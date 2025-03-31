@@ -30,14 +30,14 @@ typedef struct atl_version {
  *
  * @return c-string with compiled version of Arm Telemetry Library
  */
-ATL_EXPORT const char* atlVersionString();
+ATL_API const char* atlVersionString();
 
 /**
  * @brief Returns the compiled version of Arm Telemetry Library
  *
  * @return atl_version struct with compiled version of Arm Telemetry Library
  */
-atl_version ATL_EXPORT atlVersion();
+ATL_API atl_version atlVersion();
 
 #if defined(__cplusplus)
 }

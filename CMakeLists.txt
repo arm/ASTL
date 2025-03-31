@@ -59,6 +59,9 @@ configure_file(${PROJECT_SOURCE_DIR}/include/atl/atl_version.h.in
 
 add_library(${PROJECT_NAME} SHARED)
 
+# ATL_API macro will export functions on dlls, rather than import with ATL_BUILD set
+target_compile_definitions(${PROJECT_NAME} PRIVATE ATL_BUILD)
+
 target_sources(
     ${PROJECT_NAME}
     PRIVATE
