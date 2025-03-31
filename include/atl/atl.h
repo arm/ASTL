@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-atl_error_code ATL_EXPORT atlTest();
+atl_error_code ATL_API atlTest();
 
 #if defined(__cplusplus)
 }
