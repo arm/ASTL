@@ -1,9 +1,9 @@
 #ifndef INCLUDE_ATL_H_
 #define INCLUDE_ATL_H_
 
-#include "atl/atl_version.h"
-#include "atl/atl_utils.h"
 #include "atl/atl_errors.h"
+#include "atl/atl_utils.h"
+#include "atl/atl_version.h"
 
 #if defined(__cplusplus)
 extern "C" {

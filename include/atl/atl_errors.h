@@ -11,7 +11,7 @@ typedef enum {
   ATL_SUCCESS = 0,
 } atl_error_code;
 
-ATL_API const char * atlErrorString(atl_error_code error);
+ATL_API const char *atlErrorString(atl_error_code error);
 
 #if defined(__cplusplus)
 }

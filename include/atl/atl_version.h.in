@@ -9,6 +9,7 @@
 extern "C" {
 #endif
 
+// clang-format off
 #ifndef ATL_VERSION
 #define ATL_VERSION @ATL_VERSION@
 #endif
@@ -17,6 +18,7 @@ extern "C" {
 #define ATL_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
 #define ATL_VERSION_MINOR @PROJECT_VERSION_MINOR@
 #define ATL_VERSION_MICRO @PROJECT_VERSION_PATCH@
+// clang-format on
 
 // Note: Do not add to or modify the version structure in future API versions
 typedef struct atl_version {
@@ -30,7 +32,7 @@ typedef struct atl_version {
  *
  * @return c-string with compiled version of Arm Telemetry Library
  */
-ATL_API const char* atlVersionString();
+ATL_API const char *atlVersionString();
 
 /**
  * @brief Returns the compiled version of Arm Telemetry Library
@@ -43,4 +45,4 @@ ATL_API atl_version atlVersion();
 }
 #endif
 
-#endif  // INCLUDE_ATL_VERSION_H_
+#endif // INCLUDE_ATL_VERSION_H_

@@ -4,10 +4,11 @@
 #include "atl/atl.h"
 
 class AtlCollectorImplement {
-  public:
-    atl_error_code Test();
-  private:
-    bool test = true;
+public:
+  atl_error_code Test();
+
+private:
+  bool test = true;
 };
 
 inline static auto &AtlCollectorInstance() {
