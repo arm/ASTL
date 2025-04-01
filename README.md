@@ -1,3 +1,4 @@
+[![Clang-Tidy](https://github.com/Arm-Debug/ASTL/actions/workflows/integration.yml/badge.svg)](https://github.com/Arm-Debug/ASTL/actions/workflows/integration.yml)
 # ATL
 Arm Telemetry Library
 
