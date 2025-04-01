@@ -10,5 +10,3 @@ atl_error_code AtlCollectorImplement::Test() {
   }
   return ATL_SUCCESS;
 }
-
-

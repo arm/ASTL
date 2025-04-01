@@ -1,0 +1,2 @@
+# allow indentations in preprocessor ifdefs
+IndentPPDirectives: AfterHash
