@@ -117,14 +117,16 @@ install(TARGETS ${PROJECT_NAME}
     INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
 )
 
+include (CTest)
+
 # add samples
 if(BUILD_TESTING AND ATL_BUILD_SAMPLES)
  add_subdirectory(samples/sample_test)
 endif()
 
 # add tests
-if(BUILD_TESTING AND ATL_BUILD_TESTIN)
- add_subdirectory(test)
+if(BUILD_TESTING AND ATL_BUILD_TESTING)
+ add_subdirectory(tests)
 endif()
 
 export(

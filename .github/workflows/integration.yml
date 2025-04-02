@@ -5,7 +5,6 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
 
 jobs:
   build:
@@ -95,7 +94,7 @@ jobs:
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: ctest --build-config ${{ matrix.build_type }}
 
-  format:
+  check-format:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -104,28 +103,16 @@ jobs:
       - name: Install Tools
         run: sudo apt-get update && sudo apt-get install -y clang-format
 
-      - name: Format
+      - name: Check Formatting
         run: |
-          find . -path ./build -prune -o -regex '.*\.\(c\|cpp\|h\|hpp\|h.in\)' -exec clang-format -i {} +
-
-      - name: Commit and push formatting changes
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          if [[ -n "$(git status --porcelain)" ]]; then
-            git add .
-            git commit -m "Apply clang-format"
-            git push
-          else
-            echo "No formatting changes to commit."
-          fi
+          ./scripts/check_format.sh
 
   lint:
     runs-on: ubuntu-latest
     # Note, since version.h needs to be built from version.h.in, we have to lint _after_ a build step.
     # Also, since formatting can change the code, I'd rather lint the formatted code in case something
     # very unexpected happens there.
-    needs: [build, format]
+    needs: [build, check-format]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
