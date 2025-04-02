@@ -46,3 +46,37 @@ The library has a C-interface for the API and a C++ implementation. There is als
 
 # Installation and usage
 TBD
+
+# Build steps for developers
+## Configure workspace for your chosen compiler and configuration
+This command will create a workspace called "build" with the gcc/g++ compiler for a Debug configuration using the current directory as the source dir.
+```
+cmake -B ./build -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=DEBUG -S .
+```
+
+## Build Targets (library, sample application, etc)
+This command uses the "build" directory's generated project files (GNUMakefile, .vxproj, etc) to compile the binaries
+```
+cmake --build build --config DEBUG
+```
+
+## Run Tests
+ctest runs all test targets configured in CMakeLists.txt files. It's a useful orchestrator to execute things like sample executables and kick off unit tests.
+```
+cd build
+ctest
+```
+
+## Custom targets
+To use clang-format to check formatting:
+```
+cd build
+cmake --build . --target check-format
+```
+
+To use clang-format to format code:
+```
+cd build
+cmake --build . --target format
+```
+
