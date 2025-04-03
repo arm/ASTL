@@ -1,20 +1,18 @@
 #include <iostream>
 
-#include "atl/atl.h"
+#include "astl/astl.h"
 
 int main(int argc, char *argv[]) {
+  astl_version_t version = astlVersion();
 
-  atl_version version = atlVersion();
-
-  std::cout << "ATL version Major: " << version._major
-            << " Minor: " << version._minor << " Micro: " << version._micro
+  std::cout << "ASTL version Major: " << version._major << " Minor: " << version._minor << " Micro: " << version._micro
             << std::endl;
 
-  std::cout << "ATL version is: " << atlVersionString() << std::endl;
+  std::cout << "ASTL version is: " << astlVersionString() << std::endl;
 
-  atl_error_code status = atlTest();
+  astl_error_code status = astlTest();
 
-  std::cout << "error code is: " << atlErrorString(status) << std::endl;
+  std::cout << "error code is: " << astlErrorString(status) << std::endl;
 
   return 0;
 }

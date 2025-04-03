@@ -15,8 +15,8 @@ endif()
 
 include(CheckCXXCompilerFlag)
 
-if (NOT TARGET Atl::atl)
-  find_package(atl REQUIRED)
+if (NOT TARGET Astl::astl)
+  find_package(astl REQUIRED)
 endif()
 
 add_subdirectory (src)

@@ -4,17 +4,17 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 cmake_minimum_required(VERSION 3.0...4.0) # setting this is required
 
 include(macros)
-SetAtlVersion()
+SetAstlVersion()
 
 project(
-  atl
-  VERSION ${ATL_VERSION}
-  DESCRIPTION "Arm Telemetry Library"
-  HOMEPAGE_URL "https://github.com/Arm-Debug/ATL"
+  astl
+  VERSION ${ASTL_VERSION}
+  DESCRIPTION "Arm SoC Telemetry Library"
+  HOMEPAGE_URL "https://github.com/Arm-Debug/ASTL"
   LANGUAGES C CXX
 )
 
-message("version is set to: ${ATL_VERSION} major: ${PROJECT_VERSION_MAJOR} minor: ${PROJECT_VERSION_MINOR} micro: ${PROJECT_VERSION_PATCH}")
+message("version is set to: ${ASTL_VERSION} major: ${PROJECT_VERSION_MAJOR} minor: ${PROJECT_VERSION_MINOR} micro: ${PROJECT_VERSION_PATCH}")
 
 if (PROJECT_IS_TOP_LEVEL)
   message(STATUS "This project is a top-level project")
@@ -39,23 +39,23 @@ set(CMAKE_C_VISIBILITY_PRESET "hidden")
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-option(ATL_BUILD_TESTING "Build tests" ${PROJECT_IS_TOP_LEVEL})
-option(ATL_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
-#option(ATL_INSTALL "Install library when invoking --install" ON)
-#option(ATL_ENABLE_LOGGING "Enable logging" OFF)
+option(ASTL_BUILD_TESTING "Build tests" ${PROJECT_IS_TOP_LEVEL})
+option(ASTL_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
+#option(ASTL_INSTALL "Install library when invoking --install" ON)
+#option(ASTL_ENABLE_LOGGING "Enable logging" OFF)
 
 include(GNUInstallDirs)
-set(ATL_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/atl")
-set(ATL_INSTALL_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}")
-set(ATL_INSTALL_LIB_DIR "${CMAKE_INSTALL_LIBDIR}")
-set(ATL_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
-set(ATL_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
-set(ATL_API_SOVERSION "${PROJECT_VERSION_MAJOR}")
+set(ASTL_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/astl")
+set(ASTL_INSTALL_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}")
+set(ASTL_INSTALL_LIB_DIR "${CMAKE_INSTALL_LIBDIR}")
+set(ASTL_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
+set(ASTL_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
+set(ASTL_API_SOVERSION "${PROJECT_VERSION_MAJOR}")
 
 # Target library
 
-configure_file(${PROJECT_SOURCE_DIR}/include/atl/atl_version.h.in
-               ${PROJECT_BINARY_DIR}/include/atl/atl_version.h)
+configure_file(${PROJECT_SOURCE_DIR}/include/astl/astl_version.h.in
+               ${PROJECT_BINARY_DIR}/include/astl/astl_version.h)
 
 add_library(${PROJECT_NAME} SHARED)
 
@@ -65,13 +65,13 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE ATL_BUILD)
 target_sources(
     ${PROJECT_NAME}
     PRIVATE
-        "${PROJECT_SOURCE_DIR}/src/atl.cpp"
-        "${PROJECT_SOURCE_DIR}/src/atl_version.cpp"
-        "${PROJECT_SOURCE_DIR}/src/atl_errors.cpp"
-        "${PROJECT_SOURCE_DIR}/src/atl_impl.cpp"
+        "${PROJECT_SOURCE_DIR}/src/astl_telemetry.cpp"
+        "${PROJECT_SOURCE_DIR}/src/astl_version.cpp"
+        "${PROJECT_SOURCE_DIR}/src/astl_errors.cpp"
+        "${PROJECT_SOURCE_DIR}/src/astl_impl.cpp"
 )
 
-add_library(Atl::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
+add_library(Astl::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 # include directories
 target_include_directories(
@@ -90,9 +90,9 @@ target_include_directories(
 )
 
 set(public_headers
-    include/atl/atl.h
-    include/atl/atl_version.h
-    include/atl/atl_errors.h
+    include/astl/astl.h
+    include/astl/astl_version.h
+    include/astl/astl_errors.h
 )
 
 # public headers
@@ -101,7 +101,7 @@ set_target_properties(
   PROPERTIES
     PUBLIC_HEADER "${public_headers}"
     DEBUG_POSTFIX "d"
-    OUTPUT_NAME "atl-${PROJECT_VERSION_MAJOR}"
+    OUTPUT_NAME "astl-${PROJECT_VERSION_MAJOR}"
 )
 
 # Debug suffix
@@ -120,7 +120,7 @@ install(TARGETS ${PROJECT_NAME}
 include (CTest)
 
 # add samples
-if(BUILD_TESTING AND ATL_BUILD_SAMPLES)
+if(BUILD_TESTING AND ASTL_BUILD_SAMPLES)
  add_subdirectory(samples/sample_test)
 endif()
 
@@ -131,55 +131,55 @@ endif()
 
 export(
   TARGETS ${PROJECT_NAME}
-  FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/AtlTargets.cmake"
-  NAMESPACE Atl::)
+  FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/AstlTargets.cmake"
+  NAMESPACE Astl::)
 
-if(ATL_INSTALL)
+if(ASTL_INSTALL)
   include(CMakePackageConfigHelpers)
 
   write_basic_package_version_file(
-    "${PROJECT_BINARY_DIR}/AtlConfigVersion.cmake"
+    "${PROJECT_BINARY_DIR}/AstlConfigVersion.cmake"
     VERSION "${PROJECT_VERSION}"
     COMPATIBILITY SameMinorVersion)
 
   install(
-    FILES "${PROJECT_SOURCE_DIR}/AtlConfig.cmake"
-          "${PROJECT_BINARY_DIR}/AtlConfigVersion.cmake"
-    COMPONENT Atl_Development
-    DESTINATION "${ATL_INSTALL_CMAKE_DIR}")
+    FILES "${PROJECT_SOURCE_DIR}/AstlConfig.cmake"
+          "${PROJECT_BINARY_DIR}/AstlConfigVersion.cmake"
+    COMPONENT Astl_Development
+    DESTINATION "${ASTL_INSTALL_CMAKE_DIR}")
 
   install(
-    TARGETS atl
-    EXPORT AtlTargets
-    LIBRARY DESTINATION ${ATL_INSTALL_LIB_DIR}
-            COMPONENT Atl_Runtime
-            NAMELINK_COMPONENT Atl_Development
-    ARCHIVE DESTINATION ${ATL_INSTALL_LIB_DIR} COMPONENT Atl_Development
-    RUNTIME DESTINATION ${ATL_INSTALL_BIN_DIR} COMPONENT Atl_Runtime)
+    TARGETS astl
+    EXPORT AstlTargets
+    LIBRARY DESTINATION ${ASTL_INSTALL_LIB_DIR}
+            COMPONENT Astl_Runtime
+            NAMELINK_COMPONENT Astl_Development
+    ARCHIVE DESTINATION ${ASTL_INSTALL_LIB_DIR} COMPONENT Astl_Development
+    RUNTIME DESTINATION ${ASTL_INSTALL_BIN_DIR} COMPONENT Astl_Runtime)
 
   install(
-    DIRECTORY "${PROJECT_BINARY_DIR}/include/atl"
-    DESTINATION "${ATL_INSTALL_INCLUDE_DIR}"
-    COMPONENT Atl_Development
+    DIRECTORY "${PROJECT_BINARY_DIR}/include/astl"
+    DESTINATION "${ASTL_INSTALL_INCLUDE_DIR}"
+    COMPONENT Astl_Development
     FILES_MATCHING
     PATTERN "*.h")
 
   install(
     DIRECTORY "${PROJECT_SOURCE_DIR}/include/"
-    DESTINATION "${ATL_INSTALL_INCLUDE_DIR}"
-    COMPONENT Atl_Development
+    DESTINATION "${ASTL_INSTALL_INCLUDE_DIR}"
+    COMPONENT Astl_Development
     FILES_MATCHING
     PATTERN "*.h")
 
   install(
-    EXPORT AtlTargets
-    FILE AtlTargets.cmake
-    NAMESPACE Atl::
-    DESTINATION "${ATL_INSTALL_CMAKE_DIR}"
-    COMPONENT Atl_Development)
+    EXPORT AstlTargets
+    FILE AstlTargets.cmake
+    NAMESPACE Astl::
+    DESTINATION "${ASTL_INSTALL_CMAKE_DIR}"
+    COMPONENT Astl_Development)
 
 endif()
 
-#if(PROJECT_IS_TOP_LEVEL AND ATL_INSTALL)
+#if(PROJECT_IS_TOP_LEVEL AND ASTL_INSTALL)
 #  include(cmake/packaging.cmake)
 #endif()

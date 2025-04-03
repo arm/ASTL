@@ -19,7 +19,7 @@ target_include_directories(
 
 message("cmake_current_source_dir: ${CMAKE_CURRENT_SOURCE_DIR}")
 
-target_link_libraries(sample_test PUBLIC Atl::atl)
+target_link_libraries(sample_test PUBLIC Astl::astl)
 
 if(SHARED_KERNEL)
   target_compile_definitions(sample_test PUBLIC USED_SHARED)
