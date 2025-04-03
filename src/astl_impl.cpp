@@ -1,12 +1,12 @@
+#include "astl_impl.h"
+
 #include <iostream>
 
-#include "atl_impl.h"
-
-atl_error_code AtlCollectorImplement::Test() {
+astl_error_code AstlCollectorImplement::Test() {
   if (test) {
     std::cout << "Test pass" << std::endl;
   } else {
     std::cout << "Test fails" << std::endl;
   }
-  return ATL_SUCCESS;
+  return ASTL_SUCCESS;
 }

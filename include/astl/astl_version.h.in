@@ -1,0 +1,46 @@
+#ifndef INCLUDE_ASTL_VERSION_H_
+#define INCLUDE_ASTL_VERSION_H_
+
+#include <stdint.h>
+
+#include "astl/astl_utils.h"
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
+// clang-format off
+#ifndef ASTL_VERSION
+#define ASTL_VERSION @ASTL_VERSION@
+#endif
+
+#define ASTL_VERSION_STRING "@ASTL_VERSION@"
+#define ASTL_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define ASTL_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define ASTL_VERSION_MICRO @PROJECT_VERSION_PATCH@
+//clang-format on
+// Note: Do not add to or modify the version structure in future API versions
+typedef struct _astl_version_t {
+  uint32_t _major;
+  uint32_t _minor;
+  uint32_t _micro;
+} astl_version_t;
+
+/**
+ * @brief Returns the compiled version of Arm SoC Telemetry Library
+ *
+ * @return c-string with compiled version of Arm SoC Telemetry Library
+ */
+ASTL_API const char* astlVersionString();
+
+/**
+ * @brief Returns the compiled version of Arm SoC Telemetry Library
+ *
+ * @return astl_version struct with compiled version of Arm SoC Telemetry Library
+ */
+ASTL_API astl_version_t astlVersion();
+
+#if defined(__cplusplus)
+}
+#endif
+
+#endif  // INCLUDE_ASTL_VERSION_H_
