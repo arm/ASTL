@@ -2,7 +2,9 @@
 
 #include <iostream>
 
-astl_error_code AstlCollectorImplement::Test() {
+namespace astl {
+
+astl_error_code CollectorImplement::Test() {
   if (test) {
     std::cout << "Test pass" << std::endl;
   } else {
@@ -10,3 +12,5 @@ astl_error_code AstlCollectorImplement::Test() {
   }
   return ASTL_SUCCESS;
 }
+
+}  // namespace astl

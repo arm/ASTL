@@ -11,18 +11,21 @@ if(NOT CMAKE_BUILD_TYPE)
         FORCE)
 endif()
 
-add_executable(sample_test sample_test.cpp)
-target_compile_options(sample_test PUBLIC -O3)
-target_link_options(sample_test PUBLIC -O3)
+set(TARGET "sample_test")
+
+add_executable(${TARGET} sample_test.cpp)
+target_compile_options(${TARGET} PUBLIC -O3)
+target_link_options(${TARGET} PUBLIC -O3)
 target_include_directories(
-  sample_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+  ${TARGET} PRIVATE ${PROJECT_SOURCE_DIR}/include
+)
 
 message("cmake_current_source_dir: ${CMAKE_CURRENT_SOURCE_DIR}")
 
-target_link_libraries(sample_test PUBLIC Astl::astl)
+target_link_libraries(${TARGET} PRIVATE Astl::astl)
 
 if(SHARED_KERNEL)
-  target_compile_definitions(sample_test PUBLIC USED_SHARED)
+  target_compile_definitions(${TARGET} PUBLIC USED_SHARED)
 endif()
 
-add_custom_target(runsampletest sample_test)
+add_custom_target(runsampletest ${TARGET})

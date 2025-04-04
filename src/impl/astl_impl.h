@@ -6,7 +6,8 @@
 static_assert(sizeof(astl_value_t) == sizeof(double),
               "astl_value_t union should not change size for ABI compatibility");
 
-class AstlCollectorImplement {
+namespace astl {
+class CollectorImplement {
  public:
   astl_error_code Test();
 
@@ -14,9 +15,11 @@ class AstlCollectorImplement {
   bool test = true;
 };
 
-inline static auto &AstlCollectorInstance() {
-  static AstlCollectorImplement astl_collector_instance{};
+inline static auto &CollectorInstance() {
+  static CollectorImplement astl_collector_instance{};
   return astl_collector_instance;
 }
+
+}  // namespace astl
 
 #endif  // ASTL_API_IMPL_H_

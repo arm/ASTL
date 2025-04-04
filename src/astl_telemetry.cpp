@@ -275,6 +275,6 @@ astl_error_code astlGetAllMetricSamples(astl_metric_sample_t* metric_samples, ui
  **********************************************************************************/
 // TODO: Delete
 astl_error_code astlTest() {
-  astl_error_code result = AstlCollectorInstance().Test();
+  astl_error_code result = astl::CollectorInstance().Test();
   return result;
 }
