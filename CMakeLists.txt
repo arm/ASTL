@@ -57,36 +57,48 @@ set(ASTL_API_SOVERSION "${PROJECT_VERSION_MAJOR}")
 configure_file(${PROJECT_SOURCE_DIR}/include/astl/astl_version.h.in
                ${PROJECT_BINARY_DIR}/include/astl/astl_version.h)
 
-add_library(${PROJECT_NAME} SHARED)
 
-# ATL_API macro will export functions on dlls, rather than import with ATL_BUILD set
-target_compile_definitions(${PROJECT_NAME} PRIVATE ATL_BUILD)
+# define the static library `astl_static` - aka Astl::astl_static
+add_subdirectory(src/impl)
+
+# define the shared library `astl`
+set(LIBRARY_NAME "${PROJECT_NAME}")
+
+# Define the target for a shared library `astl`, wrapping the static library astl_static
+add_library(${LIBRARY_NAME} SHARED)
+# add alias target for the library for unambiguous FindPackage
+add_library(Astl::${LIBRARY_NAME} ALIAS ${LIBRARY_NAME})
+
+# ASTL_API macro will export functions on dlls, rather than import with ASTL_BUILD set
+target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_BUILD)
 
 target_sources(
-    ${PROJECT_NAME}
+    ${LIBRARY_NAME}
     PRIVATE
-        "${PROJECT_SOURCE_DIR}/src/astl_telemetry.cpp"
-        "${PROJECT_SOURCE_DIR}/src/astl_version.cpp"
-        "${PROJECT_SOURCE_DIR}/src/astl_errors.cpp"
-        "${PROJECT_SOURCE_DIR}/src/astl_impl.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_telemetry.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_version.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_errors.cpp"
 )
-
-add_library(Astl::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 # include directories
 target_include_directories(
-    ${PROJECT_NAME}
+    ${LIBRARY_NAME}
     PRIVATE
         # where the library itself will look for its internal headers
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
     PUBLIC
         # where top-level project will look for the library's public headers
+        ${PROJECT_SOURCE_DIR}/include
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         # where external projects will look for the library's public headers
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+# statically link in `astl_static` to the shared library
+target_link_libraries(${LIBRARY_NAME}
+    PRIVATE Astl::astl_static
 )
 
 set(public_headers
@@ -97,15 +109,15 @@ set(public_headers
 
 # public headers
 set_target_properties(
-  ${PROJECT_NAME}
-  PROPERTIES
-    PUBLIC_HEADER "${public_headers}"
-    DEBUG_POSTFIX "d"
-    OUTPUT_NAME "astl-${PROJECT_VERSION_MAJOR}"
+    ${LIBRARY_NAME}
+    PROPERTIES
+        PUBLIC_HEADER "${public_headers}"
+        DEBUG_POSTFIX "d"
+        OUTPUT_NAME "astl-${PROJECT_VERSION_MAJOR}"
 )
 
 # Debug suffix
-set_target_properties(${PROJECT_NAME} PROPERTIES DEBUG_POSTFIX "d")
+set_target_properties(${LIBRARY_NAME} PROPERTIES DEBUG_POSTFIX "d")
 
 # Definition of CMAKE_INSTALL_LIBDIR, etc
 include(GNUInstallDirs)
@@ -125,8 +137,9 @@ if(BUILD_TESTING AND ASTL_BUILD_SAMPLES)
 endif()
 
 # add tests
-if(BUILD_TESTING AND ATL_BUILD_TESTING)
- add_subdirectory(tests)
+if(BUILD_TESTING AND ASTL_BUILD_TESTING)
+  enable_testing()
+  add_subdirectory(tests/unit_test)
 endif()
 
 export(
@@ -154,6 +167,7 @@ if(ASTL_INSTALL)
     LIBRARY DESTINATION ${ASTL_INSTALL_LIB_DIR}
             COMPONENT Astl_Runtime
             NAMELINK_COMPONENT Astl_Development
+    PUBLIC_HEADER DESTINATION ${ASTL_INSTALL_INCLUDE_DIR} COMPONENT Astl_Development
     ARCHIVE DESTINATION ${ASTL_INSTALL_LIB_DIR} COMPONENT Astl_Development
     RUNTIME DESTINATION ${ASTL_INSTALL_BIN_DIR} COMPONENT Astl_Runtime)
 
@@ -183,3 +197,24 @@ endif()
 #if(PROJECT_IS_TOP_LEVEL AND ASTL_INSTALL)
 #  include(cmake/packaging.cmake)
 #endif()
+
+
+# add a phony target to format the source files
+# to use: `cd build && cmake --build . --target format`
+#     or: `cd build && make format`
+add_custom_target(format
+  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/format.sh
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Running clang-format on source files"
+)
+# add format command to help in `cmake --build . --target help` and don't build it by default
+set_target_properties(format PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# create a phony target to check formatting
+# to use: `cd build && cmakke --build . --target check_format`
+#     or: `cd build && make check_format`
+add_custom_target(check_format
+  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/check_format.sh
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Checking formatting of source files - runs on build and fails if unformatted files are found"
+)
