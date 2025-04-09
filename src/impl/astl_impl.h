@@ -9,7 +9,7 @@ static_assert(sizeof(astl_value_t) == sizeof(double),
 namespace astl {
 class CollectorImplement {
  public:
-  astl_error_code Test();
+  astl_error_code Test() const;
 
  private:
   bool test = true;

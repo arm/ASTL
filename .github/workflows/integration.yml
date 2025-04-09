@@ -127,14 +127,4 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang-tidy
 
       - name: Lint with clang-tidy
-        run: |
-          echo "Running clang-tidy to lint code..."
-          # lint one translation unit at a time (assume headers are #included)
-          FILES=$(find . -path ${{ steps.strings.outputs.build-output-dir }} -prune -o -regex ',*\.\(c\|cpp\)$')
-          for FILE in $FILES; do
-            clang-tidy $FILE -- \
-              -I${{ github.workspace }} \
-              -I${{ github.workspace }}/include \
-              -I${{ steps.strings.outputs.build-output-dir }}/include
-          done
- 
+        run: ./scripts/lint.sh ${{ github.workspace }}/build
