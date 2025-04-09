@@ -4,7 +4,7 @@
 
 namespace astl {
 
-astl_error_code CollectorImplement::Test() {
+astl_error_code CollectorImplement::Test() const {
   if (test) {
     std::cout << "Test pass" << std::endl;
   } else {

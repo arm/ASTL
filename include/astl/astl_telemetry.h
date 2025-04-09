@@ -881,7 +881,7 @@ ASTL_API astl_error_code astlGetAllMetricSamples(astl_metric_sample_t* samples, 
  **********************************************************************************/
 
 // Place holder for initial testing
-// TODO: delete
+// TODO(https://github.com/Arm-Debug/ASTL/pull/17) delete this function, replace with real unit testable
 ASTL_API astl_error_code astlTest();
 
 #if defined(__cplusplus)

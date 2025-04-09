@@ -8,7 +8,8 @@ extern "C" {
 #endif
 
 typedef enum {
-  ASTL_SUCCESS = 0,
+  ASTL_SUCCESS             = 0,
+  ASTL_ERROR_UNIMPLEMENTED = 1,
 } astl_error_code;
 
 /**

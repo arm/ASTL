@@ -62,22 +62,40 @@ cmake --build build --config DEBUG
 ```
 
 ## Run Tests
-ctest runs all test targets configured in CMakeLists.txt files. It's a useful orchestrator to execute things like sample executables and kick off unit tests.
-```
+
+`ctest` runs all test targets configured in `CMakeLists.txt` files. It's a useful orchestrator to execute things like sample executables and kick off unit tests.
+
+```sh
 cd build
 ctest
 ```
 
 ## Custom targets
-To use clang-format to check formatting:
-```
-cd build
-cmake --build . --target check-format
+
+### Formatting
+
+To use `clang-format` to check formatting, use [scripts/check_format.sh](scripts/check_format.sh) or the `cmake` target `check-format`
+
+```sh
+cd build && cmake --build . --target check-format
+# or 
+cd build && make check-format
 ```
 
-To use clang-format to format code:
-```
-cd build
-cmake --build . --target format
+To use `clang-format` to format code, use [scripts/format.sh](scripts/format.sh) or use the target `format`
+
+```sh
+cd build && cmake --build . --target format
+# or
+cd build && make format
 ```
 
+### Linting
+
+To use `clang-tidy` to lint code, use [scripts/lint.sh](scripts/lint.sh) or the target `lint`
+
+```sh
+cd build && cmake --build . --target lint
+# or just
+cd build && make lint
+```

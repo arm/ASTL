@@ -218,3 +218,10 @@ add_custom_target(check_format
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Checking formatting of source files - runs on build and fails if unformatted files are found"
 )
+
+# add a phony target to lint code
+add_custom_target(lint
+  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/lint.sh ${CMAKE_CURRENT_BINARY_DIR}
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Running clang-lint on source files"
+)
