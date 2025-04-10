@@ -8,7 +8,7 @@ if ! command -v clang-tidy >/dev/null 2>&1; then
     echo "❌ clang-tidy is not installed."
     echo "👉 Please install it with:"
     echo "   sudo apt install clang-tidy          # Debian/Ubuntu"
-    echo "   brew install clang-tidy              # macOS (Homebrew)"
+    echo "   brew install llvm                    # macOS (Homebrew)"
     echo "   export PATH="/opt/homebrew/opt/llvm/bin:\$PATH"  # macOS continued"
     exit 1
 fi

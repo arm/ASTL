@@ -1,9 +1,62 @@
+#include <unordered_map>
+
 #include "astl/astl.h"
 
-// TODO(https://github.com/Arm-Debug/ASTL/issues/16): Build a map for all of the error codes
+static const std::unordered_map<astl_error_code, const char*> kErrorMap = {
+    {ASTL_SUCCESS,                                          "SUCCESS"                                   },
+    {ASTL_ERROR_BAD_ARGUMENT,                               "BAD_ARGUMENT"                              },
+    {ASTL_ERROR_BAD_CONFIGURATION,                          "BAD_CONFIGURATION"                         },
+    {ASTL_ERROR_INVALID_TARGET_HANDLE,                      "INVALID_TARGET_HANDLE"                     },
+    {ASTL_ERROR_INVALID_COUNTER_HANDLE,                     "INVALID_COUNTER_HANDLE"                    },
+    {ASTL_ERROR_INVALID_METRIC_HANDLE,                      "INVALID_METRIC_HANDLE"                     },
+    {ASTL_ERROR_INVALID_METRIC_GROUP_HANDLE,                "INVALID_METRIC_GROUP_HANDLE"               },
+    {ASTL_ERROR_NOT_IMPLEMENTED,                            "NOT_IMPLEMENTED"                           },
+    {ASTL_ERROR_NOT_SUPPORTED,                              "NOT_SUPPORTED"                             },
+    {ASTL_ERROR_DEPRECATED_API,                             "DEPRECATED_API"                            },
+    {ASTL_ERROR_OLD_TARGET_PROPERTIES_STRUCT_VERSION,       "OLD_TARGET_PROPERTIES_STRUCT_VERSION"      },
+    {ASTL_ERROR_NEW_TARGET_PROPERTIES_STRUCT_VERSION,       "NEW_TARGET_PROPERTIES_STRUCT_VERSION"      },
+    {ASTL_ERROR_OLD_COUNTER_PROPERTIES_STRUCT_VERSION,      "OLD_COUNTER_PROPERTIES_STRUCT_VERSION"     },
+    {ASTL_ERROR_NEW_COUNTER_PROPERTIES_STRUCT_VERSION,      "NEW_COUNTER_PROPERTIES_STRUCT_VERSION"     },
+    {ASTL_ERROR_OLD_COUNTER_SAMPLE_STRUCT_VERSION,          "OLD_COUNTER_SAMPLE_STRUCT_VERSION"         },
+    {ASTL_ERROR_NEW_COUNTER_SAMPLE_STRUCT_VERSION,          "NEW_COUNTER_SAMPLE_STRUCT_VERSION"         },
+    {ASTL_ERROR_OLD_METRIC_PROPERTIES_STRUCT_VERSION,       "OLD_METRIC_PROPERTIES_STRUCT_VERSION"      },
+    {ASTL_ERROR_NEW_METRIC_PROPERTIES_STRUCT_VERSION,       "NEW_METRIC_PROPERTIES_STRUCT_VERSION"      },
+    {ASTL_ERROR_OLD_METRIC_SAMPLE_STRUCT_VERSION,           "OLD_METRIC_SAMPLE_STRUCT_VERSION"          },
+    {ASTL_ERROR_NEW_METRIC_SAMPLE_STRUCT_VERSION,           "NEW_METRIC_SAMPLE_STRUCT_VERSION"          },
+    {ASTL_ERROR_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION, "OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION"},
+    {ASTL_ERROR_NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION, "NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION"},
+    {ASTL_ERROR_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION,   "OLD_COLLECTION_PARAMETERS_STRUCT_VERSION"  },
+    {ASTL_ERROR_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION,   "NEW_COLLECTION_PARAMETERS_STRUCT_VERSION"  },
+    {ASTL_ERROR_TARGET_PROPERTIES_BUFFER_TOO_SMALL,         "TARGET_PROPERTIES_BUFFER_TOO_SMALL"        },
+    {ASTL_ERROR_COUNTER_PROPERTIES_BUFFER_TOO_SMALL,        "COUNTER_PROPERTIES_BUFFER_TOO_SMALL"       },
+    {ASTL_ERROR_METRIC_PROPERTIES_BUFFER_TOO_SMALL,         "METRIC_PROPERTIES_BUFFER_TOO_SMALL"        },
+    {ASTL_ERROR_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL,   "METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL"  },
+    {ASTL_ERROR_COUNTER_SAMPLES_BUFFER_TOO_SMALL,           "COUNTER_SAMPLES_BUFFER_TOO_SMALL"          },
+    {ASTL_ERROR_METRIC_SAMPLES_BUFFER_TOO_SMALL,            "METRIC_SAMPLES_BUFFER_TOO_SMALL"           },
+    {ASTL_ERROR_SAMPLIMG_INTERVAL_TOO_SMALL,                "SAMPLIMG_INTERVAL_TOO_SMALL"               },
+    {ASTL_ERROR_SAMPLING_INTERVAL_TOO_LARGE,                "SAMPLING_INTERVAL_TOO_LARGE"               },
+    {ASTL_ERROR_SAMPLING_INTERVAL_IGNORED,                  "SAMPLING_INTERVAL_IGNORED"                 },
+    {ASTL_ERROR_INVALID_COLLECTION_MODE,                    "INVALID_COLLECTION_MODE"                   },
+    {ASTL_ERROR_INVALID_COLLECTION_OPTIMIZATION,            "INVALID_COLLECTION_OPTIMIZATION"           },
+    {ASTL_ERROR_COUNTER_NOT_SUPPORTED_ON_TARGET,            "COUNTER_NOT_SUPPORTED_ON_TARGET"           },
+    {ASTL_ERROR_METRIC_NOT_SUPPORTED_ON_TARGET,             "METRIC_NOT_SUPPORTED_ON_TARGET"            },
+    {ASTL_ERROR_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET,       "METRIC_GROUP_NOT_SUPPORTED"                },
+    {ASTL_ERROR_COLLECTION_NOT_RUNNING,                     "COLLECTION_NOT_RUNNING"                    },
+    {ASTL_ERROR_COLLECTION_NOT_STOPPED,                     "COLLECTION_NOT_STOPPED"                    },
+    {ASTL_ERROR_COLLECTION_NOT_PAUSED,                      "COLLECTION_NOT_PAUSED"                     },
+    {ASTL_ERROR_COLLECTION_ALREADY_RUNNING,                 "COLLECTION_ALREADY_RUNNING"                },
+    {ASTL_ERROR_COLLECTION_ALREADY_STOPPED,                 "COLLECTION_ALREADY_STOPPED"                },
+    {ASTL_ERROR_COLLECTION_ALREADY_PAUSED,                  "COLLECTION_ALREADY_PAUSED"                 },
+    {ASTL_ERROR_NO_DATA_COLLECTED,                          "NO_DATA_COLLECTED"                         },
+
+    // ADD new error codes here
+
+    {ASTL_ERROR_INTERNAL,                                   "INTERNAL"                                  },
+
+    {ASTL_ERROR_UNKOWN,                                     "UNKNOWN"                                   }
+};
+
 const char* astlErrorString(astl_error_code error) {
-  if (error == ASTL_SUCCESS) {
-    return "SUCCESS";
-  }
-  return "UNKOWN";
+  auto error_entry = kErrorMap.find(error);
+  return (error_entry != kErrorMap.end()) ? error_entry->second : "UNKNOWN";
 }
