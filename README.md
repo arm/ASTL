@@ -46,28 +46,40 @@ The library has a C-interface for the API and a C++ implementation. There is als
 - Mock command line collector executable
 
 # Installation and usage
+
 TBD
 
 # Build steps for developers
-## Configure workspace for your chosen compiler and configuration
-This command will create a workspace called "build" with the gcc/g++ compiler for a Debug configuration using the current directory as the source dir.
-```
-cmake -B ./build -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=DEBUG -S .
-```
 
-## Build Targets (library, sample application, etc)
-This command uses the "build" directory's generated project files (GNUMakefile, .vxproj, etc) to compile the binaries
-```
-cmake --build build --config DEBUG
-```
+## Initial clone and setup
 
-## Run Tests
-
-`ctest` runs all test targets configured in `CMakeLists.txt` files. It's a useful orchestrator to execute things like sample executables and kick off unit tests.
+We use vcpkg as a git submodule, so you need to clone with `--recursive`. If you already cloned and forgot that, you can get the submodule via 
 
 ```sh
-cd build
-ctest
+git submodule update --init --recursive
+./vcpkg/bootstrap-vcpkg.sh
+```
+
+## Compile and test
+
+These commands will generate a workspace under 'build' with auto-detected reasonable default build systems and compilers, build it, and execute tests
+Supported presets are found in [CMakePresets.json](CMakePresets.json)
+
+```sh
+cmake -S . --preset debug
+cmake --build --preset debug
+ctest --preset debug
+```
+
+## Compile and test with specific compiler or build type
+
+If you want to choose a specific compiler that's not specified in CMakePresets.json, you can add arguments in the first configure step.
+(Be sure to set EXPORT_COMPILE_COMMANDS so that clang-tidy can find system headers for linting)
+
+```sh
+cmake -B ./build/debug -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=DEBUG -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -S .
+cmake --build ./build/debug --config DEBUG
+cd ./build/debug && ctest
 ```
 
 ## Custom targets
@@ -78,7 +90,7 @@ To use `clang-format` to check formatting, use [scripts/check_format.sh](scripts
 
 ```sh
 cd build && cmake --build . --target check-format
-# or 
+# or
 cd build && make check-format
 ```
 

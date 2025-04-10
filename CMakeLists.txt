@@ -3,6 +3,28 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 
 cmake_minimum_required(VERSION 3.0...4.0) # setting this is required
 
+
+
+# enable CMake's built-in package management, which integrates with vcpkg
+include(FetchContent)
+# use vcpkg to manage dependencies
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+  if(DEFINED ENV{VCPKG_ROOT})
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+    message(STATUS "📦 Using vcpkg toolchain from $ENV{VCPKG_ROOT}")
+  elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake")
+    message("📦 Found vcpkg git submodule - using it for dependencies\n")
+    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+    message(STATUS "Using vcpkg toolchain from ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg")
+  else()
+    message(FATAL_ERROR "❌ VCPKG_ROOT not set and no toolchain file provided.\n"
+                        " For initial setup, please run:\n"
+                        " git submodule update --init --recursive\n"
+                        " ./vcpkg/bootstrap-vcpkg.sh\n"
+                        )
+  endif()
+endif()
+
 include(macros)
 SetAstlVersion()
 
@@ -51,6 +73,13 @@ set(ASTL_INSTALL_LIB_DIR "${CMAKE_INSTALL_LIBDIR}")
 set(ASTL_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
 set(ASTL_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
 set(ASTL_API_SOVERSION "${PROJECT_VERSION_MAJOR}")
+
+# clang-tidy setup
+# include headers in compilation database - this makes it easy for clang-tidy in scripts/lint.sh to use our compile_commands.json to find system headers
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# Note - We don't set CMAKE_CXX_CLANG_TIDY here because when building with gcc, clang-tidy can't find system headers.
+#        scripts/lint.sh calls clang-tidy and searches for necessary system headers. it's accessed through the 'lint' build target if you want to run it.
+
 
 # Target library
 

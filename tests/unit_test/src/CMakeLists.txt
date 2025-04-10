@@ -18,6 +18,12 @@ add_executable(unit_test unit_test.cpp)
 target_link_libraries(unit_test
     PUBLIC
         Astl::astl_static
+    PRIVATE
+        Catch2::Catch2WithMain
 )
-
 add_custom_target(rununittests unit_test)
+
+# have catch2's cmake module discover the tests and add them to ctest for us
+include(CTest)
+include(Catch)
+catch_discover_tests(unit_test)
