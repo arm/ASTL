@@ -513,7 +513,7 @@ ASTL_API astl_error_code astlConfigureCounterCollection(astl_collection_paramete
  *                                         IMPORTANT: _size field must be set to sizeof(astl_collection_parameters_t)
  *                                         for versioning
  *
- * @param[in] metric_handles               Array  of metric handles to collect. Cannot be NULL. It
+ * @param[in] metric_handles               Array of metric handles to collect. Cannot be NULL. It
  *                                         should point to the buffer of
  *                                         sizeof(aslt_metric_handle_t) * (metric_count)
  *

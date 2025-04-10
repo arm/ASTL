@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 # This script generates 3 variables for find to use to make lint/format scripts easy to use.
-# PRUNE_EXPR - a path expression to use within parens before a -prune expression, including directories we wdon't wnat to lint/format
-# NAME_ALL_SOURCES_AND_HEADERS - a name expression to use with find to local all source files (including headers)
-# NAME_ALL_SOURCES - a name expression to use with find to local all source files (excluding headers)
+# PRUNE_EXPR - a path expression to use within parens before a -prune expression, including directories we don't want to lint/format
+# NAME_ALL_SOURCES_AND_HEADERS - a name expression to use with find to locate all source files (including headers)
+# NAME_ALL_SOURCES - a name expression to use with find to locate all source files (excluding headers)
 
 EXCLUDE_DIRS=("build" "vcpkg")
 PRUNE_EXPR=" -path build -o"
