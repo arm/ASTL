@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 
-# This script checks if the code is formatted according to clang-format rules.
+# This script finds source files and runs clang-tidy to lint them
 set -e
+
+# Check for clang-tidy
+if ! command -v clang-tidy >/dev/null 2>&1; then
+    echo "❌ clang-tidy is not installed."
+    echo "👉 Please install it with:"
+    echo "   sudo apt install clang-tidy          # Debian/Ubuntu"
+    echo "   brew install clang-tidy              # macOS (Homebrew)"
+    echo "   export PATH="/opt/homebrew/opt/llvm/bin:\$PATH"  # macOS continued"
+    exit 1
+fi
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT_DIR="$( dirname ${SCRIPT_DIR} )"

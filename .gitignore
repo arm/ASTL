@@ -57,4 +57,7 @@ build/
 # Ignore tmp directories
 tmp/
 
+# vim buffer files
+*.swp
+
 # Add more exclusions as needed
