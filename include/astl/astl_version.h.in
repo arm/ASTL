@@ -10,15 +10,13 @@ extern "C" {
 #endif
 // clang-format off
 #ifndef ASTL_VERSION
-// TODO(https://github.com/Arm-Debug/ASTL/issues/14)
-#define ASTL_VERSION @ASTL_VERSION@  // NOLINT(cppcoreguidelines-macro-usage)
+#define ASTL_VERSION @ASTL_VERSION@
 #endif
 
-// TODO(https://github.com/Arm-Debug/ASTL/issues/14)
-#define ASTL_VERSION_STRING "@ASTL_VERSION@"  // NOLINT(cppcoreguidelines-macro-usage)
-#define ASTL_VERSION_MAJOR @PROJECT_VERSION_MAJOR@  // NOLINT(cppcoreguidelines-macro-usage)  
-#define ASTL_VERSION_MINOR @PROJECT_VERSION_MINOR@  // NOLINT(cppcoreguidelines-macro-usage)
-#define ASTL_VERSION_MICRO @PROJECT_VERSION_PATCH@  // NOLINT(cppcoreguidelines-macro-usage)
+#define ASTL_VERSION_STRING "@ASTL_VERSION@"
+#define ASTL_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define ASTL_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define ASTL_VERSION_MICRO @PROJECT_VERSION_PATCH@
 //clang-format on
 // Note: Do not add to or modify the version structure in future API versions
 typedef struct _astl_version_t {

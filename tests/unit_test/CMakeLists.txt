@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.0...4.0)
 
+find_package(Catch2 CONFIG REQUIRED)
+
 project (UNIT_TEST)
 
 if (NOT CMAKE_BUILD_TYPE)
@@ -16,8 +18,3 @@ if (NOT TARGET Astl::astl_static)
 endif()
 
 add_subdirectory (src)
-
-# ctest will add the unit_test executable to its list of tests
-# to use this, after building the project, `cd build && ctest`
-# PRs should trigger ctest as well from the `integration.yml` workflow
-add_test(NAME UnitTest COMMAND ${CMAKE_BINARY_DIR}/bin/unit_test)

@@ -39,4 +39,3 @@ done
 if [ ${#NAME_ALL_SOURCES} -ge 2 ]; then
     NAME_ALL_SOURCES="${NAME_ALL_SOURCES:0:${#NAME_ALL_SOURCES}-2}"
 fi
-

@@ -19,4 +19,3 @@ source $SCRIPT_DIR/get_find_file_expressions.sh  # define PRUNE_EXPR
 
 FILES=$(find $(realpath .) \( $PRUNE_EXPR \) -prune -o \( -type f \( $NAME_ALL_SOURCES_AND_HEADERS  \) \) -print)
 clang-format -i $FILES
- 

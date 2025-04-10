@@ -1,4 +1,5 @@
 # Integration workflow to format, lint, build code on all supported platforms, and run tests.
+# source for VCPKG goodness: https://github.com/lukka/CppCMakeVcpkgTemplate/blob/v11/.github/workflows/hosted-pure-workflow.yml
 name: Integration
 
 on:
@@ -22,7 +23,7 @@ jobs:
       # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
         os: [ubuntu-latest, windows-latest]
-        build_type: [Release]
+        cmake_preset: [release]
         c_compiler: [gcc, clang, cl]
         include:
           - os: windows-latest
@@ -42,57 +43,90 @@ jobs:
           - os: ubuntu-latest
             c_compiler: cl
 
+    env:
+      # Indicates the location of the vcpkg as a Git submodule of the project repository.
+      # Not using "VCPKG_ROOT" because a variable with the same name is defined in the VS's
+      # Developer Command Prompt environment in VS 2022 17.6, which would override this one
+      # if it had the same name.
+      _VCPKG_: ${{ github.workspace }}/vcpkg
+      # Tells vcpkg where binary packages are stored.
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
+      # Let's use GitHub Action cache as storage for the vcpkg Binary Caching feature.
+      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+
     steps:
+
+      # Set env variables needed for vcpkg to use GitHub Action cache for dependencies
+    - uses: actions/github-script@v7
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
     - uses: actions/checkout@v4
       with:
         ref: ${{ github.head_ref }}
         token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: true
 
-    - name: Set reusable strings
-      # Turn repeated input strings (such as the build output directory) into step outputs.
-      # These step outputs can be used throughout the workflow file.
-      id: strings
+    - name: "Create directory '{{ env.VCPKG_DEFAULT_BINARY_CACHE }}'"
+      run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
       shell: bash
-      run: |
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+    # Restore vcpkg from the GitHub Action cache service. Note that packages are restored by vcpkg's binary caching
+    # when it is being run afterwards by CMake.
+    - name: Restore vcpkg
+      uses: actions/cache@v4
+      with:
+        # The first path is the location of vcpkg: it contains the vcpkg executable and data files, as long as the
+        # built package archives (aka binary cache) which are located by VCPKG_DEFAULT_BINARY_CACHE env var.
+        # The other paths starting with '!' are exclusions: they contain temporary files generated during the build of the installed packages.
+        path: |
+          ${{ env._VCPKG_ }}
+          !${{ env._VCPKG_ }}/buildtrees
+          !${{ env._VCPKG_ }}/packages
+          !${{ env._VCPKG_ }}/downloads
+          !${{ env._VCPKG_ }}/installed
+        # The key is composed in a way that it gets properly invalidated whenever a different version of vcpkg is being used.
+        key: |
+          os-${{ matrix.os }}-compiler${{ matrix.cpp_compiler }}-${{ hashFiles( '.git/modules/vcpkg/HEAD' )}}
+
+    - name: Run vcpkg to install dependencies
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+        vcpkgJsonGlob: '**/vcpkg.json'
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. 
-      # `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       run: >
-        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        cmake
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -S ${{ github.workspace }}
+        --preset ${{ matrix.cmake_preset }}
 
     - name: Build
       # Build ATL library with the given configuration.
-      # Note that --config is needed because the default Windows generator
+      # Note that --preset is needed because the default Windows generator
       # is a multi-config generator (Visual Studio generator).
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
-
-    # linting requires dependencies like a generated version header to be in place, so upload
-    # that file for the lint job
-    - name: Save build/include path for linting
-      id: set-path
-      run: echo "include-dir=build/include" >> $GITHUB_OUTPUT
-
-    - name: Upload build/include (only for ubuntu + gcc so there's no artifact conflict)
-      if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc'
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-include
-        path: build/include
+      run: cmake --build --preset ${{ matrix.cmake_preset }}
 
     - name: Test
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
       # Execute tests defined by the CMake configuration.
-      # Note that --build-config is needed because the default Windows generator 
+      # Note that --preset is needed because the default Windows generator
       # is a multi-config generator (Visual Studio generator).
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest --build-config ${{ matrix.build_type }}
+      run: ctest --preset ${{ matrix.cmake_preset }}
+
+    - name: Install clang-tidy
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y clang-tidy
+
+    - name: Lint with clang-tidy
+      if: matrix.os == 'ubuntu-latest'
+      run: ./scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
+
 
   check-format:
     runs-on: ubuntu-latest
@@ -106,25 +140,3 @@ jobs:
       - name: Check Formatting
         run: |
           ./scripts/check_format.sh
-
-  lint:
-    runs-on: ubuntu-latest
-    # Note, since version.h needs to be built from version.h.in, we have to lint _after_ a build step.
-    # Also, since formatting can change the code, I'd rather lint the formatted code in case something
-    # very unexpected happens there.
-    needs: [build, check-format]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download build/include from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: build-include
-          path: build/include
-
-      - name: Install tools
-        run: sudo apt-get update && sudo apt-get install -y clang-tidy
-
-      - name: Lint with clang-tidy
-        run: ./scripts/lint.sh ${{ github.workspace }}/build
