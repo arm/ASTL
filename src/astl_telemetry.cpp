@@ -10,7 +10,7 @@ astl_error_code astlGetTargetCount(uint32_t* target_count) {
   return result;
 }
 
-astl_error_code astlGetTargets(astl_target_properties_t* targets, uint32_t target_count) {
+astl_error_code astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) {
   astl_error_code result{ASTL_ERROR_NOT_IMPLEMENTED};
   return result;
 }
@@ -72,45 +72,45 @@ astl_error_code astlGetMetricGroupMetrics(astl_target_handle_t            target
  **********************************************************************************/
 
 /*** CONFIGURE COUNTERS ***/
-astl_error_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t         target_handle,
-                                                       astl_collection_parameters_t collection_params,
+astl_error_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t          target_handle,
+                                                       astl_collection_parameters_t* collection_params,
                                                        astl_counter_handle_t* counter_handles, uint32_t counter_count) {
   astl_error_code result{ASTL_ERROR_NOT_IMPLEMENTED};
   return result;
 }
 
-astl_error_code astlConfigureCounterCollection(astl_collection_parameters_t collection_params,
+astl_error_code astlConfigureCounterCollection(astl_collection_parameters_t* collection_params,
                                                astl_counter_handle_t* counter_handles, uint32_t counter_count) {
   astl_error_code result{ASTL_ERROR_NOT_IMPLEMENTED};
   return result;
 }
 
 /*** CONFIGURE METRICS ***/
-astl_error_code astlConfigureMetricCollectionOnTarget(astl_target_handle_t         target_handle,
-                                                      astl_collection_parameters_t collection_params,
+astl_error_code astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
+                                                      astl_collection_parameters_t* collection_params,
                                                       astl_metric_handle_t* metric_handles, uint32_t metric_count) {
   astl_error_code result{ASTL_ERROR_NOT_IMPLEMENTED};
   return result;
 }
 
-astl_error_code astlConfigureMetricCollection(astl_collection_parameters_t collection_params,
+astl_error_code astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
                                               astl_metric_handle_t* metric_handles, uint32_t metric_count) {
   astl_error_code result{ASTL_ERROR_NOT_IMPLEMENTED};
   return result;
 }
 
 /*** CONFIGURE METRIC GROUPS ***/
-astl_error_code astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t         target_handle,
-                                                           astl_collection_parameters_t collection_params,
-                                                           astl_metric_group_handle_t*  metric_group_handles,
-                                                           uint32_t                     metric_group_count) {
+astl_error_code astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          target_handle,
+                                                           astl_collection_parameters_t* collection_params,
+                                                           astl_metric_group_handle_t*   metric_group_handles,
+                                                           uint32_t                      metric_group_count) {
   astl_error_code result{ASTL_ERROR_NOT_IMPLEMENTED};
   return result;
 }
 
-astl_error_code astlConfigureMetricGroupCollection(astl_collection_parameters_t collection_params,
-                                                   astl_metric_group_handle_t*  metric_group_handles,
-                                                   uint32_t                     metric_group_count) {
+astl_error_code astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
+                                                   astl_metric_group_handle_t*   metric_group_handles,
+                                                   uint32_t                      metric_group_count) {
   astl_error_code result{ASTL_ERROR_NOT_IMPLEMENTED};
   return result;
 }
@@ -238,6 +238,6 @@ astl_error_code astlGetAllMetricSamples(astl_metric_sample_t* metric_samples, ui
  **********************************************************************************/
 // TODO(https://github.com/Arm-Debug/ASTL/pull/17) - delete
 astl_error_code astlTest() {
-  astl_error_code result = astl::CollectorInstance().Test();
+  astl_error_code result = astl::CollectorImplement::Test();
   return result;
 }

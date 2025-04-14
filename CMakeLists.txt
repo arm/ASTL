@@ -180,6 +180,7 @@ endif()
 if(BUILD_TESTING AND ASTL_BUILD_TESTING)
   enable_testing()
   add_subdirectory(tests/unit_test)
+  add_subdirectory(tests/wrapper_test)
 endif()
 
 export(

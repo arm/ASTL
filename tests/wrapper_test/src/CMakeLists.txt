@@ -1,0 +1,29 @@
+# set the default build type to RelWithDebInfo if not specified
+if(NOT CMAKE_BUILD_TYPE)
+    message(
+        STATUS "Default CMAKE_BUILD_TYPE not set. Using Release with Debug Info"
+    )
+    set(CMAKE_BUILD_TYPE
+        "RelWithDebInfo"
+        CACHE
+          STRING
+          "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel"
+          FORCE
+    )
+endif()
+
+add_executable(wrapper_test wrapper_test.cpp)
+
+# atl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
+target_link_libraries(wrapper_test
+    PUBLIC
+        Astl::astl
+    PRIVATE
+        Catch2::Catch2WithMain
+)
+add_custom_target(runwrappertests wrapper_test)
+
+# have catch2's cmake module discover the tests and add them to ctest for us
+include(CTest)
+include(Catch)
+catch_discover_tests(wrapper_test)

@@ -479,10 +479,10 @@ typedef struct _astl_collection_parameters_t {
  *
  * @return astl_error_code
  */
-ASTL_API astl_error_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t         target_handle,
-                                                                astl_collection_parameters_t collection_params,
-                                                                astl_counter_handle_t*       counter_handles,
-                                                                uint32_t                     counter_count);
+ASTL_API astl_error_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t          target_handle,
+                                                                astl_collection_parameters_t* collection_params,
+                                                                astl_counter_handle_t*        counter_handles,
+                                                                uint32_t                      counter_count);
 
 /**
  * @brief Configure a counter collection for all targets on which the specified counters can be
@@ -501,7 +501,7 @@ ASTL_API astl_error_code astlConfigureCounterCollectionOnTarget(astl_target_hand
  *
  * @return astl_error_code
  */
-ASTL_API astl_error_code astlConfigureCounterCollection(astl_collection_parameters_t collection_params,
+ASTL_API astl_error_code astlConfigureCounterCollection(astl_collection_parameters_t* collection_params,
                                                         astl_counter_handle_t* counter_handles, uint32_t counter_count);
 
 /**
@@ -523,10 +523,10 @@ ASTL_API astl_error_code astlConfigureCounterCollection(astl_collection_paramete
  *
  * @return astl_error_code
  */
-astl_error_code ASTL_API astlConfigureMetricCollectionOnTarget(astl_target_handle_t         target_handle,
-                                                               astl_collection_parameters_t collection_params,
-                                                               astl_metric_handle_t*        metric_handles,
-                                                               uint32_t                     metric_count);
+astl_error_code ASTL_API astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
+                                                               astl_collection_parameters_t* collection_params,
+                                                               astl_metric_handle_t*         metric_handles,
+                                                               uint32_t                      metric_count);
 
 /**
  * @brief Configure a metric collection for all targets on which the specified metrics can be
@@ -545,7 +545,7 @@ astl_error_code ASTL_API astlConfigureMetricCollectionOnTarget(astl_target_handl
  *
  * @return astl_error_code
  */
-ASTL_API astl_error_code astlConfigureMetricCollection(astl_collection_parameters_t collection_params,
+ASTL_API astl_error_code astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
                                                        astl_metric_handle_t* metric_handles, uint32_t metric_count);
 
 /**
@@ -567,10 +567,10 @@ ASTL_API astl_error_code astlConfigureMetricCollection(astl_collection_parameter
  *
  * @return astl_error_code
  */
-ASTL_API astl_error_code astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t         target_handle,
-                                                                    astl_collection_parameters_t collection_params,
-                                                                    astl_metric_group_handle_t*  metric_group_handles,
-                                                                    uint32_t                     metric_group_count);
+ASTL_API astl_error_code astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          target_handle,
+                                                                    astl_collection_parameters_t* collection_params,
+                                                                    astl_metric_group_handle_t*   metric_group_handles,
+                                                                    uint32_t                      metric_group_count);
 
 /**
  * @brief Configure a metric group collection for all targets on which the specified metrics can be
@@ -589,9 +589,9 @@ ASTL_API astl_error_code astlConfigureMetricGroupCollectionOnTarget(astl_target_
  *
  * @return astl_error_code
  */
-ASTL_API astl_error_code astlConfigureMetricGroupCollection(astl_collection_parameters_t collection_params,
-                                                            astl_metric_group_handle_t*  metric_group_handles,
-                                                            uint32_t                     metric_group_count);
+ASTL_API astl_error_code astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
+                                                            astl_metric_group_handle_t*   metric_group_handles,
+                                                            uint32_t                      metric_group_count);
 
 /**
  * @brief Do an immediate sample capture of configured counters or metrics on a specific target
