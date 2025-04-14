@@ -61,4 +61,9 @@ Testing/Temporary/
 # vim buffer files
 *.swp
 
+# coverage data
+coverage/
+coverage.html
+coverage.xml
+
 # Add more exclusions as needed

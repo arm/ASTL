@@ -10,7 +10,8 @@
         "name": "debug",
         "cacheVariables": {
             "CMAKE_BUILD_TYPE": "Debug",
-            "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+            "ENABLE_COVERAGE": "ON"
         },
         "binaryDir": "${sourceDir}/build/${presetName}"
       },
@@ -18,7 +19,8 @@
         "name": "release",
         "cacheVariables": {
             "CMAKE_BUILD_TYPE": "Release",
-            "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+            "ENABLE_COVERAGE": "OFF"
         },
         "binaryDir": "${sourceDir}/build/${presetName}"
       }
