@@ -87,12 +87,12 @@ cd ./build/debug && ctest
 
 ### Formatting
 
-To use `clang-format` to check formatting, use [scripts/check_format.sh](scripts/check_format.sh) or the `cmake` target `check-format`
+To use `clang-format` to check formatting, use [scripts/check_format.sh](scripts/check_format.sh) or the `cmake` target `check_format`
 
 ```sh
-cd build && cmake --build . --target check-format
+cd build && cmake --build . --target check_format
 # or
-cd build && make check-format
+cd build && make check_format
 ```
 
 To use `clang-format` to format code, use [scripts/format.sh](scripts/format.sh) or use the target `format`
