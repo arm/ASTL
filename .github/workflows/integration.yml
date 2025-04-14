@@ -23,7 +23,7 @@ jobs:
       # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
         os: [ubuntu-latest, windows-latest]
-        cmake_preset: [release]
+        cmake_preset: [release, debug]
         c_compiler: [gcc, clang, cl]
         include:
           - os: windows-latest
@@ -112,20 +112,47 @@ jobs:
       # is a multi-config generator (Visual Studio generator).
       run: cmake --build --preset ${{ matrix.cmake_preset }}
 
-    - name: Test
+    - name: Unit tests
       # Execute tests defined by the CMake configuration.
       # Note that --preset is needed because the default Windows generator
       # is a multi-config generator (Visual Studio generator).
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest --preset ${{ matrix.cmake_preset }}
+      # exclude sample tests - we want to measure coverage of tests that have assertions in them
+      run: ctest -E Sample --preset ${{ matrix.cmake_preset }}
 
-    - name: Install clang-tidy
+    - name: Install Dependencies
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y clang-tidy
+      run: sudo apt-get update && sudo apt-get install -y clang-tidy gcovr
 
     - name: Lint with clang-tidy
       if: matrix.os == 'ubuntu-latest'
       run: ./scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
+
+    - name: Collect Code Coverage
+      if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+      run: |
+        # note that we _do_ want to ensure code coverage of sample executables
+        gcovr -r . \
+          --exclude 'samples/*' \
+          --exclude 'tests/*' \
+          --exclude 'build/*' \
+          --xml -o coverage.xml
+
+    - name: Publish code coverage to CodeClimate
+      if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+      uses: paambaati/codeclimate-action@v9.0.0
+      env:
+        CC_TEST_REPORTER_ID: ${{ secrets.CC_TEST_REPORTER_ID }}
+
+    - name: Run Sample tests
+      # Execute tests defined by the CMake configuration.
+      # Note that --preset is needed because the default Windows generator
+      # is a multi-config generator (Visual Studio generator).
+      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+      # include only sample tests, we skipped these earlier in `Unit tests`
+      # because we don't want to include them for coverage.
+      run: ctest -R Sample --preset ${{ matrix.cmake_preset }}
+
 
 
   check-format:

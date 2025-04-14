@@ -1,4 +1,5 @@
 [![Clang-Tidy](https://github.com/Arm-Debug/ASTL/actions/workflows/integration.yml/badge.svg)](https://github.com/Arm-Debug/ASTL/actions/workflows/integration.yml)
+[![Test Coverage](https://api.codeclimate.com/v1/badges/f1abbb4695610410827d/test_coverage)](https://codeclimate.com/repos/67f93d9131093e00cd94f159/test_coverage)
 
 # ASTL
 Arm SoC Telemetry Library

@@ -66,6 +66,17 @@ option(ASTL_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
 #option(ASTL_INSTALL "Install library when invoking --install" ON)
 #option(ASTL_ENABLE_LOGGING "Enable logging" OFF)
 
+# Enable code coverage - typically on debug builds
+option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
+if(ENABLE_COVERAGE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(STATUS "Building with coverage instrumentation")
+        add_compile_options(--coverage)
+        add_link_options(--coverage)
+    endif()
+endif()
+
+
 include(GNUInstallDirs)
 set(ASTL_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/astl")
 set(ASTL_INSTALL_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}")
