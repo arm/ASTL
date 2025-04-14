@@ -50,6 +50,32 @@ The library has a C-interface for the API and a C++ implementation. There is als
 
 TBD
 
+## Running the Mock SCMI Sysfs Generator
+
+To run the mock SCMI sysfs generator:
+
+1. **Create a Mount Directory**  
+
+Create a directory to serve as the mount point (e.g., `/tmp/scmi`):
+
+```sh
+mkdir -p /tmp/scmi
+```
+
+2. **Run Mock Sysfs**
+```sh
+./MockSysfs /tmp/scmi
+```
+
+**Some Optional Flags:**
+- Display help message: -h
+- Single-threaded operation: -s
+- Run in foreground: -f
+
+3. **Terminating Mock Sysfs**
+- Foreground mode: Simply press Ctrl+C to exit.
+- Background mode: kill -SIGINT \<PID\>
+
 # Build steps for developers
 
 ## Initial clone and setup

@@ -44,6 +44,7 @@ if [[ -n "$1" ]]; then
 
   INCLUDE_PATHS+=" -I${BUILD_DIR}/include"
   INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/src/impl"
+  INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/tools/mock_sysfs/include"
   CLANG_BUILD_DIR+=" -p $BUILD_DIR"
 fi
 
@@ -56,12 +57,12 @@ SYS_INCLUDE_PATHS=$(echo | g++ -E -x c++ - -v 2>&1 | \
 
 
 # Include dependency headers from vcpkg as system headers
-readarray -t VCPKG_DEPENDENCIES < <(jq -r '.dependencies[]' $REPO_ROOT_DIR/vcpkg.json)
+readarray -t VCPKG_DEPENDENCIES < <(jq -r '.dependencies[] | if type == "string" then . else .name end' "$REPO_ROOT_DIR/vcpkg.json")
 if [ -f build/*/CMakeCache.txt ]; then
   TRIPLET=$(grep VCPKG_TARGET_TRIPLET $BUILD_DIR/CMakeCache.txt | head -n1 | cut -d '=' -f2)
   for dep in "${VCPKG_DEPENDENCIES[@]}"; do
     new_include="$REPO_ROOT_DIR/vcpkg/packages/${dep}_$TRIPLET/include"
-    SYS_INCLUDE_PATHS=$SYS_INCLUDE_PATHS:" -isystem $new_include"
+    SYS_INCLUDE_PATHS+=" -isystem $new_include"
   done
 else
   echo "No vcpkg triplet found, won't be able to provide dependencies as system headers"
