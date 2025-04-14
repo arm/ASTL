@@ -3,6 +3,6 @@
 #include "astl/astl.h"
 #include "astl_impl.h"
 
-TEST_CASE("CollectorInstance.Test()", "[always succeeds]") {
-  REQUIRE(astl::CollectorInstance().Test() == ASTL_SUCCESS);
+TEST_CASE("CollectorInstance.Test()", "[is deprecated]") {
+  REQUIRE(astl::CollectorInstance().Test() == ASTL_ERROR_DEPRECATED_API);
 }

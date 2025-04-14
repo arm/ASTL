@@ -122,11 +122,15 @@ jobs:
 
     - name: Install Dependencies
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y clang-tidy gcovr
+      run: sudo apt-get update && sudo apt-get install -y clang-tidy cppcheck gcovr
 
     - name: Lint with clang-tidy
       if: matrix.os == 'ubuntu-latest'
       run: ./scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
+
+    - name: Lint with cppcheck
+      if: matrix.os == 'ubuntu-latest'
+      run: ./scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
 
     - name: Collect Code Coverage
       if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
