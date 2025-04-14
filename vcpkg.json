@@ -1,5 +1,9 @@
 {
     "dependencies": [
-        "catch2"
+        "catch2",
+        {
+            "name": "libfuse",
+            "platform": "!windows"
+        }
     ]
 }
