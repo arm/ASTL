@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # This script finds source files and runs clang-tidy to lint them
-set -e
+set -eu -o pipefail
 
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <build>"

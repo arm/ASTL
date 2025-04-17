@@ -2,7 +2,7 @@
 
 # This script checks if the code is formatted according to clang-format rules.
 # run this from the repo root
-set -e
+set -eu -o pipefail
 
 # Check for clang-format
 if ! command -v clang-format >/dev/null 2>&1; then

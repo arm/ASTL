@@ -5,6 +5,8 @@
 # NAME_ALL_SOURCES_AND_HEADERS - a name expression to use with find to locate all source files (including headers)
 # NAME_ALL_SOURCES - a name expression to use with find to locate all source files (excluding headers)
 
+set -eu -o pipefail
+
 EXCLUDE_DIRS=("build" "vcpkg")
 PRUNE_EXPR=" -path build -o"
 for dir in "${EXCLUDE_DIRS[@]}"; do

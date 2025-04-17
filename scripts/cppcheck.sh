@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # This script finds source files and runs cppcheck for a static analysis check
-set -e
+set -eu -o pipefail
 
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <build>"
