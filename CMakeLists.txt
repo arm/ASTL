@@ -67,15 +67,16 @@ option(ASTL_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
 #option(ASTL_ENABLE_LOGGING "Enable logging" OFF)
 
 # Enable code coverage - typically on debug builds
+option(ENABLE_VALGRIND "Enable run-time memory checking on unit tests" OFF)
 option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
 if(ENABLE_COVERAGE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         message(STATUS "Building with coverage instrumentation")
         add_compile_options(--coverage)
+        add_compile_options(-O0) # Needed to get reliable coverage results
         add_link_options(--coverage)
     endif()
 endif()
-
 
 include(GNUInstallDirs)
 set(ASTL_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/astl")
@@ -169,6 +170,15 @@ install(TARGETS ${PROJECT_NAME}
     INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
 )
 
+if(ENABLE_VALGRIND)
+  # These variables MUST be set before include (CTest) or else DartConfiguration.tcl:MemoryCheckCommandOptions will be empty.
+  set(MEMORYCHECK_TYPE "Valgrind")
+  set(VALGRIND_COMMAND "/usr/bin/valgrind")
+  set(VALGRIND_COMMAND_OPTIONS "--leak-check=full --show-leak-kinds=all --track-origins=yes")
+  set(MEMORYCHECK_COMMAND "/usr/bin/valgrind")
+  set(MEMORYCHECK_COMMAND_OPTIONS "--leak-check=full --show-leak-kinds=all --track-origins=yes")
+endif()
+
 include (CTest)
 
 # add samples
@@ -239,7 +249,6 @@ endif()
 #  include(cmake/packaging.cmake)
 #endif()
 
-
 # add a phony target to format the source files
 # to use: `cd build && cmake --build . --target format`
 #     or: `cd build && make format`
@@ -266,3 +275,4 @@ add_custom_target(lint
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Running clang-lint on source files"
 )
+
