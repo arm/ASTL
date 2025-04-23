@@ -276,3 +276,9 @@ add_custom_target(lint
   COMMENT "Running clang-lint on source files"
 )
 
+add_custom_target(valgrind
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/valgrind.sh ${CMAKE_CURRENT_BINARY_DIR}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Running unit tests with Valgrind (runtime memory leak checker)"
+)
+
