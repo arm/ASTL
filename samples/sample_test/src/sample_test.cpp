@@ -10,9 +10,9 @@ int main(int argc, char *argv[]) {
 
   std::cout << "ASTL version is: " << astlVersionString() << std::endl;
 
-  astl_error_code status = astlTest();
+  astl_status_code status = astlTest();
 
-  std::cout << "error code is: " << astlErrorString(status) << std::endl;
+  std::cout << "error code is: " << astlStatusString(status) << std::endl;
 
   return 0;
 }

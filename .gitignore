@@ -54,6 +54,9 @@ dkms.conf
 # Ignore build directories
 build/
 
+# Ignore personal editor settings
+.vscode/
+
 # Ignore tmp directories
 tmp/
 Testing/Temporary/

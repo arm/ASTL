@@ -28,8 +28,8 @@ typedef struct _astl_target_properties_t {
   astl_target_handle_t _handle;         //!< Internal handle ot target
   astl_target_handle_t _parent_handle;  //!< Internal handle to the parent device where this target
                                         //!< resides. Null means top level target
-  char* _name;                          //!< Device name
-  char* _description;                   //!< Device Description
+  const char* _name;                    //!< Device name
+  const char* _description;             //!< Device Description
                                         //!< What other fields? Socket number? Node number?
                                         //!< PCIe BDF? Vendor? Model name? Model number?
                                         //!< Serial number? Version? Unique ID?
@@ -44,9 +44,9 @@ typedef struct _astl_target_properties_t {
  *                                         astl_target_properties_t big enough to hold
  *                                         target_count_elements
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetTargetCount(uint32_t* target_count);
+ASTL_API astl_status_code astlGetTargetCount(uint32_t* target_count);
 
 /**
  * @brief Get properties of all targets on the system on which collection can be done
@@ -59,11 +59,11 @@ ASTL_API astl_error_code astlGetTargetCount(uint32_t* target_count);
  *
  * @param[in/out] target_count             The number of elements the targets buffer was allocated
  *                                         for Returns the number of elements written to the targets
- *                                         buffer
+ *                                         buffer.
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count);
+ASTL_API astl_status_code astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count);
 
 /***********************************************************************************
  **********************               DATA TYPES               *********************
@@ -165,16 +165,16 @@ typedef enum _astl_counter_type_t {
 typedef struct _astl_counter_properties_t {
   size_t                _size;                   //!< Size of this struct for versioning
   astl_counter_handle_t _handle;                 //!< The handle of this counter
-  char*                 _name;                   //!< The name of this counter
-  char*                 _description;            //!< The description of this counter
+  const char*           _name;                   //!< The name of this counter
+  const char*           _description;            //!< The description of this counter
   uint32_t              _min_sampling_interval;  //!< The minimum sampling interval this counter can be collected
                                                  //!< in ms. Example: 10 means counter cannot be collected
                                                  //!< faster than every 10ms
   astl_units_t _units;                           //!< The raw units of the counter. For example, for memory transfers,
                                                  //!< it would be ASTL_UNIT_BYTES. For temperature, it would be
                                                  //!< ASTL_UNIT_CELCIUS
-  uint64_t _mask;                                //!< Optional: Mask is used to clear out bits in the 64bit container
-  char*    _formula;                  //!< Transformation required on the counter. Example: & MASK >> 2 DELTA / TIME.
+  uint64_t    _mask;                             //!< Optional: Mask is used to clear out bits in the 64bit container
+  const char* _formula;               //!< Transformation required on the counter. Example: & MASK >> 2 DELTA / TIME.
                                       //!< This example would mean: Mask the counter first,
                                       //!<  Then shift the value by 2; do Value2 - Value1 to get a delta and divide the
                                       //!<  result by the elapsed time
@@ -196,9 +196,9 @@ typedef struct _astl_counter_properties_t {
  *                                         of astl_counter_properties_t big enough to hold
  *                                         counter_count elements
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_count);
+ASTL_API astl_status_code astlGetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_count);
 
 /**
  * @brief Get properties of all counters that can be collected on the specified target
@@ -216,10 +216,10 @@ ASTL_API astl_error_code astlGetCounterCount(astl_target_handle_t target_handle,
  *                                         for Returns the number of elements written to the counter
  *                                         buffer.
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetCounters(astl_target_handle_t target_handle_handle, astl_counter_properties_t* counters,
-                                         uint32_t* counter_count);
+ASTL_API astl_status_code astlGetCounters(astl_target_handle_t       target_handle_handle,
+                                          astl_counter_properties_t* counters, uint32_t* counter_count);
 
 /***********************************************************************************
  **********************              METRIC                    *********************
@@ -297,9 +297,9 @@ typedef struct _astl_metric_properties_t {
  *                                         of astl_metric_properties_t big enough to hold metric_count
  *                                         elements
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetMetricCount(astl_target_handle_t target_handle_handle, uint32_t* metric_count);
+ASTL_API astl_status_code astlGetMetricCount(astl_target_handle_t target_handle_handle, uint32_t* metric_count);
 
 /**
  * @brief Get properties of all metrics that can be collected on the specified target
@@ -317,10 +317,10 @@ ASTL_API astl_error_code astlGetMetricCount(astl_target_handle_t target_handle_h
  *                                         for Returns the number of elements written to the metrics
  *                                         buffer.
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t* metric_buffer,
-                                        uint32_t* metric_count);
+ASTL_API astl_status_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t* metric_buffer,
+                                         uint32_t* metric_count);
 
 /***********************************************************************************
  **********************              METRIC GROUPS             *********************
@@ -363,9 +363,9 @@ typedef struct _astl_metric_group_properties_t {
  *                                         of astl_metric_group_properties_t big enough to hold metric_group_count
  *                                         elements
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetMetricGroupCount(astl_target_handle_t target_handle, uint32_t* metric_group_count);
+ASTL_API astl_status_code astlGetMetricGroupCount(astl_target_handle_t target_handle, uint32_t* metric_group_count);
 
 /**
  * @brief Get properties of all metric groups defined for the specified target
@@ -382,11 +382,11 @@ ASTL_API astl_error_code astlGetMetricGroupCount(astl_target_handle_t target_han
  * @param[in/out] metric_group_count       The number of elements the metric groups buffer was
  * allocated for Returns the number of elements written to the metric groups buffer.
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetMetricGroups(astl_target_handle_t            target_handle,
-                                             astl_metric_group_properties_t* metric_groups,
-                                             uint32_t*                       metric_group_count);
+ASTL_API astl_status_code astlGetMetricGroups(astl_target_handle_t            target_handle,
+                                              astl_metric_group_properties_t* metric_groups,
+                                              uint32_t*                       metric_group_count);
 
 /**
  * @brief Get properties of all metrics that can be collected on the specified target that are part
@@ -409,11 +409,11 @@ ASTL_API astl_error_code astlGetMetricGroups(astl_target_handle_t            tar
  *                                         IMPORTANT: _size field of at least the first element in the array
  *                                         must be set to sizeof(astl_metric_properties_t) for versioning
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetMetricGroupMetrics(astl_target_handle_t            target_handle,
-                                                   astl_metric_group_properties_t* metric_group,
-                                                   astl_metric_properties_t*       metrics);
+ASTL_API astl_status_code astlGetMetricGroupMetrics(astl_target_handle_t            target_handle,
+                                                    astl_metric_group_properties_t* metric_group,
+                                                    astl_metric_properties_t*       metrics);
 
 /***********************************************************************************
  **********************              COLLECTION                *********************
@@ -477,12 +477,12 @@ typedef struct _astl_collection_parameters_t {
  * @param[in] counter_count                The number of counters in the buffer of counter handles
  *                                         configured for collection
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t          target_handle,
-                                                                astl_collection_parameters_t* collection_params,
-                                                                astl_counter_handle_t*        counter_handles,
-                                                                uint32_t                      counter_count);
+ASTL_API astl_status_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t                target_handle,
+                                                                 const astl_collection_parameters_t* collection_params,
+                                                                 const astl_counter_handle_t*        counter_handles,
+                                                                 uint32_t                            counter_count);
 
 /**
  * @brief Configure a counter collection for all targets on which the specified counters can be
@@ -499,10 +499,11 @@ ASTL_API astl_error_code astlConfigureCounterCollectionOnTarget(astl_target_hand
  * @param[in] counter_count                The number of counters in the buffer of counter handles
  *                                         configured for collection
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlConfigureCounterCollection(astl_collection_parameters_t* collection_params,
-                                                        astl_counter_handle_t* counter_handles, uint32_t counter_count);
+ASTL_API astl_status_code astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,
+                                                         const astl_counter_handle_t*        counter_handles,
+                                                         uint32_t                            counter_count);
 
 /**
  * @brief Configure a metric collection for a specific target
@@ -523,10 +524,10 @@ ASTL_API astl_error_code astlConfigureCounterCollection(astl_collection_paramete
  *
  * @return astl_error_code
  */
-astl_error_code ASTL_API astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
-                                                               astl_collection_parameters_t* collection_params,
-                                                               astl_metric_handle_t*         metric_handles,
-                                                               uint32_t                      metric_count);
+astl_status_code ASTL_API astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
+                                                                astl_collection_parameters_t* collection_params,
+                                                                astl_metric_handle_t*         metric_handles,
+                                                                uint32_t                      metric_count);
 
 /**
  * @brief Configure a metric collection for all targets on which the specified metrics can be
@@ -543,10 +544,10 @@ astl_error_code ASTL_API astlConfigureMetricCollectionOnTarget(astl_target_handl
  * @param[in] metric_count                 The number of metrics in the buffer of metric handles
  *                                         configured for collection
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
-                                                       astl_metric_handle_t* metric_handles, uint32_t metric_count);
+ASTL_API astl_status_code astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
+                                                        astl_metric_handle_t* metric_handles, uint32_t metric_count);
 
 /**
  * @brief Configure a metric group collection for a specific target
@@ -565,12 +566,12 @@ ASTL_API astl_error_code astlConfigureMetricCollection(astl_collection_parameter
  * @param[in] metric_group_count           The number of metric groups in the buffer of metric group
  *                                         handles configured for collection
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          target_handle,
-                                                                    astl_collection_parameters_t* collection_params,
-                                                                    astl_metric_group_handle_t*   metric_group_handles,
-                                                                    uint32_t                      metric_group_count);
+ASTL_API astl_status_code astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          target_handle,
+                                                                     astl_collection_parameters_t* collection_params,
+                                                                     astl_metric_group_handle_t*   metric_group_handles,
+                                                                     uint32_t                      metric_group_count);
 
 /**
  * @brief Configure a metric group collection for all targets on which the specified metrics can be
@@ -587,11 +588,11 @@ ASTL_API astl_error_code astlConfigureMetricGroupCollectionOnTarget(astl_target_
  * @param[in] metric_group_count           The number of metric groups in the buffer of metric group
  *                                         handles configured for collection
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
-                                                            astl_metric_group_handle_t*   metric_group_handles,
-                                                            uint32_t                      metric_group_count);
+ASTL_API astl_status_code astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
+                                                             astl_metric_group_handle_t*   metric_group_handles,
+                                                             uint32_t                      metric_group_count);
 
 /**
  * @brief Do an immediate sample capture of configured counters or metrics on a specific target
@@ -599,16 +600,16 @@ ASTL_API astl_error_code astlConfigureMetricGroupCollection(astl_collection_para
  * @param[in] target_handle                The handle of the target of interest. Found in
  *                                         astl_target_properties_t
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlReadImmediateOnTarget(astl_target_handle_t target_handle);
+ASTL_API astl_status_code astlReadImmediateOnTarget(astl_target_handle_t target_handle);
 
 /**
  * @brief Do an immediate sample capture of configured counters or metrics on all configured targets
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlReadImmediate();
+ASTL_API astl_status_code astlReadImmediate();
 
 /**
  * @brief Start telemetry collection on a specific target
@@ -616,16 +617,16 @@ ASTL_API astl_error_code astlReadImmediate();
  * @param[in] target_handle                The handle of the target of interest. Found in
  *                                         astl_target_properties_t
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlStartCollectionOnTarget(astl_target_handle_t target_handle);
+ASTL_API astl_status_code astlStartCollectionOnTarget(astl_target_handle_t target_handle);
 
 /**
  * @brief Start telemetry collection on all targets
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlStartCollection();
+ASTL_API astl_status_code astlStartCollection();
 
 /**
  * @brief Pause telemetry collection on a specific target
@@ -633,16 +634,16 @@ ASTL_API astl_error_code astlStartCollection();
  * @param[in] target_handle                The handle of the target of interest. Found in
  *                                         astl_target_properties_t
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlPauseCollectionOnTarget(astl_target_handle_t target_handle);
+ASTL_API astl_status_code astlPauseCollectionOnTarget(astl_target_handle_t target_handle);
 
 /**
  * @brief Pause telemetry collection on all targets
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlPauseCollection();
+ASTL_API astl_status_code astlPauseCollection();
 
 /**
  * @brief Resume telemetry collection on a specific target
@@ -650,16 +651,16 @@ ASTL_API astl_error_code astlPauseCollection();
  * @param[in] target_handle                The handle of the target of interest. Found in
  *                                         astl_target_properties_t
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlResumeCollectionOnTarget(astl_target_handle_t target_handle);
+ASTL_API astl_status_code astlResumeCollectionOnTarget(astl_target_handle_t target_handle);
 
 /**
  * @brief Resume telemetry collection on all targets
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlResumeCollection();
+ASTL_API astl_status_code astlResumeCollection();
 
 /**
  * @brief Stop telemetry collection on a specific target
@@ -667,16 +668,16 @@ ASTL_API astl_error_code astlResumeCollection();
  * @param[in] target_handle                The handle of the target of interest. Found in
  *                                         astl_target_properties_t
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlStopCollectionOnTarget(astl_target_handle_t target_handle);
+ASTL_API astl_status_code astlStopCollectionOnTarget(astl_target_handle_t target_handle);
 
 /**
  * @brief Stop telemetry collection on all targets
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlStopCollection();
+ASTL_API astl_status_code astlStopCollection();
 
 /*** COLLECTED COUNTER SAMPLES ***/
 /**
@@ -690,11 +691,11 @@ ASTL_API astl_error_code astlStopCollection();
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetCounterSampleCountOnTarget(astl_target_handle_t  target_handle,
-                                                           astl_counter_handle_t counter_handle,
-                                                           uint32_t*             sample_count);
+ASTL_API astl_status_code astlGetCounterSampleCountOnTarget(astl_target_handle_t  target_handle,
+                                                            astl_counter_handle_t counter_handle,
+                                                            uint32_t*             sample_count);
 
 /**
  * @brief Get the samples collected for specific counter on a specific target
@@ -714,11 +715,11 @@ ASTL_API astl_error_code astlGetCounterSampleCountOnTarget(astl_target_handle_t 
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetCounterSamplesOnTarget(astl_target_handle_t   target_handle,
-                                                       astl_counter_handle_t  counter_handle,
-                                                       astl_counter_sample_t* samples, uint32_t* sample_count);
+ASTL_API astl_status_code astlGetCounterSamplesOnTarget(astl_target_handle_t   target_handle,
+                                                        astl_counter_handle_t  counter_handle,
+                                                        astl_counter_sample_t* samples, uint32_t* sample_count);
 
 /**
  * @brief Get the number of samples collected for all counters on a specific target
@@ -728,10 +729,10 @@ ASTL_API astl_error_code astlGetCounterSamplesOnTarget(astl_target_handle_t   ta
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetAllCounterSampleCountOnTarget(astl_target_handle_t target_handle,
-                                                              uint32_t*            sample_count);
+ASTL_API astl_status_code astlGetAllCounterSampleCountOnTarget(astl_target_handle_t target_handle,
+                                                               uint32_t*            sample_count);
 
 /**
  * @brief Get the samples collected for all counters on a specific target
@@ -748,19 +749,19 @@ ASTL_API astl_error_code astlGetAllCounterSampleCountOnTarget(astl_target_handle
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetAllCounterSamplesOnTarget(astl_target_handle_t   target_handle,
-                                                          astl_counter_sample_t* samples, uint32_t* sample_count);
+ASTL_API astl_status_code astlGetAllCounterSamplesOnTarget(astl_target_handle_t   target_handle,
+                                                           astl_counter_sample_t* samples, uint32_t* sample_count);
 
 /**
  * @brief Get the number of samples collected for all counters on all targets
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetAllCounterSampleCount(uint32_t* sample_count);
+ASTL_API astl_status_code astlGetAllCounterSampleCount(uint32_t* sample_count);
 
 /**
  * @brief Get the samples collected for all counters on all targets
@@ -774,9 +775,9 @@ ASTL_API astl_error_code astlGetAllCounterSampleCount(uint32_t* sample_count);
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetAllCounterSamples(astl_counter_sample_t* counter_samples, uint32_t* sample_count);
+ASTL_API astl_status_code astlGetAllCounterSamples(astl_counter_sample_t* counter_samples, uint32_t* sample_count);
 
 /*** COLLECTED METRIC SAMPLES ***/
 /**
@@ -790,10 +791,10 @@ ASTL_API astl_error_code astlGetAllCounterSamples(astl_counter_sample_t* counter
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetMetricSampleCountOnTarget(astl_target_handle_t target_handle,
-                                                          astl_metric_handle_t metric_handle, uint32_t* sample_count);
+ASTL_API astl_status_code astlGetMetricSampleCountOnTarget(astl_target_handle_t target_handle,
+                                                           astl_metric_handle_t metric_handle, uint32_t* sample_count);
 
 /**
  * @brief Get the samples collected for specific metric on a specific target
@@ -813,11 +814,11 @@ ASTL_API astl_error_code astlGetMetricSampleCountOnTarget(astl_target_handle_t t
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle,
-                                                      astl_metric_handle_t metric_handle, astl_metric_sample_t* samples,
-                                                      uint32_t* sample_count);
+ASTL_API astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t  target_handle,
+                                                       astl_metric_handle_t  metric_handle,
+                                                       astl_metric_sample_t* samples, uint32_t* sample_count);
 
 /**
  * @brief Get the number of samples collected for all metrics on a specific target
@@ -827,10 +828,10 @@ ASTL_API astl_error_code astlGetMetricSamplesOnTarget(astl_target_handle_t targe
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetAllMetricSampleCountOnTarget(astl_target_handle_t target_handle,
-                                                             uint32_t*            sample_count);
+ASTL_API astl_status_code astlGetAllMetricSampleCountOnTarget(astl_target_handle_t target_handle,
+                                                              uint32_t*            sample_count);
 
 /**
  * @brief Get the samples collected for all metrics on a specific target
@@ -847,19 +848,19 @@ ASTL_API astl_error_code astlGetAllMetricSampleCountOnTarget(astl_target_handle_
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetAllMetricSamplesOnTarget(astl_target_handle_t  target_handle,
-                                                         astl_metric_sample_t* samples, uint32_t* sample_count);
+ASTL_API astl_status_code astlGetAllMetricSamplesOnTarget(astl_target_handle_t  target_handle,
+                                                          astl_metric_sample_t* samples, uint32_t* sample_count);
 
 /**
  * @brief Get the number of samples collected for all metrics on all targets
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetAllMetricSampleCount(uint32_t* sample_count);
+ASTL_API astl_status_code astlGetAllMetricSampleCount(uint32_t* sample_count);
 
 /**
  * @brief Get the samples collected for all metrics on all targets
@@ -873,9 +874,9 @@ ASTL_API astl_error_code astlGetAllMetricSampleCount(uint32_t* sample_count);
  *
  * @param[in/out] sample_count             The number of collected samples
  *
- * @return astl_error_code
+ * @return astl_status_code
  */
-ASTL_API astl_error_code astlGetAllMetricSamples(astl_metric_sample_t* samples, uint32_t* sample_count);
+ASTL_API astl_status_code astlGetAllMetricSamples(astl_metric_sample_t* samples, uint32_t* sample_count);
 
 /***********************************************************************************
  **********************              TEST                      *********************
@@ -883,7 +884,7 @@ ASTL_API astl_error_code astlGetAllMetricSamples(astl_metric_sample_t* samples, 
 
 // Place holder for initial testing
 // TODO(https://github.com/Arm-Debug/ASTL/pull/17) delete this function, replace with real unit testable
-ASTL_API astl_error_code astlTest();
+ASTL_API astl_status_code astlTest();
 
 #if defined(__cplusplus)
 }

@@ -48,7 +48,13 @@ else()
   message(STATUS "This project has a top-level one called [${CMAKE_PROJECT_NAME}]")
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  # Workaround for std::expected not available in clang 18 and earlier
+  add_compile_options(
+    -stdlib=libstdc++ -D__cpp_concepts=202002 -Wno-builtin-macro-redefined
+  )
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
@@ -119,6 +125,7 @@ target_sources(
         "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_telemetry.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_version.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_errors.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_test_hooks.cpp"
 )
 
 # include directories
@@ -281,4 +288,3 @@ add_custom_target(valgrind
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running unit tests with Valgrind (runtime memory leak checker)"
 )
-

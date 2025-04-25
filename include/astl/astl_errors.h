@@ -8,96 +8,102 @@ extern "C" {
 #endif
 
 /**
- * @brief Error codes
+ * @brief Status codes
  */
-typedef enum _astl_error_code {
-  ASTL_SUCCESS                                    = 0,         //!< Success
-  ASTL_ERROR_BAD_ARGUMENT                         = 1,         //!< Bad argument passed to function
-  ASTL_ERROR_BAD_CONFIGURATION                    = 2,         //!< Generic bad configuration error code
-  ASTL_ERROR_INVALID_TARGET_HANDLE                = 3,         //!< Invalid target handle used
-  ASTL_ERROR_INVALID_COUNTER_HANDLE               = 4,         //!< Invalid counter handle used
-  ASTL_ERROR_INVALID_METRIC_HANDLE                = 5,         //!< Invalid metric handle used
-  ASTL_ERROR_INVALID_METRIC_GROUP_HANDLE          = 6,         //!< Invalid metric group handle used
-  ASTL_ERROR_NOT_IMPLEMENTED                      = 7,         //!< Functionality not implemented yet
-  ASTL_ERROR_NOT_SUPPORTED                        = 8,         //!< Unsupported functionality requested
-  ASTL_ERROR_DEPRECATED_API                       = 9,         //!< Deprecated API used
-  ASTL_ERROR_OLD_TARGET_PROPERTIES_STRUCT_VERSION = 10,        //!< The version of the target properties structure used
-                                                               // by client is older
-  ASTL_ERROR_NEW_TARGET_PROPERTIES_STRUCT_VERSION = 11,        //!< The version of the target properties structure used
-                                                               // by client is newer
-  ASTL_ERROR_OLD_COUNTER_PROPERTIES_STRUCT_VERSION = 12,       //!< The version of the counter properties structure
-                                                               // used by client is older
-  ASTL_ERROR_NEW_COUNTER_PROPERTIES_STRUCT_VERSION = 13,       //!< The version of the counter properties structure
-                                                               // used by client is newer
-  ASTL_ERROR_OLD_COUNTER_SAMPLE_STRUCT_VERSION = 14,           //!< The version of the counter sample structure used by
-                                                               // client is older
-  ASTL_ERROR_NEW_COUNTER_SAMPLE_STRUCT_VERSION = 15,           //!< The version of the counter sample structure used by
-                                                               // client is newer
-  ASTL_ERROR_OLD_METRIC_PROPERTIES_STRUCT_VERSION = 16,        //!< The version of the metric properties structure used
-                                                               // by client is older
-  ASTL_ERROR_NEW_METRIC_PROPERTIES_STRUCT_VERSION = 17,        //!< The version of the metric properties structure used
-                                                               // by client is newer
-  ASTL_ERROR_OLD_METRIC_SAMPLE_STRUCT_VERSION = 18,            //!< The version of the metric sample structure used by
-                                                               // client is older
-  ASTL_ERROR_NEW_METRIC_SAMPLE_STRUCT_VERSION = 19,            //!< The version of the metric sample structure used by
-                                                               // client is newer
-  ASTL_ERROR_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION = 20,  //!< The version of the metric group properties structure
-                                                               // used by client is older
-  ASTL_ERROR_NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION = 21,  //!< The version of the metric group properties structure
-                                                               // used by client is newer
-  ASTL_ERROR_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION = 22,    //!< The version of the collection parameters structure
-                                                               // used by client is older
-  ASTL_ERROR_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION = 23,    //!< The version of the collection parameters structure
-                                                               // used by client is newer
-  ASTL_ERROR_TARGET_PROPERTIES_BUFFER_TOO_SMALL = 24,          //!< Buffer of target properties passed in by client is
-                                                               // too small to hold all targets
-  ASTL_ERROR_COUNTER_PROPERTIES_BUFFER_TOO_SMALL = 25,         //!< Buffer of counter properties passed in by client is
-                                                               // too small to hold all counters
-  ASTL_ERROR_METRIC_PROPERTIES_BUFFER_TOO_SMALL = 26,          //!< Buffer of metric properties passed in by client is
-                                                               // too small to hold all metrics
-  ASTL_ERROR_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL = 27,  //!< Buffer of metric group properties passed in by client
-                                                             // is too small to hold all metric groups
-  ASTL_ERROR_COUNTER_SAMPLES_BUFFER_TOO_SMALL = 28,          //!< Buffer of counter samples passed in by client is too
-                                                             // small to hold all counter samples
-  ASTL_ERROR_METRIC_SAMPLES_BUFFER_TOO_SMALL = 29,           //!< Buffer of metric samples passed in by client is too
-                                                             // small to hold all metric samples
-  ASTL_ERROR_SAMPLIMG_INTERVAL_TOO_SMALL = 30,               //!< Sampling interval specified is too small
-  ASTL_ERROR_SAMPLING_INTERVAL_TOO_LARGE = 31,               //!< Sampling interval specified is too large
-  ASTL_ERROR_SAMPLING_INTERVAL_IGNORED   = 32,               //!< Sampling interval paramater ignored. This would be if
-                                                             // collection mode is SNAPSHOT or IMMEDIATE
-  ASTL_ERROR_INVALID_COLLECTION_MODE              = 33,      //!< Invalid collection mode specified
-  ASTL_ERROR_INVALID_COLLECTION_OPTIMIZATION      = 34,      //!< Invalid collection optimization specified
-  ASTL_ERROR_COUNTER_NOT_SUPPORTED_ON_TARGET      = 35,      //!< Counter cannot be collected on specified target
-  ASTL_ERROR_METRIC_NOT_SUPPORTED_ON_TARGET       = 36,      //!< Metric cannot be collected on specified target
-  ASTL_ERROR_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET = 37,      //!< Metric group cannot be collected on specified target
-  ASTL_ERROR_COLLECTION_NOT_RUNNING               = 38,  //!< Collection not running. Error when issuing command meant
-                                                         // for a running collection
-  ASTL_ERROR_COLLECTION_NOT_STOPPED = 39,                //!< Collection not stopped. Error when issuing command meant
-                                                         // for a stopped collection
-  ASTL_ERROR_COLLECTION_NOT_PAUSED = 40,                 //!< Collection not running. Error when issuing command meant
-                                                         // for a paused collection
-  ASTL_ERROR_COLLECTION_ALREADY_RUNNING = 41,            //!< Collection already running. Error when issuing command
-                                                         // meant to start or resume an already running collection
-  ASTL_ERROR_COLLECTION_ALREADY_STOPPED = 42,            //!< Collection already stopped. Error when issuing command
-                                                         // meant to stop an already stopped collection
-  ASTL_ERROR_COLLECTION_ALREADY_PAUSED = 43,             //!< Collection already paused. Error when issuing command
-                                                         // meant to pause an already paused collection
-  ASTL_ERROR_NO_DATA_COLLECTED = 44,                     //!< No data collected. Error when attempting to get collected
-                                                         // samples but no samples are available.
+typedef enum _astl_status_code {
+  ASTL_STATUS_SUCCESS                              = 0,    //!< Success
+  ASTL_STATUS_BAD_ARGUMENT                         = 1,    //!< Bad argument passed to function
+  ASTL_STATUS_BAD_CONFIGURATION                    = 2,    //!< Generic bad configuration error code
+  ASTL_STATUS_INVALID_TARGET_HANDLE                = 3,    //!< Invalid target handle used
+  ASTL_STATUS_INVALID_COUNTER_HANDLE               = 4,    //!< Invalid counter handle used
+  ASTL_STATUS_INVALID_METRIC_HANDLE                = 5,    //!< Invalid metric handle used
+  ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE          = 6,    //!< Invalid metric group handle used
+  ASTL_STATUS_NOT_IMPLEMENTED                      = 7,    //!< Functionality not implemented yet
+  ASTL_STATUS_NOT_SUPPORTED                        = 8,    //!< Unsupported functionality requested
+  ASTL_STATUS_DEPRECATED_API                       = 9,    //!< Deprecated API used
+  ASTL_STATUS_NO_TARGETS_FOUND                     = 10,   //!< No targets were detected or configured
+  ASTL_STATUS_OLD_TARGET_PROPERTIES_STRUCT_VERSION = 11,   //!< The version of the target properties structure used
+                                                           // by client is older
+  ASTL_STATUS_NEW_TARGET_PROPERTIES_STRUCT_VERSION = 12,   //!< The version of the target properties structure used
+                                                           // by client is newer
+  ASTL_STATUS_NO_COUNTERS_FOUND                     = 13,  //!< No counters were detected or configured
+  ASTL_STATUS_OLD_COUNTER_PROPERTIES_STRUCT_VERSION = 14,  //!< The version of the counter properties structure
+                                                           // used by client is older
+  ASTL_STATUS_NEW_COUNTER_PROPERTIES_STRUCT_VERSION = 15,  //!< The version of the counter properties structure
+                                                           // used by client is newer
+  ASTL_STATUS_OLD_COUNTER_SAMPLE_STRUCT_VERSION = 16,      //!< The version of the counter sample structure used by
+                                                           // client is older
+  ASTL_STATUS_NEW_COUNTER_SAMPLE_STRUCT_VERSION = 17,      //!< The version of the counter sample structure used by
+                                                           // client is newer
+  ASTL_STATUS_NO_METRICS_FOUND                     = 18,   //!< No metrics were detected or configured
+  ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION = 19,   //!< The version of the metric properties structure used
+                                                           // by client is older
+  ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION = 20,   //!< The version of the metric properties structure used
+                                                           // by client is newer
+  ASTL_STATUS_OLD_METRIC_SAMPLE_STRUCT_VERSION = 21,       //!< The version of the metric sample structure used by
+                                                           // client is older
+  ASTL_STATUS_NEW_METRIC_SAMPLE_STRUCT_VERSION = 22,       //!< The version of the metric sample structure used by
+                                                           // client is newer
+  ASTL_STATUS_NO_METRIC_GROUPS_FOUND = 23,                 //!< No metrics were detected or configured
+  ASTL_STATUS_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION =
+      24,  //!< The version of the metric group properties structure
+           // used by client is older
+  ASTL_STATUS_NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION =
+      25,                                                     //!< The version of the metric group properties structure
+                                                              // used by client is newer
+  ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION = 26,  //!< The version of the collection parameters structure
+                                                              // used by client is older
+  ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION = 27,  //!< The version of the collection parameters structure
+                                                              // used by client is newer
+  ASTL_STATUS_TARGET_PROPERTIES_BUFFER_TOO_SMALL = 28,        //!< Buffer of target properties passed in by client is
+                                                              // too small to hold all targets
+  ASTL_STATUS_COUNTER_PROPERTIES_BUFFER_TOO_SMALL = 29,       //!< Buffer of counter properties passed in by client is
+                                                              // too small to hold all counters
+  ASTL_STATUS_METRIC_PROPERTIES_BUFFER_TOO_SMALL = 30,        //!< Buffer of metric properties passed in by client is
+                                                              // too small to hold all metrics
+  ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL = 31,  //!< Buffer of metric group properties passed in by client
+                                                              // is too small to hold all metric groups
+  ASTL_STATUS_COUNTER_SAMPLES_BUFFER_TOO_SMALL = 32,          //!< Buffer of counter samples passed in by client is too
+                                                              // small to hold all counter samples
+  ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL = 33,           //!< Buffer of metric samples passed in by client is too
+                                                              // small to hold all metric samples
+  ASTL_STATUS_SAMPLIMG_INTERVAL_TOO_SMALL = 34,               //!< Sampling interval specified is too small
+  ASTL_STATUS_SAMPLING_INTERVAL_TOO_LARGE = 35,               //!< Sampling interval specified is too large
+  ASTL_STATUS_SAMPLING_INTERVAL_IGNORED   = 36,               //!< Sampling interval paramater ignored. This would be if
+                                                              // collection mode is SNAPSHOT or IMMEDIATE
+  ASTL_STATUS_INVALID_COLLECTION_MODE              = 37,      //!< Invalid collection mode specified
+  ASTL_STATUS_INVALID_COLLECTION_OPTIMIZATION      = 38,      //!< Invalid collection optimization specified
+  ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET      = 39,      //!< Counter cannot be collected on specified target
+  ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET       = 40,      //!< Metric cannot be collected on specified target
+  ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET = 41,      //!< Metric group cannot be collected on specified target
+  ASTL_STATUS_COLLECTION_NOT_RUNNING               = 42,  //!< Collection not running. Error when issuing command meant
+                                                          // for a running collection
+  ASTL_STATUS_COLLECTION_NOT_STOPPED = 43,                //!< Collection not stopped. Error when issuing command meant
+                                                          // for a stopped collection
+  ASTL_STATUS_COLLECTION_NOT_PAUSED = 44,                 //!< Collection not running. Error when issuing command meant
+                                                          // for a paused collection
+  ASTL_STATUS_COLLECTION_ALREADY_RUNNING = 45,            //!< Collection already running. Error when issuing command
+                                                          // meant to start or resume an already running collection
+  ASTL_STATUS_COLLECTION_ALREADY_STOPPED = 46,            //!< Collection already stopped. Error when issuing command
+                                                          // meant to stop an already stopped collection
+  ASTL_STATUS_COLLECTION_ALREADY_PAUSED = 47,             //!< Collection already paused. Error when issuing command
+                                                          // meant to pause an already paused collection
+  ASTL_STATUS_NO_DATA_COLLECTED = 48,                     //!< No data collected. Error when attempting to get collected
+                                                          // samples but no samples are available.
+  ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED = 49,             //!< Given buffer  was larger than needed. Not an error.
 
-  // Add new error codes here
+  // Add new status codes here
 
-  ASTL_ERROR_INTERNAL = 200,  //!< Internal failure
-
-  ASTL_ERROR_UNKOWN = 0xFFFFFFFF,  //!< Unknown error
-} astl_error_code;
+  ASTL_STATUS_INTERNAL_ERROR = 200,         //!< Internal failure
+  ASTL_STATUS_UNKNOWN_ERROR  = 0xFFFFFFFF,  //!< Unknown error
+} astl_status_code;
 
 /**
- * @brief Returns the string version of the Arm SoC Telemetry Library error code
+ * @brief Returns the string version of the Arm SoC Telemetry Library status code
  *
- * @return c-string of astl error code
+ * @return c-string of astl status code
  */
-ASTL_API const char* astlErrorString(astl_error_code error);
+ASTL_API const char* astlStatusString(astl_status_code status);
 
 #if defined(__cplusplus)
 }

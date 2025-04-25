@@ -18,6 +18,7 @@ add_executable(wrapper_test wrapper_test.cpp)
 target_link_libraries(wrapper_test
     PUBLIC
         Astl::astl
+        Astl::astl_static
     PRIVATE
         Catch2::Catch2WithMain
 )
