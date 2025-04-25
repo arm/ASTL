@@ -56,4 +56,4 @@ fi
 
 #echo "cppcheck --enable=all $REPO_ROOT_DIR/src/ $REPO_ROOT_DIR/tests/ $INCLUDE_PATHS $SYS_INCLUDE_PATHS"
 
-cppcheck -U_WIN32 --enable=all $REPO_ROOT_DIR/src/ $REPO_ROOT_DIR/tests/ $INCLUDE_PATHS --suppress=missingIncludeSystem
+cppcheck -U_WIN32 --inline-suppr --enable=all $REPO_ROOT_DIR/src/ $REPO_ROOT_DIR/tests/ $INCLUDE_PATHS --suppress=missingIncludeSystem

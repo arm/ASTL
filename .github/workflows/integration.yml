@@ -127,12 +127,12 @@ jobs:
       run: |
         if [[ ${{ matrix.cmake_preset }} == 'debug' ]]; then
           echo 'Running unit tests with Valgrind'
-          ctest -E Sample -T memcheck --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
+          ctest -E "^Sample" -T memcheck --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
           # Grep will return a non-zero exit code if the defect list is non-empty and cause the CICD flow to fail
           grep -F '<DefectList/>' ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/*/DynamicAnalysis.xml
         else
           echo 'Skipping Valgrind for unit tests'
-          ctest -E Sample --preset ${{ matrix.cmake_preset }}
+          ctest -E "^Sample" --preset ${{ matrix.cmake_preset }}
         fi
 
     - name: Lint with clang-tidy
@@ -146,12 +146,7 @@ jobs:
     - name: Collect Code Coverage
       if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
       run: |
-        # note that we _do_ want to ensure code coverage of sample executables
-        gcovr -r . \
-          --exclude 'samples/*' \
-          --exclude 'tests/*' \
-          --exclude 'build/*' \
-          --xml -o coverage.xml
+        ./scripts/create_coverage_report.sh --xml
 
     - name: Publish code coverage to CodeClimate
       if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
@@ -166,9 +161,7 @@ jobs:
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       # include only sample tests, we skipped these earlier in `Unit tests`
       # because we don't want to include them for coverage.
-      run: ctest -R Sample --preset ${{ matrix.cmake_preset }}
-
-
+      run: ctest -R "^Sample" --preset ${{ matrix.cmake_preset }}
 
   check-format:
     runs-on: ubuntu-latest

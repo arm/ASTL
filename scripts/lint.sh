@@ -3,8 +3,8 @@
 # This script finds source files and runs clang-tidy to lint them
 set -eu -o pipefail
 
-if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <build>"
+if [ "$#" -lt 1 ]; then
+    echo "Usage: $0 <build> [pre-commit|all|pull-request]"
     echo "build path is needed to help clang-tidy avoid linting cmake-generated source files."
     exit 1
 fi
@@ -69,12 +69,57 @@ else
   echo "Configure and maybe build a workspace first"
 fi
 
-# lint one translation unit at a time (assume headers are #included)
-FILES=$(find $REPO_ROOT_DIR \( $PRUNE_EXPR \) -prune -o \( -type f \( $NAME_ALL_SOURCES \) \) -print)
+# helpers
+get_staged_files() {
+  git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|h|hxx)$' || true
+}
+
+get_diff_files() {
+  git diff origin/main...HEAD --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|h|hxx)$' || true
+}
+
+
+if [ "$#" -lt 2 ]; then
+  MODE="pull-request"
+else
+  MODE=$2
+fi
+
+case "$MODE" in
+  pre-commit)
+    FILES=$(get_staged_files)
+    ;;
+  pull-request)
+    FILES=$(get_diff_files)
+    ;;
+  all)
+    # lint one translation unit at a time (assume headers are #included)
+    FILES=$(find $REPO_ROOT_DIR \( $PRUNE_EXPR \) -prune -o \( -type f \( $NAME_ALL_SOURCES \) \) -print)
+    ;;
+  *)
+    echo "Unknown diff mode $2. Use 'all' or pre-commit"
+    exit 1
+    ;;
+esac
+
 for FILE in $FILES; do
   echo "- Linting $FILE"
   # exclude the C-level headers from this C++ lint - we'll do them as a separate step
-  clang-tidy -header-filter='^(?!.*(include/astl|$BUILD_DIR/include/astl)).*' $FILE $CLANG_BUILD_DIR --warnings-as-errors=* -- $INCLUDE_PATHS $SYS_INCLUDE_PATHS
+  header_filter="-header-filter='^(?!.*(include/astl|$BUILD_DIR/include/astl)).*'"
+  EXTRA_ARGS=""
+  if [[ "$FILE" != *.h ]]; then
+    EXTRA_ARGS+=" --extra-arg=-std=c++23"
+  fi
+  # enable std::expected in clang-tidy
+  EXTRA_ARGS+=" --extra-arg=-D__cpp_concepts=202002L"
+
+  clang-tidy $header_filter \
+    $FILE $CLANG_BUILD_DIR \
+    $EXTRA_ARGS \
+    --warnings-as-errors=* \
+    -- \
+    $INCLUDE_PATHS \
+    $SYS_INCLUDE_PATHS
 
   # enable this to fix certain checks:
   # clang-tidy $CLANG_BUILD_DIR -checks=-*,readability-identifier-naming -fix -fix-errors -header-filter=. $FILE -- $INCLUDE_PATHS $SYS_INCLUDE_PATHS

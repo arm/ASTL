@@ -1,12 +1,11 @@
-#include "astl_impl.h"
-
-#include <iostream>
+#include "astl_impl.hpp"
 
 namespace astl {
 
-astl_error_code CollectorImplement::Test() {
-  std::cout << "Test method is deprecated" << std::endl;
-  return ASTL_ERROR_DEPRECATED_API;
-}
+std::vector<std::unique_ptr<ITarget>>& Orchestrator::GetTargets() { return _targets; }
+
+void Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> targets) { _targets = std::move(targets); }
+
+astl_status_code Orchestrator::Test() { return ASTL_STATUS_DEPRECATED_API; }
 
 }  // namespace astl

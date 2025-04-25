@@ -4,6 +4,7 @@
         {
             "name": "libfuse",
             "platform": "!windows"
-        }
+        },
+        "trompeloeil"
     ]
 }
