@@ -137,16 +137,15 @@ jobs:
 
     - name: Lint with clang-tidy
       if: matrix.os == 'ubuntu-latest'
-      run: ./scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
+      run: ${{ github.workspace }}/scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
 
     - name: Lint with cppcheck
       if: matrix.os == 'ubuntu-latest'
-      run: ./scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
+      run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
 
     - name: Collect Code Coverage
       if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
-      run: |
-        ./scripts/create_coverage_report.sh --xml
+      run: ${{ github.workspace }}/scripts/create_coverage_report.sh --xml
 
     - name: Publish code coverage to CodeClimate
       if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
@@ -173,5 +172,4 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang-format
 
       - name: Check Formatting
-        run: |
-          ./scripts/check_format.sh
+        run: ${{ github.workspace }}/scripts/check_format.sh
