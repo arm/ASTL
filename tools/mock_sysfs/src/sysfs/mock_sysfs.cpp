@@ -27,7 +27,6 @@ static void LowLevelInit(void* user_data, struct fuse_conn_info* conn) {
   std::cout << "Initializing mock filesystem..." << std::endl;
   // Create the absolute root directory.
   fuse_user_data->root = FileSystemNode::CreateDirectory("/");
-  std::cout << "This is from user_data: " << fuse_user_data->root->GetName() << "\n";
 
   InitProtocol(fuse_user_data->root.get());
 }
@@ -56,6 +55,10 @@ static void LowLevelLookup(fuse_req_t req, fuse_ino_t parent, const char* name) 
       if (child->GetType() == NodeType::DIRECTORY_NODE) {
         entry.attr.st_nlink = 2;  // Directory has at least 2 links (. and ..) define constants
       } else {
+        std::string value = HandleProtocolRead(child.get());
+        if (!value.empty()) {
+          child->SetFileContent(value);
+        }
         entry.attr.st_nlink = 1;
         entry.attr.st_size  = static_cast<off_t>(child->GetFileContent().size());
       }
@@ -79,14 +82,18 @@ static void LowLevelGetAttr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
     return;
   }
 
-  struct stat stbuf = {};
-  stbuf.st_ino      = node->GetIno();
-  stbuf.st_mode     = node->GetMode();
+  struct stat stbuf {};
+  stbuf.st_ino  = node->GetIno();
+  stbuf.st_mode = node->GetMode();
 
   if (node->GetType() == NodeType::DIRECTORY_NODE) {
     stbuf.st_nlink = kDirectoryLinkCount;  // Directory has at least 2 links (. and ..)
     stbuf.st_size  = kDefaultDirSize;
   } else {
+    std::string value = HandleProtocolRead(node);
+    if (!value.empty()) {
+      node->SetFileContent(value);
+    }
     stbuf.st_nlink = kFileLinkCount;
     stbuf.st_size  = static_cast<off_t>(node->GetFileContent().size());
   }
@@ -124,7 +131,7 @@ static int ReplyBufferLimited(fuse_req_t req, const char* buf, size_t bufsize, o
   return fuse_reply_buf(req, nullptr, 0);
 }
 
-static void LlRead(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info* file_info) {
+static void LowLevelRead(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info* file_info) {
   (void)file_info;
   std::cout << "read: ino=" << ino << ", size=" << size << ", off=" << off << std::endl;
   FuseUserData* fuse_user_data = static_cast<FuseUserData*>(fuse_req_userdata(req));
@@ -139,6 +146,8 @@ static void LlRead(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struc
     fuse_reply_err(req, EISDIR);
     return;
   }
+
+  std::cout << "value read: " << node->GetFileContent() << "\n";
 
   ReplyBufferLimited(req, node->GetFileContent().c_str(), node->GetFileContent().size(), off, size);
 }
@@ -161,9 +170,8 @@ static void LowLevelWrite(fuse_req_t req, fuse_ino_t ino, const char* buf, size_
     return;
   }
 
-  if (HandleProtocol(node) != ErrorCode::SUCCESS) {
+  if (HandleProtocolWrite(node, std::string(buf, size)) != ErrorCode::SUCCESS) {
     fuse_reply_err(req, EIO);
-    return;
   }
 
   if (off + size > kMaxContentLen - 1) {
@@ -244,7 +252,7 @@ const struct fuse_lowlevel_ops kFuseLowLevelOps = {
     .rename      = NULL,
     .link        = NULL,
     .open        = LowLevelOpen,
-    .read        = LlRead,
+    .read        = LowLevelRead,
     .write       = LowLevelWrite,
     .flush       = NULL,
     .release     = NULL,

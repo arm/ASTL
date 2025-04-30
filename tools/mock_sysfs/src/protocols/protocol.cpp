@@ -14,18 +14,33 @@ void InitProtocol(FileSystemNode* g_root) {
   g_root->AddChild(std::move(telemetry_tree));
 }
 
-ErrorCode HandleProtocol(FileSystemNode* node) {
+ErrorCode HandleProtocolWrite(const FileSystemNode* node, const std::string& value) {
   switch (node->GetProtocol()) {
     case ProtocolType::SCMI_TELEMETRY:
-      return HandleProtocolTelemetry(node);
+      return HandleProtocolTelemetryWrite(node, value);
 
-      // Add additional cases as needed:
+      // Add additional cases for other protocols as needed:
       // case ProtocolType::ANOTHER_PROTOCOL:
-      //     return protocol_another_handle(node);
+      //     return HandleAnotherProtocolWrite(node, value);
 
     default:
-      std::cerr << "No handler for protocol." << std::endl;
+      std::cerr << "No write handler for protocol." << std::endl;
       return ErrorCode::UNSUPPORTED_PROTOCOL;
+  }
+}
+
+std::string HandleProtocolRead(const FileSystemNode* node) {
+  switch (node->GetProtocol()) {
+    case ProtocolType::SCMI_TELEMETRY:
+      return HandleProtocolTelemetryRead(node);
+
+      // Add additional cases for other protocols as needed:
+      // case ProtocolType::ANOTHER_PROTOCOL:
+      //     return HandleAnotherProtocolRead(node);
+
+    default:
+      std::cerr << "No read handler for protocol." << std::endl;
+      return "";
   }
 }
 
