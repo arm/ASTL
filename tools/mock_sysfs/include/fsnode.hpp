@@ -2,12 +2,11 @@
 #ifndef INCLUDE_FSNODE_HPP_
 #define INCLUDE_FSNODE_HPP_
 
+#include <fuse_lowlevel.h>
+
 #include <memory>
 #include <string>
 #include <vector>
-
-#define FUSE_USE_VERSION 35  // NOLINT(cppcoreguidelines-macro-usage)
-#include <fuse3/fuse_lowlevel.h>
 
 #include "protocol_type.hpp"
 

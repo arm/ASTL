@@ -186,7 +186,13 @@ if(ENABLE_VALGRIND)
   set(MEMORYCHECK_COMMAND_OPTIONS "--leak-check=full --show-leak-kinds=all --track-origins=yes")
 endif()
 
-include (CTest)
+if (UNIX AND NOT APPLE)
+  add_subdirectory(tools/mock_sysfs)
+else()
+  message(STATUS "Skipping mock_sysfs on this platform")
+endif()
+
+include(CTest)
 
 # add samples
 if(BUILD_TESTING AND ASTL_BUILD_SAMPLES)

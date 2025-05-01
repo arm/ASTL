@@ -1,11 +1,9 @@
 #ifndef INCLUDE_MOCK_SYSFS_HPP_
 #define INCLUDE_MOCK_SYSFS_HPP_
 
-#include <memory>
+#include <fuse_lowlevel.h>
 
-#define FUSE_USE_VERSION 35  // NOLINT(cppcoreguidelines-macro-usage)
-#include <fuse3/fuse.h>
-#include <fuse3/fuse_lowlevel.h>
+#include <memory>
 
 #include "fsnode.hpp"
 

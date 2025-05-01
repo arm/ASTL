@@ -3,7 +3,7 @@
         "catch2",
         {
             "name": "libfuse",
-            "platform": "!windows"
+            "platform": "linux"
         },
         "trompeloeil"
     ]
