@@ -53,17 +53,9 @@ TBD
 
 To run the mock SCMI sysfs generator:
 
-1. **Build Sysfs**
-```sh
-# You will also need g++-13 or newer
-sudo apt-get -y install fuse3 libfuse3-dev
-cd ASTL/tools/mock_sysfs
-mkdir build
-cmake -S . -B build
-cmake --build build
 ```
 
-2. **Create a Mount Directory**  
+1. **Create a Mount Directory**  
 
 Create a directory to serve as the mount point (e.g., `/tmp/scmi`):
 
@@ -71,9 +63,9 @@ Create a directory to serve as the mount point (e.g., `/tmp/scmi`):
 mkdir -p /tmp/scmi
 ```
 
-3. **Run Mock Sysfs**
+2. **Run Mock Sysfs**
 ```sh
-ASTL/tools/mock_sysfs/build/MockSysfs /tmp/scmi
+ASTL/build/debug/bin/MockSysfs /tmp/scmi
 ```
 
 **Some Optional Flags:**
@@ -81,7 +73,7 @@ ASTL/tools/mock_sysfs/build/MockSysfs /tmp/scmi
 - Single-threaded operation: -s
 - Run in foreground: -f
 
-4. **Terminating Mock Sysfs**
+3. **Terminating Mock Sysfs**
 - Foreground mode: Simply press Ctrl+C to exit.
 - Background mode: kill -SIGINT \<PID\>
 
