@@ -5,6 +5,7 @@
             "name": "libfuse",
             "platform": "linux"
         },
-        "trompeloeil"
+        "trompeloeil",
+        "spdlog"
     ]
 }
