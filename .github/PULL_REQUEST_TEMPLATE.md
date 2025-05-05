@@ -1,5 +1,3 @@
-# Pull Request Template
-
 ## Description
 
 Please include a summary of the change and which issue is fixed. Please also include relevant motivation and context. List any dependencies that are required for this change.
@@ -16,10 +14,9 @@ Please describe any relevant performance impact of this change. This can be posi
 
 ## Type of change
 
-Please delete options that are not relevant.
-
 - [ ] Bug fix (non-breaking change which fixes an issue)
 - [ ] New feature (non-breaking change which adds functionality)
+- [ ] Testing, Verification, or CICD change
 - [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
 - [ ] Interface change (fix or feature that would cause the user facing interface to change)
 - [ ] This change requires a documentation update
@@ -36,10 +33,10 @@ Please describe the tests that you ran to verify your changes. Provide instructi
 * OS name:
 * OS version:
 * Kernel version:
-* Hardware name:
-* Hardware stepping:
-* Firmware version:
-* Machine name:
+* Hardware name: NA
+* Hardware stepping: NA
+* Firmware version: NA
+* Machine name: NA
 
 ## Checklist:
 
