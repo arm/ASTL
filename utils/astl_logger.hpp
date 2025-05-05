@@ -1,0 +1,495 @@
+#ifndef INCLUDE_ASTL_LOGGER_HPP_
+#define INCLUDE_ASTL_LOGGER_HPP_
+
+#include <iostream>
+#include <map>
+#include <source_location>
+#include <string>
+
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE  // This needs to be defined before spdlog.h is included
+
+#include <spdlog/cfg/env.h>
+#include <spdlog/pattern_formatter.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
+
+#include "astl_utils.hpp"
+
+namespace astl {
+
+/* @brief Predefined log level supported by the astl logger
+ * The set is separate from the spdlog levels to abstract the use of spdlog library
+ * All verbose modes automatically activate all lesser verbose modes when used
+ */
+enum class LogLevel {
+  TRACE = 0,  //!< very verbose mode, should be activated for tracing only and should not be visible to users
+  DEBUG = 1,  //!< verbose mode for debugging, debug messages should not be visible to end users
+  INFO  = 2,  //!< Info mode is somewhat verbose, messages logged as info generally should not be visible to end users
+  WARN  = 3,  //!< Warning mode is less verbose and should be used for logging warnings to users.
+  ERROR = 4,  //!< Error mode is for logging failures. Error messages should be made visible to end users.
+  CRITICAL = 5,  //!< Critical mode is catastrophic. This should only be used if the process must terminate
+  OFF      = 6,  //!< Off mode is to turn off all logging.
+  DEFAULT  = 7,  //!< Default is the predefined mode at compile time
+  NONE     = 8,  //!< No mode selected
+  UNKNOWN
+};
+
+/* Default log level for the Logger instance */
+static constexpr LogLevel kDefaultLogLevel = LogLevel::WARN;
+
+/* Default logging to console for Logger instance */
+static constexpr bool kDefaultLogConsole = false;
+
+/* Default formatting for Logger instance */
+static constexpr bool kDefaultFormatting =
+    true; /* Set to 'true' for the singleton logger object meant for logging log messages */
+
+static constexpr const char* kDefaultLogName = "astl.log";
+
+/* Default spdlog level when the Logger default is set to LogLevel::DEFAULT */
+static constexpr spdlog::level::level_enum kDefaultSpdlogLevel = spdlog::level::warn;
+
+/* Environment variable used to override log level
+ * Value should be set to string "trace", "debug", "info", "warn", "error", "critical", "default" or "off"
+ * upper case and first letter uppercase for each of the expected values are acceptable alternatives
+ */
+static constexpr const char* kAstlLogLevelEnvVar = "ASTL_LOG_LEVEL";
+
+/* Environement variable used to override logging to console.
+ * It is used to enable logging to the console when the compiled in value is set to off
+ * It cannot be used to turn off logging to the console if the code explicitely enables logging to the console
+ * Any value would activate the variable other than explicit negative values: 0, no, off or empty
+ */
+static constexpr const char* kAstlLogConsoleEnvVar = "ASTL_LOG_CONSOLE";
+
+/* Environment variable used to override the log file name
+ */
+static constexpr const char* kAstlLogNameEnvVar = "ASTL_LOG_NAME";
+
+/* Environement variable used to enable adding source location to the formatted log messages
+ * Any non negative value would activate the variable
+ */
+static constexpr const char* kAstlLogSourceLocEnvVar = "ASTL_LOG_SOURCE_LOC";
+
+/* @brief ASTL Logger class for logging and output file writing
+ * When used as a singleton, it is used to log messages to the console, to a file or to both using a predefined format
+ * with time, message level and source location when source location is activated.
+ * The logging level, whether to log to the console or not and a filename for logging to a file are options that
+ * can be specified when the singleton is first constructed.
+ * ASTL_LOG_LEVEL, ASTL_LOG_CONSOLE and ASTL_LOG_NAME are environment variables available for overriding compiled
+ * in values.
+ * ASTL_LOG_SOURCE_LOC environment variable is also available for acticativing source location to be added to the
+ * log messages These enviroment variables are meant for development and debugging only
+ *
+ * For writing output files, a new Logger object can be instantiated separately from the singleton and used for
+ * writing formated text to the specified file. It is also affected by the above mentioned environment variables.
+ * ASTL_LOG_NAME, in particular, will cause filename conflicts if more than one logger object is instanciated with the
+ * environment variable set.
+ */
+class Logger {
+ private:
+  /* @brief Map of expected string names set in ASTL_LOG_LEVEL environment variable
+   * to LogLevel enum values
+   */
+  static inline const std::map<std::string, LogLevel> kLevelNameMap = {
+      {"TRACE",    LogLevel::TRACE   },
+      {"DEBUG",    LogLevel::DEBUG   },
+      {"INFO",     LogLevel::INFO    },
+      {"WARN",     LogLevel::WARN    },
+      {"ERROR",    LogLevel::ERROR   },
+      {"CRITICAL", LogLevel::CRITICAL},
+      {"OFF",      LogLevel::OFF     },
+      {"DEFAULT",  LogLevel::DEFAULT },
+  };
+
+  /* @brief Map of ASTL LogLevel enum values to spdlog log level equivalents */
+  static inline const std::map<LogLevel, spdlog::level::level_enum> kSpdlogLevelMap = {
+      {LogLevel::TRACE,    spdlog::level::trace   },
+      {LogLevel::DEBUG,    spdlog::level::debug   },
+      {LogLevel::INFO,     spdlog::level::info    },
+      {LogLevel::WARN,     spdlog::level::warn    },
+      {LogLevel::ERROR,    spdlog::level::err     },
+      {LogLevel::CRITICAL, spdlog::level::critical},
+      {LogLevel::OFF,      spdlog::level::off     },
+      {LogLevel::DEFAULT,  kDefaultSpdlogLevel    },
+  };
+
+  /* brief Get the LogLevel from the ASTL_LOG_LEVEL environment variable
+   *
+   * @param env_var The environment variable name
+   *
+   * @return the LogLevel corresponding the environment variable value
+   */
+  static LogLevel GetEnvVarLogLevel(const std::string& env_var = "ASTL_LOG_LEVEL") {
+    std::string var = GetEnvVar(env_var);
+    std::transform(var.begin(), var.end(), var.begin(),
+                   [](unsigned char character) { return std::toupper(character); });
+    LogLevel level =
+        (var.empty() || kLevelNameMap.find(var) == kLevelNameMap.end()) ? LogLevel::NONE : kLevelNameMap.at(var);
+    return level;
+  }
+
+  /* @brief The spdlog level for a given LogLevel
+   *
+   * @param level the LogLevel level
+   *
+   * @return The corresponding spdlog level
+   */
+  static spdlog::level::level_enum GetSpdLogLevel(LogLevel level) {
+    spdlog::level::level_enum spdlog_level = spdlog::level::off;
+
+    if (kSpdlogLevelMap.find(level) != kSpdlogLevelMap.end()) {
+      spdlog_level = kSpdlogLevelMap.at(level);
+
+    } else {
+      std::cerr << "[Critical] Could not find a log level in map." << std::endl;
+    }
+
+    return spdlog_level;
+  }
+
+ public:
+  /* @brief Default constructor
+   * The log file name, enabling logging to the console and setting the log level can be done through enviroment
+   * variables.
+   */
+  Logger() {
+    const std::string& log_name        = GetEnvVar(kAstlLogNameEnvVar);
+    bool               console_enabled = IsEnvVarSet(kAstlLogConsoleEnvVar);
+    LogLevel           log_level       = GetEnvVarLogLevel(kAstlLogLevelEnvVar);
+    /* Initially, have all formatting cleared. This is useful for using the logger to write to output file instead of
+     * logging warnings and errors etc. use SetDefaultFormatting() to set default formatting for instanciated logger
+     * objects
+     */
+    bool default_formatting = false;
+    InitializeLogger(log_level, console_enabled, default_formatting, log_name);
+  }
+
+  /* @brief Explicit constructor
+   *
+   * @param level    LogLevel used for the console and file sinks.
+   * @param console  boolean to enable or disable the console sink for logging to the console.
+   * @param default_formatting boolean to enable default formatting. Set to false to remove all formatting
+   *                           This useful for using the logger to write to an output file instead lof logging
+   * formatted log messages.
+   * @param log_name The log file name for logging to a file
+   *
+   * Note: The arguments can be overriden with environment variables. The log file name and log level from
+   * environment variables have precedence over the passed in arguments. This allows for dynamically overriding
+   * for debug purposes. Logging to console is enabled if either it is set in the argumen or set in the
+   * environment variable.
+   */
+  explicit Logger(LogLevel level, bool console, bool default_formatting, const std::string& log_name = std::string()) {
+    bool               console_enabled = console || IsEnvVarSet(kAstlLogConsoleEnvVar);
+    const std::string& var_file_name   = GetEnvVar(kAstlLogNameEnvVar);
+    LogLevel           var_level       = GetEnvVarLogLevel(kAstlLogLevelEnvVar);
+    InitializeLogger(var_level == LogLevel::NONE ? level : var_level, console_enabled, default_formatting,
+                     var_file_name.empty() ? log_name : var_file_name);
+  }
+
+  /* @brief Instance of singleton Logger
+   * is used for sharing the same logging configuration across all files in a binary.
+   *
+   * @return static Logger instance
+   */
+  static Logger& GetInstance() {
+    static Logger logger_instance = Logger(kDefaultLogLevel, kDefaultLogConsole, kDefaultFormatting, kDefaultLogName);
+    return logger_instance;
+  }
+
+ private:
+  /* @brief main logging function that invokes the spdlog logger log function
+   *
+   * @param log_level  The message severity
+   * @param location   The source location where the log message is logged from
+   * @param log_text   The text of the log message
+   *
+   * Note: the source location is added to the message if the source location environment variable is set
+   * static
+   */
+  template <typename... Args>
+  void Log(LogLevel log_level, const std::source_location& location, const std::string& log_text, Args&&... args) {
+    bool               source_loc_enabled = IsEnvVarSet(kAstlLogSourceLocEnvVar);
+    spdlog::source_loc spdlog_location;
+    if (source_loc_enabled) {
+      spdlog_location = {location.file_name(), static_cast<int>(location.line()), location.function_name()};
+    }
+    logger_->log(spdlog_location, GetSpdLogLevel(log_level), fmt::runtime(log_text), std::forward<Args>(args)...);
+  }
+
+  /* @brief main logging function that invokes the spdlog logger log function without source location
+   *
+   * @param log_level  The message severity
+   * @param log_text   The text of the log message
+   */
+  template <typename... Args>
+  void Log(LogLevel log_level, const std::string& log_text, Args&&... args) {
+    logger_->log(GetSpdLogLevel(log_level), fmt::runtime(log_text), std::forward<Args>(args)...);
+  }
+
+ public:
+  // TODO(ASTL-73): Use default value std::source_location::current() in log functions
+  /* @brief Log function for trace level messages with source location
+   *
+   * @param log_text formatted text to log
+   * @param location the source location. Note: Location is expected to be passed in the caller as it is not possible
+   * to set default current location automatically in conjuction with non terminal variadic paramics and default
+   * values
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogTrace(const std::source_location& location, const std::string& log_text, Args&&... args) {
+    Log(LogLevel::TRACE, location, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for trace level messages without source location
+   *
+   * @param log_text formatted text to log
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogTrace(const std::string& log_text, Args&&... args) {
+    Log(LogLevel::TRACE, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for debug level messages with source location
+   *
+   * @param log_text formatted text to log
+   * @param location the source location. Note: Location is expected to be passed in the caller as it is not possible
+   * to set default current location automatically in conjuction with non terminal variadic paramics and default
+   * values
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogDebug(const std::source_location& location, const std::string& log_text, Args&&... args) {
+    Log(LogLevel::DEBUG, location, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for debug level messages without source location
+   *
+   * @param log_text formatted text to log
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogDebug(const std::string& log_text, Args&&... args) {
+    Log(LogLevel::DEBUG, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for info level messages with source location
+   *
+   * @param log_text formatted text to log
+   * @param location the source location. Note: Location is expected to be passed in the caller as it is not possible
+   * to set default current location automatically in conjuction with non terminal variadic paramics and default
+   * values
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogInfo(const std::source_location& location, const std::string& log_text, Args&&... args) {
+    Log(LogLevel::INFO, location, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for info level messages without source location
+   *
+   * @param log_text formatted text to log
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogInfo(const std::string& log_text, Args&&... args) {
+    Log(LogLevel::INFO, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for warning level messages with source location
+   *
+   * @param log_text formatted text to log
+   * @param location the source location. Note: Location is expected to be passed in the caller as it is not possible
+   * to set default current location automatically in conjuction with non terminal variadic paramics and default
+   * values
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogWarning(const std::source_location& location, const std::string& log_text, Args&&... args) {
+    Log(LogLevel::WARN, location, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for warning level messages without source location
+   *
+   * @param log_text formatted text to log
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogWarning(const std::string& log_text, Args&&... args) {
+    Log(LogLevel::WARN, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for error level messages with source location
+   *
+   * @param log_text formatted text to log
+   * @param location the source location. Note: Location is expected to be passed in the caller as it is not possible
+   * to set default current location automatically in conjuction with non terminal variadic paramics and default
+   * values
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogError(const std::source_location& location, const std::string& log_text, Args&&... args) {
+    Log(LogLevel::ERROR, location, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for error level messages without source location
+   *
+   * @param log_text formatted text to log
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogError(const std::string& log_text, Args&&... args) {
+    Log(LogLevel::ERROR, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for critical level messages with source location
+   *
+   * @param log_text formatted text to log
+   * @param location the source location. Note: Location is expected to be passed in the caller as it is not possible
+   * to set default current location automatically in conjuction with non terminal variadic paramics and default
+   * values
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogCritical(const std::source_location& location, const std::string& log_text, Args&&... args) {
+    Log(LogLevel::CRITICAL, location, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Log function for critical level messages without source location
+   *
+   * @param log_text formatted text to log
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   */
+  template <typename... Args>
+  void LogCritical(const std::string& log_text, Args&&... args) {
+    Log(LogLevel::CRITICAL, log_text, std::forward<Args>(args)...);
+  };
+
+  /* @brief Write message function meant for logging to an output file without regard to severity level
+   *
+   * @param log_text formatted text to log
+   * @param ... Variable arguments to be formatted according to the format string in log_text
+   *
+   * Note: This function is meant for loggers with no formatting enabled. If default formatting is enabled, then
+   * Write() is same as LogInfo() with no source location
+   */
+  template <typename... Args>
+  void Write(const std::string& log_text, Args&&... args) {
+    Log(LogLevel::INFO, log_text, std::forward<Args>(args)...);
+  };
+
+ private:
+  /* @brief Logger initialization function. It sets up the console and/or file sinks and registers the logger with
+   * spdlog
+   *
+   * @param level    LogLevel used for the console and file sinks. Default: LogLevel::OFF
+   * @param console  boolean to enable or disable the console sink for logging to the console. Default: false
+   * @param default_formatting boolean to enable default formatting. Set to false to remove all formatting
+   * @param log_name log file name for logging to a file.
+   *
+   * Note: if the level is not set to off and a log file name is not specified, then console is enabled by default
+   * even if console argument is set to false.
+   */
+  void InitializeLogger(LogLevel level = LogLevel::OFF, bool console = false, bool default_formatting = false,
+                        const std::string& log_name = std::string()) {
+    // If level is not off, console is false and log_name is not specified, then turn on console
+    bool log_console = console || (level != LogLevel::OFF && log_name.empty());
+
+    // By default the logger is set to log to the console and is disabled
+    auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    console_sink->set_level(spdlog::level::off);
+
+    spdlog::level::level_enum spdlog_level = GetSpdLogLevel(level);
+
+    std::vector<spdlog::sink_ptr> sinks;
+
+    // If log level is set by user, then either we want to log to the console, to the user specified file or to both
+    if (spdlog_level != spdlog::level::off) {
+      /* create a console sink if we need to log to the console */
+      if (log_console) {
+        console_sink->set_level(spdlog_level); /* console sink log level */
+        sinks.push_back(console_sink);
+      }
+
+      /* create a file sink to log to the specified file */
+      if (!log_name.empty()) {
+        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_name, true);
+        file_sink->set_level(spdlog_level); /* file sink log level */
+        sinks.push_back(file_sink);
+      }
+    } else { /* log level is off, set up the default console sink that is off */
+      sinks.push_back(console_sink);
+    }
+    /* spdlog requires all loggers to have unique internal names. Using a random number as part of the name guarantees
+     * all instances of Logger will will have uniquely named spdlog loggers */
+    uint64_t random_number = astl::GetRandomNumber();
+    logger_ = std::make_shared<spdlog::logger>(std::format("astl_{:x}", random_number), sinks.begin(), sinks.end());
+    logger_->set_level(spdlog_level);  // Set the logger log level
+    logger_->flush_on(spdlog_level);   // Set level for flushing, the higher the level the more expensive flushing gets
+    default_formatting ? SetDefaultFormatting() : ClearFormatting();
+    spdlog::register_logger(logger_);
+  }
+
+ public:
+  /* @brief Set default formatting for the logger.
+   * The default output format includes time in [HOUR:MINUTE:SECOND:MILLISECON:MICROSECOND] format
+   * Message level with coloring in [:::-LEVEL-:::] format
+   * if source location logging is enabled, then level is logged as[:::-LEVEL-:SOURCE:LINE:FUNCTION] format
+   */
+  void SetDefaultFormatting() { logger_->set_pattern("[%H:%M:%S.%e.%f] [:::%^-%l-%$:%s:%#:%!] %v"); }
+
+  /* @brief Removes all spdlog output formatting and preconfigured output patten
+   * after the formatting is cleared, the text string is logged as is. Even return character is not added.
+   * This is useful for logging already formatted text to an output file
+   */
+  void ClearFormatting() {
+    auto formatter =
+        std::make_unique<spdlog::pattern_formatter>("%v", spdlog::pattern_time_type::local, std::string(""));
+    logger_->set_formatter(std::move(formatter));
+  }
+
+ private:
+  std::shared_ptr<spdlog::logger> logger_;  //!< spdlog logger object with all formatting and sinks.
+};
+
+#define ASTL_LOG_TRACE_SRC_LOC(format, ...) \
+  Logger::GetInstance().LogTrace(std::source_location::current(), format, ##__VA_ARGS__)
+#define ASTL_LOG_DEBUG_SRC_LOC(format, ...) \
+  Logger::GetInstance().LogDebug(std::source_location::current(), format, ##__VA_ARGS__)
+#define ASTL_LOG_INFO_SRC_LOC(format, ...) \
+  Logger::GetInstance().LogInfo(std::source_location::current(), format, ##__VA_ARGS__)
+#define ASTL_LOG_WARNING_SRC_LOC(format, ...) \
+  Logger::GetInstance().LogWarning(std::source_location::current(), format, ##__VA_ARGS__)
+#define ASTL_LOG_ERROR_SRC_LOC(format, ...) \
+  Logger::GetInstance().LogError(std::source_location::current(), format, ##__VA_ARGS__)
+#define ASTL_LOG_CRITIAL_SRC_LOC(format, ...) \
+  Logger::GetInstance().LogCritical(std::source_location::current(), format, ##__VA_ARGS__)
+
+#define ASTL_LOG_TRACE_NO_SRC_LOC(format, ...)   Logger::GetInstance().LogTrace(format, ##__VA_ARGS__)
+#define ASTL_LOG_DEBUG_NO_SRC_LOC(format, ...)   Logger::GetInstance().LogDebug(format, ##__VA_ARGS__)
+#define ASTL_LOG_INFO_NO_SRC_LOC(format, ...)    Logger::GetInstance().LogInfo(format, ##__VA_ARGS__)
+#define ASTL_LOG_WARNING_NO_SRC_LOC(format, ...) Logger::GetInstance().LogWarning(format, ##__VA_ARGS__)
+#define ASTL_LOG_ERROR_NO_SRC_LOC(format, ...)   Logger::GetInstance().LogError(format, ##__VA_ARGS__)
+#define ASTL_LOG_CRITIAL_NO_SRC_LOC(format, ...) Logger::GetInstance().LogCritical(format, ##__VA_ARGS__)
+
+#ifdef ASTL_DEBUG
+#  define ASTL_LOG_TRACE    ASTL_LOG_TRACE_SRC_LOC
+#  define ASTL_LOG_DEBUG    ASTL_LOG_DEBUG_SRC_LOC
+#  define ASTL_LOG_INFO     ASTL_LOG_INFO_SRC_LOC
+#  define ASTL_LOG_WARNING  ASTL_LOG_WARNING_SRC_LOC
+#  define ASTL_LOG_ERROR    ASTL_LOG_ERROR_SRC_LOC
+#  define ASTL_LOG_CRITICAL ASTL_LOG_CRITIAL_SRC_LOC
+#else /* RELEASE */
+#  define ASTL_LOG_TRACE    ASTL_LOG_TRACE_NO_SRC_LOC
+#  define ASTL_LOG_DEBUG    ASTL_LOG_DEBUG_NO_SRC_LOC
+#  define ASTL_LOG_INFO     ASTL_LOG_INFO_NO_SRC_LOC
+#  define ASTL_LOG_WARNING  ASTL_LOG_WARNING_NO_SRC_LOC
+#  define ASTL_LOG_ERROR    ASTL_LOG_ERROR_NO_SRC_LOC
+#  define ASTL_LOG_CRITICAL ASTL_LOG_CRITIAL_NO_SRC_LOC
+#endif
+}  // namespace astl
+
+#endif /* INCLUDE_ASTL_LOGGER_HPP_ */

@@ -55,7 +55,7 @@ To run the mock SCMI sysfs generator:
 
 ```
 
-1. **Create a Mount Directory**  
+1. **Create a Mount Directory**
 
 Create a directory to serve as the mount point (e.g., `/tmp/scmi`):
 

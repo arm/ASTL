@@ -1,5 +1,5 @@
-#ifndef ASTL_API_IMPL_H_
-#define ASTL_API_IMPL_H_
+#ifndef ASTL_API_IMPL_HPP_
+#define ASTL_API_IMPL_HPP_
 
 #include <memory>
 
@@ -29,4 +29,4 @@ class Orchestrator {
 
 }  // namespace astl
 
-#endif  // ASTL_API_IMPL_H_
+#endif  // ASTL_API_IMPL_HPP_

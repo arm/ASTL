@@ -43,6 +43,7 @@ if [[ -n "$1" ]]; then
   BUILD_DIR=$(realpath "$1")
 
   INCLUDE_PATHS+=" -I${BUILD_DIR}/include"
+  INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/utils"
   INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/src/impl"
   INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/tools/mock_sysfs/include"
   CLANG_BUILD_DIR+=" -p $BUILD_DIR"

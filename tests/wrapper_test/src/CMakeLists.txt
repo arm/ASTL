@@ -14,7 +14,7 @@ endif()
 
 add_executable(wrapper_test wrapper_test.cpp)
 
-# atl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
+# astl.h and others should come as include paths along with the target_link_libraries joining Astl::astl_static
 target_link_libraries(wrapper_test
     PUBLIC
         Astl::astl

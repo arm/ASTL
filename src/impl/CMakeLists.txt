@@ -25,13 +25,17 @@ target_include_directories(
     PUBLIC
         # where top-level project will look for the library's public headers
         ${PROJECT_SOURCE_DIR}/include
-        $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
+        ${PROJECT_SOURCE_DIR}/utils
+	$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         # where external projects will look for the library's public headers
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+
+find_package(spdlog CONFIG REQUIRED)
+target_link_libraries(${LIBRARY_NAME} PRIVATE spdlog::spdlog)
 
 set(public_headers
     include/astl/astl.h

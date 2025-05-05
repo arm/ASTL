@@ -48,8 +48,13 @@ else()
   message(STATUS "This project has a top-level one called [${CMAKE_PROJECT_NAME}]")
 endif()
 
+# Add ASTL_DEBUG macro for all targets
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_definitions(ASTL_DEBUG)
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
-if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")# Need exact match with Clang to avoid matching "AppleClang"
   # Workaround for std::expected not available in clang 18 and earlier
   add_compile_options(
     -stdlib=libstdc++ -D__cpp_concepts=202002 -Wno-builtin-macro-redefined
@@ -137,11 +142,18 @@ target_include_directories(
     PUBLIC
         # where top-level project will look for the library's public headers
         ${PROJECT_SOURCE_DIR}/include
+	${PROJECT_SOURCE_DIR}/utils
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         # where external projects will look for the library's public headers
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+# spdlog for logging
+find_package(spdlog CONFIG REQUIRED)
+target_link_libraries(${LIBRARY_NAME}
+    PRIVATE spdlog::spdlog
 )
 
 # statically link in `astl_static` to the shared library
