@@ -8,6 +8,16 @@ file(GLOB_RECURSE MOCK_SYSFS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 add_executable(MockSysfs ${MOCK_SYSFS_SOURCES})
 
+include (CTest)
+enable_testing()
+
+add_test(NAME toolsMocksysfsFind
+      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
+              ${CMAKE_BINARY_DIR}/bin/MockSysfs
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/find/expected.txt
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/find/test.sh
+)
+
 target_compile_definitions(MockSysfs
   PRIVATE
     FUSE_USE_VERSION=316
