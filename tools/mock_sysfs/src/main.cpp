@@ -6,7 +6,7 @@
 #include "common.hpp"
 #include "mock_sysfs.hpp"  // Declares: extern const fuse_lowlevel_ops fuse_ll_ops;
 
-void CleanFuse(struct fuse_args* args, struct fuse_session* fuse_session_handle, struct fuse_loop_config* config) {
+void CleanFuse(fuse_args* args, fuse_session* fuse_session_handle, fuse_loop_config* config) {
   if (fuse_session_handle) {
     fuse_remove_signal_handlers(fuse_session_handle);
     fuse_session_destroy(fuse_session_handle);
@@ -17,11 +17,11 @@ void CleanFuse(struct fuse_args* args, struct fuse_session* fuse_session_handle,
 }
 
 int main(int argc, char* argv[]) {
-  int                      ret  = -1;
-  struct fuse_args         args = FUSE_ARGS_INIT(argc, argv);
-  struct fuse_cmdline_opts opts {};
-  struct fuse_session*     fuse_session_handle = nullptr;
-  struct fuse_loop_config* config{};
+  int               ret  = -1;
+  fuse_args         args = FUSE_ARGS_INIT(argc, argv);
+  fuse_cmdline_opts opts{};
+  fuse_session*     fuse_session_handle = nullptr;
+  fuse_loop_config* config{};
 
   if (fuse_parse_cmdline(&args, &opts)) {
     ret = static_cast<int>(mock_sysfs::ErrorCode::CMDLINE_PARSE_ERROR);
