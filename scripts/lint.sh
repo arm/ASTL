@@ -69,15 +69,24 @@ get_staged_files() {
 }
 
 get_diff_files() {
-  git diff origin/main...HEAD --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|h|hxx)$' || true
+  # .github/workflows/integration.yml should set up the env variables for BASE_REF and HEAD_REF,
+  # but provide reasonable default
+  BASE_REF="${BASE_REF:-main}"
+  HEAD_REF="${HEAD_REF:-HEAD}"
+  git fetch origin "$BASE_REF" "$HEAD_REF"
+  {
+    git diff origin/"$BASE_REF"...origin/"$HEAD_REF" --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|h|hxx)$' || true
+    git diff --cached           --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|h|hxx)$' || true
+  } | sort -u
 }
-
 
 if [ "$#" -lt 2 ]; then
   MODE="pull-request"
 else
   MODE=$2
 fi
+
+echo "Linting mode: $MODE"
 
 case "$MODE" in
   pre-commit)
