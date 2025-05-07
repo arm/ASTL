@@ -54,12 +54,19 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 set(CMAKE_CXX_STANDARD 23)
+
+if(MSVC)
+  # Enable UTF-8 file encoding and standard C++ exception handling (no SEH)
+  add_compile_options(/utf-8 /EHsc)
+endif()
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")# Need exact match with Clang to avoid matching "AppleClang"
   # Workaround for std::expected not available in clang 18 and earlier
   add_compile_options(
     -stdlib=libstdc++ -D__cpp_concepts=202002 -Wno-builtin-macro-redefined
   )
 endif()
+
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
@@ -96,6 +103,7 @@ set(ASTL_INSTALL_LIB_DIR "${CMAKE_INSTALL_LIBDIR}")
 set(ASTL_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
 set(ASTL_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
 set(ASTL_API_SOVERSION "${PROJECT_VERSION_MAJOR}")
+
 
 # clang-tidy setup
 # include headers in compilation database - this makes it easy for clang-tidy in scripts/lint.sh to use our compile_commands.json to find system headers

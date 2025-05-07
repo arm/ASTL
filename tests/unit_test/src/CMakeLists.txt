@@ -12,7 +12,10 @@ if(NOT CMAKE_BUILD_TYPE)
     )
 endif()
 
-add_executable(unit_test unit_test.cpp)
+add_executable(unit_test
+    unit_test.cpp
+    file_interface_utests.cpp
+ )
 
 # atl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
 target_link_libraries(unit_test
@@ -22,6 +25,7 @@ target_link_libraries(unit_test
         Catch2::Catch2WithMain
 )
 add_custom_target(rununittests unit_test)
+
 
 # have catch2's cmake module discover the tests and add them to ctest for us
 include(CTest)
