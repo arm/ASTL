@@ -8,7 +8,7 @@
 set -eu -o pipefail
 
 EXCLUDE_DIRS=("build" "vcpkg")
-PRUNE_EXPR=" -path build -o"
+PRUNE_EXPR=" -path \"*/build\" -o"
 for dir in "${EXCLUDE_DIRS[@]}"; do
    if [ -d $dir ] && realpath $dir>/dev/null 2>&1; then
        PRUNE_EXPR+=" -path $(realpath $dir) -o"
