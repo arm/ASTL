@@ -22,21 +22,23 @@ namespace astl {
  * The set is separate from the spdlog levels to abstract the use of spdlog library
  * All verbose modes automatically activate all lesser verbose modes when used
  */
+// NOLINTBEGIN
 enum class LogLevel {
-  TRACE = 0,  //!< very verbose mode, should be activated for tracing only and should not be visible to users
-  DEBUG = 1,  //!< verbose mode for debugging, debug messages should not be visible to end users
-  INFO  = 2,  //!< Info mode is somewhat verbose, messages logged as info generally should not be visible to end users
-  WARN  = 3,  //!< Warning mode is less verbose and should be used for logging warnings to users.
-  ERROR = 4,  //!< Error mode is for logging failures. Error messages should be made visible to end users.
-  CRITICAL = 5,  //!< Critical mode is catastrophic. This should only be used if the process must terminate
-  OFF      = 6,  //!< Off mode is to turn off all logging.
-  DEFAULT  = 7,  //!< Default is the predefined mode at compile time
-  NONE     = 8,  //!< No mode selected
-  UNKNOWN
+  Trace   = 0,  //!< very verbose mode, should be activated for tracing only and should not be visible to users
+  Debug   = 1,  //!< verbose mode for debugging, debug messages should not be visible to end users
+  Info    = 2,  //!< Info mode is somewhat verbose, messages logged as info generally should not be visible to end users
+  Warning = 3,  //!< Warning mode is less verbose and should be used for logging warnings to users.
+  Error   = 4,  //!< Error mode is for logging failures. Error messages should be made visible to end users.
+  Critical = 5,  //!< Critical mode is catastrophic. This should only be used if the process must terminate
+  Off      = 6,  //!< Off mode is to turn off all logging.
+  Default  = 7,  //!< Default is the predefined mode at compile time
+  None     = 8,  //!< No mode selected
+  Unknown
 };
+// NOLINTEND
 
 /* Default log level for the Logger instance */
-static constexpr LogLevel kDefaultLogLevel = LogLevel::WARN;
+static constexpr astl::LogLevel kDefaultLogLevel = astl::LogLevel::Warning;
 
 /* Default logging to console for Logger instance */
 static constexpr bool kDefaultLogConsole = false;
@@ -47,7 +49,7 @@ static constexpr bool kDefaultFormatting =
 
 static constexpr const char* kDefaultLogName = "astl.log";
 
-/* Default spdlog level when the Logger default is set to LogLevel::DEFAULT */
+/* Default spdlog level when the Logger default is set to LogLevel::Default */
 static constexpr spdlog::level::level_enum kDefaultSpdlogLevel = spdlog::level::warn;
 
 /* Environment variable used to override log level
@@ -92,27 +94,27 @@ class Logger {
   /* @brief Map of expected string names set in ASTL_LOG_LEVEL environment variable
    * to LogLevel enum values
    */
-  static inline const std::map<std::string, LogLevel> kLevelNameMap = {
-      {"TRACE",    LogLevel::TRACE   },
-      {"DEBUG",    LogLevel::DEBUG   },
-      {"INFO",     LogLevel::INFO    },
-      {"WARN",     LogLevel::WARN    },
-      {"ERROR",    LogLevel::ERROR   },
-      {"CRITICAL", LogLevel::CRITICAL},
-      {"OFF",      LogLevel::OFF     },
-      {"DEFAULT",  LogLevel::DEFAULT },
+  static inline const std::map<std::string, astl::LogLevel> kLevelNameMap = {
+      {"TRACE",    astl::LogLevel::Trace   },
+      {"DEBUG",    astl::LogLevel::Debug   },
+      {"INFO",     astl::LogLevel::Info    },
+      {"WARN",     astl::LogLevel::Warning },
+      {"ERROR",    astl::LogLevel::Error   },
+      {"CRITICAL", astl::LogLevel::Critical},
+      {"OFF",      astl::LogLevel::Off     },
+      {"DEFAULT",  astl::LogLevel::Default },
   };
 
   /* @brief Map of ASTL LogLevel enum values to spdlog log level equivalents */
   static inline const std::map<LogLevel, spdlog::level::level_enum> kSpdlogLevelMap = {
-      {LogLevel::TRACE,    spdlog::level::trace   },
-      {LogLevel::DEBUG,    spdlog::level::debug   },
-      {LogLevel::INFO,     spdlog::level::info    },
-      {LogLevel::WARN,     spdlog::level::warn    },
-      {LogLevel::ERROR,    spdlog::level::err     },
-      {LogLevel::CRITICAL, spdlog::level::critical},
-      {LogLevel::OFF,      spdlog::level::off     },
-      {LogLevel::DEFAULT,  kDefaultSpdlogLevel    },
+      {astl::LogLevel::Trace,    spdlog::level::trace   },
+      {astl::LogLevel::Debug,    spdlog::level::debug   },
+      {astl::LogLevel::Info,     spdlog::level::info    },
+      {astl::LogLevel::Warning,  spdlog::level::warn    },
+      {astl::LogLevel::Error,    spdlog::level::err     },
+      {astl::LogLevel::Critical, spdlog::level::critical},
+      {astl::LogLevel::Off,      spdlog::level::off     },
+      {astl::LogLevel::Default,  kDefaultSpdlogLevel    },
   };
 
   /* brief Get the LogLevel from the ASTL_LOG_LEVEL environment variable
@@ -121,12 +123,12 @@ class Logger {
    *
    * @return the LogLevel corresponding the environment variable value
    */
-  static LogLevel GetEnvVarLogLevel(const std::string& env_var = "ASTL_LOG_LEVEL") {
+  static astl::LogLevel GetEnvVarLogLevel(const std::string& env_var = "ASTL_LOG_LEVEL") {
     std::string var = GetEnvVar(env_var);
     std::transform(var.begin(), var.end(), var.begin(),
                    [](unsigned char character) { return std::toupper(character); });
-    LogLevel level =
-        (var.empty() || kLevelNameMap.find(var) == kLevelNameMap.end()) ? LogLevel::NONE : kLevelNameMap.at(var);
+    astl::LogLevel level =
+        (var.empty() || kLevelNameMap.find(var) == kLevelNameMap.end()) ? astl::LogLevel::None : kLevelNameMap.at(var);
     return level;
   }
 
@@ -136,7 +138,7 @@ class Logger {
    *
    * @return The corresponding spdlog level
    */
-  static spdlog::level::level_enum GetSpdLogLevel(LogLevel level) {
+  static spdlog::level::level_enum GetSpdLogLevel(astl::LogLevel level) {
     spdlog::level::level_enum spdlog_level = spdlog::level::off;
 
     if (kSpdlogLevelMap.find(level) != kSpdlogLevelMap.end()) {
@@ -157,7 +159,7 @@ class Logger {
   Logger() {
     const std::string& log_name        = GetEnvVar(kAstlLogNameEnvVar);
     bool               console_enabled = IsEnvVarSet(kAstlLogConsoleEnvVar);
-    LogLevel           log_level       = GetEnvVarLogLevel(kAstlLogLevelEnvVar);
+    astl::LogLevel     log_level       = GetEnvVarLogLevel(kAstlLogLevelEnvVar);
     /* Initially, have all formatting cleared. This is useful for using the logger to write to output file instead of
      * logging warnings and errors etc. use SetDefaultFormatting() to set default formatting for instanciated logger
      * objects
@@ -180,11 +182,12 @@ class Logger {
    * for debug purposes. Logging to console is enabled if either it is set in the argumen or set in the
    * environment variable.
    */
-  explicit Logger(LogLevel level, bool console, bool default_formatting, const std::string& log_name = std::string()) {
+  explicit Logger(astl::LogLevel level, bool console, bool default_formatting,
+                  const std::string& log_name = std::string()) {
     bool               console_enabled = console || IsEnvVarSet(kAstlLogConsoleEnvVar);
     const std::string& var_file_name   = GetEnvVar(kAstlLogNameEnvVar);
-    LogLevel           var_level       = GetEnvVarLogLevel(kAstlLogLevelEnvVar);
-    InitializeLogger(var_level == LogLevel::NONE ? level : var_level, console_enabled, default_formatting,
+    astl::LogLevel     var_level       = GetEnvVarLogLevel(kAstlLogLevelEnvVar);
+    InitializeLogger(var_level == astl::LogLevel::None ? level : var_level, console_enabled, default_formatting,
                      var_file_name.empty() ? log_name : var_file_name);
   }
 
@@ -209,7 +212,8 @@ class Logger {
    * static
    */
   template <typename... Args>
-  void Log(LogLevel log_level, const std::source_location& location, const std::string& log_text, Args&&... args) {
+  void Log(astl::LogLevel log_level, const std::source_location& location, const std::string& log_text,
+           Args&&... args) {
     bool               source_loc_enabled = IsEnvVarSet(kAstlLogSourceLocEnvVar);
     spdlog::source_loc spdlog_location;
     if (source_loc_enabled) {
@@ -224,7 +228,7 @@ class Logger {
    * @param log_text   The text of the log message
    */
   template <typename... Args>
-  void Log(LogLevel log_level, const std::string& log_text, Args&&... args) {
+  void Log(astl::LogLevel log_level, const std::string& log_text, Args&&... args) {
     logger_->log(GetSpdLogLevel(log_level), fmt::runtime(log_text), std::forward<Args>(args)...);
   }
 
@@ -240,7 +244,7 @@ class Logger {
    */
   template <typename... Args>
   void LogTrace(const std::source_location& location, const std::string& log_text, Args&&... args) {
-    Log(LogLevel::TRACE, location, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Trace, location, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for trace level messages without source location
@@ -250,7 +254,7 @@ class Logger {
    */
   template <typename... Args>
   void LogTrace(const std::string& log_text, Args&&... args) {
-    Log(LogLevel::TRACE, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Trace, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for debug level messages with source location
@@ -263,7 +267,7 @@ class Logger {
    */
   template <typename... Args>
   void LogDebug(const std::source_location& location, const std::string& log_text, Args&&... args) {
-    Log(LogLevel::DEBUG, location, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Debug, location, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for debug level messages without source location
@@ -273,7 +277,7 @@ class Logger {
    */
   template <typename... Args>
   void LogDebug(const std::string& log_text, Args&&... args) {
-    Log(LogLevel::DEBUG, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Debug, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for info level messages with source location
@@ -286,7 +290,7 @@ class Logger {
    */
   template <typename... Args>
   void LogInfo(const std::source_location& location, const std::string& log_text, Args&&... args) {
-    Log(LogLevel::INFO, location, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Info, location, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for info level messages without source location
@@ -296,7 +300,7 @@ class Logger {
    */
   template <typename... Args>
   void LogInfo(const std::string& log_text, Args&&... args) {
-    Log(LogLevel::INFO, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Info, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for warning level messages with source location
@@ -309,7 +313,7 @@ class Logger {
    */
   template <typename... Args>
   void LogWarning(const std::source_location& location, const std::string& log_text, Args&&... args) {
-    Log(LogLevel::WARN, location, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Warning, location, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for warning level messages without source location
@@ -319,7 +323,7 @@ class Logger {
    */
   template <typename... Args>
   void LogWarning(const std::string& log_text, Args&&... args) {
-    Log(LogLevel::WARN, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Warning, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for error level messages with source location
@@ -332,7 +336,7 @@ class Logger {
    */
   template <typename... Args>
   void LogError(const std::source_location& location, const std::string& log_text, Args&&... args) {
-    Log(LogLevel::ERROR, location, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Error, location, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for error level messages without source location
@@ -342,7 +346,7 @@ class Logger {
    */
   template <typename... Args>
   void LogError(const std::string& log_text, Args&&... args) {
-    Log(LogLevel::ERROR, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Error, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for critical level messages with source location
@@ -355,7 +359,7 @@ class Logger {
    */
   template <typename... Args>
   void LogCritical(const std::source_location& location, const std::string& log_text, Args&&... args) {
-    Log(LogLevel::CRITICAL, location, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Critical, location, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for critical level messages without source location
@@ -365,7 +369,7 @@ class Logger {
    */
   template <typename... Args>
   void LogCritical(const std::string& log_text, Args&&... args) {
-    Log(LogLevel::CRITICAL, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Critical, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Write message function meant for logging to an output file without regard to severity level
@@ -374,18 +378,18 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    *
    * Note: This function is meant for loggers with no formatting enabled. If default formatting is enabled, then
-   * Write() is same as LogInfo() with no source location
+   * Write() is same as LogCritical()) with no source location
    */
   template <typename... Args>
   void Write(const std::string& log_text, Args&&... args) {
-    Log(LogLevel::INFO, log_text, std::forward<Args>(args)...);
+    Log(astl::LogLevel::Critical, log_text, std::forward<Args>(args)...);
   };
 
  private:
   /* @brief Logger initialization function. It sets up the console and/or file sinks and registers the logger with
    * spdlog
    *
-   * @param level    LogLevel used for the console and file sinks. Default: LogLevel::OFF
+   * @param level    LogLevel used for the console and file sinks. Default: LogLevel::Off
    * @param console  boolean to enable or disable the console sink for logging to the console. Default: false
    * @param default_formatting boolean to enable default formatting. Set to false to remove all formatting
    * @param log_name log file name for logging to a file.
@@ -393,10 +397,10 @@ class Logger {
    * Note: if the level is not set to off and a log file name is not specified, then console is enabled by default
    * even if console argument is set to false.
    */
-  void InitializeLogger(LogLevel level = LogLevel::OFF, bool console = false, bool default_formatting = false,
-                        const std::string& log_name = std::string()) {
+  void InitializeLogger(astl::LogLevel level = astl::LogLevel::Off, bool console = false,
+                        bool default_formatting = false, const std::string& log_name = std::string()) {
     // If level is not off, console is false and log_name is not specified, then turn on console
-    bool log_console = console || (level != LogLevel::OFF && log_name.empty());
+    bool log_console = console || (level != astl::LogLevel::Off && log_name.empty());
 
     // By default the logger is set to log to the console and is disabled
     auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
@@ -455,25 +459,26 @@ class Logger {
   std::shared_ptr<spdlog::logger> logger_;  //!< spdlog logger object with all formatting and sinks.
 };
 
+// NOLINTBEGIN
 #define ASTL_LOG_TRACE_SRC_LOC(format, ...) \
-  Logger::GetInstance().LogTrace(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogTrace(std::source_location::current(), format, ##__VA_ARGS__)
 #define ASTL_LOG_DEBUG_SRC_LOC(format, ...) \
-  Logger::GetInstance().LogDebug(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogDebug(std::source_location::current(), format, ##__VA_ARGS__)
 #define ASTL_LOG_INFO_SRC_LOC(format, ...) \
-  Logger::GetInstance().LogInfo(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogInfo(std::source_location::current(), format, ##__VA_ARGS__)
 #define ASTL_LOG_WARNING_SRC_LOC(format, ...) \
-  Logger::GetInstance().LogWarning(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogWarning(std::source_location::current(), format, ##__VA_ARGS__)
 #define ASTL_LOG_ERROR_SRC_LOC(format, ...) \
-  Logger::GetInstance().LogError(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogError(std::source_location::current(), format, ##__VA_ARGS__)
 #define ASTL_LOG_CRITIAL_SRC_LOC(format, ...) \
-  Logger::GetInstance().LogCritical(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogCritical(std::source_location::current(), format, ##__VA_ARGS__)
 
-#define ASTL_LOG_TRACE_NO_SRC_LOC(format, ...)   Logger::GetInstance().LogTrace(format, ##__VA_ARGS__)
-#define ASTL_LOG_DEBUG_NO_SRC_LOC(format, ...)   Logger::GetInstance().LogDebug(format, ##__VA_ARGS__)
-#define ASTL_LOG_INFO_NO_SRC_LOC(format, ...)    Logger::GetInstance().LogInfo(format, ##__VA_ARGS__)
-#define ASTL_LOG_WARNING_NO_SRC_LOC(format, ...) Logger::GetInstance().LogWarning(format, ##__VA_ARGS__)
-#define ASTL_LOG_ERROR_NO_SRC_LOC(format, ...)   Logger::GetInstance().LogError(format, ##__VA_ARGS__)
-#define ASTL_LOG_CRITIAL_NO_SRC_LOC(format, ...) Logger::GetInstance().LogCritical(format, ##__VA_ARGS__)
+#define ASTL_LOG_TRACE_NO_SRC_LOC(format, ...)   astl::Logger::GetInstance().LogTrace(format, ##__VA_ARGS__)
+#define ASTL_LOG_DEBUG_NO_SRC_LOC(format, ...)   astl::Logger::GetInstance().LogDebug(format, ##__VA_ARGS__)
+#define ASTL_LOG_INFO_NO_SRC_LOC(format, ...)    astl::Logger::GetInstance().LogInfo(format, ##__VA_ARGS__)
+#define ASTL_LOG_WARNING_NO_SRC_LOC(format, ...) astl::Logger::GetInstance().LogWarning(format, ##__VA_ARGS__)
+#define ASTL_LOG_ERROR_NO_SRC_LOC(format, ...)   astl::Logger::GetInstance().LogError(format, ##__VA_ARGS__)
+#define ASTL_LOG_CRITIAL_NO_SRC_LOC(format, ...) astl::Logger::GetInstance().LogCritical(format, ##__VA_ARGS__)
 
 #ifdef ASTL_DEBUG
 #  define ASTL_LOG_TRACE    ASTL_LOG_TRACE_SRC_LOC
@@ -490,6 +495,7 @@ class Logger {
 #  define ASTL_LOG_ERROR    ASTL_LOG_ERROR_NO_SRC_LOC
 #  define ASTL_LOG_CRITICAL ASTL_LOG_CRITIAL_NO_SRC_LOC
 #endif
+// NOLINTEND
 }  // namespace astl
 
 #endif /* INCLUDE_ASTL_LOGGER_HPP_ */
