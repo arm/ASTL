@@ -15,6 +15,7 @@ endif()
 add_executable(unit_test
     unit_test.cpp
     file_interface_utests.cpp
+    logger_utests.cpp
  )
 
 # atl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
