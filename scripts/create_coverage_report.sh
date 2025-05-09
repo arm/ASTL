@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Check for exactly one argument
 if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 [--html | --xml]"
+    echo "Usage: $0 [--html | --xml]" > /dev/stderr
     exit 1
 fi
 
@@ -19,18 +19,18 @@ case "$1" in
         output_args="--xml -o coverage.xml"
         ;;
     *)
-        echo "Invalid option: $1"
-        echo "Usage: $0 [--html | --xml]"
+        echo "Invalid option: $1" > /dev/stderr
+        echo "Usage: $0 [--html | --xml]" > /dev/stderr
         exit 1
         ;;
 esac
 
 # Check for gcovr
 if ! command -v gcovr >/dev/null 2>&1; then
-    echo "❌ gcovr is not installed."
-    echo "👉 Please install it with:"
-    echo "   sudo apt install gcovr        # Debian/Ubuntu"
-    echo "   brew install gcovr            # macOS (Homebrew)"
+    echo "❌ gcovr is not installed." > /dev/stderr
+    echo "👉 Please install it with:" > /dev/stderr
+    echo "   sudo apt install gcovr        # Debian/Ubuntu" > /dev/stderr
+    echo "   brew install gcovr            # macOS (Homebrew)" > /dev/stderr
     exit 1
 fi
 
