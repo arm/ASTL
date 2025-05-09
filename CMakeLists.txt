@@ -90,9 +90,10 @@ option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
 if(ENABLE_COVERAGE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         message(STATUS "Building with coverage instrumentation")
-        add_compile_options(--coverage)
-        add_compile_options(-O0) # Needed to get reliable coverage results
-        add_link_options(--coverage)
+        add_compile_options("--coverage")
+        add_compile_options("-fprofile-dir=coverage_%p") # Uniquify the names of our .gcda files with the process ID.  Ensures parallel tests don't clobber eachother's coverage files.
+        add_compile_options("-O0") # Needed to get reliable coverage results
+        add_link_options("--coverage")
     endif()
 endif()
 
@@ -198,11 +199,15 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 if(ENABLE_VALGRIND)
+  find_program(VALGRIND_PATH "valgrind")
+  if ("${VALGRIND_PATH}" STREQUAL "VALGRIND_PATH-NOTFOUND")
+    message(FATAL_ERROR "❌ Could not locate valgrind binary.  Either install valgrind or re-run CMake with ENABLE_VALGRIND=OFF")
+  endif()
   # These variables MUST be set before include (CTest) or else DartConfiguration.tcl:MemoryCheckCommandOptions will be empty.
   set(MEMORYCHECK_TYPE "Valgrind")
-  set(VALGRIND_COMMAND "/usr/bin/valgrind")
+  set(VALGRIND_COMMAND "${VALGRIND_PATH}")
   set(VALGRIND_COMMAND_OPTIONS "--leak-check=full --show-leak-kinds=all --track-origins=yes")
-  set(MEMORYCHECK_COMMAND "/usr/bin/valgrind")
+  set(MEMORYCHECK_COMMAND "${VALGRIND_PATH}")
   set(MEMORYCHECK_COMMAND_OPTIONS "--leak-check=full --show-leak-kinds=all --track-origins=yes")
 endif()
 
