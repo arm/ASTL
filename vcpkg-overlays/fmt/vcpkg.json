@@ -1,0 +1,11 @@
+{
+  "name": "fmt",
+  "version-string": "11.1.4",
+  "description": "Formatting library",
+  "homepage": "https://github.com/fmtlib/fmt",
+  "license": "MIT",
+  "dependencies": [
+    "vcpkg-cmake",
+    "vcpkg-cmake-config"
+  ]
+}

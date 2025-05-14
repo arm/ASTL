@@ -20,7 +20,7 @@ add_test(NAME toolsMocksysfsFind
 
 target_compile_definitions(MockSysfs
   PRIVATE
-    FUSE_USE_VERSION=316
+    FUSE_USE_VERSION=316  # make sure to update scripts/lint.sh if this changes
 )
 
 target_include_directories(MockSysfs

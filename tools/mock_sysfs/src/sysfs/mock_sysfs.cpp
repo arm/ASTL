@@ -10,7 +10,10 @@
 namespace mock_sysfs {
 
 static void AddDirectoryBuffer(fuse_req_t req, std::vector<char>& buf, const char* name, ino_t ino) {
-  struct stat stbuf {};
+  // (clang-format <20 incorrectly wants to add a space before the {})
+  // clang-format off
+  struct stat stbuf{};
+  // clang-format on
   stbuf.st_ino = ino;
 
   off_t  old_size   = static_cast<off_t>(buf.size());
@@ -45,7 +48,10 @@ static void LowLevelLookup(fuse_req_t req, fuse_ino_t parent, const char* name) 
 
   for (const auto& child : parent_node->GetChildren()) {
     if (child->GetName() == name) {
-      struct fuse_entry_param entry {};
+      // (clang-format <20 incorrectly wants to add a space before the {})
+      // clang-format off
+      struct fuse_entry_param entry{};
+      // clang-format on
       entry.ino           = child->GetIno();
       entry.attr_timeout  = kAttrTimeoutSec;
       entry.entry_timeout = kEntryTimeoutSec;
@@ -81,8 +87,10 @@ static void LowLevelGetAttr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
     fuse_reply_err(req, ENOENT);
     return;
   }
-
-  struct stat stbuf {};
+  // (clang-format <20 incorrectly wants to add a space before the {})
+  // clang-format off
+  struct stat stbuf{};
+  // clang-format on
   stbuf.st_ino  = node->GetIno();
   stbuf.st_mode = node->GetMode();
 

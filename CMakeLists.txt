@@ -60,8 +60,13 @@ if(MSVC)
   add_compile_options(/utf-8 /EHsc)
 endif()
 
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")# Need exact match with Clang to avoid matching "AppleClang"
-  # Workaround for std::expected not available in clang 18 and earlier
+message(STATUS "CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
+message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
+message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
+
+# Need exact match with Clang to avoid matching "AppleClang"
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  # Workaround for std::expected not available in clang 18 and earlier, use gcc's libstdc++
   add_compile_options(
     -stdlib=libstdc++ -D__cpp_concepts=202002 -Wno-builtin-macro-redefined
   )
@@ -159,12 +164,6 @@ target_include_directories(
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-# spdlog for logging
-find_package(spdlog CONFIG REQUIRED)
-target_link_libraries(${LIBRARY_NAME}
-    PRIVATE spdlog::spdlog
-)
-
 # statically link in `astl_static` to the shared library
 target_link_libraries(${LIBRARY_NAME}
     PRIVATE Astl::astl_static
@@ -198,7 +197,7 @@ install(TARGETS ${PROJECT_NAME}
     INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
 )
 
-if(ENABLE_VALGRIND)
+if (ENABLE_VALGRIND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
   find_program(VALGRIND_PATH "valgrind")
   if ("${VALGRIND_PATH}" STREQUAL "VALGRIND_PATH-NOTFOUND")
     message(FATAL_ERROR "❌ Could not locate valgrind binary.  Either install valgrind or re-run CMake with ENABLE_VALGRIND=OFF")

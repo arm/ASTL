@@ -13,17 +13,19 @@ jobs:
 
     strategy:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
-      fail-fast: true
+      fail-fast: false
 
       # Set up a matrix to run the following configurations:
-      # 1. <Linux, Release, latest GCC compiler toolchain on the default runner image, default generator>
-      # 2. <Linux, Release, latest Clang compiler toolchain on the default runner image, default generator>
+      # 1. <Linux, Debug/Release, latest GCC compiler toolchain on the default runner image, default generator>
+      # 2. <Linux, Debug/Release, latest Clang compiler toolchain on the default runner image, default generator>
+      # 3. <MacOS 15, Debug/Release, system default compiler (AppleClang 16)>
       #
       # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
-        os: [ubuntu-latest]
+
+        os: [ubuntu-latest, macos-15]
         cmake_preset: [release, debug]
-        c_compiler: [gcc, clang, cl]
+        cpp_compiler: [g++, clang++, cl]
         include:
           - os: ubuntu-latest
             c_compiler: gcc
@@ -31,9 +33,16 @@ jobs:
           - os: ubuntu-latest
             c_compiler: clang
             cpp_compiler: clang++
+          - os: macos-15
+            cpp_compiler: clang++
         exclude:
           - os: ubuntu-latest
-            c_compiler: cl
+            cpp_compiler: cl
+          - os: macos-15
+            cpp_compiler: cl
+          - os: macos-15
+            cpp_compiler: g++
+
 
     env:
       # Indicates the location of the vcpkg as a Git submodule of the project repository.
@@ -67,9 +76,16 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         submodules: true
 
-    - name: Install apt-get Dependencies
+    - name: Install apt-get Dependencies (ubuntu-latest)
       if: matrix.os == 'ubuntu-latest'
       run: sudo apt-get update && sudo apt-get install -y clang-tidy cppcheck gcovr valgrind parallel
+
+    - name: Install brew Dependencies (macos-15)
+      if: matrix.os == 'macos-15'
+      run: |
+          brew update
+          brew install llvm cppcheck gcovr
+          echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
 
     - name: "VCPKG - Create VCPKG_DEFAULT_BINARY_CACHE directory"
       run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
@@ -100,7 +116,8 @@ jobs:
         vcpkgJsonGlob: '**/vcpkg.json'
 
     - name: CMake - Configure
-      # Configure CMake in a 'build' subdirectory. 
+      if: matrix.os != 'macos-15'
+      # Configure CMake in a 'build' subdirectory.
       run: >
         cmake
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
@@ -108,20 +125,29 @@ jobs:
         -S ${{ github.workspace }}
         --preset ${{ matrix.cmake_preset }}
 
+    - name: CMake - Configure (macos-15)
+      if: matrix.os == 'macos-15'
+      # Configure CMake in a 'build' subdirectory. 
+      # don't use the matrix strategy compiler
+      # just the runner default detected compiler for cmake works best for c++23 compatibility 
+      run: >
+        cmake
+        -S ${{ github.workspace }}
+        --preset ${{ matrix.cmake_preset }}
+
     - name: CMake - Build
-      # Build ATL library with the given configuration.
+      # Build ASTL library with the given configuration.
       # Note that --preset is needed because the default Windows generator
       # is a multi-config generator (Visual Studio generator).
-      run: cmake --build --parallel=${{ steps.cpu-cores.outputs.count }} --preset ${{ matrix.cmake_preset }}
+      run: cmake --build --parallel=${{ steps.cpu-cores.outputs.count }} --preset ${{ matrix.cmake_preset }} --verbose
 
-    - name: CMake - Run Unit Tests and Generate Code Coverage
+    - name: CMake - Run Unit Tests and Generate Code Coverage (ubuntu-latest)
       if: matrix.os == 'ubuntu-latest'
       # Execute tests defined by the CMake configuration.
       # Note that --preset is needed because the default Windows generator
       # is a multi-config generator (Visual Studio generator).
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       # exclude sample tests - we want to measure coverage of tests that have assertions in them
-      
       run: |
         if [[ ${{ matrix.cmake_preset }} == 'debug' ]]; then
           echo 'Running unit tests with Valgrind'
@@ -133,6 +159,14 @@ jobs:
           echo 'Skipping Valgrind for unit tests'
           ctest --parallel ${{ steps.cpu-cores.outputs.count }} -E "^Sample" --preset ${{ matrix.cmake_preset }}
         fi
+
+    - name: Cmake - Run Unit Tests (macos-15)
+      if: matrix.os == 'macos-15'
+      # Execute tests defined by the CMake configuration.
+      # exclude sample tests - we want to measure coverage of tests that have assertions in them
+      run: |
+        echo 'Skipping Valgrind, unsupported in macos'
+        ctest -E "^Sample" --preset ${{ matrix.cmake_preset }}
 
     - name: Code Coverage - Merge Coverage from Parallel Runs
       if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
@@ -149,14 +183,14 @@ jobs:
         CC_TEST_REPORTER_ID: ${{ secrets.CC_TEST_REPORTER_ID }}
 
     - name: Lint with clang-tidy
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-15'
       run: ${{ github.workspace }}/scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }} pull-request
       env:
         BASE_REF: ${{ github.base_ref }}
         HEAD_REF: ${{ github.head_ref }}
 
     - name: Lint with cppcheck
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-15'
       run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
 
     - name: Run Sample tests
@@ -169,13 +203,24 @@ jobs:
       run: ctest -R "^Sample" --preset ${{ matrix.cmake_preset }}
 
   check-format:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-15]
+ 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Tools
+      - name: Install Tools (ubuntu)
+        if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y clang-format
+
+      - name: Install Tools (macos)
+        if: matrix.os == 'macos-15'
+        run: brew install clang-format
 
       - name: Check Formatting
         run: ${{ github.workspace }}/scripts/check_format.sh
