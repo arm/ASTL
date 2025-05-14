@@ -57,10 +57,13 @@ SYS_INCLUDE_PATHS=$(echo | g++ -E -x c++ - -v 2>&1 | \
   sed 's/^/ -isystem /')
 
 # Include dependency headers from vcpkg as system headers
-readarray -t VCPKG_DEPENDENCIES < <(ls "$REPO_ROOT_DIR/vcpkg/packages/")
-for dep in "${VCPKG_DEPENDENCIES[@]}"; do
-  new_include="${REPO_ROOT_DIR}/vcpkg/packages/${dep}/include/"
-  SYS_INCLUDE_PATHS+=" -isystem $new_include"
+for DEP in $REPO_ROOT_DIR/vcpkg/packages/*; do
+  NEW_INCLUDE="${DEP}/include/"
+  if [[ -d "${NEW_INCLUDE}/fuse3" ]]; then
+    # vcpkg installs fuse3 headers in a subdirectory
+    NEW_INCLUDE="${NEW_INCLUDE}/fuse3"
+  fi
+  SYS_INCLUDE_PATHS+=" -isystem ${NEW_INCLUDE}"
 done
 
 # helpers
@@ -105,8 +108,32 @@ case "$MODE" in
     ;;
 esac
 
-for FILE in $FILES; do
-  echo "- Linting $FILE"
+FILES_TO_LINT=()
+case "$(uname -s)" in
+  Linux)
+    # on linux, we want to lint everything
+    FILES_TO_LINT=("${FILES}")
+    ;;
+  *)
+    # on macOS(Darwin) or other unknown, we want to lint everything except mock_sysfs
+    for FILE in ${FILES[@]}; do
+      if [[ "$FILE" == "" ]]; then
+        continue
+      elif [[ "$FILE" == *tools/mock_sysfs* ]]; then
+        echo "Skipping linting of $FILE since it's not build on this platform"
+      else
+        FILES_TO_LINT+=("$FILE")
+      fi
+    done
+    ;;
+esac
+
+for FILE in "${FILES_TO_LINT[@]-}"; do
+  if [[ "$FILE" == "" ]]; then
+    # skip empty string in case of empty file list
+    continue
+  fi
+  echo "- Linting '$FILE'"
   # exclude the C-level headers from this C++ lint - we'll do them as a separate step
   header_filter="-header-filter='^(?!.*(include/astl|$BUILD_DIR/include/astl)).*'"
   EXTRA_ARGS=""
@@ -115,6 +142,9 @@ for FILE in $FILES; do
   fi
   # enable std::expected in clang-tidy
   EXTRA_ARGS+=" --extra-arg=-D__cpp_concepts=202002L"
+
+  # set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_sysfs/CMakeLists.txt
+  EXTRA_ARGS+=" --extra-arg=-DFUSE_USE_VERSION=316"
 
   clang-tidy $header_filter \
     $FILE $CLANG_BUILD_DIR \
@@ -132,7 +162,8 @@ done
 # (We had excluded them before to keep clang-tidy from trying to lint them as C++ headers)
 echo "- Linting C Headers"
 SRC_CODE='#include <astl/astl.h>\nint main() { return 0; }'
-TEMP_C=$(mktemp --suffix=.c)
+TEMP_C=$(mktemp "${TMPDIR:-/tmp}/tmp.XXXXXX.c")
+
 trap "rm -f '$TEMP_C'" EXIT
 echo -e $SRC_CODE > $TEMP_C
 # lint the dummy C file that includes ASTL API files
