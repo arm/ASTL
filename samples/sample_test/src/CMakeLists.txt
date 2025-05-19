@@ -14,8 +14,6 @@ endif()
 set(TARGET "sample_test")
 
 add_executable(${TARGET} sample_test.cpp)
-target_compile_options(${TARGET} PUBLIC -O3)
-target_link_options(${TARGET} PUBLIC -O3)
 target_include_directories(
   ${TARGET} PRIVATE ${PROJECT_SOURCE_DIR}/include
 )

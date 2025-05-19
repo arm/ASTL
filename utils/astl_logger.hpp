@@ -7,7 +7,6 @@
 #include <string>
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE  // This needs to be defined before spdlog.h is included
-
 #include <spdlog/cfg/env.h>
 #include <spdlog/pattern_formatter.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -127,8 +126,7 @@ class Logger {
     std::string var = GetEnvVar(env_var);
     std::transform(var.begin(), var.end(), var.begin(),
                    [](unsigned char character) { return std::toupper(character); });
-    astl::LogLevel level =
-        (var.empty() || kLevelNameMap.find(var) == kLevelNameMap.end()) ? astl::LogLevel::None : kLevelNameMap.at(var);
+    astl::LogLevel level = kLevelNameMap.contains(var) ? kLevelNameMap.at(var) : astl::LogLevel::None;
     return level;
   }
 
@@ -141,9 +139,8 @@ class Logger {
   static spdlog::level::level_enum GetSpdLogLevel(astl::LogLevel level) {
     spdlog::level::level_enum spdlog_level = spdlog::level::off;
 
-    if (kSpdlogLevelMap.find(level) != kSpdlogLevelMap.end()) {
+    if (kSpdlogLevelMap.contains(level)) {
       spdlog_level = kSpdlogLevelMap.at(level);
-
     } else {
       std::cerr << "[Critical] Could not find a log level in map." << std::endl;
     }

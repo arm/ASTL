@@ -16,17 +16,18 @@ jobs:
       fail-fast: false
 
       # Set up a matrix to run the following configurations:
-      # 1. <Linux, Debug/Release, latest GCC compiler toolchain on the default runner image, default generator>
-      # 2. <Linux, Debug/Release, latest Clang compiler toolchain on the default runner image, default generator>
-      # 3. <MacOS 15, Debug/Release, system default compiler (AppleClang 16)>
-      #
-      # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
+      # - <Windows, Release/Debug, latest MSVC compiler toolchain on the default runner image, default generator>
+      # - <Linux,   Release/Debug, latest GCC compiler toolchain on the default runner image, default generator>
+      # - <Linux,   Release/Debug, latest Clang compiler toolchain on the default runner image, default generator>
+      # - <MacOs,   Release/Debug, latest Clang compiler toolchain on the default runner image, default generator>
       matrix:
-
-        os: [ubuntu-latest, macos-15]
+        os: [ubuntu-latest, windows-latest, macos-15]
         cmake_preset: [release, debug]
         cpp_compiler: [g++, clang++, cl]
         include:
+          - os: windows-latest
+            c_compiler: cl
+            cpp_compiler: cl
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
@@ -34,15 +35,19 @@ jobs:
             c_compiler: clang
             cpp_compiler: clang++
           - os: macos-15
+            c_compiler: clang
             cpp_compiler: clang++
         exclude:
+          - os: windows-latest
+            cpp_compiler: g++
+          - os: windows-latest
+            cpp_compiler: clang++
           - os: ubuntu-latest
             cpp_compiler: cl
           - os: macos-15
             cpp_compiler: cl
           - os: macos-15
             cpp_compiler: g++
-
 
     env:
       # Indicates the location of the vcpkg as a Git submodule of the project repository.

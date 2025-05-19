@@ -24,11 +24,29 @@ vcpkg_from_github(
 )
 
 vcpkg_cmake_configure(
-    SOURCE_PATH ${SOURCE_PATH}
+    SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
+        -DFMT_CMAKE_DIR=share/fmt
         -DFMT_TEST=OFF
         -DFMT_DOC=OFF
         -DFMT_INSTALL=ON
 )
 
 vcpkg_cmake_install()
+vcpkg_cmake_config_fixup()
+vcpkg_fixup_pkgconfig()
+vcpkg_copy_pdbs()
+
+if(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/fmt/base.h"
+        "defined(FMT_SHARED)"
+        "1"
+    )
+endif()
+
+file(REMOVE_RECURSE
+    ${CURRENT_PACKAGES_DIR}/debug/include
+    ${CURRENT_PACKAGES_DIR}/debug/share
+)
+
+vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")
