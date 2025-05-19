@@ -110,7 +110,6 @@ set(ASTL_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
 set(ASTL_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
 set(ASTL_API_SOVERSION "${PROJECT_VERSION_MAJOR}")
 
-
 # clang-tidy setup
 # include headers in compilation database - this makes it easy for clang-tidy in scripts/lint.sh to use our compile_commands.json to find system headers
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -156,7 +155,7 @@ target_include_directories(
     PUBLIC
         # where top-level project will look for the library's public headers
         ${PROJECT_SOURCE_DIR}/include
-	${PROJECT_SOURCE_DIR}/utils
+        ${PROJECT_SOURCE_DIR}/utils
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

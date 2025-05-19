@@ -25,6 +25,15 @@ then
     exit 1
 fi
 
+if parallel --version > /dev/null 2>&1
+then
+    echo "✅ parallel is installed"
+else
+    echo "❌ Error.  parallel is not installed, or you have some non-gnu parallel that doesn't work the same."
+    echo "👉 Please install GNU parallel."
+    exit 1
+fi
+
 TMP_DIR=$(mktemp -d /tmp/merge_coverage_XXXX)
 
 # ${TMP_DIR}/index_all_coverage_dirs.txt will contain paths like this:

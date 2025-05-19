@@ -18,8 +18,9 @@ add_executable(unit_test
     logger_utests.cpp
  )
 
-# atl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
+# astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
 target_link_libraries(unit_test
+    # test targets should link astl publicly so that gcovr can measure how much of astl_static is covered
     PUBLIC
         Astl::astl_static
     PRIVATE

@@ -34,8 +34,11 @@ target_include_directories(
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
+# find spdlog, include it as a header-only dependency. This is a little slower (+10-12s) to compile ASTL,
+# but necessary because #including spdlog headers in multiple translation units causes linker errors like LNK2005
 find_package(spdlog CONFIG REQUIRED)
-target_link_libraries(${LIBRARY_NAME} PRIVATE spdlog::spdlog)
+target_compile_definitions(${LIBRARY_NAME} PRIVATE SPDLOG_FMT_EXTERNAL)
+target_link_libraries(${LIBRARY_NAME} PRIVATE spdlog::spdlog_header_only)
 
 set(public_headers
     include/astl/astl.h
