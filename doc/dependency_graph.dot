@@ -1,0 +1,57 @@
+digraph "astl" {
+node [
+  fontsize = "12"
+];
+subgraph clusterLegend {
+  label = "Legend";
+  color = black;
+  edge [ style = invis ];
+  legendNode0 [ label = "Executable", shape = egg ];
+  legendNode1 [ label = "Static Library", shape = octagon ];
+  legendNode2 [ label = "Shared Library", shape = doubleoctagon ];
+  legendNode3 [ label = "Module Library", shape = tripleoctagon ];
+  legendNode4 [ label = "Interface Library", shape = pentagon ];
+  legendNode5 [ label = "Object Library", shape = hexagon ];
+  legendNode6 [ label = "Unknown Library", shape = septagon ];
+  legendNode7 [ label = "Custom Target", shape = box ];
+  legendNode0 -> legendNode1 [ style = solid ];
+  legendNode0 -> legendNode2 [ style = solid ];
+  legendNode0 -> legendNode3;
+  legendNode1 -> legendNode4 [ label = "Interface", style = dashed ];
+  legendNode2 -> legendNode5 [ label = "Private", style = dotted ];
+  legendNode3 -> legendNode6 [ style = solid ];
+  legendNode0 -> legendNode7;
+}
+    "node0" [ label = "MockSysfs", shape = egg ];
+    "node1" [ label = "dl", shape = septagon ];
+    "node0" -> "node1" [ style = dotted ] // MockSysfs -> dl
+    "node2" [ label = "fuse3", shape = septagon ];
+    "node0" -> "node2" [ style = dotted ] // MockSysfs -> fuse3
+    "node3" [ label = "pthread", shape = septagon ];
+    "node0" -> "node3" [ style = dotted ] // MockSysfs -> pthread
+    "node4" [ label = "rt", shape = septagon ];
+    "node0" -> "node4" [ style = dotted ] // MockSysfs -> rt
+    "node5" [ label = "astl\n(Astl::astl)", shape = doubleoctagon ];
+    "node6" [ label = "astl_static\n(Astl::astl_static)", shape = octagon ];
+    "node7" [ label = "spdlog::spdlog", shape = octagon ];
+    "node8" [ label = "Threads::Threads", shape = pentagon ];
+    "node7" -> "node8" [ style = dashed ] // spdlog::spdlog -> Threads::Threads
+    "node9" [ label = "fmt::fmt", shape = octagon ];
+    "node7" -> "node9" [ style = dashed ] // spdlog::spdlog -> fmt::fmt
+    "node6" -> "node7" [ style = dotted ] // astl_static -> spdlog::spdlog
+    "node5" -> "node6" [ style = dotted ] // astl -> astl_static
+    "node10" [ label = "sample_test", shape = egg ];
+    "node10" -> "node5" [ style = dotted ] // sample_test -> astl
+    "node11" [ label = "unit_test", shape = egg ];
+    "node12" [ label = "Catch2::Catch2WithMain", shape = octagon ];
+    "node13" [ label = "Catch2::Catch2", shape = octagon ];
+    "node12" -> "node13" [ style = dashed ] // Catch2::Catch2WithMain -> Catch2::Catch2
+    "node11" -> "node12" [ style = dotted ] // unit_test -> Catch2::Catch2WithMain
+    "node11" -> "node6" [ style = dotted ] // unit_test -> astl_static
+    "node11" -> "node11"  // unit_test -> unit_test
+    "node14" [ label = "wrapper_test", shape = egg ];
+    "node14" -> "node12" [ style = dotted ] // wrapper_test -> Catch2::Catch2WithMain
+    "node14" -> "node5" [ style = dotted ] // wrapper_test -> astl
+    "node14" -> "node6" [ style = dotted ] // wrapper_test -> astl_static
+    "node14" -> "node14"  // wrapper_test -> wrapper_test
+}
