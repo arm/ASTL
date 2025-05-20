@@ -117,9 +117,9 @@ TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") 
 // Test the main functionality of FileInterface when used with relative file paths.
 // Covers: read, write, IsValid, HasReadPermission, HasWritePermission.
 TEST_CASE("FileInterface functionality with relative path", "[file_interface]") {
-  astl::FileInterface sysfs("/tmp/");
-  const auto *const   rel_path = "test_sysfs_valid";
-  const auto *const   abs_path = "/tmp/test_sysfs_valid";
+  astl::FileInterface sysfs("/tmp");
+  const auto *const   rel_path = "test_rel_sysfs_valid";
+  const auto *const   abs_path = "/tmp/test_rel_sysfs_valid";
   const auto *const   content  = "test";
   ScopedTestFile      file(abs_path, content);
 
@@ -148,8 +148,8 @@ TEST_CASE("FileInterface functionality with relative path", "[file_interface]") 
   }
 
   SECTION("HasReadPermission() responds to permission changes") {
-    ScopedTestFile    read_perm_file("/tmp/test_sysfs_read_perm", "data");
-    const auto *const relative_path = "test_sysfs_read_perm";
+    ScopedTestFile    read_perm_file("/tmp/test_rel_sysfs_read_perm", "data");
+    const auto *const relative_path = "test_rel_sysfs_read_perm";
 
     auto result = sysfs.HasReadPermission(relative_path);
     REQUIRE(result.has_value());
@@ -164,8 +164,8 @@ TEST_CASE("FileInterface functionality with relative path", "[file_interface]") 
   }
 
   SECTION("HasWritePermission() responds to permission changes") {
-    ScopedTestFile    write_perm_file("/tmp/test_sysfs_write_perm", "data");
-    const auto *const relative_path = "test_sysfs_write_perm";
+    ScopedTestFile    write_perm_file("/tmp/test_rel_sysfs_write_perm", "data");
+    const auto *const relative_path = "test_rel_sysfs_write_perm";
 
     auto result = sysfs.HasWritePermission(relative_path);
     REQUIRE(result.has_value());
