@@ -35,6 +35,12 @@ else
 fi
 
 TMP_DIR=$(mktemp -d /tmp/merge_coverage_XXXX)
+#TMP_DIR=/tmp/merge_coverage
+#if [ -d "${TMP_DIR}" ]
+#then
+#    rm -r /tmp/merge_coverage
+#fi
+#mkdir -p "${TMP_DIR}"
 
 # ${TMP_DIR}/index_all_coverage_dirs.txt will contain paths like this:
 # ~/ASTL/build/debug/samples/sample_test/coverage_29042
@@ -45,7 +51,7 @@ NUM_TEST_DIRS=$(find $BUILD_DIR -type f | grep "\.gcda" | parallel 'dirname' {} 
 echo "Found ${NUM_TEST_DIRS} test directories containing coverage"
 echo "Outputted index to ${TMP_DIR}/index_test_dirs.txt"
 
-# Pass 1 - Merge
+# Pass 1 - Merge the parallel results from each test suite into one directory per test suite
 mkdir "${TMP_DIR}/finished_merges/"
 for CUR_TEST_DIR in $(cat "${TMP_DIR}/index_test_dirs.txt")
 do
@@ -70,15 +76,39 @@ do
     FINISHED_MERGED_DIR=$(mktemp -d "${TMP_DIR}/finished_merges/XXXX")
     mv "${TMP_DIR}/accumulator_in" "$FINISHED_MERGED_DIR/"
     echo "Saved merged results to ${FINISHED_MERGED_DIR}"
-
 done
 
-# Pass 2 - Demangle
-for CUR_MANGLED_INPUT_FILE in $(find "${TMP_DIR}/finished_merges/" -type f)
+# Pass 2 - Merge the coverage data from multiple tests suites into one output
+NUM_TESTSUITE_DIRS=$(ls ${TMP_DIR}/finished_merges | tee "${TMP_DIR}/index_all_test_suite_dirs.txt" | wc -l)
+echo "Created ${NUM_TESTSUITE_DIRS} test suite directories, combining coverage data from multiple parallel threads"
+FIRST_TEST_SUITE_DIR_TO_MERGE=$(head -1 "${TMP_DIR}/index_all_test_suite_dirs.txt")
+mv "${TMP_DIR}/finished_merges/${FIRST_TEST_SUITE_DIR_TO_MERGE}" "${TMP_DIR}/accumulator_in"
+echo "Merging first directory: ${FIRST_DIR_TO_MERGE}"
+for SUBDIR in $(tail --lines=+2 "${TMP_DIR}/index_all_test_suite_dirs.txt")
+do
+    CURRENT_DIR_TO_MERGE="${TMP_DIR}/finished_merges/${SUBDIR}"
+    echo "Merging next directory: ${CURRENT_DIR_TO_MERGE}"
+    gcov-tool merge -o "${TMP_DIR}/accumulator_out" "${TMP_DIR}/accumulator_in" "${CURRENT_DIR_TO_MERGE}"
+    rm -rf "${TMP_DIR}/accumulator_in" "${CURRENT_DIR_TO_MERGE}"
+    mv "${TMP_DIR}/accumulator_out" "${TMP_DIR}/accumulator_in"
+done
+MERGED_SUITES_DIR=${TMP_DIR}/merged_suites
+mv "${TMP_DIR}/accumulator_in" "${MERGED_SUITES_DIR}"
+echo "Saved merged results to ${MERGED_SUITES_DIR}"
+
+# Pass 3 - Demangle file names in /tmp/merge_coverage_XXXX/merged_suites/accumulator_in
+for CUR_MANGLED_INPUT_FILE in $(find "${MERGED_SUITES_DIR}" -type f)
 do
     DEMANGED_FILE_NAME=$(echo "${CUR_MANGLED_INPUT_FILE}" | sed 'sX.*accumulator_in/XX' | sed 'sX#X/Xg')
-    echo "Demangled file: ${DEMANGED_FILE_NAME}"
-    mv "${CUR_MANGLED_INPUT_FILE}" "${DEMANGED_FILE_NAME}"
+    echo "Demangled file: ${CUR_MANGLED_INPUT_FILE} -> ${DEMANGED_FILE_NAME}"
+    # if the demangled file already exists, gcov-tool merge the two
+    if [ -f "${DEMANGED_FILE_NAME}" ]
+    then
+        echo "❌ Error.  ${DEMANGED_FILE_NAME} already exists."
+        exit 1
+    else
+        mv "${CUR_MANGLED_INPUT_FILE}" "${DEMANGED_FILE_NAME}"
+    fi
 done
 
 echo "Cleaning up temporary scratch space: ${TMP_DIR}"
