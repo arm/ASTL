@@ -9,6 +9,8 @@
 
 namespace mock_sysfs {
 
+constexpr std::string_view kStartUnitTest = "eccf4f7c-d1b1-47f0-9d23-159f6d38b661";
+
 static void AddDirectoryBuffer(fuse_req_t req, std::vector<char>& buf, const char* name, ino_t ino) {
   // (clang-format <20 incorrectly wants to add a space before the {})
   // clang-format off
@@ -27,11 +29,12 @@ static void LowLevelInit(void* user_data, struct fuse_conn_info* conn) {
   FuseUserData* fuse_user_data = static_cast<FuseUserData*>(user_data);
   (void)conn;
 
-  std::cout << "Initializing mock filesystem..." << std::endl;
   // Create the absolute root directory.
   fuse_user_data->root = FileSystemNode::CreateDirectory("/");
 
   InitProtocol(fuse_user_data->root.get());
+
+  std::cout << "Mock filesystem initialized! - " << kStartUnitTest << std::endl;
 }
 
 static void LowLevelDestroy(void* user_data) { (void)user_data; }

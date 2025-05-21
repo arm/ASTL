@@ -8,7 +8,8 @@
 
 set -eu -o pipefail
 
-SLEEP_DELAY=3 # Delay (integer number of seconds) after starting or stopping MockSysfs process before interacting with the mountpoint
+TIMEOUT=30   # Maximum seconds to wait for guid
+PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 
 if [ $# -lt 2 ]
 then
@@ -48,6 +49,15 @@ export TEST_SCRATCH="${TMP_DIR}/scratch"
 
 mkdir ${MOUNT_POINT} ${TEST_SCRATCH}
 
+wait_for() {
+    local FILE="$1" DESC="$2" PATTERN="$3"
+    echo "⏱️  Waiting (up to ${TIMEOUT}s) for '$PATTERN' in ${DESC}..."
+    timeout "${TIMEOUT}" bash -c "
+        stdbuf -oL tail -n +0 -F \"${FILE}\" | grep -m1 -F \"${PATTERN}\"
+    "
+    echo "✅ Detected '$PATTERN' in ${DESC}"
+}
+
 # If valgrind reports an "unhandled dwarf2 abbrev form code 0x25" error, try compiling with g++ instead of clang
 valgrind --log-file=${VALGRIND_LOG} --leak-check=full --show-leak-kinds=all --track-origins=yes ${SYSFS_EXECUTABLE} -s ${MOUNT_POINT} &> ${SYSFS_LOG} &
 # ${SYSFS_EXECUTABLE} -f -s ${MOUNT_POINT} &> ${SYSFS_LOG} &
@@ -61,13 +71,11 @@ else
     exit 1
 fi
 
-sleep ${SLEEP_DELAY} # IMPROVE - Can we do something more reliable like umount or sync?
+wait_for "${SYSFS_LOG}" "MockSysfs startup" "${PATTERN_READY}"
 
 # Launch whatever command we want to use as our unit test
 cd ${MOUNT_POINT}
 $@ &> ${ACTUAL_OUTPUT}
-
-sleep ${SLEEP_DELAY} # IMPROVE - Can we do something more reliable like umount or sync?
 
 if kill -SIGTERM ${SYSFS_PROCESS}
 then
