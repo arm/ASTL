@@ -18,6 +18,20 @@ add_test(NAME toolsMocksysfsFind
               ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/find/test.sh
 )
 
+add_test(NAME toolsMocksysfsCdPermissions
+      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
+              ${CMAKE_BINARY_DIR}/bin/MockSysfs
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/cd_permissions/expected.txt
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/cd_permissions/test.sh
+)
+
+add_test(NAME toolsMocksysfsAllDesEnableToIndividualEnableConsistency
+      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
+              ${CMAKE_BINARY_DIR}/bin/MockSysfs
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/all_des_enable_to_individual_enable_consistency/expected.txt
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/all_des_enable_to_individual_enable_consistency/test.sh
+)
+
 target_compile_definitions(MockSysfs
   PRIVATE
     FUSE_USE_VERSION=316  # make sure to update scripts/lint.sh if this changes

@@ -1,0 +1,53 @@
+.
+./scmi_telemetry
+./scmi_telemetry/des
+./scmi_telemetry/des/0x0000
+./scmi_telemetry/des/0x0000/info
+./scmi_telemetry/des/0x0016
+./scmi_telemetry/des/0x0016/info
+./scmi_telemetry/info
+--- . ---
+scmi_telemetry
+--- ./scmi_telemetry ---
+all_des_enable
+all_des_tstamp_enable
+current_update_interval_ms
+des
+des_bulk_read
+info
+tlm_enable
+version
+--- ./scmi_telemetry/des ---
+0x0000
+0x0016
+--- ./scmi_telemetry/des/0x0000 ---
+enable
+info
+tstamp_enable
+value
+--- ./scmi_telemetry/des/0x0000/info ---
+compo_instance_id
+compo_type
+instance_id
+persistent
+tstamp_exp
+type
+unit
+unit_exp
+--- ./scmi_telemetry/des/0x0016 ---
+enable
+info
+tstamp_enable
+value
+--- ./scmi_telemetry/des/0x0016/info ---
+compo_instance_id
+compo_type
+instance_id
+persistent
+tstamp_exp
+type
+unit
+unit_exp
+--- ./scmi_telemetry/info ---
+available_update_intervals_ms
+intervals_discrete

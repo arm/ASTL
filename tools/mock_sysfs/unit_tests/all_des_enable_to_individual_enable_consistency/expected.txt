@@ -1,0 +1,18 @@
+Enable one at a time, then bulk disable
+00
+10
+11
+00
+Disable one at a time, then bulk enable
+11
+01
+00
+11
+Mix of enables/disables, then bulk disable
+11
+01
+00
+Mix of enables/disables, then bulk enable
+00
+10
+11

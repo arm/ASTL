@@ -73,9 +73,11 @@ fi
 
 wait_for "${SYSFS_LOG}" "MockSysfs startup" "${PATTERN_READY}"
 
+echo 'Start of test output...'
+
 # Launch whatever command we want to use as our unit test
 cd ${MOUNT_POINT}
-$@ &> ${ACTUAL_OUTPUT}
+$@ |& tee ${ACTUAL_OUTPUT}
 
 if kill -SIGTERM ${SYSFS_PROCESS}
 then
@@ -84,6 +86,9 @@ else
     echo "❌ Error!  Failed to send kill signal to sysfs process with PID: ${SYSFS_PROCESS}" > /dev/stderr
     exit 1
 fi
+
+echo '...End of test output'
+
 
 # We need an "&& true" guard because wait will pass through the exit code from MockSysfs
 # which will be 143 when the process ends with SIGTERM, even if there's no other error
@@ -109,7 +114,7 @@ if diff -u ${EXPECTED_OUTPUT} ${ACTUAL_OUTPUT}
 then
     echo "✅ Actual output matches expected output.  Actual output deleted because test was successful.  Expected output = ${EXPECTED_OUTPUT}"
 else
-    echo "❌ Error!  Actual test output does not match expected output.  Actual = ${ACTUAL_OUTPUT}  Expected output = ${EXPECTED_OUTPUT}" > /dev/stderr
+    echo "❌ Error!  Actual test output does not match expected output.  Actual output = ${ACTUAL_OUTPUT}  Expected output = ${EXPECTED_OUTPUT}" > /dev/stderr
     exit 1
 fi
 
