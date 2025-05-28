@@ -1,0 +1,46 @@
+sequenceDiagram
+    participant User
+    participant Orchestrator
+    participant MetricManager
+    participant Metric1 as Metric1_samplevalue
+    participant Metric2 as Metric2_samplevalue
+
+    User->>Orchestrator: Constructor()
+    Orchestrator->>MetricManager: Constructor(capabilities)
+    Orchestrator->>MetricManager: registerMetric(metric1_config)
+    MetricManager->>Metric1: checkCapabilities(capabilities)
+    Metric1-->>MetricManager: true
+    MetricManager->>MetricManager: store Metric1
+    Orchestrator->>MetricManager: registerMetric(metric2_config)
+    MetricManager->>Metric2: checkCapabilities(capabilities)
+    Metric2-->>MetricManager: false
+    MetricManager->>Metric2: shutdown()
+    MetricManager->>MetricManager: discard Metric1
+
+    User->>Orchestrator: astlGetMetrics()
+    Orchestrator->>MetricManager: getAvailableMetrics()
+    MetricManager->>Orchestrator: [Metric handle]
+    Orchestrator->>Orchestrator: find target metrics
+    Orchestrator->>User: [target metrics handle]
+
+    User->>Orchestrator: astlConfigureCounterCollection()
+    Orchestrator->>MetricManager: InitializeMetrics(span::metrics, operations)
+    MetricManager->>Metric1: Initialize(operations)
+    Orchestrator->>Orchestrator: configure collectors(span::operations)
+
+    User->>Orchestrator: astlStartCollection()
+    Orchestrator->>Orchestrator: start collection
+
+    User->>Orchestrator: astlStopCollection()
+    Orchestrator->>Orchestrator: stop collection
+    Orchestrator->>MetricManager: processData(iSampleSink)
+    MetricManager->>Metric1: RecieveSamples(messages)
+
+
+    Orchestrator->>MetricManager: SummarizeMetrics()
+    MetricManager->>Metric1: Summarize()
+ 
+
+    Orchestrator->>MetricManager: ~Destructor()
+    MetricManager->>Metric1: ~Destructor()
+
