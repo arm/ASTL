@@ -11,6 +11,7 @@ add_executable(MockSysfs ${MOCK_SYSFS_SOURCES})
 include (CTest)
 enable_testing()
 
+# TODO (https://github.com/Arm-Debug/ASTL/issues/77)
 #add_test(NAME toolsMocksysfsFind
 #      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
 #              ${CMAKE_BINARY_DIR}/bin/MockSysfs

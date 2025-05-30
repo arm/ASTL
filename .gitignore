@@ -67,7 +67,11 @@ Testing/Temporary/
 
 # coverage data
 coverage/
+coverage_*/
 coverage.html
 coverage.xml
+
+# log files
+*.log
 
 # Add more exclusions as needed

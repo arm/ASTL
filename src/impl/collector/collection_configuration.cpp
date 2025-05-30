@@ -16,30 +16,20 @@
  * under the License.
  ******************************************************************************/
 
-#ifndef OPERATION_HPP_
-#define OPERATION_HPP_
+#include "collector/collection_configuration.hpp"
 
-#include <chrono>
-#include <vector>
+#include "common/operation.hpp"
+#include "counter.hpp"
+#include "target.hpp"
 
 namespace astl {
 
-using SamplingInterval = std::chrono::duration<uint32_t, std::milli>;
-using SampleTimestamp  = std::chrono::time_point<std::chrono::steady_clock, std::chrono::microseconds>;
-
-// base class for operations for collectors to perform to enable or sample metrics
-struct Operation {
-  virtual ~Operation() = default;
-
-  Operation()                            = default;
-  Operation(const Operation&)            = default;
-  Operation& operator=(const Operation&) = default;
-  Operation(Operation&&)                 = default;
-  Operation& operator=(Operation&&)      = default;
-};
-
-using OperationSequence = std::vector<std::unique_ptr<Operation>>;
+CollectionConfiguration::CollectionConfiguration(ITarget *target, ICollector *collector,
+                                                 CollectionOperations                collectionOperations,
+                                                 astl_collection_parameters_t const &collection_params)
+    : _target{target},
+      _collector{collector},
+      _operations{std::move(collectionOperations)},
+      _collection_params{collection_params} {}
 
 }  // namespace astl
-
-#endif  // OPERATION_HPP_

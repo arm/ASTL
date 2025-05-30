@@ -12,6 +12,8 @@ target_sources(
     ${LIBRARY_NAME}
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/astl_impl.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/collector/collection_configuration.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/metric/metric_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/counter.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/target.cpp"

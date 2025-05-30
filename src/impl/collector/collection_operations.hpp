@@ -16,30 +16,30 @@
  * under the License.
  ******************************************************************************/
 
-#ifndef OPERATION_HPP_
-#define OPERATION_HPP_
+#ifndef COLLECTION_OPERATIONS_HPP_
+#define COLLECTION_OPERATIONS_HPP_
 
-#include <chrono>
+#include <memory>
 #include <vector>
+
+#include "common/capabilities.hpp"
+#include "common/operation.hpp"
 
 namespace astl {
 
-using SamplingInterval = std::chrono::duration<uint32_t, std::milli>;
-using SampleTimestamp  = std::chrono::time_point<std::chrono::steady_clock, std::chrono::microseconds>;
-
-// base class for operations for collectors to perform to enable or sample metrics
-struct Operation {
-  virtual ~Operation() = default;
-
-  Operation()                            = default;
-  Operation(const Operation&)            = default;
-  Operation& operator=(const Operation&) = default;
-  Operation(Operation&&)                 = default;
-  Operation& operator=(Operation&&)      = default;
+// Everything a collector needs to know to start, stop, pause, resume a set of counters or metrics,
+// as well as how often to sample. Metric manager should provide this set of operations,
+// Collector manager should decide which collector executes them, and concrete collectors will cast these
+// operations to concrete types to actually run them.
+struct CollectionOperations {
+  OperationSequence     operationsBeforeStart;
+  OperationSequence     operationsAtStart;
+  OperationSequence     operationsOnSample;
+  OperationSequence     operationsAtStop;
+  SamplingInterval      samplingInterval;
+  CollectorCapabilities requirements;
 };
-
-using OperationSequence = std::vector<std::unique_ptr<Operation>>;
 
 }  // namespace astl
 
-#endif  // OPERATION_HPP_
+#endif  // COLLECTION_OPERATIONS_HPP_

@@ -16,8 +16,8 @@
  * under the License.
  ******************************************************************************/
 
-#ifndef IFACE_SAMPLE_SINK_HPP_
-#define IFACE_SAMPLE_SINK_HPP_
+#ifndef I_SAMPLE_SINK_HPP_
+#define I_SAMPLE_SINK_HPP_
 
 #include <chrono>
 #include <span>
@@ -25,6 +25,7 @@
 
 #include "astl/astl.h"
 #include "counter.hpp"
+#include "operation.hpp"
 #include "target.hpp"
 
 namespace astl {
@@ -33,14 +34,16 @@ struct SampledData {
   SampledData() = delete;
 
   SampledData(ICounter *counter, astl_value_t value)
-      : counter{counter}, value{value}, timestamp{std::chrono::steady_clock::now()} {}
+      : counter{counter},
+        value{value},
+        timestamp{std::chrono::time_point_cast<SampleTimestamp::duration>(std::chrono::steady_clock::now())} {}
 
   SampledData(ICounter *counter, astl_value_t value, std::chrono::time_point<std::chrono::steady_clock> timestamp)
-      : counter{counter}, value{value}, timestamp{timestamp} {}
+      : counter{counter}, value{value}, timestamp{std::chrono::time_point_cast<SampleTimestamp::duration>(timestamp)} {}
 
-  ICounter    *counter = nullptr;  // - needs to be serializable, use an ID instead?
-  astl_value_t value;
-  std::chrono::time_point<std::chrono::steady_clock> timestamp;
+  ICounter       *counter = nullptr;  // - needs to be serializable, use an ID instead?
+  astl_value_t    value;
+  SampleTimestamp timestamp;
 };
 
 /* ISampleSink is an interface for anything that can receive sampled data.
@@ -55,9 +58,12 @@ struct ISampleSink {
   ISampleSink(ISampleSink &&)                 = default;
   ISampleSink &operator=(ISampleSink &&)      = default;
 
-  virtual astl_status_code ReceiveSamples(ITarget *target, std::span<SampledData> samples) = 0;
+  /*
+   * Deliver Some number of samples collected from the given target to this ISampleSink
+   */
+  virtual astl_status_code SinkSamples(ITarget *target, std::span<SampledData> samples) = 0;
 };
 
 }  // namespace astl
 
-#endif  // IFACE_SAMPLE_SINK_HPP_
+#endif  // I_SAMPLE_SINK_HPP_
