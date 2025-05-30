@@ -4,6 +4,7 @@
 #include <string>
 
 #include "astl/astl.h"
+#include "common/capabilities.hpp"
 
 namespace astl {
 

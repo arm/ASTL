@@ -1,0 +1,60 @@
+/*******************************************************************************
+ * SPDX-FileCopyrightText: Copyright (C) 2025 Arm Limited and/or its affiliates
+ * SPDX-FileCopyrightText: <open-source-office@arm.com>
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ ******************************************************************************/
+
+#ifndef CAPABILITIES_HPP_
+#define CAPABILITIES_HPP_
+
+#include <vector>
+
+namespace astl {
+
+enum class CollectorType { SCMI, MMIO };
+
+/**
+ * @brief Attributes of a collector indicating what it's able to do.
+ * Alternatively, requirements of an operation or metric
+ */
+struct CollectorCapabilities {
+  CollectorType collector_type;
+
+  CollectorCapabilities() = delete;
+  explicit CollectorCapabilities(CollectorType collector_type) : collector_type{collector_type} {}
+};
+
+struct SystemCapabilities {
+  std::vector<CollectorCapabilities> collector_capabilities;
+
+  SystemCapabilities() = default;
+  explicit SystemCapabilities(std::vector<CollectorCapabilities> &&collector_capabilities)
+      : collector_capabilities{std::move(collector_capabilities)} {}
+};
+
+/**
+ * @brief Encapsulates both individual collector capabilities and system-wide capabilities.
+ */
+struct Capabilities {
+  CollectorCapabilities collector;
+  SystemCapabilities    system;
+
+  Capabilities(CollectorCapabilities collector, SystemCapabilities system)
+      : collector{std::move(collector)}, system{std::move(system)} {}
+};
+
+}  // namespace astl
+
+#endif  // CAPABILITIES_HPP_

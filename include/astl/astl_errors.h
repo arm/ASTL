@@ -76,25 +76,26 @@ typedef enum _astl_status_code {
   ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET      = 39,      //!< Counter cannot be collected on specified target
   ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET       = 40,      //!< Metric cannot be collected on specified target
   ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET = 41,      //!< Metric group cannot be collected on specified target
-  ASTL_STATUS_COLLECTION_NOT_RUNNING               = 42,  //!< Collection not running. Error when issuing command meant
+  ASTL_STATUS_COLLECTION_NOT_CONFIGURED            = 42,  //!< Collection not configured. Error when starting collection
+  ASTL_STATUS_COLLECTION_NOT_RUNNING               = 43,  //!< Collection not running. Error when issuing command meant
                                                           // for a running collection
-  ASTL_STATUS_COLLECTION_NOT_STOPPED = 43,                //!< Collection not stopped. Error when issuing command meant
+  ASTL_STATUS_COLLECTION_NOT_STOPPED = 44,                //!< Collection not stopped. Error when issuing command meant
                                                           // for a stopped collection
-  ASTL_STATUS_COLLECTION_NOT_PAUSED = 44,                 //!< Collection not running. Error when issuing command meant
+  ASTL_STATUS_COLLECTION_NOT_PAUSED = 45,                 //!< Collection not running. Error when issuing command meant
                                                           // for a paused collection
-  ASTL_STATUS_COLLECTION_ALREADY_RUNNING = 45,            //!< Collection already running. Error when issuing command
+  ASTL_STATUS_COLLECTION_ALREADY_RUNNING = 46,            //!< Collection already running. Error when issuing command
                                                           // meant to start or resume an already running collection
-  ASTL_STATUS_COLLECTION_ALREADY_STOPPED = 46,            //!< Collection already stopped. Error when issuing command
+  ASTL_STATUS_COLLECTION_ALREADY_STOPPED = 47,            //!< Collection already stopped. Error when issuing command
                                                           // meant to stop an already stopped collection
-  ASTL_STATUS_COLLECTION_ALREADY_PAUSED = 47,             //!< Collection already paused. Error when issuing command
+  ASTL_STATUS_COLLECTION_ALREADY_PAUSED = 48,             //!< Collection already paused. Error when issuing command
                                                           // meant to pause an already paused collection
-  ASTL_STATUS_NO_DATA_COLLECTED = 48,                     //!< No data collected. Error when attempting to get collected
+  ASTL_STATUS_NO_DATA_COLLECTED = 49,                     //!< No data collected. Error when attempting to get collected
                                                           // samples but no samples are available.
-  ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED = 49,             //!< Given buffer  was larger than needed. Not an error.
+  ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED = 50,             //!< Given buffer  was larger than needed. Not an error.
 
-  ASTL_STATUS_FILE_OPEN_FAILED = 50,  //!< File exists, but open failed.
-  ASTL_STATUS_FILE_ERROR       = 51,  //!< File system operations failed.
-  ASTL_STATUS_OUT_OF_MEMORY    = 52,  //!< Memory allocation failed.
+  ASTL_STATUS_FILE_OPEN_FAILED = 51,  //!< File exists, but open failed.
+  ASTL_STATUS_FILE_ERROR       = 52,  //!< File system operations failed.
+  ASTL_STATUS_OUT_OF_MEMORY    = 53,  //!< Memory allocation failed.
 
   // Add new status codes here
 
