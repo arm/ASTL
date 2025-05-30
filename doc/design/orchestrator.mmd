@@ -1,0 +1,427 @@
+---
+title: ASTL Orchestrator
+---
+classDiagram
+%% Class Diagram for the ASTL Orchestrator and other high-level components
+%% This markup is Mermaid syntax, and can be uploaded into draw.io
+%% https://www.drawio.com/blog/mermaid-diagrams
+%% a Handy preview extension for VSCode is 
+%% https://marketplace.visualstudio.com/items/?itemName=MermaidChart.vscode-mermaid-chart
+
+namespace AstlApiObjects{
+
+    %% target
+    class ITarget{
+        <<Interface>>
+        +GetParent() ITarget
+        +Name() string
+        +Description() string
+    }
+
+    %% counters and values
+    class CounterSample {
+        +CounterHandle ICounter
+        +TargetHandle ITarget
+        +Timestamp uint64_t
+        +Value astl_value_t
+    }
+    
+    class astl_value_type_t{
+        <<Enumeration>>
+        +ASTL_VALUE_UINT8
+        +ASTL_VALUE_UINT16
+        +ASTL_VALUE_UINT32
+        +ASTL_VALUE_UINT64
+        +ASTL_VALUE_FLOAT32
+        +ASTL_VALUE_FLOAT64
+        +ASTL_VALUE_BOOL8
+        +ASTL_VALUE_STRING
+        +ASTL_VALUE_UNKNOWN
+    }
+
+    class astl_value_t {
+        <<Union>>
+        +ui8 uint8_t
+        +ui16 uint16_t
+        +ui32 uint32_t
+        +ui64 uint64_t
+        +fp32 float
+        +fp64 double
+        +b8 bool
+        +str char*
+    }
+
+    class astl_units_t {
+        <<Enumeration>>
+        +ASTL_UNIT_NONE
+        +ASTL_UNIT_MBYTESPERSEC
+        +ASTL_UNIT_MBYTES
+        +ASTL_UNIT_JOULES
+        +ASTL_UNIT_COUNT
+        +ASTL_UNIT_UNKNOWN
+    }
+
+    class astl_counter_type_t {
+        <<Enumeration>>
+        +ASTL_COUNTER_TYPE_VALUE
+        +ASTL_COUNTER_TYPE_COUNT
+        +ASTL_COUNTER_TYPE_EVENT
+        +ASTL_COUNTER_TYPE_UNKNOWN
+    }
+
+    class CounterProperties {
+        +CounterHandle ICounter
+        +Name string
+        +Description string
+        +MinSamplingInterval uint32_t
+        +Units astl_units_t
+        +Mask uint64_t
+        +Formula string
+        +ValueType astl_value_type_t
+        +CounterType astl_counter_type_t
+    }
+
+    class ICounter {
+        <<Interface>>
+        +GetProperties() CounterProperties
+        +GetSample() CounterSample
+    }
+
+    %% metrics
+    class MetricSample {
+        +MetricHandle IMetric
+        +TargetHandle ITarget
+        +Timestamp uint64_t
+        +Value astl_value_t
+    }
+
+    class MetricType {
+        <<Enumeration>>
+        +ASTL_METRIC_VALUE
+        +ASTL_METRIC_FINITE_SET_VALUE
+        +ASTL_METRIC_EVENT
+        +ASTL_METRIC_DELTA
+        +ASTL_METRIC_RESIDENCY
+        +ASTL_METRIC_RATE
+        +ASTL_METRIC_UNKNOWN
+    }
+
+    class MetricProperties {
+        +Handle IMetric
+        +Name string
+        +Description string
+        +MinSamplingInterval uint32_t
+        +Units astl_units_t
+        +ValueType astl_value_type_t
+        +MetricType astl_metric_type_t
+    }
+
+    class IMetric {
+        <<Interface>>
+        +GetProperties() MetricProperties
+        +GetSample() MetricSample
+    }
+
+    class MetricGroup {
+        +Metrics vector~IMetric~
+        +Name string
+        +Description string
+     }
+
+}
+
+ITarget <-- CounterSample 
+ITarget <-- MetricSample 
+CounterProperties *-- astl_counter_type_t
+CounterProperties *-- astl_value_type_t
+CounterProperties *-- astl_units_t
+ICounter *-- CounterProperties
+ICounter ..> CounterSample : produces
+CounterSample --> ICounter
+CounterSample *-- astl_value_t
+%% CounterMetric implements the ICounter interface, but the diagram doesn't display that well
+%% CounterMetric --() ICounter   
+
+MetricProperties *-- MetricType
+MetricProperties *-- astl_value_type_t
+MetricProperties *-- astl_units_t
+%%IMetric ..> MetricSample : produces
+MetricSample <.. IMetric : produces
+IMetric *-- MetricProperties
+MetricSample *-- astl_value_t
+MetricSample --> IMetric
+
+MetricGroup o-- IMetric: contains
+
+
+namespace AstlCore{
+
+    %% The entry point for the C API
+    class ITelemetryAPI{
+        <<Interface>>
+        +GetTargetCount()
+        +GetTargets() ITarget
+        +ConfigureCollection(ITarget, ImmediateMetric)
+    }
+
+    %% Abstract interface for TopologyManager
+    class ITopologyManager{
+        <<Interface>>
+    }
+
+    %% Abstract interface for ConfigurationManager
+    class IConfigurationManager{
+        <<Interface>>
+    }
+
+    %% Orchestrator implements the ITelemetryAPI and owns the Managers
+    class Orchestrator{
+        +ITopologyManager topologyManager
+        +IConfigurationManager configurationManager
+        +ICollectorManager collectorManager
+        +IMetricManager metricManager
+        +IOutputManager outputManager
+        +GetTargetCount()
+        +GetTargets()
+        +ConfigureCollection(ITarget, ImmediateMetric)
+    }
+
+    class IOutputManager{
+        <<Interface>>
+    }
+
+}
+%% end namespace AstlCore
+
+
+%% Orchestrator implements the ITelemetryAPI interface, essentially the entry points of the C API
+Orchestrator ..|> ITelemetryAPI 
+Orchestrator ..|> ISampleSink 
+
+%% Orchestrator has a composition relationship with several managers
+ITopologyManager <--* Orchestrator 
+IConfigurationManager <--* Orchestrator 
+ICollectorManager <--* Orchestrator 
+IMetricManager <--* Orchestrator 
+IOutputManager <--* Orchestrator 
+
+
+%% Metric Manager and friends
+%% https://jira.arm.com/browse/ASTL-37
+%% https://jira.arm.com/browse/ASTL-54
+%% https://jira.arm.com/browse/ASTL-55
+%% https://jira.arm.com/browse/ASTL-56
+%% https://jira.arm.com/browse/ASTL-57
+
+namespace Metrics{
+
+class CollectionOperations{
+    operationsBeforeStart: vector~Operation~
+    operationsAtStart: vector~Operation~
+    operationsOnSample: vector~Operation~
+    operationsAtStop: vector~Operation~
+    samplingInterval: SamplingInterval
+    requirements: CollectorCapabilities
+}
+
+class IMetricManager{
+    <<Interface>>
+    +GetMetricCount()
+    +GetMetrics()
+    +GetCollectionOperations(std::spand~ITarget~, std::span~IMetric~) CollectionOperations
+}
+
+%% Operations generically represent a functor, or something with an operator()
+%% Some implmen
+class Operation{
+    <<Interface>>
+    +Execute()
+}
+
+%% a strategy for sampling a counter/metric specific to a target
+class ISamplerStrategy{
+    <<Interface>>
+    +Sample() Operation
+}
+
+class SamplerOperation{
+    +ISampleDestination
+    +Execute()
+}
+
+class MetricManager{
+    +GetMetricCount()
+    +GetMetrics()
+}
+
+
+%% read a raw sample
+class CounterMetric{
+    +SampleStrategies map~ITarget, ISamplerStrategy~
+    +Sample(ITarget) Operation
+}
+
+%% read a raw sample, convert to a value and add units
+class SampledValueMetric{
+    +Sample(ITarget) Operation
+}
+
+class DeltaMetric{
+    +Sample(ITarget) Operation,Interval,Operation
+}
+
+class ResidencyMetric{
+    +Sample(ITarget) Operation
+}
+
+class EventMetric{
+    +Sample(ITarget) Operation
+}
+
+class FiniteSetValueMetric{
+    +Sample(ITarget) Operation
+}
+
+class RateMetric{
+    +Sample(ITarget) Operation
+}
+
+}
+
+SamplerOperation --|> Operation
+
+%% any counter or metric has a set of strategies for creating operations to sample its data
+%% for instance, an SoC temperature metric might have two strategies for MMIO and for SCMI.
+%% Those strategies would hold the specific collector like ScmiCollector, and parameters like offsets
+CounterMetric "1" *-- "*" ISamplerStrategy: owns 
+
+%% inheritance hierarchy for metrics
+CounterMetric <|-- SampledValueMetric 
+CounterMetric <|-- DeltaMetric
+CounterMetric <|-- ResidencyMetric
+CounterMetric <|-- EventMetric
+SampledValueMetric <|-- FiniteSetValueMetric 
+DeltaMetric <|-- RateMetric
+
+MetricManager ..|> IMetricManager 
+IMetricManager --> CollectionOperations
+
+
+%% Collector Manager and friends
+%% https://jira.arm.com/browse/ASTL-36
+%% https://jira.arm.com/browse/ASTL-46
+%% https://jira.arm.com/browse/ASTL-47
+%% https://jira.arm.com/browse/ASTL-48
+namespace Collector{
+
+  %% Abstract interface for CollectorManager
+  class ICollectorManager{
+    <<Interface>>
+    +ReportCollectionCapabilities() map~ITarget, vector[CollectorCapabilities]>~
+    +RegisterSampleSink(ISampleSink)
+    +UnregisterSampleSink(ISampleSink)
+    +ConfigureCollection(ITarget, astl_collection_parameters, CollectionOperations)
+    %% if a collection is configured on the given target, get the Operations from that CollectionConfiguration to run, and execute them
+    +Start(ITarget)
+    +Pause(ITarget)
+    +Resume(ITarget)
+    +Stop(ITarget)
+    +ReadImmediate(ITarget)
+  }
+
+  class CollectionConfiguration{
+    %% mermaid markdown doesn't support nested generics with a comma,
+    %% but a collection on a target can support collecting either on counters or metrics,
+    %% but not both, per API docstring.
+    +_target ITarget
+    +_collector ICollector
+    +_state CollectionState
+    +_operations CollectionOperations
+    +_collection_params astl_collection_parameters_t
+    +Start()
+    +Pause() 
+    +Resume()
+    +Stop()
+  }
+
+  class CollectorManager{
+    %% Members
+    +_registered_sample_sinks vector~ISampleSink~
+    +_collectors map~ITarget, vector[unique_ptr[ICollector]]~
+    %% Methods
+    %% The TopologyManager and ConfigurationManager are responsible for creating the ICollector objects,
+    %% since they know what is available and configured on the system
+    +CollectorManager(map~ITarget, vector[unique_ptr[ICollector]]~)
+  }
+
+  class CollectionState{
+      <<Enumeration>>
+      +Stopped
+      +Started
+      +Paused
+  }
+
+  class ICollector{
+      <<Interface>>
+  }
+}
+
+%% CollectorManager implements the ICollectorManager and ISampleSink interfaces
+ICollectorManager <|.. CollectorManager
+ISampleSink <|.. CollectorManager
+CollectorManager "1" *-- "*" CollectionConfiguration
+CollectorManager "1" --> "*" ISampleSink: registers
+%% The collector manages the lifetimes of the ICollector objects,
+%% but these ICollectors aren't used for much in this context. Their concrete implementations are referenced by
+%% specific counters/metrics.
+CollectorManager *-- "*" ICollector: owns
+CollectionConfiguration *-- CollectionState
+CollectionConfiguration *-- CollectionOperations
+
+
+namespace Scmi{
+  class ScmiCollector{
+    SysFsInterface sysfs
+    +SampleScmi(Offset): SampledValue
+    +GetScmiMetrics()
+  }
+
+  class ScmiTarget{
+  }
+
+  class ScmiSamplerStrategy{
+    +ScmiCollector collector
+    +ScmiOffset scmi_offset
+    +Sample() Operation
+  }
+}
+
+ScmiSamplerStrategy --|> ISamplerStrategy: implements
+ScmiSamplerStrategy *-- ScmiCollector: references
+ICollector <|.. ScmiCollector
+
+class SysFsInterface{
+    %% https://jira.arm.com/browse/ASTL-47
+    +fspath _basePath
+
+    +isValid(path:string) bool
+    +read(path:string) string
+    +write(path: string, value: string)
+}
+
+SysFsInterface --* ScmiCollector
+
+namespace TopologyAndConfiguration {
+    class TopologyManager{
+
+    }
+
+    class ConfigurationManager{
+
+    }
+}
+
+TopologyManager --|> ITopologyManager : implements
+ConfigurationManager--|> IConfigurationManager : implements
+ConfigurationManager ..> ScmiSamplerStrategy : creates
+ConfigurationManager ..> ScmiCollector : creates

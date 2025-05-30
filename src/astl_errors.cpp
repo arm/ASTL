@@ -46,6 +46,7 @@ static const std::unordered_map<astl_status_code, const char*> kStatusMap = {
     {ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET,            "COUNTER_NOT_SUPPORTED_ON_TARGET"           },
     {ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET,             "METRIC_NOT_SUPPORTED_ON_TARGET"            },
     {ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET,       "METRIC_GROUP_NOT_SUPPORTED"                },
+    {ASTL_STATUS_COLLECTION_NOT_CONFIGURED,                  "COLLECTION_NOT_CONFIGURED"                 },
     {ASTL_STATUS_COLLECTION_NOT_RUNNING,                     "COLLECTION_NOT_RUNNING"                    },
     {ASTL_STATUS_COLLECTION_NOT_STOPPED,                     "COLLECTION_NOT_STOPPED"                    },
     {ASTL_STATUS_COLLECTION_NOT_PAUSED,                      "COLLECTION_NOT_PAUSED"                     },
