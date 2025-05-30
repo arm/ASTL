@@ -20,16 +20,6 @@ if ! command -v clang-tidy >/dev/null 2>&1; then
     exit 1
 fi
 
-# check if jq exists
-if ! command -v jq >/dev/null 2>&1; then
-    echo "❌ jq is not installed."
-    echo "👉 Please install it with:"
-    echo "   sudo apt install jq                 # Debian/Ubuntu"
-    echo "   brew install jq                     # macOS (Homebrew)"
-    echo "   pacman -S jq                        # Arch"
-    exit 1
-fi
-
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT_DIR="$( dirname ${SCRIPT_DIR} )"
 INCLUDE_PATHS="-I${REPO_ROOT_DIR}/include"
@@ -45,6 +35,7 @@ if [[ -n "$1" ]]; then
   INCLUDE_PATHS+=" -I${BUILD_DIR}/include"
   INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/utils"
   INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/src/impl"
+  INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/src/impl/common"
   INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/tools/mock_sysfs/include"
   CLANG_BUILD_DIR+=" -p $BUILD_DIR"
 fi
@@ -75,11 +66,13 @@ get_diff_files() {
   # .github/workflows/integration.yml should set up the env variables for BASE_REF and HEAD_REF,
   # but provide reasonable default
   BASE_REF="${BASE_REF:-main}"
-  HEAD_REF="${HEAD_REF:-HEAD}"
+  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  HEAD_REF="${HEAD_REF:-${CURRENT_BRANCH}}"
   git fetch origin "$BASE_REF" "$HEAD_REF"
   {
-    git diff origin/"$BASE_REF"...origin/"$HEAD_REF" --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|h|hxx)$' || true
-    git diff --cached           --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|h|hxx)$' || true
+    # note: don't lint .h files, as the -std=c++23 flag cannot be applied to them. we'll treat them in a separate step
+    git diff origin/"$BASE_REF"...origin/"$HEAD_REF" --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|hpp|hxx)$' || true
+    git diff --cached           --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|hpp|hxx)$' || true
   } | sort -u
 }
 
@@ -100,7 +93,7 @@ case "$MODE" in
     ;;
   all)
     # lint one translation unit at a time (assume headers are #included)
-    FILES=$(find $REPO_ROOT_DIR \( $PRUNE_EXPR \) -prune -o \( -type f \( $NAME_ALL_SOURCES \) \) -print)
+    FILES=$(find $REPO_ROOT_DIR \( $PRUNE_EXPR \) -prune -o \( -type f \( $NAME_ALL_SOURCES_AND_HEADERS \) \) -print)
     ;;
   *)
     echo "Unknown diff mode $2. Use 'all' or pre-commit"
@@ -168,3 +161,4 @@ trap "rm -f '$TEMP_C'" EXIT
 echo -e $SRC_CODE > $TEMP_C
 # lint the dummy C file that includes ASTL API files
 clang-tidy -header-filter='^(.*(include|$BUILD_DIR/include)).*' $TEMP_C $CLANG_BUILD_DIR --warnings-as-errors=* -- $INCLUDE_PATHS $SYS_INCLUDE_PATHS
+echo "✅ Linting completed successfully."

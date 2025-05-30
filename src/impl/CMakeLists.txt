@@ -12,6 +12,7 @@ target_sources(
     ${LIBRARY_NAME}
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/astl_impl.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/metric/metric_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/counter.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/target.cpp"
 )
@@ -22,6 +23,7 @@ target_include_directories(
     PRIVATE
         # where the library itself will look for its internal headers
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/common
     PUBLIC
         # where top-level project will look for the library's public headers
         ${PROJECT_SOURCE_DIR}/include
