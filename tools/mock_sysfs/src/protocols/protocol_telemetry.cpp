@@ -16,9 +16,35 @@ namespace mock_sysfs {
 
 std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode* g_root);
 
+inline void UpdateEventByInterval(DataEvent* event, uint64_t current_ts, uint64_t interval_ms) {
+  // How many ms since we last updated?
+  uint64_t elapsed = current_ts - event->latest_timestamp_;
+
+  if (elapsed < interval_ms) {
+    // Not enough time yet, nothing to do.
+    return;
+  }
+
+  // Determine how many complete intervals have passed.
+  uint64_t count = elapsed / interval_ms;
+
+  // Advance the generator state for each missed tick.
+  for (uint64_t i = 0; i < count; ++i) {
+    event->latest_value_ = std::stod(event->Generate());
+  }
+
+  event->latest_timestamp_ = current_ts;
+}
+
 std::unique_ptr<FileSystemNode> InitProtocolTelemetry(FileSystemNode* g_root) {
   auto& context = SCMITelemetryContext::Instance();
+
+  uint64_t now_ms = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+          .count());
+
   for (const auto& event : context.GetDataEvents()) {
+    event->latest_timestamp_ = now_ms;
     event->Generate();
   }
 
@@ -339,11 +365,7 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
           continue;
         }
 
-        // Regenerate if the update interval has elapsed.
-        if (now_ms - event->latest_timestamp_ >= interval_ms) {
-          event->latest_value_     = std::stod(event->Generate());
-          event->latest_timestamp_ = now_ms;
-        }
+        UpdateEventByInterval(event.get(), now_ms, interval_ms);
 
         result += std::format("0x{:04x} ", static_cast<unsigned int>(event->id_));
 
@@ -400,11 +422,7 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
 
       uint64_t interval_ms = static_cast<uint64_t>(context.GetCurrentUpdateIntervalMs());
 
-      // Only regenerate if the specified update interval has elapsed
-      if ((now_ms - data_event->latest_timestamp_) >= interval_ms) {
-        data_event->latest_value_     = std::stod(data_event->Generate());
-        data_event->latest_timestamp_ = now_ms;
-      }
+      UpdateEventByInterval(data_event, now_ms, interval_ms);
 
       if (data_event->tstamp_enable_) {
         return std::to_string(now_ms) + " " + std::to_string(data_event->latest_value_) + "\n";

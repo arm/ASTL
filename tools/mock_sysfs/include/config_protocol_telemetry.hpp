@@ -4,6 +4,7 @@
 #include <random>
 #include <vector>
 
+#include "common_data_generator.hpp"
 #include "protocol_telemetry.hpp"
 
 namespace mock_sysfs {
@@ -11,7 +12,7 @@ namespace mock_sysfs {
 /**
  * @brief Default driver settings for SCMI Kernel Telemetry userspace API
  * @see Linux Kernel SCMI Telemetry Support Confluence page:
- *      https://confluence.arm.com/pages/viewpage.action?spaceKey=CESW&title=Linux+Kernel+SCMI+Telemetry+Support
+ *      https://confluence.arm.com/display/CESW/Linux+Kernel+SCMI+Telemetry+Support+-+v4.0+ALPHA_0+--+WIP
  */
 constexpr bool kAllDesEnable         = true;  ///< Enable all Data Events (DE) reporting at once
 constexpr bool kAllDesTstampEnable   = true;  ///< Enable timestamping for all Data Events (DE)
