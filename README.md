@@ -1,4 +1,5 @@
 [![Clang-Tidy](https://github.com/Arm-Debug/ASTL/actions/workflows/integration.yml/badge.svg)](https://github.com/Arm-Debug/ASTL/actions/workflows/integration.yml)
+[![Blackduck](https://github.com/Arm-Debug/ASTL/actions/workflows/blackduck.yaml/badge.svg)](https://github.com/Arm-Debug/ASTL/actions/workflows/blackduck.yaml)
 [![Test Coverage](https://api.codeclimate.com/v1/badges/f3a3a281741e77874f98/test_coverage)](https://codeclimate.com/repos/67fd746b1af68e00baef93ca/test_coverage)
 # ASTL
 Arm SoC Telemetry Library

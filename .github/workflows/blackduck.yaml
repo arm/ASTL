@@ -1,0 +1,48 @@
+name: Blackduck
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  blackduck:
+    runs-on: self-hosted-ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+          with:
+            ref: ${{ github.head_ref }}
+            token: ${{ secrets.GITHUB_TOKEN }}
+            submodules: true
+        - name: Install Dependencies
+          run: |
+            sudo apt-get -y update
+            sudo apt-get -y upgrade
+            sudo apt-get -y install openjdk-17-jre openjdk-17-jdk python3 python3-pip
+        - name: Fetch Detect Script
+          run: |
+            curl -s -L -o "${{ github.workspace }}/detect-arm.sh" "https://artifactory.arm.com/artifactory/synopsys-blackduck.detect-arm/detect-arm.sh"
+            chmod +x ${{ github.workspace }}/detect-arm.sh
+        - name: Run Blackduck
+          env:
+            # Blackduck will try to download its own version of the java JRE and run Detect with that instead of whatever's installed on the local machine
+            # Unfortunately, it will try to use the x86 JRE when running on an ARM64 runner
+            # This environment variable overrides this behavior and forces Detect to use the JRE installed by apt-get in a previous step
+            # If you see "Syntax error: Unterminated quoted string", it's probably this issue.
+            BDS_JAVA_HOME: /usr/lib/jvm/java-17-openjdk-arm64/
+          run: |
+            VERSION=$(head -1 ${{ github.workspace }}/VERSION.md)
+            echo "VERSION = ${VERSION}"
+            ${{ github.workspace }}/detect-arm.sh \
+            --blackduck.url='https://arm.app.blackduck.com' \
+            --detect.project.name='Arm-Debug:ASTL' \
+            --blackduck.api.token="${{ secrets.BLACKDUCK_TOKEN }}" \
+            --detect.project.version.name="${VERSION}" \
+            --detect.tools='SIGNATURE_SCAN,DETECTOR' \
+            --detect.source.path="${{ github.workspace }}" \
+            --detect.cleanup=false
