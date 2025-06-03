@@ -2,9 +2,13 @@
 # source for VCPKG goodness: https://github.com/lukka/CppCMakeVcpkgTemplate/blob/v11/.github/workflows/hosted-pure-workflow.yml
 name: Integration
 
+permissions:
+  contents: read
+  checks: write
+
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -61,156 +65,162 @@ jobs:
       VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
 
     steps:
-
       # Set env variables needed for vcpkg to use GitHub Action cache for dependencies
-    - uses: actions/github-script@v7
-      with:
-        script: |
-          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: 🚀 Set env vars
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
      # Detect number of available cores for job parallelization
-    - name: Detect Core Count
-      uses: SimenB/github-actions-cpu-cores@v2
-      id: cpu-cores
+      - name: 🚀 Detect Core Count
+        uses: SimenB/github-actions-cpu-cores@v2
+        id: cpu-cores
 
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # fetch all history so we can git diff for clang-tidy relevant files
-        ref: ${{ github.head_ref }}
-        token: ${{ secrets.GITHUB_TOKEN }}
-        submodules: true
+      - name: ⤵️ Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # fetch all history so we can git diff for clang-tidy relevant files
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
 
-    - name: Install apt-get Dependencies (ubuntu-latest)
-      if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y clang-tidy cppcheck gcovr valgrind parallel
+      - name: ⤵️ Install apt-get Dependencies (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy cppcheck yamllint gcovr valgrind parallel
 
-    - name: Install brew Dependencies (macos-15)
-      if: matrix.os == 'macos-15'
-      run: |
-          brew update
-          brew install llvm cppcheck gcovr
-          echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+      - name: ⤵️ Install brew Dependencies (macos-15)
+        if: matrix.os == 'macos-15'
+        run: |
+            brew update
+            brew install llvm cppcheck gcovr
+            echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
 
-    - name: "VCPKG - Create VCPKG_DEFAULT_BINARY_CACHE directory"
-      run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
-      shell: bash
+      - name: 🚀 VCPKG - Create VCPKG_DEFAULT_BINARY_CACHE directory
+        run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
+        shell: bash
 
-    # Restore vcpkg from the GitHub Action cache service. Note that packages are restored by vcpkg's binary caching
-    # when it is being run afterwards by CMake.
-    - name: VCPKG - Restore Cache
-      uses: actions/cache@v4
-      with:
-        # The first path is the location of vcpkg: it contains the vcpkg executable and data files, as long as the
-        # built package archives (aka binary cache) which are located by VCPKG_DEFAULT_BINARY_CACHE env var.
-        # The other paths starting with '!' are exclusions: they contain temporary files generated during the build of the installed packages.
-        path: |
-          ${{ env._VCPKG_ }}
-          !${{ env._VCPKG_ }}/buildtrees
-          !${{ env._VCPKG_ }}/packages
-          !${{ env._VCPKG_ }}/downloads
-          !${{ env._VCPKG_ }}/installed
-        # The key is composed in a way that it gets properly invalidated whenever a different version of vcpkg is being used.
-        key: |
-          os-${{ matrix.os }}-compiler${{ matrix.cpp_compiler }}-${{ hashFiles( '.git/modules/vcpkg/HEAD' )}}
+      # Restore vcpkg from the GitHub Action cache service. Note that packages are restored by vcpkg's binary caching
+      # when it is being run afterwards by CMake.
+      - name: ⤵️ VCPKG - Restore Cache
+        uses: actions/cache@v4
+        with:
+          # The first path is the location of vcpkg: it contains the vcpkg executable and data files, as long as the
+          # built package archives (aka binary cache) which are located by VCPKG_DEFAULT_BINARY_CACHE env var.
+          # The other paths starting with '!' are exclusions: they contain temporary files generated during the build of the installed packages.
+          path: |
+            ${{ env._VCPKG_ }}
+            !${{ env._VCPKG_ }}/buildtrees
+            !${{ env._VCPKG_ }}/packages
+            !${{ env._VCPKG_ }}/downloads
+            !${{ env._VCPKG_ }}/installed
+          # The key is composed in a way that it gets properly invalidated whenever a different version of vcpkg is being used.
+          key: |
+            os-${{ matrix.os }}-compiler${{ matrix.cpp_compiler }}-${{ hashFiles( '.git/modules/vcpkg/HEAD' )}}
 
-    - name: VCPKG - Install Dependencies
-      uses: lukka/run-vcpkg@v11
-      with:
-        vcpkgDirectory: '${{ github.workspace }}/vcpkg'
-        vcpkgJsonGlob: '**/vcpkg.json'
+      - name: ⤵️ VCPKG - Install Dependencies
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+          vcpkgJsonGlob: '**/vcpkg.json'
 
-    - name: CMake - Configure
-      if: matrix.os != 'macos-15'
-      # Configure CMake in a 'build' subdirectory.
-      run: >
-        cmake
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -S ${{ github.workspace }}
-        --preset ${{ matrix.cmake_preset }}
+      - name: 🚀 CMake - Configure
+        if: matrix.os != 'macos-15'
+        # Configure CMake in a 'build' subdirectory.
+        run: >
+          cmake
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+          -S ${{ github.workspace }}
+          --preset ${{ matrix.cmake_preset }}
 
-    - name: CMake - Configure (macos-15)
-      if: matrix.os == 'macos-15'
-      # Configure CMake in a 'build' subdirectory. 
-      # don't use the matrix strategy compiler
-      # just the runner default detected compiler for cmake works best for c++23 compatibility 
-      run: >
-        cmake
-        -S ${{ github.workspace }}
-        --preset ${{ matrix.cmake_preset }}
+      - name: 🚀 CMake - Configure (macos-15)
+        if: matrix.os == 'macos-15'
+        # Configure CMake in a 'build' subdirectory.
+        # don't use the matrix strategy compiler
+        # just the runner default detected compiler for cmake works best for c++23 compatibility
+        run: >
+          cmake
+          -S ${{ github.workspace }}
+          --preset ${{ matrix.cmake_preset }}
 
-    - name: CMake - Build
-      # Build ASTL library with the given configuration.
-      # Note that --preset is needed because the default Windows generator
-      # is a multi-config generator (Visual Studio generator).
-      run: cmake --build --parallel=${{ steps.cpu-cores.outputs.count }} --preset ${{ matrix.cmake_preset }} --verbose
+      - name: 🚀 CMake - Build
+        # Build ASTL library with the given configuration.
+        # Note that --preset is needed because the default Windows generator
+        # is a multi-config generator (Visual Studio generator).
+        run: cmake --build --parallel=${{ steps.cpu-cores.outputs.count }} --preset ${{ matrix.cmake_preset }} --verbose
 
-    - name: CMake - Run Unit Tests and Generate Code Coverage (ubuntu-latest)
-      if: matrix.os == 'ubuntu-latest'
-      # Execute tests defined by the CMake configuration.
-      # Note that --preset is needed because the default Windows generator
-      # is a multi-config generator (Visual Studio generator).
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      # exclude sample tests - we want to measure coverage of tests that have assertions in them
-      run: |
-        if [[ ${{ matrix.cmake_preset }} == 'debug' ]]; then
-          echo 'Running unit tests with Valgrind'
-          valgrind --version
-          ctest --parallel ${{ steps.cpu-cores.outputs.count }} -E "^Sample|^toolsMocksysfs" -T memcheck --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
-          echo 'Running MockSysfs without parallelization.  Need proper fix.'
-          ctest -R "^toolsMocksysfs" -T memcheck --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
-          # Grep will return a non-zero exit code if the defect list is non-empty and cause the CICD flow to fail
-          grep -F '<DefectList/>' ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/*/DynamicAnalysis.xml
-        else
-          echo 'Skipping Valgrind for unit tests'
-          ctest --parallel ${{ steps.cpu-cores.outputs.count }} -E "^Sample|^toolsMocksysfs" --preset ${{ matrix.cmake_preset }}
-          echo 'Running MockSysfs without parallelization.  Need proper fix.'
-          ctest -R "^toolsMocksysfs" --preset ${{ matrix.cmake_preset }}
-        fi
+      - name: 🚀 CMake - Run Unit Tests and Generate Code Coverage (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        # Execute tests defined by the CMake configuration.
+        # Note that --preset is needed because the default Windows generator
+        # is a multi-config generator (Visual Studio generator).
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        # exclude sample tests - we want to measure coverage of tests that have assertions in them
+        run: |
+          if [[ ${{ matrix.cmake_preset }} == 'debug' ]]; then
+            echo 'Running unit tests with Valgrind'
+            valgrind --version
+            ctest --parallel ${{ steps.cpu-cores.outputs.count }} -E "^Sample|^toolsMocksysfs" -T memcheck --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
+            echo 'Running MockSysfs without parallelization.  Need proper fix.'
+            ctest -R "^toolsMocksysfs" -T memcheck --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
+            # Grep will return a non-zero exit code if the defect list is non-empty and cause the CICD flow to fail
+            grep -F '<DefectList/>' ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/*/DynamicAnalysis.xml
+          else
+            echo 'Skipping Valgrind for unit tests'
+            ctest --parallel ${{ steps.cpu-cores.outputs.count }} -E "^Sample|^toolsMocksysfs" --preset ${{ matrix.cmake_preset }}
+            echo 'Running MockSysfs without parallelization.  Need proper fix.'
+            ctest -R "^toolsMocksysfs" --preset ${{ matrix.cmake_preset }}
+          fi
 
-    - name: Cmake - Run Unit Tests (macos-15)
-      if: matrix.os == 'macos-15'
-      # Execute tests defined by the CMake configuration.
-      # exclude sample tests - we want to measure coverage of tests that have assertions in them
-      # TODO - Parallelize tests on Mac OS
-      run: |
-        echo 'Skipping Valgrind, unsupported in macos'
-        ctest -E "^Sample" --preset ${{ matrix.cmake_preset }}
+      - name: 🚀 Cmake - Run Unit Tests (macos-15)
+        if: matrix.os == 'macos-15'
+        # Execute tests defined by the CMake configuration.
+        # exclude sample tests - we want to measure coverage of tests that have assertions in them
+        # TODO - Parallelize tests on Mac OS
+        run: |
+          echo 'Skipping Valgrind, unsupported in macos'
+          ctest -E "^Sample" --preset ${{ matrix.cmake_preset }}
 
-    - name: Code Coverage - Merge Coverage from Parallel Runs
-      if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
-      run: ${{ github.workspace }}/scripts/merge_coverage.sh ${{ github.workspace }}/build
+      - name: 🚀 Code Coverage - Merge Coverage from Parallel Runs
+        if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        run: ${{ github.workspace }}/scripts/merge_coverage.sh ${{ github.workspace }}/build
 
-    - name: Code Coverage - Generate Report with gcovr
-      if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
-      run: ${{ github.workspace }}/scripts/create_coverage_report.sh --xml
+      - name: 🚀 Code Coverage - Generate Report with gcovr
+        if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        run: ${{ github.workspace }}/scripts/create_coverage_report.sh --xml
 
-    - name: Code Coverage - Publish to CodeClimate
-      if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
-      uses: paambaati/codeclimate-action@v9.0.0
-      env:
-        CC_TEST_REPORTER_ID: ${{ secrets.CC_TEST_REPORTER_ID }}
+      - name: ⤴️ Code Coverage - Publish to CodeClimate
+        if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        uses: paambaati/codeclimate-action@v9.0.0
+        env:
+          CC_TEST_REPORTER_ID: ${{ secrets.CC_TEST_REPORTER_ID }}
 
-    - name: Lint with clang-tidy
-      if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-15'
-      run: ${{ github.workspace }}/scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }} pull-request
-      env:
-        BASE_REF: ${{ github.base_ref }}
-        HEAD_REF: ${{ github.head_ref }}
+      - name: 🚀 Lint with clang-tidy
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-15'
+        run: ${{ github.workspace }}/scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }} pull-request
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
 
-    - name: Lint with cppcheck
-      if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-15'
-      run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
+      - name: 🚀 Lint with cppcheck
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-15'
+        run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
 
-    - name: Run Sample tests
-      # Execute tests defined by the CMake configuration.
-      # Note that --preset is needed because the default Windows generator
-      # is a multi-config generator (Visual Studio generator).
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      # include only sample tests, we skipped these earlier in `Unit tests`
-      # because we don't want to include them for coverage.
-      run: ctest -R "^Sample" --preset ${{ matrix.cmake_preset }}
+      # Note: yamllint settings are contained in .yamllint
+      - name: 🚀 Lint check YAML files with Yamllint
+        if: matrix.os == 'ubuntu-latest'
+        run: yamllint .
+
+      - name: 🚀 Run Sample tests
+        # Execute tests defined by the CMake configuration.
+        # Note that --preset is needed because the default Windows generator
+        # is a multi-config generator (Visual Studio generator).
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        # include only sample tests, we skipped these earlier in `Unit tests`
+        # because we don't want to include them for coverage.
+        run: ctest -R "^Sample" --preset ${{ matrix.cmake_preset }}
 
   check-format:
     runs-on: ${{ matrix.os }}
@@ -219,18 +229,18 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest, macos-15]
- 
+
     steps:
-      - name: Checkout code
+      - name: ⤵️ Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Tools (ubuntu)
+      - name: ⤵️ Install Tools (ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y clang-format
 
-      - name: Install Tools (macos)
+      - name: ⤵️ Install Tools (macos)
         if: matrix.os == 'macos-15'
         run: brew install clang-format
 
-      - name: Check Formatting
+      - name: 🚀 Check Formatting
         run: ${{ github.workspace }}/scripts/check_format.sh
