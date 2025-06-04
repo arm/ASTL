@@ -77,6 +77,8 @@ int main(int argc, char* argv[]) {
     return ret;
   }
 
+  fuse_daemonize(opts.foreground);
+
   if (opts.singlethread) {
     ret = fuse_session_loop(fuse_session_handle);
   } else {
