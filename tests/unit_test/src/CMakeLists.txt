@@ -13,9 +13,10 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 add_executable(unit_test
-    unit_test.cpp
+    collector_manager_utests.cpp
     file_interface_utests.cpp
     logger_utests.cpp
+    unit_test.cpp
  )
 
 # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static

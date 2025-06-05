@@ -48,7 +48,7 @@ struct ICollector {
    * @brief Set the destination for where sampled data should be sent.
    *       This is typically the CollectorManager, but can be any ISampleSink.
    */
-  virtual void SetSampleSink(ISampleSink* sample_sink) const = 0;
+  virtual void SetSampleSink(ISampleSink* sample_sink) = 0;
 
   /*
    * @brief Configure the collector to collect data, but don't start sampling it yet.

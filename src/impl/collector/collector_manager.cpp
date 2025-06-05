@@ -49,9 +49,24 @@ std::unordered_map<ITarget*, std::vector<CollectorCapabilities>> CollectorManage
   return capabilities;
 }
 
-void CollectorManager::RegisterSampleSink(ISampleSink* sink) { _registered_sample_sinks.insert(sink); }
+astl_status_code CollectorManager::RegisterSampleSink(ISampleSink* sink) {
+  if (!sink) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  _registered_sample_sinks.insert(sink);
+  return ASTL_STATUS_SUCCESS;
+}
 
-void CollectorManager::UnregisterSampleSink(ISampleSink* sink) { _registered_sample_sinks.erase(sink); }
+astl_status_code CollectorManager::UnregisterSampleSink(ISampleSink* sink) {
+  if (!sink) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  auto num_removed = _registered_sample_sinks.erase(sink);
+  if (num_removed == 0) {
+    return ASTL_STATUS_INTERNAL_ERROR;  // sink was not registered
+  }
+  return ASTL_STATUS_SUCCESS;
+}
 
 astl_status_code CollectorManager::ConfigureCollectionOnTarget(ITarget*                            target,
                                                                astl_collection_parameters_t const& collection_params,

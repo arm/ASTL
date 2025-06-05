@@ -11,9 +11,8 @@
  */
 class ModifiedEnvVar {
  public:
-  ModifiedEnvVar(const std::string &var_name, const std::string &value) : var_name(var_name) {
-    // Save the old value of the environment variable
-    old_value = astl::GetEnvVar(var_name);
+  ModifiedEnvVar(const std::string &var_name, const std::string &value)
+      : var_name{var_name}, old_value{astl::GetEnvVar(var_name)} {
     astl::SetEnvVar(var_name, value);
   }
   ~ModifiedEnvVar() {
@@ -110,18 +109,12 @@ TEST_CASE("random number", "[rand_num]") {
 class LoggerScopedTest {
  public:
   LoggerScopedTest(const std::string &log_name, const std::string &log_level, bool log_console, bool source_loc)
-      : logfile_name(log_name) {
-    // Set logger environment variables.
-    modified_logname_var  = std::make_shared<ModifiedEnvVar>("ASTL_LOG_NAME", log_name);
-    modified_loglevel_var = std::make_shared<ModifiedEnvVar>("ASTL_LOG_LEVEL", log_level);
-    modified_logconsole_var =
-        std::make_shared<ModifiedEnvVar>("ASTL_LOG_CONSOLE", std::to_string(static_cast<int>(log_console)));
-    modified_srcloc_var =
-        std::make_shared<ModifiedEnvVar>("ASTL_LOG_SOURCE_LOC", std::to_string(static_cast<int>(source_loc)));
-
-    // Create the logger
-    logger = std::make_shared<astl::Logger>();
-  }
+      : logfile_name{log_name},
+        modified_logname_var{"ASTL_LOG_NAME", log_name},
+        modified_loglevel_var{"ASTL_LOG_LEVEL", log_level},
+        modified_logconsole_var{"ASTL_LOG_CONSOLE", std::to_string(static_cast<int>(log_console))},
+        modified_srcloc_var{"ASTL_LOG_SOURCE_LOC", std::to_string(static_cast<int>(source_loc))},
+        logger{std::make_shared<astl::Logger>()} {}
 
   LoggerScopedTest(const LoggerScopedTest &)                = delete;
   LoggerScopedTest &operator=(const LoggerScopedTest &)     = delete;
@@ -164,14 +157,14 @@ class LoggerScopedTest {
   std::shared_ptr<astl::Logger> GetLogger() { return logger; }
 
  private:
-  std::ifstream                 logfile;
-  std::string                   logfile_name;
-  std::shared_ptr<astl::Logger> logger;
+  std::ifstream logfile;
+  std::string   logfile_name;
 
-  std::shared_ptr<ModifiedEnvVar> modified_logname_var;
-  std::shared_ptr<ModifiedEnvVar> modified_loglevel_var;
-  std::shared_ptr<ModifiedEnvVar> modified_logconsole_var;
-  std::shared_ptr<ModifiedEnvVar> modified_srcloc_var;
+  ModifiedEnvVar                modified_logname_var;
+  ModifiedEnvVar                modified_loglevel_var;
+  ModifiedEnvVar                modified_logconsole_var;
+  ModifiedEnvVar                modified_srcloc_var;
+  std::shared_ptr<astl::Logger> logger;
 };
 
 /* trace, debug, info, warning, error and critical level should be logged

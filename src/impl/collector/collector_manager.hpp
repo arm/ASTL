@@ -55,8 +55,8 @@ class CollectorManager : public ICollectorManager, public ISampleSink {
   std::unordered_map<ITarget*, std::vector<CollectorCapabilities>> ReportCollectionCapabilities() const override;
 
   // ICollectorManager implementation
-  void RegisterSampleSink(ISampleSink* sink) override;
-  void UnregisterSampleSink(ISampleSink* sink) override;
+  astl_status_code RegisterSampleSink(ISampleSink* sink) override;
+  astl_status_code UnregisterSampleSink(ISampleSink* sink) override;
 
   astl_status_code ConfigureCollectionOnTarget(ITarget* target, astl_collection_parameters_t const& collection_params,
                                                CollectionOperations&& operations) override;
