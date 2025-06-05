@@ -66,15 +66,15 @@ jobs:
 
     steps:
       # Set env variables needed for vcpkg to use GitHub Action cache for dependencies
-      - name: 🚀 Set env vars
+      - name: 🌱 Set env vars
         uses: actions/github-script@v7
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-     # Detect number of available cores for job parallelization
-      - name: 🚀 Detect Core Count
+      # Detect number of available cores for job parallelization
+      - name: 🧠 Detect Core Count
         uses: SimenB/github-actions-cpu-cores@v2
         id: cpu-cores
 
@@ -97,7 +97,7 @@ jobs:
             brew install llvm cppcheck gcovr
             echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
 
-      - name: 🚀 VCPKG - Create VCPKG_DEFAULT_BINARY_CACHE directory
+      - name: 📂 VCPKG - Create VCPKG_DEFAULT_BINARY_CACHE directory
         run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
         shell: bash
 
@@ -125,7 +125,7 @@ jobs:
           vcpkgDirectory: '${{ github.workspace }}/vcpkg'
           vcpkgJsonGlob: '**/vcpkg.json'
 
-      - name: 🚀 CMake - Configure
+      - name: ⚙️ CMake - Configure
         if: matrix.os != 'macos-15'
         # Configure CMake in a 'build' subdirectory.
         run: >
@@ -135,7 +135,7 @@ jobs:
           -S ${{ github.workspace }}
           --preset ${{ matrix.cmake_preset }}
 
-      - name: 🚀 CMake - Configure (macos-15)
+      - name: ⚙️ CMake - Configure (macos-15)
         if: matrix.os == 'macos-15'
         # Configure CMake in a 'build' subdirectory.
         # don't use the matrix strategy compiler
@@ -145,13 +145,13 @@ jobs:
           -S ${{ github.workspace }}
           --preset ${{ matrix.cmake_preset }}
 
-      - name: 🚀 CMake - Build
+      - name: 🏗️ CMake - Build
         # Build ASTL library with the given configuration.
         # Note that --preset is needed because the default Windows generator
         # is a multi-config generator (Visual Studio generator).
         run: cmake --build --parallel=${{ steps.cpu-cores.outputs.count }} --preset ${{ matrix.cmake_preset }} --verbose
 
-      - name: 🚀 CMake - Run Unit Tests and Generate Code Coverage (ubuntu-latest)
+      - name: 🧪 CMake - Run Unit Tests and Generate Code Coverage (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
         # Execute tests defined by the CMake configuration.
         # Note that --preset is needed because the default Windows generator
@@ -174,7 +174,7 @@ jobs:
             ctest -R "^toolsMocksysfs" --preset ${{ matrix.cmake_preset }}
           fi
 
-      - name: 🚀 Cmake - Run Unit Tests (macos-15)
+      - name: 🧪 Cmake - Run Unit Tests (macos-15)
         if: matrix.os == 'macos-15'
         # Execute tests defined by the CMake configuration.
         # exclude sample tests - we want to measure coverage of tests that have assertions in them
@@ -183,37 +183,39 @@ jobs:
           echo 'Skipping Valgrind, unsupported in macos'
           ctest -E "^Sample" --preset ${{ matrix.cmake_preset }}
 
-      - name: 🚀 Code Coverage - Merge Coverage from Parallel Runs
+      - name: 📊 Code Coverage - Merge Coverage from Parallel Runs
         if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
         run: ${{ github.workspace }}/scripts/merge_coverage.sh ${{ github.workspace }}/build
 
-      - name: 🚀 Code Coverage - Generate Report with gcovr
+      - name: 📊 Code Coverage - Generate Report with gcovr
         if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
         run: ${{ github.workspace }}/scripts/create_coverage_report.sh --xml
 
-      - name: ⤴️ Code Coverage - Publish to CodeClimate
+      - name: ⤴️ Code Coverage - Publish to Qlty
+        # project overview: https://qlty.sh/gh/Arm-Debug/projects/ASTL
         if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
-        uses: paambaati/codeclimate-action@v9.0.0
-        env:
-          CC_TEST_REPORTER_ID: ${{ secrets.CC_TEST_REPORTER_ID }}
+        uses: qltysh/qlty-action/coverage@v1
+        with:
+          token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
+          files: coverage.xml
 
-      - name: 🚀 Lint with clang-tidy
+      - name: 🧹 Lint with clang-tidy
         if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-15'
         run: ${{ github.workspace }}/scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }} pull-request
         env:
           BASE_REF: ${{ github.base_ref }}
           HEAD_REF: ${{ github.head_ref }}
 
-      - name: 🚀 Lint with cppcheck
+      - name: 🧹 Lint with cppcheck
         if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-15'
         run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
 
       # Note: yamllint settings are contained in .yamllint
-      - name: 🚀 Lint check YAML files with Yamllint
+      - name: 🧹 Lint check YAML files with Yamllint
         if: matrix.os == 'ubuntu-latest'
         run: yamllint .
 
-      - name: 🚀 Run Sample tests
+      - name: 🧪 Run Sample tests
         # Execute tests defined by the CMake configuration.
         # Note that --preset is needed because the default Windows generator
         # is a multi-config generator (Visual Studio generator).
@@ -242,5 +244,5 @@ jobs:
         if: matrix.os == 'macos-15'
         run: brew install clang-format
 
-      - name: 🚀 Check Formatting
+      - name: 🧹 Check Formatting
         run: ${{ github.workspace }}/scripts/check_format.sh
