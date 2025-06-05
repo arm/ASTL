@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0
 
       - name: 🚀 AI Code Review
-        uses: Arm-Debug/ai-code-review@36e1803ea87854866ab06a7b16eddf857c58f8a9
+        uses: Arm-Debug/ai-code-review@315af0ad1604c20474454aafb4b2b56b9a6b8129
         continue-on-error: true
         with:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -32,3 +32,10 @@ jobs:
           CODE_REVIEW_GUIDELINES: ".github/workflows/AI_CODE_REVIEW.md"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏷️ Remove 'request-ai-review' label
+        if: always()
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: request-ai-review
