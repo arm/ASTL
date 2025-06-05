@@ -32,6 +32,7 @@ if [[ -n "$1" ]]; then
   INCLUDE_PATHS+=" -I ${BUILD_DIR}/include"
   INCLUDE_PATHS+=" -I ${REPO_ROOT_DIR}/utils"
   INCLUDE_PATHS+=" -I ${REPO_ROOT_DIR}/src/impl"
+  INCLUDE_PATHS+=" -I ${REPO_ROOT_DIR}/src/impl/common"
 fi
 
 echo "Running cppcheck to lint code..."

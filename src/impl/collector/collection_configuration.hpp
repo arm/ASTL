@@ -48,7 +48,11 @@ class CollectionConfiguration {
    * @param[in] collection_params     Collection parameters structure
    **/
   CollectionConfiguration(ITarget *target, ICollector *collector, CollectionOperations collectionOperations,
-                          astl_collection_parameters_t const &collection_params);
+                          astl_collection_parameters_t const &collection_params)
+      : _target{target},
+        _collector{collector},
+        _operations{std::move(collectionOperations)},
+        _collection_params{collection_params} {}
 
  private:
   ITarget    *_target    = nullptr;

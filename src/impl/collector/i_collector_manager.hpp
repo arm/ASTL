@@ -51,8 +51,8 @@ struct ICollectorManager {
    * This might include Orchestrator, a logger, a think translator for a API callback, etc.
    * When data is sampled, or generated asynchronously, it'll be sent to each ISampleSink in turn
    */
-  virtual void RegisterSampleSink(ISampleSink* sink)   = 0;
-  virtual void UnregisterSampleSink(ISampleSink* sink) = 0;
+  virtual astl_status_code RegisterSampleSink(ISampleSink* sink)   = 0;
+  virtual astl_status_code UnregisterSampleSink(ISampleSink* sink) = 0;
 
   /* CollectorManager should choose a suitable collector for the given operations and target,
    * and enable it according to the collection parameters.
