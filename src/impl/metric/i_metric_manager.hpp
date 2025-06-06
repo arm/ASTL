@@ -16,16 +16,16 @@
  * under the License.
  ******************************************************************************/
 
-#ifndef IFACE_METRIC_MANAGER_HPP_
-#define IFACE_METRIC_MANAGER_HPP_
+#ifndef I_METRIC_MANAGER_HPP_
+#define I_METRIC_MANAGER_HPP_
 
 #include <memory>
 #include <span>
 #include <vector>
 
 #include "astl/astl.h"
+#include "i_metric.hpp"
 #include "i_sample_sink.hpp"
-#include "metric.hpp"
 #include "metric_config.hpp"
 #include "operation.hpp"
 
@@ -88,4 +88,4 @@ class IMetricManager {
 
 }  // namespace astl
 
-#endif  // IFACE_METRIC_MANAGER_HPP_
+#endif  // I_METRIC_MANAGER_HPP_

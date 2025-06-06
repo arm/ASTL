@@ -22,6 +22,7 @@
 #include <string>
 
 #include "astl/astl.h"
+#include "capabilities.hpp"
 
 namespace astl {
 
@@ -35,8 +36,22 @@ class MetricConfig {
    * @brief allow destroying metric config instances by base class pointer
    */
   virtual ~MetricConfig() = default;
+  /**
+   * @brief Default constructor is deleted to ensure that MetricConfig cannot be instantiated directly.
+   */
+  MetricConfig() = delete;
+  /**
+   * @brief Construct a MetricConfig with the given parameters.
+   */
 
-  MetricConfig()                                = default;
+  explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
+                        astl_value_type_t value_type, astl_metric_type_t metric_type, const Capabilities &required_caps)
+      : _metric_name(name),
+        _description(description),
+        _units(units),
+        _value_type(value_type),
+        _metric_type(metric_type),
+        _required_caps(required_caps) {}
   MetricConfig(const MetricConfig &)            = default;
   MetricConfig &operator=(const MetricConfig &) = default;
   MetricConfig(MetricConfig &&)                 = default;
@@ -45,10 +60,52 @@ class MetricConfig {
   /**
    * @brief Return the name of the metric.
    *
-   * This is a placeholder interface method that must be overridden by concrete metric config classes.
    * @return std::string The metric name.
    */
-  virtual std::string Name() const = 0;
+  const std::string &Name() const { return _metric_name; }
+  /**
+   * @brief Return the description of the metric.
+   *
+   * @return std::string The metric description.
+   */
+  const std::string &Description() const { return _description; }
+  /**
+   * @brief Return the units of the metric.
+   *
+   * @return astl_units_t The metric units.
+   */
+  astl_units_t Units() const { return _units; }
+  /**
+   * @brief Return the value type of the metric.
+   *
+   * @return astl_value_type_t The metric value type.
+   */
+  astl_value_type_t ValueType() const { return _value_type; }
+  /**
+   * @brief Return the metric type.
+   *
+   * @return astl_metric_type_t The metric type.
+   */
+  astl_metric_type_t MetricType() const { return _metric_type; }
+  /**
+   * @brief Return the required capabilities of the metric.
+   */
+  const Capabilities &GetRequiredCapabilities() const { return _required_caps; }
+  /**
+   * @brief Set the required capabilities of the metric.
+   *
+   * @param required_caps The required capabilities to set.
+   */
+  void SetRequiredCapabilities(const Capabilities &required_caps) { _required_caps = required_caps; }
+
+ private:
+  std::string       _metric_name;  // Metric name as specified in the configuration file
+  std::string       _description;  // Human-readable description of the metric
+  astl_units_t      _units;        // Measurement units for the metric (e.g., seconds, bytes)
+  astl_value_type_t _value_type;   // Data type of the metric value (e.g., raw, processed)
+  astl_metric_type_t
+               _metric_type;    // Semantic type of the metric defined by ASTL design doc(e.g., value, delta, residency)
+  Capabilities _required_caps;  // Required system capabilities or collector types to support this metric
 };
 
 }  // namespace astl
