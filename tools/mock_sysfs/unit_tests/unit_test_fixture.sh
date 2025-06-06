@@ -59,7 +59,7 @@ wait_for() {
 }
 
 # If valgrind reports an "unhandled dwarf2 abbrev form code 0x25" error, try compiling with g++ instead of clang
-valgrind --log-file=${VALGRIND_LOG} --leak-check=full --show-leak-kinds=all --track-origins=yes ${SYSFS_EXECUTABLE} -s ${MOUNT_POINT} &> ${SYSFS_LOG} &
+valgrind --log-file=${VALGRIND_LOG} --leak-check=full --show-leak-kinds=all --track-origins=yes ${SYSFS_EXECUTABLE} -f -s ${MOUNT_POINT} &> ${SYSFS_LOG} &
 # ${SYSFS_EXECUTABLE} -f -s ${MOUNT_POINT} &> ${SYSFS_LOG} &
 SYSFS_PROCESS="$!"
 
