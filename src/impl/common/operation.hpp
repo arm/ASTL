@@ -19,7 +19,10 @@
 #ifndef OPERATION_HPP_
 #define OPERATION_HPP_
 
+#include <astl_logger.hpp>
 #include <chrono>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
 namespace astl {
@@ -27,15 +30,44 @@ namespace astl {
 using SamplingInterval = std::chrono::duration<uint32_t, std::milli>;
 using SampleTimestamp  = std::chrono::time_point<std::chrono::steady_clock, std::chrono::microseconds>;
 
+using OperationId                    = uint16_t;
+constexpr size_t kOperationIdInvalid = std::numeric_limits<OperationId>::max();
+
 // base class for operations for collectors to perform to enable or sample metrics
-struct Operation {
+class Operation {
+ public:
   virtual ~Operation() = default;
 
-  Operation()                            = default;
+  Operation() : operation_id{GetNextOperationId()} {}
   Operation(const Operation&)            = default;
   Operation& operator=(const Operation&) = default;
   Operation(Operation&&)                 = default;
   Operation& operator=(Operation&&)      = default;
+
+  /*
+   * @brief Get an identifier associated with this Operation instance.
+   * Useful for when a Collector needs to send SampledData back to Orchestrator and tie it to Metrics
+   */
+  OperationId GetId() const { return operation_id; }
+
+ private:
+  OperationId operation_id{kOperationIdInvalid};
+
+  /*
+   * @brief increment an operation base-class level identifier and return the current value
+   * Since this is used in the constructor, this simply raises an exception if it gets all the way up to
+   * an invalid kOperationIdInvalid value.
+   */
+  static OperationId GetNextOperationId() {
+    static OperationId next_operation_id{};
+    auto               this_id = next_operation_id;
+    next_operation_id++;
+    if (this_id == kOperationIdInvalid) {
+      ASTL_LOG_CRITICAL("ASTL has run out of unique OperationIds. This error is currently unrecoverable");
+      throw std::runtime_error("ASTL has run out of unique OperationIds. This error is currently unrecoverable");
+    }
+    return this_id;
+  }
 };
 
 using OperationSequence = std::vector<std::unique_ptr<Operation>>;

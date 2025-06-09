@@ -19,7 +19,6 @@
 #ifndef COLLECTOR_MANAGER_HPP_
 #define COLLECTOR_MANAGER_HPP_
 
-#include <map>
 #include <span>
 #include <unordered_map>
 #include <unordered_set>
@@ -39,8 +38,15 @@ namespace astl {
 class CollectorManager : public ICollectorManager, public ISampleSink {
  public:
   CollectorManager() = delete;
+
   /*
-   * operationsProvider knows how to translate groups of metrics into sets of operations for a given target.
+   * @brief Construct the Collector manager, providing a set of collection strategies for each target.
+   *
+   * @param collectors is a map from a given target to a set of collectors than can retrieve samples from that target.
+   *        It's assumed that each target supports only on CollectorType protocol, but there are multiple collector
+   *        options based on collection optimization hints and heuristics.
+   *
+   * @note Collection must be stopped and CollectorManager destroyed before the given ITarget keys are destroyed
    */
   explicit CollectorManager(std::unordered_map<ITarget*, std::vector<std::unique_ptr<ICollector>>>&& collectors);
 

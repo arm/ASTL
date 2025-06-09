@@ -16,6 +16,7 @@ add_executable(unit_test
     collector_manager_utests.cpp
     file_interface_utests.cpp
     logger_utests.cpp
+    scmi_sysfs_collector_utests.cpp
     unit_test.cpp
  )
 
@@ -23,6 +24,7 @@ add_executable(unit_test
 target_link_libraries(unit_test
     # test targets should link astl publicly so that gcovr can measure how much of astl_static is covered
     PUBLIC
+        Astl::astl
         Astl::astl_static
     PRIVATE
         Catch2::Catch2WithMain
