@@ -1,6 +1,7 @@
 #ifndef INCLUDE_ASTL_LOGGER_HPP_
 #define INCLUDE_ASTL_LOGGER_HPP_
 
+#include <format>
 #include <iostream>
 #include <map>
 #include <source_location>
@@ -14,6 +15,33 @@
 #include <spdlog/spdlog.h>
 
 #include "astl_utils.hpp"
+namespace astl {
+
+// add astl_status_code to the to_string overload set
+inline std::string to_string(astl_status_code status_code) { return astlStatusString(status_code); }
+
+// stream output function for astl_status_code
+inline std::ostream& operator<<(std::ostream& output_stream, astl_status_code status_code) {
+  return output_stream << astl::to_string(status_code);
+}
+
+}  // namespace astl
+
+// std::format formatter for astl_status_code
+template <>
+struct std::formatter<astl_status_code> : std::formatter<std::string> {
+  auto format(astl_status_code status_code, auto& ctx) const {
+    return std::formatter<std::string>::format(astl::to_string(status_code), ctx);
+  }
+};
+
+// and another formatter because spdlog uses fmt:: by default.
+template <>
+struct fmt::formatter<astl_status_code> : fmt::formatter<std::string> {
+  auto format(astl_status_code status_code, auto& ctx) const {
+    return fmt::formatter<std::string>::format(astl::to_string(status_code), ctx);
+  }
+};
 
 namespace astl {
 
@@ -57,7 +85,7 @@ static constexpr spdlog::level::level_enum kDefaultSpdlogLevel = spdlog::level::
  */
 static constexpr const char* kAstlLogLevelEnvVar = "ASTL_LOG_LEVEL";
 
-/* Environement variable used to override logging to console.
+/* Environment variable used to override logging to console.
  * It is used to enable logging to the console when the compiled in value is set to off
  * It cannot be used to turn off logging to the console if the code explicitely enables logging to the console
  * Any value would activate the variable other than explicit negative values: 0, no, off or empty
@@ -68,7 +96,7 @@ static constexpr const char* kAstlLogConsoleEnvVar = "ASTL_LOG_CONSOLE";
  */
 static constexpr const char* kAstlLogNameEnvVar = "ASTL_LOG_NAME";
 
-/* Environement variable used to enable adding source location to the formatted log messages
+/* Environment variable used to enable adding source location to the formatted log messages
  * Any non negative value would activate the variable
  */
 static constexpr const char* kAstlLogSourceLocEnvVar = "ASTL_LOG_SOURCE_LOC";

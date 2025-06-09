@@ -33,15 +33,15 @@ namespace astl {
 struct SampledData {
   SampledData() = delete;
 
-  SampledData(ICounter *counter, astl_value_t value)
-      : counter{counter},
+  SampledData(OperationId operation_id, astl_value_t value)
+      : operation_id{operation_id},
         value{value},
         timestamp{std::chrono::time_point_cast<SampleTimestamp::duration>(std::chrono::steady_clock::now())} {}
 
-  SampledData(ICounter *counter, astl_value_t value, std::chrono::time_point<std::chrono::steady_clock> timestamp)
-      : counter{counter}, value{value}, timestamp{std::chrono::time_point_cast<SampleTimestamp::duration>(timestamp)} {}
+  SampledData(OperationId operation_id, astl_value_t value, SampleTimestamp timestamp)
+      : operation_id{operation_id}, value{value}, timestamp{timestamp} {}
 
-  ICounter       *counter = nullptr;  // - needs to be serializable, use an ID instead?
+  OperationId     operation_id{kOperationIdInvalid};
   astl_value_t    value;
   SampleTimestamp timestamp;
 };

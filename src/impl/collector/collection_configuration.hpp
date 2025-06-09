@@ -19,16 +19,11 @@
 #ifndef COLLECTION_CONFIGURATION_HPP_
 #define COLLECTION_CONFIGURATION_HPP_
 
-#include <span>
-
 #include "astl/astl.h"
 #include "collection_operations.hpp"
 #include "target.hpp"
 
 namespace astl {
-
-class ICollector;
-class ITarget;
 
 /*
  * @brief Current state of collection for a given set of metrics on a target.
@@ -39,24 +34,26 @@ class ITarget;
 class CollectionConfiguration {
  public:
   /**
-   * @brief Construct a configuration from Counters
+   * @brief Construct a configuration of operations to collect and how to collect them
    *
-   * @param[in] target                ITarget where this collection will be configured
+   * @param[in] target                Target where this collection will be configured
    *
-   * @param[in] counters              collection of Counters to be sampled
+   * @param[in] collectionOperations  Groups of operations to apply at different phases of collection
    *
-   * @param[in] collection_params     Collection parameters structure
+   * @param[in] collection_params     Collection parameters (interval, strategy, etc)
    **/
-  CollectionConfiguration(ITarget *target, ICollector *collector, CollectionOperations collectionOperations,
+  CollectionConfiguration(ITarget *target, CollectionOperations collectionOperations,
                           astl_collection_parameters_t const &collection_params)
-      : _target{target},
-        _collector{collector},
-        _operations{std::move(collectionOperations)},
-        _collection_params{collection_params} {}
+      : _target{target}, _operations{std::move(collectionOperations)}, _collection_params{collection_params} {}
+
+  ITarget *Target() const { return _target; }
+
+  CollectionOperations const &Operations() const { return _operations; }
+
+  astl_collection_parameters_t CollectionParams() const { return _collection_params; }
 
  private:
-  ITarget    *_target    = nullptr;
-  ICollector *_collector = nullptr;
+  ITarget *_target = nullptr;
 
   CollectionOperations _operations;
 

@@ -3,10 +3,16 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
+#include <expected>
+#include <filesystem>
+#include <span>
+#include <string>
+#include <string_view>
 
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
 #include "common/capabilities.hpp"
+#include "common/i_sample_sink.hpp"
 #include "counter.hpp"
 #include "target.hpp"
 
@@ -53,6 +59,18 @@ struct MockCounter : public astl::ICounter {
   MAKE_MOCK1(GetProperties, auto(astl_counter_properties_t*) -> astl_status_code, override);
   MAKE_MOCK1(ConfigureCollection, auto(astl_collection_parameters_t const* const) -> astl_status_code, override);
   // clang-format on
+};
+
+// MockFileInterface is a mockable implementation of the astl::FileInterface
+struct MockFileInterface {
+  static constexpr bool trompeloeil_movable_mock = true;
+
+  using expected_bool = std::expected<bool, astl_status_code>;
+  MAKE_MOCK1(IsValid, auto(const std::filesystem::path&)->expected_bool, const noexcept);
+  MAKE_MOCK1(HasReadPermission, auto(const std::filesystem::path&)->expected_bool, const noexcept);
+  MAKE_MOCK1(HasWritePermission, auto(const std::filesystem::path&)->expected_bool, const noexcept);
+  MAKE_MOCK2(Read, auto(const std::filesystem::path&, std::string&)->astl_status_code, const);
+  MAKE_MOCK2(Write, auto(const std::filesystem::path&, const std::string_view)->astl_status_code, const);
 };
 
 struct MockCollector : public astl::ICollector {

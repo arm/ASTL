@@ -75,7 +75,7 @@ astl_status_code CollectorManager::ConfigureCollectionOnTarget(ITarget*         
   if (!collector) {
     return collector.error();
   }
-  CollectionConfiguration configuration_instance(target, collector.value(), std::move(operations), collection_params);
+  CollectionConfiguration configuration_instance(target, std::move(operations), collection_params);
   return collector.value()->ConfigureCollection(std::move(configuration_instance));
 }
 

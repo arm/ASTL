@@ -14,17 +14,11 @@
 
 using trompeloeil::_;
 
-// extend the overload set of std::to_string to support our error enum
-namespace std {
-std::string to_string(astl_status_code error) { return astlStatusString(error); }
-}  // namespace std
-
 // extend Catch2's to-string capabilities, so assert failures mention error codes by name rather than value
 namespace Catch {
 template <>
 struct StringMaker<astl_status_code> {
-  // cppcheck-suppress unusedFunction
-  static std::string convert(astl_status_code error) { return std::to_string(error); }
+  static std::string convert(astl_status_code error) { return astlStatusString(error); }
 };
 }  // namespace Catch
 

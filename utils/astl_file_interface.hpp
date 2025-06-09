@@ -106,7 +106,7 @@ class FileInterface {
    * @param value The string data to write into the file.
    * @return ASTL_STATUS_SUCCESS if the file is successfully written, or an error code otherwise.
    */
-  astl_status_code Write(const std::filesystem::path &path, const std::string &value) const {
+  astl_status_code Write(const std::filesystem::path &path, const std::string_view value) const {
     std::ofstream file(Resolve(path));
     if (!file.is_open()) {
       return ASTL_STATUS_FILE_OPEN_FAILED;
