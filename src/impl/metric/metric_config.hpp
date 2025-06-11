@@ -20,6 +20,7 @@
 #define METRIC_CONFIG_HPP_
 
 #include <string>
+#include <vector>
 
 #include "astl/astl.h"
 #include "common/capabilities.hpp"
@@ -45,13 +46,16 @@ class MetricConfig {
    */
 
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
-                        astl_value_type_t value_type, astl_metric_type_t metric_type, const Capabilities &required_caps)
+                        astl_value_type_t value_type, astl_metric_type_t metric_type, CollectorType collector_type,
+                        const std::vector<std::string> &data_event_ids)
       : _metric_name(name),
         _description(description),
         _units(units),
         _value_type(value_type),
         _metric_type(metric_type),
-        _required_caps(required_caps) {}
+        _collector_type(collector_type),
+        _data_event_ids(std::move(data_event_ids)) {}
+
   MetricConfig(const MetricConfig &)            = default;
   MetricConfig &operator=(const MetricConfig &) = default;
   MetricConfig(MetricConfig &&)                 = default;
@@ -88,15 +92,21 @@ class MetricConfig {
    */
   astl_metric_type_t MetricType() const { return _metric_type; }
   /**
-   * @brief Return the required capabilities of the metric.
+   * @brief Return the collector type of the metric.
    */
-  const Capabilities &GetRequiredCapabilities() const { return _required_caps; }
+  CollectorType GetCollectorType() const { return _collector_type; }
   /**
-   * @brief Set the required capabilities of the metric.
+   * @brief Set the collector type of the metric.
    *
-   * @param required_caps The required capabilities to set.
+   * @param collector_type The collector type to set.
    */
-  void SetRequiredCapabilities(const Capabilities &required_caps) { _required_caps = required_caps; }
+  void SetCollectorType(CollectorType collector_type) { _collector_type = collector_type; }
+  /**
+   * @brief Return a vector of the Data Event IDs of the metric.
+   *
+   * @return std::string Vector of Data Event IDs.
+   */
+  const std::vector<std::string> &DataEventIds() const { return _data_event_ids; }
 
  private:
   std::string       _metric_name;  // Metric name as specified in the configuration file
@@ -104,8 +114,9 @@ class MetricConfig {
   astl_units_t      _units;        // Measurement units for the metric (e.g., seconds, bytes)
   astl_value_type_t _value_type;   // Data type of the metric value (e.g., raw, processed)
   astl_metric_type_t
-               _metric_type;    // Semantic type of the metric defined by ASTL design doc(e.g., value, delta, residency)
-  Capabilities _required_caps;  // Required system capabilities or collector types to support this metric
+                _metric_type;  // Semantic type of the metric defined by ASTL design doc(e.g., value, delta, residency)
+  CollectorType _collector_type;  // Collector type to support this metric
+  std::vector<std::string> _data_event_ids;
 };
 
 }  // namespace astl

@@ -16,26 +16,21 @@
  * under the License.
  ******************************************************************************/
 
-#include "metric_manager.hpp"
+#ifndef STATIC_METRIC_CONFIG_HPP_
+#define STATIC_METRIC_CONFIG_HPP_
 
-#include "astl/astl_errors.h"
+#include "astl/astl_telemetry.h"
+#include "common/capabilities.hpp"
+#include "metric/metric_config.hpp"
 
 namespace astl {
 
-astl_status_code MetricManager::RegisterMetric(std::unique_ptr<MetricConfig> metric_config) {
-  return ASTL_STATUS_NOT_IMPLEMENTED;
-}
+inline const std::vector<std::string> kDataEventIds = {"0x1234"};
 
-std::expected<std::span<IMetric*>, astl_status_code> MetricManager::GetAvailableMetrics() const {
-  return std::unexpected{ASTL_STATUS_NOT_IMPLEMENTED};
-}
-
-std::expected<OperationSequence, astl_status_code> MetricManager::GetRequiredOperations(std::span<IMetric*> metrics) {
-  return std::unexpected{ASTL_STATUS_NOT_IMPLEMENTED};
-}
-
-astl_status_code MetricManager::ProcessData(std::span<SampledData> data) { return ASTL_STATUS_NOT_IMPLEMENTED; }
-
-astl_status_code MetricManager::SummarizeMetrics() { return ASTL_STATUS_NOT_IMPLEMENTED; }
+inline const MetricConfig kTemperature{
+    "SoC Temperature", "SoC Temperature for abc xyz", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64,
+    ASTL_METRIC_VALUE, CollectorType::SCMI,           kDataEventIds};
 
 }  // namespace astl
+
+#endif  // STATIC_METRIC_CONFIG_HPP_
