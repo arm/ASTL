@@ -76,7 +76,7 @@ typedef enum _astl_units_t {
   ASTL_UNITS_NONE    = 0,       //!< No units
   ASTL_UNITS_TICKS   = 1,       //!< Clock ticks for time metric calculation
   ASTL_UNITS_SECONDS = 2,       //!< Time (ticks converted to time). For calculated metric
-  ASTL_UNITS_CELCIUS = 3,       //!< Thermal readings in celcius
+  ASTL_UNITS_CELSIUS = 3,       //!< Thermal readings in Celsius
   ASTL_UNITS_JOULES  = 4,       //!< Energy readings in joules
   ASTL_UNITS_WATTS   = 5,       //!< Power readings in watts. For calculated metrics but hardware may
                                 //!< already be doing the calculation, not ideal but possible
@@ -172,7 +172,7 @@ typedef struct _astl_counter_properties_t {
                                                  //!< faster than every 10ms
   astl_units_t _units;                           //!< The raw units of the counter. For example, for memory transfers,
                                                  //!< it would be ASTL_UNIT_BYTES. For temperature, it would be
-                                                 //!< ASTL_UNIT_CELCIUS
+                                                 //!< ASTL_UNITS_CELSIUS
   uint64_t    _mask;                             //!< Optional: Mask is used to clear out bits in the 64bit container
   const char* _formula;               //!< Transformation required on the counter. Example: & MASK >> 2 DELTA / TIME.
                                       //!< This example would mean: Mask the counter first,

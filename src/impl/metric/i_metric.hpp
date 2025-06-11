@@ -23,9 +23,9 @@
 #include <string>
 
 #include "astl/astl.h"
-#include "capabilities.hpp"
-#include "i_sample_sink.hpp"
-#include "operation.hpp"
+#include "common/capabilities.hpp"
+#include "common/i_sample_sink.hpp"
+#include "common/operation.hpp"
 
 namespace astl {
 
