@@ -8,9 +8,12 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <vector>
 
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
+#include "collector/i_collector_manager.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_sample_sink.hpp"
 #include "counter.hpp"
@@ -34,19 +37,29 @@ struct MockTarget : public astl::ITarget {
   MAKE_MOCK1(GetProperties, astl_status_code(astl_target_properties_t* target), override);
   MAKE_CONST_MOCK0(GetCounterCount, size_t(), override);
   std::vector<std::unique_ptr<astl::ICounter>> const& GetCounters() const override { return _counters; };
+};
 
-  MAKE_MOCK2(ConfigureCounterCollection,
-             astl_status_code(astl_collection_parameters_t const* const collection_params,
-                              std::span<astl::ICounter*>                counters),
-             override);
+/**
+ * @brief A mockable implementation of Orchestrator's telemetry interface
+ *
+ * Set up expected function calls and their results and side effects with REQUIRE_CALL and ALLOW_CALL
+ */
+struct MockOrchestrator {
+ private:
+ public:
+  static constexpr bool trompeloeil_movable_mock = true;  // cppcheck-suppress unusedStructMember
 
-  MAKE_MOCK0(ReadImmediate, astl_status_code(), override);
-  MAKE_MOCK0(StartCollection, astl_status_code(), override);
-  MAKE_MOCK0(PauseCollection, astl_status_code(), override);
-  MAKE_MOCK0(ResumeCollection, astl_status_code(), override);
-  MAKE_MOCK0(StopCollection, astl_status_code(), override);
+  MAKE_MOCK3(ConfigureCounterCollection,
+             astl_status_code(astl::ITarget* target, astl_collection_parameters_t const* const collection_params,
+                              std::span<astl::ICounter*> counters));
+
+  MAKE_MOCK1(ReadImmediate, astl_status_code(astl::ITarget* target));
+  MAKE_MOCK1(StartCollection, astl_status_code(astl::ITarget* target));
+  MAKE_MOCK1(PauseCollection, astl_status_code(astl::ITarget* target));
+  MAKE_MOCK1(ResumeCollection, astl_status_code(astl::ITarget* target));
+  MAKE_MOCK1(StopCollection, astl_status_code(astl::ITarget* target));
   using RType = std::expected<uint32_t, astl_status_code>;  // define this separately to avoid MACRO expansion quirk
-  MAKE_CONST_MOCK1(GetCounterSampleCount, RType(const astl::ICounter*), override);
+  MAKE_CONST_MOCK2(GetCounterSampleCount, RType(astl::ITarget const* target, const astl::ICounter*));
 };
 
 /**
@@ -71,6 +84,26 @@ struct MockFileInterface {
   MAKE_MOCK1(HasWritePermission, auto(const std::filesystem::path&)->expected_bool, const noexcept);
   MAKE_MOCK2(Read, auto(const std::filesystem::path&, std::string&)->astl_status_code, const);
   MAKE_MOCK2(Write, auto(const std::filesystem::path&, const std::string_view)->astl_status_code, const);
+};
+
+struct MockCollectorManager : public astl::ICollectorManager {
+  static constexpr bool trompeloeil_movable_mock = true;
+
+  using CollectionCapabilitiesRtype = std::unordered_map<astl::ITarget*, std::vector<astl::CollectorCapabilities>>;
+  MAKE_CONST_MOCK0(ReportCollectionCapabilities, CollectionCapabilitiesRtype(), override);
+  MAKE_MOCK1(RegisterSampleSink, astl_status_code(astl::ISampleSink* sink), override);
+  MAKE_MOCK1(UnregisterSampleSink, astl_status_code(astl::ISampleSink* sink), override);
+
+  MAKE_MOCK3(ConfigureCollectionOnTarget,
+             astl_status_code(astl::ITarget* target, astl_collection_parameters_t const& collection_params,
+                              astl::CollectionOperations&& configuration),
+             override);
+
+  MAKE_MOCK1(StartOnTarget, astl_status_code(astl::ITarget* target), override);
+  MAKE_MOCK1(PauseOnTarget, astl_status_code(astl::ITarget* target), override);
+  MAKE_MOCK1(ResumeOnTarget, astl_status_code(astl::ITarget* target), override);
+  MAKE_MOCK1(ReadImmediateOnTarget, astl_status_code(astl::ITarget* target), override);
+  MAKE_MOCK1(StopOnTarget, astl_status_code(astl::ITarget* target), override);
 };
 
 struct MockCollector : public astl::ICollector {

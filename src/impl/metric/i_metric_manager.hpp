@@ -24,10 +24,10 @@
 #include <vector>
 
 #include "astl/astl.h"
+#include "common/i_sample_sink.hpp"
+#include "common/operation.hpp"
 #include "i_metric.hpp"
-#include "i_sample_sink.hpp"
 #include "metric_config.hpp"
-#include "operation.hpp"
 
 namespace astl {
 

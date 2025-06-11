@@ -11,8 +11,7 @@ add_executable(MockSysfs ${MOCK_SYSFS_SOURCES})
 include (CTest)
 enable_testing()
 
-# TODO re-enable these tests once issue #77 / ASTL-95 is resolved
-
+# TODO(77) re-enable these tests once issue #77 / ASTL-95 is resolved
 #add_test(NAME toolsMocksysfsFind
 #      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
 #              $<TARGET_FILE:MockSysfs>

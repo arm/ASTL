@@ -12,6 +12,26 @@ extern "C" {
 #endif
 
 /***********************************************************************************
+ **********************            INITIALIZATION           ************************
+ **********************************************************************************/
+
+typedef struct _astl_initialization_parameters_t {
+  size_t _size;  //!< size of this struct for versioning
+  // empty struct for now, future API versions may include config file, or saved session file,
+  // or other hints about how to initialize.
+} astl_initialization_parameters_t;
+
+/*
+ * @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc
+ *
+ * @param[in] init_params             parameters configuring how the library should be initialized.
+ *                                    (placeholder for future expansion)
+ *
+ * @return astl_status_code
+ */
+ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t* init_params);
+
+/***********************************************************************************
  **********************               TARGETS               ************************
  **********************************************************************************/
 

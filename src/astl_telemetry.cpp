@@ -324,7 +324,7 @@ astl_status_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t    
     }
     counters.push_back(*get_counter_result);
   }
-  return target->ConfigureCounterCollection(collection_params, counters);
+  return astl::Orchestrator::GetInstance()->ConfigureCounterCollection(target, collection_params, counters);
 }
 
 astl_status_code astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,
@@ -403,15 +403,14 @@ astl_status_code astlReadImmediateOnTarget(astl_target_handle_t target_handle) {
   }
   auto* target = *result;
 
-  // TODO(https://jira.arm.com/browse/ASTL-54)  -- dispatch read to the metric manager instead of the target
-  return target->ReadImmediate();
+  return astl::Orchestrator::GetInstance()->ReadImmediate(target);
 }
 
 astl_status_code astlReadImmediate() {
-  auto& available_targets = astl::Orchestrator::GetInstance()->GetTargets();
-  for (auto& target : available_targets) {
+  const auto& available_targets = astl::Orchestrator::GetInstance()->GetTargets();
+  for (const auto& target : available_targets) {
     // TODO(https://jira.arm.com/browse/ASTL-54)  -- dispatch read to the metric manager instead of the target
-    auto result = target->ReadImmediate();
+    auto result = astl::Orchestrator::GetInstance()->ReadImmediate(target.get());
     if (result != ASTL_STATUS_SUCCESS) {
       return result;
     }
@@ -477,7 +476,7 @@ astl_status_code astlGetCounterSampleCountOnTarget(astl_target_handle_t  target_
   }
   auto* counter = *get_counter_result;
 
-  auto sample_result = target->GetCounterSampleCount(counter);
+  auto sample_result = astl::Orchestrator::GetInstance()->GetCounterSampleCount(target, counter);
   if (!sample_result) {
     return sample_result.error();
   }

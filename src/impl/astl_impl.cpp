@@ -4,9 +4,93 @@
 
 namespace astl {
 
-std::vector<std::unique_ptr<ITarget>>& Orchestrator::GetTargets() { return _targets; }
+std::vector<std::unique_ptr<ITarget>> const &Orchestrator::GetTargets() const { return _targets; }
 
 void Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> targets) { _targets = std::move(targets); }
+
+astl_status_code Orchestrator::ConfigureCounterCollection(ITarget                            *target,
+                                                          const astl_collection_parameters_t *collection_params,
+                                                          std::span<ICounter *>               counters) {
+  auto index = std::find_if(std::begin(_targets), std::end(_targets),
+                            [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(_targets)) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  }
+  return ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET;
+}
+
+astl_status_code Orchestrator::StartCollection(ITarget *target) {
+  auto index = std::find_if(std::begin(_targets), std::end(_targets),
+                            [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(_targets)) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  }
+  return ASTL_STATUS_NOT_IMPLEMENTED;
+}
+
+astl_status_code Orchestrator::ReadImmediate(ITarget *target) {
+  if (!_collector_manager) {
+    ASTL_LOG_ERROR("Orchestrator::ReadImmediate called with null CollectorManager");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  return _collector_manager->ReadImmediateOnTarget(target);
+}
+
+astl_status_code Orchestrator::PauseCollection(ITarget *target) {
+  auto index = std::find_if(std::begin(_targets), std::end(_targets),
+                            [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(_targets)) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  }
+  return ASTL_STATUS_NOT_IMPLEMENTED;
+}
+
+astl_status_code Orchestrator::ResumeCollection(ITarget *target) {
+  auto index = std::find_if(std::begin(_targets), std::end(_targets),
+                            [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(_targets)) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  }
+  return ASTL_STATUS_NOT_IMPLEMENTED;
+}
+
+astl_status_code Orchestrator::StopCollection(ITarget *target) {
+  auto index = std::find_if(std::begin(_targets), std::end(_targets),
+                            [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(_targets)) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  }
+  return ASTL_STATUS_NOT_IMPLEMENTED;
+}
+
+std::expected<uint32_t, astl_status_code> Orchestrator::GetCounterSampleCount(const ITarget  *target,
+                                                                              const ICounter *counter) const {
+  auto index = std::find_if(std::begin(_targets), std::end(_targets),
+                            [target](auto const &owned_target) { return owned_target.get() == target; });
+
+  if (index == std::end(_targets)) {
+    return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
+  }
+
+  return std::unexpected(ASTL_STATUS_INVALID_COUNTER_HANDLE);
+}
+
+astl_status_code Orchestrator::SinkSamples(ITarget *target, std::span<SampledData> samples) {
+  if (!target) {
+    ASTL_LOG_ERROR("Orchestrator::SinkSamples called with null target");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  /* Get the target name - just for logging */
+  astl_target_properties_t properties;
+  auto                     result = target->GetProperties(&properties);
+  if (result != ASTL_STATUS_SUCCESS) {
+    return result;
+  }
+  ASTL_LOG_DEBUG("Received {} samples for target {}", samples.size(), properties._name);
+
+  return ASTL_STATUS_SUCCESS;
+}
 
 astl_status_code Orchestrator::Test() {
   ASTL_LOG_INFO("Test method is deprecated: {:d}", static_cast<uint32_t>(ASTL_STATUS_DEPRECATED_API));
