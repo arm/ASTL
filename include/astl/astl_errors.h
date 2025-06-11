@@ -9,6 +9,7 @@ extern "C" {
 
 /**
  * @brief Status codes
+ * TODO (https://jira.arm.com/browse/ASTL-98) - Create separate list for internal error codes.
  */
 typedef enum _astl_status_code {
   ASTL_STATUS_SUCCESS                              = 0,    //!< Success
@@ -67,35 +68,38 @@ typedef enum _astl_status_code {
                                                               // small to hold all counter samples
   ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL = 33,           //!< Buffer of metric samples passed in by client is too
                                                               // small to hold all metric samples
-  ASTL_STATUS_SAMPLIMG_INTERVAL_TOO_SMALL = 34,               //!< Sampling interval specified is too small
-  ASTL_STATUS_SAMPLING_INTERVAL_TOO_LARGE = 35,               //!< Sampling interval specified is too large
-  ASTL_STATUS_SAMPLING_INTERVAL_IGNORED   = 36,               //!< Sampling interval paramater ignored. This would be if
-                                                              // collection mode is SNAPSHOT or IMMEDIATE
-  ASTL_STATUS_INVALID_COLLECTION_MODE              = 37,      //!< Invalid collection mode specified
-  ASTL_STATUS_INVALID_COLLECTION_OPTIMIZATION      = 38,      //!< Invalid collection optimization specified
-  ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET      = 39,      //!< Counter cannot be collected on specified target
-  ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET       = 40,      //!< Metric cannot be collected on specified target
-  ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET = 41,      //!< Metric group cannot be collected on specified target
-  ASTL_STATUS_COLLECTION_NOT_CONFIGURED            = 42,  //!< Collection not configured. Error when starting collection
-  ASTL_STATUS_COLLECTION_NOT_RUNNING               = 43,  //!< Collection not running. Error when issuing command meant
+  ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE =
+      34,  //!< Metric received a sample that does not match the expected type or value
+  ASTL_STATUS_METRIC_OVERFLOW_DETECTED    = 35,           //!< Overflow detected in metric processing.
+  ASTL_STATUS_SAMPLING_INTERVAL_TOO_SMALL = 36,           //!< Sampling interval specified is too small
+  ASTL_STATUS_SAMPLING_INTERVAL_TOO_LARGE = 37,           //!< Sampling interval specified is too large
+  ASTL_STATUS_SAMPLING_INTERVAL_IGNORED   = 38,           //!< Sampling interval paramater ignored. This would be if
+                                                          // collection mode is SNAPSHOT or IMMEDIATE
+  ASTL_STATUS_INVALID_COLLECTION_MODE              = 39,  //!< Invalid collection mode specified
+  ASTL_STATUS_INVALID_COLLECTION_OPTIMIZATION      = 40,  //!< Invalid collection optimization specified
+  ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET      = 41,  //!< Counter cannot be collected on specified target
+  ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET       = 42,  //!< Metric cannot be collected on specified target
+  ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET = 43,  //!< Metric group cannot be collected on specified target
+  ASTL_STATUS_COLLECTION_NOT_CONFIGURED            = 44,  //!< Collection not configured. Error when starting collection
+  ASTL_STATUS_COLLECTION_NOT_RUNNING               = 45,  //!< Collection not running. Error when issuing command meant
                                                           // for a running collection
-  ASTL_STATUS_COLLECTION_NOT_STOPPED = 44,                //!< Collection not stopped. Error when issuing command meant
+  ASTL_STATUS_COLLECTION_NOT_STOPPED = 46,                //!< Collection not stopped. Error when issuing command meant
                                                           // for a stopped collection
-  ASTL_STATUS_COLLECTION_NOT_PAUSED = 45,                 //!< Collection not running. Error when issuing command meant
+  ASTL_STATUS_COLLECTION_NOT_PAUSED = 47,                 //!< Collection not running. Error when issuing command meant
                                                           // for a paused collection
-  ASTL_STATUS_COLLECTION_ALREADY_RUNNING = 46,            //!< Collection already running. Error when issuing command
+  ASTL_STATUS_COLLECTION_ALREADY_RUNNING = 48,            //!< Collection already running. Error when issuing command
                                                           // meant to start or resume an already running collection
-  ASTL_STATUS_COLLECTION_ALREADY_STOPPED = 47,            //!< Collection already stopped. Error when issuing command
+  ASTL_STATUS_COLLECTION_ALREADY_STOPPED = 49,            //!< Collection already stopped. Error when issuing command
                                                           // meant to stop an already stopped collection
-  ASTL_STATUS_COLLECTION_ALREADY_PAUSED = 48,             //!< Collection already paused. Error when issuing command
+  ASTL_STATUS_COLLECTION_ALREADY_PAUSED = 50,             //!< Collection already paused. Error when issuing command
                                                           // meant to pause an already paused collection
-  ASTL_STATUS_NO_DATA_COLLECTED = 49,                     //!< No data collected. Error when attempting to get collected
+  ASTL_STATUS_NO_DATA_COLLECTED = 51,                     //!< No data collected. Error when attempting to get collected
                                                           // samples but no samples are available.
-  ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED = 50,             //!< Given buffer  was larger than needed. Not an error.
+  ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED = 52,             //!< Given buffer  was larger than needed. Not an error.
 
-  ASTL_STATUS_FILE_OPEN_FAILED = 51,  //!< File exists, but open failed.
-  ASTL_STATUS_FILE_ERROR       = 52,  //!< File system operations failed.
-  ASTL_STATUS_OUT_OF_MEMORY    = 53,  //!< Memory allocation failed.
+  ASTL_STATUS_FILE_OPEN_FAILED = 53,  //!< File exists, but open failed.
+  ASTL_STATUS_FILE_ERROR       = 54,  //!< File system operations failed.
+  ASTL_STATUS_OUT_OF_MEMORY    = 55,  //!< Memory allocation failed.
 
   // Add new status codes here
 

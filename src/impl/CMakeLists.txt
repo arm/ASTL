@@ -15,6 +15,7 @@ target_sources(
         "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/collector/scmi_sysfs_collector.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/metric/metric_manager.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/metric/sampled_value_metric.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/counter.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/target.cpp"
 )
@@ -26,14 +27,13 @@ target_include_directories(
         # where top-level project will look for the library's public headers
         # this static library should make a lot public so unit tests can instantiate objects
         # defined in these directories.
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/common>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/common>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/utils>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         # where external projects will look for the library's public headers
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )

@@ -18,6 +18,7 @@ add_executable(unit_test
     logger_utests.cpp
     scmi_sysfs_collector_utests.cpp
     unit_test.cpp
+    metric_utests.cpp
  )
 
 # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
