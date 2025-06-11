@@ -21,6 +21,7 @@
 
 #include <span>
 
+#include "astl/astl_errors.h"
 #include "common/capabilities.hpp"
 #include "i_metric_manager.hpp"
 
@@ -44,7 +45,7 @@ class MetricManager : public IMetricManager {
    *
    * This method is called by the orchestrator to register a new metric.
    */
-  void RegisterMetric(std::unique_ptr<MetricConfig> metric_config) override;
+  astl_status_code RegisterMetric(std::unique_ptr<MetricConfig> metric_config) override;
 
   /**
    * @brief Get the available metrics.
@@ -54,7 +55,7 @@ class MetricManager : public IMetricManager {
    *
    * @return A span of IMetric pointers.
    */
-  std::span<IMetric*> GetAvailableMetrics() const override;
+  std::expected<std::span<IMetric*>, astl_status_code> GetAvailableMetrics() const override;
 
   /**
    * @brief Get the sequence of operations needed to measure this set of metrics
@@ -70,14 +71,14 @@ class MetricManager : public IMetricManager {
    *
    * This method is called by the orchestrator to distribute all the samples collected.
    */
-  void ProcessData(std::span<SampledData> data) override;
+  astl_status_code ProcessData(std::span<SampledData> data) override;
 
   /**
    * @brief Summarize the metric.
    * Depending on the metric type, this may mean aggregating samples, calculating averages, etc.
    * This is called once all the samples are processed.
    */
-  void SummarizeMetrics() override;
+  astl_status_code SummarizeMetrics() override;
 
  private:
   std::vector<std::unique_ptr<IMetric>> _metrics;

@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "astl/astl.h"
+#include "astl/astl_errors.h"
 #include "common/i_sample_sink.hpp"
 #include "common/operation.hpp"
 #include "i_metric.hpp"
@@ -52,7 +53,7 @@ class IMetricManager {
    *
    * This method is called by the orchestrator to register a new metric.
    */
-  virtual void RegisterMetric(std::unique_ptr<MetricConfig> metric_config) = 0;
+  virtual astl_status_code RegisterMetric(std::unique_ptr<MetricConfig> metric_config) = 0;
 
   /**
    * @brief Get the available metrics.
@@ -62,7 +63,7 @@ class IMetricManager {
    *
    * @return A span of IMetric pointers.
    */
-  virtual std::span<IMetric*> GetAvailableMetrics() const = 0;
+  virtual std::expected<std::span<IMetric*>, astl_status_code> GetAvailableMetrics() const = 0;
 
   /**
    * @brief Initialize the metrics.
@@ -76,14 +77,14 @@ class IMetricManager {
    *
    * This method is called by the orchestrator to distribute all the samples collected.
    */
-  virtual void ProcessData(std::span<SampledData> data) = 0;
+  virtual astl_status_code ProcessData(std::span<SampledData> data) = 0;
 
   /**
    * @brief Summarize the metrics messages.
    *
    * This method should be called to create a summary for all the metrics.
    */
-  virtual void SummarizeMetrics() = 0;
+  virtual astl_status_code SummarizeMetrics() = 0;
 };
 
 }  // namespace astl

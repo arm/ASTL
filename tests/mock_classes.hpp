@@ -11,12 +11,16 @@
 #include <unordered_map>
 #include <vector>
 
+#include "astl/astl_errors.h"
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
 #include "collector/i_collector_manager.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_sample_sink.hpp"
+#include "common/operation.hpp"
 #include "counter.hpp"
+#include "metric/i_metric.hpp"
+#include "metric/i_metric_manager.hpp"
 #include "target.hpp"
 
 /**
@@ -151,6 +155,53 @@ struct MockSampleSink : public astl::ISampleSink {
    * Deliver Some number of samples collected from the given target to this ISampleSink
    */
   MAKE_MOCK2(SinkSamples, astl_status_code(astl::ITarget* target, std::span<astl::SampledData> samples), override);
+};
+
+struct MockMetricManager : public astl::IMetricManager {
+  static constexpr bool trompeloeil_movable_mock = true;
+
+  using expected_operation_sequence = std::expected<astl::OperationSequence, astl_status_code>;
+  using expected_metric_interface   = std::expected<std::span<astl::IMetric*>, astl_status_code>;
+
+  /*
+   * @brief Register a new metric with the metric manager.
+   *
+   * @param metric_config A unique pointer to a MetricConfig describing the metric to be registered.
+   * @return astl_status_code indicating success or failure of the registration process.
+   */
+  MAKE_MOCK1(RegisterMetric, auto(std::unique_ptr<astl::MetricConfig>)->astl_status_code, override);
+
+  /*
+   * @brief Retrieve a list of all currently registered and available metrics.
+   *
+   * @return A std::expected containing either a span of IMetric pointers if successful,
+   *         or an astl_status_code in case of error.
+   */
+  MAKE_MOCK0(GetAvailableMetrics, expected_metric_interface(), const override);
+
+  /*
+   * @brief Determine the required operations to support the specified metrics.
+   *
+   * @param metrics A span of metric pointers for which to determine the required operations.
+   * @return A std::expected containing the required OperationSequence if successful,
+   *         or an astl_status_code on failure.
+   */
+  MAKE_MOCK1(GetRequiredOperations, auto(std::span<astl::IMetric*>)->expected_operation_sequence, override);
+
+  /*
+   * @brief Process the sampled data for all registered metrics.
+   *
+   * @param data A span of SampledData objects to process.
+   * @return astl_status_code indicating success or failure of the processing operation.
+   */
+  MAKE_MOCK1(ProcessData, auto(std::span<astl::SampledData>)->astl_status_code, override);
+
+  /*
+   * @brief Perform a final summary or aggregation of all collected metric data.
+   *
+   * @return astl_status_code indicating success or failure of the summarization process.
+   */
+  MAKE_MOCK0(SummarizeMetrics, astl_status_code(), override);
 };
 
 #endif  // ASTL_MOCK_CLASSES_H_
