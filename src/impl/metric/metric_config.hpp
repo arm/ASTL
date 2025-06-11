@@ -22,7 +22,7 @@
 #include <string>
 
 #include "astl/astl.h"
-#include "capabilities.hpp"
+#include "common/capabilities.hpp"
 
 namespace astl {
 

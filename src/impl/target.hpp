@@ -26,21 +26,6 @@ struct ITarget {
   virtual astl_status_code                              GetProperties(astl_target_properties_t* target) = 0;
   virtual size_t                                        GetCounterCount() const                         = 0;
   virtual const std::vector<std::unique_ptr<ICounter>>& GetCounters() const                             = 0;
-
-  virtual astl_status_code ConfigureCounterCollection(astl_collection_parameters_t const* collection_params,
-                                                      std::span<ICounter*>                counters) = 0;
-
-  virtual astl_status_code ReadImmediate() = 0;
-
-  virtual astl_status_code StartCollection() = 0;
-
-  virtual astl_status_code PauseCollection() = 0;
-
-  virtual astl_status_code ResumeCollection() = 0;
-
-  virtual astl_status_code StopCollection() = 0;
-
-  virtual std::expected<uint32_t, astl_status_code> GetCounterSampleCount(const ICounter* counter) const = 0;
 };
 
 /**
@@ -48,7 +33,8 @@ struct ITarget {
  */
 class Target : public ITarget {
  public:
-  Target()                         = default;
+  Target() = default;
+  Target(std::string name, std::string description, Target* parent = nullptr);
   ~Target() override               = default;
   Target(const Target&)            = default;
   Target& operator=(const Target&) = default;

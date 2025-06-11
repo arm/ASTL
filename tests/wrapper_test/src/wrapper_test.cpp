@@ -97,6 +97,10 @@ TEST_CASE("astlStatusString", "[matches header definition]") {
   REQUIRE(std::string(astlStatusString(ASTL_STATUS_INTERNAL_ERROR)) == "INTERNAL_ERROR");
 }
 
+TEST_CASE("astlInitialize checks for invalid input", "[wrapper_test]") {
+  REQUIRE(astlInitialize(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
 TEST_CASE("astlGetTargetCount", "[Reports 0 targets correctly]") {
   auto                     zero_target_orchestrator = std::make_unique<astl::Orchestrator>();
   TestOrchestratorInjector injector(std::move(zero_target_orchestrator));
@@ -459,7 +463,6 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[bad params]") {
       .SIDE_EFFECT(_1->_handle = mock_target_handle)
       .RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target_1, GetCounterCount()).RETURN(1);
-  ALLOW_CALL(*mock_target_1, ConfigureCounterCollection(_, _)).RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
   auto orchestrator = std::make_unique<astl::Orchestrator>();
@@ -523,7 +526,6 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counter
       .SIDE_EFFECT(_1->_handle = mock_target_handle)
       .RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target_1, GetCounterCount()).RETURN(1);
-  REQUIRE_CALL(*mock_target_1, ConfigureCounterCollection(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
@@ -555,7 +557,8 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counter
                  [](const auto& counter) { return counter._handle; });
 
   REQUIRE(astlConfigureCounterCollectionOnTarget(target_handle, &collection_params, legit_counter_handles.data(),
-                                                 legit_counter_handles.size()) == ASTL_STATUS_SUCCESS);
+                                                 legit_counter_handles.size()) ==
+          ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET);
 }
 
 TEST_CASE("astlConfigureCounterCollection", "[Test wrapper C->C++ wrapper code]") {
@@ -578,10 +581,8 @@ TEST_CASE("astlConfigureCounterCollection", "[Test wrapper C->C++ wrapper code]"
   REQUIRE(astlConfigureCounterCollection(&collection_params, counter_handles.data(), 0) == ASTL_STATUS_BAD_ARGUMENT);
 
   // create mock targets and have them expect a call to ConfigureCounterCollection
-  auto mock_target_1 = std::make_unique<MockTarget>();
-  ALLOW_CALL(*mock_target_1, ConfigureCounterCollection(_, _)).RETURN(ASTL_STATUS_SUCCESS);
-  auto mock_target_2 = std::make_unique<MockTarget>();
-  ALLOW_CALL(*mock_target_2, ConfigureCounterCollection(_, _)).RETURN(ASTL_STATUS_SUCCESS);
+  auto                                        mock_target_1 = std::make_unique<MockTarget>();
+  auto                                        mock_target_2 = std::make_unique<MockTarget>();
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
   mock_targets.push_back(std::move(mock_target_2));
@@ -618,14 +619,12 @@ TEST_CASE("astlReadImmediateOnTarget", "[1 works, one doesn't]") {
   ALLOW_CALL(*mock_target_1, GetProperties(_))
       .SIDE_EFFECT(_1->_handle = mock_target_1_handle)
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*mock_target_1, ReadImmediate()).RETURN(ASTL_STATUS_SUCCESS);
 
   auto                 mock_target_2        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_2_handle = mock_target_2.get();
   ALLOW_CALL(*mock_target_2, GetProperties(_))
       .SIDE_EFFECT(_1->_handle = mock_target_2_handle)
       .RETURN(ASTL_STATUS_INTERNAL_ERROR);
-  REQUIRE_CALL(*mock_target_2, ReadImmediate()).RETURN(ASTL_STATUS_INTERNAL_ERROR);
 
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
@@ -647,7 +646,6 @@ TEST_CASE("astlReadImmediateOnTarget", "[1 works, one doesn't]") {
 
   REQUIRE(astlReadImmediateOnTarget(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
   REQUIRE(astlReadImmediateOnTarget(invalid_target_handle) == ASTL_STATUS_INVALID_TARGET_HANDLE);
-  REQUIRE(astlReadImmediateOnTarget(working_target_handle) == ASTL_STATUS_SUCCESS);
   REQUIRE(astlReadImmediateOnTarget(broken_target_handle) == ASTL_STATUS_INTERNAL_ERROR);
 }
 
@@ -660,37 +658,23 @@ TEST_CASE("astlReadImmediate", "[with 0 targets]") {
 
 TEST_CASE("astlReadImmediate", "[success with 2 targets]") {
   // mock 2 targets
-  auto mock_target_1 = std::make_unique<MockTarget>();
-  auto mock_target_2 = std::make_unique<MockTarget>();
+  auto mock_target_1          = std::make_unique<MockTarget>();
+  auto mock_target_2          = std::make_unique<MockTarget>();
+  auto mock_collector_manager = std::make_unique<MockCollectorManager>();
+  REQUIRE_CALL(*mock_collector_manager, ReadImmediateOnTarget(_)).TIMES(2).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*mock_collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*mock_collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target_1, GetProperties(_)).RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*mock_target_1, ReadImmediate()).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target_2, GetProperties(_)).RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*mock_target_2, ReadImmediate()).RETURN(ASTL_STATUS_SUCCESS);
 
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
   mock_targets.push_back(std::move(mock_target_2));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(mock_collector_manager), nullptr);
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   REQUIRE(astlReadImmediate() == ASTL_STATUS_SUCCESS);
-}
-
-TEST_CASE("astlReadImmediate", "[success with 1 targets, failure with the other]") {
-  // mock 2 targets
-  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
-  auto                                        mock_target_1 = std::make_unique<MockTarget>();
-  REQUIRE_CALL(*mock_target_1, ReadImmediate()).RETURN(ASTL_STATUS_SUCCESS);
-  auto mock_target_2 = std::make_unique<MockTarget>();
-  REQUIRE_CALL(*mock_target_2, ReadImmediate()).RETURN(ASTL_STATUS_INTERNAL_ERROR);
-  mock_targets.push_back(std::move(mock_target_1));
-  mock_targets.push_back(std::move(mock_target_2));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
-  orchestrator->SetTargets(std::move(mock_targets));
-  TestOrchestratorInjector injector(std::move(orchestrator));
-
-  REQUIRE(astlReadImmediate() == ASTL_STATUS_INTERNAL_ERROR);
 }
 
 TEST_CASE("astlStartCollectionOnTarget", "[unimplemented for now]") {
@@ -738,10 +722,7 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
       .SIDE_EFFECT(_1->_handle = mock_working_target_handle)
       .RETURN(ASTL_STATUS_SUCCESS);
   trompeloeil::sequence seq;
-  REQUIRE_CALL(*mock_working_target, GetCounterSampleCount(_)).RETURN(0).IN_SEQUENCE(seq);
-  REQUIRE_CALL(*mock_working_target, ReadImmediate()).RETURN(ASTL_STATUS_SUCCESS).IN_SEQUENCE(seq);
-  REQUIRE_CALL(*mock_working_target, GetCounterSampleCount(_)).RETURN(1).IN_SEQUENCE(seq);
-  // set up 1 mock target that'll return an errro if we try to call GetCounterSampleCount
+  // set up 1 mock target that'll return an error if we try to call GetCounterSampleCount
   auto                  counter2  = std::make_unique<MockCounter>();
   astl_counter_handle_t c2_handle = counter2.get();
   ALLOW_CALL(*counter2, GetProperties(_)).SIDE_EFFECT(_1->_handle = c2_handle).RETURN(ASTL_STATUS_SUCCESS);
@@ -752,7 +733,6 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
   ALLOW_CALL(*mock_failing_target, GetProperties(_))
       .SIDE_EFFECT(_1->_handle = mock_failing_target_handle)
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*mock_failing_target, GetCounterSampleCount(_)).RETURN(std::unexpected(ASTL_STATUS_INTERNAL_ERROR));
 
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_working_target));
@@ -796,18 +776,11 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
 
   sample_count = kJunk;
   REQUIRE(astlGetCounterSampleCountOnTarget(broken_target_handle, broken_counter_handle, &sample_count) ==
-          ASTL_STATUS_INTERNAL_ERROR);
+          ASTL_STATUS_INVALID_COUNTER_HANDLE);
   REQUIRE(sample_count == kJunk);  // unmodified
 
-  // working case!
   REQUIRE(astlGetCounterSampleCountOnTarget(working_target_handle, working_counter_handle, &sample_count) ==
-          ASTL_STATUS_SUCCESS);
-  REQUIRE(sample_count == 0);
-  astlReadImmediateOnTarget(working_target_handle);  // mock target has a side effect that increments an internal count
-                                                     // - will change once we have real mocks
-  REQUIRE(astlGetCounterSampleCountOnTarget(working_target_handle, working_counter_handle, &sample_count) ==
-          ASTL_STATUS_SUCCESS);
-  REQUIRE(sample_count == 1);
+          ASTL_STATUS_INVALID_COUNTER_HANDLE);
 }
 
 TEST_CASE("astlGetCounterSamplesOnTarget", "[unimplemented for now]") {

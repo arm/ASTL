@@ -18,4 +18,18 @@
 
 #include "metric_manager.hpp"
 
-namespace astl {}  // namespace astl
+namespace astl {
+
+void MetricManager::RegisterMetric(std::unique_ptr<MetricConfig> metric_config) {}
+
+std::span<IMetric*> MetricManager::GetAvailableMetrics() const { return {}; }
+
+std::expected<OperationSequence, astl_status_code> MetricManager::GetRequiredOperations(std::span<IMetric*> metrics) {
+  return std::unexpected{ASTL_STATUS_NOT_IMPLEMENTED};
+}
+
+void MetricManager::ProcessData(std::span<SampledData> data) {}
+
+void MetricManager::SummarizeMetrics() {}
+
+}  // namespace astl

@@ -140,10 +140,11 @@ target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_BUILD)
 target_sources(
     ${LIBRARY_NAME}
     PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_telemetry.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_version.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_errors.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_initialize.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_telemetry.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_test_hooks.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_version.cpp"
 )
 
 # include directories
@@ -168,10 +169,17 @@ target_link_libraries(${LIBRARY_NAME}
     PRIVATE Astl::astl_static
 )
 
+# find spdlog, include it as a header-only dependency. This is a little slower (+10-12s) to compile ASTL,
+# but necessary because #including spdlog headers in multiple translation units causes linker errors like LNK2005
+find_package(spdlog CONFIG REQUIRED)
+target_compile_definitions(${LIBRARY_NAME} PRIVATE SPDLOG_FMT_EXTERNAL)
+target_link_libraries(${LIBRARY_NAME} PRIVATE spdlog::spdlog_header_only)
+
 set(public_headers
     include/astl/astl.h
-    include/astl/astl_version.h
     include/astl/astl_errors.h
+    include/astl/astl_telemetry.h
+    include/astl/astl_version.h
 )
 
 # public headers
