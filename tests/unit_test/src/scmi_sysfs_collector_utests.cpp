@@ -40,19 +40,15 @@ TEST_CASE("ScmiSysfsCollector::ConfigureCollection - empty", "[scmi_sysfs_collec
   // ensure that configuring an empty set of operations doesn't touch the file system
   MockFileInterface mock_file_interface;
 
-  ALLOW_CALL(mock_file_interface, Read(_, _))
-      .WITH(_1 == std::filesystem::path("info/de_implementation_version"))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("info/de_implementation_version"), _))
       .SIDE_EFFECT(_2 = "0.0.0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(mock_file_interface, Read(_, _))
-      .WITH(_1 == std::filesystem::path("info/version"))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("info/version"), _))
       .SIDE_EFFECT(_2 = "0.0.1")
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // expect collector may initialize telemetry subsystem
-  ALLOW_CALL(mock_file_interface, Write(_, _))
-      .WITH(_1 == std::filesystem::path("tlm_enable"), _2 == "1")
-      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, Write(std::filesystem::path("tlm_enable"), "1")).RETURN(ASTL_STATUS_SUCCESS);
 
   astl::ScmiSysfsCollector<MockFileInterface> collector(nullptr, std::move(mock_file_interface));
   astl::CollectionOperations    operations{{}, {}, {}, {}, {}, astl::CollectorCapabilities{astl::CollectorType::SCMI}};
@@ -118,7 +114,8 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
   MockSampleSink     mock_sample_sink;
   const astl_value_t expected_value{.ui64 = 0x42};
   REQUIRE_CALL(mock_sample_sink, SinkSamples(_, _))
-      .WITH(_2.size() == 1, _2[0].value.ui64 == expected_value.ui64)
+      .WITH(_2.size() == 1)
+      .WITH(_2[0].value.ui64 == expected_value.ui64)
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // create the collector and its operations
