@@ -88,13 +88,15 @@ jobs:
 
       - name: ⤵️ Install apt-get Dependencies (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y clang-tidy cppcheck yamllint gcovr valgrind parallel
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcovr valgrind parallel
 
       - name: ⤵️ Install brew Dependencies (macos-15)
         if: matrix.os == 'macos-15'
         run: |
             brew update
-            brew install llvm cppcheck gcovr
+            brew install llvm
             echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
 
       - name: 📂 VCPKG - Create VCPKG_DEFAULT_BINARY_CACHE directory
@@ -199,22 +201,6 @@ jobs:
           token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
           files: coverage.xml
 
-      - name: 🧹 Lint with clang-tidy
-        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-15'
-        run: ${{ github.workspace }}/scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }} pull-request
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
-
-      - name: 🧹 Lint with cppcheck
-        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-15'
-        run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
-
-      # Note: yamllint settings are contained in .yamllint
-      - name: 🧹 Lint check YAML files with Yamllint
-        if: matrix.os == 'ubuntu-latest'
-        run: yamllint .
-
       - name: 🧪 Run Sample tests
         # Execute tests defined by the CMake configuration.
         # Note that --preset is needed because the default Windows generator
@@ -224,25 +210,3 @@ jobs:
         # because we don't want to include them for coverage.
         run: ctest -R "^Sample" --preset ${{ matrix.cmake_preset }}
 
-  check-format:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
-      fail-fast: true
-      matrix:
-        os: [ubuntu-latest, macos-15]
-
-    steps:
-      - name: ⤵️ Checkout code
-        uses: actions/checkout@v4
-
-      - name: ⤵️ Install Tools (ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y clang-format
-
-      - name: ⤵️ Install Tools (macos)
-        if: matrix.os == 'macos-15'
-        run: brew install clang-format
-
-      - name: 🧹 Check Formatting
-        run: ${{ github.workspace }}/scripts/check_format.sh

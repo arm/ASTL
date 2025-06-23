@@ -116,12 +116,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Note - We don't set CMAKE_CXX_CLANG_TIDY here because when building with gcc, clang-tidy can't find system headers.
 #        scripts/lint.sh calls clang-tidy and searches for necessary system headers. it's accessed through the 'lint' build target if you want to run it.
 
-
-# Target library
-
-configure_file(${PROJECT_SOURCE_DIR}/include/astl/astl_version.h.in
-               ${PROJECT_BINARY_DIR}/include/astl/astl_version.h)
-
+include(render_templates)
 
 # define the static library `astl_static` - aka Astl::astl_static
 add_subdirectory(src/impl)
