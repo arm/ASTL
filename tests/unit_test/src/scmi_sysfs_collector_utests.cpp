@@ -22,11 +22,7 @@ std::ostream& operator<<(std::ostream& output_stream, astl_status_code error) {
   output_stream << astlStatusString(error);
   return output_stream;
 }
-template <>
-struct StringMaker<astl_status_code> {
-  // cppcheck-suppress unusedFunction
-  static std::string convert(astl_status_code error) { return astlStatusString(error); }
-};
+
 }  // namespace Catch
 
 TEST_CASE("ScmiSysfsCollector::GetCapabilities", "[scmi_sysfs_collector]") {

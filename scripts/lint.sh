@@ -139,10 +139,17 @@ for FILE in "${FILES_TO_LINT[@]-}"; do
   # set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_sysfs/CMakeLists.txt
   EXTRA_ARGS+=" --extra-arg=-DFUSE_USE_VERSION=316"
 
+  # treat warnings as errors, but not for unit tests (want to easily mute specific linter errors for those)
+  if [[ "$FILE" != *tests* ]]; then
+    EXTRA_ARGS+=" --warnings-as-errors=*"
+  else
+    # allow use of magic numbers in test code
+    EXTRA_ARGS+=" -checks=-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers"
+  fi
+
   clang-tidy $header_filter \
     $FILE $CLANG_BUILD_DIR \
     $EXTRA_ARGS \
-    --warnings-as-errors=* \
     -- \
     $INCLUDE_PATHS \
     $SYS_INCLUDE_PATHS

@@ -14,14 +14,6 @@
 
 using trompeloeil::_;
 
-// extend Catch2's to-string capabilities, so assert failures mention error codes by name rather than value
-namespace Catch {
-template <>
-struct StringMaker<astl_status_code> {
-  static std::string convert(astl_status_code error) { return astlStatusString(error); }
-};
-}  // namespace Catch
-
 /**
  * @brief A test harness construct to replace the ASTL's Orchestrator instance with one for testing
  *

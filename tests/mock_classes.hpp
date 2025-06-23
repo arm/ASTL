@@ -23,6 +23,14 @@
 #include "metric/i_metric_manager.hpp"
 #include "target.hpp"
 
+// extend Catch2's to-string capabilities, so assert failures mention error codes by name rather than value
+namespace Catch {
+template <>
+struct StringMaker<astl_status_code> {
+  static std::string convert(astl_status_code error) { return astlStatusString(error); }
+};
+}  // namespace Catch
+
 /**
  * @brief A mockable implementation of the astl::ITarget interface
  *

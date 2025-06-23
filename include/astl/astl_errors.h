@@ -97,9 +97,11 @@ typedef enum _astl_status_code {
                                                           // samples but no samples are available.
   ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED = 52,             //!< Given buffer  was larger than needed. Not an error.
 
-  ASTL_STATUS_FILE_OPEN_FAILED = 53,  //!< File exists, but open failed.
-  ASTL_STATUS_FILE_ERROR       = 54,  //!< File system operations failed.
-  ASTL_STATUS_OUT_OF_MEMORY    = 55,  //!< Memory allocation failed.
+  ASTL_STATUS_FILE_OPEN_FAILED   = 53,  //!< File exists, but open failed.
+  ASTL_STATUS_FILE_ERROR         = 54,  //!< File system operations failed.
+  ASTL_STATUS_OUT_OF_MEMORY      = 55,  //!< Memory allocation failed.
+  ASTL_STATUS_DIVIDE_BY_ZERO     = 55,  //!< Attempted division by zero
+  ASTL_STATUS_INVALID_VALUE_TYPE = 56,  //!< Invalid astl_value_type_t for operation
 
   // Add new status codes here
 
