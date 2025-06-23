@@ -1,0 +1,68 @@
+name: Lint
+
+permissions:
+  contents: read
+  checks: write
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+        cmake_preset: [debug]
+
+    steps:
+      - name: ⤵️ Checkout code
+        uses: actions/checkout@v4
+
+      - name: ⤵️ Install Tools (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format cppcheck cmake yamllint
+
+      - name: ⤵️ Install Tools (macos-15)
+        if: matrix.os == 'macos-15'
+        run: |
+          brew update
+          brew install llvm cppcheck
+          echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+
+      - name: 🧹 YAML Lint
+        if: matrix.os == 'ubuntu-latest'
+        run: yamllint ${{ github.workspace }}/.github/workflows/*.yaml
+
+      - name: 🧹 Check Formatting
+        run: ${{ github.workspace }}/scripts/check_format.sh
+
+      - name: ⚙️ Fast render .in files
+        working-directory: ${{ github.workspace }}  # Necessary since the git checkout command at the end works best with relative paths
+        # We only want to render our .in files and avoid a heavy vcpkg installation when we run CMake Configure
+        run: |
+          echo 'Creating a fake CMakeLists.txt to only render .in files'
+          echo 'set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")' > ${{ github.workspace }}/CMakeLists.txt
+          echo 'cmake_minimum_required(VERSION 3.0...4.0) # setting this is required' >> ${{ github.workspace }}/CMakeLists.txt
+          echo 'include(macros)' >> ${{ github.workspace }}/CMakeLists.txt
+          echo 'SetAstlVersion()' >> ${{ github.workspace }}/CMakeLists.txt
+          echo 'include(render_templates)' >> ${{ github.workspace }}/CMakeLists.txt
+          echo 'Rendering .in files'
+          cmake -S ${{ github.workspace }} --preset debug
+          echo 'Restoring CMakeLists.txt'
+          git checkout CMakeLists.txt
+
+      - name: 🧹 Lint with cppcheck
+        run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
+
+      - name: 🧹 Lint with clang-tidy
+        run: ${{ github.workspace }}/scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }} pull-request
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
