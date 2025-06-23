@@ -13,6 +13,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 add_executable(unit_test
+    astl_value_utests.cpp
     collector_manager_utests.cpp
     file_interface_utests.cpp
     logger_utests.cpp
