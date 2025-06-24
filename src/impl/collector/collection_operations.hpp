@@ -32,12 +32,12 @@ namespace astl {
 // Collector manager should decide which collector executes them, and concrete collectors will cast these
 // operations to concrete types to actually run them.
 struct CollectionOperations {
-  OperationSequence     operationsBeforeStart;
-  OperationSequence     operationsAtStart;
-  OperationSequence     operationsOnSample;
-  OperationSequence     operationsAtStop;
-  SamplingInterval      samplingInterval;
-  CollectorCapabilities requirements;
+  OperationSequence   operationsBeforeStart;
+  OperationSequence   operationsAtStart;
+  OperationSequence   operationsOnSample;
+  OperationSequence   operationsAtStop;
+  SamplingInterval    samplingInterval;
+  CollectorCapability requirements;
 };
 
 }  // namespace astl

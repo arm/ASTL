@@ -57,6 +57,7 @@ static const std::unordered_map<astl_status_code, const char*> kStatusMap = {
     {ASTL_STATUS_COLLECTION_ALREADY_PAUSED,                  "COLLECTION_ALREADY_PAUSED"                 },
     {ASTL_STATUS_NO_DATA_COLLECTED,                          "NO_DATA_COLLECTED"                         },
     {ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED,                  "INFO_BUFFER_LARGER_THAN_NEEDED"            },
+    {ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE,                 "UNSUPPORTED_COLLECTOR_TYPE"                },
     {ASTL_STATUS_FILE_OPEN_FAILED,                           "FILE_OPEN_FAILED"                          },
     {ASTL_STATUS_FILE_ERROR,                                 "FILE_ERROR"                                },
     {ASTL_STATUS_OUT_OF_MEMORY,                              "OUT_OF_MEMORY"                             },

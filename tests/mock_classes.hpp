@@ -101,7 +101,7 @@ struct MockFileInterface {
 struct MockCollectorManager : public astl::ICollectorManager {
   static constexpr bool trompeloeil_movable_mock = true;
 
-  using CollectionCapabilitiesRtype = std::unordered_map<astl::ITarget*, std::vector<astl::CollectorCapabilities>>;
+  using CollectionCapabilitiesRtype = std::unordered_map<astl::ITarget*, std::vector<astl::CollectorCapability>>;
   MAKE_CONST_MOCK0(ReportCollectionCapabilities, CollectionCapabilitiesRtype(), override);
   MAKE_MOCK1(RegisterSampleSink, astl_status_code(astl::ISampleSink* sink), override);
   MAKE_MOCK1(UnregisterSampleSink, astl_status_code(astl::ISampleSink* sink), override);
@@ -120,7 +120,7 @@ struct MockCollectorManager : public astl::ICollectorManager {
 
 struct MockCollector : public astl::ICollector {
   /* @brief Get the capabilities of this collector, including the collector type. */
-  MAKE_MOCK0(GetCapabilities, astl::CollectorCapabilities const&(), const override);
+  MAKE_MOCK0(GetCapabilities, astl::CollectorCapability const&(), const override);
 
   /*
    * @brief Set the destination for where sampled data should be sent.
@@ -169,7 +169,7 @@ struct MockMetricManager : public astl::IMetricManager {
   static constexpr bool trompeloeil_movable_mock = true;
 
   using expected_operation_sequence = std::expected<astl::OperationSequence, astl_status_code>;
-  using expected_metric_interface   = std::expected<std::span<astl::IMetric*>, astl_status_code>;
+  using expected_metric_interface   = std::expected<std::span<astl::IMetric* const>, astl_status_code>;
 
   /*
    * @brief Register a new metric with the metric manager.
@@ -194,7 +194,7 @@ struct MockMetricManager : public astl::IMetricManager {
    * @return A std::expected containing the required OperationSequence if successful,
    *         or an astl_status_code on failure.
    */
-  MAKE_MOCK1(GetRequiredOperations, auto(std::span<astl::IMetric*>)->expected_operation_sequence, override);
+  MAKE_MOCK1(GetRequiredOperations, auto(std::span<astl::IMetric* const>)->expected_operation_sequence, override);
 
   /*
    * @brief Process the sampled data for all registered metrics.

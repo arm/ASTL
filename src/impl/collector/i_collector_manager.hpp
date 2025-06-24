@@ -45,7 +45,7 @@ struct ICollectorManager {
   ICollectorManager(ICollectorManager&&)                 = default;
   ICollectorManager& operator=(ICollectorManager&&)      = default;
 
-  virtual std::unordered_map<ITarget*, std::vector<CollectorCapabilities>> ReportCollectionCapabilities() const = 0;
+  virtual std::unordered_map<ITarget*, std::vector<CollectorCapability>> ReportCollectionCapabilities() const = 0;
 
   /* The CollectorManager can support a number of destinations for sampled data to go to.
    * This might include Orchestrator, a logger, a think translator for a API callback, etc.

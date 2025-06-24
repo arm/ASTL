@@ -221,7 +221,7 @@ class CollectionOperations{
     operationsOnSample: vector~Operation~
     operationsAtStop: vector~Operation~
     samplingInterval: SamplingInterval
-    requirements: CollectorCapabilities
+    requirements: CollectorCapability
 }
 
 class IMetricManager{
@@ -317,7 +317,7 @@ namespace Collector{
   %% Abstract interface for CollectorManager
   class ICollectorManager{
     <<Interface>>
-    +ReportCollectionCapabilities() map~ITarget, vector[CollectorCapabilities]>~
+    +ReportCollectionCapabilities() map~ITarget, vector[CollectorCapability]>~
     +RegisterSampleSink(ISampleSink)
     +UnregisterSampleSink(ISampleSink)
     +ConfigureCollection(ITarget, astl_collection_parameters, CollectionOperations)

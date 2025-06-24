@@ -95,13 +95,13 @@ typedef enum _astl_status_code {
                                                           // meant to pause an already paused collection
   ASTL_STATUS_NO_DATA_COLLECTED = 51,                     //!< No data collected. Error when attempting to get collected
                                                           // samples but no samples are available.
-  ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED = 52,             //!< Given buffer  was larger than needed. Not an error.
-
-  ASTL_STATUS_FILE_OPEN_FAILED   = 53,  //!< File exists, but open failed.
-  ASTL_STATUS_FILE_ERROR         = 54,  //!< File system operations failed.
-  ASTL_STATUS_OUT_OF_MEMORY      = 55,  //!< Memory allocation failed.
-  ASTL_STATUS_DIVIDE_BY_ZERO     = 55,  //!< Attempted division by zero
-  ASTL_STATUS_INVALID_VALUE_TYPE = 56,  //!< Invalid astl_value_type_t for operation
+  ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED  = 52,            //!< Given buffer  was larger than needed. Not an error.
+  ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE = 53,            //!< Unsupported collector type requested.
+  ASTL_STATUS_FILE_OPEN_FAILED           = 54,            //!< File exists, but open failed.
+  ASTL_STATUS_FILE_ERROR                 = 55,            //!< File system operations failed.
+  ASTL_STATUS_OUT_OF_MEMORY              = 56,            //!< Memory allocation failed.
+  ASTL_STATUS_DIVIDE_BY_ZERO             = 57,            //!< Attempted division by zero
+  ASTL_STATUS_INVALID_VALUE_TYPE         = 58,            //!< Invalid astl_value_type_t for operation
 
   // Add new status codes here
 

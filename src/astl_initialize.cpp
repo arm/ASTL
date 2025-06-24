@@ -66,9 +66,12 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   ////
   // set up Metrics and MetricManager (ideally ConfigManager should do this bit)
   ////
-  astl::CollectorCapabilities           collector_capabilities{astl::CollectorType::SCMI};
-  astl::SystemCapabilities              system_capabilities;
-  astl::Capabilities                    capabilities{collector_capabilities, system_capabilities};
+  astl::CollectorCapability              collector_capabilities{astl::CollectorType::SCMI};
+  astl::SystemCapability                 system_capabilities{};
+  std::vector<astl::CollectorCapability> collector_caps_list{collector_capabilities};
+  std::vector<astl::SystemCapability>    system_caps_list{system_capabilities};
+  astl::Capabilities                     capabilities{std::move(collector_caps_list), std::move(system_caps_list)};
+
   std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.

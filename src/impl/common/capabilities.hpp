@@ -29,18 +29,21 @@ enum class CollectorType { SCMI, MMIO };
  * @brief Attributes of a collector indicating what it's able to do.
  * Alternatively, requirements of an operation or metric
  */
-struct CollectorCapabilities {
+struct CollectorCapability {
   CollectorType collector_type;
 
-  CollectorCapabilities() = delete;
-  explicit CollectorCapabilities(CollectorType collector_type) : collector_type{collector_type} {}
+  CollectorCapability() = delete;
+  explicit CollectorCapability(CollectorType collector_type) : collector_type{collector_type} {}
+
+  /// @brief Returns the collector type.
+  CollectorType GetCollectorType() const { return collector_type; }
 };
 
-struct SystemCapabilities {
-  std::vector<CollectorCapabilities> collector_capabilities;
+struct SystemCapability {
+  std::vector<CollectorCapability> collector_capabilities;
 
-  SystemCapabilities() = default;
-  explicit SystemCapabilities(std::vector<CollectorCapabilities> &&collector_capabilities)
+  SystemCapability() = default;
+  explicit SystemCapability(std::vector<CollectorCapability> &&collector_capabilities)
       : collector_capabilities{std::move(collector_capabilities)} {}
 };
 
@@ -48,11 +51,19 @@ struct SystemCapabilities {
  * @brief Encapsulates both individual collector capabilities and system-wide capabilities.
  */
 struct Capabilities {
-  CollectorCapabilities collector;
-  SystemCapabilities    system;
+  std::vector<CollectorCapability> _collector_capabilities;
+  std::vector<SystemCapability>    _system_capabilities;
 
-  Capabilities(CollectorCapabilities collector, SystemCapabilities system)
-      : collector{std::move(collector)}, system{std::move(system)} {}
+  Capabilities(std::vector<CollectorCapability> &&collector_capabilities,
+               std::vector<SystemCapability>    &&system_capabilities)
+      : _collector_capabilities{std::move(collector_capabilities)},
+        _system_capabilities{std::move(system_capabilities)} {}
+
+  /// @brief Returns the collector capabilities.
+  const std::vector<CollectorCapability> &GetCollectorCapability() const { return _collector_capabilities; }
+
+  /// @brief Returns the system capabilities.
+  const std::vector<SystemCapability> &GetSystemCapabilities() const { return _system_capabilities; }
 };
 
 }  // namespace astl

@@ -58,7 +58,7 @@ class ScmiSysfsCollector : public ICollector {
   /*
    * @brief Get the capabilities of this collector, including the collector type.
    */
-  CollectorCapabilities const& GetCapabilities() const override;
+  CollectorCapability const& GetCapabilities() const override;
 
   /*
    * @brief Set the destination for where sampled data should be sent.
@@ -106,9 +106,9 @@ class ScmiSysfsCollector : public ICollector {
 
   // data members
 
-  CollectorCapabilities _collector_capabilities{CollectorType::SCMI};  //!< The capabilities of this collector
-  ISampleSink*          _sample_sink = nullptr;  //!< The (optional) destination for where sampled data should be sent
-  CollectionState       _collection_state = CollectionState::UNCONFIGURED;
+  CollectorCapability _collector_capability{CollectorType::SCMI};  //!< The capabilities of this collector
+  ISampleSink*        _sample_sink = nullptr;  //!< The (optional) destination for where sampled data should be sent
+  CollectionState     _collection_state = CollectionState::UNCONFIGURED;
   std::optional<CollectionConfiguration> _configuration;  //!< The current active configuration for this collector
   FileInterfaceT                         _scmi_file_interface;
   //!< Data events touched by the current collection (TODO - consider making _collection_state a variant to bundle the
@@ -184,8 +184,8 @@ ScmiSysfsCollector<FileInterfaceT>::ScmiSysfsCollector(ISampleSink* sample_sink,
  * @brief Get the capabilities of this collector, including the collector type.
  */
 template <typename FileInterfaceT>
-CollectorCapabilities const& ScmiSysfsCollector<FileInterfaceT>::GetCapabilities() const {
-  return _collector_capabilities;
+CollectorCapability const& ScmiSysfsCollector<FileInterfaceT>::GetCapabilities() const {
+  return _collector_capability;
 };
 
 /*

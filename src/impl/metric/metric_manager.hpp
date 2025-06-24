@@ -15,6 +15,11 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  ******************************************************************************/
+/*******************************************************************************
+ * @file metric_manager.hpp
+ * @brief Defines MetricManager, which handles registration of metrics,
+ *        exposes available metrics, and constructs SCMI operation sequences.
+ ******************************************************************************/
 
 #ifndef METRIC_MANAGER_HPP_
 #define METRIC_MANAGER_HPP_
@@ -27,6 +32,11 @@
 
 namespace astl {
 
+class MetricManagerTestAccessor;
+/**
+ * @class MetricManager
+ * @brief Implements IMetricManager to manage metrics and generate collection operations.
+ */
 class MetricManager : public IMetricManager {
  public:
   ~MetricManager() override = default;
@@ -41,48 +51,62 @@ class MetricManager : public IMetricManager {
   explicit MetricManager(const Capabilities& capabilities) : _capabilities(capabilities) {}
 
   /**
-   * @brief Register the metric.
-   *
-   * This method is called by the orchestrator to register a new metric.
+   * @brief Register a new metric configuration.
+   * @param metric_config Unique pointer to the MetricConfig to register.
+   * @return ASTL_STATUS_SUCCESS on success, or an error code (e.g., ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE).
    */
   astl_status_code RegisterMetric(std::unique_ptr<MetricConfig> metric_config) override;
 
   /**
-   * @brief Get the available metrics.
-   *
-   * This method returns a vector of vectors of IMetric pointers.
-   * This is used to retrieve all the metrics that are available for the targets.
-   *
-   * @return A span of IMetric pointers.
+   * @brief Retrieve all registered metrics.
+   * @return expected containing a span of registered IMetric pointers on success,
+   *         or an error code if retrieval fails.
    */
-  std::expected<std::span<IMetric*>, astl_status_code> GetAvailableMetrics() const override;
+  std::expected<std::span<IMetric* const>, astl_status_code> GetAvailableMetrics() const override;
 
   /**
-   * @brief Get the sequence of operations needed to measure this set of metrics
-   *
-   * This method is called by the orchestrator to gather operations for CollectorManager to execute
-   * @param metrics The sequence of metrics to be measured
-   * @return either a OperationSequence, or a status code indicating the error.
+   * @brief Build the sequence of operations required to collect the given metrics.
+   * @param metrics Span of metric pointers for which to generate operations.
+   * @return expected containing an OperationSequence of SCMI read operations on success,
+   *         or an error code (e.g., BAD_ARGUMENT, UNSUPPORTED_COLLECTOR_TYPE).
+   * TODO (https://jira.arm.com/browse/ASTL-113):
+   * Implement an API to return CollectionOperations.
    */
-  std::expected<OperationSequence, astl_status_code> GetRequiredOperations(std::span<IMetric*> metrics) override;
+  std::expected<OperationSequence, astl_status_code> GetRequiredOperations(std::span<IMetric* const> metrics) override;
 
   /**
-   * @brief Process the data and route the messages to metrics.
-   *
-   * This method is called by the orchestrator to distribute all the samples collected.
+   * @brief Distribute collected sample data to registered metrics.
+   * @param data Span of SampledData to process.
+   * @return ASTL_STATUS_SUCCESS or an appropriate error code.
    */
   astl_status_code ProcessData(std::span<SampledData> data) override;
 
   /**
-   * @brief Summarize the metric.
-   * Depending on the metric type, this may mean aggregating samples, calculating averages, etc.
-   * This is called once all the samples are processed.
+   * @brief Finalize and summarize metrics after data processing.
+   * @return ASTL_STATUS_SUCCESS or an appropriate error code.
    */
   astl_status_code SummarizeMetrics() override;
 
+  /**
+   * TODO (https://jira.arm.com/browse/ASTL-112) : remove this friend declaration
+   *  once a way to inject Mock Metric to Metric Manager for testing is introduced..
+   */
+  friend class MetricManagerTestAccessor;
+
  private:
-  std::vector<std::unique_ptr<IMetric>> _metrics;
-  Capabilities                          _capabilities;
+  /**
+   * @brief Check if a collector type is supported by this manager.
+   * @param required_collector_type The collector type to verify support for.
+   * @return true if supported, false otherwise.
+   */
+  bool         IsCollectorTypeSupported(CollectorType required_collector_type) const;
+  Capabilities _capabilities;
+  std::unordered_map<IMetric*, std::unique_ptr<IMetric>> _metrics_map;  ///< Maps metric pointers to their instances
+  std::unordered_map<IMetric*, std::unique_ptr<MetricConfig>>
+      _config_map;  ///< Maps metric pointers to their configurations
+  std::unordered_map<uint32_t, IMetric*>
+                        _operation_to_metric_map;  ///< Maps operation IDs to their corresponding metrics
+  std::vector<IMetric*> _metric_handles;
 };
 
 }  // namespace astl

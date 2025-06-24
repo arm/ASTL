@@ -38,9 +38,8 @@ CollectorManager::CollectorManager(std::unordered_map<ITarget*, std::vector<std:
 // ICollectorManager implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unordered_map<ITarget*, std::vector<CollectorCapabilities>> CollectorManager::ReportCollectionCapabilities()
-    const {
-  std::unordered_map<ITarget*, std::vector<CollectorCapabilities>> capabilities;
+std::unordered_map<ITarget*, std::vector<CollectorCapability>> CollectorManager::ReportCollectionCapabilities() const {
+  std::unordered_map<ITarget*, std::vector<CollectorCapability>> capabilities;
   for (const auto& [target, collectors] : _collectors) {
     for (const auto& collector : collectors) {
       capabilities[target].push_back(collector->GetCapabilities());
@@ -122,7 +121,7 @@ astl_status_code CollectorManager::SinkSamples(ITarget* target, std::span<Sample
 
 // given a target and a set of desired capabilities, choose a suiteable collector
 std::expected<ICollector*, astl_status_code> CollectorManager::SelectCollector(
-    ITarget* target, CollectorCapabilities const& requirements) {
+    ITarget* target, CollectorCapability const& requirements) {
   // find a set of collectors associated with the given target
   const auto& potential_collectors = _collectors.find(target);
   if (potential_collectors == _collectors.end()) {
