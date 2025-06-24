@@ -58,7 +58,7 @@ class CollectorManager : public ICollectorManager, public ISampleSink {
 
   ~CollectorManager() override = default;
 
-  std::unordered_map<ITarget*, std::vector<CollectorCapabilities>> ReportCollectionCapabilities() const override;
+  std::unordered_map<ITarget*, std::vector<CollectorCapability>> ReportCollectionCapabilities() const override;
 
   // ICollectorManager implementation
   astl_status_code RegisterSampleSink(ISampleSink* sink) override;
@@ -85,8 +85,8 @@ class CollectorManager : public ICollectorManager, public ISampleSink {
   std::unordered_map<ITarget*, std::vector<std::unique_ptr<ICollector>>> _collectors;
 
   // given a target and a set of desired capabilities, choose a suiteable collector
-  std::expected<ICollector*, astl_status_code> SelectCollector(ITarget*                     target,
-                                                               CollectorCapabilities const& requirements);
+  std::expected<ICollector*, astl_status_code> SelectCollector(ITarget*                   target,
+                                                               CollectorCapability const& requirements);
 };
 
 }  // namespace astl

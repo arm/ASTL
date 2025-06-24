@@ -61,16 +61,17 @@ class IMetricManager {
    * This method returns a vector of vectors of IMetric pointers.
    * This is used to retrieve all the metrics that are available for the targets.
    *
-   * @return A span of IMetric pointers.
+   * @return A span<IMetric* const> containing all registered metrics.
    */
-  virtual std::expected<std::span<IMetric*>, astl_status_code> GetAvailableMetrics() const = 0;
+  virtual std::expected<std::span<IMetric* const>, astl_status_code> GetAvailableMetrics() const = 0;
 
   /**
    * @brief Initialize the metrics.
    *
    * This method is called by the orchestrator to initialize metrics for a given target.
    */
-  virtual std::expected<OperationSequence, astl_status_code> GetRequiredOperations(std::span<IMetric*> metrics) = 0;
+  virtual std::expected<OperationSequence, astl_status_code> GetRequiredOperations(
+      std::span<IMetric* const> metrics) = 0;
 
   /**
    * @brief Process the data and route the messages to metrics.

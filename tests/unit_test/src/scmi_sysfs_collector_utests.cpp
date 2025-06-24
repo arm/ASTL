@@ -47,7 +47,7 @@ TEST_CASE("ScmiSysfsCollector::ConfigureCollection - empty", "[scmi_sysfs_collec
   ALLOW_CALL(mock_file_interface, Write(std::filesystem::path("tlm_enable"), "1")).RETURN(ASTL_STATUS_SUCCESS);
 
   astl::ScmiSysfsCollector<MockFileInterface> collector(nullptr, std::move(mock_file_interface));
-  astl::CollectionOperations    operations{{}, {}, {}, {}, {}, astl::CollectorCapabilities{astl::CollectorType::SCMI}};
+  astl::CollectionOperations    operations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
   astl_collection_parameters_t  collection_params{};
   astl::CollectionConfiguration configuration{nullptr, std::move(operations), collection_params};
   REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
@@ -130,7 +130,7 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
                                           .operationsOnSample{std::move(operations_on_sample)},
                                           .operationsAtStop{},
                                           .samplingInterval{},
-                                          .requirements{astl::CollectorCapabilities{astl::CollectorType::SCMI}}};
+                                          .requirements{astl::CollectorCapability{astl::CollectorType::SCMI}}};
   astl_collection_parameters_t collection_params{
       ._size              = sizeof(astl_collection_parameters_t),
       ._sampling_interval = 0,

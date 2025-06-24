@@ -81,8 +81,8 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
   auto mock_scmi_collector2 = std::make_unique<MockCollector>();
   auto mock_mmio_collector  = std::make_unique<MockCollector>();
 
-  astl::CollectorCapabilities scmi_capabilities{astl::CollectorType::SCMI};
-  astl::CollectorCapabilities mmio_capabilities{astl::CollectorType::MMIO};
+  astl::CollectorCapability scmi_capabilities{astl::CollectorType::SCMI};
+  astl::CollectorCapability mmio_capabilities{astl::CollectorType::MMIO};
 
   // when CollectorManager is instantiated, it should set itself as the sample sink for each collector
   ALLOW_CALL(*mock_scmi_collector, SetSampleSink(trompeloeil::_));
@@ -107,12 +107,12 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
     REQUIRE(capabilities_map.size() == 1);  // one supported target
     REQUIRE(capabilities_map.contains(mock_target.get()));
     REQUIRE(capabilities_map[mock_target.get()].size() >= 2);  // maybe SCMI shows up twice, maybe only once.
-    std::vector<astl::CollectorCapabilities> expected_capabilities = {
-        astl::CollectorCapabilities{astl::CollectorType::SCMI}, astl::CollectorCapabilities{astl::CollectorType::MMIO}};
+    std::vector<astl::CollectorCapability> expected_capabilities = {
+        astl::CollectorCapability{astl::CollectorType::SCMI}, astl::CollectorCapability{astl::CollectorType::MMIO}};
     for (const auto expected_cap : expected_capabilities) {
       auto collector_type_it =
           std::find_if(capabilities_map[mock_target.get()].begin(), capabilities_map[mock_target.get()].end(),
-                       [&expected_cap](const astl::CollectorCapabilities& cap) {
+                       [&expected_cap](const astl::CollectorCapability& cap) {
                          return expected_cap.collector_type == cap.collector_type;
                        });
       REQUIRE(collector_type_it != capabilities_map[mock_target.get()].end());
