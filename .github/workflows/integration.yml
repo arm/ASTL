@@ -119,7 +119,7 @@ jobs:
             !${{ env._VCPKG_ }}/installed
           # The key is composed in a way that it gets properly invalidated whenever a different version of vcpkg is being used.
           key: |
-            os-${{ matrix.os }}-compiler${{ matrix.cpp_compiler }}-${{ hashFiles( '.git/modules/vcpkg/HEAD' )}}
+            os-${{ matrix.os }}-compiler${{ matrix.cpp_compiler }}-${{ hashFiles( '.git/modules/vcpkg/HEAD' )}}-vcpkg.json
 
       - name: ⤵️ VCPKG - Install Dependencies
         uses: lukka/run-vcpkg@v11

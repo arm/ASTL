@@ -19,15 +19,39 @@ jobs:
         os: [ubuntu-latest, macos-15]
         cmake_preset: [debug]
 
+    env:
+      # Indicates the location of the vcpkg as a Git submodule of the project repository.
+      # Not using "VCPKG_ROOT" because a variable with the same name is defined in the VS's
+      # Developer Command Prompt environment in VS 2022 17.6, which would override this one
+      # if it had the same name.
+      _VCPKG_: ${{ github.workspace }}/vcpkg
+      # Tells vcpkg where binary packages are stored.
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
+      # Let's use GitHub Action cache as storage for the vcpkg Binary Caching feature.
+      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+
     steps:
+      # Set env variables needed for vcpkg to use GitHub Action cache for dependencies
+      - name: 🌱 Set env vars
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: ⤵️ Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # fetch all history so we can git diff for clang-tidy relevant files
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
 
       - name: ⤵️ Install Tools (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format cppcheck cmake yamllint
+          sudo apt-get install -y clang clang-format cppcheck cmake yamllint
 
       - name: ⤵️ Install Tools (macos-15)
         if: matrix.os == 'macos-15'
@@ -36,27 +60,50 @@ jobs:
           brew install llvm cppcheck
           echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
 
+      - name: 📂 VCPKG - Create VCPKG_DEFAULT_BINARY_CACHE directory
+        run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
+        shell: bash
+
+      # Restore vcpkg from the GitHub Action cache service. Note that packages are restored by vcpkg's binary caching
+      # when it is being run afterwards by CMake.
+      - name: ⤵️ VCPKG - Restore Cache
+        uses: actions/cache@v4
+        with:
+          # The first path is the location of vcpkg: it contains the vcpkg executable and data files, as long as the
+          # built package archives (aka binary cache) which are located by VCPKG_DEFAULT_BINARY_CACHE env var.
+          # The other paths starting with '!' are exclusions: they contain temporary files generated during the build of the installed packages.
+          path: |
+            ${{ env._VCPKG_ }}
+            !${{ env._VCPKG_ }}/buildtrees
+            !${{ env._VCPKG_ }}/packages
+            !${{ env._VCPKG_ }}/downloads
+            !${{ env._VCPKG_ }}/installed
+          # The key is composed in a way that it gets properly invalidated whenever a different version of vcpkg is being used.
+          key: |
+            os-${{ matrix.os }}-${{ hashFiles( '.git/modules/vcpkg/HEAD' )}}-vcpkg.json
+
+      - name: ⤵️ VCPKG - Install Dependencies
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+          vcpkgJsonGlob: '**/vcpkg.json'
+
+      - name: ⚙️ CMake - Configure
+        # Configure CMake in a 'build' subdirectory.
+        run: >
+          cmake
+          -DCMAKE_CXX_COMPILER=clang
+          -DCMAKE_C_COMPILER=clang
+          -DENABLE_VALGRIND=OFF
+          -S ${{ github.workspace }}
+          --preset ${{ matrix.cmake_preset }}
+
       - name: 🧹 YAML Lint
         if: matrix.os == 'ubuntu-latest'
         run: yamllint ${{ github.workspace }}/.github/workflows/*.yaml
 
       - name: 🧹 Check Formatting
         run: ${{ github.workspace }}/scripts/check_format.sh
-
-      - name: ⚙️ Fast render .in files
-        working-directory: ${{ github.workspace }}  # Necessary since the git checkout command at the end works best with relative paths
-        # We only want to render our .in files and avoid a heavy vcpkg installation when we run CMake Configure
-        run: |
-          echo 'Creating a fake CMakeLists.txt to only render .in files'
-          echo 'set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")' > ${{ github.workspace }}/CMakeLists.txt
-          echo 'cmake_minimum_required(VERSION 3.0...4.0) # setting this is required' >> ${{ github.workspace }}/CMakeLists.txt
-          echo 'include(macros)' >> ${{ github.workspace }}/CMakeLists.txt
-          echo 'SetAstlVersion()' >> ${{ github.workspace }}/CMakeLists.txt
-          echo 'include(render_templates)' >> ${{ github.workspace }}/CMakeLists.txt
-          echo 'Rendering .in files'
-          cmake -S ${{ github.workspace }} --preset debug
-          echo 'Restoring CMakeLists.txt'
-          git checkout CMakeLists.txt
 
       - name: 🧹 Lint with cppcheck
         run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
