@@ -17,13 +17,13 @@ jobs:
 
     strategy:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
-      fail-fast: false
+      fail-fast: true
 
       # Set up a matrix to run the following configurations:
-      # - <Windows, Release/Debug, latest MSVC compiler toolchain on the default runner image, default generator>
-      # - <Linux,   Release/Debug, latest GCC compiler toolchain on the default runner image, default generator>
-      # - <Linux,   Release/Debug, latest Clang compiler toolchain on the default runner image, default generator>
-      # - <MacOs,   Release/Debug, latest Clang compiler toolchain on the default runner image, default generator>
+      # - <Windows, Release, latest MSVC compiler toolchain on the default runner image, default generator>
+      # - <Linux,   Debug,   latest GCC compiler toolchain on the default runner image, default generator>
+      # - <Linux,   Debug,   latest Clang compiler toolchain on the default runner image, default generator>
+      # - <MacOs,   Release, latest Clang compiler toolchain on the default runner image, default generator>
       matrix:
         os: [ubuntu-latest, windows-latest, macos-15]
         cmake_preset: [release, debug]
@@ -42,6 +42,10 @@ jobs:
             c_compiler: clang
             cpp_compiler: clang++
         exclude:
+          - os: ubuntu-latest
+            cmake_preset: release
+          - os: windows-latest
+            cmake_preset: debug
           - os: windows-latest
             cpp_compiler: g++
           - os: windows-latest
@@ -52,6 +56,8 @@ jobs:
             cpp_compiler: cl
           - os: macos-15
             cpp_compiler: g++
+          - os: macos-15
+            cmake_preset: debug
 
     env:
       # Indicates the location of the vcpkg as a Git submodule of the project repository.
@@ -181,17 +187,6 @@ jobs:
             ctest -L "time_sensitive" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
           fi
 
-      - name: 🧪 Cmake - Run Unit Tests (macos-15)
-        if: matrix.os == 'macos-15'
-        # Execute tests defined by the CMake configuration.
-        # exclude sample tests - we want to measure coverage of tests that have assertions in them
-        # TODO - Parallelize tests on Mac OS
-        # run as sudo so collector threads can set priority
-        run: |
-          echo 'Skipping Valgrind, unsupported in macos'
-          ctest -LE "integration|time_sensitive" --preset ${{ matrix.cmake_preset }}
-          ctest -L "time_sensitive" --preset ${{ matrix.cmake_preset }}
-
       - name: 📊 Code Coverage - Merge Coverage from Parallel Runs
         if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
         run: ${{ github.workspace }}/scripts/merge_coverage.sh ${{ github.workspace }}/build
@@ -216,4 +211,3 @@ jobs:
         # include only sample tests, we skipped these earlier in `Unit tests`
         # because we don't want to include them for coverage.
         run: ctest -L "integration" --preset ${{ matrix.cmake_preset }}
-

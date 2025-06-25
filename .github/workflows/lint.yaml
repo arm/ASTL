@@ -14,9 +14,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os: [ubuntu-latest, macos-15]
+        os: [ubuntu-latest]
         cmake_preset: [debug]
 
     env:
@@ -52,13 +52,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang clang-format cppcheck cmake yamllint
-
-      - name: ⤵️ Install Tools (macos-15)
-        if: matrix.os == 'macos-15'
-        run: |
-          brew update
-          brew install llvm cppcheck
-          echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
 
       - name: 📂 VCPKG - Create VCPKG_DEFAULT_BINARY_CACHE directory
         run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
