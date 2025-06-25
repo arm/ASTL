@@ -23,7 +23,11 @@ jobs:
         run: |
           sudo apt-get -y update
           sudo apt-get -y upgrade
-          sudo apt-get -y install openjdk-17-jre openjdk-17-jdk python3 python3-pip
+          sudo apt-get -y install openjdk-17-jre openjdk-17-jdk
+      - name: ⤵️ Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
       - name: Fetch Detect Script
         run: |
           curl -s -L -o "${{ github.workspace }}/detect-arm.sh" "https://artifactory.arm.com/artifactory/synopsys-blackduck.detect-arm/detect-arm.sh"
