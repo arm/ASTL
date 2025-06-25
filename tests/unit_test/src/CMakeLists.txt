@@ -22,7 +22,7 @@ add_executable(unit_test
     metric_utests.cpp
     config_manager_utests.cpp
     metric_manager_utests.cpp
- )
+)
 
 # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
 target_link_libraries(unit_test

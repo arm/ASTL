@@ -8,6 +8,8 @@
 #include <string>
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE  // This needs to be defined before spdlog.h is included
+#define SPDLOG_USE_STD_FORMAT
+
 #include <spdlog/cfg/env.h>
 #include <spdlog/pattern_formatter.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -32,14 +34,6 @@ template <>
 struct std::formatter<astl_status_code> : std::formatter<std::string> {
   auto format(astl_status_code status_code, auto& ctx) const {
     return std::formatter<std::string>::format(astl::to_string(status_code), ctx);
-  }
-};
-
-// and another formatter because spdlog uses fmt:: by default.
-template <>
-struct fmt::formatter<astl_status_code> : fmt::formatter<std::string> {
-  auto format(astl_status_code status_code, auto& ctx) const {
-    return fmt::formatter<std::string>::format(astl::to_string(status_code), ctx);
   }
 };
 
@@ -237,14 +231,15 @@ class Logger {
    * static
    */
   template <typename... Args>
-  void Log(astl::LogLevel log_level, const std::source_location& location, const std::string& log_text,
+  void Log(astl::LogLevel log_level, const std::source_location& location, std::format_string<Args...> log_text,
            Args&&... args) {
     bool               source_loc_enabled = IsEnvVarSet(kAstlLogSourceLocEnvVar);
     spdlog::source_loc spdlog_location;
     if (source_loc_enabled) {
       spdlog_location = {location.file_name(), static_cast<int>(location.line()), location.function_name()};
     }
-    logger_->log(spdlog_location, GetSpdLogLevel(log_level), fmt::runtime(log_text), std::forward<Args>(args)...);
+    auto formatted_text = std::format(log_text, std::forward<Args>(args)...);
+    _logger->log(spdlog_location, GetSpdLogLevel(log_level), std::move(formatted_text));
   }
 
   /* @brief main logging function that invokes the spdlog logger log function without source location
@@ -253,9 +248,35 @@ class Logger {
    * @param log_text   The text of the log message
    */
   template <typename... Args>
-  void Log(astl::LogLevel log_level, const std::string& log_text, Args&&... args) {
-    logger_->log(GetSpdLogLevel(log_level), fmt::runtime(log_text), std::forward<Args>(args)...);
+  void Log(astl::LogLevel log_level, std::format_string<Args...> log_text, Args&&... args) {
+    auto formatted_text = std::format(log_text, std::forward<Args>(args)...);
+    _logger->log(GetSpdLogLevel(log_level), std::move(formatted_text));
   }
+
+  /* @brief logging function that takes pre-formatted or runtime text, and performs no formatting
+   *
+   * @param log_level  The message severity
+   * @param location   The source location where the log message is logged from
+   * @param log_text   The text of the log message
+   *
+   * Note: the source location is added to the message if the source location environment variable is set
+   * static
+   */
+  void Log(astl::LogLevel log_level, const std::source_location& location, std::string const& log_text) {
+    bool               source_loc_enabled = IsEnvVarSet(kAstlLogSourceLocEnvVar);
+    spdlog::source_loc spdlog_location;
+    if (source_loc_enabled) {
+      spdlog_location = {location.file_name(), static_cast<int>(location.line()), location.function_name()};
+    }
+    _logger->log(spdlog_location, GetSpdLogLevel(log_level), log_text);
+  }
+
+  /* @brief logging function that invokes the spdlog logger log function without source location or formatting
+   *
+   * @param log_level  The message severity
+   * @param log_text   The text of the log message
+   */
+  void Log(astl::LogLevel log_level, std::string const& log_text) { _logger->log(GetSpdLogLevel(log_level), log_text); }
 
  public:
   // TODO(ASTL-73): Use default value std::source_location::current() in log functions
@@ -268,7 +289,7 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogTrace(const std::source_location& location, const std::string& log_text, Args&&... args) {
+  void LogTrace(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Trace, location, log_text, std::forward<Args>(args)...);
   };
 
@@ -278,7 +299,7 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogTrace(const std::string& log_text, Args&&... args) {
+  void LogTrace(std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Trace, log_text, std::forward<Args>(args)...);
   };
 
@@ -291,7 +312,7 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogDebug(const std::source_location& location, const std::string& log_text, Args&&... args) {
+  void LogDebug(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Debug, location, log_text, std::forward<Args>(args)...);
   };
 
@@ -301,7 +322,7 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogDebug(const std::string& log_text, Args&&... args) {
+  void LogDebug(const std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Debug, log_text, std::forward<Args>(args)...);
   };
 
@@ -314,7 +335,7 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogInfo(const std::source_location& location, const std::string& log_text, Args&&... args) {
+  void LogInfo(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Info, location, log_text, std::forward<Args>(args)...);
   };
 
@@ -324,7 +345,7 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogInfo(const std::string& log_text, Args&&... args) {
+  void LogInfo(std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Info, log_text, std::forward<Args>(args)...);
   };
 
@@ -337,7 +358,7 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogWarning(const std::source_location& location, const std::string& log_text, Args&&... args) {
+  void LogWarning(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Warning, location, log_text, std::forward<Args>(args)...);
   };
 
@@ -347,7 +368,7 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogWarning(const std::string& log_text, Args&&... args) {
+  void LogWarning(std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Warning, log_text, std::forward<Args>(args)...);
   };
 
@@ -360,7 +381,7 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogError(const std::source_location& location, const std::string& log_text, Args&&... args) {
+  void LogError(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Error, location, log_text, std::forward<Args>(args)...);
   };
 
@@ -370,20 +391,20 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogError(const std::string& log_text, Args&&... args) {
+  void LogError(std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Error, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Log function for critical level messages with source location
    *
-   * @param log_text formatted text to log
+   * @param log_text format string to log
    * @param location the source location. Note: Location is expected to be passed in the caller as it is not possible
    * to set default current location automatically in conjuction with non terminal variadic paramics and default
    * values
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogCritical(const std::source_location& location, const std::string& log_text, Args&&... args) {
+  void LogCritical(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Critical, location, log_text, std::forward<Args>(args)...);
   };
 
@@ -393,21 +414,20 @@ class Logger {
    * @param ... Variable arguments to be formatted according to the format string in log_text
    */
   template <typename... Args>
-  void LogCritical(const std::string& log_text, Args&&... args) {
+  void LogCritical(std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Critical, log_text, std::forward<Args>(args)...);
   };
 
   /* @brief Write message function meant for logging to an output file without regard to severity level
    *
-   * @param log_text formatted text to log
-   * @param ... Variable arguments to be formatted according to the format string in log_text
+   * @param log_text pre-formatted text to log
    *
-   * Note: This function is meant for loggers with no formatting enabled. If default formatting is enabled, then
-   * Write() is same as LogCritical()) with no source location
+   * Note: This function is meant for loggers with no formatting enabled, or for writing runtime-strings.
+   * If default formatting is enabled, then Write() is same as LogCritical()) with no source location or formatting
    */
   template <typename... Args>
-  void Write(const std::string& log_text, Args&&... args) {
-    Log(astl::LogLevel::Critical, log_text, std::forward<Args>(args)...);
+  void Write(const std::string& log_text) {
+    Log(astl::LogLevel::Critical, log_text);
   };
 
  private:
@@ -455,11 +475,11 @@ class Logger {
     /* spdlog requires all loggers to have unique internal names. Using a random number as part of the name guarantees
      * all instances of Logger will will have uniquely named spdlog loggers */
     uint64_t random_number = astl::GetRandomNumber();
-    logger_ = std::make_shared<spdlog::logger>(std::format("astl_{:x}", random_number), sinks.begin(), sinks.end());
-    logger_->set_level(spdlog_level);  // Set the logger log level
-    logger_->flush_on(spdlog_level);   // Set level for flushing, the higher the level the more expensive flushing gets
+    _logger = std::make_shared<spdlog::logger>(std::format("astl_{:x}", random_number), sinks.begin(), sinks.end());
+    _logger->set_level(spdlog_level);  // Set the logger log level
+    _logger->flush_on(spdlog_level);   // Set level for flushing, the higher the level the more expensive flushing gets
     default_formatting ? SetDefaultFormatting() : ClearFormatting();
-    spdlog::register_logger(logger_);
+    spdlog::register_logger(_logger);
   }
 
  public:
@@ -468,7 +488,7 @@ class Logger {
    * Message level with coloring in [:::-LEVEL-:::] format
    * if source location logging is enabled, then level is logged as[:::-LEVEL-:SOURCE:LINE:FUNCTION] format
    */
-  void SetDefaultFormatting() { logger_->set_pattern("[%H:%M:%S.%e.%f] [:::%^-%l-%$:%s:%#:%!] %v"); }
+  void SetDefaultFormatting() { _logger->set_pattern("[%H:%M:%S.%e.%f] [:::%^-%l-%$:%s:%#:%!] %v"); }
 
   /* @brief Removes all spdlog output formatting and preconfigured output patten
    * after the formatting is cleared, the text string is logged as is. Even return character is not added.
@@ -477,11 +497,11 @@ class Logger {
   void ClearFormatting() {
     auto formatter =
         std::make_unique<spdlog::pattern_formatter>("%v", spdlog::pattern_time_type::local, std::string(""));
-    logger_->set_formatter(std::move(formatter));
+    _logger->set_formatter(std::move(formatter));
   }
 
  private:
-  std::shared_ptr<spdlog::logger> logger_;  //!< spdlog logger object with all formatting and sinks.
+  std::shared_ptr<spdlog::logger> _logger{nullptr};  //!< spdlog logger object with all formatting and sinks.
 };
 
 // NOLINTBEGIN

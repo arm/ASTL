@@ -176,8 +176,10 @@ TEST_CASE("Logger log level trace tests", "[trace]") {
   bool        log_console  = false;
   bool        source_loc   = false;
 
-  std::string test_string = "This is a trace level test log message: ";
-  std::string test_format = "{:d}";
+  // test_format should start with the same value as test_string.
+  // format strings have to be constexpr for std::format to do compile-time checks on them
+  std::string                test_string = "This is a trace level test log message: ";
+  constexpr std::string_view test_format = "This is a trace level test log message: {:d}";
 
   LoggerScopedTest scoped_test = LoggerScopedTest(logfile_name, log_level, log_console, source_loc);
 
@@ -187,7 +189,7 @@ TEST_CASE("Logger log level trace tests", "[trace]") {
   logger->SetDefaultFormatting();
 
   // LogTrace should be able to log
-  logger->LogTrace(test_string + test_format, 0);  // NOLINT
+  logger->LogTrace(test_format, 0);  // NOLINT
   std::string expected_string = "[:::-trace-:::] " + test_string + "0";
   scoped_test.OpenLog();
 
@@ -196,41 +198,41 @@ TEST_CASE("Logger log level trace tests", "[trace]") {
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogDebug should be able to log
-  logger->LogDebug(test_string + test_format, 1);  // NOLINT
+  logger->LogDebug(test_format, 1);  // NOLINT
   expected_string = "[:::-debug-:::] " + test_string + "1";
 
   scoped_test.LogGetLine(line);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogInfo should be able to log"
-  logger->LogInfo(test_string + test_format, 2);  // NOLINT
+  logger->LogInfo(test_format, 2);  // NOLINT
   expected_string = "[:::-info-:::] " + test_string + "2";
   scoped_test.LogGetLine(line);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogWarning should be able to log
-  logger->LogWarning(test_string + test_format, 3);  // NOLINT
+  logger->LogWarning(test_format, 3);  // NOLINT
   expected_string = "[:::-warning-:::] " + test_string + "3";
   scoped_test.LogGetLine(line);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogError should be able to log
-  logger->LogError(test_string + test_format, 4);  // NOLINT
+  logger->LogError(test_format, 4);  // NOLINT
   expected_string = "[:::-error-:::] " + test_string + "4";
   scoped_test.LogGetLine(line);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogCritical should be able to log"
-  logger->LogCritical(test_string + test_format, 5);  // NOLINT
+  logger->LogCritical(test_format, 5);  // NOLINT
   expected_string = "[:::-critical-:::] " + test_string + "5";
   scoped_test.LogGetLine(line);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
-  // Write should be able to log with no formatting
+  // Write should be able to log runtime string with no formatting
   logger->ClearFormatting();
-  logger->Write(test_string + test_format, 6);  // NOLINT
-  expected_string                 = test_string + "6";
-  std::string not_expected_string = "[:::-critical-:::] " + test_string + "6";
+  logger->Write(test_string);
+  expected_string                 = test_string;
+  std::string not_expected_string = "[:::-critical-:::] " + test_string;
   scoped_test.LogGetLine(line);
   REQUIRE(line.find(expected_string) != std::string::npos);
   REQUIRE(line.find(not_expected_string) == std::string::npos);
@@ -245,8 +247,9 @@ TEST_CASE("Logger log level critical tests", "[critcal]") {
   bool        log_console  = false;
   bool        source_loc   = false;
 
-  std::string test_string = "This is a critical level test log message: ";
-  std::string test_format = "{:d}";
+  // format strings must be constexpr for std::format's compile-time check
+  std::string                test_string = "This is a critical level test log message: ";
+  constexpr std::string_view test_format = "This is a critical level test log message: {:d}";
 
   LoggerScopedTest scoped_test = LoggerScopedTest(logfile_name, log_level, log_console, source_loc);
 
@@ -256,38 +259,38 @@ TEST_CASE("Logger log level critical tests", "[critcal]") {
   logger->SetDefaultFormatting();
 
   // LogTrace should not be able to log
-  logger->LogTrace(test_string + test_format, 0);  // NOLINT
+  logger->LogTrace(test_format, 0);  // NOLINT
   scoped_test.OpenLog();
   std::string line;
   scoped_test.LogGetLine(line);
   REQUIRE(line.empty());
 
   // LogDebug should not be able to log
-  logger->LogDebug(test_string + test_format, 1);  // NOLINT
+  logger->LogDebug(test_format, 1);  // NOLINT
   scoped_test.RewindLog();
   scoped_test.LogGetLine(line);
   REQUIRE(line.empty());
 
   // LogInfo should not be able to log
-  logger->LogInfo(test_string + test_format, 2);  // NOLINT
+  logger->LogInfo(test_format, 2);  // NOLINT
   scoped_test.RewindLog();
   scoped_test.LogGetLine(line);
   REQUIRE(line.empty());
 
   // LogWarning should not be able to log
-  logger->LogWarning(test_string + test_format, 3);  // NOLINT
+  logger->LogWarning(test_format, 3);  // NOLINT
   scoped_test.RewindLog();
   scoped_test.LogGetLine(line);
   REQUIRE(line.empty());
 
   // LogError should not be able to log
-  logger->LogError(test_string + test_format, 4);  // NOLINT
+  logger->LogError(test_format, 4);  // NOLINT
   scoped_test.RewindLog();
   scoped_test.LogGetLine(line);
   REQUIRE(line.empty());
 
   // LogCritical should be able to log
-  logger->LogCritical(test_string + test_format, 5);  // NOLINT
+  logger->LogCritical(test_format, 5);  // NOLINT
   std::string expected_string = "[:::-critical-:::] " + test_string + "5";
   scoped_test.RewindLog();
   scoped_test.LogGetLine(line);
@@ -295,8 +298,8 @@ TEST_CASE("Logger log level critical tests", "[critcal]") {
 
   // Write should be able to log with no formatting
   logger->ClearFormatting();
-  logger->Write(test_string + test_format, 6);  // NOLINT
-  expected_string                 = test_string + "6";
+  logger->Write(test_string);
+  expected_string                 = test_string;
   std::string not_expected_string = "[:::-critical-:::] " + test_string + "6";
   scoped_test.LogGetLine(line);
   REQUIRE(line.find(expected_string) != std::string::npos);
@@ -309,8 +312,8 @@ TEST_CASE("Logger with source location", "[src_loc]") {
   bool        log_console  = false;
   bool        source_loc   = true;
 
-  std::string test_string = "This is a src loc test log message: ";
-  std::string test_format = "{:d}";
+  std::string                test_string = "This is a src loc test log message: ";
+  constexpr std::string_view test_format = "This is a src loc test log message: {:d}";
 
   LoggerScopedTest scoped_test = LoggerScopedTest(logfile_name, log_level, log_console, source_loc);
 
@@ -321,7 +324,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
 
   // LogTrace should be able to log
   std::source_location src_loc = std::source_location::current();
-  logger->LogTrace(src_loc, test_string + test_format, 0);  // NOLINT
+  logger->LogTrace(src_loc, test_format, 0);  // NOLINT
   uint32_t    line_number   = src_loc.line();
   std::string function_name = src_loc.function_name();
   std::string file_name     = src_loc.file_name();
@@ -337,7 +340,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
 
   // LogDebug should be able to log
   src_loc = std::source_location::current();
-  logger->LogDebug(src_loc, test_string + test_format, 1);  // NOLINT
+  logger->LogDebug(src_loc, test_format, 1);  // NOLINT
   line_number   = src_loc.line();
   function_name = src_loc.function_name();
   file_name     = src_loc.file_name();
@@ -350,7 +353,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
 
   // LogInfo should be able to log
   src_loc = std::source_location::current();
-  logger->LogInfo(src_loc, test_string + test_format, 2);  // NOLINT
+  logger->LogInfo(src_loc, test_format, 2);  // NOLINT
   line_number   = src_loc.line();
   function_name = src_loc.function_name();
   file_name     = src_loc.file_name();
@@ -363,7 +366,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
 
   // LogWarning should be able to log
   src_loc = std::source_location::current();
-  logger->LogWarning(src_loc, test_string + test_format, 3);  // NOLINT
+  logger->LogWarning(src_loc, test_format, 3);  // NOLINT
   line_number   = src_loc.line();
   function_name = src_loc.function_name();
   file_name     = src_loc.file_name();
@@ -376,7 +379,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
 
   // LogError should be able to log
   src_loc = std::source_location::current();
-  logger->LogError(src_loc, test_string + test_format, 4);  // NOLINT
+  logger->LogError(src_loc, test_format, 4);  // NOLINT
   line_number   = src_loc.line();
   function_name = src_loc.function_name();
   file_name     = src_loc.file_name();
@@ -389,7 +392,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
 
   // LogCritical should be able to log
   src_loc = std::source_location::current();
-  logger->LogCritical(src_loc, test_string + test_format, 5);  // NOLINT
+  logger->LogCritical(src_loc, test_format, 5);  // NOLINT
   line_number     = src_loc.line();
   function_name   = src_loc.function_name();
   file_name       = src_loc.file_name();
