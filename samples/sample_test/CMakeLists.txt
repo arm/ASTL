@@ -25,3 +25,4 @@ add_subdirectory (src)
 # to use this, after building the project, `cd build && ctest`
 # PRs should trigger this as well from the `integration.yml` workflow
 add_test(NAME SampleTest COMMAND ${CMAKE_BINARY_DIR}/bin/sample_test)
+set_tests_properties(SampleTest PROPERTIES LABELS "integration;sample")

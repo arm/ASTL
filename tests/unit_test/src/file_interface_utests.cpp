@@ -1,4 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
+#ifndef _WIN32
+#  include <unistd.h>
+#endif
+#include <cstdlib>  // getenv
 
 #include "astl_file_interface.hpp"
 
@@ -31,6 +35,39 @@ class ScopedTestFile {
   std::string _filePath;
 };
 
+#ifndef _WIN32
+// RAII helper to switch EUID
+struct ScopedDropRoot {
+  uid_t old_euid;
+  bool  did_drop = false;
+
+  ScopedDropRoot() : old_euid{geteuid()} {
+    if (old_euid != 0) {
+      // not running as root
+      return;
+    }
+    if (const auto *sudo_uid = std::getenv("SUDO_UID")) {
+      uid_t unpriv = static_cast<uid_t>(std::stoi(sudo_uid));
+      if (seteuid(unpriv) == 0) {
+        did_drop = true;
+      }
+    }
+  }
+
+  ScopedDropRoot(const ScopedDropRoot &)            = delete;
+  ScopedDropRoot &operator=(const ScopedDropRoot &) = delete;
+  ScopedDropRoot(ScopedDropRoot &&)                 = delete;
+  ScopedDropRoot &operator=(ScopedDropRoot &&)      = delete;
+
+  ~ScopedDropRoot() {
+    if (did_drop) {
+      // restore root
+      (void)seteuid(old_euid);
+    }
+  }
+};
+#endif
+
 // Test the main functionality of FileInterface when used with full absolute file paths.
 // Covers: read, write, IsValid, HasReadPermission, HasWritePermission.
 TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") {
@@ -56,13 +93,16 @@ TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") 
   }
 
   SECTION("Read() test file read interface error code") {
+#ifndef _WIN32
     std::string    output;
     ScopedTestFile no_read_perm_file("/tmp/test_sysfs_no_read_perm", "data");
     std::filesystem::permissions(
         no_read_perm_file.Path(),
         std::filesystem::perms::owner_read | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
         std::filesystem::perm_options::remove);
+    ScopedDropRoot drop_root_perms;
     REQUIRE(sysfs.Read(no_read_perm_file.Path(), output) == ASTL_STATUS_FILE_OPEN_FAILED);
+#endif
   }
 
   SECTION("Write() test file write interface") {
@@ -74,13 +114,16 @@ TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") 
   }
 
   SECTION("Write() test file write interface error code") {
+#ifndef _WIN32
     const auto *const new_content = "new_test";
     ScopedTestFile    no_write_perm_file("/tmp/test_sysfs_no_write_perm", "data");
     std::filesystem::permissions(no_write_perm_file.Path(),
                                  std::filesystem::perms::owner_write | std::filesystem::perms::group_write |
                                      std::filesystem::perms::others_write,
                                  std::filesystem::perm_options::remove);
+    ScopedDropRoot drop_sudo;
     REQUIRE(sysfs.Write(no_write_perm_file.Path(), new_content) == ASTL_STATUS_FILE_OPEN_FAILED);
+#endif
   }
 
   SECTION("HasReadPermission() responds to permission changes") {

@@ -39,4 +39,5 @@ add_custom_target(rununittests unit_test)
 # have catch2's cmake module discover the tests and add them to ctest for us
 include(CTest)
 include(Catch)
-catch_discover_tests(unit_test)
+catch_discover_tests(unit_test
+    ADD_TAGS_AS_LABELS)

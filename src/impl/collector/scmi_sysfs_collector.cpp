@@ -85,7 +85,9 @@ std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> 
   return std::make_pair(expected_timestamp.value(), value.value());
 }
 
+// TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen optimization
 // Expected format: "0 <value>"
+// cppcheck-suppress unusedFunction
 std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> ParseDataEventValueWithoutTimestamp(
     std::string const& data_read) {
   auto space_pos = data_read.find(' ');

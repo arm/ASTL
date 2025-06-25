@@ -1,5 +1,6 @@
 {
     "dependencies": [
+        "bshoshany-thread-pool",
         "catch2",
         {
             "name": "libfuse",

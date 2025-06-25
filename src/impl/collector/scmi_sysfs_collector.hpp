@@ -19,8 +19,10 @@
 #ifndef SCMI_SYSFS_COLLECTOR_HPP_
 #define SCMI_SYSFS_COLLECTOR_HPP_
 
+#include <atomic>
 #include <expected>
 #include <filesystem>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_set>
@@ -30,6 +32,7 @@
 #include "astl_logger.hpp"
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
+#include "collector/periodic_sampler.hpp"
 #include "collector/scmi_data_event.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_sample_sink.hpp"
@@ -114,6 +117,9 @@ class ScmiSysfsCollector : public ICollector {
   //!< Data events touched by the current collection (TODO - consider making _collection_state a variant to bundle the
   //!< CollectionState in with _data_events and _configuration)
   std::vector<ScmiDataEvent> _data_events;
+  mutable std::mutex
+      _collection_mutex;  // prevent the collection configuration from being accessed by two threads at once
+  std::unique_ptr<PeriodicSampler> _periodic_sampler;
 
   // private methods
 
@@ -148,7 +154,7 @@ class ScmiSysfsCollector : public ICollector {
   /*
    * @brief Stop any background threads or async tasks that were started for interval sampling.
    */
-  astl_status_code StopIntervalSampling();
+  void StopIntervalSampling();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -194,6 +200,7 @@ CollectorCapability const& ScmiSysfsCollector<FileInterfaceT>::GetCapabilities()
  */
 template <typename FileInterfaceT>
 void ScmiSysfsCollector<FileInterfaceT>::SetSampleSink(ISampleSink* sample_sink) {
+  std::scoped_lock lock{_collection_mutex};
   _sample_sink = sample_sink;
 };
 
@@ -205,6 +212,7 @@ void ScmiSysfsCollector<FileInterfaceT>::SetSampleSink(ISampleSink* sample_sink)
  */
 template <typename FileInterfaceT>
 astl_status_code ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfiguration&& configuration) {
+  std::scoped_lock lock{_collection_mutex};
   if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::STOPPED) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot reconfigure while already started
   }
@@ -244,6 +252,7 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(Collect
  */
 template <typename FileInterfaceT>
 astl_status_code ScmiSysfsCollector<FileInterfaceT>::StartCollection() {
+  std::scoped_lock lock{_collection_mutex};
   if (_collection_state == CollectionState::STARTED) {
     return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
   }
@@ -285,7 +294,13 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StartCollection() {
  */
 template <typename FileInterfaceT>
 astl_status_code ScmiSysfsCollector<FileInterfaceT>::PauseCollection() {
-  return ASTL_STATUS_NOT_IMPLEMENTED;
+  std::scoped_lock lock{_collection_mutex};
+  if (!_periodic_sampler) {
+    ASTL_LOG_WARNING("PauseCollection called when no periodic sampler initialized");
+  } else {
+    _periodic_sampler->Pause();
+  }
+  return ASTL_STATUS_SUCCESS;
 };
 
 /*
@@ -293,7 +308,13 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::PauseCollection() {
  */
 template <typename FileInterfaceT>
 astl_status_code ScmiSysfsCollector<FileInterfaceT>::ResumeCollection() {
-  return ASTL_STATUS_NOT_IMPLEMENTED;
+  std::scoped_lock lock{_collection_mutex};
+  if (!_periodic_sampler) {
+    ASTL_LOG_WARNING("ResumeCollection called when no periodic sampler initialized");
+  } else {
+    _periodic_sampler->Unpause();
+  }
+  return ASTL_STATUS_SUCCESS;
 };
 
 /*
@@ -301,7 +322,12 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ResumeCollection() {
  */
 template <typename FileInterfaceT>
 astl_status_code ScmiSysfsCollector<FileInterfaceT>::StopCollection() {
-  auto result = ASTL_STATUS_SUCCESS;
+  // before we modify any of the collection configuration state, try to stop any
+  // configured interval sampling. taking the _collection_mutex lock here has contention
+  // against the sampling thread, so signal the stop _BEFORE_ grabbing _collection_mutex.
+  StopIntervalSampling();
+  auto             result = ASTL_STATUS_SUCCESS;
+  std::scoped_lock lock{_collection_mutex};
   if (_collection_state == CollectionState::STOPPED) {
     return ASTL_STATUS_COLLECTION_ALREADY_STOPPED;  // stop is idempotent
   }
@@ -320,11 +346,8 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StopCollection() {
       }
       break;
     case ASTL_COLLECTION_MODE_SAMPLING:
-      // do any necessary teardown to unschedule/join threads, etc for interval sampling.
-      result = StopIntervalSampling();
-      if (result != ASTL_STATUS_SUCCESS) {
-        return result;
-      }
+      // NOTE - we should already have stopped this interval sampling
+      // at the top of this function before grabbing _collection_mutex
       break;
     default:
       return ASTL_STATUS_BAD_CONFIGURATION;  // Unsupported collection mode
@@ -345,6 +368,7 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StopCollection() {
  */
 template <typename FileInterfaceT>
 astl_status_code ScmiSysfsCollector<FileInterfaceT>::ReadImmediate() {
+  std::scoped_lock lock{_collection_mutex};
   if (_collection_state != CollectionState::STARTED) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot read while not started
   }
@@ -498,17 +522,33 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(Sc
  */
 template <typename FileInterfaceT>
 astl_status_code ScmiSysfsCollector<FileInterfaceT>::StartIntervalSampling() {
-  ASTL_LOG_ERROR("SCMI interval sampling not yet implemented");
-  return ASTL_STATUS_NOT_IMPLEMENTED;
+  if (_collection_state != CollectionState::STOPPED && _collection_state != CollectionState::PAUSED) {
+    ASTL_LOG_ERROR("SCMI interval sampling started when collection state is not stopped or paused");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  if (!_configuration.has_value()) {
+    ASTL_LOG_ERROR("SCMI interval sampling start attempted with no configuration!");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  if (_periodic_sampler) {
+    ASTL_LOG_ERROR("SCMI interval sampling started _periodic_sampler is already initialized");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  auto interval     = std::chrono::milliseconds{_configuration.value().CollectionParams()._sampling_interval};
+  _periodic_sampler = std::make_unique<PeriodicSampler>(this, interval);
+  return ASTL_STATUS_SUCCESS;
 }
 
 /*
  * @brief Stop any background threads or async tasks that were started for interval sampling.
+ *
+ * @returns ASTL_STATUS_SUCCESS even if there was no ongoing task. this is because
+ *          we must try to signal _stop_sampling_task in a lightweight way with no lock
  */
 template <typename FileInterfaceT>
-astl_status_code ScmiSysfsCollector<FileInterfaceT>::StopIntervalSampling() {
-  ASTL_LOG_ERROR("SCMI interval sampling not yet implemented");
-  return ASTL_STATUS_NOT_IMPLEMENTED;
+void ScmiSysfsCollector<FileInterfaceT>::StopIntervalSampling() {
+  _periodic_sampler = nullptr;  // destroy periodic_sampler and wait for its thread pool to empty
 }
 
 }  // namespace astl
