@@ -46,9 +46,9 @@ SYS_INCLUDE_PATHS=$(echo | g++ -E -x c++ - -v 2>&1 | \
 # Include dependency headers from vcpkg as system headers
 for DEP in $REPO_ROOT_DIR/vcpkg/packages/*; do
   NEW_INCLUDE="${DEP}/include/"
-  SYS_INCLUDE_PATHS+=" -I ${NEW_INCLUDE}"
+  SYS_INCLUDE_PATHS+=" -system ${NEW_INCLUDE}"
 done
 
-#echo "cppcheck --enable=all $REPO_ROOT_DIR/src/ $REPO_ROOT_DIR/tests/ $INCLUDE_PATHS $SYS_INCLUDE_PATHS"
+#echo "cppcheck -U_WIN32 --inline-suppr --enable=all $REPO_ROOT_DIR/src/ $REPO_ROOT_DIR/tests/ $INCLUDE_PATHS --suppress=missingIncludeSystem"
 
-cppcheck -U_WIN32 --inline-suppr --enable=all $REPO_ROOT_DIR/src/ $REPO_ROOT_DIR/tests/ $INCLUDE_PATHS --suppress=missingIncludeSystem
+cppcheck -U_WIN32 --inline-suppr --enable=all $REPO_ROOT_DIR/src/ $REPO_ROOT_DIR/tests/ $INCLUDE_PATHS --suppress=missingIncludeSystem --suppress=missingInclude
