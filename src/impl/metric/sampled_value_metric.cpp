@@ -56,8 +56,8 @@ astl_status_code SampledValueMetric::ReceiveSample(const SampledData& sample) {
       } else {
         _sum_sample_value += sample_val;  // Update sum for average calculation
       }
-      _raw_sample_logger.LogInfo("Metric: {}, Description: {}, Units: {%d}, Raw Value: {%llu}, Type: UINT64",
-                                 _name.c_str(), _description.c_str(), static_cast<int>(_units), sample_val);
+      _raw_sample_logger.LogInfo("Metric: {}, Description: {}, Units: {}, Raw Value: {}, Type: UINT64", _name.c_str(),
+                                 _description.c_str(), static_cast<int>(_units), sample_val);
       break;
     }
     default: {
@@ -83,8 +83,8 @@ astl_status_code SampledValueMetric::Summarize() {
       // Compute average
       _summary_data.avg.ui64 = _sum_sample_value / _sample_count;  // Update summary data with computed average
       _summary_logger.LogInfo(
-          "Metric: {}, Description: {}, Units: {%d}, Maximum Value: {%llu}, Minimum Value: {%llu}, Average Value: "
-          "{%llu}, Type: UINT64",
+          "Metric: {}, Description: {}, Units: {}, Maximum Value: {}, Minimum Value: {}, Average Value: "
+          "{}, Type: UINT64",
           _name.c_str(), _description.c_str(), static_cast<int>(_units), _summary_data.max.ui64, _summary_data.min.ui64,
           _summary_data.avg.ui64);
       break;
