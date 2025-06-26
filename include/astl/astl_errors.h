@@ -69,7 +69,7 @@ typedef enum _astl_status_code {
   ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL = 33,           //!< Buffer of metric samples passed in by client is too
                                                               // small to hold all metric samples
   ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE =
-      34,  //!< Metric received a sample that does not match the expected type or value
+      34,  //!< Metric or MetricManager received a sample that does not match the expected type or value.
   ASTL_STATUS_METRIC_OVERFLOW_DETECTED    = 35,           //!< Overflow detected in metric processing.
   ASTL_STATUS_SAMPLING_INTERVAL_TOO_SMALL = 36,           //!< Sampling interval specified is too small
   ASTL_STATUS_SAMPLING_INTERVAL_TOO_LARGE = 37,           //!< Sampling interval specified is too large

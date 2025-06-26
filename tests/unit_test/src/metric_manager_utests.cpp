@@ -38,6 +38,8 @@ using astl::CollectorType;
 using astl::IMetric;
 using astl::MetricConfig;
 using astl::MetricManager;
+using astl::OperationSequence;
+using astl::SampledData;
 using astl::SystemCapability;
 
 namespace astl {
@@ -51,8 +53,43 @@ class MetricManagerTestAccessor {
     mgr._metrics_map.emplace(metric_ptr, std::move(metric));
     mgr._metric_handles.emplace_back(metric_ptr);
   }
+  static void InjectOperation(astl::MetricManager& mgr, OperationId op_id, IMetric* metric_handle) {
+    // In a real implementation, this would add the operation to the manager's internal state.
+    mgr._operation_to_metric_map[op_id] = metric_handle;
+  }
 };
 }  // namespace astl
+
+// Dummy metric implementation for testing purposes
+// This metric simply collects samples and stores them in a vector.
+// It can be configured to return a specific status code when processing samples.
+struct TestMetric : public IMetric {
+  astl_status_code         lastStatus      = ASTL_STATUS_SUCCESS;
+  astl_status_code         summarizeStatus = ASTL_STATUS_SUCCESS;
+  std::vector<SampledData> received;
+
+  astl_status_code ReceiveSample(const SampledData& sample) override {
+    received.push_back(sample);
+    return lastStatus;
+  }
+  // --- Implement remaining pure-virtuals so TestMetric is concrete ---
+  bool CheckCapabilities(const Capabilities& /*caps*/) const override { return true; }
+
+  std::expected<OperationSequence, astl_status_code> GetOperations() const override {
+    // Return an empty sequence by default
+    return OperationSequence{};
+  }
+
+  astl_status_code Summarize() override {
+    // No-op summary
+    return summarizeStatus;
+  }
+
+  astl_status_code GetProperties(astl_metric_properties_t* /*props*/) const override {
+    // No special properties
+    return ASTL_STATUS_SUCCESS;
+  }
+};
 
 static Capabilities MakeCaps(CollectorType collector_type) {
   // Build a Capabilities object with exactly one collector type.
@@ -159,4 +196,149 @@ TEST_CASE("MetricManager::GetRequiredOperations fails for non-SCMI metric", "[Me
   std::expected<astl::OperationSequence, astl_status_code> result      = mgr.GetRequiredOperations(metric_span);
   REQUIRE_FALSE(result.has_value());
   REQUIRE(result.error() == ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE);
+}
+
+TEST_CASE("MetricManager::ProcessData processes valid sample and returns success", "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+
+  auto              owner_metric = std::make_unique<TestMetric>();
+  TestMetric*       metric_ptr   = owner_metric.get();
+  astl::OperationId op_id        = 7;  // Example operation ID
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric),
+      std::make_unique<MetricConfig>("test", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, std::vector<std::string>{}));
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, op_id, metric_ptr);
+
+  astl_value_t             val1{.ui64 = 256};  // Sample value
+  astl::SampledData        sample1(op_id, val1);
+  std::vector<SampledData> data{sample1};
+  REQUIRE(mgr.ProcessData(data) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric_ptr->received.size() == 1);
+  REQUIRE(metric_ptr->received[0].value.ui64 == 256);
+}
+
+TEST_CASE("MetricManager::ProcessData processes multiple samples for the same metric", "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+
+  auto              owner_metric = std::make_unique<TestMetric>();
+  TestMetric*       metric_ptr   = owner_metric.get();
+  astl::OperationId op_id        = 9;
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric),
+      std::make_unique<MetricConfig>("multi", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, std::vector<std::string>{}));
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, op_id, metric_ptr);
+
+  astl_value_t             val1{.ui64 = 100};
+  astl_value_t             val2{.ui64 = 200};
+  SampledData              sample1(op_id, val1);
+  SampledData              sample2(op_id, val2);
+  std::vector<SampledData> data{sample1, sample2};
+
+  REQUIRE(mgr.ProcessData(data) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric_ptr->received.size() == 2);
+  REQUIRE(metric_ptr->received[0].value.ui64 == 100);
+  REQUIRE(metric_ptr->received[1].value.ui64 == 200);
+}
+
+TEST_CASE("MetricManager::ProcessData processes different metrics for different operations", "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+
+  auto        owner_metric1 = std::make_unique<TestMetric>();
+  auto        owner_metric2 = std::make_unique<TestMetric>();
+  TestMetric* metric_ptr1   = owner_metric1.get();
+  TestMetric* metric_ptr2   = owner_metric2.get();
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric1),
+      std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     std::vector<std::string>{}));
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric2),
+      std::make_unique<MetricConfig>("m2", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     std::vector<std::string>{}));
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, 1, metric_ptr1);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, 2, metric_ptr2);
+
+  astl_value_t             val1{.ui64 = 5};
+  astl_value_t             val2{.ui64 = 7};
+  SampledData              sample1(1, val1);
+  SampledData              sample2(2, val2);
+  SampledData              sample3(1, val1);
+  SampledData              sample4(2, val2);
+  std::vector<SampledData> data{sample1, sample2, sample3, sample4};
+
+  REQUIRE(mgr.ProcessData(data) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric_ptr1->received.size() == 2);
+  REQUIRE(metric_ptr2->received.size() == 2);
+}
+
+TEST_CASE("MetricManager::ProcessData stops on error and does not process further samples", "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+
+  auto owner_metric1        = std::make_unique<TestMetric>();
+  auto owner_metric2        = std::make_unique<TestMetric>();
+  owner_metric2->lastStatus = ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+  TestMetric* metric_ptr1   = owner_metric1.get();
+  TestMetric* metric_ptr2   = owner_metric2.get();
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric1),
+      std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     std::vector<std::string>{}));
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric2),
+      std::make_unique<MetricConfig>("m2", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     std::vector<std::string>{}));
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, 1, metric_ptr1);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, 2, metric_ptr2);
+
+  astl_value_t             val1{.ui64 = 1};
+  astl_value_t             val2{.ui64 = 2};
+  SampledData              sample1(1, val1);
+  SampledData              sample2(2, val2);
+  SampledData              sample3(1, val1);
+  std::vector<SampledData> data{sample1, sample2, sample3};
+
+  REQUIRE(mgr.ProcessData(data) == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+  REQUIRE(metric_ptr1->received.size() == 1);
+  REQUIRE(metric_ptr2->received.size() == 1);
+}
+
+TEST_CASE("MetricManager::SummarizeMetrics returns success for a TestMetric", "[MetricManager]") {
+  // Arrange
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  auto          owner_metric = std::make_unique<TestMetric>();
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric),
+      std::make_unique<MetricConfig>("metricX", "descX", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, std::vector<std::string>{}));
+
+  REQUIRE(mgr.SummarizeMetrics() == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("MetricManager::SummarizeMetrics returns error for a TestMetric", "[MetricManager]") {
+  // Arrange
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  auto          owner_metric    = std::make_unique<TestMetric>();
+  owner_metric->summarizeStatus = ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric),
+      std::make_unique<MetricConfig>("metric", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, std::vector<std::string>{}));
+
+  REQUIRE(mgr.SummarizeMetrics() == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 }
