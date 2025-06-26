@@ -7,6 +7,7 @@
 
 #include "../../mock_classes.hpp"
 #include "astl/astl.h"
+#include "astl/astl_errors.h"
 #include "astl/astl_test_hooks.h"
 #include "astl_impl.hpp"
 #include "counter.hpp"
@@ -670,7 +671,40 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets]") {
 }
 
 TEST_CASE("astlStartCollectionOnTarget", "[unimplemented for now]") {
-  REQUIRE(astlStartCollectionOnTarget(nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  // mock 2 targets
+  auto                 mock_target_1        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_1_handle = mock_target_1.get();
+  ALLOW_CALL(*mock_target_1, GetProperties(_))
+      .SIDE_EFFECT(_1->_handle = mock_target_1_handle)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  auto                 mock_target_2        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_2_handle = mock_target_2.get();
+  ALLOW_CALL(*mock_target_2, GetProperties(_))
+      .SIDE_EFFECT(_1->_handle = mock_target_2_handle)
+      .RETURN(ASTL_STATUS_INTERNAL_ERROR);
+
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target_1));
+  mock_targets.push_back(std::move(mock_target_2));
+
+  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  orchestrator->SetTargets(std::move(mock_targets));
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  std::vector<astl_target_properties_t> targets{kAFew};
+  targets[0]._size      = sizeof(astl_target_properties_t);
+  uint32_t target_count = 2;
+  REQUIRE(astlGetTargets(targets.data(), &target_count) ==
+          ASTL_STATUS_INTERNAL_ERROR);             // get target properties from our mock target fails
+  int                  junk                  = 1;  // not null, but not a valid handle to a target
+  astl_target_handle_t invalid_target_handle = static_cast<astl_target_handle_t>(&junk);
+  astl_target_handle_t working_target_handle = targets[0]._handle;
+  astl_target_handle_t broken_target_handle  = targets[1]._handle;
+
+  REQUIRE(astlStartCollectionOnTarget(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(astlStartCollectionOnTarget(invalid_target_handle) == ASTL_STATUS_INVALID_TARGET_HANDLE);
+  REQUIRE(astlStartCollectionOnTarget(broken_target_handle) == ASTL_STATUS_INTERNAL_ERROR);
 }
 
 TEST_CASE("astlStartCollection", "[unimplemented for now]") {
@@ -694,7 +728,39 @@ TEST_CASE("astlResumeCollection", "[unimplemented for now]") {
 }
 
 TEST_CASE("astlStopCollectionOnTarget", "[unimplemented for now]") {
-  REQUIRE(astlStopCollectionOnTarget(nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  // mock 2 targets
+  auto                 mock_target_1        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_1_handle = mock_target_1.get();
+  ALLOW_CALL(*mock_target_1, GetProperties(_))
+      .SIDE_EFFECT(_1->_handle = mock_target_1_handle)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  auto                 mock_target_2        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_2_handle = mock_target_2.get();
+  ALLOW_CALL(*mock_target_2, GetProperties(_))
+      .SIDE_EFFECT(_1->_handle = mock_target_2_handle)
+      .RETURN(ASTL_STATUS_INTERNAL_ERROR);
+
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target_1));
+  mock_targets.push_back(std::move(mock_target_2));
+
+  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  orchestrator->SetTargets(std::move(mock_targets));
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  std::vector<astl_target_properties_t> targets{kAFew};
+  targets[0]._size      = sizeof(astl_target_properties_t);
+  uint32_t target_count = 2;
+  REQUIRE(astlGetTargets(targets.data(), &target_count) ==
+          ASTL_STATUS_INTERNAL_ERROR);             // get target properties from our mock target fails
+  int                  junk                  = 1;  // not null, but not a valid handle to a target
+  astl_target_handle_t invalid_target_handle = static_cast<astl_target_handle_t>(&junk);
+  astl_target_handle_t working_target_handle = targets[0]._handle;
+  astl_target_handle_t broken_target_handle  = targets[1]._handle;
+
+  REQUIRE(astlStopCollectionOnTarget(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(astlStopCollectionOnTarget(invalid_target_handle) == ASTL_STATUS_INVALID_TARGET_HANDLE);
 }
 
 TEST_CASE("astlStopCollection", "[unimplemented for now]") {

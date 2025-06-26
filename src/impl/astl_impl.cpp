@@ -1,5 +1,6 @@
 #include "astl_impl.hpp"
 
+#include "astl/astl_errors.h"
 #include "astl_logger.hpp"
 
 namespace astl {
@@ -20,12 +21,20 @@ astl_status_code Orchestrator::ConfigureCounterCollection(ITarget               
 }
 
 astl_status_code Orchestrator::StartCollection(ITarget *target) {
+  if (!_collector_manager) {
+    ASTL_LOG_ERROR("Orchestrator::StartCollection called with null CollectorManager");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
   auto index = std::find_if(std::begin(_targets), std::end(_targets),
                             [target](auto const &owned_target) { return owned_target.get() == target; });
+
   if (index == std::end(_targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
-  return ASTL_STATUS_NOT_IMPLEMENTED;
+
+  _samples.clear();
+  return _collector_manager->StartOnTarget(target);
 }
 
 astl_status_code Orchestrator::ReadImmediate(ITarget *target) {
@@ -60,7 +69,18 @@ astl_status_code Orchestrator::StopCollection(ITarget *target) {
   if (index == std::end(_targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
-  return ASTL_STATUS_NOT_IMPLEMENTED;
+
+  astl_status_code status = _metric_manager->ProcessData(_samples);
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+
+  status = _collector_manager->StopOnTarget(target);
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+
+  return ASTL_STATUS_SUCCESS;
 }
 
 std::expected<uint32_t, astl_status_code> Orchestrator::GetCounterSampleCount(const ITarget  *target,
@@ -88,6 +108,13 @@ astl_status_code Orchestrator::SinkSamples(ITarget *target, std::span<SampledDat
     return result;
   }
   ASTL_LOG_DEBUG("Received {} samples for target {}", samples.size(), properties._name);
+  for (const auto &sample : samples) {
+    _samples.push_back(sample);
+    auto timestamp_ns = sample.timestamp.time_since_epoch().count();
+    auto value        = sample.value.ui64;
+
+    ASTL_LOG_DEBUG("Sample - timestamp (ns since epoch): {}, value (ui64): {}", timestamp_ns, value);
+  }
 
   return ASTL_STATUS_SUCCESS;
 }

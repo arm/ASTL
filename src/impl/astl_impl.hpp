@@ -180,6 +180,7 @@ class Orchestrator : public ISampleSink {
   std::vector<std::unique_ptr<ITarget>> _targets;
   std::unique_ptr<ICollectorManager>    _collector_manager;
   std::unique_ptr<IMetricManager>       _metric_manager;
+  std::vector<SampledData>              _samples;
 };
 
 }  // namespace astl

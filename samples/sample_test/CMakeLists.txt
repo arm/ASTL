@@ -24,5 +24,16 @@ add_subdirectory (src)
 # ctest will add the sample_test executable to its list of tests
 # to use this, after building the project, `cd build && ctest`
 # PRs should trigger this as well from the `integration.yml` workflow
-add_test(NAME SampleTest COMMAND ${CMAKE_BINARY_DIR}/bin/sample_test)
+add_test(
+  NAME SampleTest
+  COMMAND ${CMAKE_BINARY_DIR}/bin/sample_test
+)
+add_test(
+  NAME SampleTest_Immediate
+  COMMAND ${CMAKE_BINARY_DIR}/bin/sample_test --immediate
+)
+add_test(
+  NAME SampleTest_Interval
+  COMMAND ${CMAKE_BINARY_DIR}/bin/sample_test --interval=50
+)
 set_tests_properties(SampleTest PROPERTIES LABELS "integration;sample")
