@@ -53,7 +53,62 @@ The library has a C-interface for the API and a C++ implementation. There is als
 
 # Installation and usage
 
-TBD
+## Installation
+See [Build steps for developers](#build-steps-for-developers) for more detailed build instructions.
+
+## Usage
+The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_test.cpp). Below are the minimal snippets you need:
+```cpp
+#include "astl/astl.h"          // core API
+#include "astl_telemetry.h"     // Function calls
+```
+
+1. Initialize ASTL
+```cpp
+astl_initialization_parameters_t init_params{};
+init_params._size = sizeof(init_params);
+auto status = astlInitialize(&init_params);
+if (status != ASTL_STATUS_SUCCESS) {
+    // handle error...
+}
+```
+2. Discover targets
+```cpp
+status = astlGetTargetCount(&target_count);
+astl_target_properties_t props{ ._size = sizeof(props) };
+status = astlGetTargets(&props, &count);
+```
+3. Configure collection
+```cpp
+uint32_t metric_count{};
+astlGetMetricCount(target_properties._handle, &metric_count);
+std::vector<astl_metric_properties_t> metric_buffer(metric_count);
+status = astlGetMetrics(target_properties._handle, metric_buffer.data(), &metric_count);
+
+astl_collection_parameters_t collection_params{
+    ._size              = sizeof(astl_collection_parameters_t),
+    ._sampling_interval = 0,
+    ._collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+    ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
+};
+status = astlConfigureMetricCollectionOnTarget(target_properties._handle, &collection_params,
+                                                &metric_buffer.front()._handle, metric_count);
+```
+
+4. Start, read, and stop collection
+```cpp
+status = astlStartCollectionOnTarget(target_properties._handle);
+status = astlReadImmediateOnTarget(target_properties._handle);
+status = astlStopCollectionOnTarget(target_properties._handle);
+```
+5. Retrieve metric samples (via debug logs for now). To do this, set environment variables `ASTL_LOG_LEVEL=DEBUG`.
+Set `ASTL_LOG_CONSOLE` to see output to the terminal, and/or set `ASTL_LOG_NAME=<path>` to save logs to a file.
+
+See all available functions by running the demo script at `scripts/demo.sh`.
+This will setup the mock driver, and run an immediate sample.
+
+Alternatively, you can setup a mock server manually and run the sample binary in `build/debug/bin/sample_test`.
+See `--help` for more options.
 
 ## Running the Mock SCMI Sysfs Generator
 

@@ -419,8 +419,17 @@ astl_status_code astlReadImmediate() {
 }
 
 astl_status_code astlStartCollectionOnTarget(astl_target_handle_t target_handle) {
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  return result;
+  if (!target_handle) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  auto result = GetTargetFromHandle(target_handle);
+  if (!result) {
+    return result.error();
+  }
+
+  auto* target = *result;
+  return astl::Orchestrator::GetInstance()->StartCollection(target);
 }
 
 astl_status_code astlStartCollection() {
@@ -449,8 +458,17 @@ astl_status_code astlResumeCollection() {
 }
 
 astl_status_code astlStopCollectionOnTarget(astl_target_handle_t target_handle) {
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  return result;
+  if (!target_handle) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  auto result = GetTargetFromHandle(target_handle);
+  if (!result) {
+    return result.error();
+  }
+
+  auto* target = *result;
+  return astl::Orchestrator::GetInstance()->StopCollection(target);
 }
 
 astl_status_code astlStopCollection() {

@@ -98,7 +98,13 @@ astl_status_code CollectorManager::ReadImmediateOnTarget(ITarget* target) {
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
 
-astl_status_code CollectorManager::StopOnTarget(ITarget* target) { return ASTL_STATUS_NOT_IMPLEMENTED; }
+astl_status_code CollectorManager::StopOnTarget(ITarget* target) {
+  if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
+    // if we have a collector for this target, start it
+    return collector->second.front()->StopCollection();
+  }
+  return ASTL_STATUS_INVALID_TARGET_HANDLE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ISampleSink implementation

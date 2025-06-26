@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl_file_interface.hpp"
 #include "astl_impl.hpp"
@@ -28,6 +29,7 @@
 #include "collector/i_collector.hpp"
 #include "collector/scmi_sysfs_collector.hpp"
 #include "common/capabilities.hpp"
+#include "config/static_metric_config.hpp"
 #include "metric/metric_manager.hpp"
 #include "target.hpp"
 
@@ -53,7 +55,7 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   // providing an abstract set of ICollectors, or just a fully-formed CollectorManager to link to Orchestrator.
   // But for an upcoming milestone, we're doing that directly here until TopologyManager is online.
   // TODO(ASTL-39) - hide deriving class details of collectors behind another initialization agent.
-  astl::FileInterface scmi_sysfs_file_interface{std::filesystem::path{"scmi_telemetry"}};
+  astl::FileInterface scmi_sysfs_file_interface{std::filesystem::path{"/tmp/fuse/scmi/scmi_telemetry"}};
   using ScmiCollector = astl::ScmiSysfsCollector<decltype(scmi_sysfs_file_interface)>;
   std::unique_ptr<astl::ICollector> scmi_collector =
       std::make_unique<ScmiCollector>(nullptr, std::move(scmi_sysfs_file_interface));
@@ -73,6 +75,36 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   astl::Capabilities                     capabilities{std::move(collector_caps_list), std::move(system_caps_list)};
 
   std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
+
+  // TODO(ASTL-118): wire C API astlConfigureMetricCollectionOnTarget() to
+  // Orchestrator::ConfigureMetricCollectionOnTarget() Move this logic to ConfigurationManager and Orchestrator.
+  metric_manager->RegisterMetric(std::make_unique<astl::MetricConfig>(astl::kTemperature));
+  auto available_metrics = metric_manager->GetAvailableMetrics();
+  if (!available_metrics) {
+    return ASTL_STATUS_NO_METRICS_FOUND;
+  }
+
+  auto operations_on_sample = metric_manager->GetRequiredOperations(available_metrics.value());
+  if (!operations_on_sample) {
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  astl::CollectionOperations operations{.operationsBeforeStart{},
+                                        .operationsAtStart{},
+                                        .operationsOnSample{std::move(operations_on_sample.value())},
+                                        .operationsAtStop{},
+                                        .samplingInterval{},
+                                        .requirements{astl::CollectorCapability{astl::CollectorType::SCMI}}};
+
+  astl_collection_parameters_t collection_params{
+      ._size              = sizeof(astl_collection_parameters_t),
+      ._sampling_interval = 0,
+      ._collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+      ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
+  };
+
+  astl_status_code status =
+      collector_manager->ConfigureCollectionOnTarget(target.get(), collection_params, std::move(operations));
+
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
   auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(collector_manager), std::move(metric_manager));
