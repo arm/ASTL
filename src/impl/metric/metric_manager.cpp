@@ -115,9 +115,47 @@ std::expected<OperationSequence, astl_status_code> MetricManager::GetRequiredOpe
   return op_sequence;
 }
 
-astl_status_code MetricManager::ProcessData(std::span<SampledData> data) { return ASTL_STATUS_NOT_IMPLEMENTED; }
+astl_status_code MetricManager::ProcessData(std::span<SampledData> data) {
+  for (const auto& sample : data) {
+    // Find the metric handle corresponding to this operation ID
+    auto op_iter = _operation_to_metric_map.find(sample.operation_id);
+    if (op_iter == _operation_to_metric_map.end()) {
+      ASTL_LOG_ERROR("ProcessData: No metric associated with operation ID {}", sample.operation_id);
+      return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+    }
+    IMetric* metric_handle = op_iter->second;
+    // Look up the owning unique_ptr for this metric to invoke ReceiveSample
+    auto metric_iter = _metrics_map.find(metric_handle);
+    if (metric_iter == _metrics_map.end()) {
+      ASTL_LOG_ERROR("ProcessData: Metric pointer not found in metrics map for operation ID {}", sample.operation_id);
+      return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+    }
+    // Process the sample and propagate errors
+    astl_status_code status = metric_iter->second->ReceiveSample(sample);
+    if (status != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} with status {}", sample.operation_id,
+                     astlStatusString(status));
+      return status;
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
+}
 
-astl_status_code MetricManager::SummarizeMetrics() { return ASTL_STATUS_NOT_IMPLEMENTED; }
+astl_status_code MetricManager::SummarizeMetrics() {
+  for (IMetric* metric_ptr : _metric_handles) {
+    auto it = _metrics_map.find(metric_ptr);
+    if (it == _metrics_map.end()) {
+      ASTL_LOG_ERROR("SummarizeMetrics: Metric pointer not found in metrics map");
+      return ASTL_STATUS_BAD_ARGUMENT;
+    }
+    astl_status_code status = it->second->Summarize();
+    if (status != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("SummarizeMetrics: Summarize failed for metric with status {}", astlStatusString(status));
+      return status;
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
+}
 
 bool MetricManager::IsCollectorTypeSupported(CollectorType required_collector_type) const {
   // Check against the manager's capabilities
