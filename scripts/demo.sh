@@ -25,9 +25,9 @@ PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 		exit 1
 	}
 
-mkdir -p "$MOUNT_POINT"
+mkdir -p "$MOUNT_POINT/scmi_telemetry"
 
-LOG_DIR="$(mktemp -d /tmp/mock_sysfs_XXXXXXXX)"
+LOG_DIR="$ASTL_ROOT"
 SYSFS_LOG="$LOG_DIR/sysfs.log"
 
 echo "Logs Directory = $LOG_DIR"
@@ -72,10 +72,6 @@ if [[ ! -x $SAMPLE_TEST_BIN ]]; then
 fi
 
 echo "🚀 Running sample_test with --immediate"
-
-# Set environment variables and run
-ASTL_LOG_LEVEL=DEBUG \
-	ASTL_LOG_NAME="$LOG_DIR/demo.log" \
-	"$SAMPLE_TEST_BIN" --immediate
+"$SAMPLE_TEST_BIN" --immediate
 
 echo "🏁 Demo complete - exiting."
