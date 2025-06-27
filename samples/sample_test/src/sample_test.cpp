@@ -32,18 +32,16 @@ void PrintHelp() {
             << "Options:\n"
             << "  --help              Show this help message.\n"
             << "  --version           Print version and exit.\n"
-            << "  --test              Run self-test.\n"
             << "  --immediate         Trigger immediate sample read. This is default behavior.\n"
             << "  --interval=<n>      Trigger interval sample read.\n";
 }
 
 /**
- * @brief  Example ASTL usage: version, test, init, target discovery, metric collection.
+ * @brief  Example ASTL usage: version, init, target discovery, metric collection.
  *
  * Supported options:
  *   --help         Show usage
  *   --version      Print ASTL version and exit
- *   --test         Run self-test
  *   --immediate    Trigger an immediate metric sample. This is default behavior.
  *   --interval=<n> Trigger interval sampling every <n> milliseconds
  *
@@ -64,12 +62,6 @@ int main(int argc, char* argv[]) {
     astl_version_t version = astlVersion();
     std::cout << "ASTL v" << version._major << "." << version._minor << "." << version._micro << "\n";
     std::cout << "Version string: " << astlVersionString() << "\n";
-    return 0;
-  }
-
-  if (args.contains("test")) {
-    status = astlTest();
-    std::cout << "Self-test status: " << astlStatusString(status) << "\n";
     return 0;
   }
 

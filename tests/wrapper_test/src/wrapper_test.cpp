@@ -885,5 +885,3 @@ TEST_CASE("astlGetAllMetricSampleCount", "[unimplemented for now]") {
 TEST_CASE("astlGetAllMetricSamples", "[unimplemented for now]") {
   REQUIRE(astlGetAllMetricSamples(nullptr, nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
 }
-
-TEST_CASE("astlTest", "[deprecated for now]") { REQUIRE(astlTest() == ASTL_STATUS_DEPRECATED_API); }

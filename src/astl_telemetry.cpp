@@ -562,12 +562,3 @@ astl_status_code astlGetAllMetricSamples(astl_metric_sample_t* metric_samples, u
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
-
-/***********************************************************************************
- **********************              TEST                      *********************
- **********************************************************************************/
-// TODO(https://github.com/Arm-Debug/ASTL/pull/17) - delete
-astl_status_code astlTest() {
-  astl_status_code result = astl::Orchestrator::Test();
-  return result;
-}
