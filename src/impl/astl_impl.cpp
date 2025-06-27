@@ -75,6 +75,11 @@ astl_status_code Orchestrator::StopCollection(ITarget *target) {
     return status;
   }
 
+  status = _metric_manager->SummarizeMetrics();
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+
   status = _collector_manager->StopOnTarget(target);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
