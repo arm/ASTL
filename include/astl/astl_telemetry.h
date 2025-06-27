@@ -898,14 +898,6 @@ ASTL_API astl_status_code astlGetAllMetricSampleCount(uint32_t* sample_count);
  */
 ASTL_API astl_status_code astlGetAllMetricSamples(astl_metric_sample_t* samples, uint32_t* sample_count);
 
-/***********************************************************************************
- **********************              TEST                      *********************
- **********************************************************************************/
-
-// Place holder for initial testing
-// TODO(https://github.com/Arm-Debug/ASTL/pull/17) delete this function, replace with real unit testable
-ASTL_API astl_status_code astlTest();
-
 #if defined(__cplusplus)
 }
 #endif
