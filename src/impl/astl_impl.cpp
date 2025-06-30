@@ -64,6 +64,14 @@ astl_status_code Orchestrator::ResumeCollection(ITarget *target) {
 }
 
 astl_status_code Orchestrator::StopCollection(ITarget *target) {
+  if (!_metric_manager) {
+    ASTL_LOG_ERROR("null _metric_manager in Orchestrator::StopCollection");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  if (!_collector_manager) {
+    ASTL_LOG_ERROR("null _collector_manager in Orchestrator::StopCollection");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
   auto index = std::find_if(std::begin(_targets), std::end(_targets),
                             [target](auto const &owned_target) { return owned_target.get() == target; });
   if (index == std::end(_targets)) {
@@ -116,9 +124,9 @@ astl_status_code Orchestrator::SinkSamples(ITarget *target, std::span<SampledDat
   for (const auto &sample : samples) {
     _samples.push_back(sample);
     auto timestamp_ns = sample.timestamp.time_since_epoch().count();
-    auto value        = sample.value.ui64;
+    auto value        = sample.value;
 
-    ASTL_LOG_DEBUG("Sample - timestamp (ns since epoch): {}, value (ui64): {}", timestamp_ns, value);
+    ASTL_LOG_DEBUG("Sample - timestamp (ns since epoch): {}, value: {}", timestamp_ns, value);
   }
 
   return ASTL_STATUS_SUCCESS;

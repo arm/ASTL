@@ -27,46 +27,48 @@ SampledValueMetric::SampledValueMetric(const char* name, const char* description
       _units(units),
       _value_type(value_type),
       _summary_data{},
-      _sum_sample_value{0},
+      _sum_sample_value{uint64_t{0}},
       _sample_count{0} {
   // Initialize summary data based on the value type
-  switch (_value_type) {
-    case astl_value_type_t::ASTL_VALUE_UINT64:
-      _summary_data.min.ui64 = std::numeric_limits<uint64_t>::max();     // Initialize min
-      _summary_data.max.ui64 = std::numeric_limits<uint64_t>::lowest();  // Initialize max
-      _summary_data.avg.ui64 = 0;                                        // Initialize avg to zero
-      break;
-    default:
-      // Handle other types if necessary or default
-      ASTL_LOG_ERROR("SampledValueMetric: unsupported type for metric: {}", _name);
-      break;
+  astl_value_t val{0};
+  auto         zero_val = AstlValue::FromUnion(val, _value_type);
+  if (zero_val.has_value()) {
+    _summary_data = {.min = std::nullopt, .max = std::nullopt, .avg = zero_val.value()};
+  } else {
+    ASTL_LOG_INFO("SampledValueMetric: unsupported type {} for statistics for metric: {}", static_cast<int>(value_type),
+                  _name);
   }
 }
+
 astl_status_code SampledValueMetric::ReceiveSample(const SampledData& sample) {
-  // For numeric types, update min, max and sum values.
-  switch (_value_type) {
-    case astl_value_type_t::ASTL_VALUE_UINT64: {
-      uint64_t sample_val    = sample.value.ui64;
-      _summary_data.min.ui64 = std::min(_summary_data.min.ui64, sample_val);
-      _summary_data.max.ui64 = std::max(_summary_data.max.ui64, sample_val);
-      if (UINT64_MAX - _sum_sample_value < sample_val) [[unlikely]] {
-        // TODO (https://jira.arm.com/browse/ASTL-100): Handle overflow more gracefully.
-        ASTL_LOG_ERROR("SampledValueMetric: Sum overflow detected for metric: {}", _name);
-        return ASTL_STATUS_METRIC_OVERFLOW_DETECTED;
-      } else {
-        _sum_sample_value += sample_val;  // Update sum for average calculation
-      }
-      _raw_sample_logger.LogInfo("Metric: {}, Description: {}, Units: {}, Raw Value: {}, Type: UINT64", _name.c_str(),
-                                 _description.c_str(), static_cast<int>(_units), sample_val);
-      break;
-    }
-    default: {
-      // Handle other types if necessary or log an error
-      ASTL_LOG_ERROR("SampledValueMetric: unsupported type for metric: {}", _name);
-      return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
-    }
+  const auto sample_type = sample.value.ToAstlUnionValue().second;
+  if (sample_type != _value_type) {
+    ASTL_LOG_ERROR("SampledValueMetric: received sample with type {} for metric {}, expected type {}",
+                   static_cast<int>(sample_type), _name.c_str(), static_cast<int>(_value_type));
+    return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
+  _raw_sample_logger.LogInfo("Metric: {}, Description: {}, Units: {}, Raw Value: {}", _name.c_str(),
+                             _description.c_str(), static_cast<int>(_units), sample.value);
+  auto status = UpdateStatistics(sample);
+
   _sample_count++;
+  return status;
+}
+
+astl_status_code SampledValueMetric::UpdateStatistics(const SampledData& sample) {
+  if (!sample.value.IsArithmetic()) {
+    ASTL_LOG_TRACE("SampledValueMetric: received sample with non-arithmetic value type for metric: {}", _name);
+    return ASTL_STATUS_SUCCESS;
+  }
+  // For numeric types, update min, max and sum values.
+  _summary_data.min = _summary_data.min.has_value() ? std::min(_summary_data.min.value(), sample.value) : sample.value;
+  _summary_data.max = _summary_data.max.has_value() ? std::max(_summary_data.max.value(), sample.value) : sample.value;
+  // Update sum for average calculation
+  auto new_sum_for_avg = AstlValue::Add(sample.value, _sum_sample_value);
+  if (!new_sum_for_avg) {
+    return new_sum_for_avg.error();
+  }
+  _sum_sample_value = *new_sum_for_avg;
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -77,22 +79,20 @@ astl_status_code SampledValueMetric::Summarize() {
     _summary_logger.LogInfo("No samples to summarize.");
     return ASTL_STATUS_SUCCESS;
   }
-  // Log using the correct numeric type
-  switch (_value_type) {
-    case astl_value_type_t::ASTL_VALUE_UINT64:
-      // Compute average
-      _summary_data.avg.ui64 = _sum_sample_value / _sample_count;  // Update summary data with computed average
-      _summary_logger.LogInfo(
-          "Metric: {}, Description: {}, Units: {}, Maximum Value: {}, Minimum Value: {}, Average Value: "
-          "{}, Type: UINT64",
-          _name.c_str(), _description.c_str(), static_cast<int>(_units), _summary_data.max.ui64, _summary_data.min.ui64,
-          _summary_data.avg.ui64);
-      break;
-
-    default:
-      ASTL_LOG_ERROR("SampledValueMetric: unsupported type for metric: {}", _name);
-      return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+  if (_sample_count > 0) {
+    auto average = AstlValue::Divide(_sum_sample_value, _sample_count);
+    if (average) {
+      _summary_data.avg = average.value();
+    } else {
+      ASTL_LOG_ERROR("Error computing average sample value: {}", astlStatusString(average.error()));
+    }
   }
+  auto none = AstlValue{std::string{"<none>"}};
+  _summary_logger.LogInfo(
+      "Metric: {}, Description: {}, Units: {}, Maximum Value: {}, Minimum Value: {}, Average Value: {}"
+      ", Type {}",
+      _name.c_str(), _description.c_str(), static_cast<int>(_units), _summary_data.max.value_or(none),
+      _summary_data.min.value_or(none), _summary_data.avg.value_or(none), static_cast<int>(_value_type));
   return ASTL_STATUS_SUCCESS;
 }
 

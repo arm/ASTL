@@ -83,7 +83,8 @@ int main(int argc, char* argv[]) {
 
   // 1. Initialize
   astl_initialization_parameters_t init_params{};
-  status = astlInitialize(&init_params);
+  init_params._size = sizeof(astl_initialization_parameters_t);
+  status            = astlInitialize(&init_params);
   std::cout << "Initialize status: " << astlStatusString(status) << "\n";
 
   // 2. Get targets

@@ -24,6 +24,7 @@
 #include <utility>
 
 #include "astl/astl.h"
+#include "astl_value.hpp"
 #include "counter.hpp"
 #include "operation.hpp"
 #include "target.hpp"
@@ -33,17 +34,23 @@ namespace astl {
 struct SampledData {
   SampledData() = delete;
 
-  SampledData(OperationId operation_id, astl_value_t value)
+  SampledData(OperationId operation_id, AstlValue value)
       : operation_id{operation_id},
         value{value},
         timestamp{std::chrono::time_point_cast<SampleTimestamp::duration>(std::chrono::steady_clock::now())} {}
 
-  SampledData(OperationId operation_id, astl_value_t value, SampleTimestamp timestamp)
+  SampledData(OperationId operation_id, AstlValue value, SampleTimestamp timestamp)
       : operation_id{operation_id}, value{value}, timestamp{timestamp} {}
 
   OperationId     operation_id{kOperationIdInvalid};
-  astl_value_t    value;
+  AstlValue       value;
   SampleTimestamp timestamp;
+
+  // get the raw data of type T (must be exact match)
+  template <typename T>
+  const auto &get() const {
+    return std::get<T>(value.value);
+  };
 };
 
 /* ISampleSink is an interface for anything that can receive sampled data.

@@ -8,7 +8,7 @@ TEST_CASE("SampledValueMetric: construction & ReceiveSample single sample", "[Sa
   astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64);
   // 2) Create a sample with a random value.
   // NOLINTNEXTLINE
-  astl_value_t      val1{.ui64 = 40};
+  astl::AstlValue   val1{uint64_t{40}};
   astl::SampledData sample1(1, val1);
   auto              status1 = metric.ReceiveSample(sample1);
   REQUIRE(status1 == ASTL_STATUS_SUCCESS);
@@ -19,7 +19,7 @@ TEST_CASE("SampledValueMetric & ReceiveSample with not supported type", "[Sample
   astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT32);
   // 2) Create a sample with a random value.
   // NOLINTNEXTLINE
-  astl_value_t      val1{.ui32 = 40};
+  astl::AstlValue   val1{uint64_t{40}};
   astl::SampledData sample1(1, val1);
   auto              status1 = metric.ReceiveSample(sample1);
   REQUIRE(status1 == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
@@ -31,7 +31,7 @@ TEST_CASE("SampledValueMetric: GetSummaryData returns correct summary", "[Sample
   // NOLINTNEXTLINE
   std::vector<uint64_t> values = {10, 20, 30, 40};
   for (auto value : values) {
-    astl_value_t      sample_value{.ui64 = value};
+    astl::AstlValue   sample_value{uint64_t{value}};
     astl::SampledData sample(1, sample_value);
     auto              status = metric.ReceiveSample(sample);
     REQUIRE(status == ASTL_STATUS_SUCCESS);
@@ -43,7 +43,10 @@ TEST_CASE("SampledValueMetric: GetSummaryData returns correct summary", "[Sample
   // Retrieve summary
   auto summary = metric.GetSummaryData();
   // Expected: min=10, max=40, avg=(10+20+30+40)/4 = 25
-  REQUIRE(summary.min.ui64 == 10);
-  REQUIRE(summary.max.ui64 == 40);
-  REQUIRE(summary.avg.ui64 == 25);
+  auto as_u64 = [](const std::optional<astl::AstlValue> &val) -> uint64_t {
+    return std::get<uint64_t>(val.value().value);
+  };
+  REQUIRE(as_u64(summary.min) == 10);
+  REQUIRE(as_u64(summary.max) == 40);
+  REQUIRE(as_u64(summary.avg) == 25);
 }

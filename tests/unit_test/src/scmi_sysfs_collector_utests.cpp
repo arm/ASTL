@@ -39,10 +39,10 @@ TEST_CASE("ScmiSysfsCollector::ConfigureCollection - empty", "[scmi_sysfs_collec
   // ensure that configuring an empty set of operations doesn't touch the file system
   MockFileInterface mock_file_interface;
 
-  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("info/de_implementation_version"), _))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("de_implementation_version"), _))
       .SIDE_EFFECT(_2 = "0.0.0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("info/version"), _))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("version"), _))
       .SIDE_EFFECT(_2 = "0.0.1")
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -68,10 +68,10 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
   ALLOW_CALL(mock_file_interface, IsValid(_)).RETURN(true);
   ALLOW_CALL(mock_file_interface, HasWritePermission(_)).RETURN(true);
   ALLOW_CALL(mock_file_interface, HasReadPermission(_)).RETURN(true);
-  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"info/de_implementation_version"}, _))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"de_implementation_version"}, _))
       .SIDE_EFFECT(_2 = "0.0.0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"info/version"}, _))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"version"}, _))
       .SIDE_EFFECT(_2 = "0.0.1")
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -110,11 +110,11 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 
-  MockSampleSink     mock_sample_sink;
-  const astl_value_t expected_value{.ui64 = 0x42};
+  MockSampleSink        mock_sample_sink;
+  const astl::AstlValue expected_value{uint64_t{0x42}};
   REQUIRE_CALL(mock_sample_sink, SinkSamples(_, _))
       .WITH(_2.size() == 1)
-      .WITH(_2[0].value.ui64 == expected_value.ui64)
+      .WITH(_2[0].value == expected_value)
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // create the collector and its operations
@@ -160,10 +160,10 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
   ALLOW_CALL(mock_file_interface, IsValid(_)).RETURN(true);
   ALLOW_CALL(mock_file_interface, HasWritePermission(_)).RETURN(true);
   ALLOW_CALL(mock_file_interface, HasReadPermission(_)).RETURN(true);
-  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"info/de_implementation_version"}, _))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"de_implementation_version"}, _))
       .SIDE_EFFECT(_2 = "0.0.0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"info/version"}, _))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"version"}, _))
       .SIDE_EFFECT(_2 = "0.0.1")
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -217,17 +217,22 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 
-  MockSampleSink              mock_sample_sink;
-  const std::vector<uint64_t> expected_samples{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
-  std::vector<uint64_t>       samples;
+  MockSampleSink               mock_sample_sink;
+  const std::vector<uint64_t>  expected_raw_data_samples{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
+  std::vector<astl::AstlValue> expected_samples;
+  expected_samples.reserve(expected_raw_data_samples.size());
+  std::transform(expected_raw_data_samples.begin(), expected_raw_data_samples.end(),
+                 std::back_inserter(expected_samples),
+                 [](const auto& raw_value) { return astl::AstlValue{uint64_t{raw_value}}; });
+  std::vector<astl::AstlValue> samples;
   // each time SinkSamples is called, we push all of the values of the samples to our local `samples` vector
   // in the end, `samples` should match expected_samples, regardless of how many samples come in each call to
   // SinkSamples
   REQUIRE_CALL(mock_sample_sink, SinkSamples(_, _))
       // extra parens needed for proper macro parse, letting us mutate `samples`
       .TIMES(10)
-      .LR_SIDE_EFFECT((std::for_each(std::begin(_2), std::end(_2),
-                                     [&samples](auto& sample) { samples.push_back(sample.value.ui64); })))
+      .LR_SIDE_EFFECT(
+          (std::for_each(std::begin(_2), std::end(_2), [&samples](auto& sample) { samples.push_back(sample.value); })))
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // ALLOW_CALL(mock_sample_sink, SinkSamples(_, _)).RETURN(ASTL_STATUS_SUCCESS);

@@ -89,8 +89,6 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode* g
 
   auto des_dir = FileSystemNode::CreateDirectory("des", telemetry.get(), ProtocolType::SCMI_TELEMETRY);
 
-  auto top_info_dir = FileSystemNode::CreateDirectory("info", telemetry.get(), ProtocolType::SCMI_TELEMETRY);
-
   std::string initial_value;
   if (context.GetIntervalsAreDiscreteFlag()) {
     const auto& intervals = context.GetAvailableUpdateIntervalsMs();
@@ -105,13 +103,12 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode* g
                     " " + std::to_string(context.GetStepSize());
   }
 
-  top_info_dir->AddChild(FileSystemNode::CreateFile("available_update_intervals_ms", initial_value,
-                                                    FileAccess::READ_WRITE, top_info_dir.get(),
-                                                    ProtocolType::SCMI_TELEMETRY));
+  telemetry->AddChild(FileSystemNode::CreateFile("available_update_intervals_ms", initial_value, FileAccess::READ_WRITE,
+                                                 telemetry.get(), ProtocolType::SCMI_TELEMETRY));
 
-  top_info_dir->AddChild(
+  telemetry->AddChild(
       FileSystemNode::CreateFile("intervals_discrete", context.GetIntervalsAreDiscreteFlag() ? "1\n" : "0\n",
-                                 FileAccess::READ_WRITE, top_info_dir.get(), ProtocolType::SCMI_TELEMETRY));
+                                 FileAccess::READ_WRITE, telemetry.get(), ProtocolType::SCMI_TELEMETRY));
 
   // For each data event, create its event directory and add files.
   for (const auto& data_event : context.GetDataEvents()) {
@@ -165,7 +162,6 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode* g
   }
 
   telemetry->AddChild(std::move(des_dir));
-  telemetry->AddChild(std::move(top_info_dir));
   return telemetry;
 }
 

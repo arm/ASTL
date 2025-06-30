@@ -62,7 +62,8 @@ static const std::unordered_map<astl_status_code, const char*> kStatusMap = {
     {ASTL_STATUS_FILE_ERROR,                                 "FILE_ERROR"                                },
     {ASTL_STATUS_OUT_OF_MEMORY,                              "OUT_OF_MEMORY"                             },
     {ASTL_STATUS_DIVIDE_BY_ZERO,                             "DIVIDE_BY_ZERO"                            },
-    {ASTL_STATUS_INVALID_VALUE_TYPE,                         "ASTL_STATUS_INVALID_VALUE_TYPE"            },
+    {ASTL_STATUS_INVALID_VALUE_TYPE,                         "INVALID_VALUE_TYPE"                        },
+    {ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE,                   "INCOMPATIBLE_STRUCT_SIZE"                  },
 
     // Add new status codes here
 

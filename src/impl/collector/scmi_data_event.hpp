@@ -52,18 +52,17 @@ inline std::string to_string(const astl::ScmiDataEvent& data_event) {
                      data_event.originally_enabled ? "true" : "false", data_event.timestamp_enabled ? "true" : "false");
 }
 
-constexpr std::string_view kScmiTlmEnableFileName                   = "tlm_enable";
-constexpr std::string_view kScmiTlmEnableValue                      = "1";
-constexpr std::string_view kScmiDataEventEnableFileName             = "enable";
-constexpr std::string_view kScmiDataEventEnableValue                = "1";
-constexpr std::string_view kScmiDataEventDisableValue               = "0";
-constexpr std::string_view kScmiDataEventTstampEnableFileName       = "tstamp_enable";
-constexpr std::string_view kScmiDataEventTstampEnableValue          = "1";
-constexpr std::string_view kScmiDataEventTstampDisableValue         = "0";
-constexpr std::string_view kScmiDataEventValueFileName              = "value";
-constexpr std::string_view kScmiInfoDirName                         = "info";
-constexpr std::string_view kScmiInfoDeImplementationVersionFileName = "de_implementation_version";
-constexpr std::string_view kScmiInfoVersion                         = "version";
+constexpr std::string_view kScmiTlmEnableFileName               = "tlm_enable";
+constexpr std::string_view kScmiTlmEnableValue                  = "1";
+constexpr std::string_view kScmiDataEventEnableFileName         = "enable";
+constexpr std::string_view kScmiDataEventEnableValue            = "1";
+constexpr std::string_view kScmiDataEventDisableValue           = "0";
+constexpr std::string_view kScmiDataEventTstampEnableFileName   = "tstamp_enable";
+constexpr std::string_view kScmiDataEventTstampEnableValue      = "1";
+constexpr std::string_view kScmiDataEventTstampDisableValue     = "0";
+constexpr std::string_view kScmiDataEventValueFileName          = "value";
+constexpr std::string_view kScmiDeImplementationVersionFileName = "de_implementation_version";
+constexpr std::string_view kScmiVersion                         = "version";
 
 /*
  * @brief The data read from an SCMI sysfs data event's 'value' file.

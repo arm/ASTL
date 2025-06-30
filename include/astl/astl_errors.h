@@ -102,6 +102,7 @@ typedef enum _astl_status_code {
   ASTL_STATUS_OUT_OF_MEMORY              = 56,            //!< Memory allocation failed.
   ASTL_STATUS_DIVIDE_BY_ZERO             = 57,            //!< Attempted division by zero
   ASTL_STATUS_INVALID_VALUE_TYPE         = 58,            //!< Invalid astl_value_type_t for operation
+  ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE   = 59,            //!< A struct parameter's _size property doesn't match
 
   // Add new status codes here
 
