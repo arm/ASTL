@@ -212,12 +212,12 @@ TEST_CASE("MetricManager::ProcessData processes valid sample and returns success
                                      CollectorType::SCMI, std::vector<std::string>{}));
   astl::MetricManagerTestAccessor::InjectOperation(mgr, op_id, metric_ptr);
 
-  astl_value_t             val1{.ui64 = 256};  // Sample value
+  astl::AstlValue          val1{uint64_t{256}};  // Sample value
   astl::SampledData        sample1(op_id, val1);
   std::vector<SampledData> data{sample1};
   REQUIRE(mgr.ProcessData(data) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric_ptr->received.size() == 1);
-  REQUIRE(metric_ptr->received[0].value.ui64 == 256);
+  REQUIRE(metric_ptr->received[0].get<uint64_t>() == 256);
 }
 
 TEST_CASE("MetricManager::ProcessData processes multiple samples for the same metric", "[MetricManager]") {
@@ -234,16 +234,16 @@ TEST_CASE("MetricManager::ProcessData processes multiple samples for the same me
                                      CollectorType::SCMI, std::vector<std::string>{}));
   astl::MetricManagerTestAccessor::InjectOperation(mgr, op_id, metric_ptr);
 
-  astl_value_t             val1{.ui64 = 100};
-  astl_value_t             val2{.ui64 = 200};
+  astl::AstlValue          val1{uint64_t{100}};
+  astl::AstlValue          val2{uint64_t{200}};
   SampledData              sample1(op_id, val1);
   SampledData              sample2(op_id, val2);
   std::vector<SampledData> data{sample1, sample2};
 
   REQUIRE(mgr.ProcessData(data) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric_ptr->received.size() == 2);
-  REQUIRE(metric_ptr->received[0].value.ui64 == 100);
-  REQUIRE(metric_ptr->received[1].value.ui64 == 200);
+  REQUIRE(metric_ptr->received[0].get<uint64_t>() == 100);
+  REQUIRE(metric_ptr->received[1].get<uint64_t>() == 200);
 }
 
 TEST_CASE("MetricManager::ProcessData processes different metrics for different operations", "[MetricManager]") {
@@ -267,8 +267,8 @@ TEST_CASE("MetricManager::ProcessData processes different metrics for different 
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 1, metric_ptr1);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 2, metric_ptr2);
 
-  astl_value_t             val1{.ui64 = 5};
-  astl_value_t             val2{.ui64 = 7};
+  astl::AstlValue          val1{uint64_t{5}};
+  astl::AstlValue          val2{uint64_t{7}};
   SampledData              sample1(1, val1);
   SampledData              sample2(2, val2);
   SampledData              sample3(1, val1);
@@ -302,8 +302,8 @@ TEST_CASE("MetricManager::ProcessData stops on error and does not process furthe
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 1, metric_ptr1);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 2, metric_ptr2);
 
-  astl_value_t             val1{.ui64 = 1};
-  astl_value_t             val2{.ui64 = 2};
+  astl::AstlValue          val1{uint64_t{1}};
+  astl::AstlValue          val2{uint64_t{2}};
   SampledData              sample1(1, val1);
   SampledData              sample2(2, val2);
   SampledData              sample3(1, val1);

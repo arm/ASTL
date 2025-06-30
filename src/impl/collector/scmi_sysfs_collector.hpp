@@ -234,15 +234,13 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(Collect
 
   // log some version info
   std::string de_implementation_version;
-  result = _scmi_file_interface.Read(std::filesystem::path{kScmiInfoDirName} / kScmiInfoDeImplementationVersionFileName,
-                                     de_implementation_version);
-  ASTL_LOG_INFO("info/de_implementation_version: {}",
+  result =
+      _scmi_file_interface.Read(std::filesystem::path{kScmiDeImplementationVersionFileName}, de_implementation_version);
+  ASTL_LOG_INFO("de_implementation_version: {}",
                 result == ASTL_STATUS_SUCCESS ? de_implementation_version : astl::to_string(result));
   std::string telemetry_protocol_version;
-  result =
-      _scmi_file_interface.Read(std::filesystem::path{kScmiInfoDirName} / kScmiInfoVersion, de_implementation_version);
-  ASTL_LOG_INFO("info/version: {}",
-                result == ASTL_STATUS_SUCCESS ? telemetry_protocol_version : astl::to_string(result));
+  result = _scmi_file_interface.Read(std::filesystem::path{kScmiVersion}, telemetry_protocol_version);
+  ASTL_LOG_INFO("version: {}", result == ASTL_STATUS_SUCCESS ? telemetry_protocol_version : astl::to_string(result));
 
   return ExecuteCollectionOperations(_configuration->Operations().operationsBeforeStart);
 }
@@ -496,8 +494,8 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(Sc
   std::string data_read;
   auto        result = _scmi_file_interface.Read(data_event_dir_path.value() / kScmiDataEventValueFileName, data_read);
   if (result != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_CRITICAL("Error {} executing SCMI read operation for data event ID: {:04X}",
-                      astl::to_string(data_event_dir_path.error()), operation.scmi_data_event_id);
+    ASTL_LOG_CRITICAL("Error {} executing SCMI read operation for data event ID: {:04X}", astlStatusString(result),
+                      operation.scmi_data_event_id);
     return result;
   }
   // TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen optimization
@@ -507,8 +505,8 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(Sc
     return parsed_value.error();
   }
   auto        timestamp = parsed_value->first;
-  auto        value     = parsed_value->second;
-  SampledData sampled_data{operation.GetId(), value.AsAstlValue(), timestamp};
+  auto        value     = AstlValue{parsed_value->second.value};
+  SampledData sampled_data{operation.GetId(), value, timestamp};
 
   if (_sample_sink) {
     return _sample_sink->SinkSamples(_configuration->Target(), {&sampled_data, 1});

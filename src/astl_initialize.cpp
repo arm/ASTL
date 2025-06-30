@@ -39,6 +39,9 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   if (!init_params) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+  if (init_params->_size != sizeof(astl_initialization_parameters_t)) {
+    return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
+  }
   // TODO(ASTL-39) - add topologymanager. For now, hard-code one target
   std::unique_ptr<astl::ITarget> target = std::make_unique<astl::Target>("Scmi0", "The SCMI interface on Socket0");
 
@@ -104,6 +107,10 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
 
   astl_status_code status =
       collector_manager->ConfigureCollectionOnTarget(target.get(), collection_params, std::move(operations));
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to configure collection on target: {}", astlStatusString(status));
+    return status;
+  }
 
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
@@ -114,5 +121,5 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   orchestrator->SetTargets(std::move(targets));
   // replace the existing orchestrator with the newly constructed one
   astl::Orchestrator::GetInstance() = std::move(orchestrator);
-  return ASTL_STATUS_SUCCESS;
+  return status;
 }

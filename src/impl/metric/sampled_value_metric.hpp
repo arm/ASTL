@@ -19,8 +19,11 @@
 #ifndef SAMPLED_VALUE_METRIC_HPP_
 #define SAMPLED_VALUE_METRIC_HPP_
 
+#include <optional>
+
 #include "astl/astl.h"
 #include "astl_logger.hpp"
+#include "astl_value.hpp"
 #include "raw_metric.hpp"
 
 namespace astl {
@@ -31,9 +34,9 @@ namespace astl {
  * from sampled data in SampledValueMetric.
  */
 struct MinMaxAvgSummaryData {
-  astl_value_t min;  ///< Minimum sample value seen
-  astl_value_t max;  ///< Maximum sample value seen
-  astl_value_t avg;  ///< Computed average of sample values
+  std::optional<AstlValue> min;  ///< Minimum sample value seen
+  std::optional<AstlValue> max;  ///< Maximum sample value seen
+  std::optional<AstlValue> avg;  ///< Computed average of sample values
 };
 
 /**
@@ -96,15 +99,18 @@ class SampledValueMetric : public RawMetric {
   MinMaxAvgSummaryData GetSummaryData() const;
 
  private:
+  /** @brief private helper to update statistics for summary later */
+  astl_status_code UpdateStatistics(const SampledData &sample);
+
   std::string       _name;
   std::string       _description;
   astl_units_t      _units;
   astl_value_type_t _value_type;
 
   MinMaxAvgSummaryData _summary_data;  // Summary data for min, max, avg
-  uint64_t
-      _sum_sample_value;   // Sum of sample values for average calculation. Uses uint64_t to reduce risk of overflow.
-                           // uint64_t is the largest natively support integer type across Windows, macOS and Linux.
+  AstlValue            _sum_sample_value{
+      uint64_t{0}};  // Sum of sample values for average calculation. Uses uint64_t to reduce risk of overflow.
+                     // uint64_t is the largest natively support integer type across Windows, macOS and Linux.
   uint64_t _sample_count;  // Count of samples received
   // Create a Logger instance explicitly to log samples
   astl::Logger _raw_sample_logger{astl::LogLevel::Info, false /* Console logging disabled */,
