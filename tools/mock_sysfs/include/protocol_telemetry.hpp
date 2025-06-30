@@ -84,13 +84,15 @@ class DataEvent {
   DataEvent(DataEvent&&)                 = delete;
   DataEvent& operator=(const DataEvent&) = delete;
   DataEvent& operator=(DataEvent&&)      = delete;
-  DataEvent(uint16_t data_event_id, bool enable, bool tstamp_enable, double latest_value, uint64_t latest_timestamp,
-            uint32_t compo_instance_id, uint32_t compo_type, uint32_t instance_id, bool persistent, bool tstamp_exp,
-            uint32_t type, std::string unit, std::string unit_exp)
+  DataEvent(uint16_t data_event_id, bool enable, bool tstamp_enable, _astl_value_t latest_value,
+            _astl_value_type_t value_type, uint64_t latest_timestamp, uint32_t compo_instance_id, uint32_t compo_type,
+            uint32_t instance_id, bool persistent, bool tstamp_exp, uint32_t type, std::string unit,
+            std::string unit_exp)
       : id_(data_event_id),
         enable_(enable),
         tstamp_enable_(tstamp_enable),
         latest_value_(latest_value),
+        value_type_(value_type),
         latest_timestamp_(latest_timestamp),
         compo_instance_id_(compo_instance_id),
         compo_type_(compo_type),
@@ -102,13 +104,14 @@ class DataEvent {
         unit_exp_(std::move(unit_exp)) {}
   virtual ~DataEvent() = default;
 
-  virtual std::string Generate() = 0;
+  virtual astl_value_t Generate() = 0;
 
-  uint16_t id_;
-  bool     enable_;
-  bool     tstamp_enable_;
-  double   latest_value_;
-  uint64_t latest_timestamp_;
+  uint16_t          id_;
+  bool              enable_;
+  bool              tstamp_enable_;
+  astl_value_t      latest_value_;
+  astl_value_type_t value_type_;
+  uint64_t          latest_timestamp_;
 
   uint32_t    compo_instance_id_;
   uint32_t    compo_type_;

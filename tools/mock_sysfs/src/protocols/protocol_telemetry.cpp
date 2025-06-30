@@ -30,7 +30,8 @@ inline void UpdateEventByInterval(DataEvent* event, uint64_t current_ts, uint64_
 
   // Advance the generator state for each missed tick.
   for (uint64_t i = 0; i < count; ++i) {
-    event->latest_value_ = std::stod(event->Generate());
+    // TODO(ASTL-116) - Handle all other _astl_value_type_t
+    event->latest_value_ = event->Generate();
   }
 
   event->latest_timestamp_ = current_ts;
@@ -126,9 +127,12 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode* g
                                                    FileAccess::READ_WRITE, event_dir.get(),
                                                    ProtocolType::SCMI_TELEMETRY));
 
-    event_dir->AddChild(FileSystemNode::CreateFile("value", std::to_string(data_event->latest_value_),
-                                                   FileAccess::READ_ONLY, event_dir.get(),
-                                                   ProtocolType::SCMI_TELEMETRY));
+    // TODO(ASTL-116) - Handle all other _astl_value_type_t
+    event_dir->AddChild(FileSystemNode::CreateFile(
+        // NOLINTBEGIN
+        "value", std::format("{} {:016x}\n", data_event->latest_timestamp_, data_event->latest_value_.ui64),
+        // NOLINTEND
+        FileAccess::READ_ONLY, event_dir.get(), ProtocolType::SCMI_TELEMETRY));
 
     auto info_dir = FileSystemNode::CreateDirectory("info", event_dir.get(), ProtocolType::SCMI_TELEMETRY);
 
@@ -367,13 +371,14 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
 
         UpdateEventByInterval(event.get(), now_ms, interval_ms);
 
+        // Append latest timestamp if enabled, else 0
+        result += event->tstamp_enable_ ? std::to_string(event->latest_timestamp_) + " " : "0 ";
         result += std::format("0x{:04x} ", static_cast<unsigned int>(event->id_));
 
-        if (event->tstamp_enable_) {
-          result += std::to_string(event->latest_timestamp_) + " ";
-        }
-
-        result += std::to_string(event->latest_value_) + "\n";
+        // TODO(ASTL-116) - Handle all other _astl_value_type_t
+        // NOLINTBEGIN
+        result += std::format("{:016x} \n", event->latest_value_.ui64);
+        // NOLINTEND
       }
 
       return result;
@@ -424,10 +429,15 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
 
       UpdateEventByInterval(data_event, now_ms, interval_ms);
 
+      // TODO(ASTL-116) - Handle all other _astl_value_type_t
       if (data_event->tstamp_enable_) {
-        return std::to_string(now_ms) + " " + std::to_string(data_event->latest_value_) + "\n";
+        // NOLINTBEGIN
+        return std::format("{} {:016x}\n", std::to_string(now_ms), data_event->latest_value_.ui64);
+        // NOLINTEND
       }
-      return std::to_string(data_event->latest_value_) + "\n";
+      // NOLINTBEGIN
+      return std::format("0 {:016x}\n", data_event->latest_value_.ui64);
+      // NOLINTEND
     }
 
     default:
