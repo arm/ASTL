@@ -22,16 +22,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fetch Certificate for Proxy
+        run: |
+          curl --retry 5 -f -s https://artifactory.arm.com/artifactory/vault.pki/ent-pki/pem/certs/ARM%20Enterprise%20PKI%20Root%20CA.pem -o arm.pem
+
       - name: 🚀 AI Code Review
-        uses: Arm-Debug/ai-code-review@315af0ad1604c20474454aafb4b2b56b9a6b8129
+        uses: Arm-Debug/ai-code-review@9ac097f58c2c56080be54269c9ca981edbb7b805
         continue-on-error: true
         with:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_PROXY_KEY_FOR_SELF_HOSTED_RUNNERS }}
+          OPENAI_API_HOSTNAME: 'openai-api-proxy.geo.arm.com'
+          OPENAI_API_PATH: '/api/providers/openai-eu/v1/chat/completions'
           OPENAI_API_MODEL: "o4-mini"
           REASONING_EFFORT: "high"
           CODE_REVIEW_GUIDELINES: ".github/workflows/AI_CODE_REVIEW.md"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/arm.pem
 
       - name: 🏷️ Remove 'request-ai-review' label
         if: always()
