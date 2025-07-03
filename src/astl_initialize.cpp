@@ -101,7 +101,7 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   astl_collection_parameters_t collection_params{
       ._size              = sizeof(astl_collection_parameters_t),
       ._sampling_interval = 0,
-      ._collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+      ._collection_mode   = ASTL_COLLECTION_MODE_SAMPLING,
       ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
   };
 
