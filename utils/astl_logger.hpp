@@ -16,24 +16,78 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#include <magic_enum/magic_enum.hpp>
+
 #include "astl_utils.hpp"
 namespace astl {
 
 // add astl_status_code to the to_string overload set
 inline std::string to_string(astl_status_code status_code) { return astlStatusString(status_code); }
 
+// Generic to_string for any enum using magic_enum
+template <typename T>
+requires std::is_enum_v<T>
+inline std::string to_string(T enum_value) {
+  auto enum_name = magic_enum::enum_name(enum_value);
+  if (!enum_name.empty()) {
+    return std::string(enum_name);
+  }
+  // Fallback to numeric value if enum name is not found
+  return std::to_string(static_cast<std::underlying_type_t<T>>(enum_value));
+}
+
 // stream output function for astl_status_code
 inline std::ostream& operator<<(std::ostream& output_stream, astl_status_code status_code) {
   return output_stream << astl::to_string(status_code);
 }
 
+// Generic stream output for any enum using magic_enum
+template <typename T>
+requires std::is_enum_v<T>
+inline std::ostream& operator<<(std::ostream& output_stream, T enum_value) {
+  return output_stream << astl::to_string(enum_value);
+}
+
 }  // namespace astl
 
-// std::format formatter for astl_status_code
+/**
+ * @brief std::format formatter specialization for astl_status_code
+ *
+ * This formatter enables astl_status_code values to be used directly in std::format calls.
+ * It leverages the existing astl::to_string(astl_status_code) function to convert the
+ * status code to its string representation.
+ *
+ * @example
+ * astl_status_code status = ASTL_SUCCESS;
+ * auto message = std::format("Operation result: {}", status);
+ */
 template <>
 struct std::formatter<astl_status_code> : std::formatter<std::string> {
   auto format(astl_status_code status_code, auto& ctx) const {
     return std::formatter<std::string>::format(astl::to_string(status_code), ctx);
+  }
+};
+
+/**
+ * @brief Generic std::format formatter for any enum type using magic_enum
+ *
+ * This template specialization provides automatic formatting support for any enum type
+ * when used with std::format. It uses the magic_enum library to convert enum values
+ * to their string names at runtime.
+ *
+ * @tparam T The enum type to format (constrained by std::is_enum_v<T>)
+ *
+ */
+template <typename T>
+requires std::is_enum_v<T>
+struct std::formatter<T> : std::formatter<std::string> {
+  auto format(T enum_value, auto& ctx) const {
+    auto enum_name = magic_enum::enum_name(enum_value);
+    if (!enum_name.empty()) {
+      return std::formatter<std::string>::format(std::string(enum_name), ctx);
+    }
+    // Fallback to numeric value if enum name is not found
+    return std::formatter<std::string>::format(std::to_string(static_cast<std::underlying_type_t<T>>(enum_value)), ctx);
   }
 };
 

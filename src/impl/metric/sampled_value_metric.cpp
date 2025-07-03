@@ -35,20 +35,22 @@ SampledValueMetric::SampledValueMetric(const char* name, const char* description
   if (zero_val.has_value()) {
     _summary_data = {.min = std::nullopt, .max = std::nullopt, .avg = zero_val.value()};
   } else {
-    ASTL_LOG_INFO("SampledValueMetric: unsupported type {} for statistics for metric: {}", static_cast<int>(value_type),
-                  _name);
+    ASTL_LOG_INFO("SampledValueMetric: unsupported type {} for statistics for metric: {}", value_type, _name);
   }
+  // Header Initialization of loggers
+  _raw_sample_logger.LogInfo("Metric, Description, Units, Raw Value \n");
+  _summary_logger.LogInfo("Metric, Description, Units, Maximum Value, Minimum Value, Average Value, Type \n");
 }
 
 astl_status_code SampledValueMetric::ReceiveSample(const SampledData& sample) {
   const auto sample_type = sample.value.ToAstlUnionValue().second;
   if (sample_type != _value_type) {
-    ASTL_LOG_ERROR("SampledValueMetric: received sample with type {} for metric {}, expected type {}",
-                   static_cast<int>(sample_type), _name.c_str(), static_cast<int>(_value_type));
+    ASTL_LOG_ERROR("SampledValueMetric: received sample with type {} for metric {}, expected type {}", sample_type,
+                   _name.c_str(), _value_type);
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
-  _raw_sample_logger.LogInfo("Metric: {}, Description: {}, Units: {}, Raw Value: {}", _name.c_str(),
-                             _description.c_str(), static_cast<int>(_units), sample.value);
+  // LOG : Metric, Description, Units, Raw-Value
+  _raw_sample_logger.LogInfo("{}, {}, {}, {} \n", _name.c_str(), _description.c_str(), _units, sample.value);
   auto status = UpdateStatistics(sample);
 
   _sample_count++;
@@ -88,11 +90,10 @@ astl_status_code SampledValueMetric::Summarize() {
     }
   }
   auto none = AstlValue{std::string{"<none>"}};
-  _summary_logger.LogInfo(
-      "Metric: {}, Description: {}, Units: {}, Maximum Value: {}, Minimum Value: {}, Average Value: {}"
-      ", Type {}",
-      _name.c_str(), _description.c_str(), static_cast<int>(_units), _summary_data.max.value_or(none),
-      _summary_data.min.value_or(none), _summary_data.avg.value_or(none), static_cast<int>(_value_type));
+  // LOG : Metric, Description, Units, Maximum Value, Minimum Value, Average Value, Type
+  _summary_logger.LogInfo("{}, {}, {}, {}, {}, {}, {} \n", _name.c_str(), _description.c_str(), _units,
+                          _summary_data.max.value_or(none), _summary_data.min.value_or(none),
+                          _summary_data.avg.value_or(none), _value_type);
   return ASTL_STATUS_SUCCESS;
 }
 
