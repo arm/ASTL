@@ -19,6 +19,8 @@
 #ifndef RAW_METRIC_HPP_
 #define RAW_METRIC_HPP_
 
+#include <span>
+
 #include "astl/astl.h"
 #include "i_metric.hpp"
 
@@ -64,6 +66,16 @@ class RawMetric : public IMetric {
   }
 
   astl_status_code ReceiveSample(const SampledData &sample) override = 0;
+
+  /**
+   * @brief Return a view of the samples received by this metric
+   */
+  std::span<const SampledData> GetSamples() const override = 0;
+
+  /**
+   * @brief Reset the metric state, dropping all collected samples
+   */
+  void Reset() override = 0;
 
   astl_status_code Summarize() override = 0;
 

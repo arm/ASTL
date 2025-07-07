@@ -169,6 +169,14 @@ class Orchestrator : public ISampleSink {
    */
   std::expected<uint32_t, astl_status_code> GetCounterSampleCount(const ITarget *target, const ICounter *counter) const;
 
+  std::span<const SampledData> GetSamples() const { return _samples; }
+
+  // TODO(ASTL-58): when OutputManager is implemented, revisit to see if GetMetricManager is even needed
+  /**
+   * @brief Return a reference to a pointer to the MetricManager, used to enumerate metrics
+   */
+  const auto &GetMetricManager() const { return _metric_manager; }
+
   /**
    * @brief Implementation of the ISampleSink interface - Receives samples from CollectorManager
    */

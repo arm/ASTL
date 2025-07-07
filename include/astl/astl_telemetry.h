@@ -78,7 +78,7 @@ ASTL_API astl_status_code astlGetTargetCount(uint32_t* target_count);
  *                                         must be set to sizeof(astl_target_properties_t) for versioning
  *
  * @param[in/out] target_count             The number of elements the targets buffer was allocated
- *                                         for Returns the number of elements written to the targets
+ *                                         for. Returns the number of elements written to the targets
  *                                         buffer.
  *
  * @return astl_status_code
@@ -233,7 +233,7 @@ ASTL_API astl_status_code astlGetCounterCount(astl_target_handle_t target_handle
  *                                         must be set to sizeof(astl_counter_properties_t) for versioning
  *
  * @param[in/out] counter_count            The number of elements the counters buffer was allocated
- *                                         for Returns the number of elements written to the counter
+ *                                         for. Returns the number of elements written to the counter
  *                                         buffer.
  *
  * @return astl_status_code
@@ -334,7 +334,7 @@ ASTL_API astl_status_code astlGetMetricCount(astl_target_handle_t target_handle_
  *                                         must be set to sizeof(astl_metric_properties_t) for versioning
  *
  * @param[in/out] metric_count             The number of elements the metrics buffer was allocated
- *                                         for Returns the number of elements written to the metrics
+ *                                         for. Returns the number of elements written to the metrics
  *                                         buffer.
  *
  * @return astl_status_code
@@ -400,7 +400,7 @@ ASTL_API astl_status_code astlGetMetricGroupCount(astl_target_handle_t target_ha
  *                                         must be set to sizeof(astl_metric_group_properties_t) for versioning
  *
  * @param[in/out] metric_group_count       The number of elements the metric groups buffer was
- * allocated for Returns the number of elements written to the metric groups buffer.
+ * allocated for. Returns the number of elements written to the metric groups buffer.
  *
  * @return astl_status_code
  */

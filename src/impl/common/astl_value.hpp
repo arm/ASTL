@@ -66,6 +66,15 @@ struct AstlValue {
   static std::expected<AstlValue, astl_status_code> FromUnion(const astl_value_t& val, astl_value_type_t type);
 
   /**
+   * @brief Create an AstlValue of 0 value of the largest representative of the given type
+   *        For example, if the type given is ASTL_VALUE_UINT16, this will return an AstlValue with
+   *        uint64_t as its representation. A float or double will give back a double
+   *
+   *        This is useful for creating a base for arithmetic operations, like a running sum for average
+   */
+  static std::expected<AstlValue, astl_status_code> FromUnionPromoting(astl_value_type_t type);
+
+  /**
    * @brief Create an AstlValue of the given type with the minimal possible value
    *
    * @return an AstlValue instance with the minimum possible value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE

@@ -20,15 +20,19 @@
 #define OPERATION_HPP_
 
 #include <astl_logger.hpp>
+#include <atomic>
 #include <chrono>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
 namespace astl {
 
 using SamplingInterval = std::chrono::duration<uint32_t, std::milli>;
-using SampleTimestamp  = std::chrono::time_point<std::chrono::steady_clock, std::chrono::microseconds>;
+// unsigned representation for timestamps - not suitable for differences
+using SampleMicroseconds = std::chrono::duration<uint64_t, std::micro>;
+using SampleTimestamp    = std::chrono::time_point<std::chrono::steady_clock, SampleMicroseconds>;
 
 using OperationId                    = uint16_t;
 constexpr size_t kOperationIdInvalid = std::numeric_limits<OperationId>::max();
@@ -59,9 +63,8 @@ class Operation {
    * an invalid kOperationIdInvalid value.
    */
   static OperationId GetNextOperationId() {
-    static OperationId next_operation_id{};
-    auto               this_id = next_operation_id;
-    next_operation_id++;
+    static std::atomic<OperationId> next_operation_id{0};
+    auto                            this_id = next_operation_id.fetch_add(1, std::memory_order_relaxed);
     if (this_id == kOperationIdInvalid) {
       ASTL_LOG_CRITICAL("ASTL has run out of unique OperationIds. This error is currently unrecoverable");
       throw std::runtime_error("ASTL has run out of unique OperationIds. This error is currently unrecoverable");

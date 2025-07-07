@@ -165,6 +165,20 @@ struct MockSampleSink : public astl::ISampleSink {
   MAKE_MOCK2(SinkSamples, astl_status_code(astl::ITarget* target, std::span<astl::SampledData> samples), override);
 };
 
+struct MockMetric : public astl::IMetric {
+  using expected_operation_sequence = std::expected<astl::OperationSequence, astl_status_code>;
+
+  MAKE_MOCK1(CheckCapabilities, auto(const astl::Capabilities& capabilities)->bool, const override);
+  MAKE_MOCK0(GetOperations, auto()->expected_operation_sequence, const override);
+  MAKE_MOCK1(ReceiveSample, auto(const astl::SampledData& sample)->astl_status_code, override);
+
+  using samples_t = std::span<const astl::SampledData>;
+  MAKE_MOCK0(GetSamples, auto()->samples_t, const override);
+  MAKE_MOCK0(Reset, auto()->void, override);
+  MAKE_MOCK0(Summarize, auto()->astl_status_code, override);
+  MAKE_MOCK1(GetProperties, auto(astl_metric_properties_t* properties)->astl_status_code, const override);
+};
+
 struct MockMetricManager : public astl::IMetricManager {
   static constexpr bool trompeloeil_movable_mock = true;
 
