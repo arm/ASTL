@@ -27,6 +27,8 @@
 #include <string>
 #include <variant>
 
+#include "astl_logger.hpp"
+
 namespace astl {
 
 AstlValue::AstlValue(uint8_t val) : value{val} {}
@@ -56,6 +58,23 @@ std::expected<AstlValue, astl_status_code> AstlValue::FromUnion(const astl_value
     case ASTL_VALUE_STRING:      return AstlValue{std::string(val.str ? val.str : "")};
     case ASTL_VALUE_UNKNOWN:     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     default:                     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+  // clang-format on
+}
+
+std::expected<AstlValue, astl_status_code> AstlValue::FromUnionPromoting(astl_value_type_t type) {
+  // clang-format off
+  switch (type) {
+    case ASTL_VALUE_UINT8:     return AstlValue{uint64_t{0}};
+    case ASTL_VALUE_UINT16:    return AstlValue{uint64_t{0}};
+    case ASTL_VALUE_UINT32:    return AstlValue{uint64_t{0}};
+    case ASTL_VALUE_UINT64:    return AstlValue{uint64_t{0}};
+    case ASTL_VALUE_FLOAT32:   return AstlValue{0.0};
+    case ASTL_VALUE_FLOAT64:   return AstlValue{0.0};
+    case ASTL_VALUE_BOOL8:     return AstlValue{uint64_t{0}};
+    case ASTL_VALUE_STRING:    return AstlValue{std::string()};
+    case ASTL_VALUE_UNKNOWN:   return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    default:                   return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
   // clang-format on
 }
@@ -148,6 +167,13 @@ std::expected<AstlValue, astl_status_code> AstlValue::Add(const AstlValue& adden
       [](auto&& left, auto&& right) -> std::expected<AstlValue, astl_status_code> {
         using X = std::decay_t<decltype(left)>;
         using Y = std::decay_t<decltype(right)>;
+
+        // disallow adding integral types with floating point types
+        if constexpr ((std::is_integral_v<X> && !std::is_integral_v<Y>) ||
+                      (!std::is_integral_v<X> && std::is_integral_v<Y>)) {
+          ASTL_LOG_ERROR("Cannot add integral type with floading point type");
+          return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+        }
 
         if constexpr (std::is_arithmetic_v<X> && std::is_arithmetic_v<Y>) {
           // Cast both operands to common type

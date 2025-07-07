@@ -80,6 +80,10 @@ struct TestMetric : public IMetric {
     return OperationSequence{};
   }
 
+  std::span<const SampledData> GetSamples() const override { return {received}; }
+
+  void Reset() override { received.clear(); }
+
   astl_status_code Summarize() override {
     // No-op summary
     return summarizeStatus;

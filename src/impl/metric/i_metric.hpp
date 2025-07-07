@@ -20,6 +20,7 @@
 #define I_METRIC_HPP_
 
 #include <expected>
+#include <span>
 #include <string>
 
 #include "astl/astl.h"
@@ -71,6 +72,16 @@ class IMetric {
    * @return astl_status_code
    */
   virtual astl_status_code ReceiveSample(const SampledData &sample) = 0;
+
+  /**
+   * @brief Return a view of the samples received by this metric
+   */
+  virtual std::span<const SampledData> GetSamples() const = 0;
+
+  /**
+   * @brief Reset the metric state, dropping all collected samples
+   */
+  virtual void Reset() = 0;
 
   /**
    * @brief Summarize the metric.

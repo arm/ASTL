@@ -27,19 +27,8 @@ SampledValueMetric::SampledValueMetric(const char* name, const char* description
       _units(units),
       _value_type(value_type),
       _summary_data{},
-      _sum_sample_value{uint64_t{0}},
-      _sample_count{0} {
-  // Initialize summary data based on the value type
-  astl_value_t val{0};
-  auto         zero_val = AstlValue::FromUnion(val, _value_type);
-  if (zero_val.has_value()) {
-    _summary_data = {.min = std::nullopt, .max = std::nullopt, .avg = zero_val.value()};
-  } else {
-    ASTL_LOG_INFO("SampledValueMetric: unsupported type {} for statistics for metric: {}", value_type, _name);
-  }
-  // Header Initialization of loggers
-  _raw_sample_logger.LogInfo("Metric, Description, Units, Raw Value \n");
-  _summary_logger.LogInfo("Metric, Description, Units, Maximum Value, Minimum Value, Average Value, Type \n");
+      _sum_sample_value{uint64_t{0}} {
+  InitializeSamples();
 }
 
 astl_status_code SampledValueMetric::ReceiveSample(const SampledData& sample) {
@@ -52,10 +41,16 @@ astl_status_code SampledValueMetric::ReceiveSample(const SampledData& sample) {
   // LOG : Metric, Description, Units, Raw-Value
   _raw_sample_logger.LogInfo("{}, {}, {}, {} \n", _name.c_str(), _description.c_str(), _units, sample.value);
   auto status = UpdateStatistics(sample);
-
-  _sample_count++;
+  _samples.push_back(sample);
   return status;
 }
+
+std::span<const SampledData> SampledValueMetric::GetSamples() const {
+  // Return a span of the samples received by this metric
+  return std::span<const SampledData>(_samples);
+}
+
+void SampledValueMetric::Reset() { InitializeSamples(); }
 
 astl_status_code SampledValueMetric::UpdateStatistics(const SampledData& sample) {
   if (!sample.value.IsArithmetic()) {
@@ -74,20 +69,41 @@ astl_status_code SampledValueMetric::UpdateStatistics(const SampledData& sample)
   return ASTL_STATUS_SUCCESS;
 }
 
+void SampledValueMetric::InitializeSamples() {
+  // Reset the metric state
+  _samples.clear();
+  _summary_data          = MinMaxAvgSummaryData{};
+  auto from_union_result = AstlValue::FromUnionPromoting(_value_type);
+  if (from_union_result.has_value()) {
+    _sum_sample_value = from_union_result.value();
+  } else {
+    ASTL_LOG_ERROR(
+        "SampledValueMetric: failed to create initial sum for metric: "
+        "{} with type {} because it's a non-arithmetic type",
+        _name, _value_type);
+  }
+  // Initialize summary data based on the value type
+  astl_value_t val{0};
+  auto         zero_val = AstlValue::FromUnion(val, _value_type);
+  if (zero_val.has_value()) {
+    _summary_data = {.min = std::nullopt, .max = std::nullopt, .avg = zero_val.value()};
+  } else {
+    ASTL_LOG_INFO("SampledValueMetric: unsupported type {} for statistics for metric: {}", _value_type, _name);
+  }
+}
+
 astl_status_code SampledValueMetric::Summarize() {
   // Compute min, max, and average values for the received samples.
   // Only one numeric type is valid for a given metric instance.
-  if (_sample_count == 0) {
+  if (_samples.empty()) {
     _summary_logger.LogInfo("No samples to summarize.");
     return ASTL_STATUS_SUCCESS;
   }
-  if (_sample_count > 0) {
-    auto average = AstlValue::Divide(_sum_sample_value, _sample_count);
-    if (average) {
-      _summary_data.avg = average.value();
-    } else {
-      ASTL_LOG_ERROR("Error computing average sample value: {}", astlStatusString(average.error()));
-    }
+  auto average = AstlValue::Divide(_sum_sample_value, _samples.size());
+  if (average) {
+    _summary_data.avg = average.value();
+  } else {
+    ASTL_LOG_ERROR("Error computing average sample value: {}", astlStatusString(average.error()));
   }
   auto none = AstlValue{std::string{"<none>"}};
   // LOG : Metric, Description, Units, Maximum Value, Minimum Value, Average Value, Type

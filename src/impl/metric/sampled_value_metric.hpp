@@ -20,6 +20,7 @@
 #define SAMPLED_VALUE_METRIC_HPP_
 
 #include <optional>
+#include <span>
 
 #include "astl/astl.h"
 #include "astl_logger.hpp"
@@ -73,6 +74,17 @@ class SampledValueMetric : public RawMetric {
    * @return astl_status_code indicating success or failure.
    */
   astl_status_code ReceiveSample(const SampledData &sample) override;
+
+  /**
+   * @brief Return a view of the samples received by this metric
+   */
+  std::span<const SampledData> GetSamples() const override;
+
+  /**
+   * @brief Reset the metric state, dropping all collected samples
+   */
+  void Reset() override;
+
   /**
    * @brief Summarize collected sample data.
    *
@@ -102,16 +114,20 @@ class SampledValueMetric : public RawMetric {
   /** @brief private helper to update statistics for summary later */
   astl_status_code UpdateStatistics(const SampledData &sample);
 
+  // private helper to initialize or reset the samples + statistics
+  void InitializeSamples();
+
   std::string       _name;
   std::string       _description;
   astl_units_t      _units;
   astl_value_type_t _value_type;
 
-  MinMaxAvgSummaryData _summary_data;  // Summary data for min, max, avg
-  AstlValue            _sum_sample_value{
-      uint64_t{0}};  // Sum of sample values for average calculation. Uses uint64_t to reduce risk of overflow.
-                     // uint64_t is the largest natively support integer type across Windows, macOS and Linux.
-  uint64_t _sample_count;  // Count of samples received
+  std::vector<SampledData> _samples;
+  MinMaxAvgSummaryData     _summary_data;  // Summary data for min, max, avg
+  // Sum of sample values for average calculation. Uses max representation to reduce risk of overflow.
+  // uint64_t or double are the largest natively support integer/float type across Windows, macOS and Linux.
+  AstlValue _sum_sample_value;
+
   // Create a Logger instance explicitly to log samples
   astl::Logger _raw_sample_logger{astl::LogLevel::Info, false /* Console logging disabled */,
                                   false /* No default formatting */, "sampled_value_raw.log"};
