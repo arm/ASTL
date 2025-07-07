@@ -51,4 +51,10 @@ done
 
 #echo "cppcheck -U_WIN32 --inline-suppr --enable=all $REPO_ROOT_DIR/src/ $REPO_ROOT_DIR/tests/ $INCLUDE_PATHS --suppress=missingIncludeSystem"
 
-cppcheck -U_WIN32 --inline-suppr --enable=all $REPO_ROOT_DIR/src/ $REPO_ROOT_DIR/tests/ $INCLUDE_PATHS --suppress=missingIncludeSystem --suppress=missingInclude
+# suppress syntaxError since cppcheck 2.13 (on ubuntu-latest github runner) considers variadic macros with __VA_OPT__ an error
+cppcheck -U_WIN32 --inline-suppr --enable=all "$REPO_ROOT_DIR"/src/ "$REPO_ROOT_DIR"/tests/ "$INCLUDE_PATHS" \
+    --suppress=syntaxError \
+    --suppress=missingInclude \
+    --suppress=missingIncludeSystem \
+    --quiet
+

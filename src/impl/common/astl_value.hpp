@@ -82,6 +82,13 @@ struct AstlValue {
   static std::expected<AstlValue, astl_status_code> FromMinimum(astl_value_type_t type);
 
   /**
+   * @brief Create an AstlValue of the given type as close to '0' as possible
+   *
+   * @return an AstlValue instance of 0 value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
+   */
+  static std::expected<AstlValue, astl_status_code> FromZero(astl_value_type_t type);
+
+  /**
    * @brief Create an AstlValue of the given type with the maximum possible value
    *
    * @return an AstlValue instance with the max representable value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
@@ -100,7 +107,7 @@ struct AstlValue {
 
   /**
    * @brief Divide the dividend by the divisor. May truncate if dividend or divisor are integral types
-   * @return The quotient, or a ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE error if dividend is not arithmetic.
+   * @return The quotient, or a ASTL_STATUS_INVALID_VALUE_TYPE error if dividend is not arithmetic.
    */
   template <typename T>
   static std::expected<AstlValue, astl_status_code> Divide(const AstlValue& dividend, const T divisor) {
@@ -111,7 +118,7 @@ struct AstlValue {
             if (divisor == 0) {
               return std::unexpected(ASTL_STATUS_DIVIDE_BY_ZERO);
             }
-            return AstlValue{static_cast<X>(dividend_x / divisor)};
+            return AstlValue{static_cast<X>(static_cast<X>(dividend_x) / static_cast<X>(divisor))};
           } else {
             return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
           }

@@ -86,9 +86,19 @@ astl_status_code CollectorManager::StartOnTarget(ITarget* target) {
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
 
-astl_status_code CollectorManager::PauseOnTarget(ITarget* target) { return ASTL_STATUS_NOT_IMPLEMENTED; }
+astl_status_code CollectorManager::PauseOnTarget(ITarget* target) {
+  if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
+    return collector->second.front()->PauseCollection();
+  }
+  return ASTL_STATUS_INVALID_TARGET_HANDLE;
+}
 
-astl_status_code CollectorManager::ResumeOnTarget(ITarget* target) { return ASTL_STATUS_NOT_IMPLEMENTED; }
+astl_status_code CollectorManager::ResumeOnTarget(ITarget* target) {
+  if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
+    return collector->second.front()->ResumeCollection();
+  }
+  return ASTL_STATUS_INVALID_TARGET_HANDLE;
+}
 
 astl_status_code CollectorManager::ReadImmediateOnTarget(ITarget* target) {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {

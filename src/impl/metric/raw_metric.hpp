@@ -51,6 +51,7 @@ class RawMetric : public IMetric {
    * @return true if the capabilities are met, false otherwise.
    */
   bool CheckCapabilities(const Capabilities &capabilities) const override {
+    (void)capabilities;
     return true;  // Default implementation, can be overridden by derived classes
   }
 

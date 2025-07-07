@@ -345,7 +345,7 @@ class Logger {
   template <typename... Args>
   void LogTrace(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Trace, location, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for trace level messages without source location
    *
@@ -355,7 +355,7 @@ class Logger {
   template <typename... Args>
   void LogTrace(std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Trace, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for debug level messages with source location
    *
@@ -368,7 +368,7 @@ class Logger {
   template <typename... Args>
   void LogDebug(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Debug, location, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for debug level messages without source location
    *
@@ -378,7 +378,7 @@ class Logger {
   template <typename... Args>
   void LogDebug(const std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Debug, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for info level messages with source location
    *
@@ -391,7 +391,7 @@ class Logger {
   template <typename... Args>
   void LogInfo(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Info, location, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for info level messages without source location
    *
@@ -401,7 +401,7 @@ class Logger {
   template <typename... Args>
   void LogInfo(std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Info, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for warning level messages with source location
    *
@@ -414,7 +414,7 @@ class Logger {
   template <typename... Args>
   void LogWarning(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Warning, location, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for warning level messages without source location
    *
@@ -424,7 +424,7 @@ class Logger {
   template <typename... Args>
   void LogWarning(std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Warning, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for error level messages with source location
    *
@@ -437,7 +437,7 @@ class Logger {
   template <typename... Args>
   void LogError(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Error, location, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for error level messages without source location
    *
@@ -447,7 +447,7 @@ class Logger {
   template <typename... Args>
   void LogError(std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Error, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for critical level messages with source location
    *
@@ -460,7 +460,7 @@ class Logger {
   template <typename... Args>
   void LogCritical(const std::source_location& location, std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Critical, location, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Log function for critical level messages without source location
    *
@@ -470,7 +470,7 @@ class Logger {
   template <typename... Args>
   void LogCritical(std::format_string<Args...> log_text, Args&&... args) {
     Log(astl::LogLevel::Critical, log_text, std::forward<Args>(args)...);
-  };
+  }
 
   /* @brief Write message function meant for logging to an output file without regard to severity level
    *
@@ -482,7 +482,7 @@ class Logger {
   template <typename... Args>
   void Write(const std::string& log_text) {
     Log(astl::LogLevel::Critical, log_text);
-  };
+  }
 
  private:
   /* @brief Logger initialization function. It sets up the console and/or file sinks and registers the logger with
@@ -560,24 +560,26 @@ class Logger {
 
 // NOLINTBEGIN
 #define ASTL_LOG_TRACE_SRC_LOC(format, ...) \
-  astl::Logger::GetInstance().LogTrace(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogTrace(std::source_location::current(), format __VA_OPT__(, ) __VA_ARGS__)
 #define ASTL_LOG_DEBUG_SRC_LOC(format, ...) \
-  astl::Logger::GetInstance().LogDebug(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogDebug(std::source_location::current(), format __VA_OPT__(, ) __VA_ARGS__)
 #define ASTL_LOG_INFO_SRC_LOC(format, ...) \
-  astl::Logger::GetInstance().LogInfo(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogInfo(std::source_location::current(), format __VA_OPT__(, ) __VA_ARGS__)
 #define ASTL_LOG_WARNING_SRC_LOC(format, ...) \
-  astl::Logger::GetInstance().LogWarning(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogWarning(std::source_location::current(), format __VA_OPT__(, ) __VA_ARGS__)
 #define ASTL_LOG_ERROR_SRC_LOC(format, ...) \
-  astl::Logger::GetInstance().LogError(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogError(std::source_location::current(), format __VA_OPT__(, ) __VA_ARGS__)
 #define ASTL_LOG_CRITIAL_SRC_LOC(format, ...) \
-  astl::Logger::GetInstance().LogCritical(std::source_location::current(), format, ##__VA_ARGS__)
+  astl::Logger::GetInstance().LogCritical(std::source_location::current(), format __VA_OPT__(, ) __VA_ARGS__)
 
-#define ASTL_LOG_TRACE_NO_SRC_LOC(format, ...)   astl::Logger::GetInstance().LogTrace(format, ##__VA_ARGS__)
-#define ASTL_LOG_DEBUG_NO_SRC_LOC(format, ...)   astl::Logger::GetInstance().LogDebug(format, ##__VA_ARGS__)
-#define ASTL_LOG_INFO_NO_SRC_LOC(format, ...)    astl::Logger::GetInstance().LogInfo(format, ##__VA_ARGS__)
-#define ASTL_LOG_WARNING_NO_SRC_LOC(format, ...) astl::Logger::GetInstance().LogWarning(format, ##__VA_ARGS__)
-#define ASTL_LOG_ERROR_NO_SRC_LOC(format, ...)   astl::Logger::GetInstance().LogError(format, ##__VA_ARGS__)
-#define ASTL_LOG_CRITIAL_NO_SRC_LOC(format, ...) astl::Logger::GetInstance().LogCritical(format, ##__VA_ARGS__)
+#define ASTL_LOG_TRACE_NO_SRC_LOC(format, ...) astl::Logger::GetInstance().LogTrace(format __VA_OPT__(, ) __VA_ARGS__)
+#define ASTL_LOG_DEBUG_NO_SRC_LOC(format, ...) astl::Logger::GetInstance().LogDebug(format __VA_OPT__(, ) __VA_ARGS__)
+#define ASTL_LOG_INFO_NO_SRC_LOC(format, ...)  astl::Logger::GetInstance().LogInfo(format __VA_OPT__(, ) __VA_ARGS__)
+#define ASTL_LOG_WARNING_NO_SRC_LOC(format, ...) \
+  astl::Logger::GetInstance().LogWarning(format __VA_OPT__(, ) __VA_ARGS__)
+#define ASTL_LOG_ERROR_NO_SRC_LOC(format, ...) astl::Logger::GetInstance().LogError(format __VA_OPT__(, ) __VA_ARGS__)
+#define ASTL_LOG_CRITIAL_NO_SRC_LOC(format, ...) \
+  astl::Logger::GetInstance().LogCritical(format __VA_OPT__(, ) __VA_ARGS__)
 
 #ifdef ASTL_DEBUG
 #  define ASTL_LOG_TRACE    ASTL_LOG_TRACE_SRC_LOC

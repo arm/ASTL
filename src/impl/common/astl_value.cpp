@@ -102,6 +102,28 @@ std::expected<AstlValue, astl_status_code> AstlValue::FromMinimum(astl_value_typ
 }
 
 /**
+ * @brief Create an AstlValue of the given type as close to '0' as possible
+ *
+ * @return an AstlValue instance of 0 value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
+ */
+std::expected<AstlValue, astl_status_code> AstlValue::FromZero(astl_value_type_t type) {
+  // clang-format off
+  switch (type) {
+    case ASTL_VALUE_UINT8:       return AstlValue{uint8_t{0}};
+    case ASTL_VALUE_UINT16:      return AstlValue{uint16_t{0}};
+    case ASTL_VALUE_UINT32:      return AstlValue{uint32_t{0}};
+    case ASTL_VALUE_UINT64:      return AstlValue{uint64_t{0}};
+    case ASTL_VALUE_FLOAT32:     return AstlValue{0.0F};
+    case ASTL_VALUE_FLOAT64:     return AstlValue{0.0};
+    case ASTL_VALUE_BOOL8:       return AstlValue{false};
+    case ASTL_VALUE_STRING:      return AstlValue{std::string{}};
+    case ASTL_VALUE_UNKNOWN:     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    default:                     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+  // clang-format on
+}
+
+/**
  * @brief Create an AstlValue of the given type with the maximum possible value
  *
  * @return an AstlValue instance with the max representable value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE

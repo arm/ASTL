@@ -1,10 +1,13 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <cstdint>
 #include <format>
 #include <optional>
 
 #include "common/astl_value.hpp"
+
+using Catch::Matchers::WithinAbs;
 
 TEST_CASE("AstlValue as u8", "[AstlValue]") {
   astl::AstlValue val     = astl::AstlValue{uint8_t{0x42}};
@@ -14,6 +17,9 @@ TEST_CASE("AstlValue as u8", "[AstlValue]") {
   SECTION("std::max works", "[AstlValue]") {
     REQUIRE(std::max(one, val) == val);
     REQUIRE(std::max(std::optional<astl::AstlValue>{one}, std::optional<astl::AstlValue>{}) == one);
+    astl::AstlValue max_u8 = astl::AstlValue::FromMaximum(ASTL_VALUE_UINT8).value();
+    REQUIRE(std::max(max_u8, one) == max_u8);
+    REQUIRE(max_u8 == max_val);
   }
 
   SECTION("std::min works", "[AstlValue]") {
@@ -70,8 +76,7 @@ TEST_CASE("AstlValue as u8", "[AstlValue]") {
     const astl::AstlValue val_b{uint8_t{3}};
     const astl::AstlValue expected{uint8_t{7}};
     const auto            sum = astl::AstlValue::Add(val_a, val_b).value();
-    const auto            avg = astl::AstlValue::Divide(sum, 2).value();
-
+    const auto            avg = astl::AstlValue::Divide(sum, uint8_t{2}).value();
     REQUIRE(avg == expected);
     REQUIRE(std::get<uint8_t>(avg.value) == 7);
   }
@@ -153,7 +158,6 @@ TEST_CASE("AstlValue as ui64", "[AstlValue]") {
     const astl::AstlValue expected{uint64_t{7}};
     const auto            sum = astl::AstlValue::Add(val_a, val_b).value();
     const auto            avg = astl::AstlValue::Divide(sum, 2).value();
-
     REQUIRE(avg == expected);
     REQUIRE(std::get<uint64_t>(avg.value) == 7);
   }
@@ -193,4 +197,179 @@ TEST_CASE("AstlValue as string", "[AstlValue]") {
     std::string formatted = std::format("{}", hello);
     REQUIRE(formatted == "Hello, ");
   }
+}
+
+TEST_CASE("AstlValue invalid constructors", "[AstlValue]") {
+  const uint64_t     test_value{0xa5};
+  const astl_value_t c_value{.ui64 = test_value};
+  const auto         truly_unknown_type = static_cast<astl_value_type_t>(ASTL_VALUE_UNKNOWN - 1);
+  REQUIRE(astl::AstlValue::FromUnion(astl_value_t{}, ASTL_VALUE_UNKNOWN).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  REQUIRE(astl::AstlValue::FromUnion(c_value, truly_unknown_type).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  REQUIRE(astl::AstlValue::FromMinimum(ASTL_VALUE_STRING).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  REQUIRE(astl::AstlValue::FromMinimum(ASTL_VALUE_UNKNOWN).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  REQUIRE(astl::AstlValue::FromMinimum(truly_unknown_type).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  REQUIRE(astl::AstlValue::FromMaximum(ASTL_VALUE_STRING).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  REQUIRE(astl::AstlValue::FromMaximum(ASTL_VALUE_UNKNOWN).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  REQUIRE(astl::AstlValue::FromMaximum(truly_unknown_type).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+}
+
+TEST_CASE("AstlValue::FromUnion", "[AstlValue]") {
+  // u8
+  astl_value_t union_value{.ui8 = 0xa5};
+  auto         astl_value = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_UINT8).value();
+  REQUIRE(std::get<uint8_t>(astl_value.value) == 0xa5);
+  // u16
+  union_value.ui16 = 0x1234;
+  astl_value       = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_UINT16).value();
+  REQUIRE(std::get<uint16_t>(astl_value.value) == 0x1234);
+  // u32
+  union_value.ui32 = 0x1234568;
+  astl_value       = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_UINT32).value();
+  REQUIRE(std::get<uint32_t>(astl_value.value) == 0x1234568);
+  // u64
+  union_value.ui64 = 0x1234568deadaced;
+  astl_value       = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_UINT64).value();
+  REQUIRE(std::get<uint64_t>(astl_value.value) == 0x1234568deadaced);
+  // f32
+  union_value.fp32 = 3.14F;
+  astl_value       = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_FLOAT32).value();
+  REQUIRE_THAT(std::get<float>(astl_value.value), WithinAbs(3.14F, 0.0001));
+  // f64
+  union_value.fp64 = 3.14159;
+  astl_value       = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_FLOAT64).value();
+  REQUIRE_THAT(std::get<double>(astl_value.value), WithinAbs(3.14159, 0.000001));
+  // bool
+  union_value.b8 = true;
+  astl_value     = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_BOOL8).value();
+  REQUIRE(std::get<bool>(astl_value.value) == true);
+  // string
+  union_value.str = nullptr;
+  astl_value      = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_STRING).value();
+  REQUIRE(std::get<std::string>(astl_value.value).empty());
+  union_value.str = "lorem ipsum dolor sit amet";
+  astl_value      = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_STRING).value();
+  REQUIRE(std::get<std::string>(astl_value.value) == "lorem ipsum dolor sit amet");
+}
+
+TEST_CASE("AstlValue::FromZero", "[AstlValue]") {
+  // u8
+  auto astl_value = astl::AstlValue::FromZero(ASTL_VALUE_UINT8).value();
+  REQUIRE(std::get<uint8_t>(astl_value.value) == 0);
+  // u16
+  astl_value = astl::AstlValue::FromZero(ASTL_VALUE_UINT16).value();
+  REQUIRE(std::get<uint16_t>(astl_value.value) == 0);
+  // u32
+  astl_value = astl::AstlValue::FromZero(ASTL_VALUE_UINT32).value();
+  REQUIRE(std::get<uint32_t>(astl_value.value) == 0);
+  // u64
+  astl_value = astl::AstlValue::FromZero(ASTL_VALUE_UINT64).value();
+  REQUIRE(std::get<uint64_t>(astl_value.value) == 0);
+  // f32
+  astl_value = astl::AstlValue::FromZero(ASTL_VALUE_FLOAT32).value();
+  REQUIRE_THAT(std::get<float>(astl_value.value), WithinAbs(0.0F, 0.0001));
+  // f64
+  astl_value = astl::AstlValue::FromZero(ASTL_VALUE_FLOAT64).value();
+  REQUIRE_THAT(std::get<double>(astl_value.value), WithinAbs(0.0, 0.000001));
+  // bool
+  astl_value = astl::AstlValue::FromZero(ASTL_VALUE_BOOL8).value();
+  REQUIRE(std::get<bool>(astl_value.value) == false);
+  // string
+  astl_value = astl::AstlValue::FromZero(ASTL_VALUE_STRING).value();
+  REQUIRE(std::get<std::string>(astl_value.value).empty());
+}
+
+TEST_CASE("AstlValue::FromMinimum", "[AstlValue]") {
+  auto astl_value = astl::AstlValue::FromMinimum(ASTL_VALUE_UINT8).value();
+  REQUIRE(std::get<uint8_t>(astl_value.value) == 0);
+  astl_value = astl::AstlValue::FromMinimum(ASTL_VALUE_UINT16).value();
+  REQUIRE(std::get<uint16_t>(astl_value.value) == 0);
+  astl_value = astl::AstlValue::FromMinimum(ASTL_VALUE_UINT32).value();
+  REQUIRE(std::get<uint32_t>(astl_value.value) == 0);
+  astl_value = astl::AstlValue::FromMinimum(ASTL_VALUE_UINT64).value();
+  REQUIRE(std::get<uint64_t>(astl_value.value) == 0);
+  astl_value = astl::AstlValue::FromMinimum(ASTL_VALUE_FLOAT32).value();
+  // note that floating point values are signed
+  REQUIRE_THAT(std::get<float>(astl_value.value), WithinAbs(std::numeric_limits<float>::lowest(), 0.0001F));
+  astl_value = astl::AstlValue::FromMinimum(ASTL_VALUE_FLOAT64).value();
+  REQUIRE_THAT(std::get<double>(astl_value.value), WithinAbs(std::numeric_limits<double>::lowest(), 0.000001));
+  astl_value = astl::AstlValue::FromMinimum(ASTL_VALUE_BOOL8).value();
+  REQUIRE(std::get<bool>(astl_value.value) == false);
+}
+
+TEST_CASE("AstlValue::FromMaximum", "[AstlValue]") {
+  auto astl_value = astl::AstlValue::FromMaximum(ASTL_VALUE_UINT8).value();
+  REQUIRE(std::get<uint8_t>(astl_value.value) == 0xFF);
+  astl_value = astl::AstlValue::FromMaximum(ASTL_VALUE_UINT16).value();
+  REQUIRE(std::get<uint16_t>(astl_value.value) == 0xFFFF);
+  astl_value = astl::AstlValue::FromMaximum(ASTL_VALUE_UINT32).value();
+  REQUIRE(std::get<uint32_t>(astl_value.value) == 0xFFFFFFFF);
+  astl_value = astl::AstlValue::FromMaximum(ASTL_VALUE_UINT64).value();
+  REQUIRE(std::get<uint64_t>(astl_value.value) == 0xFFFFFFFFFFFFFFFF);
+  astl_value = astl::AstlValue::FromMaximum(ASTL_VALUE_FLOAT32).value();
+  REQUIRE_THAT(std::get<float>(astl_value.value), WithinAbs(std::numeric_limits<float>::max(), 0.0001F));
+  astl_value = astl::AstlValue::FromMaximum(ASTL_VALUE_FLOAT64).value();
+  REQUIRE_THAT(std::get<double>(astl_value.value), WithinAbs(std::numeric_limits<double>::max(), 0.000001));
+  astl_value = astl::AstlValue::FromMaximum(ASTL_VALUE_BOOL8).value();
+  REQUIRE(std::get<bool>(astl_value.value) == true);
+  // string is not supported
+}
+
+TEST_CASE("AstlValue::ToAstlUnionValue", "[AstlValue]") {
+  astl::AstlValue val{uint8_t{0x42}};
+  auto [astl_value, astl_type] = val.ToAstlUnionValue();
+  REQUIRE(astl_type == ASTL_VALUE_UINT8);
+  REQUIRE(astl_value.ui8 == 0x42);
+
+  val                             = astl::AstlValue{uint16_t{0x1234}};
+  std::tie(astl_value, astl_type) = val.ToAstlUnionValue();
+  REQUIRE(astl_type == ASTL_VALUE_UINT16);
+  REQUIRE(astl_value.ui16 == 0x1234);
+
+  val                             = astl::AstlValue{uint32_t{0x12345678}};
+  std::tie(astl_value, astl_type) = val.ToAstlUnionValue();
+  REQUIRE(astl_type == ASTL_VALUE_UINT32);
+  REQUIRE(astl_value.ui32 == 0x12345678);
+
+  val                             = astl::AstlValue{uint64_t{0x12345678deadaced}};
+  std::tie(astl_value, astl_type) = val.ToAstlUnionValue();
+  REQUIRE(astl_type == ASTL_VALUE_UINT64);
+  REQUIRE(astl_value.ui64 == 0x12345678deadaced);
+
+  val                             = astl::AstlValue{3.14F};
+  std::tie(astl_value, astl_type) = val.ToAstlUnionValue();
+  REQUIRE(astl_type == ASTL_VALUE_FLOAT32);
+  REQUIRE_THAT(astl_value.fp32, WithinAbs(3.14, 0.001));
+
+  val                             = astl::AstlValue{3.14159};
+  std::tie(astl_value, astl_type) = val.ToAstlUnionValue();
+  REQUIRE(astl_type == ASTL_VALUE_FLOAT64);
+  REQUIRE_THAT(astl_value.fp64, WithinAbs(3.14159, 0.00001));
+
+  val                             = astl::AstlValue{true};
+  std::tie(astl_value, astl_type) = val.ToAstlUnionValue();
+  REQUIRE(astl_type == ASTL_VALUE_BOOL8);
+  REQUIRE(astl_value.b8 == true);
+
+  val                             = astl::AstlValue{std::string{"Hello, world!"}};
+  std::tie(astl_value, astl_type) = val.ToAstlUnionValue();
+  REQUIRE(astl_type == ASTL_VALUE_STRING);
+  REQUIRE(std::strncmp(astl_value.str, "Hello, world!", std::strlen("Hello, world!")) == 0);
+}
+
+TEST_CASE("astl::to_string(AstlValue)", "[AstlValue]") {
+  astl::AstlValue val{uint8_t{0x42}};
+  REQUIRE(astl::to_string(val) == "66");  // use format with specifiers if you want to keep hex format
+  val = astl::AstlValue{uint64_t{0x42}};
+  REQUIRE(astl::to_string(val) == "66");
+
+  val = astl::AstlValue{true};
+  REQUIRE(astl::to_string(val) == "true");
+  val = astl::AstlValue{false};
+  REQUIRE(astl::to_string(val) == "false");
+
+  val = astl::AstlValue{3.14};
+  REQUIRE(astl::to_string(val) == "3.14");
+
+  val = astl::AstlValue{std::string{"Hello, world!"}};
+  REQUIRE(astl::to_string(val) == "Hello, world!");
 }

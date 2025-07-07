@@ -172,11 +172,11 @@ TEST_CASE("astlGetTargets", "[invalid parameters]") {
   REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_TARGET_PROPERTIES_BUFFER_TOO_SMALL);
 
   targets[0]._size = sizeof(astl_target_properties_t) - 1;  // caller has old struct
-  target_count     = targets.size();
+  target_count     = static_cast<uint32_t>(targets.size());
   REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_OLD_TARGET_PROPERTIES_STRUCT_VERSION);
 
   targets[0]._size = sizeof(astl_target_properties_t) + 1;  // caller has new struct
-  target_count     = targets.size();
+  target_count     = static_cast<uint32_t>(targets.size());
   REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_NEW_TARGET_PROPERTIES_STRUCT_VERSION);
 }
 
@@ -365,7 +365,7 @@ TEST_CASE("astlGetCounters", "[0 counters available]") {
   }
   SECTION("Asking for some counters when 0 are available is a NO_COUNTERS error") {
     std::vector<astl_counter_properties_t> counters{kAFew};
-    counter_count     = counters.size();
+    counter_count     = static_cast<uint32_t>(counters.size());
     counters[0]._size = sizeof(astl_counter_properties_t);
     REQUIRE(astlGetCounters(target_handle, counters.data(), &counter_count) == ASTL_STATUS_NO_COUNTERS_FOUND);
     REQUIRE(counter_count == 0);
@@ -501,15 +501,19 @@ TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator]") {
 }
 
 TEST_CASE("astlGetMetricGroupCount", "[unimplemented for now]") {
-  REQUIRE(astlGetMetricGroupCount(nullptr, nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  uint32_t count{};
+  REQUIRE(astlGetMetricGroupCount(nullptr, &count) == ASTL_STATUS_NOT_IMPLEMENTED);
 }
 
 TEST_CASE("astlGetMetricGroups", "[unimplemented for now]") {
-  REQUIRE(astlGetMetricGroups(nullptr, nullptr, nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  std::array<astl_metric_group_properties_t, 1> properties{};
+  uint32_t                                      count{};
+  REQUIRE(astlGetMetricGroups(nullptr, properties.data(), &count) == ASTL_STATUS_NOT_IMPLEMENTED);
 }
 
 TEST_CASE("astlGetMetricGroupMetrics", "[unimplemented for now]") {
-  REQUIRE(astlGetMetricGroupMetrics(nullptr, nullptr, nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  std::array<astl_metric_properties_t, 1> properties{};
+  REQUIRE(astlGetMetricGroupMetrics(nullptr, nullptr, properties.data()) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
 TEST_CASE("astlConfigureCounterCollectionOnTarget", "[bad params]") {
@@ -552,11 +556,11 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[bad params]") {
   // test handler for unmatched size/version of the collection_params struct
   collection_params._size = sizeof(astl_collection_parameters_t) - 1;
   REQUIRE(astlConfigureCounterCollectionOnTarget(target_handle, &collection_params, counter_handles.data(),
-                                                 counter_handles.size()) ==
+                                                 static_cast<uint32_t>(counter_handles.size())) ==
           ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION);
   collection_params._size = sizeof(astl_collection_parameters_t) + 1;
   REQUIRE(astlConfigureCounterCollectionOnTarget(target_handle, &collection_params, counter_handles.data(),
-                                                 counter_handles.size()) ==
+                                                 static_cast<uint32_t>(counter_handles.size())) ==
           ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION);
   collection_params._size = sizeof(astl_collection_parameters_t);
 
@@ -617,7 +621,7 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counter
                  [](const auto& counter) { return counter._handle; });
 
   REQUIRE(astlConfigureCounterCollectionOnTarget(target_handle, &collection_params, legit_counter_handles.data(),
-                                                 legit_counter_handles.size()) ==
+                                                 static_cast<uint32_t>(legit_counter_handles.size())) ==
           ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET);
 }
 
@@ -630,10 +634,12 @@ TEST_CASE("astlConfigureCounterCollection", "[Test wrapper C->C++ wrapper code]"
   std::vector<astl_counter_handle_t> counter_handles{kAFew};
   // test handler for unmatched size/version of the collection_params struct
   collection_params._size = sizeof(astl_collection_parameters_t) - 1;
-  REQUIRE(astlConfigureCounterCollection(&collection_params, counter_handles.data(), counter_handles.size()) ==
+  REQUIRE(astlConfigureCounterCollection(&collection_params, counter_handles.data(),
+                                         static_cast<uint32_t>(counter_handles.size())) ==
           ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION);
   collection_params._size = sizeof(astl_collection_parameters_t) + 1;
-  REQUIRE(astlConfigureCounterCollection(&collection_params, counter_handles.data(), counter_handles.size()) ==
+  REQUIRE(astlConfigureCounterCollection(&collection_params, counter_handles.data(),
+                                         static_cast<uint32_t>(counter_handles.size())) ==
           ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION);
   collection_params._size = sizeof(astl_collection_parameters_t);
 
@@ -651,8 +657,8 @@ TEST_CASE("astlConfigureCounterCollection", "[Test wrapper C->C++ wrapper code]"
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   // Not implemented yet
-  REQUIRE(astlConfigureCounterCollection(&collection_params, counter_handles.data(), counter_handles.size()) ==
-          ASTL_STATUS_NOT_IMPLEMENTED);
+  REQUIRE(astlConfigureCounterCollection(&collection_params, counter_handles.data(),
+                                         static_cast<uint32_t>(counter_handles.size())) == ASTL_STATUS_NOT_IMPLEMENTED);
 }
 
 TEST_CASE("astlConfigureMetricCollectionOnTarget", "[unimplemented for now]") {
@@ -905,23 +911,23 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
 }
 
 TEST_CASE("astlGetCounterSamplesOnTarget", "[unimplemented for now]") {
-  REQUIRE(astlGetCounterSamplesOnTarget(nullptr, nullptr, nullptr, nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  REQUIRE(astlGetCounterSamplesOnTarget(nullptr, nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
 TEST_CASE("astlGetAllCounterSampleCountOnTarget", "[unimplemented for now]") {
-  REQUIRE(astlGetAllCounterSampleCountOnTarget(nullptr, nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  REQUIRE(astlGetAllCounterSampleCountOnTarget(nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
 TEST_CASE("astlGetAllCounterSamplesOnTarget", "[unimplemented for now]") {
-  REQUIRE(astlGetAllCounterSamplesOnTarget(nullptr, nullptr, nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  REQUIRE(astlGetAllCounterSamplesOnTarget(nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
 TEST_CASE("astlGetAllCounterSampleCount", "[unimplemented for now]") {
-  REQUIRE(astlGetAllCounterSampleCount(nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  REQUIRE(astlGetAllCounterSampleCount(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
 TEST_CASE("astlGetAllCounterSamples", "[unimplemented for now]") {
-  REQUIRE(astlGetAllCounterSamples(nullptr, nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  REQUIRE(astlGetAllCounterSamples(nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
 /*** COLLECTED METRIC SAMPLES ***/
@@ -977,7 +983,7 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator]") {
             ASTL_STATUS_BAD_ARGUMENT);
     // ABI compatibility checks
     samples_out[0]._size = sizeof(astl_metric_sample_t) - 1;
-    sample_count         = samples.size();
+    sample_count         = static_cast<uint32_t>(samples.size());
     REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), samples_out.data(), &sample_count) ==
             ASTL_STATUS_OLD_METRIC_SAMPLE_STRUCT_VERSION);
     samples_out[0]._size = sizeof(astl_metric_sample_t) + 1;
@@ -998,7 +1004,6 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator]") {
 
   SECTION("[some samples]") {
     std::vector<astl::SampledData> samples;
-    auto                           start_time = std::chrono::seconds{100};
     using std::chrono::microseconds;
     samples.emplace_back(1, astl::AstlValue{uint64_t{1}}, astl::SampleTimestamp{microseconds{100}});
     samples.emplace_back(2, astl::AstlValue{uint64_t{2}}, astl::SampleTimestamp{microseconds{101}});
@@ -1125,5 +1130,5 @@ TEST_CASE("astlGetAllMetricSamplesOnTarget", "[wrapper][Orchestrator]") {
 }
 
 TEST_CASE("astlGetAllMetricSamples", "[unimplemented for now]") {
-  REQUIRE(astlGetAllMetricSamples(nullptr, nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+  REQUIRE(astlGetAllMetricSamples(nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
 }

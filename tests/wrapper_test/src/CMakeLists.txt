@@ -14,6 +14,9 @@ endif()
 
 add_executable(wrapper_test wrapper_test.cpp)
 
+include(Warnings)
+set_project_warnings(wrapper_test)
+
 # astl.h and others should come as include paths along with the target_link_libraries joining Astl::astl_static
 target_link_libraries(wrapper_test
     # test targets should link astl publicly so that gcovr can measure how much of astl_static is covered

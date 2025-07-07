@@ -42,13 +42,14 @@ class Target : public ITarget {
   Target& operator=(Target&&)      = default;
 
   astl_status_code                              GetProperties(astl_target_properties_t* target) override;
+  const Target*                                 GetParent() const { return _parent; }
   size_t                                        GetCounterCount() const override { return _counters.size(); }
   const std::vector<std::unique_ptr<ICounter>>& GetCounters() const override { return _counters; }
 
  private:
-  Target*                                _parent = nullptr;
   std::string                            _name;
   std::string                            _description;
+  Target*                                _parent = nullptr;
   std::vector<std::unique_ptr<ICounter>> _counters;
 };
 
