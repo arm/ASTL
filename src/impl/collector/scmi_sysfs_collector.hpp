@@ -170,10 +170,6 @@ std::expected<SampleTimestamp, astl_status_code> ParseScmiTimeStamp(std::string 
 std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> ParseDataEventValueWithTimestamp(
     std::string const& data_read);
 
-// Expected format: "0 <value>"
-std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> ParseDataEventValueWithoutTimestamp(
-    std::string const& data_read);
-
 std::unordered_set<ScmiDataEventId> GetUniqueDataEventsIds(CollectionOperations const& operations);
 
 }  // namespace scmi_detail

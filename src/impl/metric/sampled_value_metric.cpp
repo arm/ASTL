@@ -83,8 +83,7 @@ void SampledValueMetric::InitializeSamples() {
         _name, _value_type);
   }
   // Initialize summary data based on the value type
-  astl_value_t val{0};
-  auto         zero_val = AstlValue::FromUnion(val, _value_type);
+  auto zero_val = AstlValue::FromZero(_value_type);
   if (zero_val.has_value()) {
     _summary_data = {.min = std::nullopt, .max = std::nullopt, .avg = zero_val.value()};
   } else {
@@ -116,6 +115,7 @@ astl_status_code SampledValueMetric::Summarize() {
 MinMaxAvgSummaryData SampledValueMetric::GetSummaryData() const { return _summary_data; }
 
 astl_status_code SampledValueMetric::GetProperties(astl_metric_properties_t* properties) const {
+  (void)properties;
   return ASTL_STATUS_NOT_IMPLEMENTED;
 }
 

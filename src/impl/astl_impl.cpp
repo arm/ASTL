@@ -17,6 +17,9 @@ astl_status_code Orchestrator::ConfigureCounterCollection(ITarget               
   if (index == std::end(_targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
+  // unused, since unimplemented
+  (void)collection_params;
+  (void)counters;
   return ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET;
 }
 
@@ -104,7 +107,7 @@ std::expected<uint32_t, astl_status_code> Orchestrator::GetCounterSampleCount(co
   if (index == std::end(_targets)) {
     return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
   }
-
+  (void)counter;  // unused since unimplemented for now
   return std::unexpected(ASTL_STATUS_INVALID_COUNTER_HANDLE);
 }
 

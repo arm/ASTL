@@ -62,7 +62,8 @@ struct ScopedDropRoot {
   ~ScopedDropRoot() {
     if (did_drop) {
       // restore root
-      (void)seteuid(old_euid);
+      auto result = seteuid(old_euid);
+      (void)result;
     }
   }
 };

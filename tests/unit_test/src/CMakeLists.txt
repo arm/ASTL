@@ -24,6 +24,9 @@ add_executable(unit_test
     metric_manager_utests.cpp
 )
 
+include(Warnings)
+set_project_warnings(unit_test)
+
 # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
 target_link_libraries(unit_test
     # test targets should link astl publicly so that gcovr can measure how much of astl_static is covered

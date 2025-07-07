@@ -129,6 +129,9 @@ add_library(${LIBRARY_NAME} SHARED)
 # add alias target for the library for unambiguous FindPackage
 add_library(Astl::${LIBRARY_NAME} ALIAS ${LIBRARY_NAME})
 
+include(Warnings)
+set_project_warnings(${LIBRARY_NAME})
+
 # ASTL_API macro will export functions on dlls, rather than import with ASTL_BUILD set
 target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_BUILD)
 

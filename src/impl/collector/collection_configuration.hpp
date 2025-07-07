@@ -58,7 +58,8 @@ class CollectionConfiguration {
   CollectionOperations _operations;
 
   // input from the astl API on how to collect (interval, optimization strategy, etc)
-  astl_collection_parameters_t _collection_params = {0};
+  astl_collection_parameters_t _collection_params = {0, 0, ASTL_COLLECTION_MODE_IMMEDIATE,
+                                                     ASTL_COLLECTION_OPTIMIZATION_MEMORY};
 };
 
 }  // namespace astl

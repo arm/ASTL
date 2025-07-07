@@ -125,7 +125,6 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
   astl::ScmiDataEventId   data_event_id{raw_id};
   astl::OperationSequence operations_on_sample;
   auto                    read_operation = std::make_unique<astl::ScmiReadOperation>(data_event_id);
-  auto                    read_op_id     = read_operation->GetId();
   operations_on_sample.push_back(std::move(read_operation));
 
   astl::CollectionOperations   operations{.operationsBeforeStart{},
@@ -245,7 +244,6 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
   astl::ScmiDataEventId   data_event_id{raw_id};
   astl::OperationSequence operations_on_sample;
   auto                    read_operation = std::make_unique<astl::ScmiReadOperation>(data_event_id);
-  auto                    read_op_id     = read_operation->GetId();
   operations_on_sample.push_back(std::move(read_operation));
 
   astl::CollectionOperations operations{.operationsBeforeStart{},

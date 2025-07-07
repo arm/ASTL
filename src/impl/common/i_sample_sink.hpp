@@ -50,7 +50,7 @@ struct SampledData {
   template <typename T>
   const auto &get() const {
     return std::get<T>(value.value);
-  };
+  }
 };
 
 /* ISampleSink is an interface for anything that can receive sampled data.

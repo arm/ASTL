@@ -86,25 +86,6 @@ std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> 
 }
 
 // TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen optimization
-// Expected format: "0 <value>"
-// cppcheck-suppress unusedFunction
-std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> ParseDataEventValueWithoutTimestamp(
-    std::string const& data_read) {
-  auto space_pos = data_read.find(' ');
-  if (space_pos == std::string::npos) {
-    ASTL_LOG_ERROR("ParseDataEventValueWithoutTimestamp: No space found in data_read: {}", data_read);
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
-  }
-  // no timestamp provided, use current time
-  const auto      now       = std::chrono::steady_clock::now();
-  SampleTimestamp timestamp = std::chrono::time_point_cast<SampleTimestamp::duration>(now);
-  // now parse value
-  auto value = ScmiDataEventValue::FromString(data_read.substr(space_pos + 1));
-  if (!value) {
-    return std::unexpected{value.error()};
-  }
-  return std::make_pair(timestamp, value.value());
-}
 
 std::unordered_set<ScmiDataEventId> GetUniqueDataEventsIds(CollectionOperations const& operations) {
   // just get a unique set of all data events in all the operations
