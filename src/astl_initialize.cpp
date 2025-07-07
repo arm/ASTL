@@ -29,7 +29,8 @@
 #include "collector/i_collector.hpp"
 #include "collector/scmi_sysfs_collector.hpp"
 #include "common/capabilities.hpp"
-#include "config/static_metric_config.hpp"
+#include "config/configuration_manager.hpp"
+#include "config/topology_manager.hpp"
 #include "metric/metric_manager.hpp"
 #include "target.hpp"
 
@@ -42,46 +43,14 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   if (init_params->_size != sizeof(astl_initialization_parameters_t)) {
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
-  // TODO(ASTL-39) - add topologymanager. For now, hard-code one target
-  std::unique_ptr<astl::ITarget> target = std::make_unique<astl::Target>("Scmi0", "The SCMI interface on Socket0");
-
-  // TODO(ASTL-40) - add configurationmanager to determine Metric configurations
-
-  ////
-  // Set up Collectors and CollectorManager (Ideally TopologyManager, and maybe ConfigManager should do this bit)
-  ////
-  // tell collectorManager which collectors are suitable for which targets
-  std::unordered_map<astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> target_to_collectors;
-  // Set up the Scmi Sysfs Collector
-  // Note that details like ScmiCollector should normally be hidden from high-level setup code like this.
-  // Normally, TopologyManager and/or ConfigurationManager would handle those details of collectors,
-  // providing an abstract set of ICollectors, or just a fully-formed CollectorManager to link to Orchestrator.
-  // But for an upcoming milestone, we're doing that directly here until TopologyManager is online.
-  // TODO(ASTL-39) - hide deriving class details of collectors behind another initialization agent.
-  astl::FileInterface scmi_sysfs_file_interface{std::filesystem::path{"/tmp/fuse/scmi/scmi_telemetry"}};
-  using ScmiCollector = astl::ScmiSysfsCollector<decltype(scmi_sysfs_file_interface)>;
-  std::unique_ptr<astl::ICollector> scmi_collector =
-      std::make_unique<ScmiCollector>(nullptr, std::move(scmi_sysfs_file_interface));
-  std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
-  collectors_for_target.push_back(std::move(scmi_collector));
-  target_to_collectors.emplace(target.get(), std::move(collectors_for_target));
-  std::unique_ptr<astl::ICollectorManager> collector_manager =
-      std::make_unique<astl::CollectorManager>(std::move(target_to_collectors));
-
-  ////
-  // set up Metrics and MetricManager (ideally ConfigManager should do this bit)
-  ////
-  astl::CollectorCapability              collector_capabilities{astl::CollectorType::SCMI};
-  astl::SystemCapability                 system_capabilities{};
-  std::vector<astl::CollectorCapability> collector_caps_list{collector_capabilities};
-  std::vector<astl::SystemCapability>    system_caps_list{system_capabilities};
-  astl::Capabilities                     capabilities{std::move(collector_caps_list), std::move(system_caps_list)};
-
-  std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
+  auto                  configuration = astl::ConfigurationManager::GetConfiguration();
+  astl::TopologyManager topology_manager{configuration};
+  auto [targets, collector_manager] = topology_manager.InitializeCollectorManager();
+  auto metric_manager               = topology_manager.InitializeMetricManager();
 
   // TODO(ASTL-118): wire C API astlConfigureMetricCollectionOnTarget() to
   // Orchestrator::ConfigureMetricCollectionOnTarget() Move this logic to ConfigurationManager and Orchestrator.
-  metric_manager->RegisterMetric(std::make_unique<astl::MetricConfig>(astl::kTemperature));
+
   auto available_metrics = metric_manager->GetAvailableMetrics();
   if (!available_metrics) {
     return ASTL_STATUS_NO_METRICS_FOUND;
@@ -105,8 +74,12 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
       ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
   };
 
+  // TODO(ASTL-118): this target lookup only exists to upport the ConfigureCollectionOnTarget call below, which should
+  // be handled elsewhere
+  auto* target = targets[0].get();
+
   astl_status_code status =
-      collector_manager->ConfigureCollectionOnTarget(target.get(), collection_params, std::move(operations));
+      collector_manager->ConfigureCollectionOnTarget(target, collection_params, std::move(operations));
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Failed to configure collection on target: {}", astlStatusString(status));
     return status;
@@ -115,9 +88,7 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
   auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(collector_manager), std::move(metric_manager));
-  // add send the target into the Orchestrator
-  std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::move(target));
+  // the orchestrator owns targets
   orchestrator->SetTargets(std::move(targets));
   // replace the existing orchestrator with the newly constructed one
   astl::Orchestrator::GetInstance() = std::move(orchestrator);
