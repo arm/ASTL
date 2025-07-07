@@ -14,6 +14,8 @@ target_sources(
         "${CMAKE_CURRENT_SOURCE_DIR}/astl_impl.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/collector/scmi_sysfs_collector.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/configuration_manager.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/topology_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/common/astl_value.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/metric/metric_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/metric/sampled_value_metric.cpp"
