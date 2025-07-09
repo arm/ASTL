@@ -106,6 +106,15 @@ struct AstlValue {
   static std::expected<AstlValue, astl_status_code> Add(const AstlValue& addend, const AstlValue& augend);
 
   /**
+   * @brief Compute the difference of two AstlValues of the same underlying type.
+   *
+   * @return value of common larger type of the two operands or a status code:
+   *   - ASTL_STATUS_METRIC_OVERFLOW_DETECTED if this would overflow their representations
+   *   - ASTL_STATUS_INVALID_VALUE_TYPE if operands aren't similar types
+   */
+  static std::expected<AstlValue, astl_status_code> Subtract(const AstlValue& minuend, const AstlValue& subtrahend);
+
+  /**
    * @brief Divide the dividend by the divisor. May truncate if dividend or divisor are integral types
    * @return The quotient, or a ASTL_STATUS_INVALID_VALUE_TYPE error if dividend is not arithmetic.
    */

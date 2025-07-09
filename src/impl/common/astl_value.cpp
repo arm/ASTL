@@ -221,6 +221,40 @@ std::expected<AstlValue, astl_status_code> AstlValue::Add(const AstlValue& adden
 }
 
 /**
+ * @brief Compute the difference of two AstlValues of the same underlying type.
+ *
+ * @return value of common larger type of the two operands or a status code:
+ *   - ASTL_STATUS_METRIC_OVERFLOW_DETECTED if this would overflow their representations
+ *   - ASTL_STATUS_INVALID_VALUE_TYPE if operands aren't similar types
+ */
+std::expected<AstlValue, astl_status_code> AstlValue::Subtract(const AstlValue& minuend, const AstlValue& subtrahend) {
+  return std::visit(
+      [](auto&& left, auto&& right) -> std::expected<AstlValue, astl_status_code> {
+        using X = std::decay_t<decltype(left)>;
+        using Y = std::decay_t<decltype(right)>;
+
+        if constexpr (std::is_arithmetic_v<X> && std::is_arithmetic_v<Y>) {
+          // Cast both operands to common type
+          using Result      = std::conditional_t<(sizeof(X) >= sizeof(Y)), X, Y>;
+          Result left_cast  = static_cast<Result>(left);
+          Result right_cast = static_cast<Result>(right);
+
+          // Check for underflow (only for unsigned integers)
+          if constexpr (std::is_integral_v<Result> && std::is_unsigned_v<Result>) {
+            if (left_cast < right_cast) [[unlikely]] {
+              return std::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
+            }
+          }
+          Result difference{static_cast<Result>(left_cast - right_cast)};
+          return AstlValue{difference};
+        } else {
+          return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+        }
+      },
+      minuend.value, subtrahend.value);
+}
+
+/**
  * @brief convert the AstlValue to a string suitable for Log debugging
  */
 std::string to_string(const AstlValue& variant_value) {
