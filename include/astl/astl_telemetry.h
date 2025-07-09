@@ -292,8 +292,8 @@ typedef enum _astl_metric_type_t {
 typedef struct _astl_metric_properties_t {
   size_t               _size;                   //!< Size of this struct for versioning
   astl_metric_handle_t _handle;                 //!< This handle of this metric
-  char*                _name;                   //!< The name of this metric
-  char*                _description;            //!< The description of this metric
+  const char*          _name;                   //!< The name of this metric
+  const char*          _description;            //!< The description of this metric
   uint32_t             _min_sampling_interval;  //!< The minimum sampling interval this metric can be collected
                                                 //!< in ms. It is the largest minimum sampling interval
                                                 //!< value from all counters used in this metric
@@ -363,8 +363,8 @@ typedef void* astl_metric_group_handle_t;  //!< Abstraction of a metric group ha
 typedef struct _astl_metric_group_properties_t {
   size_t                     _size;          //!< Size of this struct for versioning
   astl_metric_group_handle_t _handle;        //!< The handle of this metric group
-  char*                      _name;          //!< The name of this metric group
-  char*                      _description;   //!< The description of this metric group
+  const char*                _name;          //!< The name of this metric group
+  const char*                _description;   //!< The description of this metric group
   uint32_t                   _metric_count;  //!< The number of metrics in this metric group
   astl_metric_properties_t*  _metrics;       //!< Pointer for buffer of metric properties in this
                                              //!< metric group. User must allocate buffer of

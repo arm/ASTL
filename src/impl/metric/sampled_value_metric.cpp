@@ -22,24 +22,21 @@ namespace astl {
 
 SampledValueMetric::SampledValueMetric(const char* name, const char* description, astl_units_t units,
                                        astl_value_type_t value_type)
-    : _name(name),
-      _description(description),
-      _units(units),
-      _value_type(value_type),
+    : RawMetric(name, description, units, value_type, ASTL_METRIC_VALUE),
       _summary_data{},
       _sum_sample_value{uint64_t{0}} {
   InitializeSamples();
 }
 
 astl_status_code SampledValueMetric::ReceiveSample(const SampledData& sample) {
-  const auto sample_type = sample.value.ToAstlUnionValue().second;
-  if (sample_type != _value_type) {
-    ASTL_LOG_ERROR("SampledValueMetric: received sample with type {} for metric {}, expected type {}", sample_type,
-                   _name.c_str(), _value_type);
-    return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+  // Check if the sample's value type matches the metric's expected type
+  auto type_check_result = CheckSampleValueType(sample);
+  if (type_check_result != ASTL_STATUS_SUCCESS) {
+    return type_check_result;
   }
-  // LOG : Metric, Description, Units, Raw-Value
-  _raw_sample_logger.LogInfo("{}, {}, {}, {} \n", _name.c_str(), _description.c_str(), _units, sample.value);
+
+  // Log the raw sample using the base class method
+  LogRawSample(sample);
   auto status = UpdateStatistics(sample);
   _samples.push_back(sample);
   return status;
@@ -113,10 +110,5 @@ astl_status_code SampledValueMetric::Summarize() {
 }
 
 MinMaxAvgSummaryData SampledValueMetric::GetSummaryData() const { return _summary_data; }
-
-astl_status_code SampledValueMetric::GetProperties(astl_metric_properties_t* properties) const {
-  (void)properties;
-  return ASTL_STATUS_NOT_IMPLEMENTED;
-}
 
 }  // namespace astl

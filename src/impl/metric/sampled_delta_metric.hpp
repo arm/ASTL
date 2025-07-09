@@ -1,0 +1,177 @@
+/*******************************************************************************
+ * SPDX-FileCopyrightText: Copyright (C) 2025 Arm Limited and/or its affiliates
+ * SPDX-FileCopyrightText: <open-source-office@arm.com>
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ ******************************************************************************/
+
+#ifndef DELTA_METRIC_HPP_
+#define DELTA_METRIC_HPP_
+
+#include <chrono>
+#include <expected>
+#include <optional>
+#include <span>
+#include <vector>
+
+#include "astl/astl.h"
+#include "astl_logger.hpp"
+#include "astl_value.hpp"
+#include "i_sample_sink.hpp"
+#include "raw_metric.hpp"
+
+namespace astl {
+
+/**
+ * @brief Holds delta calculation data between consecutive samples.
+ * This structure is used to store the delta value and timestamp information.
+ */
+struct DeltaData {
+  AstlValue       delta_value;  ///< The delta value between consecutive samples
+  SampleTimestamp timestamp;    ///< Timestamp when the delta was calculated
+};
+
+/**
+ * @brief Holds summary values for delta statistics.
+ * This structure is used to store computed delta statistics.
+ * // TODO (ASTL-58): Various summary types will be implemented in the OutputManager.
+ */
+struct DeltaSummaryData {
+  std::optional<AstlValue> min_delta;  ///< Minimum delta value seen
+  std::optional<AstlValue> max_delta;  ///< Maximum delta value seen
+  std::optional<AstlValue> avg_delta;  ///< Computed average of delta values
+};
+
+/**
+ * @brief Delta metric class that calculates differences between consecutive samples.
+ *
+ * DeltaMetric processes sampled data and computes the delta (difference) between
+ * consecutive samples. It maintains statistics about the deltas and can be used
+ * as a base class for more complex metrics like RateMetric.
+ */
+class DeltaMetric : public RawMetric {
+ public:
+  DeltaMetric() = delete;
+
+  /**
+   * @brief Construct a DeltaMetric with specified name, description, units, and value type.
+   *
+   * Initializes the metric with the provided parameters and sets up initial delta tracking.
+   *
+   * @param name The name of the metric.
+   * @param description A brief description of the metric.
+   * @param units The units of measurement for this metric.
+   * @param value_type The type of values this metric will process (e.g., UINT64).
+   */
+  explicit DeltaMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type);
+
+  /**
+   * @brief Process and record a new sample value, calculating delta from previous sample.
+   *
+   * Updates the internal state by calculating the delta between this sample and the
+   * previous sample, then incorporates it into delta statistics.
+   *
+   * @param sample A single sampled data point to be processed.
+   * @return astl_status_code indicating success or failure.
+   */
+  astl_status_code ReceiveSample(const SampledData& sample) override;
+
+  /**
+   * @brief Summarize collected delta data.
+   *
+   * Finalizes the summary by calculating statistics from accumulated deltas.
+   * Logs the results using the summary logger.
+   *
+   * @return astl_status_code indicating success or failure.
+   */
+  astl_status_code Summarize() override;
+
+  /**
+   * @brief Retrieve the delta summary data.
+   *
+   * Returns the current delta summary data containing minimum, maximum,
+   * and average delta values computed from received samples.
+   *
+   * @return A DeltaSummaryData struct with delta statistics.
+   */
+  DeltaSummaryData GetDeltaSummaryData() const;
+
+  /**
+   * @brief Return a view of the samples received by this metric
+   */
+  std::span<const SampledData> GetSamples() const override;
+
+  /**
+   * @brief Get a view of the delta data calculated by this metric.
+   *
+   * This method provides access to the internal delta data for testing purposes.
+   *
+   * @note TODO(ASTL-58): When OutputManager is implemented, evaluate whether this method
+   * can be consolidated with GetSamples() or if DeltaData should be handled through
+   * a unified output interface. Currently exposed primarily for unit testing.
+   *
+   * @return A span containing all calculated delta values with their timestamps.
+   */
+  std::span<const DeltaData> GetDeltas() const;
+
+  /**
+   * @brief Reset the metric state, dropping all collected samples
+   */
+  void Reset() override;
+
+ protected:
+  /**
+   * @brief Initialize/reset delta samples and summary data.
+   *
+   * Resets the metric state by clearing all delta data and reinitializing
+   * the summary data structures.
+   */
+  void InitializeSamples();
+
+  /**
+   * @brief Calculate delta between current and previous sample.
+   *
+   * @param current_sample The current sample value.
+   * @param previous_sample The previous sample value.
+   * @return Expected delta value or error code.
+   */
+  static std::expected<AstlValue, astl_status_code> CalculateDelta(const AstlValue& current_sample,
+                                                                   const AstlValue& previous_sample);
+
+  /**
+   * @brief Update delta statistics with a new delta value.
+   *
+   * @param delta_value The new delta value to incorporate.
+   * @param timestamp The timestamp when the delta was calculated.
+   * @return astl_status_code indicating success or failure.
+   */
+  astl_status_code UpdateDeltaStatistics(const AstlValue& delta_value, SampleTimestamp timestamp);
+
+  // NOLINTBEGIN - Disable clang-tidy checks for protected members - required by RateMetric class inherited from
+  // DeltaMetric
+  std::optional<SampledData> _previous_sample;               // Previous sample for delta calculation
+  DeltaSummaryData           _delta_summary_data;            // Summary data for delta statistics
+  AstlValue                  _sum_delta_value{uint64_t{0}};  // Sum of delta values for average calculation
+  std::vector<DeltaData>     _deltas;                        ///< Vector of all delta values with timestamps
+
+  // NOLINTEND
+ private:
+  // Create a logger instance to explicitly log delta summaries
+  astl::Logger _delta_summary_logger{astl::LogLevel::Info, false /* Console logging disabled */,
+                                     false /* No default formatting */, "delta_summary.log"};
+};
+
+}  // namespace astl
+
+#endif  // DELTA_METRIC_HPP_

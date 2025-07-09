@@ -96,11 +96,6 @@ class SampledValueMetric : public RawMetric {
   astl_status_code Summarize() override;
 
   /**
-   * @brief Assign values such as name, units, etc to the given properties pointer.
-   */
-  astl_status_code GetProperties(astl_metric_properties_t *properties) const override;
-
-  /**
    * @brief Retrieve the statistical summary of the sampled values.
    *
    * Returns the current summary data containing minimum, maximum,
@@ -117,20 +112,11 @@ class SampledValueMetric : public RawMetric {
   // private helper to initialize or reset the samples + statistics
   void InitializeSamples();
 
-  std::string       _name;
-  std::string       _description;
-  astl_units_t      _units;
-  astl_value_type_t _value_type;
-
   std::vector<SampledData> _samples;
   MinMaxAvgSummaryData     _summary_data;  // Summary data for min, max, avg
   // Sum of sample values for average calculation. Uses max representation to reduce risk of overflow.
   // uint64_t or double are the largest natively support integer/float type across Windows, macOS and Linux.
   AstlValue _sum_sample_value;
-
-  // Create a Logger instance explicitly to log samples
-  astl::Logger _raw_sample_logger{astl::LogLevel::Info, false /* Console logging disabled */,
-                                  false /* No default formatting */, "sampled_value_raw.log"};
   // create a logger instance to explicitly log summary
   astl::Logger _summary_logger{astl::LogLevel::Info, false /* Console logging disabled */,
                                false /* No default formatting */, "sampled_value_summary.log"};
