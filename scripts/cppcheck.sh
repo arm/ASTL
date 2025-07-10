@@ -19,8 +19,9 @@ if ! command -v cppcheck >/dev/null 2>&1; then
 fi
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-REPO_ROOT_DIR="$( dirname ${SCRIPT_DIR} )"
-INCLUDE_PATHS="-I ${REPO_ROOT_DIR}/include"
+REPO_ROOT_DIR="$(dirname ${SCRIPT_DIR})"
+echo "REPO_ROOT_DIR='$REPO_ROOT_DIR'"
+INCLUDE_PATHS=" -I${REPO_ROOT_DIR}/include"
 
 # don't lint builld dir, or vcpkg dependencies
 source $SCRIPT_DIR/get_find_file_expressions.sh # define PRUNE_EXPR
@@ -29,10 +30,10 @@ source $SCRIPT_DIR/get_find_file_expressions.sh # define PRUNE_EXPR
 if [[ -n "$1" ]]; then
   BUILD_DIR=$(realpath "$1")
 
-  INCLUDE_PATHS+=" -I ${BUILD_DIR}/include"
-  INCLUDE_PATHS+=" -I ${REPO_ROOT_DIR}/utils"
-  INCLUDE_PATHS+=" -I ${REPO_ROOT_DIR}/src/impl"
-  INCLUDE_PATHS+=" -I ${REPO_ROOT_DIR}/src/impl/common"
+  INCLUDE_PATHS+=" -I${BUILD_DIR}/include"
+  INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/utils"
+  INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/src/impl"
+  INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/src/impl/common"
 fi
 
 echo "Running cppcheck to lint code..."
@@ -53,8 +54,11 @@ done
 
 # suppress syntaxError since cppcheck 2.13 (on ubuntu-latest github runner) considers variadic macros with __VA_OPT__ an error
 cppcheck -U_WIN32 --inline-suppr --enable=all "$REPO_ROOT_DIR"/src/ "$REPO_ROOT_DIR"/tests/ "$INCLUDE_PATHS" \
+    --suppress=unusedFunction \
     --suppress=syntaxError \
+    --suppress=unmatchedSuppression \
     --suppress=missingInclude \
     --suppress=missingIncludeSystem \
-    --quiet
+    --quiet \
+    --error-exitcode=1
 

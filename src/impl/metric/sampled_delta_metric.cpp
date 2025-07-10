@@ -121,15 +121,12 @@ astl_status_code DeltaMetric::Summarize() {
     _delta_summary_logger.LogInfo("No deltas to summarize for metric: {}.", _name.c_str());
     return ASTL_STATUS_SUCCESS;
   }
-
-  if (!_deltas.empty()) {
-    auto average = AstlValue::Divide(_sum_delta_value, _deltas.size());
-    if (average.has_value()) {
-      _delta_summary_data.avg_delta = average.value();
-    } else {
-      ASTL_LOG_ERROR("Error computing average delta value for metric {}: {}", _name.c_str(),
-                     astlStatusString(average.error()));
-    }
+  auto average = AstlValue::Divide(_sum_delta_value, _deltas.size());
+  if (average.has_value()) {
+    _delta_summary_data.avg_delta = average.value();
+  } else {
+    ASTL_LOG_ERROR("Error computing average delta value for metric {}: {}", _name.c_str(),
+                   astlStatusString(average.error()));
   }
 
   auto none = AstlValue{std::string{"<none>"}};

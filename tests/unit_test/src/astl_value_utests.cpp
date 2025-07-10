@@ -35,7 +35,6 @@ TEST_CASE("AstlValue as u8", "[AstlValue]") {
     REQUIRE(std::get<uint8_t>(astl_value.value) == test_value);
 
     REQUIRE(astl::AstlValue::FromUnion(c_value, ASTL_VALUE_UNKNOWN).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
-    // cppcheck-suppress integerOverflow
     const auto truly_unknown_type = static_cast<astl_value_type_t>(ASTL_VALUE_UNKNOWN - 1);
     REQUIRE(astl::AstlValue::FromUnion(c_value, truly_unknown_type).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
   }
@@ -115,7 +114,6 @@ TEST_CASE("AstlValue as ui64", "[AstlValue]") {
     REQUIRE(std::get<uint64_t>(var.value) == test_value);
 
     REQUIRE(astl::AstlValue::FromUnion(c_value, ASTL_VALUE_UNKNOWN).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
-    // cppcheck-suppress integerOverflow
     const auto truly_unknown_type = static_cast<astl_value_type_t>(ASTL_VALUE_UNKNOWN - 1);
     REQUIRE(astl::AstlValue::FromUnion(c_value, truly_unknown_type).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
   }
