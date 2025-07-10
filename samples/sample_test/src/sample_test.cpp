@@ -82,9 +82,8 @@ int main(int argc, char* argv[]) {
   }
 
   // 1. Initialize
-  astl_initialization_parameters_t init_params{};
-  init_params._size = sizeof(astl_initialization_parameters_t);
-  status            = astlInitialize(&init_params);
+  ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params);
+  status = astlInitialize(&init_params);
   std::cout << "Initialize status: " << astlStatusString(status) << "\n";
 
   // 2. Get targets
@@ -92,9 +91,8 @@ int main(int argc, char* argv[]) {
   status                = astlGetTargetCount(&target_count);
   std::cout << "Target count: " << target_count << "\n";
 
-  astl_target_properties_t target_properties{};
-  target_properties._size = sizeof(astl_target_properties_t);
-  status                  = astlGetTargets(&target_properties, &target_count);
+  ASTL_INIT_STRUCT(astl_target_properties_t, target_properties);
+  status = astlGetTargets(&target_properties, &target_count);
   std::cout << "astlGetTargets Status: " << astlStatusString(status) << std::endl;
   if (status == ASTL_STATUS_SUCCESS || status == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED) {
     std::cout << "Target info:" << std::endl;
@@ -122,13 +120,12 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
-  constexpr uint32_t           sample_interval = 50;
-  astl_collection_parameters_t collection_params{
-      ._size              = sizeof(astl_collection_parameters_t),
-      ._sampling_interval = do_interval ? sample_interval : 0,
-      ._collection_mode   = do_interval ? ASTL_COLLECTION_MODE_SAMPLING : ASTL_COLLECTION_MODE_IMMEDIATE,
-      ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
-  };
+  constexpr uint32_t sample_interval = 50;
+  ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params);
+  collection_params._sampling_interval = do_interval ? sample_interval : 0;
+  collection_params._collection_mode   = do_interval ? ASTL_COLLECTION_MODE_SAMPLING : ASTL_COLLECTION_MODE_IMMEDIATE;
+  collection_params._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD;
+
   status = astlConfigureMetricCollectionOnTarget(target_properties._handle, &collection_params,
                                                  &metric_buffer.front()._handle, metric_count);
   std::cout << "astlConfigureMetricCollectionOnTarget Status: " << astlStatusString(status) << std::endl;

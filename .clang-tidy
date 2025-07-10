@@ -1,5 +1,7 @@
 Checks: '-*,google*,cppcoreguidelines*,readability*'
 CheckOptions:
+  - key:             cppcoreguidelines-avoid-do-while.IgnoreMacros
+    value:           true
   - key:             readability-identifier-naming.GlobalConstantCase
     value:           CamelCase
   - key:             readability-identifier-naming.GlobalConstantPrefix
