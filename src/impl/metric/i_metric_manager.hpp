@@ -25,6 +25,7 @@
 
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
+#include "collector/collection_operations.hpp"
 #include "common/i_sample_sink.hpp"
 #include "common/operation.hpp"
 #include "i_metric.hpp"
@@ -70,7 +71,7 @@ class IMetricManager {
    *
    * This method is called by the orchestrator to initialize metrics for a given target.
    */
-  virtual std::expected<OperationSequence, astl_status_code> GetRequiredOperations(
+  virtual std::expected<CollectionOperations, astl_status_code> GetRequiredOperations(
       std::span<IMetric* const> metrics) = 0;
 
   /**

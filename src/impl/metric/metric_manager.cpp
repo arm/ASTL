@@ -22,6 +22,7 @@
 #include <string>
 
 #include "astl/astl_errors.h"
+#include "collector/collection_operations.hpp"
 #include "common/scmi/scmi_read_operation.hpp"
 #include "i_metric.hpp"
 #include "metric_config.hpp"
@@ -65,7 +66,7 @@ std::expected<std::span<IMetric* const>, astl_status_code> MetricManager::GetAva
   return std::expected<std::span<IMetric* const>, astl_status_code>(std::in_place, handles_span);
 }
 
-std::expected<OperationSequence, astl_status_code> MetricManager::GetRequiredOperations(
+std::expected<CollectionOperations, astl_status_code> MetricManager::GetRequiredOperations(
     std::span<IMetric* const> metrics) {
   /**
    * This method performs the following steps:
@@ -75,7 +76,7 @@ std::expected<OperationSequence, astl_status_code> MetricManager::GetRequiredOpe
    * - Parses the string ID to a uint32_t, handling exceptions.
    * - Creates a ScmiReadOperation for that event ID.
    * - Records the operation_id to metric mapping for processing samples later.
-   * - Returns the complete OperationSequence or an appropriate error.
+   * - Returns the complete CollectionOperations struct or an appropriate error.
    * */
 
   OperationSequence op_sequence;
@@ -112,7 +113,14 @@ std::expected<OperationSequence, astl_status_code> MetricManager::GetRequiredOpe
       ASTL_LOG_INFO("GetRequiredOperations: Created Operation for event ID {}", event_id);
     }
   }
-  return op_sequence;
+
+  CollectionOperations operations{.operationsBeforeStart{},
+                                  .operationsAtStart{},
+                                  .operationsOnSample{std::move(op_sequence)},
+                                  .operationsAtStop{},
+                                  .samplingInterval{},
+                                  .requirements{astl::CollectorCapability{astl::CollectorType::SCMI}}};
+  return operations;
 }
 
 astl_status_code MetricManager::ProcessData(std::span<SampledData> data) {
@@ -142,6 +150,7 @@ astl_status_code MetricManager::ProcessData(std::span<SampledData> data) {
 }
 
 astl_status_code MetricManager::SummarizeMetrics() {
+  _operation_to_metric_map.clear();  // release the memory tying operation IDs to metrics
   for (IMetric* metric_ptr : _metric_handles) {
     auto it = _metrics_map.find(metric_ptr);
     if (it == _metrics_map.end()) {

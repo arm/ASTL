@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_tostring.hpp>
 #include <catch2/trompeloeil.hpp>
+#include <chrono>
 #include <cstdint>
 #include <utility>
 
@@ -516,26 +517,45 @@ TEST_CASE("astlGetMetricGroupMetrics", "[unimplemented for now]") {
   REQUIRE(astlGetMetricGroupMetrics(nullptr, nullptr, properties.data()) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
-TEST_CASE("astlConfigureCounterCollectionOnTarget", "[bad params]") {
-  // set up a mock target with one mock counter
-  auto                                         counter1 = std::make_unique<MockCounter>();
-  std::vector<std::unique_ptr<astl::ICounter>> counters;
-  counters.push_back(std::move(counter1));
-  auto                 mock_target_1      = std::make_unique<MockTarget>(std::move(counters));
-  astl_target_handle_t mock_target_handle = mock_target_1.get();
-  ALLOW_CALL(*mock_target_1, GetProperties(_))
-      .SIDE_EFFECT(_1->_handle = mock_target_handle)
-      .RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(*mock_target_1, GetCounterCount()).RETURN(1);
+TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator]") {
+  // set up target
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
-  mock_targets.push_back(std::move(mock_target_1));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto                                        mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t                        mock_target_handle = mock_target.get();
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  mock_targets.push_back(std::move(mock_target));
+  // set up metric
+  auto                 metric_manager     = std::make_unique<MockMetricManager>();
+  auto                 mock_metric        = std::make_unique<MockMetric>();
+  astl_metric_handle_t mock_metric_handle = mock_metric.get();
+  ALLOW_CALL(*mock_metric, GetProperties(_))
+      .SIDE_EFFECT(_1->_value_type = ASTL_VALUE_FLOAT64)
+      .SIDE_EFFECT(_1->_handle = mock_metric_handle)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  auto                 mock_metric2        = std::make_unique<MockMetric>();
+  astl_metric_handle_t mock_metric_handle2 = mock_metric2.get();
+  ALLOW_CALL(*mock_metric2, GetProperties(_))
+      .SIDE_EFFECT(_1->_value_type = ASTL_VALUE_FLOAT32)
+      .SIDE_EFFECT(_1->_handle = mock_metric_handle2)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  std::vector<astl::IMetric*> available_metrics;
+  available_metrics.push_back(mock_metric.get());
+  available_metrics.push_back(mock_metric2.get());
+
+  ALLOW_CALL(*metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
+  ALLOW_CALL(*metric_manager, GetRequiredOperations(_))
+      .RETURN(astl::CollectionOperations{
+          {}, {}, {}, {}, std::chrono::milliseconds{100}, astl::CollectorCapability{astl::CollectorType::SCMI}});
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  auto* collector_manager_ptr_for_require_calls = collector_manager.get();
+  auto  orchestrator = std::make_unique<astl::Orchestrator>(std::move(collector_manager), std::move(metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  // all nullptrs
-  REQUIRE(astlConfigureCounterCollectionOnTarget(nullptr, nullptr, nullptr, 0) == ASTL_STATUS_BAD_ARGUMENT);
-
+  // get back a handle to a target
   std::vector<astl_target_properties_t> targets{kAFew};
   targets[0]._size = sizeof(astl_target_properties_t);
   uint32_t target_count{0};
@@ -543,30 +563,51 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[bad params]") {
   REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
   astl_target_handle_t target_handle{targets[0]._handle};
 
-  // given a realistic target handle, but invalid other params
-  REQUIRE(astlConfigureCounterCollectionOnTarget(target_handle, nullptr, nullptr, 0) == ASTL_STATUS_BAD_ARGUMENT);
+  astl_collection_parameters_t collection_params{
+      ._size              = sizeof(astl_collection_parameters_t),
+      ._sampling_interval = 0,
+      ._collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+      ._optimization      = ASTL_COLLECTION_OPTIMIZATION_MEMORY,
+  };
 
-  constexpr uint32_t           sampling_interval_ms{100};
-  astl_collection_parameters_t collection_params{sizeof(astl_collection_parameters_t), sampling_interval_ms,
-                                                 ASTL_COLLECTION_MODE_SAMPLING, ASTL_COLLECTION_OPTIMIZATION_MEMORY};
-  REQUIRE(astlConfigureCounterCollectionOnTarget(target_handle, &collection_params, nullptr, 0) ==
-          ASTL_STATUS_BAD_ARGUMENT);
-  // Note: normally we'd get these handles from astlGetCounters
-  std::vector<astl_counter_handle_t> counter_handles{1};
-  // test handler for unmatched size/version of the collection_params struct
-  collection_params._size = sizeof(astl_collection_parameters_t) - 1;
-  REQUIRE(astlConfigureCounterCollectionOnTarget(target_handle, &collection_params, counter_handles.data(),
-                                                 static_cast<uint32_t>(counter_handles.size())) ==
-          ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION);
-  collection_params._size = sizeof(astl_collection_parameters_t) + 1;
-  REQUIRE(astlConfigureCounterCollectionOnTarget(target_handle, &collection_params, counter_handles.data(),
-                                                 static_cast<uint32_t>(counter_handles.size())) ==
-          ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION);
-  collection_params._size = sizeof(astl_collection_parameters_t);
+  // get the handles to metrics
+  std::array<astl_metric_properties_t, 2> metric_buffer{};
+  metric_buffer[0]._size = sizeof(astl_metric_properties_t);
+  uint32_t metric_count{2};
+  REQUIRE(astlGetMetrics(target_handle, metric_buffer.data(), &metric_count) == ASTL_STATUS_SUCCESS);
+  std::vector<astl_metric_handle_t> metric_handles;
+  metric_handles.push_back(metric_buffer[0]._handle);
 
-  // configuring 0 counters is a bad argument
-  REQUIRE(astlConfigureCounterCollectionOnTarget(target_handle, &collection_params, counter_handles.data(), 0) ==
-          ASTL_STATUS_BAD_ARGUMENT);
+  SECTION("[bad params]") {
+    // all nullptrs
+    REQUIRE(astlConfigureMetricCollectionOnTarget(nullptr, nullptr, nullptr, 0) == ASTL_STATUS_BAD_ARGUMENT);
+    REQUIRE(astlConfigureMetricCollectionOnTarget(target_handle, nullptr, nullptr, 0) == ASTL_STATUS_BAD_ARGUMENT);
+    REQUIRE(astlConfigureMetricCollectionOnTarget(target_handle, &collection_params, nullptr, 0) ==
+            ASTL_STATUS_BAD_ARGUMENT);
+    // invalid target
+    int                  junk                  = 1;  // not null, but not a valid handle to a target
+    astl_target_handle_t invalid_target_handle = static_cast<astl_target_handle_t>(&junk);
+    REQUIRE(astlConfigureMetricCollectionOnTarget(invalid_target_handle, &collection_params, metric_handles.data(),
+                                                  1) == ASTL_STATUS_INVALID_TARGET_HANDLE);
+    // unsupported collection_params version
+    collection_params._size = sizeof(astl_collection_parameters_t) - 1;
+    REQUIRE(astlConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles.data(), 1) ==
+            ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION);
+    collection_params._size = sizeof(astl_collection_parameters_t) + 1;
+    REQUIRE(astlConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles.data(), 1) ==
+            ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION);
+    collection_params._size = sizeof(astl_collection_parameters_t);
+    // 0 metrics is an error
+    REQUIRE(astlConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles.data(), 0) ==
+            ASTL_STATUS_BAD_ARGUMENT);
+  }
+
+  SECTION("[valid input]") {
+    REQUIRE_CALL(*collector_manager_ptr_for_require_calls, ConfigureCollectionOnTarget(_, _, _))
+        .RETURN(ASTL_STATUS_SUCCESS);
+    REQUIRE(astlConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles.data(), 1) ==
+            ASTL_STATUS_SUCCESS);
+  }
 }
 
 TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counters, configure collection]") {
@@ -661,8 +702,16 @@ TEST_CASE("astlConfigureCounterCollection", "[Test wrapper C->C++ wrapper code]"
                                          static_cast<uint32_t>(counter_handles.size())) == ASTL_STATUS_NOT_IMPLEMENTED);
 }
 
-TEST_CASE("astlConfigureMetricCollectionOnTarget", "[unimplemented for now]") {
-  REQUIRE(astlConfigureMetricCollectionOnTarget(nullptr, nullptr, nullptr, 0) == ASTL_STATUS_NOT_IMPLEMENTED);
+TEST_CASE("astlConfigureMetricCollectionOnTarget", "[bad parameters]") {
+  // create mock target
+  auto                                        mock_target_1 = std::make_unique<MockTarget>();
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target_1));
+  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  orchestrator->SetTargets(std::move(mock_targets));
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  REQUIRE(astlConfigureMetricCollectionOnTarget(nullptr, nullptr, nullptr, 0) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
 TEST_CASE("astlConfigureMetricCollection", "[unimplemented for now]") {

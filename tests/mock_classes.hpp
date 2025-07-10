@@ -182,8 +182,8 @@ struct MockMetric : public astl::IMetric {
 struct MockMetricManager : public astl::IMetricManager {
   static constexpr bool trompeloeil_movable_mock = true;
 
-  using expected_operation_sequence = std::expected<astl::OperationSequence, astl_status_code>;
-  using expected_metric_interface   = std::expected<std::span<astl::IMetric* const>, astl_status_code>;
+  using expected_collection_operations = std::expected<astl::CollectionOperations, astl_status_code>;
+  using expected_metric_interface      = std::expected<std::span<astl::IMetric* const>, astl_status_code>;
 
   /*
    * @brief Register a new metric with the metric manager.
@@ -205,10 +205,10 @@ struct MockMetricManager : public astl::IMetricManager {
    * @brief Determine the required operations to support the specified metrics.
    *
    * @param metrics A span of metric pointers for which to determine the required operations.
-   * @return A std::expected containing the required OperationSequence if successful,
+   * @return A std::expected containing the required CollectionOperations struct if successful,
    *         or an astl_status_code on failure.
    */
-  MAKE_MOCK1(GetRequiredOperations, auto(std::span<astl::IMetric* const>)->expected_operation_sequence, override);
+  MAKE_MOCK1(GetRequiredOperations, auto(std::span<astl::IMetric* const>)->expected_collection_operations, override);
 
   /*
    * @brief Process the sampled data for all registered metrics.

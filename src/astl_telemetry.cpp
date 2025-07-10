@@ -451,12 +451,29 @@ astl_status_code astlConfigureCounterCollection(const astl_collection_parameters
 astl_status_code astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
                                                        astl_collection_parameters_t* collection_params,
                                                        astl_metric_handle_t* metric_handles, uint32_t metric_count) {
-  (void)target_handle;
-  (void)collection_params;
-  (void)metric_handles;
-  (void)metric_count;
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  return result;
+  // check input arguments for null and api version
+  if (!target_handle || !collection_params || !metric_handles || !metric_count) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (collection_params->_size < sizeof(astl_collection_parameters_t)) {
+    return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  if (collection_params->_size > sizeof(astl_collection_parameters_t)) {
+    return ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  auto get_target_result = GetTargetFromHandle(target_handle);
+  if (!get_target_result) {
+    return get_target_result.error();
+  }
+  std::span<astl_metric_handle_t> metric_handle_span{metric_handles, metric_count};
+  auto*                           target = *get_target_result;
+  std::vector<astl::IMetric*>     metrics;
+  metrics.reserve(metric_count);
+  std::transform(std::begin(metric_handle_span), std::end(metric_handle_span), std::back_inserter(metrics),
+                 [](const astl_metric_handle_t& metric_handle) { return static_cast<astl::IMetric*>(metric_handle); });
+  // TODO(https://github.com/Arm-Debug/ASTL/issues/129) - validate metric_handle
+  std::span<astl::IMetric*> metric_span{metrics};
+  return astl::Orchestrator::GetInstance()->ConfigureMetricCollection(target, collection_params, metric_span);
 }
 
 astl_status_code astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
