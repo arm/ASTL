@@ -93,6 +93,21 @@ class Orchestrator : public ISampleSink {
                                               std::span<ICounter *> counters);
 
   /**
+   * @brief For a given target, enable collection on a set of measurable Metrics.
+   *
+   * @param target The target from which the collection will be sampled
+   * @param collection_params Specifies how the collection should be gathered
+   * @param metrics The set of data points to collect
+   *
+   * @return error status code:
+   *   - ASTL_STATUS_SUCCESS: success
+   *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
+   *   - ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET: one of the given metrics is not associated with the target
+   */
+  astl_status_code ConfigureMetricCollection(ITarget *target, const astl_collection_parameters_t *collection_params,
+                                             std::span<IMetric *> metrics);
+
+  /**
    * @brief Apply the previously configured collection on the given target
    *
    * Attempts to enable any data sources set up by ConfigureCounterCollection or similar, and may take initial sample

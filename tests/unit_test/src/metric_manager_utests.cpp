@@ -154,14 +154,14 @@ TEST_CASE("MetricManager::GetRequiredOperations succeeds with valid SCMI metric"
   REQUIRE(metrics.size() == 1);
 
   // Obtain the required SCMI operations
-  std::expected<astl::OperationSequence, astl_status_code> ops = mgr.GetRequiredOperations(metrics);
+  auto const& ops = mgr.GetRequiredOperations(metrics);
   REQUIRE(ops);
-  REQUIRE_FALSE(ops->empty());
+  REQUIRE_FALSE(ops->operationsOnSample.empty());
   // Verify there is exactly one operation with ID 123
-  astl::OperationSequence& op_seq = *ops;
+  astl::OperationSequence const& op_seq = ops->operationsOnSample;
   REQUIRE(op_seq.size() == 1);
-  auto& base_op = op_seq.front();
-  auto* scmi_op = dynamic_cast<astl::ScmiReadOperation*>(base_op.get());
+  const auto& base_op = op_seq.front();
+  const auto* scmi_op = dynamic_cast<astl::ScmiReadOperation*>(base_op.get());
   REQUIRE(scmi_op != nullptr);
   REQUIRE(scmi_op->scmi_data_event_id == 123);
 }
@@ -171,10 +171,10 @@ TEST_CASE("MetricManager::GetRequiredOperations fails for unregistered metric", 
   MetricManager mgr(caps);
 
   // Metric pointer not registered
-  astl::IMetric*                                           unregistered_metric = nullptr;
-  std::array<astl::IMetric*, 1>                            metrics_array{unregistered_metric};
-  std::span<astl::IMetric*>                                span(metrics_array.data(), metrics_array.size());
-  std::expected<astl::OperationSequence, astl_status_code> result = mgr.GetRequiredOperations(span);
+  astl::IMetric*                unregistered_metric = nullptr;
+  std::array<astl::IMetric*, 1> metrics_array{unregistered_metric};
+  std::span<astl::IMetric*>     span(metrics_array.data(), metrics_array.size());
+  auto                          result = mgr.GetRequiredOperations(span);
   REQUIRE_FALSE(result.has_value());
   REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
 }
@@ -196,8 +196,8 @@ TEST_CASE("MetricManager::GetRequiredOperations fails for non-SCMI metric", "[Me
   // Retrieve the metric.
   std::expected<std::span<IMetric* const>, astl_status_code> avail = mgr.GetAvailableMetrics();
   REQUIRE(avail.has_value());
-  auto                                                     metric_span = *avail;
-  std::expected<astl::OperationSequence, astl_status_code> result      = mgr.GetRequiredOperations(metric_span);
+  auto metric_span = *avail;
+  auto result      = mgr.GetRequiredOperations(metric_span);
   REQUIRE_FALSE(result.has_value());
   REQUIRE(result.error() == ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE);
 }

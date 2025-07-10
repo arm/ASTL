@@ -25,8 +25,11 @@
 #define METRIC_MANAGER_HPP_
 
 #include <span>
+#include <unordered_map>
+#include <vector>
 
 #include "astl/astl_errors.h"
+#include "collector/collection_operations.hpp"
 #include "common/capabilities.hpp"
 #include "i_metric_manager.hpp"
 
@@ -67,12 +70,11 @@ class MetricManager : public IMetricManager {
   /**
    * @brief Build the sequence of operations required to collect the given metrics.
    * @param metrics Span of metric pointers for which to generate operations.
-   * @return expected containing an OperationSequence of SCMI read operations on success,
+   * @return expected containing an CollectionOperations group of SCMI read operations on success,
    *         or an error code (e.g., BAD_ARGUMENT, UNSUPPORTED_COLLECTOR_TYPE).
-   * TODO (https://jira.arm.com/browse/ASTL-113):
-   * Implement an API to return CollectionOperations.
    */
-  std::expected<OperationSequence, astl_status_code> GetRequiredOperations(std::span<IMetric* const> metrics) override;
+  std::expected<CollectionOperations, astl_status_code> GetRequiredOperations(
+      std::span<IMetric* const> metrics) override;
 
   /**
    * @brief Distribute collected sample data to registered metrics.
