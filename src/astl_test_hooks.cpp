@@ -14,7 +14,6 @@ ASTL_API astl_status_code astlInjectTestOrchestrator(astl_test_orchestrator_t  n
   // most likely by swapping it back in when done
   *original_orchestrator = current_orchestrator.release();
 
-  // cppcheck-suppress constVariablePointer
   auto* raw_orchestrator_ptr = static_cast<astl::Orchestrator*>(new_orchestrator);
   astl::Orchestrator::GetInstance().reset(raw_orchestrator_ptr);
   return ASTL_STATUS_SUCCESS;

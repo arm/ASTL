@@ -431,9 +431,9 @@ ASTL_API astl_status_code astlGetMetricGroups(astl_target_handle_t            ta
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlGetMetricGroupMetrics(astl_target_handle_t            target_handle,
-                                                    astl_metric_group_properties_t* metric_group,
-                                                    astl_metric_properties_t*       metrics);
+ASTL_API astl_status_code astlGetMetricGroupMetrics(astl_target_handle_t                  target_handle,
+                                                    const astl_metric_group_properties_t* metric_group,
+                                                    astl_metric_properties_t*             metrics);
 
 /***********************************************************************************
  **********************              COLLECTION                *********************

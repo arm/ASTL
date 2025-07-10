@@ -352,21 +352,24 @@ astl_status_code astlGetMetricGroups(astl_target_handle_t target_handle, astl_me
   if (!metric_group_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  *metric_group_count = 0;
+  std::span<astl_metric_group_properties_t> metric_groups_span{metric_groups, *metric_group_count};
+  // change when implementing this function
+  metric_groups_span[0]._handle = nullptr;  // cppcheck-suppress unreadVariable
+  *metric_group_count           = 0;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
-astl_status_code astlGetMetricGroupMetrics(astl_target_handle_t            target_handle,
-                                           astl_metric_group_properties_t* metric_groups,
-                                           astl_metric_properties_t*       metrics) {
+astl_status_code astlGetMetricGroupMetrics(astl_target_handle_t                  target_handle,
+                                           const astl_metric_group_properties_t* metric_groups,
+                                           astl_metric_properties_t*             metrics) {
   (void)target_handle;
-  if (!metric_groups) {
+  if (!metric_groups || !metrics || metric_groups->_metric_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (!metrics) {
-    return ASTL_STATUS_BAD_ARGUMENT;
-  }
+  std::span<astl_metric_properties_t> metrics_span{metrics, metric_groups->_metric_count};
+  // change when implementing this function
+  metrics_span[0]._handle = nullptr;  // cppcheck-suppress unreadVariable
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
@@ -626,10 +629,13 @@ astl_status_code astlGetCounterSamplesOnTarget(astl_target_handle_t target_handl
   if (!samples) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (!sample_count) {
+  if (!sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  *sample_count = 0;
+  std::span<astl_counter_sample_t> samples_span{samples, *sample_count};
+  // remove this when implementing this function
+  samples_span[0]._counter_handle = nullptr;  // cppcheck-suppress unreadVariable
+  *sample_count                   = 0;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
@@ -650,10 +656,13 @@ astl_status_code astlGetAllCounterSamplesOnTarget(astl_target_handle_t target_ha
   if (!samples) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (!sample_count) {
+  if (!sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  *sample_count = 0;
+  std::span<astl_counter_sample_t> samples_span{samples, *sample_count};
+  // remove this when implementing this function
+  samples_span[0]._counter_handle = nullptr;  // cppcheck-suppress unreadVariable
+  *sample_count                   = 0;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
@@ -671,10 +680,13 @@ astl_status_code astlGetAllCounterSamples(astl_counter_sample_t* samples, uint32
   if (!samples) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (!sample_count) {
+  if (!sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  *sample_count = 0;
+  std::span<astl_counter_sample_t> samples_span{samples, *sample_count};
+  // remove this when implementing this function
+  samples_span[0]._counter_handle = nullptr;  // cppcheck-suppress unreadVariable
+  *sample_count                   = 0;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
@@ -865,10 +877,13 @@ astl_status_code astlGetAllMetricSamples(astl_metric_sample_t* metric_samples, u
   if (!metric_samples) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (!sample_count) {
+  if (!sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  *sample_count = 0;
+  std::span<astl_metric_sample_t> samples_span{metric_samples, *sample_count};
+  // remove this when implementing this function
+  samples_span[0]._metric_handle = nullptr;  // cppcheck-suppress unreadVariable
+  *sample_count                  = 0;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
