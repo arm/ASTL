@@ -15,6 +15,35 @@ extern "C" {
  **********************            INITIALIZATION           ************************
  **********************************************************************************/
 
+/**
+ * @brief macro to declare a struct of type `type` with name `var` and initialize the _size field for API versioning
+ * @example
+ * `ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params);`
+ * Now collection_params._size is set automatically
+ */
+#define ASTL_INIT_STRUCT(type, var) type var = {._size = sizeof(type)}
+
+/**
+ * @brief macro to declare and 0-initialize a `count`-length array of structs of type `type` named `var`
+ *        Will initialize the `_size` field of the first element in the array for API versioning
+ */
+#define ASTL_ALLOC_ARRAY(type, var, count)          \
+  type* var = (type*)calloc((count), sizeof(type)); \
+  if (var) {                                        \
+    var[0]._size = sizeof(type);                    \
+  }
+
+/**
+ * @brief macro to free an array allocated by ASTL_ALLOC_ARRAY
+ */
+#define ASTL_FREE_ARRAY(ptr) \
+  do {                       \
+    if ((ptr) != NULL) {     \
+      free(ptr);             \
+      (ptr) = NULL;          \
+    }                        \
+  } while (0)
+
 typedef struct _astl_initialization_parameters_t {
   size_t _size;  //!< size of this struct for versioning
   // empty struct for now, future API versions may include config file, or saved session file,

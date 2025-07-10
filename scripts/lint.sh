@@ -59,7 +59,8 @@ done
 
 # helpers
 get_staged_files() {
-  git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|h|hxx)$' || true
+  # note: don't lint .h files, as the -std=c++23 flag cannot be applied to them. we'll treat them in a separate step
+  git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|hpp|hxx)$' || true
 }
 
 get_diff_files() {
@@ -124,6 +125,10 @@ esac
 for FILE in "${FILES_TO_LINT[@]-}"; do
   if [[ "$FILE" == "" ]]; then
     # skip empty string in case of empty file list
+    continue
+  fi
+  if [[ "$FILE" == include/astl/* || "$FILE" == "$BUILD_DIR/include/astl/"* ]]; then
+    echo "Skipping lint of $FILE for now since it's a C header"
     continue
   fi
   echo "- Linting '$FILE'"

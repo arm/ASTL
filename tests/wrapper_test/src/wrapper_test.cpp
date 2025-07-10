@@ -16,6 +16,15 @@
 
 using trompeloeil::_;
 
+template <typename T>
+auto AllocateAstlVector(size_t count) -> std::vector<T> {
+  std::vector<T> objects{count};
+  if (count > 0) {
+    objects[0]._size = sizeof(T);
+  }
+  return objects;
+}
+
 /**
  * @brief A test harness construct to replace the ASTL's Orchestrator instance with one for testing
  *
@@ -91,6 +100,38 @@ TEST_CASE("astlStatusString", "[matches header definition]") {
   REQUIRE(std::string(astlStatusString(ASTL_STATUS_INTERNAL_ERROR)) == "INTERNAL_ERROR");
 }
 
+TEST_CASE("astl initialization macros") {
+  ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params);
+  REQUIRE(init_params._size == sizeof(astl_initialization_parameters_t));
+
+// For C++ client code, it is recommended to define your own template function to handle the initialization
+// of a vector container.
+// For testing this macro, We have a few warnings and linters to disable
+// to use old-style casts and manual memory management.
+#ifdef _MSC_VER
+#  pragma warning(push)
+#  pragma warning(disable : 26490)  // MSVC: "Don't use reinterpret_cast-style C-casts"
+#elif defined(__GNUC__) || defined(__clang__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wold-style-cast"
+#endif
+  // NOLINTNEXTLINE
+  ASTL_ALLOC_ARRAY(astl_metric_properties_t, metric_properties, kAFew);
+#ifdef _MSC_VER
+#  pragma warning(pop)
+#elif defined(__GNUC__) || defined(__clang__)
+#  pragma GCC diagnostic pop
+#endif
+
+  REQUIRE(metric_properties != NULL);
+  // NOLINTNEXTLINE
+  ASTL_FREE_ARRAY(metric_properties);
+  REQUIRE(metric_properties == NULL);
+  // NOLINTNEXTLINE
+  ASTL_FREE_ARRAY(metric_properties);
+  REQUIRE(true);  // ensure no UB from double-free
+}
+
 TEST_CASE("astlInitialize checks for invalid input", "[wrapper_test]") {
   REQUIRE(astlInitialize(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
 }
@@ -147,8 +188,7 @@ TEST_CASE("astlGetTargets", "[Oversized buffer]") {
   astlGetTargetCount(&target_count);
   auto actual_target_count = target_count;
   target_count *= 2;  // allocate a little extra buffer, to ensure we get the right warning
-  std::vector<astl_target_properties_t> targets{target_count};
-  targets[0]._size = sizeof(astl_target_properties_t);
+  auto targets = AllocateAstlVector<astl_target_properties_t>(target_count);
   REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED);
   REQUIRE(target_count == actual_target_count);
 }
@@ -196,8 +236,7 @@ TEST_CASE("astlGetTargets", "[second target can't retrieve parameters]") {
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size      = sizeof(astl_target_properties_t);
+  auto     targets      = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count = 2;
 
   REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_INTERNAL_ERROR);
@@ -219,8 +258,7 @@ TEST_CASE("astlGetCounterCount", "[unreasonably huge number of counters]") {
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   // get a handle back to the target
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size = sizeof(astl_target_properties_t);
+  auto     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count{0};
   astlGetTargetCount(&target_count);
   REQUIRE(target_count == 1);
@@ -245,8 +283,7 @@ TEST_CASE("astlGetCounterCount", "[Ask a target how many counters it has]") {
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   // get a handle back to the target
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size = sizeof(astl_target_properties_t);
+  auto     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count{0};
   astlGetTargetCount(&target_count);
   REQUIRE(target_count == 1);
@@ -285,8 +322,7 @@ TEST_CASE("astlGetCounters", "[invalid parameters]") {
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   // get a handle back to the target
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size = sizeof(astl_target_properties_t);
+  auto     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count{0};
   astlGetTargetCount(&target_count);
   REQUIRE(target_count == 1);
@@ -344,8 +380,7 @@ TEST_CASE("astlGetCounters", "[0 counters available]") {
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   // get a handle back to the target
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size = sizeof(astl_target_properties_t);
+  auto     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count{0};
   astlGetTargetCount(&target_count);
   REQUIRE(target_count == 1);
@@ -359,15 +394,14 @@ TEST_CASE("astlGetCounters", "[0 counters available]") {
   SECTION("Asking for 0 counters, when 0 are availalable is a bad argument") {
     // try asking for 0 counters, even when 0 counters are available - is a bad input argument
     counter_count = 0;
-    std::vector<astl_counter_properties_t> counters{kAFew};
-    counters[0]._size = sizeof(astl_counter_properties_t);
+    auto counters = AllocateAstlVector<astl_counter_properties_t>(kAFew);
     REQUIRE(astlGetCounters(target_handle, counters.data(), &counter_count) == ASTL_STATUS_BAD_ARGUMENT);
     REQUIRE(counter_count == 0);
   }
   SECTION("Asking for some counters when 0 are available is a NO_COUNTERS error") {
-    std::vector<astl_counter_properties_t> counters{kAFew};
-    counter_count     = static_cast<uint32_t>(counters.size());
+    auto counters     = AllocateAstlVector<astl_counter_properties_t>(kAFew);
     counters[0]._size = sizeof(astl_counter_properties_t);
+    counter_count     = kAFew;
     REQUIRE(astlGetCounters(target_handle, counters.data(), &counter_count) == ASTL_STATUS_NO_COUNTERS_FOUND);
     REQUIRE(counter_count == 0);
   }
@@ -397,8 +431,7 @@ TEST_CASE("astlGetCounters", "[Retrieve a number of counters from a target]") {
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   // get a handle back to the target
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size = sizeof(astl_target_properties_t);
+  auto     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count{0};
   astlGetTargetCount(&target_count);
   REQUIRE(target_count == 1);
@@ -406,9 +439,8 @@ TEST_CASE("astlGetCounters", "[Retrieve a number of counters from a target]") {
   auto* target_handle = targets[0]._handle;
 
   SECTION("Request with oversized buffer") {
-    uint32_t                               counter_count{kAFew};
-    std::vector<astl_counter_properties_t> counters{counter_count};
-    counters[0]._size = sizeof(astl_counter_properties_t);
+    uint32_t counter_count{kAFew};
+    auto     counters = AllocateAstlVector<astl_counter_properties_t>(counter_count);
     REQUIRE(astlGetCounters(target_handle, counters.data(), &counter_count) == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED);
     REQUIRE(counters[0]._mask == 0);
     REQUIRE(counters[1]._value_type == ASTL_VALUE_FLOAT64);
@@ -416,9 +448,8 @@ TEST_CASE("astlGetCounters", "[Retrieve a number of counters from a target]") {
   }
 
   SECTION("Request with exact right buffer size") {
-    uint32_t                               counter_count{2};
-    std::vector<astl_counter_properties_t> counters{counter_count};
-    counters[0]._size = sizeof(astl_counter_properties_t);
+    uint32_t counter_count{2};
+    auto     counters = AllocateAstlVector<astl_counter_properties_t>(counter_count);
     REQUIRE(astlGetCounters(target_handle, counters.data(), &counter_count) == ASTL_STATUS_SUCCESS);
     REQUIRE(counters[0]._mask == 0);
     REQUIRE(counters[1]._value_type == ASTL_VALUE_FLOAT64);
@@ -493,9 +524,8 @@ TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator]") {
   }
 
   SECTION("astlGetMetrics", "[good params]") {
-    uint32_t                              metric_count{2};
-    std::vector<astl_metric_properties_t> metrics{kAFew};
-    metrics[0]._size = sizeof(astl_metric_properties_t);
+    uint32_t metric_count{2};
+    auto     metrics = AllocateAstlVector<astl_metric_properties_t>(kAFew);
     REQUIRE(astlGetMetrics(mock_target_handle, metrics.data(), &metric_count) == ASTL_STATUS_SUCCESS);
     REQUIRE(metrics[0]._value_type == ASTL_VALUE_FLOAT64);
   }
@@ -555,9 +585,10 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator]") {
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  // get back a handle to a target
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size = sizeof(astl_target_properties_t);
+  // all nullptrs
+  REQUIRE(astlConfigureCounterCollectionOnTarget(nullptr, nullptr, nullptr, 0) == ASTL_STATUS_BAD_ARGUMENT);
+
+  auto     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count{0};
   REQUIRE(astlGetTargetCount(&target_count) == ASTL_STATUS_SUCCESS);
   REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
@@ -637,10 +668,8 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counter
   auto orchestrator = std::make_unique<astl::Orchestrator>();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
-
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size = sizeof(astl_target_properties_t);
-  uint32_t target_count{0};
+  auto                     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
+  uint32_t                 target_count{0};
   astlGetTargetCount(&target_count);
   astlGetTargets(targets.data(), &target_count);
   astl_target_handle_t target_handle{targets[0]._handle};
@@ -650,8 +679,7 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counter
                                                  ASTL_COLLECTION_MODE_SAMPLING, ASTL_COLLECTION_OPTIMIZATION_MEMORY};
 
   // with some valid counter_handles we should be good
-  std::vector<astl_counter_properties_t> counter_properties{kAFew};
-  counter_properties[0]._size = sizeof(astl_counter_properties_t);
+  auto     counter_properties = AllocateAstlVector<astl_counter_properties_t>(kAFew);
   uint32_t counter_count{1};
   REQUIRE(astlGetCounterCount(target_handle, &counter_count) == ASTL_STATUS_SUCCESS);
   REQUIRE(astlGetCounters(target_handle, counter_properties.data(), &counter_count) == ASTL_STATUS_SUCCESS);
@@ -749,8 +777,7 @@ TEST_CASE("astlReadImmediateOnTarget", "[1 works, one doesn't]") {
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size      = sizeof(astl_target_properties_t);
+  auto     targets      = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count = 2;
   REQUIRE(astlGetTargets(targets.data(), &target_count) ==
           ASTL_STATUS_INTERNAL_ERROR);             // get target properties from our mock target fails
@@ -813,8 +840,7 @@ TEST_CASE("astlStartCollectionOnTarget", "[unimplemented for now]") {
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size      = sizeof(astl_target_properties_t);
+  auto     targets      = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count = 2;
   REQUIRE(astlGetTargets(targets.data(), &target_count) ==
           ASTL_STATUS_INTERNAL_ERROR);             // get target properties from our mock target fails
@@ -869,8 +895,7 @@ TEST_CASE("astlStopCollectionOnTarget", "[unimplemented for now]") {
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size      = sizeof(astl_target_properties_t);
+  auto     targets      = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count = 2;
   REQUIRE(astlGetTargets(targets.data(), &target_count) ==
           ASTL_STATUS_INTERNAL_ERROR);             // get target properties from our mock target fails
@@ -918,8 +943,7 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   // now that the test objects are in place, use the API as normal to get the handles to our objects
-  std::vector<astl_target_properties_t> targets{kAFew};
-  targets[0]._size = sizeof(astl_target_properties_t);
+  auto     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count{2};
   astlGetTargets(targets.data(), &target_count);
   int   junk{1};
@@ -927,8 +951,7 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
   auto* working_target_handle{targets[0]._handle};
   auto* broken_target_handle{targets[1]._handle};
 
-  std::vector<astl_counter_properties_t> counters{kAFew};
-  counters[0]._size = sizeof(astl_counter_properties_t);
+  auto     counters = AllocateAstlVector<astl_counter_properties_t>(kAFew);
   uint32_t counter_count{1};
   REQUIRE(astlGetCounters(working_target_handle, counters.data(), &counter_count) == ASTL_STATUS_SUCCESS);
   auto* working_counter_handle{counters[0]._handle};
@@ -1020,8 +1043,7 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator]") {
     REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
     REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), nullptr, nullptr) ==
             ASTL_STATUS_BAD_ARGUMENT);
-    std::vector<astl_metric_sample_t> samples_out{kAFew};
-    samples_out[0]._size = sizeof(astl_metric_sample_t);
+    auto samples_out = AllocateAstlVector<astl_metric_sample_t>(kAFew);
     REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), samples_out.data(), nullptr) ==
             ASTL_STATUS_BAD_ARGUMENT);
     sample_count = 1;  // too small a buffer - 3 samples are defined above
@@ -1043,8 +1065,7 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator]") {
   SECTION("[no samples]") {
     REQUIRE_CALL(*mock_metric, GetSamples()).RETURN(std::span<const astl::SampledData>{});
 
-    std::vector<astl_metric_sample_t> samples_out{kAFew};
-    samples_out[0]._size = sizeof(astl_metric_sample_t);
+    auto samples_out = AllocateAstlVector<astl_metric_sample_t>(kAFew);
 
     auto result = astlGetMetricSampleCountOnTarget(mock_target_handle, mock_metric.get(), &sample_count);
     REQUIRE((result == ASTL_STATUS_SUCCESS || result == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED));
@@ -1062,9 +1083,8 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator]") {
             ASTL_STATUS_SUCCESS);
     REQUIRE(sample_count == samples.size());
 
-    sample_count = 3;  // should match samples.size()};
-    std::vector<astl_metric_sample_t> samples_out{kAFew};
-    samples_out[0]._size = sizeof(astl_metric_sample_t);
+    sample_count     = 3;  // should match samples.size()};
+    auto samples_out = AllocateAstlVector<astl_metric_sample_t>(kAFew);
 
     REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), samples_out.data(), &sample_count) ==
             ASTL_STATUS_SUCCESS);
@@ -1134,8 +1154,7 @@ TEST_CASE("astlGetAllMetricSamplesOnTarget", "[wrapper][Orchestrator]") {
     result = astlGetAllMetricSamplesOnTarget(invalid_target_handle, nullptr, nullptr);
     REQUIRE((result == ASTL_STATUS_BAD_ARGUMENT || result == ASTL_STATUS_INVALID_TARGET_HANDLE));
     REQUIRE(astlGetAllMetricSamplesOnTarget(mock_target_handle, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
-    std::vector<astl_metric_sample_t> samples_out{kAFew};
-    samples_out[0]._size = sizeof(astl_metric_sample_t);
+    auto samples_out = AllocateAstlVector<astl_metric_sample_t>(kAFew);
     REQUIRE(astlGetAllMetricSamplesOnTarget(mock_target_handle, samples_out.data(), nullptr) ==
             ASTL_STATUS_BAD_ARGUMENT);
     sample_count = 0;  // 0 is an invalid buffer size - we need to check one element's _size field for version
@@ -1157,9 +1176,8 @@ TEST_CASE("astlGetAllMetricSamplesOnTarget", "[wrapper][Orchestrator]") {
   }
 
   SECTION("astlGetAllMetricSamplesOnTarget [good params]") {
-    std::vector<astl_metric_sample_t> samples_out{kAFew};
-    samples_out[0]._size = sizeof(astl_metric_sample_t);
-    sample_count         = 4;
+    auto samples_out = AllocateAstlVector<astl_metric_sample_t>(kAFew);
+    sample_count     = 4;
     REQUIRE(astlGetAllMetricSamplesOnTarget(mock_target_handle, samples_out.data(), &sample_count) ==
             ASTL_STATUS_SUCCESS);
 
