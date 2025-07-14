@@ -76,10 +76,10 @@ FileSystemNode* FindNodeByIno(FileSystemNode* node, ino_t ino) {
 
   if (node->GetType() == NodeType::DIRECTORY_NODE) {
     for (const auto& child : node->GetChildren()) {
-      auto* node = FindNodeByIno(child.get(), ino);
-      if (node) {
-        node_map[ino] = node;
-        return node;
+      auto* recurse_node = FindNodeByIno(child.get(), ino);
+      if (recurse_node) {
+        node_map[ino] = recurse_node;
+        return recurse_node;
       }
     }
   }

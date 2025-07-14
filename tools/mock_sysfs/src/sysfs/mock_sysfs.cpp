@@ -49,34 +49,34 @@ static void LowLevelLookup(fuse_req_t req, fuse_ino_t parent, const char* name) 
     return;
   }
 
-  for (const auto& child : parent_node->GetChildren()) {
-    if (child->GetName() == name) {
-      // (clang-format <20 incorrectly wants to add a space before the {})
-      // clang-format off
-      struct fuse_entry_param entry{};
-      // clang-format on
-      entry.ino           = child->GetIno();
-      entry.attr_timeout  = kAttrTimeoutSec;
-      entry.entry_timeout = kEntryTimeoutSec;
-      entry.attr.st_ino   = child->GetIno();
-      entry.attr.st_mode  = child->GetMode();
+  if (auto matching_child = std::ranges::find_if(parent_node->GetChildren(),
+                                                 [&name](const auto& child) { return child->GetName() == name; });
+      matching_child != parent_node->GetChildren().end()) {
+    const auto& child = *matching_child;
+    // (clang-format <20 incorrectly wants to add a space before the {})
+    // clang-format off
+    struct fuse_entry_param entry{};
+    // clang-format on
+    entry.ino           = child->GetIno();
+    entry.attr_timeout  = kAttrTimeoutSec;
+    entry.entry_timeout = kEntryTimeoutSec;
+    entry.attr.st_ino   = child->GetIno();
+    entry.attr.st_mode  = child->GetMode();
 
-      if (child->GetType() == NodeType::DIRECTORY_NODE) {
-        entry.attr.st_nlink = 2;  // Directory has at least 2 links (. and ..) define constants
-      } else {
-        std::string value = HandleProtocolRead(child.get());
-        if (!value.empty()) {
-          child->SetFileContent(value);
-        }
-        entry.attr.st_nlink = 1;
-        entry.attr.st_size  = static_cast<off_t>(child->GetFileContent().size());
+    if (child->GetType() == NodeType::DIRECTORY_NODE) {
+      entry.attr.st_nlink = 2;  // Directory has at least 2 links (. and ..) define constants
+    } else {
+      std::string value = HandleProtocolRead(child.get());
+      if (!value.empty()) {
+        child->SetFileContent(value);
       }
-
-      fuse_reply_entry(req, &entry);
-      return;
+      entry.attr.st_nlink = 1;
+      entry.attr.st_size  = static_cast<off_t>(child->GetFileContent().size());
     }
-  }
 
+    fuse_reply_entry(req, &entry);
+    return;
+  }
   fuse_reply_err(req, ENOENT);
 }
 
