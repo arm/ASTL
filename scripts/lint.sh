@@ -4,173 +4,170 @@
 set -eu -o pipefail
 
 if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <build> [pre-commit|all|pull-request]"
-    echo "build path is needed to help clang-tidy avoid linting cmake-generated source files."
-    exit 1
+	echo "Usage: $0 <build> [pre-commit|all|pull-request]"
+	echo "build path is needed to help clang-tidy avoid linting cmake-generated source files."
+	exit 1
 fi
 
 # Check for clang-tidy
 if ! command -v clang-tidy >/dev/null 2>&1; then
-    echo "❌ clang-tidy is not installed."
-    echo "👉 Please install it with:"
-    echo "   sudo apt install clang-tidy        # Debian/Ubuntu"
-    echo "   brew install llvm                                # macOS (Homebrew)"
-    echo "   export PATH="/opt/homebrew/opt/llvm/bin:\$PATH"  # macOS continued"
-    echo "   pacman -S clang                    # Arch"
-    exit 1
+	echo "❌ clang-tidy is not installed."
+	echo "👉 Please install it with:"
+	echo "   sudo apt install clang-tidy        # Debian/Ubuntu"
+	echo "   brew install llvm                                # macOS (Homebrew)"
+	echo "   export PATH=\"/opt/homebrew/opt/llvm/bin:$PATH\" # macOS continued"
+	echo "   pacman -S clang                    # Arch"
+	exit 1
 fi
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-REPO_ROOT_DIR="$( dirname ${SCRIPT_DIR} )"
-INCLUDE_PATHS="-I${REPO_ROOT_DIR}/include"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 
-# don't lint builld dir, or vcpkg dependencies
-source $SCRIPT_DIR/get_find_file_expressions.sh # define PRUNE_EXPR
+# use utils.sh's get_all_source_files to export  SOURCE_FILES
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR"/utils.sh
+get_all_source_files # export SOURCE_FILES
+BUILD_DIR=$(realpath "$1")
 
-CLANG_BUILD_DIR=""
-# if the script was given an argument for the build output, add the include path from that, and exclude it from linting
-if [[ -n "$1" ]]; then
-  BUILD_DIR=$(realpath "$1")
-
-  INCLUDE_PATHS+=" -I${BUILD_DIR}/include"
-  INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/utils"
-  INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/src/impl"
-  INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/src/impl/common"
-  INCLUDE_PATHS+=" -I${REPO_ROOT_DIR}/tools/mock_sysfs/include"
-  CLANG_BUILD_DIR+=" -p $BUILD_DIR"
-fi
+INCLUDE_PATHS=(-I"${REPO_ROOT_DIR}"/include)
+INCLUDE_PATHS+=(-I"${BUILD_DIR}"/include)
+INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/utils)
+INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/src/impl)
+INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/src/impl/common)
+INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/tools/mock_sysfs/include)
 
 echo "Running clang-tidy to lint code..."
 
 # find the system header paths so clang++ can find them
-SYS_INCLUDE_PATHS=$(echo | g++ -E -x c++ - -v 2>&1 | \
-  awk '/#include <...> search starts here:/{flag=1;next}/End of search list/{flag=0}flag' | \
-  sed 's/^/ -isystem /')
+SYS_INCLUDE_PATHS=$(echo | g++ -E -x c++ - -v 2>&1 |
+	awk '/#include <...> search starts here:/{flag=1;next}/End of search list/{flag=0}flag' |
+	sed -E 's/ *\(.*\)$//' | sed 's/^/ -isystem /')
 
 # Include dependency headers from vcpkg as system headers
-for DEP in $REPO_ROOT_DIR/vcpkg/packages/*; do
-  NEW_INCLUDE="${DEP}/include/"
-  if [[ -d "${NEW_INCLUDE}/fuse3" ]]; then
-    # vcpkg installs fuse3 headers in a subdirectory
-    NEW_INCLUDE="${NEW_INCLUDE}/fuse3"
-  fi
-  SYS_INCLUDE_PATHS+=" -isystem ${NEW_INCLUDE}"
+for DEP in "$REPO_ROOT_DIR"/vcpkg/packages/*; do
+	NEW_INCLUDE="${DEP}/include/"
+	if [[ -d "${NEW_INCLUDE}/fuse3" ]]; then
+		# vcpkg installs fuse3 headers in a subdirectory
+		NEW_INCLUDE="${NEW_INCLUDE}/fuse3"
+	fi
+	SYS_INCLUDE_PATHS+=(-isystem "${NEW_INCLUDE}")
 done
 
 # helpers
 get_staged_files() {
-  # note: don't lint .h files, as the -std=c++23 flag cannot be applied to them. we'll treat them in a separate step
-  git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|hpp|hxx)$' || true
+	git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|hxx)$' || true
 }
 
 get_diff_files() {
-  # .github/workflows/integration.yml should set up the env variables for BASE_REF and HEAD_REF,
-  # but provide reasonable default
-  BASE_REF="${BASE_REF:-main}"
-  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-  HEAD_REF="${HEAD_REF:-${CURRENT_BRANCH}}"
-  git fetch origin "$BASE_REF" "$HEAD_REF"
-  {
-    # note: don't lint .h files, as the -std=c++23 flag cannot be applied to them. we'll treat them in a separate step
-    git diff origin/"$BASE_REF"...origin/"$HEAD_REF" --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|hpp|hxx)$' || true
-    git diff --cached           --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|hpp|hxx)$' || true
-  } | sort -u
+	# .github/workflows/integration.yml should set up the env variables for BASE_REF and HEAD_REF,
+	# but provide reasonable default
+	BASE_REF="${BASE_REF:-main}"
+	CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+	HEAD_REF="${HEAD_REF:-${CURRENT_BRANCH}}"
+	git fetch origin "$BASE_REF" "$HEAD_REF"
+	{
+		git diff origin/"$BASE_REF"...origin/"$HEAD_REF" --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|hxx)$' || true
+		git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|hxx)$' || true
+	} | sort -u
 }
 
 if [ "$#" -lt 2 ]; then
-  MODE="pull-request"
+	MODE="pull-request"
 else
-  MODE=$2
+	MODE=$2
 fi
 
 echo "Linting mode: $MODE"
 
+FILES=()
 case "$MODE" in
-  pre-commit)
-    FILES=$(get_staged_files)
-    ;;
-  pull-request)
-    FILES=$(get_diff_files)
-    ;;
-  all)
-    # lint one translation unit at a time (assume headers are #included)
-    FILES=$(find $REPO_ROOT_DIR \( $PRUNE_EXPR \) -prune -o \( -type f \( $NAME_ALL_SOURCES_AND_HEADERS \) \) -print)
-    ;;
-  *)
-    echo "Unknown diff mode $2. Use 'all' or pre-commit"
-    exit 1
-    ;;
+pre-commit)
+	while IFS= read -r LINE; do
+		FILES+=("$LINE")
+	done < <(get_staged_files)
+	;;
+pull-request)
+	while IFS= read -r LINE; do
+		FILES+=("$LINE")
+	done < <(get_diff_files)
+	;;
+all)
+	# lint one translation unit at a time (assume headers are #included)
+	FILES=("${SOURCE_FILES[@]}")
+	;;
+*)
+	echo "Unknown diff mode $2. Use 'all' or pre-commit"
+	exit 1
+	;;
 esac
 
-FILES_TO_LINT=()
-case "$(uname -s)" in
-  Linux)
-    # on linux, we want to lint everything
-    FILES_TO_LINT=("${FILES}")
-    ;;
-  *)
-    # on macOS(Darwin) or other unknown, we want to lint everything except mock_sysfs
-    for FILE in ${FILES[@]}; do
-      if [[ "$FILE" == "" ]]; then
-        continue
-      elif [[ "$FILE" == *tools/mock_sysfs* ]]; then
-        echo "Skipping linting of $FILE since it's not build on this platform"
-      else
-        FILES_TO_LINT+=("$FILE")
-      fi
-    done
-    ;;
-esac
-
-for FILE in "${FILES_TO_LINT[@]-}"; do
-  if [[ "$FILE" == "" ]]; then
-    # skip empty string in case of empty file list
-    continue
-  fi
-  if [[ "$FILE" == include/astl/* || "$FILE" == "$BUILD_DIR/include/astl/"* ]]; then
-    echo "Skipping lint of $FILE for now since it's a C header"
-    continue
-  fi
-  echo "- Linting '$FILE'"
-  # exclude the C-level headers from this C++ lint - we'll do them as a separate step
-  header_filter="-header-filter='^(?!.*(include/astl|$BUILD_DIR/include/astl)).*'"
-  EXTRA_ARGS=""
-  if [[ "$FILE" != *.h ]]; then
-    EXTRA_ARGS+=" --extra-arg=-std=c++23"
-  fi
-  # enable std::expected in clang-tidy
-  EXTRA_ARGS+=" --extra-arg=-D__cpp_concepts=202002L"
-
-  # set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_sysfs/CMakeLists.txt
-  EXTRA_ARGS+=" --extra-arg=-DFUSE_USE_VERSION=316"
-
-  # treat warnings as errors, but not for unit tests (want to easily mute specific linter errors for those)
-  if [[ "$FILE" != *tests* ]]; then
-    EXTRA_ARGS+=" --warnings-as-errors=*"
-  else
-    # allow use of magic numbers in test code
-    EXTRA_ARGS+=" -checks=-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers"
-  fi
-
-  clang-tidy $header_filter \
-    $FILE $CLANG_BUILD_DIR \
-    $EXTRA_ARGS \
-    -- \
-    $INCLUDE_PATHS \
-    $SYS_INCLUDE_PATHS
-
-  # enable this to fix certain checks:
-  # clang-tidy $CLANG_BUILD_DIR -checks=-*,readability-identifier-naming -fix -fix-errors -header-filter=. $FILE -- $INCLUDE_PATHS $SYS_INCLUDE_PATHS
+## split files into
+##  - C++ source and header files,
+##  - C++ test files (which have more lax linter rules)
+##  - C-style header files (linted with different language standards)
+SOURCE_FILES_TO_LINT=()
+TEST_FILES_TO_LINT=()
+C_HEADERS_TO_LINT=()
+for FILE in "${FILES[@]}"; do
+	if [[ $FILE == *.h.in ]]; then
+		# skip files used to generate C code
+		continue
+	elif [[ $FILE == *tools/mock_sysfs* && "$(uname -s)" != "Linux" ]]; then
+		# mock_sysfs code only compiles on Linux, so skip these files if on other OS
+		continue
+	elif [[ $FILE == *.h ]]; then
+		C_HEADERS_TO_LINT+=("$FILE")
+	elif [[ $FILE == *tests/* || $FILE == *samples/* ]]; then
+		TEST_FILES_TO_LINT+=("$FILE")
+	else
+		SOURCE_FILES_TO_LINT+=("$FILE")
+	fi
 done
+
+EXTRA_ARGS=()
+# exclude the C-level headers from this C++ lint - we'll do them as a separate step
+EXTRA_ARGS+=(--extra-arg=-std=c++23)
+# enable std::expected in clang-tidy
+EXTRA_ARGS+=(--extra-arg=-D__cpp_concepts=202002L)
+# set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_sysfs/CMakeLists.txt
+EXTRA_ARGS+=(--extra-arg=-DFUSE_USE_VERSION=316)
+
+if [[ ${#SOURCE_FILES_TO_LINT[@]} -gt 0 ]]; then
+	echo "🧹 Linting C++ Sources"
+	clang-tidy \
+		"${SOURCE_FILES_TO_LINT[@]}" -p "${BUILD_DIR}" \
+		-header-filter="'^(?!.*(include/astl|$BUILD_DIR/include/astl)).*'" \
+		"${EXTRA_ARGS[@]}" \
+		--warnings-as-errors=* \
+		-- \
+		"${INCLUDE_PATHS[@]}" \
+		"${SYS_INCLUDE_PATHS[@]}"
+fi
+
+if [[ ${#TEST_FILES_TO_LINT[@]} -gt 0 ]]; then
+	echo "🧹 Linting test files sources"
+	clang-tidy \
+		"${TEST_FILES_TO_LINT[@]}" -p "${BUILD_DIR}" \
+		-header-filter="'^(?!.*(include/astl|$BUILD_DIR/include/astl)).*'" \
+		"${EXTRA_ARGS[@]}" \
+		-checks=-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers \
+		-- \
+		"${INCLUDE_PATHS[@]}" \
+		"${SYS_INCLUDE_PATHS[@]}"
+fi
 
 # create a temporary C file to include all the C headers. This will cause clang-tidy to evaluate them as C headers
 # (We had excluded them before to keep clang-tidy from trying to lint them as C++ headers)
-echo "- Linting C Headers"
-SRC_CODE='#include <astl/astl.h>\nint main() { return 0; }'
-TEMP_C=$(mktemp "${TMPDIR:-/tmp}/tmp.XXXXXX.c")
+if [[ ${#C_HEADERS_TO_LINT[@]} -gt 0 ]]; then
+	echo "🧹 Linting C Headers"
+	clang-tidy -header-filter="^(.*(include|$BUILD_DIR/include)).*" \
+		"${C_HEADERS_TO_LINT[@]:-}" \
+		-p "${BUILD_DIR}" \
+		--warnings-as-errors=* \
+		-checks=-cppcoreguidelines-macro-to-enum \
+		-- \
+		"${INCLUDE_PATHS[@]}" \
+		"${SYS_INCLUDE_PATHS[@]}"
+fi
 
-trap "rm -f '$TEMP_C'" EXIT
-echo -e $SRC_CODE > $TEMP_C
-# lint the dummy C file that includes ASTL API files
-clang-tidy -header-filter='^(.*(include|$BUILD_DIR/include)).*' $TEMP_C $CLANG_BUILD_DIR --warnings-as-errors=* -- $INCLUDE_PATHS $SYS_INCLUDE_PATHS
 echo "✅ Linting completed successfully."

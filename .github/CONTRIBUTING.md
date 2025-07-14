@@ -6,12 +6,15 @@ Thank you for your interest in contributing to our project! We strive to maintai
 
 There are multiple ways you can contribute to this project:
 
-1. **Report an Issue or make a feature request**: If you encounter a bug, have a suggestion or would like to make a feature request, please open an ticket on our
-[Jira project](https://jira.arm.com/browse/ASCT) to report bug or make a feature request.
+1. **Report an Issue or make a feature request**
+   If you encounter a bug, have a suggestion or would like to make a feature request,
+   please open an ticket on our
+   [Jira project](https://jira.arm.com/browse/ASCT)
+   to report bug or make a feature request.
 
 2. **Open a Pull Request**: Contributions are welcome, whether you're fixing a bug, adding a new feature, or improving
-documentation. You can submit a pull request to our
-[GitHub repository](https://github.com/Arm-Debug/ATL/pulls) to:
+   documentation. You can submit a pull request to our
+   [GitHub repository](https://github.com/Arm-Debug/ATL/pulls) to:
    - Provide a bug fix
    - Add new features or enhancements
    - Improve or expand existing documentation
@@ -41,15 +44,18 @@ To make a successful contribution, please follow these steps:
 
 2. **Create a Private Branch**: Name your branch with the following format: <user-name>/<change-name>
 
-2. **Make Your Changes**:
+3. **Make Your Changes**:
+
    - Implement your changes, ensuring that you match the existing coding style and documentation conventions.
    - Write unit tests for your code to ensure it is functional and reliable.
 
-3. **Write a Clear Commit Message**: Write a concise and informative commit message summarizing your changes.
+4. **Write a Clear Commit Message**:
+   Write a concise and informative commit message summarizing your changes.
 
-4. **Push to your Branch**: Push your changes to your branch.
+5. **Push to your Branch**: Push your changes to your branch.
 
-5. **Submit a Pull Request (PR)**: Open a pull request from your branch against the main repository.
+6. **Submit a Pull Request (PR)**:
+   Open a pull request from your branch against the main repository.
 
 ### Review Process
 

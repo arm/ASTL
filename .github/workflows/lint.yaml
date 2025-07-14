@@ -28,7 +28,7 @@ jobs:
       # Tells vcpkg where binary packages are stored.
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
       # Let's use GitHub Action cache as storage for the vcpkg Binary Caching feature.
-      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
     steps:
       # Set env variables needed for vcpkg to use GitHub Action cache for dependencies
@@ -42,7 +42,8 @@ jobs:
       - name: ⤵️ Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # fetch all history so we can git diff for clang-tidy relevant files
+          # fetch all history so we can git diff for clang-tidy relevant files
+          fetch-depth: 0
           ref: ${{ github.head_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
@@ -78,8 +79,8 @@ jobs:
       - name: ⤵️ VCPKG - Install Dependencies
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
-          vcpkgJsonGlob: '**/vcpkg.json'
+          vcpkgDirectory: "${{ github.workspace }}/vcpkg"
+          vcpkgJsonGlob: "**/vcpkg.json"
 
       - name: ⚙️ CMake - Configure
         # Configure CMake in a 'build' subdirectory.

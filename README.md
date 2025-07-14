@@ -7,9 +7,7 @@
 
 # ASTL
 
-
 Arm SoC Telemetry Library
-
 
 # Description
 
@@ -19,45 +17,31 @@ The initial implementation focuses on the System Control and Management Interfac
 
 The library has a C-interface for the API and a C++ implementation. There is also plan to offer a python wrapper interface (not implemented yet)
 
-
-
 # Key Goals and Properties
-
 
 ## Sharable
 
-
-
 - New or other tools at Arm can use it (not used yet)
-
 - Partners and external 3rd party tool developers can use it to access telemetry on Arm platforms (not used yet)
-
 
 ## Uniform
 
-
 - Telemetry collection through fixed predefined set of API (not defined yet)
 
-
 ## Portable
-
 
 - Rebuild on Windows or other OS’s with same user API interface (not ported yet)
 - Wrap with python layer (not done yet)
 
-
-## Extensible:
+## Extensible
 
 - Driver to driver context-switch based collection (not implemented yet)
-
 - SCMI specification extensions (not implemented yet)
 - New/other platform level telemetry access mechanisms (not implemented yet)
-
 
 ## Reusable
 
 - Can be deployed on all new platforms: IOT, Automotive, Client, Data center, GPUs, NPUs. (not deployed yet)
-
 - Can be used by a telemetry collection tool or in an AI framework or directly to instrument a workload (not used yet)
 
 # High Level Architecture Diagram
@@ -70,12 +54,9 @@ The library has a C-interface for the API and a C++ implementation. There is als
 
 # AI Framework Usage Example Diagram
 
-
 ![image](https://github.com/user-attachments/assets/e514cfb8-7d15-45f6-899e-2b70c2c6c5db)
 
-
 # Testing and Isolation Methodology
-
 
 ![image](https://github.com/user-attachments/assets/0a2b1e39-cb08-4e04-9f62-bba5329bfe56)
 
@@ -92,14 +73,11 @@ The library has a C-interface for the API and a C++ implementation. There is als
 
 See [Build steps for developers](#build-steps-for-developers) for more detailed build instructions.
 
-
-
 ## Usage
 
 The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_test.cpp). Below are the minimal snippets you need:
 
 ```cpp
-
 #include "astl/astl.h"          // core API
 
 #include "astl_telemetry.h"     // Function calls
@@ -124,7 +102,6 @@ status = astlGetTargetCount(&target_count);
 astl_target_properties_t props{ ._size = sizeof(props) };
 status = astlGetTargets(&props, &count);
 ```
-
 
 3. Configure collection
 
@@ -155,12 +132,10 @@ status = astlStopCollectionOnTarget(target_properties._handle);
 
 5. Retrieve metric samples. Logs are written to:
 
-
 - `sampled_value_raw.log` and `sampled_value_summary.log` - metric data
 - sysfs.log - mock SCMI driver output
 
 Run `scripts/demo.sh` to run this flow. This sets up the mock driver and performs a sample run.
-
 
 To run manually, start a mock server and execute build/debug/bin/sample_test. Use --help for usage details.
 

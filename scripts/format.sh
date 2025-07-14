@@ -6,16 +6,29 @@ set -eu -o pipefail
 
 # Check for clang-format
 if ! command -v clang-format >/dev/null 2>&1; then
-    echo "❌ clang-format is not installed."
-    echo "👉 Please install it with:"
-    echo "   sudo apt install clang-format        # Debian/Ubuntu"
-    echo "   brew install clang-format            # macOS (Homebrew)"
-    echo "   pacman -S clang                      # Arch"
-    exit 1
+	echo "❌ clang-format is not installed."
+	echo "👉 Please install it with:"
+	echo "   sudo apt install clang-format        # Debian/Ubuntu"
+	echo "   brew install clang-format            # macOS (Homebrew)"
+	echo "   pacman -S clang                      # Arch"
+	exit 1
 fi
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-source $SCRIPT_DIR/get_find_file_expressions.sh  # define PRUNE_EXPR
+# use utils.sh's get_all_source_files to export SOURCE_FILES array
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}"/utils.sh
+get_all_source_files
 
-FILES=$(find $(realpath .) \( $PRUNE_EXPR \) -prune -o \( -type f \( $NAME_ALL_SOURCES_AND_HEADERS  \) \) -print)
-clang-format -i $FILES
+clang-format -i "${SOURCE_FILES[@]}"
+
+# Format .sh files using qlty cli
+if ! command -v qlty >/dev/null 2>&1; then
+	echo "❌ qlty cli tool is not installed to auto-format .sh files."
+	echo "👉 Please install it with the instructions here: https://docs.qlty.sh/cli/quickstart"
+	exit 0
+fi
+
+qlty fmt ./scripts/
+qlty fmt ./*.md
+qlty fmt ./.github/

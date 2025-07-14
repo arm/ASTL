@@ -6,23 +6,23 @@ set -eu -o pipefail
 
 # Check for clang-format
 if ! command -v clang-format >/dev/null 2>&1; then
-    echo "❌ clang-format is not installed."
-    echo "👉 Please install it with:"
-    echo "   sudo apt install clang-format        # Debian/Ubuntu"
-    echo "   brew install clang-format            # macOS (Homebrew)"
-    echo "   pacman -S clang                      # Arch"
-    exit 1
+	echo "❌ clang-format is not installed."
+	echo "👉 Please install it with:"
+	echo "   sudo apt install clang-format        # Debian/Ubuntu"
+	echo "   brew install clang-format            # macOS (Homebrew)"
+	echo "   pacman -S clang                      # Arch"
+	exit 1
 fi
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-source $SCRIPT_DIR/get_find_file_expressions.sh  # define PRUNE_EXPR
+# use utils.sh's get_all_source_files to export  SOURCE_FILES
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/utils.sh"
+get_all_source_files
 
-FILES=$(find $(realpath .) \( $PRUNE_EXPR \) -prune -o \( -type f \( $NAME_ALL_SOURCES_AND_HEADERS  \) \) -print)
-
-
-if ! clang-format --dry-run --Werror $FILES; then
-  echo "💥 Code is not properly formatted! Run 'cmake --build . --target format'"
-  exit 1
+if ! clang-format --dry-run --Werror "${SOURCE_FILES[@]}"; then
+	echo "💥 Code is not properly formatted! Run 'cmake --build . --target format'"
+	exit 1
 fi
 
 echo "✅ Code is properly formatted!"
