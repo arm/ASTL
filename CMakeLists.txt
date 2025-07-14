@@ -322,3 +322,12 @@ add_custom_target(valgrind
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running unit tests with Valgrind (runtime memory leak checker)"
 )
+
+# To generate pretty class diagrams and function call graphs with doxygen, run this target after configuring:
+# cmake --build build/debug/ --target doxygen
+# firefox html/index.html
+add_custom_target(doxygen
+    COMMAND doxygen ${CMAKE_SOURCE_DIR}/doxyfile
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Render class diagrams and function call graphs with doxygen.  Typically outputs to html/index.html"
+)

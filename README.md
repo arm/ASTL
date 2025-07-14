@@ -230,3 +230,20 @@ cd build && cmake --build . --target lint
 # or just
 cd build && make lint
 ```
+
+### Doxygen
+
+Automatically generate class diagrams, function call graphs,
+and other documentation automatically from source.
+You don't need to build or run first, only configure.
+Output will be at: \<ASTL\>/html/index.html
+
+```sh
+cd build/debug && cmake --build . --target doxygen
+```
+
+Note: you need to install both doxygen and dot on your system:
+
+```sh
+sudo apt-get -y install doxygen graphviz
+```

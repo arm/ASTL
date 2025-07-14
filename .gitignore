@@ -70,8 +70,13 @@ coverage/
 coverage_*/
 coverage.html
 coverage.xml
+*.info
 
 # log files
 *.log
+
+# Doxygen Rendered Documentation
+html
+latex
 
 # Add more exclusions as needed
