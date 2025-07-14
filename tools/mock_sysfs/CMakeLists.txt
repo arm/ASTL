@@ -11,30 +11,29 @@ add_executable(MockSysfs ${MOCK_SYSFS_SOURCES})
 include (CTest)
 enable_testing()
 
-# TODO(77) re-enable these tests once issue #77 / ASTL-95 is resolved
-#add_test(NAME toolsMocksysfsFind
-#      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
-#              $<TARGET_FILE:MockSysfs>
-#              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/find/expected.txt
-#              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/find/test.sh
-#)
-#set_tests_properties(toolsMocksysfsFind PROPERTIES LABELS "mocksysfs")
+add_test(NAME toolsMocksysfsFind
+      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
+              $<TARGET_FILE:MockSysfs>
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/find/expected.txt
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/find/test.sh
+)
+set_tests_properties(toolsMocksysfsFind PROPERTIES LABELS "mocksysfs")
 
-#add_test(NAME toolsMocksysfsCdPermissions
-#      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
-#              $<TARGET_FILE:MockSysfs>
-#              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/cd_permissions/expected.txt
-#              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/cd_permissions/test.sh
-#)
-#set_tests_properties(toolsMocksysfsCdPermissions PROPERTIES LABELS "mocksysfs")
+add_test(NAME toolsMocksysfsCdPermissions
+      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
+              $<TARGET_FILE:MockSysfs>
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/cd_permissions/expected.txt
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/cd_permissions/test.sh
+)
+set_tests_properties(toolsMocksysfsCdPermissions PROPERTIES LABELS "mocksysfs")
 
-#add_test(NAME toolsMocksysfsAllDesEnableToIndividualEnableConsistency
-#      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
-#              $<TARGET_FILE:MockSysfs>
-#              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/all_des_enable_to_individual_enable_consistency/expected.txt
-#              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/all_des_enable_to_individual_enable_consistency/test.sh
-#)
-#set_tests_properties(toolsMocksysfsAllDesEnableToIndividualEnableConsistency PROPERTIES LABELS "mocksysfs")
+add_test(NAME toolsMocksysfsAllDesEnableToIndividualEnableConsistency
+      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/unit_test_fixture.sh
+              $<TARGET_FILE:MockSysfs>
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/all_des_enable_to_individual_enable_consistency/expected.txt
+              ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests/all_des_enable_to_individual_enable_consistency/test.sh
+)
+set_tests_properties(toolsMocksysfsAllDesEnableToIndividualEnableConsistency PROPERTIES LABELS "mocksysfs")
 
 target_compile_definitions(MockSysfs
   PRIVATE
