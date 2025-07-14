@@ -6,23 +6,21 @@ set -eu -o pipefail
 
 # Check for dot (from the graphviz package)
 if ! command -v dot >/dev/null 2>&1; then
-    echo "❌ dot is not installed."
-    echo "👉 Please install the graphviz package with:"
-    echo "   sudo apt install graphviz   # Debian/Ubuntu"
-    echo "   brew install graphviz       # macOS (Homebrew)"
-    exit 1
+	echo "❌ dot is not installed."
+	echo "👉 Please install the graphviz package with:"
+	echo "   sudo apt install graphviz   # Debian/Ubuntu"
+	echo "   brew install graphviz       # macOS (Homebrew)"
+	exit 1
 fi
 
-
-
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # set cwd to repo root
-cd ${SCRIPT_DIR}/..
+cd "${SCRIPT_DIR}"/..
 
-cmake -S . -B build/graphviz --graphviz=build/graphviz/graph.dot > /dev/null
-if diff build/graphviz/graph.dot doc/dependency_graph.dot > /dev/null; then
-    echo "✅ No changes to the dependency graph!"
-    exit 0
+cmake -S . -B build/graphviz --graphviz=build/graphviz/graph.dot >/dev/null
+if diff build/graphviz/graph.dot doc/dependency_graph.dot >/dev/null; then
+	echo "✅ No changes to the dependency graph!"
+	exit 0
 fi
 
 cp build/graphviz/graph.dot doc/dependency_graph.dot

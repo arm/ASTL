@@ -68,7 +68,7 @@ jobs:
       # Tells vcpkg where binary packages are stored.
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
       # Let's use GitHub Action cache as storage for the vcpkg Binary Caching feature.
-      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
     steps:
       # Set env variables needed for vcpkg to use GitHub Action cache for dependencies
@@ -87,7 +87,8 @@ jobs:
       - name: ⤵️ Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # fetch all history so we can git diff for clang-tidy relevant files
+          # fetch all history so we can git diff for clang-tidy relevant files
+          fetch-depth: 0
           ref: ${{ github.head_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
@@ -101,9 +102,9 @@ jobs:
       - name: ⤵️ Install brew Dependencies (macos-15)
         if: matrix.os == 'macos-15'
         run: |
-            brew update
-            brew install llvm
-            echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+          brew update
+          brew install llvm
+          echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
 
       - name: 📂 VCPKG - Create VCPKG_DEFAULT_BINARY_CACHE directory
         run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
@@ -130,8 +131,8 @@ jobs:
       - name: ⤵️ VCPKG - Install Dependencies
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
-          vcpkgJsonGlob: '**/vcpkg.json'
+          vcpkgDirectory: "${{ github.workspace }}/vcpkg"
+          vcpkgJsonGlob: "**/vcpkg.json"
 
       - name: ⚙️ CMake - Configure
         if: matrix.os != 'macos-15'

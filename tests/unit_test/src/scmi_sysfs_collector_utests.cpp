@@ -230,8 +230,8 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
   REQUIRE_CALL(mock_sample_sink, SinkSamples(_, _))
       // extra parens needed for proper macro parse, letting us mutate `samples`
       .TIMES(10)
-      .LR_SIDE_EFFECT(
-          (std::for_each(std::begin(_2), std::end(_2), [&samples](auto& sample) { samples.push_back(sample.value); })))
+      .LR_SIDE_EFFECT((std::for_each(std::begin(_2), std::end(_2),
+                                     [&samples](auto const& sample) { samples.push_back(sample.value); })))
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // ALLOW_CALL(mock_sample_sink, SinkSamples(_, _)).RETURN(ASTL_STATUS_SUCCESS);
