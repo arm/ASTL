@@ -16,7 +16,7 @@
  * under the License.
  ******************************************************************************/
 
-#include "config/topology_manager.hpp"
+#include "topology/topology_manager.hpp"
 
 #include <vector>
 
