@@ -30,9 +30,9 @@
 #include "collector/scmi_sysfs_collector.hpp"
 #include "common/capabilities.hpp"
 #include "config/configuration_manager.hpp"
-#include "config/topology_manager.hpp"
 #include "metric/metric_manager.hpp"
 #include "target.hpp"
+#include "topology/topology_manager.hpp"
 
 /* @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
  */
