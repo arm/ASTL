@@ -236,7 +236,7 @@ cd build && make lint
 Automatically generate class diagrams, function call graphs,
 and other documentation automatically from source.
 You don't need to build or run first, only configure.
-Output will be at: \<ASTL\>/html/index.html
+Output will be at: \<ASTL\>/doc/html/index.html
 
 ```sh
 cd build/debug && cmake --build . --target doxygen
