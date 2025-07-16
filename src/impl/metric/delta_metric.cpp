@@ -16,7 +16,7 @@
  * under the License.
  ******************************************************************************/
 
-#include "sampled_delta_metric.hpp"
+#include "delta_metric.hpp"
 
 #include "astl_logger.hpp"
 #include "astl_value.hpp"

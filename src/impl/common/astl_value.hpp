@@ -118,16 +118,23 @@ struct AstlValue {
    * @brief Divide the dividend by the divisor. May truncate if dividend or divisor are integral types
    * @return The quotient, or a ASTL_STATUS_INVALID_VALUE_TYPE error if dividend is not arithmetic.
    */
-  template <typename T>
-  static std::expected<AstlValue, astl_status_code> Divide(const AstlValue& dividend, const T divisor) {
+  template <typename DivisorType>
+  static std::expected<AstlValue, astl_status_code> Divide(const AstlValue& dividend, const DivisorType divisor) {
     return std::visit(
         [=](auto&& dividend_x) -> std::expected<AstlValue, astl_status_code> {
-          using X = std::decay_t<decltype(dividend_x)>;
-          if constexpr (std::is_arithmetic_v<X>) {
+          using DividendType = std::decay_t<decltype(dividend_x)>;
+          if constexpr (std::is_arithmetic_v<DividendType>) {
             if (divisor == 0) {
               return std::unexpected(ASTL_STATUS_DIVIDE_BY_ZERO);
             }
-            return AstlValue{static_cast<X>(static_cast<X>(dividend_x) / static_cast<X>(divisor))};
+
+            // If divisor is double or float, return result as the divisor's type
+            if constexpr (std::is_same_v<DivisorType, double> || std::is_same_v<DivisorType, float>) {
+              return AstlValue{static_cast<DivisorType>(static_cast<DivisorType>(dividend_x) / divisor)};
+            } else {
+              return AstlValue{static_cast<DividendType>(static_cast<DividendType>(dividend_x) /
+                                                         static_cast<DividendType>(divisor))};
+            }
           } else {
             return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
           }

@@ -22,7 +22,7 @@
 #include <span>
 #include <vector>
 
-#include "metric/sampled_delta_metric.hpp"
+#include "metric/delta_metric.hpp"
 
 // Test fixture class to access protected members
 class DeltaMetricTestFixture : public astl::DeltaMetric {
