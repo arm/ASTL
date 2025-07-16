@@ -139,6 +139,7 @@ astl_status_code MetricManager::ProcessData(std::span<SampledData> data) {
       return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
     }
     // Process the sample and propagate errors
+    // TODO (https://jira.arm.com/browse/ASTL-130): MetricManager needs to ensure Monotonicity in timestamp.
     astl_status_code status = metric_iter->second->ReceiveSample(sample);
     if (status != ASTL_STATUS_SUCCESS) {
       ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} with status {}", sample.operation_id,
