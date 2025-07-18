@@ -17,8 +17,8 @@ add_executable(unit_test
     collector_manager_utests.cpp
     file_interface_utests.cpp
     logger_utests.cpp
+    orchestrator_utests.cpp
     scmi_sysfs_collector_utests.cpp
-    unit_test.cpp
     sampled_value_metric_utests.cpp
     delta_metric_utests.cpp
     rate_metric_utests.cpp

@@ -16,12 +16,13 @@ extern "C" {
  **********************************************************************************/
 
 /**
- * @brief macro to declare a struct of type `type` with name `var` and initialize the _size field for API versioning
+ * @brief macro to declare a struct of type `type` with name `var` and initialize all fields,
+ *        including the _size field for API versioning
  * @example
- * `ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params);`
- * Now collection_params._size is set automatically
+ * `ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._config_file_path="~/astl/config.json")
  */
-#define ASTL_INIT_STRUCT(type, var) type var = {._size = sizeof(type)}
+#define ASTL_INIT_STRUCT(type, var, ...) \
+  type var { ._size = sizeof(type) __VA_OPT__(, ) __VA_ARGS__ }
 
 /**
  * @brief macro to declare and 0-initialize a `count`-length array of structs of type `type` named `var`
@@ -45,9 +46,8 @@ extern "C" {
   } while (0)
 
 typedef struct _astl_initialization_parameters_t {
-  size_t _size;  //!< size of this struct for versioning
-  // empty struct for now, future API versions may include config file, or saved session file,
-  // or other hints about how to initialize.
+  size_t      _size;                     //!< size of this struct for versioning
+  const char* _configuration_file_path;  //!< path to a json astl_configuration  file
 } astl_initialization_parameters_t;
 
 /*

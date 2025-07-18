@@ -4,6 +4,8 @@
 
 #include "../../mock_classes.hpp"
 #include "astl/astl_errors.h"
+#include "config/astl_configuration.hpp"
+#include "config/configuration_manager.hpp"
 #include "config/static_metric_config.hpp"
 
 using trompeloeil::_;
@@ -28,4 +30,32 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
 
     REQUIRE(mock_metric_manager.RegisterMetric(std::move(invalid_metric_config)) == ASTL_STATUS_NOT_IMPLEMENTED);
   }
+}
+
+TEST_CASE("ParseConfiguration", "[ConfigManager]") {
+  constexpr auto     json_config_data = R"json(
+  {
+    "scmi_sysfs_telemetry_root_path": "~/tmp/fuse/scmi",
+
+    "metrics": [
+      "cpu_cycles",
+      "SoC Temperature"
+    ],
+
+    "smcf_definition_file_path": "/etc/arm/astl/smcf_config.json"
+  }
+  )json";
+  std::istringstream json_data_stream{json_config_data};
+  auto               result = astl::ParseConfiguration(json_data_stream);
+  REQUIRE(result);
+  auto config = result.value();
+  REQUIRE(config.metric_names_to_use.size() == 2);
+  REQUIRE(config.scmi_sysfs_telemetry_root_path == "~/tmp/fuse/scmi");
+  REQUIRE(config.smcf_definition_file_path == "/etc/arm/astl/smcf_config.json");
+}
+
+TEST_CASE("Invalid file path", "[ConfigManager]") {
+  ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = "not_a_valid_file.wav");
+  auto config_results = astl::ConfigurationManager::GetConfiguration(&init_params);
+  REQUIRE(config_results.error() == ASTL_STATUS_BAD_CONFIGURATION);
 }

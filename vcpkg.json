@@ -1,13 +1,14 @@
 {
-    "dependencies": [
-        "bshoshany-thread-pool",
-        "catch2",
-        {
-            "name": "libfuse",
-            "platform": "linux"
-        },
-        "trompeloeil",
-        "magic-enum",
-        "spdlog"
-    ]
+  "dependencies": [
+    "bshoshany-thread-pool",
+    "catch2",
+    {
+      "name": "libfuse",
+      "platform": "linux"
+    },
+    "nlohmann-json",
+    "trompeloeil",
+    "magic-enum",
+    "spdlog"
+  ]
 }

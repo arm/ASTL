@@ -42,8 +42,8 @@ auto TopologyManager::InitializeCollectorManager() const
   // tell collectorManager which collectors are suitable for which targets
   std::unordered_map<astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> target_to_collectors;
   // Set up the Scmi Sysfs Collector
-  astl::FileInterface scmi_sysfs_file_interface{_configuration.scmi_sysfs_telemetry_root_override
-                                                    ? *_configuration.scmi_sysfs_telemetry_root_override
+  astl::FileInterface scmi_sysfs_file_interface{_configuration.scmi_sysfs_telemetry_root_path
+                                                    ? *_configuration.scmi_sysfs_telemetry_root_path
                                                     : std::filesystem::path{"/tmp/fuse/scmi/scmi_telemetry"}};
   using ScmiCollector = astl::ScmiSysfsCollector<decltype(scmi_sysfs_file_interface)>;
   std::unique_ptr<astl::ICollector> scmi_collector =
@@ -67,8 +67,8 @@ auto TopologyManager::InitializeMetricManager() const -> std::unique_ptr<IMetric
   std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
 
   auto temperature_metric = std::make_unique<astl::MetricConfig>(astl::kTemperature);
-  if (auto finder = std::ranges::find(_configuration.disabled_metrics_by_name, temperature_metric->Name());
-      finder == _configuration.disabled_metrics_by_name.end()) {
+  if (auto finder = std::ranges::find(_configuration.metric_names_to_use, temperature_metric->Name());
+      finder != _configuration.metric_names_to_use.end()) {
     metric_manager->RegisterMetric(std::move(temperature_metric));
   } else {
     // If the metric is disabled, do not register it

@@ -85,9 +85,21 @@ The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_
 
 1. Initialize ASTL
 
+First, create an astl json configuration file specifying which metrics should be made available at the API to collect.
+You can also optionally override the root path for the Scmi file system, and the definition file for the system metrics
+
+```json
+{
+  "scmi_sysfs_telemetry_root_path": "/tmp/fuse/scmi/scmi_telemetry",
+
+  "metrics": ["InstantaneousPower", "Voltage", "SoC Temperature"],
+
+  "smcf_definition_file_path": "/etc/arm/astl/smcf_config.json"
+}
+```
+
 ```cpp
-astl_initialization_parameters_t init_params{};
-init_params._size = sizeof(init_params);
+ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = "~/.my_astl_config.json");
 auto status = astlInitialize(&init_params);
 if (status != ASTL_STATUS_SUCCESS) {
     // handle error...
@@ -97,10 +109,13 @@ if (status != ASTL_STATUS_SUCCESS) {
 2. Discover targets
 
 ```cpp
-
 status = astlGetTargetCount(&target_count);
-astl_target_properties_t props{ ._size = sizeof(props) };
-status = astlGetTargets(&props, &count);
+// allocate an array to hold the properties of each target
+ASTL_ALLOC_ARRAY(astl_target_properties_t, target_properties_buffer, target_count);
+status = astlGetTargets(target_properties_buffer, &target_count);
+...
+// using the first target
+astl_target_properties_t target_properties = target_properties_buffer[0];
 ```
 
 3. Configure collection
@@ -111,12 +126,11 @@ astlGetMetricCount(target_properties._handle, &metric_count);
 std::vector<astl_metric_properties_t> metric_buffer(metric_count);
 status = astlGetMetrics(target_properties._handle, metric_buffer.data(), &metric_count);
 
-astl_collection_parameters_t collection_params{
-    ._size              = sizeof(astl_collection_parameters_t),
+ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params,
     ._sampling_interval = 0,
     ._collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
     ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
-};
+);
 status = astlConfigureMetricCollectionOnTarget(target_properties._handle, &collection_params,
                                                 &metric_buffer.front()._handle, metric_count);
 ```
@@ -135,9 +149,13 @@ status = astlStopCollectionOnTarget(target_properties._handle);
 - `sampled_value_raw.log` and `sampled_value_summary.log` - metric data
 - sysfs.log - mock SCMI driver output
 
-Run `scripts/demo.sh` to run this flow. This sets up the mock driver and performs a sample run.
+6. Clean up allocated resources
 
-To run manually, start a mock server and execute build/debug/bin/sample_test. Use --help for usage details.
+```cpp
+ASTL_FREE_ARRAY(target_properties_buffer)
+```
+
+Run `scripts/demo.sh` to run this flow. This sets up the mock driver and performs a sample run. To run manually, start a mock server and execute build/debug/bin/sample_test. Use --help for usage details.
 
 ## Running the Mock SCMI Sysfs Generator
 

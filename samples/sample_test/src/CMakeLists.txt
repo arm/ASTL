@@ -17,6 +17,7 @@ add_executable(${TARGET} sample_test.cpp)
 target_include_directories(
   ${TARGET} PRIVATE ${PROJECT_SOURCE_DIR}/include
 )
+set_project_warnings(${TARGET})
 
 message("cmake_current_source_dir: ${CMAKE_CURRENT_SOURCE_DIR}")
 

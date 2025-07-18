@@ -97,7 +97,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcovr valgrind parallel
+          sudo apt-get install -y gcovr valgrind parallel jq
 
       - name: ⤵️ Install brew Dependencies (macos-15)
         if: matrix.os == 'macos-15'
@@ -212,3 +212,10 @@ jobs:
         # include only sample tests, we skipped these earlier in `Unit tests`
         # because we don't want to include them for coverage.
         run: ctest -L "integration" --preset ${{ matrix.cmake_preset }}
+
+      - name: 📽️ Run Demo with MockSysFs
+        if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        run: ${{ github.workspace }}/scripts/demo.sh
+        env:
+          ASTL_LOG_LEVEL: "DEBUG"
+          ASTL_LOG_CONSOLE: 1

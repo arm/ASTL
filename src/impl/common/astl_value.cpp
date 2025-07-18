@@ -193,7 +193,7 @@ std::expected<AstlValue, astl_status_code> AstlValue::Add(const AstlValue& adden
         // disallow adding integral types with floating point types
         if constexpr ((std::is_integral_v<X> && !std::is_integral_v<Y>) ||
                       (!std::is_integral_v<X> && std::is_integral_v<Y>)) {
-          ASTL_LOG_ERROR("Cannot add integral type with floading point type");
+          ASTL_LOG_ERROR("Cannot add integral type with floating point type");
           return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
         }
 

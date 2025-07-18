@@ -19,32 +19,21 @@
 #ifndef CONFIGURATION_MANAGER_HPP_
 #define CONFIGURATION_MANAGER_HPP_
 
+#include <expected>
 #include <filesystem>
 #include <optional>
 #include <vector>
 
+#include "astl/astl_telemetry.h"
+#include "config/astl_configuration.hpp"
+
 namespace astl {
-
-struct AstlConfiguration {
-  /** @brief scmi_sysfs_telemetry_root_override is an optional path to replace "/tmp/fuse/scmi/scmi_telemetry"
-   *         This is a placeholder example of something that _could_ be configured.
-   *         subject to change, not currently modified.
-   */
-  std::optional<std::filesystem::path> scmi_sysfs_telemetry_root_override;
-
-  /** @brief disabled_metrics_by_name is a collection of metric names to disable
-   *         This is a placeholder example of something that _could_ be configured.
-   *         subject to change, not currently modified.
-   */
-  std::vector<std::string> disabled_metrics_by_name;
-};
-
 namespace ConfigurationManager {
 
-AstlConfiguration GetConfiguration();
+auto GetConfiguration(astl_initialization_parameters_t const* init_params)
+    -> std::expected<AstlConfiguration, astl_status_code>;
 
-}  // namespace ConfigurationManager
-
+}  // namespace  ConfigurationManager
 }  // namespace astl
 
 #endif  // CONFIGURATION_MANAGER_HPP_

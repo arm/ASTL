@@ -50,14 +50,19 @@ done
 
 FOLDERS=()
 FOLDERS+=("$REPO_ROOT_DIR"/tools/)
+FOLDERS+=("$REPO_ROOT_DIR"/samples/)
 FOLDERS+=("$REPO_ROOT_DIR"/src/)
 FOLDERS+=("$REPO_ROOT_DIR"/tests/)
 FOLDERS+=("$REPO_ROOT_DIR"/utils/)
 
+set -x
+
 # suppress syntaxError since cppcheck 2.13 (on ubuntu-latest github runner) considers variadic macros with __VA_OPT__ an error
-cppcheck -U_WIN32 --inline-suppr --enable=all "${FOLDERS[@]}" "$INCLUDE_PATHS" \
+# suppress unknownMacro since cppcheck struggles to parse variadic macros with __VA_OPT__
+cppcheck -U_WIN32 --std=c++23 --inline-suppr --enable=all "${FOLDERS[@]}" "$INCLUDE_PATHS" \
 	--suppress=unusedFunction \
 	--suppress=syntaxError \
+	--suppress=unknownMacro \
 	--suppress=unmatchedSuppression \
 	--suppress=missingInclude \
 	--suppress=missingIncludeSystem \
