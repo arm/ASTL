@@ -43,8 +43,11 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   if (init_params->_size != sizeof(astl_initialization_parameters_t)) {
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
-  auto                  configuration = astl::ConfigurationManager::GetConfiguration();
-  astl::TopologyManager topology_manager{configuration};
+  auto configuration = astl::ConfigurationManager::GetConfiguration(init_params);
+  if (!configuration) {
+    return configuration.error();
+  }
+  astl::TopologyManager topology_manager{configuration.value()};
   auto [targets, collector_manager] = topology_manager.InitializeCollectorManager();
   auto metric_manager               = topology_manager.InitializeMetricManager();
 

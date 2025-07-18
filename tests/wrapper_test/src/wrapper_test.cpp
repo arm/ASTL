@@ -9,6 +9,7 @@
 #include "../../mock_classes.hpp"
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
+#include "astl/astl_telemetry.h"
 #include "astl/astl_test_hooks.h"
 #include "astl_impl.hpp"
 #include "counter.hpp"
@@ -101,7 +102,7 @@ TEST_CASE("astlStatusString", "[matches header definition]") {
 }
 
 TEST_CASE("astl initialization macros") {
-  ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params);
+  ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = nullptr);
   REQUIRE(init_params._size == sizeof(astl_initialization_parameters_t));
 
 // For C++ client code, it is recommended to define your own template function to handle the initialization

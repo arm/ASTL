@@ -17,6 +17,7 @@ target_sources(
         "${CMAKE_CURRENT_SOURCE_DIR}/astl_impl.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/collector/scmi_sysfs_collector.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/astl_configuration.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/configuration_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/topology/topology_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/common/astl_value.cpp"

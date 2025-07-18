@@ -16,38 +16,35 @@
  * under the License.
  ******************************************************************************/
 
-#include "config/configuration_manager.hpp"
+#ifndef ASTL_CONFIGURATION_HPP_
+#define ASTL_CONFIGURATION_HPP_
 
 #include <expected>
 #include <filesystem>
-#include <fstream>
+#include <optional>
+#include <vector>
 
-#include "astl/astl_telemetry.h"
-#include "astl_logger.hpp"
-#include "config/astl_configuration.hpp"
+#include "astl/astl_errors.h"
 
 namespace astl {
-namespace ConfigurationManager {
 
-namespace fs = std::filesystem;
+/** @brief Overall configuration for the ASTL library */
+struct AstlConfiguration {
+  /** @brief scmi_sysfs_telemetry_root_override is an optional path to replace "/tmp/fuse/scmi/scmi_telemetry"
+   *         This is a placeholder example of something that _could_ be configured.
+   *         subject to change, not currently modified.
+   */
+  std::optional<std::filesystem::path> scmi_sysfs_telemetry_root_path;
 
-std::expected<AstlConfiguration, astl_status_code> GetConfiguration(
-    astl_initialization_parameters_t const *init_params) {
-  if (init_params->_configuration_file_path == nullptr) {
-    // nullptr is valid - just use default settings
-    return AstlConfiguration{};
-  }
-  std::filesystem::path config_filepath{init_params->_configuration_file_path};
-  std::ifstream         config_file_ifstream(config_filepath);
-  if (!config_file_ifstream) {
-    ASTL_LOG_ERROR("Unable to open {} as input configuration file", config_filepath.string());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-  return ParseConfiguration(config_file_ifstream);
+  /** @brief collection of metric names for ASTL to present to user */
+  std::vector<std::string> metric_names_to_use;
 
-  return AstlConfiguration{};
+  /** @brief Override path for configuration file containing SCMI metric definitions */
+  std::optional<std::filesystem::path> smcf_definition_file_path;
 };
 
-}  // namespace ConfigurationManager
+auto ParseConfiguration(std::istream &configuration_data) -> std::expected<AstlConfiguration, astl_status_code>;
 
 }  // namespace astl
+
+#endif  // ASTL_CONFIGURATION_HPP_

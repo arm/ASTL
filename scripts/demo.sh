@@ -12,7 +12,7 @@ echo "ASTL_ROOT = $ASTL_ROOT"
 # Launch MockSysfs (FUSE) demo         #
 ########################################
 MOCK_SYSFS="$ASTL_ROOT/build/debug/bin/MockSysfs"
-MOUNT_POINT="/tmp/fuse/scmi"
+MOUNT_POINT=~/tmp/fuse/scmi
 
 # Constants for startup detection
 TIMEOUT=30
@@ -25,7 +25,8 @@ PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 		exit 1
 	}
 
-mkdir -p "$MOUNT_POINT/scmi_telemetry"
+TELEMETRY_ROOT="$MOUNT_POINT/scmi_telemetry"
+mkdir -p "$TELEMETRY_ROOT"
 
 LOG_DIR="$ASTL_ROOT"
 SYSFS_LOG="$LOG_DIR/sysfs.log"
@@ -72,6 +73,17 @@ if [[ ! -x $SAMPLE_TEST_BIN ]]; then
 fi
 
 echo "🚀 Running sample_test with --immediate"
-"$SAMPLE_TEST_BIN" --immediate
+
+UPDATED_JSON_FILE=~/tmp/updated_config.json
+jq --arg telemetry_root "$TELEMETRY_ROOT" \
+	'.scmi_sysfs_telemetry_root_path = $telemetry_root' \
+	./samples/sample_configuration/astl_configuration.json >$UPDATED_JSON_FILE
+
+"$SAMPLE_TEST_BIN" --immediate --config="$UPDATED_JSON_FILE"
+ERR=$?
+if [[ $ERR -ne 0 ]]; then
+	echo "❌ Error: $SAMPLE_TEST_BIN returned a non-zero return code $ERR" >&2
+	exit $ERR
+fi
 
 echo "🏁 Demo complete - exiting."
