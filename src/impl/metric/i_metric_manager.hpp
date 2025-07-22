@@ -39,8 +39,7 @@ namespace astl {
  * This interface defines the methods that a Metric Manager implements.
  * It is used to manage metrics in the ASTL framework.
  */
-class IMetricManager {
- public:
+struct IMetricManager {
   virtual ~IMetricManager() = default;
 
   IMetricManager()                                 = default;

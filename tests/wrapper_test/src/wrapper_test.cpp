@@ -481,7 +481,9 @@ TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator]") {
   available_metrics.push_back(mock_metric2.get());
 
   ALLOW_CALL(*metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
-  auto orchestrator = std::make_unique<astl::Orchestrator>(nullptr, std::move(metric_manager));
+  auto topology_manager = std::make_unique<MockTopologyManager>();
+  auto orchestrator =
+      std::make_unique<astl::Orchestrator>(std::move(topology_manager), nullptr, std::move(metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -582,7 +584,9 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator]") {
   ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto* collector_manager_ptr_for_require_calls = collector_manager.get();
-  auto  orchestrator = std::make_unique<astl::Orchestrator>(std::move(collector_manager), std::move(metric_manager));
+  auto  topology_manager                        = std::make_unique<MockTopologyManager>();
+  auto  orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                            std::move(metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -812,7 +816,9 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets]") {
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
   mock_targets.push_back(std::move(mock_target_2));
-  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(mock_collector_manager), nullptr);
+  auto topology_manager = std::make_unique<MockTopologyManager>();
+  auto orchestrator =
+      std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(mock_collector_manager), nullptr);
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -1126,7 +1132,9 @@ TEST_CASE("astlGetAllMetricSamplesOnTarget", "[wrapper][Orchestrator]") {
   auto mock_metric_manager = std::make_unique<MockMetricManager>();
   auto metrics_pointers    = std::vector<astl::IMetric*>{mock_metric0.get(), mock_metric1.get(), mock_metric2.get()};
   ALLOW_CALL(*mock_metric_manager, GetAvailableMetrics()).RETURN(metrics_pointers);
-  auto orchestrator = std::make_unique<astl::Orchestrator>(nullptr, std::move(mock_metric_manager));
+  auto topology_manager = std::make_unique<MockTopologyManager>();
+  auto orchestrator =
+      std::make_unique<astl::Orchestrator>(std::move(topology_manager), nullptr, std::move(mock_metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 

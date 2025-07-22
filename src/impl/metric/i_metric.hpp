@@ -34,8 +34,7 @@ namespace astl {
  * @brief Abstract interface for all ASTL metric implementations.
  * All metric implementations should inherit from this class.
  */
-class IMetric {
- public:
+struct IMetric {
   /**
    * @brief allow destroying metric instances by base class pointer
    */

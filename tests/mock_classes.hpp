@@ -22,6 +22,7 @@
 #include "metric/i_metric.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "target.hpp"
+#include "topology/i_topology_manager.hpp"
 
 /**
  * @brief A mockable implementation of the astl::ITarget interface
@@ -88,6 +89,21 @@ struct MockFileInterface {
   MAKE_MOCK1(HasWritePermission, auto(const std::filesystem::path&)->expected_bool, const noexcept);
   MAKE_MOCK2(Read, auto(const std::filesystem::path&, std::string&)->astl_status_code, const);
   MAKE_MOCK2(Write, auto(const std::filesystem::path&, const std::string_view)->astl_status_code, const);
+};
+
+struct MockTopologyManager : public astl::ITopologyManager {
+  using InitializeCollectorManagerRtype =
+      std::pair<std::vector<std::unique_ptr<astl::ITarget>>, std::unique_ptr<astl::ICollectorManager>>;
+  MAKE_CONST_MOCK0(InitializeCollectorManager, InitializeCollectorManagerRtype(), override);
+  MAKE_CONST_MOCK0(InitializeMetricManager, std::unique_ptr<astl::IMetricManager>(), override);
+  const std::vector<std::unique_ptr<astl::ITarget>>& GetTargets() const override { return _targets; }
+  astl_status_code SetTargets(std::vector<std::unique_ptr<astl::ITarget>> new_targets) override {
+    _targets = std::move(new_targets);
+    return ASTL_STATUS_SUCCESS;
+  }
+
+ private:
+  std::vector<std::unique_ptr<astl::ITarget>> _targets;
 };
 
 struct MockCollectorManager : public astl::ICollectorManager {

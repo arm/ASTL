@@ -8,6 +8,7 @@
 #include "common/i_sample_sink.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "target.hpp"
+#include "topology/i_topology_manager.hpp"
 
 static_assert(sizeof(astl_value_t) == sizeof(double),
               "astl_value_t union should not change size for ABI compatibility");
@@ -21,10 +22,12 @@ class Orchestrator : public ISampleSink {
    *        This is pretty useless on its own, outside of maybe unit tests.
    *        astlInitialize will replace the static instance accessed through GetInstance()
    */
-  Orchestrator() = default;
+  Orchestrator();
 
   /**
    * @brief Create a fully armed and operational Orchestrator from the necessary parts
+   *
+   * @param topology_manager - Used to discover the hardware components (targets) on the current platform.
    *
    * @param collector_manager - Can be given a set of operations and hints on how to run them,
    *                            and then sample the data on an appropriate data source
@@ -32,19 +35,15 @@ class Orchestrator : public ISampleSink {
    * @param metric_manager - Can turn a set of desired metrics into a set of operations to collect,
    *                         then post-process the sampled data
    */
-  explicit Orchestrator(std::unique_ptr<ICollectorManager> collector_manager,
-                        std::unique_ptr<IMetricManager>    metric_manager)
-      : _collector_manager{std::move(collector_manager)}, _metric_manager{std::move(metric_manager)} {
-    if (_collector_manager) {
-      _collector_manager->RegisterSampleSink(this);
-    }
-  }
+  Orchestrator(std::unique_ptr<ITopologyManager> topology_manager, std::unique_ptr<ICollectorManager> collector_manager,
+               std::unique_ptr<IMetricManager> metric_manager);
 
   ~Orchestrator() override {
     if (_collector_manager) {
       _collector_manager->UnregisterSampleSink(this);
     }
   }
+
   // forbid copy
   Orchestrator(Orchestrator const &)            = delete;
   Orchestrator &operator=(Orchestrator const &) = delete;
@@ -74,8 +73,12 @@ class Orchestrator : public ISampleSink {
 
   /**
    * @brief Reassign the set of Targets managed by this orchestrator.
+   *
+   * Refactor - We probably want to provide a more controlled interface for modifying the target list
+   *  For example, we could add member functions to enable/disable specific targets or
+   *  modify the list internally when we read the configuration.
    */
-  void SetTargets(std::vector<std::unique_ptr<ITarget>> targets);
+  astl_status_code SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets);
 
   /**
    * @brief For a given target, enable collection on a set of measurable Counters.
@@ -190,7 +193,7 @@ class Orchestrator : public ISampleSink {
   /**
    * @brief Return a reference to a pointer to the MetricManager, used to enumerate metrics
    */
-  const auto &GetMetricManager() const { return _metric_manager; }
+  const std::unique_ptr<IMetricManager> &GetMetricManager() const { return _metric_manager; }
 
   /**
    * @brief Implementation of the ISampleSink interface - Receives samples from CollectorManager
@@ -200,10 +203,10 @@ class Orchestrator : public ISampleSink {
   static astl_status_code Test();
 
  private:
-  std::vector<std::unique_ptr<ITarget>> _targets;
-  std::unique_ptr<ICollectorManager>    _collector_manager;
-  std::unique_ptr<IMetricManager>       _metric_manager;
-  std::vector<SampledData>              _samples;
+  std::unique_ptr<ITopologyManager>  _topology_manager;
+  std::unique_ptr<ICollectorManager> _collector_manager;
+  std::unique_ptr<IMetricManager>    _metric_manager;
+  std::vector<SampledData>           _samples;
 };
 
 }  // namespace astl
