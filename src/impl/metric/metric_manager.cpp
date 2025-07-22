@@ -24,8 +24,10 @@
 #include "astl/astl_errors.h"
 #include "collector/collection_operations.hpp"
 #include "common/scmi/scmi_read_operation.hpp"
+#include "delta_metric.hpp"
 #include "i_metric.hpp"
 #include "metric_config.hpp"
+#include "rate_metric.hpp"
 #include "sampled_value_metric.hpp"
 
 namespace astl {
@@ -43,10 +45,21 @@ astl_status_code MetricManager::RegisterMetric(std::unique_ptr<MetricConfig> met
           std::make_unique<SampledValueMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
                                                metric_config->Units(), metric_config->ValueType());
       ASTL_LOG_INFO("RegisterMetric: Registered metric '{}'", metric_config->Name());
-      IMetric* metric_ptr = metric.get();
-      _config_map.emplace(metric_ptr, std::move(metric_config));
-      _metrics_map.emplace(metric_ptr, std::move(metric));
-      _metric_handles.emplace_back(metric_ptr);
+      AddMetricToMaps(std::move(metric), std::move(metric_config));
+      break;
+    }
+    case astl_metric_type_t::ASTL_METRIC_DELTA: {
+      auto metric = std::make_unique<DeltaMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
+                                                  metric_config->Units(), metric_config->ValueType());
+      ASTL_LOG_INFO("RegisterMetric: Registered DeltaMetric '{}'", metric_config->Name());
+      AddMetricToMaps(std::move(metric), std::move(metric_config));
+      break;
+    }
+    case astl_metric_type_t::ASTL_METRIC_RATE: {
+      auto metric = std::make_unique<RateMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
+                                                 metric_config->Units(), metric_config->ValueType());
+      ASTL_LOG_INFO("RegisterMetric: Registered RateMetric '{}'", metric_config->Name());
+      AddMetricToMaps(std::move(metric), std::move(metric_config));
       break;
     }
     // TODO (https://jira.arm.com/browse/ASTL-102):
@@ -172,5 +185,12 @@ bool MetricManager::IsCollectorTypeSupported(CollectorType required_collector_ty
   const std::vector<CollectorCapability>& collector_caps = _capabilities.GetCollectorCapability();
   return std::any_of(collector_caps.begin(), collector_caps.end(),
                      [&](const CollectorCapability& cap) { return cap.GetCollectorType() == required_collector_type; });
+}
+
+void MetricManager::AddMetricToMaps(std::unique_ptr<IMetric> metric, std::unique_ptr<MetricConfig> metric_config) {
+  IMetric* metric_ptr = metric.get();
+  _config_map.emplace(metric_ptr, std::move(metric_config));
+  _metrics_map.emplace(metric_ptr, std::move(metric));
+  _metric_handles.emplace_back(metric_ptr);
 }
 }  // namespace astl

@@ -1,7 +1,7 @@
 {
   "scmi_sysfs_telemetry_root_path": "/tmp/fuse/scmi/scmi_telemetry",
 
-  "metrics": ["InstantaneousPower", "Voltage", "SoC Temperature"],
+  "metrics": ["SoC Power", "Voltage", "Throttle Counts", "SoC Temperature"],
 
   "smcf_definition_file_path": "placeholder/replace/me/later/smcf_config.json"
 }
