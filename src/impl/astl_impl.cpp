@@ -2,19 +2,42 @@
 
 #include "astl/astl_errors.h"
 #include "astl_logger.hpp"
+#include "topology/topology_manager.hpp"
 
 namespace astl {
 
-std::vector<std::unique_ptr<ITarget>> const &Orchestrator::GetTargets() const { return _targets; }
+Orchestrator::Orchestrator() : _topology_manager{std::make_unique<TopologyManager>()} {
+  /// @todo https://jira.arm.com/browse/ASTL-133 - Ideally the Orchestrator would depend on ITopologyManager instead of
+  /// TopologyManager
+}
 
-void Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> targets) { _targets = std::move(targets); }
+Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>  topology_manager,
+                           std::unique_ptr<ICollectorManager> collector_manager,
+                           std::unique_ptr<IMetricManager>    metric_manager)
+    : _topology_manager{std::move(topology_manager)},
+      _collector_manager{std::move(collector_manager)},
+      _metric_manager{std::move(metric_manager)} {
+  if (_collector_manager) {
+    _collector_manager->RegisterSampleSink(this);
+  }
+}
+
+std::vector<std::unique_ptr<ITarget>> const &Orchestrator::GetTargets() const {
+  return _topology_manager->GetTargets();
+}
+
+astl_status_code Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) {
+  _topology_manager->SetTargets(std::move(new_targets));
+  return ASTL_STATUS_SUCCESS;
+}
 
 astl_status_code Orchestrator::ConfigureCounterCollection(ITarget                            *target,
                                                           const astl_collection_parameters_t *collection_params,
                                                           std::span<ICounter *>               counters) {
-  auto index = std::find_if(std::begin(_targets), std::end(_targets),
-                            [target](auto const &owned_target) { return owned_target.get() == target; });
-  if (index == std::end(_targets)) {
+  const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
+  auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
+                                                                      [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
   // unused, since unimplemented
@@ -26,9 +49,10 @@ astl_status_code Orchestrator::ConfigureCounterCollection(ITarget               
 astl_status_code Orchestrator::ConfigureMetricCollection(ITarget                            *target,
                                                          const astl_collection_parameters_t *collection_params,
                                                          std::span<IMetric *>                metrics) {
-  auto index = std::find_if(std::begin(_targets), std::end(_targets),
-                            [target](auto const &owned_target) { return owned_target.get() == target; });
-  if (index == std::end(_targets)) {
+  const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
+  auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
+                                                                      [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
   if (!_metric_manager) {
@@ -74,9 +98,10 @@ astl_status_code Orchestrator::StartCollection(ITarget *target) {
     ASTL_LOG_ERROR("Orchestrator::StartCollection called with null CollectorManager");
     return ASTL_STATUS_INTERNAL_ERROR;
   }
-  auto index = std::find_if(std::begin(_targets), std::end(_targets),
-                            [target](auto const &owned_target) { return owned_target.get() == target; });
-  if (index == std::end(_targets)) {
+  const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
+  auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
+                                                                      [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
 
@@ -93,18 +118,20 @@ astl_status_code Orchestrator::ReadImmediate(ITarget *target) {
 }
 
 astl_status_code Orchestrator::PauseCollection(ITarget *target) {
-  auto index = std::find_if(std::begin(_targets), std::end(_targets),
-                            [target](auto const &owned_target) { return owned_target.get() == target; });
-  if (index == std::end(_targets)) {
+  const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
+  auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
+                                                                      [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
   return ASTL_STATUS_NOT_IMPLEMENTED;
 }
 
 astl_status_code Orchestrator::ResumeCollection(ITarget *target) {
-  auto index = std::find_if(std::begin(_targets), std::end(_targets),
-                            [target](auto const &owned_target) { return owned_target.get() == target; });
-  if (index == std::end(_targets)) {
+  const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
+  auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
+                                                                      [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
   return ASTL_STATUS_NOT_IMPLEMENTED;
@@ -119,9 +146,10 @@ astl_status_code Orchestrator::StopCollection(ITarget *target) {
     ASTL_LOG_ERROR("null _collector_manager in Orchestrator::StopCollection");
     return ASTL_STATUS_INTERNAL_ERROR;
   }
-  auto index = std::find_if(std::begin(_targets), std::end(_targets),
-                            [target](auto const &owned_target) { return owned_target.get() == target; });
-  if (index == std::end(_targets)) {
+  const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
+  auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
+                                                                      [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
 
@@ -145,10 +173,11 @@ astl_status_code Orchestrator::StopCollection(ITarget *target) {
 
 std::expected<uint32_t, astl_status_code> Orchestrator::GetCounterSampleCount(const ITarget  *target,
                                                                               const ICounter *counter) const {
-  auto index = std::find_if(std::begin(_targets), std::end(_targets),
-                            [target](auto const &owned_target) { return owned_target.get() == target; });
+  const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
+  auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
+                                                                      [target](auto const &owned_target) { return owned_target.get() == target; });
 
-  if (index == std::end(_targets)) {
+  if (index == std::end(targets)) {
     return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
   }
   (void)counter;  // unused since unimplemented for now

@@ -34,7 +34,8 @@
 #include "target.hpp"
 #include "topology/topology_manager.hpp"
 
-/* @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
+/** @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
+ *  @todo https://jira.arm.com/browse/ASTL-131 clean up the dependency entanglement between the various managers.
  */
 ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t* init_params) {
   if (!init_params) {
@@ -47,13 +48,14 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   if (!configuration) {
     return configuration.error();
   }
-  astl::TopologyManager topology_manager{configuration.value()};
-  auto [targets, collector_manager] = topology_manager.InitializeCollectorManager();
-  auto metric_manager               = topology_manager.InitializeMetricManager();
+  auto topology_manager             = std::make_unique<astl::TopologyManager>(configuration.value());
+  auto [targets, collector_manager] = topology_manager->InitializeCollectorManager();
+  auto metric_manager               = topology_manager->InitializeMetricManager();
 
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
-  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(collector_manager), std::move(metric_manager));
+  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                           std::move(metric_manager));
   // the orchestrator owns targets
   orchestrator->SetTargets(std::move(targets));
   // replace the existing orchestrator with the newly constructed one

@@ -18,8 +18,10 @@
 
 #include "topology/topology_manager.hpp"
 
+#include <memory>
 #include <vector>
 
+#include "astl/astl_errors.h"
 #include "astl_file_interface.hpp"
 #include "collector/collector_manager.hpp"
 #include "collector/scmi_sysfs_collector.hpp"
@@ -78,6 +80,13 @@ auto TopologyManager::InitializeMetricManager() const -> std::unique_ptr<IMetric
     }
   }
   return metric_manager;
+}
+
+const std::vector<std::unique_ptr<ITarget>>& TopologyManager::GetTargets() const { return _targets; }
+
+astl_status_code TopologyManager::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) {
+  _targets = std::move(new_targets);
+  return ASTL_STATUS_SUCCESS;
 }
 
 }  // namespace astl

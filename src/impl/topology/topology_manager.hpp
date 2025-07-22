@@ -25,25 +25,33 @@
 
 #include "collector/i_collector.hpp"
 #include "collector/i_collector_manager.hpp"
-#include "config/configuration_manager.hpp"
+#include "config/configuration_manager.hpp"  /// @todo https://jira.arm.com/browse/ASTL-131 - Try to remove dependencies with config/metric managers
 #include "metric/i_metric_manager.hpp"
 #include "target.hpp"
+#include "topology/i_topology_manager.hpp"
 
 namespace astl {
 
-class TopologyManager {
+class TopologyManager : public ITopologyManager {
  public:
+  TopologyManager() = default;
+
   explicit TopologyManager(const AstlConfiguration& configuration);
 
   // Initialize the CollectorManager based on the configuration
   auto InitializeCollectorManager() const
-      -> std::pair<std::vector<std::unique_ptr<ITarget>>, std::unique_ptr<ICollectorManager>>;
+      -> std::pair<std::vector<std::unique_ptr<ITarget>>, std::unique_ptr<ICollectorManager>> override;
 
   // Initialize the MetricManager based on the configuration and system config files
-  auto InitializeMetricManager() const -> std::unique_ptr<IMetricManager>;
+  auto InitializeMetricManager() const -> std::unique_ptr<IMetricManager> override;
+
+  const std::vector<std::unique_ptr<ITarget>>& GetTargets() const override;
+
+  astl_status_code SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) override;
 
  private:
-  AstlConfiguration _configuration;
+  AstlConfiguration                     _configuration;
+  std::vector<std::unique_ptr<ITarget>> _targets;
 };
 
 }  // namespace astl
