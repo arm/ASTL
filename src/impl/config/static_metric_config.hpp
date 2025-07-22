@@ -28,8 +28,21 @@ namespace astl {
 inline const std::vector<std::string> kDataEventIds = {"0x1234"};
 
 inline const MetricConfig kTemperature{
-    "SoC Temperature", "SoC Temperature for abc xyz", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64,
-    ASTL_METRIC_VALUE, CollectorType::SCMI,           kDataEventIds};
+    "SoC Temperature", "SoC Temperature in Celsius", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64,
+    ASTL_METRIC_VALUE, CollectorType::SCMI,          kDataEventIds};
+
+inline const MetricConfig kThermalCount{"Throttle Counts", "Number of thermal throttling events",
+                                        ASTL_UNITS_NONE,   ASTL_VALUE_UINT64,
+                                        ASTL_METRIC_DELTA, CollectorType::SCMI,
+                                        kDataEventIds};
+
+inline const MetricConfig kPower{"SoC Power",      "Current power consumption in watts",
+                                 ASTL_UNITS_WATTS, ASTL_VALUE_UINT64,
+                                 ASTL_METRIC_RATE, CollectorType::SCMI,
+                                 kDataEventIds};
+
+// Vector containing all metric configurations
+inline const std::vector<MetricConfig> kMetricConfigs = {kTemperature, kThermalCount, kPower};
 
 }  // namespace astl
 

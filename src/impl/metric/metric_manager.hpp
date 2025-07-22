@@ -101,7 +101,14 @@ class MetricManager : public IMetricManager {
    * @param required_collector_type The collector type to verify support for.
    * @return true if supported, false otherwise.
    */
-  bool         IsCollectorTypeSupported(CollectorType required_collector_type) const;
+  bool IsCollectorTypeSupported(CollectorType required_collector_type) const;
+
+  /**
+   * @brief Helper function to register a metric instance with the manager.
+   * @param metric Unique pointer to the metric instance to register.
+   * @param metric_config Unique pointer to the metric configuration.
+   */
+  void         AddMetricToMaps(std::unique_ptr<IMetric> metric, std::unique_ptr<MetricConfig> metric_config);
   Capabilities _capabilities;
   std::unordered_map<IMetric*, std::unique_ptr<IMetric>> _metrics_map;  ///< Maps metric pointers to their instances
   std::unordered_map<IMetric*, std::unique_ptr<MetricConfig>>

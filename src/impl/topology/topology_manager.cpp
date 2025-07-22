@@ -66,13 +66,16 @@ auto TopologyManager::InitializeMetricManager() const -> std::unique_ptr<IMetric
 
   std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
 
-  auto temperature_metric = std::make_unique<astl::MetricConfig>(astl::kTemperature);
-  if (auto finder = std::ranges::find(_configuration.metric_names_to_use, temperature_metric->Name());
-      finder != _configuration.metric_names_to_use.end()) {
-    metric_manager->RegisterMetric(std::move(temperature_metric));
-  } else {
-    // If the metric is disabled, do not register it
-    ASTL_LOG_INFO("Metric {} is disabled by configuration", temperature_metric->Name());
+  // Register all metrics from kMetricConfigs
+  for (const auto& metric_config : kMetricConfigs) {
+    auto metric = std::make_unique<astl::MetricConfig>(metric_config);
+    if (auto finder = std::ranges::find(_configuration.metric_names_to_use, metric->Name());
+        finder != _configuration.metric_names_to_use.end()) {
+      metric_manager->RegisterMetric(std::move(metric));
+    } else {
+      // If the metric is disabled, do not register it
+      ASTL_LOG_INFO("Metric {} is disabled by configuration", metric->Name());
+    }
   }
   return metric_manager;
 }
