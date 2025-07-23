@@ -64,6 +64,7 @@ static const std::unordered_map<astl_status_code, const char*> kStatusMap = {
     {ASTL_STATUS_DIVIDE_BY_ZERO,                             "DIVIDE_BY_ZERO"                            },
     {ASTL_STATUS_INVALID_VALUE_TYPE,                         "INVALID_VALUE_TYPE"                        },
     {ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE,                   "INCOMPATIBLE_STRUCT_SIZE"                  },
+    {ASTL_STATUS_NOT_INITIALIZED,                            "NOT_INITIALIZED"                           },
 
     // Add new status codes here
 

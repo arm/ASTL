@@ -16,7 +16,11 @@
 
 /** @brief Confirms that the given non-null target_handle matches some known ITarget */
 std::expected<astl::ITarget*, astl_status_code> GetTargetFromHandle(astl_target_handle_t target_handle) {
-  auto const& available_targets = astl::Orchestrator::GetInstance()->GetTargets();
+  auto const& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return std::unexpected(ASTL_STATUS_NOT_INITIALIZED);
+  }
+  auto const& available_targets = orchestrator->GetTargets();
   auto*       target            = static_cast<astl::ITarget*>(target_handle);
   auto        is_handle_match   = [target](auto& target_iter) -> bool { return target_iter.get() == target; };
 
@@ -67,7 +71,11 @@ astl_status_code astlGetTargetCount(uint32_t* target_count) {
   if (!target_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto targets_size = astl::Orchestrator::GetInstance()->GetTargets().size();
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  auto targets_size = orchestrator->GetTargets().size();
   // error if the number of targets won't fit in a 32-bit integer (unlikely)
   if (targets_size > std::numeric_limits<uint32_t>::max()) {
     return ASTL_STATUS_TARGET_PROPERTIES_BUFFER_TOO_SMALL;
@@ -123,8 +131,11 @@ astl_status_code astlGetTargets(astl_target_properties_t* targets, uint32_t* tar
   if (*target_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-
-  auto const& available_targets       = astl::Orchestrator::GetInstance()->GetTargets();
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  auto const& available_targets       = orchestrator->GetTargets();
   auto        available_targets_count = available_targets.size();
   if (available_targets_count == 0) {
     *target_count = 0;
@@ -247,7 +258,10 @@ astl_status_code astlGetMetricCount(astl_target_handle_t target_handle, uint32_t
   }
   // TODO(ASTL-127) Make metric manager target-aware
   // const auto* target         = get_target_result.value();
-  const auto& orchestrator   = astl::Orchestrator::GetInstance();
+  const auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
   const auto& metric_manager = orchestrator->GetMetricManager();
   if (!metric_manager) {
     ASTL_LOG_ERROR("No Metric Manager assigned to Orchestrator");
@@ -279,7 +293,10 @@ astl_status_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_
   std::span<astl_metric_properties_t> output_metrics{metrics, *metric_count};
   // TODO(https://github.com/Arm-Debug/ASTL/issues/127) Make metric manager target-aware
   // const auto* target         = get_target_result.value();
-  const auto& orchestrator   = astl::Orchestrator::GetInstance();
+  const auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
   const auto& metric_manager = orchestrator->GetMetricManager();
   if (!metric_manager) {
     ASTL_LOG_ERROR("No Metric Manager assigned to Orchestrator");
@@ -411,7 +428,11 @@ astl_status_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t    
     }
     counters.push_back(*get_counter_result);
   }
-  return astl::Orchestrator::GetInstance()->ConfigureCounterCollection(target, collection_params, counters);
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  return orchestrator->ConfigureCounterCollection(target, collection_params, counters);
 }
 
 astl_status_code astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,
@@ -476,7 +497,11 @@ astl_status_code astlConfigureMetricCollectionOnTarget(astl_target_handle_t     
                  [](const astl_metric_handle_t& metric_handle) { return static_cast<astl::IMetric*>(metric_handle); });
   // TODO(https://github.com/Arm-Debug/ASTL/issues/129) - validate metric_handle
   std::span<astl::IMetric*> metric_span{metrics};
-  return astl::Orchestrator::GetInstance()->ConfigureMetricCollection(target, collection_params, metric_span);
+  auto&                     orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  return orchestrator->ConfigureMetricCollection(target, collection_params, metric_span);
 }
 
 astl_status_code astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
@@ -521,14 +546,22 @@ astl_status_code astlReadImmediateOnTarget(astl_target_handle_t target_handle) {
   }
   auto* target = *result;
 
-  return astl::Orchestrator::GetInstance()->ReadImmediate(target);
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  return orchestrator->ReadImmediate(target);
 }
 
 astl_status_code astlReadImmediate() {
-  const auto& available_targets = astl::Orchestrator::GetInstance()->GetTargets();
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  const auto& available_targets = orchestrator->GetTargets();
   for (const auto& target : available_targets) {
     // TODO(https://jira.arm.com/browse/ASTL-54)  -- dispatch read to the metric manager instead of the target
-    auto result = astl::Orchestrator::GetInstance()->ReadImmediate(target.get());
+    auto result = orchestrator->ReadImmediate(target.get());
     if (result != ASTL_STATUS_SUCCESS) {
       return result;
     }
@@ -546,8 +579,12 @@ astl_status_code astlStartCollectionOnTarget(astl_target_handle_t target_handle)
     return result.error();
   }
 
-  auto* target = *result;
-  return astl::Orchestrator::GetInstance()->StartCollection(target);
+  auto* target       = *result;
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  return orchestrator->StartCollection(target);
 }
 
 astl_status_code astlStartCollection() {
@@ -587,8 +624,12 @@ astl_status_code astlStopCollectionOnTarget(astl_target_handle_t target_handle) 
     return result.error();
   }
 
-  auto* target = *result;
-  return astl::Orchestrator::GetInstance()->StopCollection(target);
+  auto* target       = *result;
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  return orchestrator->StopCollection(target);
 }
 
 astl_status_code astlStopCollection() {
@@ -614,7 +655,11 @@ astl_status_code astlGetCounterSampleCountOnTarget(astl_target_handle_t  target_
   }
   auto* counter = *get_counter_result;
 
-  auto sample_result = astl::Orchestrator::GetInstance()->GetCounterSampleCount(target, counter);
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  auto sample_result = orchestrator->GetCounterSampleCount(target, counter);
   if (!sample_result) {
     return sample_result.error();
   }
@@ -775,7 +820,11 @@ astl_status_code astlGetAllMetricSampleCountOnTarget(astl_target_handle_t target
   *sample_count = 0;
   // TODO(https://github.com/Arm-Debug/ASTL/issues/127) Make metric manager target-aware
   // auto* target = *result;
-  const auto& metric_manager = astl::Orchestrator::GetInstance()->GetMetricManager();
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  const auto& metric_manager = orchestrator->GetMetricManager();
   if (!metric_manager) {
     ASTL_LOG_ERROR("No metric manager assigned to orchestrator");
     *sample_count = 0;
@@ -826,7 +875,11 @@ astl_status_code astlGetAllMetricSamplesOnTarget(astl_target_handle_t target_han
   }
   // TODO(https://github.com/Arm-Debug/ASTL/issues/127) Make metric manager target-aware
   // auto* target = *result;
-  const auto& metric_manager = astl::Orchestrator::GetInstance()->GetMetricManager();
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  const auto& metric_manager = orchestrator->GetMetricManager();
   if (!metric_manager) {
     ASTL_LOG_ERROR("No metric manager assigned to orchestrator");
     *sample_count = 0;

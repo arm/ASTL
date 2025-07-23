@@ -18,14 +18,8 @@ namespace astl {
 class Orchestrator : public ISampleSink {
  public:
   /**
-   * @brief default ctor for Orchestrator supports no collection of any metrics.
-   *        This is pretty useless on its own, outside of maybe unit tests.
-   *        astlInitialize will replace the static instance accessed through GetInstance()
-   */
-  Orchestrator();
-
-  /**
-   * @brief Create a fully armed and operational Orchestrator from the necessary parts
+   * @brief Create a fully armed and operational Orchestrator from the necessary parts.
+   *        One of Orchestrator's class invariants is that it has non-null topology, collector, and metric managers.
    *
    * @param topology_manager - Used to discover the hardware components (targets) on the current platform.
    *
@@ -38,11 +32,7 @@ class Orchestrator : public ISampleSink {
   Orchestrator(std::unique_ptr<ITopologyManager> topology_manager, std::unique_ptr<ICollectorManager> collector_manager,
                std::unique_ptr<IMetricManager> metric_manager);
 
-  ~Orchestrator() override {
-    if (_collector_manager) {
-      _collector_manager->UnregisterSampleSink(this);
-    }
-  }
+  ~Orchestrator() override;
 
   // forbid copy
   Orchestrator(Orchestrator const &)            = delete;
@@ -53,18 +43,30 @@ class Orchestrator : public ISampleSink {
   Orchestrator &operator=(Orchestrator &&other) = delete;
 
   /**
+   * @brief Initialize the static singleton instance of Orchestrator, to be retrieved later through GetInstance
+   *
+   * @param topology_manager - Used to discover the hardware components (targets) on the current platform.
+   *
+   * @param collector_manager - Can be given a set of operations and hints on how to run them,
+   *                            and then sample the data on an appropriate data source
+   *
+   * @param metric_manager - Can turn a set of desired metrics into a set of operations to collect,
+   *                         then post-process the sampled data
+   */
+  static void InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
+                                 std::unique_ptr<ICollectorManager> collector_manager,
+                                 std::unique_ptr<IMetricManager>    metric_manager);
+
+  /**
    * @brief Return a reference to the single Orchestrator instance
    *        If one hasn't been constructed yet, a default one with no collectors,
    *        metrics, or targets will be created in a thread-safe way.
    *        astlInitialize will use this returned reference to assign a new Orchestrator that may
    *        have more complex internals
    *
-   * @return a reference to an owning pointer to Orchestrator.
+   * @return a reference to an owning pointer to Orchestrator. Will return nullptr before InitializeInstance is called
    */
-  static std::unique_ptr<Orchestrator> &GetInstance() {
-    static auto instance = std::make_unique<Orchestrator>();
-    return instance;
-  }
+  static std::unique_ptr<Orchestrator> &GetInstance();
 
   /**
    * @brief Returns a const reference to the set of Targets managed by this orchestrator.
@@ -200,9 +202,8 @@ class Orchestrator : public ISampleSink {
    */
   astl_status_code SinkSamples(ITarget *target, std::span<SampledData> samples) override;
 
-  static astl_status_code Test();
-
  private:
+  static std::mutex                 &GetMutex();  // manange thread-safe access to singleton instance
   std::unique_ptr<ITopologyManager>  _topology_manager;
   std::unique_ptr<ICollectorManager> _collector_manager;
   std::unique_ptr<IMetricManager>    _metric_manager;

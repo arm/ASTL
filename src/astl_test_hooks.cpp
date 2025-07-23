@@ -6,7 +6,7 @@
 // For use only in tests, mostly tests covering the C -> C++ wrapper layer
 ASTL_API astl_status_code astlInjectTestOrchestrator(astl_test_orchestrator_t  new_orchestrator,
                                                      astl_test_orchestrator_t* original_orchestrator) {
-  if (!new_orchestrator || !original_orchestrator) {
+  if (original_orchestrator == nullptr) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   auto& current_orchestrator = astl::Orchestrator::GetInstance();

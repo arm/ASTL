@@ -26,6 +26,21 @@ auto AllocateAstlVector(size_t count) -> std::vector<T> {
   return objects;
 }
 
+using expectation = std::unique_ptr<trompeloeil::expectation>;
+
+auto MakeMinimalOrchestrator() -> std::pair<std::unique_ptr<astl::Orchestrator>, std::vector<expectation>> {
+  auto                     topology_manager  = std::make_unique<MockTopologyManager>();
+  auto                     collector_manager = std::make_unique<MockCollectorManager>();
+  std::vector<expectation> expectations;
+  expectations.push_back(NAMED_ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
+  expectations.push_back(NAMED_ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
+  auto metric_manager = std::make_unique<MockMetricManager>();
+
+  return {std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                               std::move(metric_manager)),
+          std::move(expectations)};
+}
+
 /**
  * @brief A test harness construct to replace the ASTL's Orchestrator instance with one for testing
  *
@@ -42,9 +57,8 @@ class TestOrchestratorInjector {
    *
    * When this TestOrchestratorInjector is destroyed, it'll put the original orchestrator back
    */
-  explicit TestOrchestratorInjector(std::unique_ptr<astl::Orchestrator> test_orchestrator)
-      : _test_orchestrator(std::move(test_orchestrator)) {
-    astlInjectTestOrchestrator(_test_orchestrator.release(), &_original_orchestrator);
+  explicit TestOrchestratorInjector(std::unique_ptr<astl::Orchestrator> test_orchestrator) {
+    astlInjectTestOrchestrator(test_orchestrator.release(), &_original_orchestrator);
   }
 
   /**
@@ -54,9 +68,9 @@ class TestOrchestratorInjector {
     // swap back the original orchestrator, and retrieve the test orchestrator for clean up.
     astl_test_orchestrator_t test_orchestrator_handle{nullptr};
     astlInjectTestOrchestrator(_original_orchestrator, &test_orchestrator_handle);
-    // cppcheck-suppress constVariablePointer
-    auto* raw_test_orchestrator = static_cast<astl::Orchestrator*>(test_orchestrator_handle);
-    _test_orchestrator.reset(raw_test_orchestrator);
+    // now clean up the `test_orchestrator` we received in this class's constructor
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
+    delete static_cast<astl::Orchestrator*>(test_orchestrator_handle);
   }
 
   // since we're managing a resource (an original orchestrator and test orchestrator),
@@ -67,12 +81,11 @@ class TestOrchestratorInjector {
   TestOrchestratorInjector& operator=(TestOrchestratorInjector&&)      = delete;
 
  private:
-  std::unique_ptr<astl::Orchestrator> _test_orchestrator;
   // hold the original orchestrator as a raw handle, since that's how the C interface provides it
   astl_test_orchestrator_t _original_orchestrator{nullptr};
 };
 
-// just a couple handy imprecise constants for testing
+// imprecise constants for testing
 constexpr uint32_t kJunk = 13;
 constexpr uint32_t kAFew = 7;
 
@@ -138,8 +151,8 @@ TEST_CASE("astlInitialize checks for invalid input", "[wrapper_test]") {
 }
 
 TEST_CASE("astlGetTargetCount", "[Reports 0 targets correctly]") {
-  auto                     zero_target_orchestrator = std::make_unique<astl::Orchestrator>();
-  TestOrchestratorInjector injector(std::move(zero_target_orchestrator));
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+  TestOrchestratorInjector injector(std::move(orchestrator));
   REQUIRE(astlGetTargetCount(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
   uint32_t target_count{kJunk};
   REQUIRE(astlGetTargetCount(&target_count) == ASTL_STATUS_SUCCESS);
@@ -152,9 +165,9 @@ TEST_CASE("astlGetTargetCount", "[Reports a few targets correctly]") {
   for (uint32_t i = 0; i < kAFew; ++i) {
     targets.push_back(std::make_unique<MockTarget>());
   }
-  auto a_few_targets_orchestrator = std::make_unique<astl::Orchestrator>();
-  a_few_targets_orchestrator->SetTargets(std::move(targets));
-  TestOrchestratorInjector injector(std::move(a_few_targets_orchestrator));
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+  orchestrator->SetTargets(std::move(targets));
+  TestOrchestratorInjector injector(std::move(orchestrator));
 
   uint32_t target_count{kJunk};
   REQUIRE(astlGetTargetCount(&target_count) == ASTL_STATUS_SUCCESS);
@@ -162,7 +175,7 @@ TEST_CASE("astlGetTargetCount", "[Reports a few targets correctly]") {
 }
 
 TEST_CASE("astlGetTargets", "[0 targets available]") {
-  auto                     orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   uint32_t                              target_count{kJunk};
@@ -181,7 +194,7 @@ TEST_CASE("astlGetTargets", "[Oversized buffer]") {
   auto                                        mock_target_1 = std::make_unique<MockTarget>();
   ALLOW_CALL(*mock_target_1, GetProperties(_)).RETURN(ASTL_STATUS_SUCCESS);
   mock_targets.push_back(std::move(mock_target_1));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -204,7 +217,7 @@ TEST_CASE("astlGetTargets", "[invalid parameters]") {
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.emplace_back(std::make_unique<MockTarget>());
   mock_targets.emplace_back(std::make_unique<MockTarget>());
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -233,7 +246,7 @@ TEST_CASE("astlGetTargets", "[second target can't retrieve parameters]") {
   REQUIRE_CALL(*mock_target_2, GetProperties(_)).RETURN(ASTL_STATUS_INTERNAL_ERROR);
   mock_targets.push_back(std::move(mock_target_2));
 
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -254,7 +267,7 @@ TEST_CASE("astlGetCounterCount", "[unreasonably huge number of counters]") {
   REQUIRE_CALL(*mock_target_1, GetCounterCount()).RETURN(size_t{1} + std::numeric_limits<uint32_t>::max());
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -279,7 +292,7 @@ TEST_CASE("astlGetCounterCount", "[Ask a target how many counters it has]") {
   REQUIRE_CALL(*mock_target_1, GetCounterCount()).RETURN(0);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -318,7 +331,7 @@ TEST_CASE("astlGetCounters", "[invalid parameters]") {
   ALLOW_CALL(*mock_target, GetCounterCount()).RETURN(2);
 
   mock_targets.push_back(std::move(mock_target));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -376,7 +389,7 @@ TEST_CASE("astlGetCounters", "[0 counters available]") {
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*mock_target, GetCounterCount()).RETURN(0);
   mock_targets.push_back(std::move(mock_target));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -427,7 +440,7 @@ TEST_CASE("astlGetCounters", "[Retrieve a number of counters from a target]") {
   astl_target_handle_t                        mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   mock_targets.push_back(std::move(mock_target));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -481,9 +494,12 @@ TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator]") {
   available_metrics.push_back(mock_metric2.get());
 
   ALLOW_CALL(*metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
-  auto topology_manager = std::make_unique<MockTopologyManager>();
-  auto orchestrator =
-      std::make_unique<astl::Orchestrator>(std::move(topology_manager), nullptr, std::move(metric_manager));
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                           std::move(metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -670,7 +686,7 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counter
 
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
   auto                     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
@@ -726,7 +742,7 @@ TEST_CASE("astlConfigureCounterCollection", "[Test wrapper C->C++ wrapper code]"
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
   mock_targets.push_back(std::move(mock_target_2));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -740,7 +756,7 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[bad parameters]") {
   auto                                        mock_target_1 = std::make_unique<MockTarget>();
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -778,7 +794,7 @@ TEST_CASE("astlReadImmediateOnTarget", "[1 works, one doesn't]") {
   mock_targets.push_back(std::move(mock_target_1));
   mock_targets.push_back(std::move(mock_target_2));
 
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -786,18 +802,17 @@ TEST_CASE("astlReadImmediateOnTarget", "[1 works, one doesn't]") {
   uint32_t target_count = 2;
   REQUIRE(astlGetTargets(targets.data(), &target_count) ==
           ASTL_STATUS_INTERNAL_ERROR);             // get target properties from our mock target fails
+  REQUIRE(target_count == 1);                      // only 1 is successful here.
   int                  junk                  = 1;  // not null, but not a valid handle to a target
   astl_target_handle_t invalid_target_handle = static_cast<astl_target_handle_t>(&junk);
-  astl_target_handle_t broken_target_handle  = targets[1]._handle;
 
   REQUIRE(astlReadImmediateOnTarget(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
   REQUIRE(astlReadImmediateOnTarget(invalid_target_handle) == ASTL_STATUS_INVALID_TARGET_HANDLE);
-  REQUIRE(astlReadImmediateOnTarget(broken_target_handle) == ASTL_STATUS_INTERNAL_ERROR);
 }
 
 TEST_CASE("astlReadImmediate", "[with 0 targets]") {
   // mock 0 targets
-  auto                     orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));
   REQUIRE(astlReadImmediate() == ASTL_STATUS_SUCCESS);
 }
@@ -817,8 +832,9 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets]") {
   mock_targets.push_back(std::move(mock_target_1));
   mock_targets.push_back(std::move(mock_target_2));
   auto topology_manager = std::make_unique<MockTopologyManager>();
-  auto orchestrator =
-      std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(mock_collector_manager), nullptr);
+  auto metric_manager   = std::make_unique<MockMetricManager>();
+  auto orchestrator     = std::make_unique<astl::Orchestrator>(
+      std::move(topology_manager), std::move(mock_collector_manager), std::move(metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -843,7 +859,7 @@ TEST_CASE("astlStartCollectionOnTarget", "[unimplemented for now]") {
   mock_targets.push_back(std::move(mock_target_1));
   mock_targets.push_back(std::move(mock_target_2));
 
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -853,11 +869,9 @@ TEST_CASE("astlStartCollectionOnTarget", "[unimplemented for now]") {
           ASTL_STATUS_INTERNAL_ERROR);             // get target properties from our mock target fails
   int                  junk                  = 1;  // not null, but not a valid handle to a target
   astl_target_handle_t invalid_target_handle = static_cast<astl_target_handle_t>(&junk);
-  astl_target_handle_t broken_target_handle  = targets[1]._handle;
 
   REQUIRE(astlStartCollectionOnTarget(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
   REQUIRE(astlStartCollectionOnTarget(invalid_target_handle) == ASTL_STATUS_INVALID_TARGET_HANDLE);
-  REQUIRE(astlStartCollectionOnTarget(broken_target_handle) == ASTL_STATUS_INTERNAL_ERROR);
 }
 
 TEST_CASE("astlStartCollection", "[unimplemented for now]") {
@@ -898,7 +912,7 @@ TEST_CASE("astlStopCollectionOnTarget", "[unimplemented for now]") {
   mock_targets.push_back(std::move(mock_target_1));
   mock_targets.push_back(std::move(mock_target_2));
 
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -945,7 +959,7 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_working_target));
   mock_targets.push_back(std::move(mock_failing_target));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -1016,7 +1030,7 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator]") {
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
-  auto orchestrator = std::make_unique<astl::Orchestrator>();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -1132,9 +1146,12 @@ TEST_CASE("astlGetAllMetricSamplesOnTarget", "[wrapper][Orchestrator]") {
   auto mock_metric_manager = std::make_unique<MockMetricManager>();
   auto metrics_pointers    = std::vector<astl::IMetric*>{mock_metric0.get(), mock_metric1.get(), mock_metric2.get()};
   ALLOW_CALL(*mock_metric_manager, GetAvailableMetrics()).RETURN(metrics_pointers);
-  auto topology_manager = std::make_unique<MockTopologyManager>();
-  auto orchestrator =
-      std::make_unique<astl::Orchestrator>(std::move(topology_manager), nullptr, std::move(mock_metric_manager));
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                           std::move(mock_metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 

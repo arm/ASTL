@@ -2,14 +2,8 @@
 
 #include "astl/astl_errors.h"
 #include "astl_logger.hpp"
-#include "topology/topology_manager.hpp"
 
 namespace astl {
-
-Orchestrator::Orchestrator() : _topology_manager{std::make_unique<TopologyManager>()} {
-  /// @todo https://jira.arm.com/browse/ASTL-133 - Ideally the Orchestrator would depend on ITopologyManager instead of
-  /// TopologyManager
-}
 
 Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>  topology_manager,
                            std::unique_ptr<ICollectorManager> collector_manager,
@@ -17,9 +11,33 @@ Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>  topology_manager,
     : _topology_manager{std::move(topology_manager)},
       _collector_manager{std::move(collector_manager)},
       _metric_manager{std::move(metric_manager)} {
-  if (_collector_manager) {
-    _collector_manager->RegisterSampleSink(this);
+  if (!_topology_manager || !_collector_manager || !_metric_manager) {
+    throw std::invalid_argument("Orchestrator requires non-null inputs for topology, collector, and metric managers.");
   }
+  _collector_manager->RegisterSampleSink(this);
+}
+
+Orchestrator::~Orchestrator() { _collector_manager->UnregisterSampleSink(this); }
+
+void Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
+                                      std::unique_ptr<ICollectorManager> collector_manager,
+                                      std::unique_ptr<IMetricManager>    metric_manager) {
+  std::scoped_lock lock(GetMutex());
+  auto            &inst = GetInstance();
+  if (!inst) {
+    inst = std::make_unique<Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                          std::move(metric_manager));
+  }
+}
+
+std::unique_ptr<Orchestrator> &Orchestrator::GetInstance() {
+  static std::unique_ptr<Orchestrator> instance;
+  return instance;
+}
+
+std::mutex &Orchestrator::GetMutex() {
+  static std::mutex initialization_mutex;
+  return initialization_mutex;
 }
 
 std::vector<std::unique_ptr<ITarget>> const &Orchestrator::GetTargets() const {
@@ -206,11 +224,6 @@ astl_status_code Orchestrator::SinkSamples(ITarget *target, std::span<SampledDat
   }
 
   return ASTL_STATUS_SUCCESS;
-}
-
-astl_status_code Orchestrator::Test() {
-  ASTL_LOG_INFO("Test method is deprecated: {:d}", static_cast<uint32_t>(ASTL_STATUS_DEPRECATED_API));
-  return ASTL_STATUS_DEPRECATED_API;
 }
 
 }  // namespace astl
