@@ -58,11 +58,9 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
 
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
-  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                           std::move(metric_manager));
+  astl::Orchestrator::InitializeInstance(std::move(topology_manager), std::move(collector_manager),
+                                         std::move(metric_manager));
   // the orchestrator owns targets
-  orchestrator->SetTargets(std::move(targets));
-  // replace the existing orchestrator with the newly constructed one
-  astl::Orchestrator::GetInstance() = std::move(orchestrator);
+  astl::Orchestrator::GetInstance()->SetTargets(std::move(targets));
   return ASTL_STATUS_SUCCESS;
 }

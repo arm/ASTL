@@ -92,6 +92,7 @@ struct MockFileInterface {
 };
 
 struct MockTopologyManager : public astl::ITopologyManager {
+  static constexpr bool trompeloeil_movable_mock = true;
   using InitializeCollectorManagerRtype =
       std::pair<std::vector<std::unique_ptr<astl::ITarget>>, std::unique_ptr<astl::ICollectorManager>>;
   MAKE_CONST_MOCK0(InitializeCollectorManager, InitializeCollectorManagerRtype(), override);
