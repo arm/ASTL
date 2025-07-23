@@ -40,7 +40,7 @@ struct AstlConfiguration {
   std::vector<std::string> metric_names_to_use;
 
   /** @brief Override path for configuration file containing SCMI metric definitions */
-  std::optional<std::filesystem::path> smcf_definition_file_path;
+  std::optional<std::filesystem::path> scmi_specification_path;
 };
 
 auto ParseConfiguration(std::istream &configuration_data) -> std::expected<AstlConfiguration, astl_status_code>;

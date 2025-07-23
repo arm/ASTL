@@ -43,7 +43,7 @@ class TopologyManager : public ITopologyManager {
       -> std::pair<std::vector<std::unique_ptr<ITarget>>, std::unique_ptr<ICollectorManager>> override;
 
   // Initialize the MetricManager based on the configuration and system config files
-  auto InitializeMetricManager() const -> std::unique_ptr<IMetricManager> override;
+  auto InitializeMetricManager() const -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> override;
 
   const std::vector<std::unique_ptr<ITarget>>& GetTargets() const override;
 

@@ -1,60 +1,61 @@
 {
-    "version": 3,
-    "cmakeMinimumRequired": {
-        "major": 3,
-        "minor": 21,
-        "patch": 0
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_COVERAGE": "ON",
+        "ENABLE_VALGRIND": "ON",
+        "JSON_DIAGNOSTICS": "1"
+      },
+      "binaryDir": "${sourceDir}/build/${presetName}"
     },
-    "configurePresets": [
-      {
-        "name": "debug",
-        "cacheVariables": {
-            "CMAKE_BUILD_TYPE": "Debug",
-            "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-            "ENABLE_COVERAGE": "ON",
-            "ENABLE_VALGRIND": "ON"
-        },
-        "binaryDir": "${sourceDir}/build/${presetName}"
+    {
+      "name": "release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_COVERAGE": "OFF",
+        "ENABLE_VALGRIND": "OFF"
       },
-      {
-        "name": "release",
-        "cacheVariables": {
-            "CMAKE_BUILD_TYPE": "Release",
-            "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-            "ENABLE_COVERAGE": "OFF",
-            "ENABLE_VALGRIND": "OFF"
-        },
-        "binaryDir": "${sourceDir}/build/${presetName}"
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
       }
-    ],
-    "buildPresets": [
-      {
-        "name": "debug",
-        "configurePreset": "debug",
-        "configuration": "Debug"
-      },
-      {
-        "name": "release",
-        "configurePreset": "release",
-        "configuration": "Release"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
       }
-    ],
-    "testPresets": [
-      {
-        "name": "debug",
-        "configurePreset": "debug",
-        "configuration": "Debug",
-        "output": {
-          "outputOnFailure": true
-        }
-      },
-      {
-        "name": "release",
-        "configurePreset": "release",
-        "configuration": "Release",
-        "output": {
-          "outputOnFailure": true
-        }
-      }
-    ]
+    }
+  ]
 }

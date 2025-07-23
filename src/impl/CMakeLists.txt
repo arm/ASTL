@@ -47,6 +47,23 @@ target_include_directories(
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
+# include nlohmann_json - json parser for importing configuration files
+find_package(nlohmann_json CONFIG REQUIRED)
+target_link_libraries(${LIBRARY_NAME} PRIVATE nlohmann_json::nlohmann_json)
+
+# if doing a debug build, include detailed json diagnostics on parse errors
+# This setting has two parts:
+# - the CMake cache variable JSON_DIAGNOSTICS, which is set in the CmakePresets.json file
+#   and used here in the conditional below
+# - the preprocessor definition JSON_DIAGNOSTICS which nlohmann::json looks for at compile time.
+if (JSON_DIAGNOSTICS)
+    target_compile_definitions(${LIBRARY_NAME}
+      PRIVATE
+        JSON_DIAGNOSTICS=1
+    )
+endif()
+
+
 # find spdlog, include it as a header-only dependency. This is a little slower (+10-12s) to compile ASTL,
 # but necessary because #including spdlog headers in multiple translation units causes linker errors like LNK2005
 find_package(spdlog CONFIG REQUIRED)

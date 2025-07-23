@@ -18,17 +18,63 @@
 
 #include "topology/topology_manager.hpp"
 
+#include <fstream>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <vector>
 
 #include "astl/astl_errors.h"
 #include "astl_file_interface.hpp"
+#include "astl_utils.hpp"
 #include "collector/collector_manager.hpp"
 #include "collector/scmi_sysfs_collector.hpp"
+#include "config/scmi_specification_json.hpp"
 #include "config/static_metric_config.hpp"
 #include "metric/metric_manager.hpp"
 
+using json = nlohmann::json;
+
 namespace astl {
+
+/**
+ * @brief helper function to parse a system scmi specification json file into MetricConfig objects
+ */
+auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& configuration)
+    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
+  std::vector<std::unique_ptr<MetricConfig>> configurations;
+  if (!configuration.scmi_specification_path) {
+    ASTL_LOG_INFO("No specification file path provided, so no metrics available from SCMI");
+    // TODO(ASTL-40 - default path for SCMI definition file)
+    return configurations;
+  }
+  const auto& scmi_specification_path = configuration.scmi_specification_path.value();
+  ASTL_LOG_DEBUG("Attmempting to parse {} for metric definitions", scmi_specification_path.string());
+  try {
+    std::ifstream json_file(scmi_specification_path);
+    json          json_data          = json::parse(json_file);
+    auto          specification_data = json_data.get<scmi::ScmiSpecification>();
+
+    ASTL_LOG_DEBUG("specification_data.datasources.size(): {}", specification_data.datasources.size());
+    ASTL_LOG_DEBUG("specification_data.definitions.groups.size(): {}", specification_data.definitions.groups.size());
+    ASTL_LOG_DEBUG("specification_data.layout.members.size(): {}", specification_data.layout.members.size());
+    ASTL_LOG_DEBUG("specification_data.processes.size(): {}", specification_data.processes.size());
+    ASTL_LOG_DEBUG("specification_data.transformations.size(): {}", specification_data.transformations.size());
+
+    // TODO(ASTL-40 - replace this with Configmanager parsing specification file)
+    configurations.push_back(std::make_unique<MetricConfig>(kTemperature));
+  } catch (nlohmann::json::parse_error const& e) {
+    ASTL_LOG_ERROR("Unable to parse SCMI definition file {}: {}", scmi_specification_path.string(), e.what());
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  } catch (nlohmann::json::type_error const& e) {
+    ASTL_LOG_ERROR("Type error parsing SCMI definition file {}: {}", scmi_specification_path.string(), e.what());
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  } catch (nlohmann::json::exception const& e) {
+    ASTL_LOG_ERROR("Exception caught while parsing SCMI definition file{}: {}", scmi_specification_path.string(),
+                   e.what());
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  return configurations;
+}
 
 TopologyManager::TopologyManager(const AstlConfiguration& configuration) : _configuration(configuration) {}
 
@@ -58,7 +104,8 @@ auto TopologyManager::InitializeCollectorManager() const
 }
 
 // Initialize the MetricManager based on the configuration and system config files
-auto TopologyManager::InitializeMetricManager() const -> std::unique_ptr<IMetricManager> {
+auto TopologyManager::InitializeMetricManager() const
+    -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
   // TODO(ASTL-40) - determine Metric configurations by using the configuration and system config files
   astl::CollectorCapability              collector_capabilities{astl::CollectorType::SCMI};
   astl::SystemCapability                 system_capabilities{};
@@ -68,15 +115,14 @@ auto TopologyManager::InitializeMetricManager() const -> std::unique_ptr<IMetric
 
   std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
 
-  // Register all metrics from kMetricConfigs
-  for (const auto& metric_config : kMetricConfigs) {
-    auto metric = std::make_unique<astl::MetricConfig>(metric_config);
-    if (auto finder = std::ranges::find(_configuration.metric_names_to_use, metric->Name());
-        finder != _configuration.metric_names_to_use.end()) {
-      metric_manager->RegisterMetric(std::move(metric));
-    } else {
-      // If the metric is disabled, do not register it
-      ASTL_LOG_INFO("Metric {} is disabled by configuration", metric->Name());
+  auto metric_configurations = ParseMetricConfigurationsFromScmiSpecification(_configuration);
+  if (!metric_configurations) {
+    return std::unexpected(metric_configurations.error());
+  }
+  for (auto& metric_config : metric_configurations.value()) {
+    auto status = metric_manager->RegisterMetric(std::move(metric_config));
+    if (status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(status);
     }
   }
   return metric_manager;

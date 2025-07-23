@@ -76,7 +76,7 @@ TEST_CASE("Orchestrator-StopCollection", "[Orchestrator]") {
     astl::Orchestrator orchestrator(std::move(topology_manager),  // cppcheck-suppress accessMoved
                                     nullptr,
                                     std::move(metric_manager));  // cppcheck-suppress accessMoved
-    auto&              target_ptr = orchestrator.GetTargets()[0];
+    const auto&        target_ptr = orchestrator.GetTargets()[0];
     REQUIRE(orchestrator.StopCollection(target_ptr.get()) == ASTL_STATUS_INTERNAL_ERROR);
   }
 
@@ -84,7 +84,7 @@ TEST_CASE("Orchestrator-StopCollection", "[Orchestrator]") {
     astl::Orchestrator orchestrator(std::move(topology_manager),   // cppcheck-suppress accessMoved
                                     std::move(collector_manager),  // cppcheck-suppress accessMoved
                                     std::move(metric_manager));    // cppcheck-suppress accessMoved
-    auto&              target_ptr = orchestrator.GetTargets()[0];
+    const auto&        target_ptr = orchestrator.GetTargets()[0];
     REQUIRE(orchestrator.StopCollection(target_ptr.get()) == ASTL_STATUS_COLLECTION_ALREADY_STOPPED);
   }
 }

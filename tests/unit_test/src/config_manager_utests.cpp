@@ -42,7 +42,7 @@ TEST_CASE("ParseConfiguration", "[ConfigManager]") {
       "SoC Temperature"
     ],
 
-    "smcf_definition_file_path": "/etc/arm/astl/smcf_config.json"
+    "scmi_specification_path": "/etc/arm/astl/scmi_specification.json"
   }
   )json";
   std::istringstream json_data_stream{json_config_data};
@@ -51,7 +51,7 @@ TEST_CASE("ParseConfiguration", "[ConfigManager]") {
   auto config = result.value();
   REQUIRE(config.metric_names_to_use.size() == 2);
   REQUIRE(config.scmi_sysfs_telemetry_root_path == "~/tmp/fuse/scmi");
-  REQUIRE(config.smcf_definition_file_path == "/etc/arm/astl/smcf_config.json");
+  REQUIRE(config.scmi_specification_path == "/etc/arm/astl/scmi_specification.json");
 }
 
 TEST_CASE("Invalid file path", "[ConfigManager]") {

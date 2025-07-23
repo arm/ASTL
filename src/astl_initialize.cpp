@@ -50,7 +50,11 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   }
   auto topology_manager             = std::make_unique<astl::TopologyManager>(configuration.value());
   auto [targets, collector_manager] = topology_manager->InitializeCollectorManager();
-  auto metric_manager               = topology_manager->InitializeMetricManager();
+  auto metric_manager_init_result   = topology_manager->InitializeMetricManager();
+  if (!metric_manager_init_result) {
+    return metric_manager_init_result.error();
+  }
+  auto& metric_manager = *metric_manager_init_result;
 
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
