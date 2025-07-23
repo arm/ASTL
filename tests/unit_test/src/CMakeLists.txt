@@ -24,6 +24,7 @@ add_executable(unit_test
     rate_metric_utests.cpp
     config_manager_utests.cpp
     metric_manager_utests.cpp
+    scmi_specification_json_utests.cpp
 )
 
 include(Warnings)

@@ -48,7 +48,7 @@ struct ITopologyManager {
       -> std::pair<std::vector<std::unique_ptr<ITarget>>, std::unique_ptr<ICollectorManager>> = 0;
 
   /** @brief Initialize the MetricManager based on the configuration and system config files */
-  virtual auto InitializeMetricManager() const -> std::unique_ptr<IMetricManager> = 0;
+  virtual auto InitializeMetricManager() const -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> = 0;
 
   virtual const std::vector<std::unique_ptr<ITarget>>& GetTargets() const = 0;
 

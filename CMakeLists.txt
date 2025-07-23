@@ -135,6 +135,15 @@ set_project_warnings(${LIBRARY_NAME})
 # ASTL_API macro will export functions on dlls, rather than import with ASTL_BUILD set
 target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_BUILD)
 
+# if we're in a debug build, we want nlohmann::json library to include detailed diagnostics on failure.
+# This 'JSON_DIAGNOSTICS' setting has two parts:
+# - the CMake cache variable JSON_DIAGNOSTICS, which is set in the CmakePresets.json file
+#   and used here in the conditional below
+# - the preprocessor definition JSON_DIAGNOSTICS which nlohmann::json looks for at compile time.
+if (JSON_DIAGNOSTICS)
+    target_compile_definitions(${LIBRARY_NAME} PRIVATE JSON_DIAGNOSTICS=1)
+endif()
+
 target_sources(
     ${LIBRARY_NAME}
     PRIVATE

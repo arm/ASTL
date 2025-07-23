@@ -37,11 +37,15 @@ INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/src/impl/common)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/tools/mock_sysfs/include)
 
 echo "Running clang-tidy to lint code..."
-
 # find the system header paths so clang++ can find them
-SYS_INCLUDE_PATHS=$(echo | g++ -E -x c++ - -v 2>&1 |
+GCC_INCLUDE_PATHS=$(echo | g++ -E -x c++ - -v 2>&1 |
 	awk '/#include <...> search starts here:/{flag=1;next}/End of search list/{flag=0}flag' |
-	sed -E 's/ *\(.*\)$//' | sed 's/^/ -isystem /')
+	sed -E 's/^\s+//')
+SYS_INCLUDE_PATHS=()
+while IFS= read -r SYSTEM_INCLUDE; do
+	SYS_INCLUDE_PATHS+=(-isystem)
+	SYS_INCLUDE_PATHS+=("${SYSTEM_INCLUDE}")
+done <<<"$GCC_INCLUDE_PATHS"
 
 # Include dependency headers from vcpkg as system headers
 for DEP in "$REPO_ROOT_DIR"/vcpkg/packages/*; do

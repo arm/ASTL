@@ -3,5 +3,5 @@
 
   "metrics": ["SoC Power", "Voltage", "Throttle Counts", "SoC Temperature"],
 
-  "smcf_definition_file_path": "placeholder/replace/me/later/smcf_config.json"
+  "scmi_specification_path": "./samples/sample_topology/example_scmi_specification.json"
 }

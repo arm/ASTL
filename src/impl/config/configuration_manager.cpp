@@ -35,6 +35,7 @@ std::expected<AstlConfiguration, astl_status_code> GetConfiguration(
     astl_initialization_parameters_t const *init_params) {
   if (init_params->_configuration_file_path == nullptr) {
     // nullptr is valid - just use default settings
+    ASTL_LOG_DEBUG("No configuration file path given, using default config settings");
     return AstlConfiguration{};
   }
   std::filesystem::path config_filepath{init_params->_configuration_file_path};
@@ -43,9 +44,8 @@ std::expected<AstlConfiguration, astl_status_code> GetConfiguration(
     ASTL_LOG_ERROR("Unable to open {} as input configuration file", config_filepath.string());
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
+  ASTL_LOG_DEBUG("Parsing ASTL configuration from {}", config_filepath.string());
   return ParseConfiguration(config_file_ifstream);
-
-  return AstlConfiguration{};
 };
 
 }  // namespace ConfigurationManager

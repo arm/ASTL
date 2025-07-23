@@ -94,7 +94,7 @@ You can also optionally override the root path for the Scmi file system, and the
 
   "metrics": ["InstantaneousPower", "Voltage", "SoC Temperature"],
 
-  "smcf_definition_file_path": "/etc/arm/astl/smcf_config.json"
+  "scmi_specification_path": "samples/example_scmi_specification.json"
 }
 ```
 
