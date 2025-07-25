@@ -190,8 +190,8 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
       .RETURN(ASTL_STATUS_SUCCESS);
   // collector should read the value
   size_t                         read_value_call_count{0};
-  const std::vector<std::string> expected_data{"1234567890 10", "1234567890 11", "1234567891 12", "1234567892 13",
-                                               "1234567893 14", "1234567894 15", "1234567895 16", "1234567897 17",
+  const std::vector<std::string> expected_data{"1234567890 10", "1234567891 11", "1234567892 12", "1234567893 13",
+                                               "1234567894 14", "1234567895 15", "1234567896 16", "1234567897 17",
                                                "1234567898 18", "1234567899 19"};
   // we expect some number of calls to this value read function, depending on how long
   // we leave the collection enabled. return some of the expected data, and don't overrun that list.
@@ -274,4 +274,123 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
   constexpr auto allowed_extra_samples{3};
   REQUIRE(read_value_call_count <= expected_call_count + allowed_extra_samples);
   REQUIRE_THAT(samples, Catch::Matchers::Equals(expected_samples));
+}
+
+TEST_CASE("ScmiSysfsCollector::DuplicateTimestampHandling", "[scmi_sysfs_collector]") {
+  // Test that samples with duplicate timestamps are properly discarded
+  MockFileInterface mock_file_interface;
+
+  // Allow basic file interface operations
+  ALLOW_CALL(mock_file_interface, IsValid(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, HasWritePermission(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, HasReadPermission(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"de_implementation_version"}, _))
+      .SIDE_EFFECT(_2 = "0.0.0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"version"}, _))
+      .SIDE_EFFECT(_2 = "0.0.1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  trompeloeil::sequence seq;
+
+  // Expect collector to initialize telemetry subsystem
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"tlm_enable"}, "1"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  // Data event 0x5678 setup
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x5678/enable"}, "1"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/tstamp_enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x5678/tstamp_enable"}, "1"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  // Test data with duplicate timestamps
+  size_t                         read_value_call_count{0};
+  const std::vector<std::string> test_data{
+      "1000000 100",  // First sample: timestamp=1000000, value=100
+      "1000000 200",  // Duplicate timestamp: should be discarded
+      "1000001 300",  // Different timestamp: should be accepted
+      "1000001 400",  // Another duplicate: should be discarded
+      "1000002 500"   // Different timestamp: should be accepted
+  };
+
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/value"}, _))
+      .IN_SEQUENCE(seq)
+      .TIMES(5)
+      .LR_SIDE_EFFECT(_2 = test_data[std::min(read_value_call_count, test_data.size() - 1)], ++read_value_call_count)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  // Cleanup calls
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x5678/tstamp_enable"}, "0"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x5678/enable"}, "0"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  // Track samples received by the sink
+  MockSampleSink               mock_sample_sink;
+  std::vector<astl::AstlValue> received_samples;
+
+  // We expect only 3 samples to be received (duplicate timestamps should be discarded)
+  REQUIRE_CALL(mock_sample_sink, SinkSamples(_, _))
+      .TIMES(3)
+      .LR_SIDE_EFFECT(
+          (std::for_each(std::begin(_2), std::end(_2),
+                         [&received_samples](auto const& sample) { received_samples.push_back(sample.value); })))
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  // Create the collector and configure it
+  astl::ScmiSysfsCollector<MockFileInterface> collector(nullptr, std::move(mock_file_interface));
+  collector.SetSampleSink(&mock_sample_sink);
+
+  constexpr uint32_t      raw_id = 0x5678;
+  astl::ScmiDataEventId   data_event_id{raw_id};
+  astl::OperationSequence operations_on_sample;
+  auto                    read_operation = std::make_unique<astl::ScmiReadOperation>(data_event_id);
+  operations_on_sample.push_back(std::move(read_operation));
+
+  astl::CollectionOperations operations{.operationsBeforeStart{},
+                                        .operationsAtStart{},
+                                        .operationsOnSample{std::move(operations_on_sample)},
+                                        .operationsAtStop{},
+                                        .samplingInterval{},
+                                        .requirements{astl::CollectorCapability{astl::CollectorType::SCMI}}};
+
+  astl_collection_parameters_t collection_params{
+      ._size              = sizeof(astl_collection_parameters_t),
+      ._sampling_interval = 1,
+      ._collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+      ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
+  };
+
+  astl::CollectionConfiguration configuration{nullptr, std::move(operations), collection_params};
+
+  // Configure and start collection
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
+
+  // Perform 5 immediate reads
+  for (int i = 0; i < 5; ++i) {
+    REQUIRE(ASTL_STATUS_SUCCESS == collector.ReadImmediate());
+  }
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
+
+  // Verify that only samples with unique timestamps were received
+  // Expected: 100 (first), 300 (after first duplicate), 500 (after second duplicate)
+  const std::vector<astl::AstlValue> expected_samples{
+      astl::AstlValue{uint64_t{0x100}}, astl::AstlValue{uint64_t{0x300}}, astl::AstlValue{uint64_t{0x500}}};
+
+  REQUIRE_THAT(received_samples, Catch::Matchers::Equals(expected_samples));
 }

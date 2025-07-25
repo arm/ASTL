@@ -25,6 +25,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -36,6 +37,7 @@
 #include "collector/scmi_data_event.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_sample_sink.hpp"
+#include "common/operation.hpp"
 #include "common/scmi/scmi_read_operation.hpp"
 
 namespace astl {
@@ -120,6 +122,8 @@ class ScmiSysfsCollector : public ICollector {
   mutable std::mutex
       _collection_mutex;  // prevent the collection configuration from being accessed by two threads at once
   std::unique_ptr<PeriodicSampler> _periodic_sampler;
+  std::unordered_map<ScmiDataEventId, SampleTimestamp>
+      _previous_timestamps;  //!< Track previous timestamp per data event ID to detect duplicates
 
   // private methods
 
@@ -253,6 +257,10 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StartCollection() {
   if (_collection_state != CollectionState::STOPPED || !_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot start while already started or unconfigured
   }
+
+  // Clear previous timestamps from any previous collection cycles
+  _previous_timestamps.clear();
+
   auto result = ExecuteCollectionOperations(_configuration->Operations().operationsAtStart);
   if (result != ASTL_STATUS_SUCCESS) {
     return result;  // Propagate the error code from the operation
@@ -353,6 +361,7 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StopCollection() {
   // Restore the original enabled state of data events
   result = RestoreDataEventEnabledState(_data_events);
   _data_events.clear();
+  _previous_timestamps.clear();  // Clear previous timestamps for next collection cycle
   _collection_state = CollectionState::STOPPED;
   return result;
 }
@@ -500,8 +509,25 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(Sc
   if (!parsed_value) {
     return parsed_value.error();
   }
-  auto        timestamp = parsed_value->first;
-  auto        value     = AstlValue{parsed_value->second.value};
+  auto timestamp = parsed_value->first;
+  auto value     = AstlValue{parsed_value->second.value};
+
+  /**
+   * @brief Discard samples that arrive with the same timestamp as the previous one.
+   * @todo ASTL-135: Evaluate event-driven SCMI sampling—subscribe to driver “Samples Ready” notifications
+   *       instead of periodic polling to avoid duplicates.
+   */
+  auto prev_timestamp_it = _previous_timestamps.find(operation.scmi_data_event_id);
+  if (prev_timestamp_it != _previous_timestamps.end() && prev_timestamp_it->second == timestamp) {
+    ASTL_LOG_CRITICAL(
+        "ScmiSysfsCollector: discarding sample with duplicate timestamp for data event ID: {:04X}, timestamp: {}",
+        operation.scmi_data_event_id, timestamp.time_since_epoch().count());
+    return ASTL_STATUS_SUCCESS;  // Discard sample but return success
+  }
+
+  // Update the previous timestamp for this data event
+  _previous_timestamps[operation.scmi_data_event_id] = timestamp;
+
   SampledData sampled_data{operation.GetId(), value, timestamp};
 
   if (_sample_sink) {
