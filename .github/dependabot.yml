@@ -1,0 +1,22 @@
+version: 2
+enable-beta-ecosystems: true
+updates:
+  # Maintain dependencies for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      all:
+        applies-to: version-updates
+        update-types:
+          - major
+          - minor
+          - patch
+
+  # Maintain dependencies for C++ through vcpkg
+  - package-ecosystem: "vcpkg"
+    directories:
+      - "/"
+    schedule:
+      interval: "weekly"

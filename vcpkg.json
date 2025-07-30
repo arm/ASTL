@@ -1,4 +1,5 @@
 {
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "dependencies": [
     "bshoshany-thread-pool",
     "catch2",
@@ -10,5 +11,6 @@
     "trompeloeil",
     "magic-enum",
     "spdlog"
-  ]
+  ],
+  "builtin-baseline": "3425f537d2f01c761d2d2cff59a7577eb4f568c0"
 }
