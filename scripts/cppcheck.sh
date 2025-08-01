@@ -41,7 +41,7 @@ SYS_INCLUDE_PATHS=$(echo | g++ -E -x c++ - -v 2>&1 |
 	sed 's/^/ -I /')
 
 # Include dependency headers from vcpkg as system headers
-for DEP in "$REPO_ROOT_DIR/vcpkg/packages"/*; do
+for DEP in "$REPO_ROOT_DIR/external/vcpkg/packages"/*; do
 	NEW_INCLUDE="${DEP}/include/"
 	SYS_INCLUDE_PATHS+=" -system ${NEW_INCLUDE}"
 done

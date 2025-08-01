@@ -48,7 +48,7 @@ while IFS= read -r SYSTEM_INCLUDE; do
 done <<<"$GCC_INCLUDE_PATHS"
 
 # Include dependency headers from vcpkg as system headers
-for DEP in "$REPO_ROOT_DIR"/vcpkg/packages/*; do
+for DEP in "$REPO_ROOT_DIR"/external/vcpkg/packages/*; do
 	NEW_INCLUDE="${DEP}/include/"
 	if [[ -d "${NEW_INCLUDE}/fuse3" ]]; then
 		# vcpkg installs fuse3 headers in a subdirectory

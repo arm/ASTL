@@ -9,21 +9,36 @@ cmake_minimum_required(VERSION 3.0...4.0) # setting this is required
 include(FetchContent)
 # use vcpkg to manage dependencies
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-  if(DEFINED ENV{VCPKG_ROOT})
-    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
-    message(STATUS "📦 Using vcpkg toolchain from $ENV{VCPKG_ROOT}")
-  elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake")
-    message("📦 Found vcpkg git submodule - using it for dependencies\n")
-    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
-    message(STATUS "Using vcpkg toolchain from ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg")
-  else()
-    message(FATAL_ERROR "❌ VCPKG_ROOT not set and no toolchain file provided.\n"
-                        " For initial setup, please run:\n"
-                        " git submodule update --init --recursive\n"
-                        " ./vcpkg/bootstrap-vcpkg.sh\n"
-                        )
+  # Configure vcpkg bootstrap
+  set(VCPKG_DIR "${CMAKE_SOURCE_DIR}/external/vcpkg")
+  set(VCPKG_BOOTSTRAP_SH "${CMAKE_SOURCE_DIR}/scripts/bootstrap-vcpkg.sh")
+  set(VCPKG_BOOTSTRAP_PS1 "${CMAKE_SOURCE_DIR}/scripts/bootstrap-vcpkg.ps1")
+
+  # Only run bootstrap if vcpkg hasn't been built
+  if(NOT EXISTS "${VCPKG_DIR}/vcpkg")
+      if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+          message(STATUS "Bootstrapping vcpkg (Windows)...")
+          execute_process(
+              COMMAND powershell -ExecutionPolicy Bypass -File "${VCPKG_BOOTSTRAP_PS1}"
+              RESULT_VARIABLE _vcpkg_result
+          )
+      else()
+          message(STATUS "Bootstrapping vcpkg (Unix)...")
+          execute_process(
+              COMMAND bash "${VCPKG_BOOTSTRAP_SH}"
+              RESULT_VARIABLE _vcpkg_result
+          )
+      endif()
+
+      if(NOT _vcpkg_result EQUAL 0)
+          message(FATAL_ERROR "vcpkg bootstrap failed!")
+      endif()
   endif()
-endif()
+
+  # Tell CMake to use vcpkg toolchain
+  set(CMAKE_TOOLCHAIN_FILE "${VCPKG_DIR}/scripts/buildsystems/vcpkg.cmake"
+      CACHE STRING "Vcpkg toolchain file")
+  endif()
 
 include(macros)
 SetAstlVersion()
