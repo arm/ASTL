@@ -25,24 +25,37 @@
 
 namespace astl {
 
-inline const std::vector<std::string> kDataEventIds = {"0x1234"};
+/**
+ * @brief Metric configurations for various metric types currently hardcoded for testing purposes.
+ *
+ * @todo ASTL-40 (https://jira.arm.com/browse/ASTL-40): Remove this file once dynamic ASTL configuration loading and
+ * appropriate platform-specific JSON files are fully implemented.
+ */
+inline const std::vector<std::string> kDataEventIdsTemperature   = {"0x7a9b"};
+inline const std::vector<std::string> kDataEventIdsThrottleCount = {"0x8c3d"};
+inline const std::vector<std::string> kDataEventIdsPower         = {"0x9e4f"};
+inline const std::vector<std::string> kDataEventIdsFreq          = {"0x1A68"};
 
 inline const MetricConfig kTemperature{
-    "SoC Temperature", "SoC Temperature in Celsius", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64,
-    ASTL_METRIC_VALUE, CollectorType::SCMI,          kDataEventIds};
+    "SoC Temperature", "SoC Temperature in Celsius", ASTL_UNITS_CELSIUS,      ASTL_VALUE_UINT64,
+    ASTL_METRIC_VALUE, CollectorType::SCMI,          kDataEventIdsTemperature};
 
-inline const MetricConfig kThermalCount{"Throttle Counts", "Number of thermal throttling events",
-                                        ASTL_UNITS_NONE,   ASTL_VALUE_UINT64,
-                                        ASTL_METRIC_DELTA, CollectorType::SCMI,
-                                        kDataEventIds};
+inline const MetricConfig kThrottleCount{"Throttle Counts",         "Number of thermal throttling events",
+                                         ASTL_UNITS_NONE,           ASTL_VALUE_UINT64,
+                                         ASTL_METRIC_DELTA,         CollectorType::SCMI,
+                                         kDataEventIdsThrottleCount};
 
-inline const MetricConfig kPower{"SoC Power",      "Current power consumption in watts",
-                                 ASTL_UNITS_WATTS, ASTL_VALUE_UINT64,
-                                 ASTL_METRIC_RATE, CollectorType::SCMI,
-                                 kDataEventIds};
+inline const MetricConfig kPower{"SoC Power",       "Current power consumption in watts",
+                                 ASTL_UNITS_WATTS,  ASTL_VALUE_UINT64,
+                                 ASTL_METRIC_RATE,  CollectorType::SCMI,
+                                 kDataEventIdsPower};
 
+inline const MetricConfig kFreq{"Frequency",       "Current Frequency of the SoC in MHz",
+                                ASTL_UNITS_MHERTZ, ASTL_VALUE_UINT64,
+                                ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                kDataEventIdsFreq};
 // Vector containing all metric configurations
-inline const std::vector<MetricConfig> kMetricConfigs = {kTemperature, kThermalCount, kPower};
+inline const std::vector<MetricConfig> kMetricConfigs = {kTemperature, kThrottleCount, kPower, kFreq};
 
 }  // namespace astl
 
