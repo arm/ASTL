@@ -107,8 +107,10 @@ typedef enum _astl_status_code {
 
   // Add new status codes here
 
-  ASTL_STATUS_INTERNAL_ERROR = 200,         //!< Internal failure
-  ASTL_STATUS_UNKNOWN_ERROR  = 0xFFFFFFFF,  //!< Unknown error
+  ASTL_STATUS_INTERNAL_ERROR = 127,  //!< Internal failure
+  // Do not define status codes higher than 127 due to stringify limitations
+
+  ASTL_STATUS_UNKNOWN_ERROR = 0xFFFFFFFF,  //!< Unknown error
 } astl_status_code;
 
 /**

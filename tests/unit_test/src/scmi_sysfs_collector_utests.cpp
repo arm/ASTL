@@ -1,8 +1,4 @@
 #include <algorithm>
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/catch_tostring.hpp>
-#include <catch2/matchers/catch_matchers_vector.hpp>
-#include <catch2/trompeloeil.hpp>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
@@ -10,6 +6,7 @@
 #include <vector>
 
 #include "../../mock_classes.hpp"
+#include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl.h"
 #include "collector/scmi_sysfs_collector.hpp"
 #include "common/scmi/scmi_read_operation.hpp"

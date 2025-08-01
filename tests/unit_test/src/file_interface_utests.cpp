@@ -1,4 +1,4 @@
-#include <catch2/catch_test_macros.hpp>
+#include "../../test_includes.hpp"  // include before catch2
 #ifndef _WIN32
 #  include <unistd.h>
 #endif

@@ -16,15 +16,13 @@
  * under the License.
  ******************************************************************************/
 
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <chrono>
 #include <expected>
 #include <limits>
 #include <span>
 #include <vector>
 
+#include "../../test_includes.hpp"  // include before catch2
 #include "metric/rate_metric.hpp"
 
 // Test fixture class to access protected members

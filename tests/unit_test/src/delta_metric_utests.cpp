@@ -16,12 +16,12 @@
  * under the License.
  ******************************************************************************/
 
-#include <catch2/catch_test_macros.hpp>
 #include <expected>
 #include <limits>
 #include <span>
 #include <vector>
 
+#include "../../test_includes.hpp"  // include before catch2
 #include "metric/delta_metric.hpp"
 
 // Test fixture class to access protected members

@@ -1,8 +1,6 @@
 #ifndef ASTL_MOCK_CLASSES_H_
 #define ASTL_MOCK_CLASSES_H_
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/trompeloeil.hpp>
 #include <expected>
 #include <filesystem>
 #include <span>
@@ -22,6 +20,7 @@
 #include "metric/i_metric.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "target.hpp"
+#include "test_includes.hpp"
 #include "topology/i_topology_manager.hpp"
 
 /**
