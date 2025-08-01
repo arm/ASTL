@@ -1,10 +1,9 @@
 #include <algorithm>
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <cstdint>
 #include <format>
 #include <optional>
 
+#include "../../test_includes.hpp"  // include before catch2
 #include "common/astl_value.hpp"
 
 using Catch::Matchers::WithinAbs;

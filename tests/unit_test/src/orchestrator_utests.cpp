@@ -1,17 +1,13 @@
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers.hpp>
-#include <catch2/matchers/catch_matchers_exception.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
 #include <stdexcept>
-#include <trompeloeil.hpp>
 
 #include "../../mock_classes.hpp"
+#include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl.h"
+#include "astl/astl_errors.h"
 #include "astl_impl.hpp"
 #include "common/i_sample_sink.hpp"
 
 using Catch::Matchers::ContainsSubstring;
-
 using trompeloeil::_;
 
 TEST_CASE("Orchestrator ctor", "[Orchestrator]") {

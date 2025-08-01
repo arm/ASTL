@@ -1,6 +1,6 @@
-#include <catch2/catch_test_macros.hpp>
 #include <vector>
 
+#include "../../test_includes.hpp"  // include before catch2
 #include "metric/sampled_value_metric.hpp"
 
 TEST_CASE("SampledValueMetric: construction & ReceiveSample single sample", "[SampledValueMetric]") {

@@ -1,7 +1,4 @@
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/catch_tostring.hpp>
-#include <catch2/trompeloeil.hpp>
-
+#include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl_errors.h"
 #include "config/scmi_specification_json.hpp"
 

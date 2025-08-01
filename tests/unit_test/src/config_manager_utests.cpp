@@ -1,8 +1,5 @@
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/catch_tostring.hpp>
-#include <catch2/trompeloeil.hpp>
-
 #include "../../mock_classes.hpp"
+#include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl_errors.h"
 #include "config/astl_configuration.hpp"
 #include "config/configuration_manager.hpp"

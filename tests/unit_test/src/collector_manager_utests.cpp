@@ -16,11 +16,8 @@
  * under the License.
  ******************************************************************************/
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/catch_tostring.hpp>
-#include <catch2/trompeloeil.hpp>
-
 #include "../../mock_classes.hpp"
+#include "../../test_includes.hpp"  // include before catch2
 #include "collector/collector_manager.hpp"
 
 TEST_CASE("CollectorManager::RegisterSampleSink", "[collector_manager]") {
