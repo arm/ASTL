@@ -16,7 +16,7 @@ get_all_source_files() {
 	if command -v find >/dev/null; then
 		while IFS= read -r -d '' FILE; do
 			FILES+=("$FILE")
-		done < <(find "$REPO_ROOT" \( -path "$REPO_ROOT/build" -o -path "$REPO_ROOT/vcpkg" \) -prune -false -o \
+		done < <(find "$REPO_ROOT" \( -path "$REPO_ROOT/build" -o -path "$REPO_ROOT/external/vcpkg" \) -prune -false -o \
 			-type f \( -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.h.in' \) -print0)
 	fi
 

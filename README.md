@@ -188,15 +188,6 @@ ASTL/build/debug/bin/MockSysfs /tmp/scmi
 
 # Build steps for developers
 
-## Initial clone and setup
-
-We use vcpkg as a git submodule, so you need to clone with `--recursive`. If you already cloned and forgot that, you can get the submodule via
-
-```sh
-git submodule update --init --recursive
-./vcpkg/bootstrap-vcpkg.sh
-```
-
 ## Compile and test
 
 These commands will generate a workspace under 'build' with auto-detected reasonable default build systems and compilers, build it, and execute tests
