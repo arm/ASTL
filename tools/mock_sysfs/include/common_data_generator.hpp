@@ -164,7 +164,7 @@ class CSVDataGenerator {
   /**
    * @param csv_path Filesystem path to the CSV file.
    */
-  explicit CSVDataGenerator(const std::string& csv_path);
+  explicit CSVDataGenerator(const std::string& csv_path, uint8_t column);
 
   /**
    * @brief Generate returns the data value for the most recent timestamp <= now.

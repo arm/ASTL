@@ -215,6 +215,11 @@ static void LowLevelOpenDir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
     return;
   }
 
+  std::string value = HandleProtocolRead(node);
+  if (!value.empty()) {
+    node->SetFileContent(value);
+  }
+
   fuse_reply_open(req, file_info);
 }
 

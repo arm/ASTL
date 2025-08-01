@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <fstream>
-#include <iostream>
 #include <random>
 #include <sstream>
 
@@ -70,7 +69,7 @@ T PulseGenerator<T>::GeneratePulse() {
 //------------------------------------------------------------------------------
 // CSVDataGenerator
 //------------------------------------------------------------------------------
-CSVDataGenerator::CSVDataGenerator(const std::string& csv_path) {
+CSVDataGenerator::CSVDataGenerator(const std::string& csv_path, uint8_t column) {
   std::ifstream file(csv_path);
   if (!file.is_open()) {
     return;
@@ -83,13 +82,19 @@ CSVDataGenerator::CSVDataGenerator(const std::string& csv_path) {
       title = false;
       continue;
     }
-    std::stringstream str_stream(line);
 
-    std::string ts_str;
-    std::string data_str;
-    if (!std::getline(str_stream, ts_str, ',') || !std::getline(str_stream, data_str)) {
+    std::stringstream        str_stream(line);
+    std::vector<std::string> tokens;
+    std::string              field;
+    while (std::getline(str_stream, field, ',')) {
+      tokens.push_back(field);
+    }
+
+    if (tokens.size() <= column) {
       continue;
     }
+    std::string ts_str   = tokens[0];
+    std::string data_str = tokens[column];
 
     try {
       uint64_t ts_uint64 = std::stoull(ts_str);
