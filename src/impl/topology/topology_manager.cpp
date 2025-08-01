@@ -18,7 +18,9 @@
 
 #include "topology/topology_manager.hpp"
 
+#include <algorithm>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <vector>
@@ -61,7 +63,9 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& con
     ASTL_LOG_DEBUG("specification_data.transformations.size(): {}", specification_data.transformations.size());
 
     // TODO(ASTL-40 - replace this with Configmanager parsing specification file)
-    configurations.push_back(std::make_unique<MetricConfig>(kTemperature));
+    configurations.reserve(kMetricConfigs.size());
+    std::transform(kMetricConfigs.begin(), kMetricConfigs.end(), std::back_inserter(configurations),
+                   [](const auto& metric_config) { return std::make_unique<MetricConfig>(metric_config); });
   } catch (nlohmann::json::parse_error const& e) {
     ASTL_LOG_ERROR("Unable to parse SCMI definition file {}: {}", scmi_specification_path.string(), e.what());
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
