@@ -19,7 +19,10 @@
 #ifndef RAW_METRIC_HPP_
 #define RAW_METRIC_HPP_
 
+#include <algorithm>
+#include <cctype>
 #include <span>
+#include <string>
 
 #include "astl/astl.h"
 #include "astl_logger.hpp"
@@ -146,6 +149,39 @@ class RawMetric : public IMetric {
     _raw_sample_logger.LogInfo("{}, {}, {}, {}, {} \n", _name, _description, _units, sample.value, timestamp);
   }
 
+  /**
+   * @brief Helper function to sanitize metric name for use as filename
+   * @param name The metric name to sanitize
+   * @return A sanitized string safe for use as a filename
+   */
+  static std::string SanitizeMetricNameForFilename(const std::string &name) {
+    std::string sanitized = name;
+
+    // Replace spaces and other problematic characters with underscores
+    std::transform(sanitized.begin(), sanitized.end(), sanitized.begin(), [](char chr) {
+      if (std::isalnum(chr) || chr == '_' || chr == '-') {
+        return chr;  // Keep alphanumeric, underscore, and hyphen
+      }
+      return '_';  // Replace everything else with underscore
+    });
+
+    // Remove consecutive underscores
+    auto new_end = std::unique(sanitized.begin(), sanitized.end(),
+                               [](char prev, char curr) { return prev == '_' && curr == '_'; });
+    sanitized.erase(new_end, sanitized.end());
+
+    // Remove leading/trailing underscores
+    sanitized.erase(0, sanitized.find_first_not_of('_'));
+    sanitized.erase(sanitized.find_last_not_of('_') + 1);
+
+    // Ensure we have a valid filename (not empty)
+    if (sanitized.empty()) {
+      sanitized = "metric";
+    }
+
+    return sanitized;
+  }
+
   // Member variables for metrics are protected to allow access in derived classes.
   // NOLINTBEGIN - Disable clang-tidy checks for protected members.
   // The common parameters used by all metric types like formula, mask go in here.
@@ -158,7 +194,7 @@ class RawMetric : public IMetric {
   // Create a Logger instance explicitly to log raw samples
   // TODO (ASTL-58): When the output manager is implemented raw_sample_logger will be part of the OutputManager.
   astl::Logger _raw_sample_logger{astl::LogLevel::Info, false /* Console logging disabled */,
-                                  false /* No default formatting */, "raw_samples.log"};
+                                  false /* No default formatting */, "raw_samples.csv"};
 
   // NOLINTEND - End of clang-tidy checks for protected members.
 };  // End of RawMetric class

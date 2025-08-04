@@ -114,7 +114,8 @@ std::expected<CollectionOperations, astl_status_code> MetricManager::GetRequired
     for (const auto& id_string : data_event_ids) {
       uint32_t event_id = 0;
       try {
-        event_id = static_cast<uint32_t>(std::stoul(id_string));
+        constexpr int hex_base = 16;
+        event_id = static_cast<uint32_t>(std::stoul(id_string, nullptr, hex_base));  // Convert hex string to uint32_t
       } catch (const std::exception& e) {
         ASTL_LOG_ERROR("GetRequiredOperations: invalid event ID string '{}' (exception: {})", id_string, e.what());
         return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};

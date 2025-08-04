@@ -1,6 +1,10 @@
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <expected>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -33,9 +37,11 @@ void PrintHelp() {
             << "Options:\n"
             << "  --help              Show this help message.\n"
             << "  --version           Print version and exit.\n"
-            << "  --immediate         Trigger immediate sample read. This is default behavior.\n"
-            << "  --interval=<n>      Trigger interval sample read.\n"
-            << "  --config=<path>     Path to  json config file for ASTL.\n";
+            << "  --immediate         Trigger immediate sample read.\n"
+            << "  --interval=<n>      Trigger interval sample read period in milliseconds.\n"
+            << "  --duration=<n>      Collection duration in seconds.\n"
+            << "  --config=<path>     Path to  json config file for ASTL.\n"
+            << "  Default: interval mode, 10 seconds duration and 500 milliseconds sampling interval.\n";
 }
 
 void PrintVersion() {
@@ -44,18 +50,42 @@ void PrintVersion() {
   std::cout << "Version string: " << astlVersionString() << "\n";
 }
 
-int ValidateIntervalArgument(const std::unordered_map<std::string, std::string>& args) {
+std::expected<std::chrono::milliseconds, int> GetIntervalArgument(
+    const std::unordered_map<std::string, std::string>& args) {
   if (args.contains("interval")) {
     try {
-      int interval = std::stoi(args.at("interval"));
-      std::cout << "Interval set to: " << interval << " milliseconds\n";
-      return 0;
+      int tmp_interval = std::stoi(args.at("interval"));
+      if (tmp_interval <= 0) {
+        std::cerr << "Interval must be a positive integer.\n";
+        return std::unexpected<int>(1);
+      }
+      auto sampling_interval_ms = std::chrono::milliseconds(tmp_interval);
+      std::cout << "Interval set to: " << sampling_interval_ms.count() << " milliseconds\n";
+      return sampling_interval_ms;
     } catch (const std::exception& e) {
       std::cerr << "Invalid value for --interval\n";
-      return 1;
+      return std::unexpected<int>(1);
     }
   }
-  return 0;
+  return std::chrono::milliseconds{};
+}
+std::expected<std::chrono::seconds, int> GetDurationArgument(const std::unordered_map<std::string, std::string>& args) {
+  if (args.contains("duration")) {
+    try {
+      int tmp_duration = std::stoi(args.at("duration"));
+      if (tmp_duration <= 0) {
+        std::cerr << "Duration must be a positive integer.\n";
+        return std::unexpected<int>(1);
+      }
+      auto duration_seconds = std::chrono::seconds(tmp_duration);
+      std::cout << "Duration set to: " << duration_seconds.count() << " seconds\n";
+      return duration_seconds;
+    } catch (const std::exception&) {
+      std::cerr << "Invalid value for --duration\n";
+      return std::unexpected<int>(1);
+    }
+  }
+  return std::chrono::seconds{};
 }
 
 astl_status_code InitializeASTL(const char* config_file_path) {
@@ -116,10 +146,11 @@ astl_status_code GetMetrics(astl_target_handle_t target_handle, std::vector<astl
 
 astl_status_code ConfigureAndRunCollection(astl_target_handle_t                         target_handle,
                                            const std::vector<astl_metric_properties_t>& metric_buffer,
-                                           uint32_t metric_count, bool do_interval) {
-  constexpr uint32_t sample_interval = 50;
+                                           uint32_t metric_count, bool do_interval,
+                                           std::chrono::seconds      duration_seconds,
+                                           std::chrono::milliseconds sampling_interval) {
   ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params,
-                   ._sampling_interval = do_interval ? sample_interval : 0,
+                   ._sampling_interval = do_interval ? static_cast<uint32_t>(sampling_interval.count()) : 0,
                    ._collection_mode   = do_interval ? ASTL_COLLECTION_MODE_SAMPLING : ASTL_COLLECTION_MODE_IMMEDIATE,
                    ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD);
 
@@ -140,6 +171,10 @@ astl_status_code ConfigureAndRunCollection(astl_target_handle_t                 
 
   status = astlStartCollectionOnTarget(target_handle);
   std::cout << "astlStartCollectionOnTarget Status: " << astlStatusString(status) << std::endl;
+
+  if (do_interval && duration_seconds > std::chrono::seconds::zero()) {
+    std::this_thread::sleep_for(duration_seconds);
+  }
 
   if (!do_interval) {
     status = astlReadImmediateOnTarget(target_handle);
@@ -196,16 +231,32 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
-  if (int result = ValidateIntervalArgument(args); result != 0) {
-    return result;
+  std::chrono::seconds duration_seconds(10);  // Default duration
+  auto                 duration_result = GetDurationArgument(args);
+  if (!duration_result) {
+    return duration_result.error();
+  }
+  if (duration_result->count() > 0) {
+    duration_seconds = *duration_result;
   }
 
   const bool do_immediate = args.contains("immediate");
-  const bool do_interval  = args.contains("interval");
+  bool       do_interval  = args.contains("interval");
   if (!do_immediate && !do_interval) {
-    std::cout << "--immediate or --interval not set, running --immediate\n";
+    do_interval = true;
+    std::cout << "Neither --immediate nor --interval specified; defaulting to interval mode\n";
   }
 
+  std::chrono::milliseconds sampling_interval_ms(500);  // Default sampling interval
+  if (do_interval) {
+    auto interval_result = GetIntervalArgument(args);
+    if (!interval_result) {
+      return interval_result.error();
+    }
+    if (interval_result->count() > 0) {
+      sampling_interval_ms = *interval_result;
+    }
+  }
   const char* config_file_path = args.contains("config") ? args["config"].c_str() : nullptr;
 
   // Initialize ASTL
@@ -238,7 +289,8 @@ int main(int argc, char* argv[]) {
   }
 
   // Configure and run collection
-  status = ConfigureAndRunCollection(target_properties._handle, metric_buffer, metric_count, do_interval);
+  status = ConfigureAndRunCollection(target_properties._handle, metric_buffer, metric_count, do_interval,
+                                     duration_seconds, sampling_interval_ms);
   if (status != ASTL_STATUS_SUCCESS) {
     // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
     // even without mock sysfs running

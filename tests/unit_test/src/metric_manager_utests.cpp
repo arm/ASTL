@@ -162,7 +162,7 @@ TEST_CASE("MetricManager::GetRequiredOperations succeeds with valid SCMI metric"
   const auto& base_op = op_seq.front();
   const auto* scmi_op = dynamic_cast<astl::ScmiReadOperation*>(base_op.get());
   REQUIRE(scmi_op != nullptr);
-  REQUIRE(scmi_op->scmi_data_event_id == 123);
+  REQUIRE(scmi_op->scmi_data_event_id == 0x123);
 }
 
 TEST_CASE("MetricManager::GetRequiredOperations fails for unregistered metric", "[MetricManager]") {
