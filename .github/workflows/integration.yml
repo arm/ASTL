@@ -171,9 +171,7 @@ jobs:
           if [[ ${{ matrix.cmake_preset }} == 'debug' ]]; then
             echo 'Running unit tests with Valgrind'
             valgrind --version
-            ctest --parallel ${{ steps.cpu-cores.outputs.count }} -LE "integration|time_sensitive|mocksysfs" -T memcheck --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
-            # echo 'Running MockSysfs without parallelization.  Need proper fix.'
-            # ctest -L "mocksysfs" -T memcheck --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
+            ctest --parallel ${{ steps.cpu-cores.outputs.count }} -LE "integration|time_sensitive" -T memcheck --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
             echo 'Running time_sensitive tests without parallelization or memcheck.'
             ctest -L "time_sensitive" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
 
@@ -181,9 +179,7 @@ jobs:
             grep -F '<DefectList/>' ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/*/DynamicAnalysis.xml
           else
             echo 'Skipping Valgrind for unit tests'
-            ctest --parallel ${{ steps.cpu-cores.outputs.count }} -LE "integration|time_sensitive|mocksysfs" --preset ${{ matrix.cmake_preset }}
-            # echo 'Running MockSysfs without parallelization.  Need proper fix.'
-            # ctest -L "mocksysfs" --preset ${{ matrix.cmake_preset }}
+            ctest --parallel ${{ steps.cpu-cores.outputs.count }} -LE "integration|time_sensitive" --preset ${{ matrix.cmake_preset }}
             echo 'Running time_sensitive tests without parallelization.'
             ctest -L "time_sensitive" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
           fi

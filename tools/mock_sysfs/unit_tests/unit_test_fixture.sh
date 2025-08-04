@@ -75,6 +75,11 @@ echo 'Start of test output...'
 cd ${MOUNT_POINT}
 $@ |& tee ${ACTUAL_OUTPUT}
 
+# Give valgrind time to flushs its output.
+# Without this, the `wait` below will hang because the `kill` command doesn't really terminate the process and/or its children.
+# A value of less than 0.5 seconds seems to be too short, as measured experimentally.
+sleep 0.5
+
 if kill -SIGTERM ${SYSFS_PROCESS}; then
 	echo "✅ Sent SIGTERM sysfs process to gracefully kill it"
 else
