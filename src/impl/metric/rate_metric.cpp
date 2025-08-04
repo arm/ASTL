@@ -45,7 +45,8 @@ namespace astl {
 RateMetric::RateMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type)
     : DeltaMetric(name, description, units, value_type),
       _rate_summary_data{},
-      _interval_logger(astl::LogLevel::Info, false, false, std::string(name) + "_rate_intervals.log") {
+      _interval_logger(astl::LogLevel::Info, false, false,
+                       RawMetric::SanitizeMetricNameForFilename(std::string(name)) + "_rate_intervals.csv") {
   // Initialize rate summary data - rates are always double
   astl_value_t val{0};
   auto         zero_val = AstlValue::FromUnion(val, _value_type);

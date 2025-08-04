@@ -158,6 +158,10 @@ static void LowLevelRead(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     return;
   }
 
+  std::string value = HandleProtocolRead(node);
+  if (!value.empty()) {
+    node->SetFileContent(value);
+  }
   std::cout << "value read: " << node->GetFileContent() << "\n";
 
   ReplyBufferLimited(req, node->GetFileContent().c_str(), node->GetFileContent().size(), off, size);
@@ -214,12 +218,6 @@ static void LowLevelOpenDir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
     fuse_reply_err(req, ENOTDIR);
     return;
   }
-
-  std::string value = HandleProtocolRead(node);
-  if (!value.empty()) {
-    node->SetFileContent(value);
-  }
-
   fuse_reply_open(req, file_info);
 }
 

@@ -26,6 +26,36 @@ PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 	}
 
 TELEMETRY_ROOT="$MOUNT_POINT/scmi_telemetry"
+
+# Default mode duration and interval
+# Default to interval mode with 10 seconds duration and 500ms interval
+# unless overridden by command-line arguments
+MODE="interval"
+DURATION=10
+INTERVAL=500
+
+# Parse command-line arguments for mode, interval, and duration (using '=' syntax)
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	--immediate)
+		MODE="immediate"
+		shift
+		;;
+	--interval=*)
+		MODE="interval"
+		INTERVAL="${1#--interval=}"
+		shift
+		;;
+	--duration=*)
+		DURATION="${1#--duration=}"
+		shift
+		;;
+	*)
+		break
+		;;
+	esac
+done
+
 mkdir -p "$TELEMETRY_ROOT"
 
 LOG_DIR="$ASTL_ROOT"
@@ -72,14 +102,21 @@ if [[ ! -x $SAMPLE_TEST_BIN ]]; then
 	exit 1
 fi
 
-echo "🚀 Running sample_test with --immediate"
+# Run sample_test in selected mode
+if [[ $MODE == "immediate" ]]; then
+	echo "🚀 Running sample_test with --immediate"
+	RUN_ARGS=(--immediate)
+else
+	echo "🚀 Running sample_test with --interval for ${DURATION}s"
+	RUN_ARGS=(--interval="$INTERVAL" --duration="$DURATION")
+fi
 
 UPDATED_JSON_FILE=~/tmp/updated_config.json
 jq --arg telemetry_root "$TELEMETRY_ROOT" \
 	'.scmi_sysfs_telemetry_root_path = $telemetry_root' \
 	./samples/sample_configuration/astl_configuration.json >$UPDATED_JSON_FILE
 
-"$SAMPLE_TEST_BIN" --immediate --config="$UPDATED_JSON_FILE"
+"$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --config="$UPDATED_JSON_FILE"
 ERR=$?
 if [[ $ERR -ne 0 ]]; then
 	echo "❌ Error: $SAMPLE_TEST_BIN returned a non-zero return code $ERR" >&2
