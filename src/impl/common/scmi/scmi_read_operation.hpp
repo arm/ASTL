@@ -19,6 +19,8 @@
 #ifndef SCMI_READ_OPERATION_HPP_
 #define SCMI_READ_OPERATION_HPP_
 
+#include <unordered_map>
+
 #include "common/operation.hpp"
 
 namespace astl {
@@ -26,6 +28,9 @@ namespace astl {
 // Type alias for Data Event Identifiers
 using ScmiDataEventId                                   = uint32_t;
 constexpr ScmiDataEventId kScmiFirstReservedDataEventId = 0x10000;
+
+// maps a target name to a data event ID for a DE
+using ScmiTargetToDataEventIdMap = std::unordered_map<std::string, ScmiDataEventId>;
 
 /*
  * @brief A specialization of Operation that represents a read or write through SCMI

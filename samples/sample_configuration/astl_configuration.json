@@ -1,7 +1,37 @@
 {
+  "_comment": "ASTL configuration file - view README.md for more details",
   "scmi_sysfs_telemetry_root_path": "/tmp/fuse/scmi/scmi_telemetry",
 
-  "metrics": ["SoC Power", "Voltage", "Throttle Counts", "SoC Temperature"],
+  "metrics": {
+    "SoC Temperature": {
+      "description": "SoC Temperature in Celsius",
+      "register": "CORE_TEMP_0",
+      "unit": "C",
+      "metric_type": "value",
+      "collection_protocol": "scmi"
+    },
+    "Throttle Counts": {
+      "description": "Number of thermal throttling events",
+      "register": "THROTTLE_EVENTS",
+      "unit": "",
+      "metric_type": "delta",
+      "collection_protocol": "scmi"
+    },
+    "SoC Power": {
+      "description": "SoC Power Consumption in Watts",
+      "register": "ENERGY_COUNTER",
+      "unit": "W",
+      "metric_type": "rate",
+      "collection_protocol": "scmi"
+    },
+    "Frequency": {
+      "description": "Current Frequency of the SoC in MHz",
+      "register": "FREQUENCY",
+      "unit": "MHz",
+      "metric_type": "value",
+      "collection_protocol": "scmi"
+    }
+  },
 
   "scmi_specification_path": "./samples/sample_topology/example_scmi_specification.json"
 }

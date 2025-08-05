@@ -86,18 +86,45 @@ The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_
 
 1. Initialize ASTL
 
-First, create an astl json configuration file specifying which metrics should be made available at the API to collect.
+First, create or select an astl json configuration file specifying which metrics should be made available at the API to collect.
 You can also optionally override the root path for the Scmi file system, and the definition file for the system metrics
 
 ```json
 {
+{
   "scmi_sysfs_telemetry_root_path": "/tmp/fuse/scmi/scmi_telemetry",
 
-  "metrics": ["InstantaneousPower", "Voltage", "SoC Temperature"],
+  "metrics": {
+    "SoC Temperature": {
+      "description": "SoC Temperature in Celsius",
+      "register": "CORE_TEMP_0",
+      "unit": "C",
+      "metric_type": "value",
+      "collection_protocol": "scmi"
+    },
+    "SoC Power": {
+      "description": "SoC Power Consumption in Watts",
+      "register": "ENERGY_COUNTER",
+      "unit": "W",
+      "metric_type": "rate",
+      "collection_protocol": "scmi"
+    },
+  },
 
-  "scmi_specification_path": "samples/example_scmi_specification.json"
+  "scmi_specification_path": "./samples/sample_topology/example_scmi_specification.json"
+}
 }
 ```
+
+Key elements of the configuration file:
+
+1. metrics: a set of objects, each with a name as a key, along with the following fields:
+   1. description: use readable notes to explain the metric
+   1. register: the exact name of the register where ASTL should read this metric's data from. (e.g. a 'layout/member' key in the scmi spec)
+   1. unit: will identify which astl_units_t to associate with this metric.
+   1. metric_type - select the astl_metric_type_t to measure this data
+   1. collection_protocol - select which collectors should try to measure this.
+1. scmi_specification_path: optional override for the .json file specifying the data event ids and targets for each metric on the platform.
 
 ```cpp
 ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = "~/.my_astl_config.json");

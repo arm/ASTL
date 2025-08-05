@@ -39,6 +39,7 @@ using astl::MetricConfig;
 using astl::MetricManager;
 using astl::OperationSequence;
 using astl::SampledData;
+using astl::ScmiTargetToDataEventIdMap;
 using astl::SystemCapability;
 
 namespace astl {
@@ -103,9 +104,9 @@ static Capabilities MakeCaps(CollectorType collector_type) {
 }
 
 TEST_CASE("MetricManager::RegisterMetric succeeds when collector supported", "[MetricManager]") {
-  // 1) Register a single SCMI metric with data_event_id "123"
+  // 1) Register a single SCMI metric with data_event_id "0x123"
   // 2) Retrieve available metrics via GetAvailableMetrics()
-  // 3) Fetch required operations and verify we get exactly one ScmiReadOperation with ID==123
+  // 3) Fetch required operations and verify we get exactly one ScmiReadOperation with ID==0x123
   Capabilities  caps = MakeCaps(CollectorType::SCMI);
   MetricManager mgr(caps);
 
@@ -116,7 +117,7 @@ TEST_CASE("MetricManager::RegisterMetric succeeds when collector supported", "[M
                                             astl_value_type_t::ASTL_VALUE_UINT64,   // value type
                                             astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
                                             CollectorType::SCMI,                    // collector type
-                                            std::vector<std::string>{}              // data_event_ids
+                                            ScmiTargetToDataEventIdMap{}            // data_event_ids
   );
 
   astl_status_code status = mgr.RegisterMetric(std::move(cfg));
@@ -131,7 +132,7 @@ TEST_CASE("MetricManager::RegisterMetric fails when collector unsupported", "[Me
   // 2) Build a MetricConfig whose collector type is MMIO - Not supported
   auto cfg = std::make_unique<MetricConfig>("metricB", "descr", astl_units_t::ASTL_UNITS_CELSIUS,
                                             astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
-                                            CollectorType::MMIO, std::vector<std::string>{});
+                                            CollectorType::MMIO, ScmiTargetToDataEventIdMap{});
 
   astl_status_code status = mgr.RegisterMetric(std::move(cfg));
   REQUIRE(status == ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE);
@@ -143,7 +144,10 @@ TEST_CASE("MetricManager::GetRequiredOperations succeeds with valid SCMI metric"
 
   auto cfg = std::make_unique<MetricConfig>("metricA", "descr", astl_units_t::ASTL_UNITS_CELSIUS,
                                             astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
-                                            CollectorType::SCMI, std::vector<std::string>{"123"});
+                                            CollectorType::SCMI,
+                                            ScmiTargetToDataEventIdMap{
+                                                {"AP0", 0x123}
+  });
 
   REQUIRE(mgr.RegisterMetric(std::move(cfg)) == ASTL_STATUS_SUCCESS);
   // Retrieve the registered metrics
@@ -156,7 +160,7 @@ TEST_CASE("MetricManager::GetRequiredOperations succeeds with valid SCMI metric"
   auto const& ops = mgr.GetRequiredOperations(metrics);
   REQUIRE(ops);
   REQUIRE_FALSE(ops->operationsOnSample.empty());
-  // Verify there is exactly one operation with ID 123
+  // Verify there is exactly one operation with ID 0x123
   astl::OperationSequence const& op_seq = ops->operationsOnSample;
   REQUIRE(op_seq.size() == 1);
   const auto& base_op = op_seq.front();
@@ -190,7 +194,10 @@ TEST_CASE("MetricManager::GetRequiredOperations fails for non-SCMI metric", "[Me
       mgr, std::move(owner_metric_mmio),
       std::make_unique<MetricConfig>("metricC", "descr", astl_units_t::ASTL_UNITS_CELSIUS,
                                      astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
-                                     CollectorType::MMIO, std::vector<std::string>{"123"}));
+                                     CollectorType::MMIO,
+                                     ScmiTargetToDataEventIdMap{
+                                         {"AP0", 0x123}
+  }));
 
   // Retrieve the metric.
   std::expected<std::span<IMetric* const>, astl_status_code> avail = mgr.GetAvailableMetrics();
@@ -212,7 +219,7 @@ TEST_CASE("MetricManager::ProcessData processes valid sample and returns success
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("test", "desc", astl_units_t::ASTL_UNITS_NONE,
                                      astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
-                                     CollectorType::SCMI, std::vector<std::string>{}));
+                                     CollectorType::SCMI, ScmiTargetToDataEventIdMap{}));
   astl::MetricManagerTestAccessor::InjectOperation(mgr, op_id, metric_ptr);
 
   astl::AstlValue          val1{uint64_t{256}};  // Sample value
@@ -234,7 +241,7 @@ TEST_CASE("MetricManager::ProcessData processes multiple samples for the same me
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("multi", "desc", astl_units_t::ASTL_UNITS_NONE,
                                      astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
-                                     CollectorType::SCMI, std::vector<std::string>{}));
+                                     CollectorType::SCMI, ScmiTargetToDataEventIdMap{}));
   astl::MetricManagerTestAccessor::InjectOperation(mgr, op_id, metric_ptr);
 
   astl::AstlValue          val1{uint64_t{100}};
@@ -261,12 +268,12 @@ TEST_CASE("MetricManager::ProcessData processes different metrics for different 
       mgr, std::move(owner_metric1),
       std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
-                                     std::vector<std::string>{}));
+                                     ScmiTargetToDataEventIdMap{}));
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric2),
       std::make_unique<MetricConfig>("m2", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
-                                     std::vector<std::string>{}));
+                                     ScmiTargetToDataEventIdMap{}));
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 1, metric_ptr1);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 2, metric_ptr2);
 
@@ -296,12 +303,12 @@ TEST_CASE("MetricManager::ProcessData stops on error and does not process furthe
       mgr, std::move(owner_metric1),
       std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
-                                     std::vector<std::string>{}));
+                                     ScmiTargetToDataEventIdMap{}));
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric2),
       std::make_unique<MetricConfig>("m2", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
-                                     std::vector<std::string>{}));
+                                     ScmiTargetToDataEventIdMap{}));
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 1, metric_ptr1);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 2, metric_ptr2);
 
@@ -326,7 +333,7 @@ TEST_CASE("MetricManager::SummarizeMetrics returns success for a TestMetric", "[
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("metricX", "descX", astl_units_t::ASTL_UNITS_NONE,
                                      astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
-                                     CollectorType::SCMI, std::vector<std::string>{}));
+                                     CollectorType::SCMI, ScmiTargetToDataEventIdMap{}));
 
   REQUIRE(mgr.SummarizeMetrics() == ASTL_STATUS_SUCCESS);
 }
@@ -341,7 +348,7 @@ TEST_CASE("MetricManager::SummarizeMetrics returns error for a TestMetric", "[Me
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("metric", "desc", astl_units_t::ASTL_UNITS_NONE,
                                      astl_value_type_t::ASTL_VALUE_UINT64, astl_metric_type_t::ASTL_METRIC_VALUE,
-                                     CollectorType::SCMI, std::vector<std::string>{}));
+                                     CollectorType::SCMI, ScmiTargetToDataEventIdMap{}));
 
   REQUIRE(mgr.SummarizeMetrics() == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 }

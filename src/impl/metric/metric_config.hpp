@@ -24,6 +24,7 @@
 
 #include "astl/astl.h"
 #include "common/capabilities.hpp"
+#include "common/scmi/scmi_read_operation.hpp"
 
 namespace astl {
 
@@ -47,7 +48,7 @@ class MetricConfig {
 
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                         astl_value_type_t value_type, astl_metric_type_t metric_type, CollectorType collector_type,
-                        const std::vector<std::string> &data_event_ids)
+                        ScmiTargetToDataEventIdMap data_event_ids)
       : _metric_name(name),
         _description(description),
         _units(units),
@@ -102,11 +103,11 @@ class MetricConfig {
    */
   void SetCollectorType(CollectorType collector_type) { _collector_type = collector_type; }
   /**
-   * @brief Return a vector of the Data Event IDs of the metric.
+   * @brief Return a map of target name to Data Event ID of the metric.
    *
-   * @return std::string Vector of Data Event IDs.
+   * @return map of target name to data event id
    */
-  const std::vector<std::string> &DataEventIds() const { return _data_event_ids; }
+  auto DataEventIds() const -> const ScmiTargetToDataEventIdMap & { return _data_event_ids; }
 
  private:
   std::string       _metric_name;  // Metric name as specified in the configuration file
@@ -116,7 +117,7 @@ class MetricConfig {
   astl_metric_type_t
                 _metric_type;  // Semantic type of the metric defined by ASTL design doc(e.g., value, delta, residency)
   CollectorType _collector_type;  // Collector type to support this metric
-  std::vector<std::string> _data_event_ids;
+  ScmiTargetToDataEventIdMap _data_event_ids;
 };
 
 }  // namespace astl

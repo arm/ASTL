@@ -67,6 +67,8 @@ echo "🚀 Launching MockSysfs..."
 "$MOCK_SYSFS" -f -s "$MOUNT_POINT" &>"$SYSFS_LOG" &
 SYSFS_PID=$!
 
+find "$MOUNT_POINT"
+
 # Always clean up on exit
 cleanup() {
 	echo "🛑 Stopping MockSysfs (PID=$SYSFS_PID)..."
