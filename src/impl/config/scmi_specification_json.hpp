@@ -27,6 +27,8 @@
 #include <string>
 #include <vector>
 
+#include "common/scmi/scmi_read_operation.hpp"
+
 using json = nlohmann::json;
 
 namespace astl {
@@ -37,6 +39,13 @@ inline uint64_t ParseToUint64(const json& json_data, std::string_view field_name
   std::string string_for_conversion;
   json_data.at(field_name).get_to(string_for_conversion);
   return std::stoull(string_for_conversion, nullptr, 0);
+}
+
+// parse helping function
+inline uint32_t ParseToUint32(const json& json_data, std::string_view field_name) {
+  std::string string_for_conversion;
+  json_data.at(field_name).get_to(string_for_conversion);
+  return static_cast<uint32_t>(std::stoul(string_for_conversion, nullptr, 0));
 }
 
 // Common structures
@@ -61,13 +70,13 @@ inline void from_json(const json& json_data, ConfigRegister& reg) {
 }
 
 struct LayoutMemberEntry {
-  uint32_t    instance_id{};
-  uint32_t    local_id{};
-  uint64_t    offset{};
-  std::string name;
-  uint64_t    line_addr{};
-  uint64_t    value_addr{};
-  uint64_t    de_id{};
+  uint32_t        instance_id{};
+  uint32_t        local_id{};
+  uint64_t        offset{};
+  std::string     name;
+  uint64_t        line_addr{};
+  uint64_t        value_addr{};
+  ScmiDataEventId de_id{};
 };
 
 inline void from_json(const json& json_data, LayoutMemberEntry& entry) {
@@ -77,7 +86,7 @@ inline void from_json(const json& json_data, LayoutMemberEntry& entry) {
   json_data.at("name").get_to(entry.name);
   entry.line_addr  = ParseToUint64(json_data, "offset");
   entry.value_addr = ParseToUint64(json_data, "value_addr");
-  entry.de_id      = ParseToUint64(json_data, "de_id");
+  entry.de_id      = ParseToUint32(json_data, "de_id");
 }
 
 struct ProcessSrc {
@@ -286,6 +295,30 @@ inline void from_json(const json& json_data, ScmiSpecification& root) {
   root.datasources = json_data.at("datasources").get<DataSources>();
   root.processes   = json_data.at("processes").get<Processes>();
   root.layout      = json_data.at("layout").get<Layout>();
+}
+
+/**
+ * @brief Get the map of target names to Data Event IDs for a given metric register name
+ * @param register_name The register name to look up
+ * @param layout The Scmi layout specification containing the Data Event IDs from platform json spec
+ * @return A map of target names to Data Event IDs for the metric
+ */
+inline auto GetDataEventIdsForMetric(std::string_view register_name,
+                                     Layout const&    layout) -> ScmiTargetToDataEventIdMap {
+  ScmiTargetToDataEventIdMap data_event_ids;
+  for (const auto& [target_name, members] : layout.members) {
+    for (const auto& [member_name, member_entry] : members) {
+      ASTL_LOG_TRACE("Comparing {} with {}", member_entry.name, register_name);
+      // note, we're using the key name for the register, e.g. 'CPU_CYCLES',
+      // not the .name field of the entry, e.g. 'AP0_CPU_CYCLES', so that one
+      // metric can be defined in the library configuration file, and be created
+      // for each target that supports it in the spec.
+      if (member_name == register_name) {
+        data_event_ids[target_name] = member_entry.de_id;
+      }
+    }
+  }
+  return data_event_ids;
 }
 
 }  // namespace scmi

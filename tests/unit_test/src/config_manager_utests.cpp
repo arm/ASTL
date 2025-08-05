@@ -1,11 +1,23 @@
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl_errors.h"
+#include "common/capabilities.hpp"
+#include "common/scmi/scmi_read_operation.hpp"
 #include "config/astl_configuration.hpp"
 #include "config/configuration_manager.hpp"
-#include "config/static_metric_config.hpp"
+#include "metric/metric_config.hpp"
 
 using trompeloeil::_;
+
+inline const std::vector<std::string> kDataEventIds = {"0x1234"};
+
+inline const astl::MetricConfig kTemperature{"SoC Temperature",
+                                             "SoC Temperature in Celsius",
+                                             ASTL_UNITS_CELSIUS,
+                                             ASTL_VALUE_UINT64,
+                                             ASTL_METRIC_VALUE,
+                                             astl::CollectorType::SCMI,
+                                             astl::ScmiTargetToDataEventIdMap{{"AP0", 0x1234}}};
 
 TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
   MockMetricManager mock_metric_manager;
@@ -14,12 +26,12 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
   // TODO(ASTL-101): Create unit tests for metric manager
 
   SECTION("Register a valid metric config") {
-    REQUIRE(mock_metric_manager.RegisterMetric(std::make_unique<astl::MetricConfig>(astl::kTemperature)) ==
+    REQUIRE(mock_metric_manager.RegisterMetric(std::make_unique<astl::MetricConfig>(kTemperature)) ==
             ASTL_STATUS_NOT_IMPLEMENTED);
   }
 
   SECTION("Register an invalid metric config") {
-    std::vector<std::string> invalid_data_event_ids{};
+    astl::ScmiTargetToDataEventIdMap invalid_data_event_ids{};
 
     auto invalid_metric_config = std::make_unique<astl::MetricConfig>(
         "SoC Temperature", "SoC Temperature for abc xyz", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, ASTL_METRIC_VALUE,
@@ -34,10 +46,22 @@ TEST_CASE("ParseConfiguration", "[ConfigManager]") {
   {
     "scmi_sysfs_telemetry_root_path": "~/tmp/fuse/scmi",
 
-    "metrics": [
-      "cpu_cycles",
-      "SoC Temperature"
-    ],
+    "metrics": {
+      "SoC Type": {
+        "description": "Temperature in Celsius",
+        "register": "SOC_TEMP",
+        "unit": "C",
+        "metric_type": "value",
+        "collection_protocol": "scmi"
+      },
+      "Throttle Counts": {
+        "description": "Number of thermal throttling events",
+        "register": "THROTTLE_EVENTS",
+        "unit": "",
+        "metric_type": "delta",
+        "collection_protocol": "scmi"
+      }
+    },
 
     "scmi_specification_path": "/etc/arm/astl/scmi_specification.json"
   }
@@ -46,7 +70,7 @@ TEST_CASE("ParseConfiguration", "[ConfigManager]") {
   auto               result = astl::ParseConfiguration(json_data_stream);
   REQUIRE(result);
   auto config = result.value();
-  REQUIRE(config.metric_names_to_use.size() == 2);
+  REQUIRE(config.metric_declarations.size() == 2);
   REQUIRE(config.scmi_sysfs_telemetry_root_path == "~/tmp/fuse/scmi");
   REQUIRE(config.scmi_specification_path == "/etc/arm/astl/scmi_specification.json");
 }

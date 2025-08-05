@@ -21,12 +21,25 @@
 
 #include <expected>
 #include <filesystem>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "config/scmi_specification_json.hpp"
+#include "metric/metric_config.hpp"
+
+using json = nlohmann::json;
 
 namespace astl {
+
+struct MetricJsonDeclaration {
+  std::string description;          //!< Description of the metric
+  std::string register_name;        //!< Register name associated with the metric
+  std::string unit;                 //!< Unit of measurement for the metric
+  std::string metric_type;          //!< Type of metric (e.g., value, delta, rate)
+  std::string collection_protocol;  //!< Collector type (e.g., scmi)
+};
 
 /** @brief Overall configuration for the ASTL library */
 struct AstlConfiguration {
@@ -36,14 +49,22 @@ struct AstlConfiguration {
    */
   std::optional<std::filesystem::path> scmi_sysfs_telemetry_root_path;
 
-  /** @brief collection of metric names for ASTL to present to user */
-  std::vector<std::string> metric_names_to_use;
+  /** @brief collection of metric declarations for ASTL to present to user */
+  std::map<std::string, MetricJsonDeclaration> metric_declarations;
 
   /** @brief Override path for configuration file containing SCMI metric definitions */
   std::optional<std::filesystem::path> scmi_specification_path;
 };
 
-auto ParseConfiguration(std::istream &configuration_data) -> std::expected<AstlConfiguration, astl_status_code>;
+auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlConfiguration, astl_status_code>;
+
+/**
+ * @brief helper function to create a MetricConfig object from a MetricJsonDeclaration and ScmiSpecification
+ * @param metric_declaration The MetricJsonDeclaration object to convert
+ * @param layout The Scmi layout specification containing the Data Event IDs from platform json spec
+ */
+auto CreateMetricConfig(std::string_view metric_name, MetricJsonDeclaration const& metric_declaration,
+                        scmi::Layout const& layout) -> std::unique_ptr<MetricConfig>;
 
 }  // namespace astl
 

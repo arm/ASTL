@@ -31,7 +31,6 @@
 #include "collector/collector_manager.hpp"
 #include "collector/scmi_sysfs_collector.hpp"
 #include "config/scmi_specification_json.hpp"
-#include "config/static_metric_config.hpp"
 #include "metric/metric_manager.hpp"
 
 using json = nlohmann::json;
@@ -56,16 +55,16 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& con
     json          json_data          = json::parse(json_file);
     auto          specification_data = json_data.get<scmi::ScmiSpecification>();
 
-    ASTL_LOG_DEBUG("specification_data.datasources.size(): {}", specification_data.datasources.size());
-    ASTL_LOG_DEBUG("specification_data.definitions.groups.size(): {}", specification_data.definitions.groups.size());
     ASTL_LOG_DEBUG("specification_data.layout.members.size(): {}", specification_data.layout.members.size());
-    ASTL_LOG_DEBUG("specification_data.processes.size(): {}", specification_data.processes.size());
-    ASTL_LOG_DEBUG("specification_data.transformations.size(): {}", specification_data.transformations.size());
 
-    // TODO(ASTL-40 - replace this with Configmanager parsing specification file)
-    configurations.reserve(kMetricConfigs.size());
-    std::transform(kMetricConfigs.begin(), kMetricConfigs.end(), std::back_inserter(configurations),
-                   [](const auto& metric_config) { return std::make_unique<MetricConfig>(metric_config); });
+    // convert all of the metric declarations in the top-level config file into usable MetricConfig objects
+    // based on the platform SCMI specification which includes the Data Event IDs.
+    auto metric_config_maker = [&specification_data](const auto& name_and_declaration) {
+      return CreateMetricConfig(name_and_declaration.first, name_and_declaration.second, specification_data.layout);
+    };
+    std::transform(configuration.metric_declarations.begin(), configuration.metric_declarations.end(),
+                   std::back_inserter(configurations), metric_config_maker);
+
   } catch (nlohmann::json::parse_error const& e) {
     ASTL_LOG_ERROR("Unable to parse SCMI definition file {}: {}", scmi_specification_path.string(), e.what());
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
@@ -77,6 +76,7 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& con
                    e.what());
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
+
   return configurations;
 }
 

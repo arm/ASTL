@@ -16,7 +16,7 @@ config preset='debug':
 
 # run unit tests
 test preset='debug': build
-    ctest --parallel=8 -LE "integration|mocksysfs" --preset {{preset}}
+    ctest --parallel=8 -LE "integration" --preset {{preset}}
 
 # test everything, generate html coverage file
 test-cov: build

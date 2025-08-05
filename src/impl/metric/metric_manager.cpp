@@ -110,22 +110,24 @@ std::expected<CollectionOperations, astl_status_code> MetricManager::GetRequired
     // Currently, only SCMI collector type is supported for metrics.
     // MetricConfig provides a DataEventIds field specifying the SCMI event IDs.
     // TODO (https://jira.arm.com/browse/ASTL-114): handle other collector types
-    const std::vector<std::string>& data_event_ids = config.DataEventIds();
-    for (const auto& id_string : data_event_ids) {
-      uint32_t event_id = 0;
-      try {
-        constexpr int hex_base = 16;
-        event_id = static_cast<uint32_t>(std::stoul(id_string, nullptr, hex_base));  // Convert hex string to uint32_t
-      } catch (const std::exception& e) {
-        ASTL_LOG_ERROR("GetRequiredOperations: invalid event ID string '{}' (exception: {})", id_string, e.what());
-        return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
-      }
-      std::unique_ptr<ScmiReadOperation> operation    = std::make_unique<ScmiReadOperation>(event_id);
-      uint32_t                           operation_id = operation->GetId();  // or operation->operation_id if public
-      _operation_to_metric_map[operation_id]          = metric;
-      op_sequence.push_back(std::move(operation));
-      ASTL_LOG_INFO("GetRequiredOperations: Created Operation for event ID {}", event_id);
+    const auto& data_event_ids = config.DataEventIds();
+    // TODO(https://github.com/Arm-Debug/ASTL/issues/127) - MetricManager  should support multiple targets
+    //  right now we hard-code assume the first target
+    if (data_event_ids.empty()) {
+      ASTL_LOG_ERROR("GetRequiredOperations: No DataEventIds found for metric '{}'", config.Name());
+      return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
     }
+    auto target_and_event_id = data_event_ids.find("AP0");  // TODO(#127): support multiple targets
+    if (target_and_event_id == data_event_ids.end()) {
+      // if we can't find the demo AP0 target, fall back on whatever the first target is.
+      target_and_event_id = data_event_ids.begin();
+    }
+    auto                               event_id     = target_and_event_id->second;
+    std::unique_ptr<ScmiReadOperation> operation    = std::make_unique<ScmiReadOperation>(event_id);
+    uint32_t                           operation_id = operation->GetId();  // or operation->operation_id if public
+    _operation_to_metric_map[operation_id]          = metric;
+    op_sequence.push_back(std::move(operation));
+    ASTL_LOG_INFO("GetRequiredOperations: Created Operation for event ID {:04X}", event_id);
   }
 
   CollectionOperations operations{.operationsBeforeStart{},

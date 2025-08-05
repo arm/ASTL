@@ -83,6 +83,11 @@ inline uint64_t GetRandomNumber() {
   return rand_num(prng);
 }
 
+inline std::string ToLowerCopy(std::string str) {
+  std::transform(str.begin(), str.end(), str.begin(), [](unsigned char letter) { return std::tolower(letter); });
+  return str;
+}
+
 }  // namespace astl
 
 #endif /* INCLUDE_ASTL_UTILS_HPP_ */

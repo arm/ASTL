@@ -2221,7 +2221,7 @@
           "name": "AP0_CORE_TEMP_0",
           "line_addr": "0x740080B0",
           "value_addr": "0x740080B8",
-          "de_id": "0x00000033"
+          "de_id": "0x00007a9b"
         },
         "CORE_TEMP_1": {
           "instance_id": 0,
@@ -2240,6 +2240,33 @@
           "line_addr": "0x740080D0",
           "value_addr": "0x740080D8",
           "de_id": "0x00000035"
+        },
+        "THROTTLE_EVENTS": {
+          "instance_id": 0,
+          "local_id": 54,
+          "offset": "0x00E0",
+          "name": "AP0_THROTTLE_EVENTS",
+          "line_addr": "0x740080E0",
+          "value_addr": "0x740080E8",
+          "de_id": "0x00008c3d"
+        },
+        "ENERGY_COUNTER": {
+          "instance_id": 0,
+          "local_id": 55,
+          "offset": "0x00F0",
+          "name": "AP0_ENERGY_COUNTER",
+          "line_addr": "0x740080F0",
+          "value_addr": "0x740080F8",
+          "de_id": "0x00009e4f"
+        },
+        "FREQUENCY": {
+          "instance_id": 0,
+          "local_id": 56,
+          "offset": "0x0100",
+          "name": "AP0_FREQUENCY",
+          "line_addr": "0x74008100",
+          "value_addr": "0x74008108",
+          "de_id": "0x00001a68"
         }
       },
       "AP1": {
@@ -2340,7 +2367,7 @@
           "name": "AP1_CORE_TEMP_0",
           "line_addr": "0x74008180",
           "value_addr": "0x74008188",
-          "de_id": "0x00010033"
+          "de_id": "0x00017a9b"
         },
         "CORE_TEMP_1": {
           "instance_id": 1,
@@ -2359,6 +2386,33 @@
           "line_addr": "0x740081A0",
           "value_addr": "0x740081A8",
           "de_id": "0x00010035"
+        },
+        "THROTTLE_EVENTS": {
+          "instance_id": 0,
+          "local_id": 54,
+          "offset": "0x01B0",
+          "name": "AP1_THROTTLE_EVENTS",
+          "line_addr": "0x740081B0",
+          "value_addr": "0x740081B8",
+          "de_id": "0x00018c3d"
+        },
+        "ENERGY_COUNTER": {
+          "instance_id": 0,
+          "local_id": 55,
+          "offset": "0x01C0",
+          "name": "AP1_ENERGY_COUNTER",
+          "line_addr": "0x740081C0",
+          "value_addr": "0x740081C8",
+          "de_id": "0x00019e4f"
+        },
+        "FREQUENCY": {
+          "instance_id": 0,
+          "local_id": 56,
+          "offset": "0x01D0",
+          "name": "AP1_FREQUENCY",
+          "line_addr": "0x740081D0",
+          "value_addr": "0x740081D8",
+          "de_id": "0x00011a68"
         }
       }
     }
