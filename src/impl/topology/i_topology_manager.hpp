@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "collector/i_collector_manager.hpp"
+#include "config/configuration_manager.hpp"  /// @todo https://jira.arm.com/browse/ASTL-131 - Try to remove dependencies with config/metric managers
 #include "metric/i_metric_manager.hpp"
 #include "target.hpp"
 
@@ -43,19 +44,28 @@ struct ITopologyManager {
   ITopologyManager(ITopologyManager&&)                 = default;
   ITopologyManager& operator=(ITopologyManager&&)      = default;
 
-  /** @brief Initialize the CollectorManager based on the configuration */
-  virtual auto InitializeCollectorManager() const
-      -> std::pair<std::vector<std::unique_ptr<ITarget>>, std::unique_ptr<ICollectorManager>> = 0;
+  /** @brief Probe the system on which this code is running for targets.
+   * Calling ScanForTargets() multiple times discards any old target info and re-initializes
+   * the topology manager from scratch as if it were freshly constructed.
+   */
+  virtual auto ScanForTargets() -> astl_status_code = 0;
 
-  /** @brief Initialize the MetricManager based on the configuration and system config files */
-  virtual auto InitializeMetricManager() const -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> = 0;
+  /** @brief Initialize the MetricManager based on the configuration and system config files
+   *  @todo ASTL-151 InitializeMetricManager will be moved out of the TopologyManager class entireley soon.
+   *        we probably don't want to create a dependency between the abstract ITopologyManager and AstlConfiguration
+   *        but since this will be refactored out soon anyway, we can tolerate the dependency here */
+  virtual auto InitializeMetricManager(const AstlConfiguration& configuration) const
+      -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> = 0;
 
+  /** @brief Get the target list from the most recent call of ScanForTargets() */
   virtual const std::vector<std::unique_ptr<ITarget>>& GetTargets() const = 0;
 
-  /** @todo https://jira.arm.com/browse/ASTL-132
+  /** @todo ASTL-132
    *  Refactor: We probably want to provide a more controlled interface for modifying the target list
    *  For example, we could add member functions to enable/disable specific targets or
-   *  modify the list internally when we read the configuration. */
+   *  modify the list internally when we read the configuration.
+   *
+   *  Ideally we would just call ScanForTargets() and never set the target list directly */
   virtual astl_status_code SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) = 0;
 };
 

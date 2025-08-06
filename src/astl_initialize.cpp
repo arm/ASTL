@@ -48,9 +48,14 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   if (!configuration) {
     return configuration.error();
   }
-  auto topology_manager             = std::make_unique<astl::TopologyManager>(configuration.value());
-  auto [targets, collector_manager] = topology_manager->InitializeCollectorManager();
-  auto metric_manager_init_result   = topology_manager->InitializeMetricManager();
+
+  auto topology_manager = std::make_unique<astl::TopologyManager>();
+  topology_manager->ScanForTargets();
+
+  auto collector_manager =
+      std::make_unique<astl::CollectorManager>(topology_manager->GetTargets(), configuration.value());
+  // auto [targets, collector_manager] = topology_manager->InitializeCollectorManager();
+  auto metric_manager_init_result = topology_manager->InitializeMetricManager(configuration.value());
   if (!metric_manager_init_result) {
     return metric_manager_init_result.error();
   }
@@ -61,6 +66,5 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   astl::Orchestrator::InitializeInstance(std::move(topology_manager), std::move(collector_manager),
                                          std::move(metric_manager));
   // the orchestrator owns targets
-  astl::Orchestrator::GetInstance()->SetTargets(std::move(targets));
   return ASTL_STATUS_SUCCESS;
 }
