@@ -45,7 +45,7 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& con
   std::vector<std::unique_ptr<MetricConfig>> configurations;
   if (!configuration.scmi_specification_path) {
     ASTL_LOG_INFO("No specification file path provided, so no metrics available from SCMI");
-    // TODO(ASTL-40 - default path for SCMI definition file)
+    // @todo ASTL-40 default path for SCMI definition file)
     return configurations;
   }
   const auto& scmi_specification_path = configuration.scmi_specification_path.value();
@@ -80,37 +80,18 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& con
   return configurations;
 }
 
-TopologyManager::TopologyManager(const AstlConfiguration& configuration) : _configuration(configuration) {}
-
-// Initialize the CollectorManager based on the configuration
-auto TopologyManager::InitializeCollectorManager() const
-    -> std::pair<std::vector<std::unique_ptr<ITarget>>, std::unique_ptr<ICollectorManager>> {
-  // TODO(ASTL-39) - add topologymanager. For now, hard-code one target
-  // TODO(ASTL-40) - use configuration and platform config json to determine available collectors
-  std::unique_ptr<astl::ITarget> target = std::make_unique<astl::Target>("Scmi0", "The SCMI interface on Socket0");
-  std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::move(target));
-
-  // tell collectorManager which collectors are suitable for which targets
-  std::unordered_map<astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> target_to_collectors;
-  // Set up the Scmi Sysfs Collector
-  astl::FileInterface scmi_sysfs_file_interface{_configuration.scmi_sysfs_telemetry_root_path
-                                                    ? *_configuration.scmi_sysfs_telemetry_root_path
-                                                    : std::filesystem::path{"/tmp/fuse/scmi/scmi_telemetry"}};
-  using ScmiCollector = astl::ScmiSysfsCollector<decltype(scmi_sysfs_file_interface)>;
-  std::unique_ptr<astl::ICollector> scmi_collector =
-      std::make_unique<ScmiCollector>(nullptr, std::move(scmi_sysfs_file_interface));
-  std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
-  collectors_for_target.push_back(std::move(scmi_collector));
-  target_to_collectors.emplace(targets[0].get(), std::move(collectors_for_target));
-
-  return {std::move(targets), std::make_unique<astl::CollectorManager>(std::move(target_to_collectors))};
+auto TopologyManager::ScanForTargets() -> astl_status_code {
+  _targets.clear();
+  /// @todo ASTL-144 Actually implement first topology manager plugin
+  _targets.push_back(
+      std::make_unique<astl::Target>("Scmi0", "The SCMI interface on Socket0"));  // This is a fake target placeholder
+  return ASTL_STATUS_SUCCESS;
 }
 
 // Initialize the MetricManager based on the configuration and system config files
-auto TopologyManager::InitializeMetricManager() const
+auto TopologyManager::InitializeMetricManager(const AstlConfiguration& configuration) const
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
-  // TODO(ASTL-40) - determine Metric configurations by using the configuration and system config files
+  // @todo ASTL-40 - determine Metric configurations by using the configuration and system config files
   astl::CollectorCapability              collector_capabilities{astl::CollectorType::SCMI};
   astl::SystemCapability                 system_capabilities{};
   std::vector<astl::CollectorCapability> collector_caps_list{collector_capabilities};
@@ -119,7 +100,8 @@ auto TopologyManager::InitializeMetricManager() const
 
   std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
 
-  auto metric_configurations = ParseMetricConfigurationsFromScmiSpecification(_configuration);
+  // @todo ASTL-151 - Move InitializeMetricManager out of the topology manager
+  auto metric_configurations = ParseMetricConfigurationsFromScmiSpecification(configuration);
   if (!metric_configurations) {
     return std::unexpected(metric_configurations.error());
   }

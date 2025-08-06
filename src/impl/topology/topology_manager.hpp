@@ -36,21 +36,17 @@ class TopologyManager : public ITopologyManager {
  public:
   TopologyManager() = default;
 
-  explicit TopologyManager(const AstlConfiguration& configuration);
-
-  // Initialize the CollectorManager based on the configuration
-  auto InitializeCollectorManager() const
-      -> std::pair<std::vector<std::unique_ptr<ITarget>>, std::unique_ptr<ICollectorManager>> override;
+  auto ScanForTargets() -> astl_status_code override;
 
   // Initialize the MetricManager based on the configuration and system config files
-  auto InitializeMetricManager() const -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> override;
+  auto InitializeMetricManager(const AstlConfiguration& configuration) const
+      -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> override;
 
   const std::vector<std::unique_ptr<ITarget>>& GetTargets() const override;
 
   astl_status_code SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) override;
 
  private:
-  AstlConfiguration                     _configuration;
   std::vector<std::unique_ptr<ITarget>> _targets;
 };
 
