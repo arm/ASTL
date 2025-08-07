@@ -2,6 +2,7 @@
 #define ASTL_API_IMPL_HPP_
 
 #include <memory>
+#include <unordered_map>
 
 #include "astl/astl.h"
 #include "collector/i_collector_manager.hpp"
@@ -30,7 +31,7 @@ class Orchestrator : public ISampleSink {
    *                         then post-process the sampled data
    */
   Orchestrator(std::unique_ptr<ITopologyManager> topology_manager, std::unique_ptr<ICollectorManager> collector_manager,
-               std::unique_ptr<IMetricManager> metric_manager);
+               std::unordered_map<ITarget *, std::unique_ptr<IMetricManager>> metric_manager);
 
   ~Orchestrator() override;
 
@@ -53,9 +54,9 @@ class Orchestrator : public ISampleSink {
    * @param metric_manager - Can turn a set of desired metrics into a set of operations to collect,
    *                         then post-process the sampled data
    */
-  static void InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
-                                 std::unique_ptr<ICollectorManager> collector_manager,
-                                 std::unique_ptr<IMetricManager>    metric_manager);
+  static void InitializeInstance(std::unique_ptr<ITopologyManager>                              topology_manager,
+                                 std::unique_ptr<ICollectorManager>                             collector_manager,
+                                 std::unordered_map<ITarget *, std::unique_ptr<IMetricManager>> metric_manager_map);
 
   /**
    * @brief Return a reference to the single Orchestrator instance
@@ -195,7 +196,7 @@ class Orchestrator : public ISampleSink {
   /**
    * @brief Return a reference to a pointer to the MetricManager, used to enumerate metrics
    */
-  const std::unique_ptr<IMetricManager> &GetMetricManager() const { return _metric_manager; }
+  auto GetMetricManager(ITarget *target) const -> std::expected<const IMetricManager *, astl_status_code>;
 
   /**
    * @brief Implementation of the ISampleSink interface - Receives samples from CollectorManager
@@ -206,8 +207,8 @@ class Orchestrator : public ISampleSink {
   static std::mutex                 &GetMutex();  // manange thread-safe access to singleton instance
   std::unique_ptr<ITopologyManager>  _topology_manager;
   std::unique_ptr<ICollectorManager> _collector_manager;
-  std::unique_ptr<IMetricManager>    _metric_manager;
-  std::vector<SampledData>           _samples;
+  std::unordered_map<ITarget *, std::unique_ptr<IMetricManager>> _metric_managers;
+  std::vector<SampledData>                                       _samples;
 };
 
 }  // namespace astl

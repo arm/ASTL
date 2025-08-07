@@ -32,10 +32,10 @@ auto MakeMinimalOrchestrator() -> std::pair<std::unique_ptr<astl::Orchestrator>,
   std::vector<expectation> expectations;
   expectations.push_back(NAMED_ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
   expectations.push_back(NAMED_ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
-  auto metric_manager = std::make_unique<MockMetricManager>();
+  std::unordered_map<astl::ITarget*, std::unique_ptr<astl::IMetricManager>> metric_manager_map;
 
   return {std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                               std::move(metric_manager)),
+                                               std::move(metric_manager_map)),
           std::move(expectations)};
 }
 
@@ -469,7 +469,7 @@ TEST_CASE("astlGetCounters", "[Retrieve a number of counters from a target][wrap
   }
 }
 
-TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator][wrapper]") {
+TEST_CASE("astlGetMetrics", "[Orchestrator][wrapper]") {
   // set up target
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   auto                                        mock_target        = std::make_unique<MockTarget>();
@@ -496,8 +496,11 @@ TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator][wrapper]") {
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  std::unordered_map<astl::ITarget*, std::unique_ptr<astl::IMetricManager>> metric_manager_map;
+  metric_manager_map.emplace(mock_targets[0].get(), std::move(metric_manager));
+
   auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                           std::move(metric_manager));
+                                                           std::move(metric_manager_map));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -594,13 +597,16 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{100}, astl::CollectorCapability{astl::CollectorType::SCMI}});
+  std::unordered_map<astl::ITarget*, std::unique_ptr<astl::IMetricManager>> metric_manager_map;
+  metric_manager_map.emplace(mock_targets[0].get(), std::move(metric_manager));
+
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto* collector_manager_ptr_for_require_calls = collector_manager.get();
   auto  topology_manager                        = std::make_unique<MockTopologyManager>();
   auto  orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                            std::move(metric_manager));
+                                                            std::move(metric_manager_map));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -830,9 +836,14 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
   mock_targets.push_back(std::move(mock_target_1));
   mock_targets.push_back(std::move(mock_target_2));
   auto topology_manager = std::make_unique<MockTopologyManager>();
-  auto metric_manager   = std::make_unique<MockMetricManager>();
-  auto orchestrator     = std::make_unique<astl::Orchestrator>(
-      std::move(topology_manager), std::move(mock_collector_manager), std::move(metric_manager));
+  auto metric_manager1  = std::make_unique<MockMetricManager>();
+  auto metric_manager2  = std::make_unique<MockMetricManager>();
+  std::unordered_map<astl::ITarget*, std::unique_ptr<astl::IMetricManager>> metric_manager_map;
+  metric_manager_map.emplace(mock_targets[0].get(), std::move(metric_manager1));
+  metric_manager_map.emplace(mock_targets[1].get(), std::move(metric_manager2));
+
+  auto orchestrator = std::make_unique<astl::Orchestrator>(
+      std::move(topology_manager), std::move(mock_collector_manager), std::move(metric_manager_map));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -1142,14 +1153,17 @@ TEST_CASE("astlGetAllMetricSamplesOnTarget", "[wrapper]") {
   ALLOW_CALL(*mock_metric2, GetSamples()).RETURN(std::span<const astl::SampledData>{samples2});
 
   auto mock_metric_manager = std::make_unique<MockMetricManager>();
-  auto metrics_pointers    = std::vector<astl::IMetric*>{mock_metric0.get(), mock_metric1.get(), mock_metric2.get()};
+  auto metrics_pointers = std::vector<astl::IMetric*>{mock_metric0.get(), mock_metric1.get(), mock_metric2.get()};
   ALLOW_CALL(*mock_metric_manager, GetAvailableMetrics()).RETURN(metrics_pointers);
+  std::unordered_map<astl::ITarget*, std::unique_ptr<astl::IMetricManager>> metric_manager_map;
+  metric_manager_map.emplace(mock_targets[0].get(), std::move(mock_metric_manager));
+
   auto topology_manager  = std::make_unique<MockTopologyManager>();
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                           std::move(mock_metric_manager));
+                                                           std::move(metric_manager_map));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
