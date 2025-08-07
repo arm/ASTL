@@ -17,14 +17,11 @@ TEST_CASE("Orchestrator ctor", "[Orchestrator]") {
   ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, ProcessData(_)).RETURN(ASTL_STATUS_COLLECTION_ALREADY_STOPPED);
-  astl::ITarget*                                                            target{nullptr};
-  std::unordered_map<astl::ITarget*, std::unique_ptr<astl::IMetricManager>> metric_manager_map;
-  metric_manager_map.emplace(target, std::move(metric_manager));
 
   auto topology_manager = std::make_unique<MockTopologyManager>();
 
   SECTION("All nullptrs") {
-    REQUIRE_THROWS_MATCHES(astl::Orchestrator(nullptr, nullptr, std::move(metric_manager_map)), std::invalid_argument,
+    REQUIRE_THROWS_MATCHES(astl::Orchestrator(nullptr, nullptr, nullptr), std::invalid_argument,
                            MessageMatches(ContainsSubstring("requires non-null")));
   }
 
@@ -35,44 +32,40 @@ TEST_CASE("Orchestrator ctor", "[Orchestrator]") {
         // even though it looks like that syntactically. cppcheck can't properly expand the `SECTION` macro,
         // so we'll suppress the (moving a moved-from variable) warning here.
         // cppcheck-suppress accessMoved
-        astl::Orchestrator(nullptr, std::move(collector_manager), std::move(metric_manager_map)), std::invalid_argument,
+        astl::Orchestrator(nullptr, std::move(collector_manager), std::move(metric_manager)), std::invalid_argument,
         MessageMatches(ContainsSubstring("requires non-null")));
   }
 
   SECTION("null collector_manager") {
     REQUIRE_THROWS_MATCHES(
         // cppcheck-suppress accessMoved
-        astl::Orchestrator(std::move(topology_manager), nullptr, std::move(metric_manager_map)), std::invalid_argument,
+        astl::Orchestrator(std::move(topology_manager), nullptr, std::move(metric_manager)), std::invalid_argument,
         MessageMatches(ContainsSubstring("requires non-null")));
   }
 
   SECTION("null metric_manager") {
-    metric_manager_map[target] = nullptr;
     REQUIRE_THROWS_MATCHES(
         // cppcheck-suppress accessMoved
-        astl::Orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager_map)),
-        std::invalid_argument, MessageMatches(ContainsSubstring("requires non-null")));
+        astl::Orchestrator(std::move(topology_manager), std::move(collector_manager), nullptr), std::invalid_argument,
+        MessageMatches(ContainsSubstring("requires non-null")));
   }
 }
 
 TEST_CASE("Orchestrator-Collection", "[Orchestrator]") {
-  auto                 mock_target        = std::make_unique<MockTarget>();
-  astl_target_handle_t mock_target_handle = mock_target.get();
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
-  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
-  mock_targets.push_back(std::move(mock_target));
-
   auto topology_manager  = std::make_unique<MockTopologyManager>();
   auto collector_manager = std::make_unique<MockCollectorManager>();
   // ALLOW_CALL(*topology_manager, SetTargets(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto metric_manager = std::make_unique<MockMetricManager>();
-  std::unordered_map<astl::ITarget*, std::unique_ptr<astl::IMetricManager>> metric_manager_map;
-  metric_manager_map.emplace(mock_targets[0].get(), std::move(metric_manager));
   auto orchestrator =
-      astl::Orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager_map));
+      astl::Orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager));
 
+  auto                 mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_handle = mock_target.get();
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target));
   orchestrator.SetTargets(std::move(mock_targets));
 
   auto unexpected_target = std::make_unique<MockTarget>();
@@ -107,34 +100,29 @@ TEST_CASE("Orchestrator-StopCollection", "[Orchestrator]") {
   ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, ProcessData(_)).RETURN(ASTL_STATUS_COLLECTION_ALREADY_STOPPED);
-  std::unordered_map<astl::ITarget*, std::unique_ptr<astl::IMetricManager>> metric_manager_map;
-  metric_manager_map.emplace(mock_targets[0].get(), std::move(metric_manager));
 
   auto topology_manager = std::make_unique<MockTopologyManager>();
   REQUIRE(topology_manager->SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
   REQUIRE(topology_manager->GetTargets().size() == 1);
-  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager),
-                                  std::move(metric_manager_map));
+
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager));
   const auto&        target_ptr = orchestrator.GetTargets()[0];
   REQUIRE(orchestrator.StopCollection(target_ptr.get()) == ASTL_STATUS_COLLECTION_ALREADY_STOPPED);
 }
 
 TEST_CASE("Orchestrator-SinkSamples", "[Orchestrator]") {
-  auto                 mock_target        = std::make_unique<MockTarget>();
-  astl_target_handle_t mock_target_handle = mock_target.get();
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
-  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
-  mock_targets.push_back(std::move(mock_target));
-
   auto topology_manager  = std::make_unique<MockTopologyManager>();
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto metric_manager = std::make_unique<MockMetricManager>();
-  std::unordered_map<astl::ITarget*, std::unique_ptr<astl::IMetricManager>> metric_manager_map;
-  metric_manager_map.emplace(mock_targets[0].get(), std::move(metric_manager));
   auto orchestrator =
-      astl::Orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager_map));
+      astl::Orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager));
 
+  auto                 mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_handle = mock_target.get();
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target));
   REQUIRE(orchestrator.SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
 }

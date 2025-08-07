@@ -39,8 +39,8 @@ class TopologyManager : public ITopologyManager {
   auto ScanForTargets() -> astl_status_code override;
 
   // Initialize the MetricManager based on the configuration and system config files
-  auto InitializeMetricManagers(const AstlConfiguration& configuration) const
-      -> std::expected<std::unordered_map<ITarget*, std::unique_ptr<IMetricManager>>, astl_status_code> override;
+  auto InitializeMetricManager(const AstlConfiguration& configuration) const
+      -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> override;
 
   const std::vector<std::unique_ptr<ITarget>>& GetTargets() const override;
 
