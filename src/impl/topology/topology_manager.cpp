@@ -89,8 +89,8 @@ auto TopologyManager::ScanForTargets() -> astl_status_code {
 }
 
 // Initialize the MetricManager based on the configuration and system config files
-auto TopologyManager::InitializeMetricManagers(const AstlConfiguration& configuration) const
-    -> std::expected<std::unordered_map<ITarget*, std::unique_ptr<IMetricManager>>, astl_status_code> {
+auto TopologyManager::InitializeMetricManager(const AstlConfiguration& configuration) const
+    -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
   // @todo ASTL-40 - determine Metric configurations by using the configuration and system config files
   astl::CollectorCapability              collector_capabilities{astl::CollectorType::SCMI};
   astl::SystemCapability                 system_capabilities{};
@@ -98,15 +98,6 @@ auto TopologyManager::InitializeMetricManagers(const AstlConfiguration& configur
   std::vector<astl::SystemCapability>    system_caps_list{system_capabilities};
   astl::Capabilities                     capabilities{std::move(collector_caps_list), std::move(system_caps_list)};
 
-  std::unordered_map<ITarget*, std::unique_ptr<IMetricManager>> metric_manager_map;
-
-  // @todo ASTL-127 - support multiple targets
-  if (_targets.size() != 1) {
-    ASTL_LOG_ERROR(
-        "InitializeMetricManagers: Expected exactly one target (until ASTL issue #127 is resolved), found {}",
-        _targets.size());
-    return std::unexpected(ASTL_STATUS_NO_TARGETS_FOUND);
-  }
   std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
 
   // @todo ASTL-151 - Move InitializeMetricManager out of the topology manager
@@ -120,8 +111,7 @@ auto TopologyManager::InitializeMetricManagers(const AstlConfiguration& configur
       return std::unexpected(status);
     }
   }
-  metric_manager_map.emplace(_targets[0].get(), std::move(metric_manager));
-  return metric_manager_map;
+  return metric_manager;
 }
 
 const std::vector<std::unique_ptr<ITarget>>& TopologyManager::GetTargets() const { return _targets; }

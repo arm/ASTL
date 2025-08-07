@@ -55,16 +55,16 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   auto collector_manager =
       std::make_unique<astl::CollectorManager>(topology_manager->GetTargets(), configuration.value());
   // auto [targets, collector_manager] = topology_manager->InitializeCollectorManager();
-  auto metric_manager_init_result = topology_manager->InitializeMetricManagers(configuration.value());
+  auto metric_manager_init_result = topology_manager->InitializeMetricManager(configuration.value());
   if (!metric_manager_init_result) {
     return metric_manager_init_result.error();
   }
-  auto& metric_manager_map = *metric_manager_init_result;
+  auto& metric_manager = *metric_manager_init_result;
 
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
   astl::Orchestrator::InitializeInstance(std::move(topology_manager), std::move(collector_manager),
-                                         std::move(metric_manager_map));
+                                         std::move(metric_manager));
   // the orchestrator owns targets
   return ASTL_STATUS_SUCCESS;
 }

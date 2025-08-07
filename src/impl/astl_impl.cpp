@@ -5,33 +5,28 @@
 
 namespace astl {
 
-Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>                              topology_manager,
-                           std::unique_ptr<ICollectorManager>                             collector_manager,
-                           std::unordered_map<ITarget *, std::unique_ptr<IMetricManager>> metric_manager_map)
+Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>  topology_manager,
+                           std::unique_ptr<ICollectorManager> collector_manager,
+                           std::unique_ptr<IMetricManager>    metric_manager)
     : _topology_manager{std::move(topology_manager)},
       _collector_manager{std::move(collector_manager)},
-      _metric_managers{std::move(metric_manager_map)} {
-  if (!_topology_manager || !_collector_manager) {
-    throw std::invalid_argument("Orchestrator requires non-null inputs for topology and collector managers.");
-  }
-  if (std::any_of(std::begin(_metric_managers), std::end(_metric_managers), [](const auto &target_and_metrics) {
-        return target_and_metrics.first == nullptr || target_and_metrics.second == nullptr;
-      })) {
-    throw std::invalid_argument("Orchestrator metric_managers requires non-null targets and metric_managers");
+      _metric_manager{std::move(metric_manager)} {
+  if (!_topology_manager || !_collector_manager || !_metric_manager) {
+    throw std::invalid_argument("Orchestrator requires non-null inputs for topology, collector, and metric managers.");
   }
   _collector_manager->RegisterSampleSink(this);
 }
 
 Orchestrator::~Orchestrator() { _collector_manager->UnregisterSampleSink(this); }
 
-void Orchestrator::InitializeInstance(
-    std::unique_ptr<ITopologyManager> topology_manager, std::unique_ptr<ICollectorManager> collector_manager,
-    std::unordered_map<ITarget *, std::unique_ptr<IMetricManager>> metric_manager_map) {
+void Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
+                                      std::unique_ptr<ICollectorManager> collector_manager,
+                                      std::unique_ptr<IMetricManager>    metric_manager) {
   std::scoped_lock lock(GetMutex());
   auto            &inst = GetInstance();
   if (!inst) {
     inst = std::make_unique<Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                          std::move(metric_manager_map));
+                                          std::move(metric_manager));
   }
 }
 
@@ -72,17 +67,21 @@ astl_status_code Orchestrator::ConfigureCounterCollection(ITarget               
 astl_status_code Orchestrator::ConfigureMetricCollection(ITarget                            *target,
                                                          const astl_collection_parameters_t *collection_params,
                                                          std::span<IMetric *>                metrics) {
-  auto metric_manager_iter = _metric_managers.find(target);
-  if (metric_manager_iter == _metric_managers.end() || metric_manager_iter->second == nullptr) {
-    ASTL_LOG_ERROR("Orchestrator::ConfigureMetricCollection called with unrecognized target");
+  const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
+  auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
+                                                                      [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
-  auto &metric_manager = metric_manager_iter->second;
+  if (!_metric_manager) {
+    ASTL_LOG_ERROR("Orchestrator::ConfigureMetricCollection called with null MetricManager");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
   if (!_collector_manager) {
     ASTL_LOG_ERROR("Orchestrator::ConfigureMetricCollection called with null CollectorManager");
     return ASTL_STATUS_INTERNAL_ERROR;
   }
-  auto available_metrics = metric_manager->GetAvailableMetrics();
+  auto available_metrics = _metric_manager->GetAvailableMetrics();
   if (!available_metrics) {
     return available_metrics.error();
   }
@@ -99,7 +98,7 @@ astl_status_code Orchestrator::ConfigureMetricCollection(ITarget                
       return ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET;
     }
   }
-  auto operations = metric_manager->GetRequiredOperations(metrics);
+  auto operations = _metric_manager->GetRequiredOperations(metrics);
   if (!operations) {
     return ASTL_STATUS_INTERNAL_ERROR;
   }
@@ -157,13 +156,10 @@ astl_status_code Orchestrator::ResumeCollection(ITarget *target) {
 }
 
 astl_status_code Orchestrator::StopCollection(ITarget *target) {
-  auto metric_manager_iter = _metric_managers.find(target);
-  if (metric_manager_iter == _metric_managers.end() || metric_manager_iter->second == nullptr) {
-    ASTL_LOG_ERROR("Orchestrator::ConfigureMetricCollection called with unrecognized target");
-    return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  if (!_metric_manager) {
+    ASTL_LOG_ERROR("null _metric_manager in Orchestrator::StopCollection");
+    return ASTL_STATUS_INTERNAL_ERROR;
   }
-  auto &metric_manager = metric_manager_iter->second;
-
   if (!_collector_manager) {
     ASTL_LOG_ERROR("null _collector_manager in Orchestrator::StopCollection");
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -175,12 +171,12 @@ astl_status_code Orchestrator::StopCollection(ITarget *target) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
 
-  astl_status_code status = metric_manager->ProcessData(_samples);
+  astl_status_code status = _metric_manager->ProcessData(_samples);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
 
-  status = metric_manager->SummarizeMetrics();
+  status = _metric_manager->SummarizeMetrics();
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
@@ -204,17 +200,6 @@ std::expected<uint32_t, astl_status_code> Orchestrator::GetCounterSampleCount(co
   }
   (void)counter;  // unused since unimplemented for now
   return std::unexpected(ASTL_STATUS_INVALID_COUNTER_HANDLE);
-}
-
-// TODO(ASTL-58): when OutputManager is implemented, revisit to see if GetMetricManager is even needed
-/**
- * @brief Return a reference to a pointer to the MetricManager, used to enumerate metrics
- */
-auto Orchestrator::GetMetricManager(ITarget *target) const -> std::expected<const IMetricManager *, astl_status_code> {
-  if (const auto &manager = _metric_managers.find(target); manager != _metric_managers.end()) {
-    return manager->second.get();
-  }
-  return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
 }
 
 astl_status_code Orchestrator::SinkSamples(ITarget *target, std::span<SampledData> samples) {
