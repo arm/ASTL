@@ -60,7 +60,7 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode* g
   auto telemetry = FileSystemNode::CreateDirectory("scmi_telemetry", g_root, ProtocolType::SCMI_TELEMETRY);
 
   if (!telemetry) {
-    std::cerr << "Error: telemetry is null!" << std::endl;
+    std::cerr << "Error: telemetry is null!" << '\n';
     abort();
   }
 
@@ -269,7 +269,7 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
   switch (file_type) {
     case TelemetryFile::ALL_DES_ENABLE:
       context.SetAllDesEnableFlag(std::atoi(value.c_str()) == 1);
-      std::cout << "Set all_des_enable to " << (std::atoi(value.c_str()) == 1 ? "1" : "0") << std::endl;
+      std::cout << "Set all_des_enable to " << (std::atoi(value.c_str()) == 1 ? "1" : "0") << '\n';
 
       for (const auto& event : context.GetDataEvents()) {
         event->enable_ = (std::atoi(value.c_str()) != 0);
@@ -279,7 +279,7 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
 
     case TelemetryFile::ALL_DES_TSTAMP_ENABLE:
       context.SetAllDesTstampEnableFlag(std::atoi(value.c_str()) == 1);
-      std::cout << "Set all_des_tstamp_enable to " << (std::atoi(value.c_str()) == 1 ? "1" : "0") << std::endl;
+      std::cout << "Set all_des_tstamp_enable to " << (std::atoi(value.c_str()) == 1 ? "1" : "0") << '\n';
 
       for (const auto& event : context.GetDataEvents()) {
         event->tstamp_enable_ = (std::atoi(value.c_str()) != 0);
@@ -294,17 +294,17 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
       // TODO(danngu01): implement check for if not discrete intervals
       if (std::find(available_intervals.begin(), available_intervals.end(), interval) != available_intervals.end()) {
         context.SetCurrentUpdateIntervalMs(interval);
-        std::cout << "Set current_update_interval_ms to " << interval << std::endl;
+        std::cout << "Set current_update_interval_ms to " << interval << '\n';
         return ErrorCode::SUCCESS;
       }
 
-      std::cerr << "Unsupported update interval: " << interval << std::endl;
+      std::cerr << "Unsupported update interval: " << interval << '\n';
       return ErrorCode::UNSUPPORTED_PROTOCOL;
     }
 
     case TelemetryFile::TLM_ENABLE:
       context.SetTlmEnableFlag(std::atoi(value.c_str()) == 1);
-      std::cout << "Set tlm_enable to " << (std::atoi(value.c_str()) == 1 ? "1" : "0") << std::endl;
+      std::cout << "Set tlm_enable to " << (std::atoi(value.c_str()) == 1 ? "1" : "0") << '\n';
       return ErrorCode::SUCCESS;
 
     // DE Handler
@@ -328,7 +328,7 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
     }
 
     default:
-      std::cout << "Unknown telemetry file: " << file_name << std::endl;
+      std::cout << "Unknown telemetry file: " << file_name << '\n';
       return ErrorCode::UNSUPPORTED_PROTOCOL;
   }
 }
@@ -437,7 +437,7 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
     }
 
     default:
-      std::cout << "Unknown telemetry file: " << file_name << std::endl;
+      std::cout << "Unknown telemetry file: " << file_name << '\n';
       return "";
   }
 }

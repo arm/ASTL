@@ -110,14 +110,14 @@ astl_status_code GetTargets(std::vector<astl_target_properties_t>& target_proper
   }
   status = astlGetTargets(target_properties_buffer.data(), &target_count);
   target_properties_buffer.resize(target_count);
-  std::cout << "astlGetTargets Status: " << astlStatusString(status) << std::endl;
+  std::cout << "astlGetTargets Status: " << astlStatusString(status) << '\n';
 
   if (target_count > 0 && (status == ASTL_STATUS_SUCCESS || status == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED)) {
     std::ranges::for_each(target_properties_buffer, [](const auto target_properties) {
-      std::cout << "Target info:" << std::endl;
-      std::cout << "  Name:        " << (target_properties._name ? target_properties._name : "<null>") << std::endl;
+      std::cout << "Target info:" << '\n';
+      std::cout << "  Name:        " << (target_properties._name ? target_properties._name : "<null>") << '\n';
       std::cout << "  Description: " << (target_properties._description ? target_properties._description : "<null>")
-                << std::endl;
+                << '\n';
     });
     target_properties = target_properties_buffer[0];
     return ASTL_STATUS_SUCCESS;
@@ -130,7 +130,7 @@ astl_status_code GetTargets(std::vector<astl_target_properties_t>& target_proper
 astl_status_code GetMetrics(astl_target_handle_t target_handle, std::vector<astl_metric_properties_t>& metric_buffer,
                             uint32_t& metric_count) {
   astl_status_code status = astlGetMetricCount(target_handle, &metric_count);
-  std::cout << "Metric count: " << metric_count << std::endl;
+  std::cout << "Metric count: " << metric_count << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
@@ -140,7 +140,7 @@ astl_status_code GetMetrics(astl_target_handle_t target_handle, std::vector<astl
     metric_buffer[0]._size = sizeof(astl_metric_properties_t);
   }
   status = astlGetMetrics(target_handle, metric_buffer.data(), &metric_count);
-  std::cout << "astlGetMetrics Status: " << astlStatusString(status) << std::endl;
+  std::cout << "astlGetMetrics Status: " << astlStatusString(status) << '\n';
   return status;
 }
 
@@ -163,14 +163,14 @@ astl_status_code ConfigureAndRunCollection(astl_target_handle_t                 
 
   astl_status_code status =
       astlConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles_vec.data(), metric_count);
-  std::cout << "astlConfigureMetricCollectionOnTarget Status: " << astlStatusString(status) << std::endl;
+  std::cout << "astlConfigureMetricCollectionOnTarget Status: " << astlStatusString(status) << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
-    std::cout << "Failed to configure metric collection - exiting early" << std::endl;
+    std::cout << "Failed to configure metric collection - exiting early" << '\n';
     return status;
   }
 
   status = astlStartCollectionOnTarget(target_handle);
-  std::cout << "astlStartCollectionOnTarget Status: " << astlStatusString(status) << std::endl;
+  std::cout << "astlStartCollectionOnTarget Status: " << astlStatusString(status) << '\n';
 
   if (do_interval && duration_seconds > std::chrono::seconds::zero()) {
     std::this_thread::sleep_for(duration_seconds);
@@ -182,7 +182,7 @@ astl_status_code ConfigureAndRunCollection(astl_target_handle_t                 
   }
 
   status = astlStopCollectionOnTarget(target_handle);
-  std::cout << "astlStopCollectionOnTarget Status: " << astlStatusString(status) << std::endl;
+  std::cout << "astlStopCollectionOnTarget Status: " << astlStatusString(status) << '\n';
 
   return status;
 }
@@ -195,14 +195,14 @@ void RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
   uint32_t         sample_count{};
   astl_status_code status =
       astlGetMetricSampleCountOnTarget(target_handle, metric_buffer.front()._handle, &sample_count);
-  std::cout << "astlGetMetricSampleCountOnTarget Status: " << astlStatusString(status) << std::endl;
+  std::cout << "astlGetMetricSampleCountOnTarget Status: " << astlStatusString(status) << '\n';
 
   std::vector<astl_metric_sample_t> samples(sample_count);
   if (sample_count > 0) {
     samples[0]._size = sizeof(astl_metric_sample_t);
   }
   status = astlGetMetricSamplesOnTarget(target_handle, metric_buffer.front()._handle, samples.data(), &sample_count);
-  std::cout << "astlGetMetricSamplesOnTarget Status: " << astlStatusString(status) << std::endl;
+  std::cout << "astlGetMetricSamplesOnTarget Status: " << astlStatusString(status) << '\n';
 }
 
 /**
@@ -284,7 +284,7 @@ int main(int argc, char* argv[]) {
   }
 
   if (metric_count == 0) {
-    std::cout << "no metrics available to collect on target: " << target_properties._name << std::endl;
+    std::cout << "no metrics available to collect on target: " << target_properties._name << '\n';
     return 0;
   }
 

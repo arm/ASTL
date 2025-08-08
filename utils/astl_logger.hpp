@@ -218,7 +218,7 @@ class Logger {
     if (kSpdlogLevelMap.contains(level)) {
       spdlog_level = kSpdlogLevelMap.at(level);
     } else {
-      std::cerr << "[Critical] Could not find a log level in map." << std::endl;
+      std::cerr << "[Critical] Could not find a log level in map." << '\n';
     }
 
     return spdlog_level;

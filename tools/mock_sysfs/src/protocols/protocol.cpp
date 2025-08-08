@@ -24,7 +24,7 @@ ErrorCode HandleProtocolWrite(const FileSystemNode* node, const std::string& val
       //     return HandleAnotherProtocolWrite(node, value);
 
     default:
-      std::cerr << "No write handler for protocol." << std::endl;
+      std::cerr << "No write handler for protocol." << '\n';
       return ErrorCode::UNSUPPORTED_PROTOCOL;
   }
 }
@@ -39,7 +39,7 @@ std::string HandleProtocolRead(const FileSystemNode* node) {
       //     return HandleAnotherProtocolRead(node);
 
     default:
-      std::cerr << "No read handler for protocol." << std::endl;
+      std::cerr << "No read handler for protocol." << '\n';
       return "";
   }
 }
