@@ -1,4 +1,4 @@
-time_s,temperature_C,throttle_count,power_W,freq
+time_ms,temperature_C,throttle_count,energy_J,freq
 100,40,5,500000,2000
 200,40,5,500000,2000
 300,40,5,500000,2000
