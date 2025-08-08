@@ -53,7 +53,7 @@ class ScmiSysfsCollector : public ICollector {
   ~ScmiSysfsCollector() override = default;
 
   ScmiSysfsCollector() = delete;  // needs to be initialized with the base path for the telemetry directory
-  ScmiSysfsCollector(ISampleSink* sample_sink, FileInterfaceT file_interface);
+  explicit ScmiSysfsCollector(FileInterfaceT file_interface);
 
   ScmiSysfsCollector(const ScmiSysfsCollector&)            = default;
   ScmiSysfsCollector& operator=(const ScmiSysfsCollector&) = default;
@@ -183,8 +183,8 @@ std::unordered_set<ScmiDataEventId> GetUniqueDataEventsIds(CollectionOperations 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename FileInterfaceT>
-ScmiSysfsCollector<FileInterfaceT>::ScmiSysfsCollector(ISampleSink* sample_sink, FileInterfaceT file_interface)
-    : _sample_sink{sample_sink}, _scmi_file_interface{std::move(file_interface)} {}
+ScmiSysfsCollector<FileInterfaceT>::ScmiSysfsCollector(FileInterfaceT file_interface)
+    : _scmi_file_interface{std::move(file_interface)} {}
 
 /*
  * @brief Get the capabilities of this collector, including the collector type.

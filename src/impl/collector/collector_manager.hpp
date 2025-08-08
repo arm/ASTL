@@ -28,7 +28,6 @@
 #include "collector/collection_configuration.hpp"
 #include "common/i_sample_sink.hpp"
 #include "common/operation.hpp"
-#include "config/astl_configuration.hpp"
 #include "counter.hpp"
 #include "i_collector.hpp"
 #include "i_collector_manager.hpp"
@@ -40,9 +39,8 @@ class CollectorManager : public ICollectorManager, public ISampleSink {
  public:
   CollectorManager() = delete;
 
-  /**
-   * @brief Construct the Collector manager, providing a list of targets discovered by the topology manager.
-   *        The collector manager is responsible for assigning a specific collector to each target
+  /*
+   * @brief Construct the Collector manager, providing a set of collection strategies for each target.
    *
    * @param collectors is a map from a given target to a set of collectors than can retrieve samples from that target.
    *        It's assumed that each target supports only on CollectorType protocol, but there are multiple collector
@@ -50,7 +48,7 @@ class CollectorManager : public ICollectorManager, public ISampleSink {
    *
    * @note Collection must be stopped and CollectorManager destroyed before the given ITarget keys are destroyed
    */
-  explicit CollectorManager(const std::vector<std::unique_ptr<ITarget>>&, const AstlConfiguration& configuration);
+  explicit CollectorManager(std::unordered_map<ITarget*, std::vector<std::unique_ptr<ICollector>>>&& collectors);
 
   // CollectorManager owns its ICollector instances, so it can be moved, but not copied
   CollectorManager(CollectorManager const&)            = delete;
@@ -81,10 +79,6 @@ class CollectorManager : public ICollectorManager, public ISampleSink {
 
   // ISampleSink implementation
   astl_status_code SinkSamples(ITarget* target, std::span<SampledData> samples) override;
-
-  // @todo ASTL-148 DEPRICATED!  DO NOT USE!
-  astl_status_code ForceTargetToCollectorMap(
-      std::unordered_map<ITarget*, std::vector<std::unique_ptr<ICollector>>>&& targets_to_collectors_map);
 
  private:
   std::unordered_set<ISampleSink*> _registered_sample_sinks;

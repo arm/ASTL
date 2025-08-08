@@ -27,7 +27,7 @@ std::ostream& operator<<(std::ostream& output_stream, astl_status_code error) {
 
 TEST_CASE("ScmiSysfsCollector::GetCapabilities", "[scmi_sysfs_collector]") {
   MockFileInterface                           mock_file_interface;
-  astl::ScmiSysfsCollector<MockFileInterface> collector(nullptr, std::move(mock_file_interface));
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
   auto                                        collector_capabilities = collector.GetCapabilities();
   REQUIRE(collector_capabilities.collector_type == astl::CollectorType::SCMI);
 }
@@ -46,7 +46,7 @@ TEST_CASE("ScmiSysfsCollector::ConfigureCollection - empty", "[scmi_sysfs_collec
   // expect collector may initialize telemetry subsystem
   ALLOW_CALL(mock_file_interface, Write(std::filesystem::path("tlm_enable"), "1")).RETURN(ASTL_STATUS_SUCCESS);
 
-  astl::ScmiSysfsCollector<MockFileInterface> collector(nullptr, std::move(mock_file_interface));
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
   astl::CollectionOperations    operations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
   astl_collection_parameters_t  collection_params{};
   astl::CollectionConfiguration configuration{nullptr, std::move(operations), collection_params};
@@ -115,7 +115,7 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // create the collector and its operations
-  astl::ScmiSysfsCollector<MockFileInterface> collector(nullptr, std::move(mock_file_interface));
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
   collector.SetSampleSink(&mock_sample_sink);
 
   constexpr uint32_t      raw_id = 0x1234;
@@ -234,7 +234,7 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
   // ALLOW_CALL(mock_sample_sink, SinkSamples(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   // create the collector and its operations
-  astl::ScmiSysfsCollector<MockFileInterface> collector(nullptr, std::move(mock_file_interface));
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
   collector.SetSampleSink(&mock_sample_sink);
 
   constexpr uint32_t      raw_id = 0x1234;
@@ -348,7 +348,7 @@ TEST_CASE("ScmiSysfsCollector::DuplicateTimestampHandling", "[scmi_sysfs_collect
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // Create the collector and configure it
-  astl::ScmiSysfsCollector<MockFileInterface> collector(nullptr, std::move(mock_file_interface));
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
   collector.SetSampleSink(&mock_sample_sink);
 
   constexpr uint32_t      raw_id = 0x5678;

@@ -22,29 +22,11 @@
 #include <expected>
 
 #include "astl/astl.h"
-#include "astl_file_interface.hpp"
 #include "collection_configuration.hpp"
-#include "collector/scmi_sysfs_collector.hpp"
-#include "config/astl_configuration.hpp"
-
 namespace astl {
 
-CollectorManager::CollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
-                                   const AstlConfiguration&                     configuration) {
-  for (const auto& cur_target : targets) {
-    /// @todo ASTL-146 Instead of hard-coding an SCMI/SysFS collector,
-    ///                dynamically assign an appropriate collector for each target
-    astl::FileInterface scmi_sysfs_file_interface{configuration.scmi_sysfs_telemetry_root_path
-                                                      ? *configuration.scmi_sysfs_telemetry_root_path
-                                                      : std::filesystem::path{"/tmp/fuse/scmi/scmi_telemetry"}};
-    using ScmiCollector = astl::ScmiSysfsCollector<decltype(scmi_sysfs_file_interface)>;
-    std::unique_ptr<astl::ICollector> scmi_collector =
-        std::make_unique<ScmiCollector>(nullptr, std::move(scmi_sysfs_file_interface));
-    std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
-    collectors_for_target.push_back(std::move(scmi_collector));
-    _collectors.emplace(cur_target.get(), std::move(collectors_for_target));
-  }
-
+CollectorManager::CollectorManager(std::unordered_map<ITarget*, std::vector<std::unique_ptr<ICollector>>>&& collectors)
+    : _collectors{std::move(collectors)} {
   // tell each collector to send their samples to CollectorManager. Each Collector has only one sample-sink,
   // but collector manager can support multiple sinks.
   for (auto& [_, cur_collector_vector] : _collectors) {
@@ -148,12 +130,6 @@ astl_status_code CollectorManager::SinkSamples(ITarget* target, std::span<Sample
     }
   }
   return result;
-}
-
-astl_status_code CollectorManager::ForceTargetToCollectorMap(
-    std::unordered_map<ITarget*, std::vector<std::unique_ptr<ICollector>>>&& targets_to_collectors_map) {
-  _collectors = std::move(targets_to_collectors_map);
-  return ASTL_STATUS_SUCCESS;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

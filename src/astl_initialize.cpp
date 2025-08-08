@@ -25,9 +25,9 @@
 #include "astl/astl_telemetry.h"
 #include "astl_file_interface.hpp"
 #include "astl_impl.hpp"
+#include "collector/collector_builder.hpp"
 #include "collector/collector_manager.hpp"
 #include "collector/i_collector.hpp"
-#include "collector/scmi_sysfs_collector.hpp"
 #include "common/capabilities.hpp"
 #include "config/configuration_manager.hpp"
 #include "metric/metric_manager.hpp"
@@ -52,9 +52,11 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   auto topology_manager = std::make_unique<astl::TopologyManager>();
   topology_manager->ScanForTargets();
 
-  auto collector_manager =
-      std::make_unique<astl::CollectorManager>(topology_manager->GetTargets(), configuration.value());
-  // auto [targets, collector_manager] = topology_manager->InitializeCollectorManager();
+  auto collector_manager = astl::BuildCollectorManager(topology_manager->GetTargets(), configuration.value());
+  if (!collector_manager) {
+    return collector_manager.error();
+  }
+
   auto metric_manager_init_result = topology_manager->InitializeMetricManager(configuration.value());
   if (!metric_manager_init_result) {
     return metric_manager_init_result.error();
@@ -63,7 +65,7 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
 
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
-  astl::Orchestrator::InitializeInstance(std::move(topology_manager), std::move(collector_manager),
+  astl::Orchestrator::InitializeInstance(std::move(topology_manager), std::move(collector_manager.value()),
                                          std::move(metric_manager));
   // the orchestrator owns targets
   return ASTL_STATUS_SUCCESS;
