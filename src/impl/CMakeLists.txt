@@ -15,6 +15,7 @@ target_sources(
     ${LIBRARY_NAME}
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/astl_impl.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_builder.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/collector/scmi_sysfs_collector.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/astl_configuration.cpp"

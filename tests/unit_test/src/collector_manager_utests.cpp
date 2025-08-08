@@ -18,17 +18,12 @@
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
+#include "collector/collector_builder.hpp"
 #include "collector/collector_manager.hpp"
-#include "config/configuration_manager.hpp"  /// @todo ASTL-147 Implement a MockConfigurationManager
 
 TEST_CASE("CollectorManager::RegisterSampleSink", "[collector_manager]") {
   // create a collector manager with an empty map of target-collector
-
-  astl_initialization_parameters_t init_params{sizeof(_astl_initialization_parameters_t), nullptr};
-  auto                             configuration = astl::ConfigurationManager::GetConfiguration(
-      &init_params);  /// @todo ASTL-147 Implement a MockConfigurationManager
-  std::vector<std::unique_ptr<astl::ITarget>> fake_targets;
-  astl::CollectorManager                      collector_manager{fake_targets, configuration.value()};
+  astl::CollectorManager collector_manager{{}};
 
   auto mock_sink  = std::make_unique<MockSampleSink>();
   auto mock_sink2 = std::make_unique<MockSampleSink>();
@@ -78,17 +73,11 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
 
   // create a collector manager with an empty map of target-collector
 
-  auto mock_target              = std::make_unique<MockTarget>();
-  auto mock_target2             = std::make_unique<MockTarget>();
-  auto mock_empty_target_vector = std::vector<std::unique_ptr<astl::ITarget>>();
-  auto mock_scmi_collector      = std::make_unique<MockCollector>();
-  auto mock_scmi_collector2     = std::make_unique<MockCollector>();
-  auto mock_mmio_collector      = std::make_unique<MockCollector>();
-
-  astl_initialization_parameters_t init_params{sizeof(_astl_initialization_parameters_t), nullptr};
-  auto                             configuration = astl::ConfigurationManager::GetConfiguration(
-      &init_params);  /// @todo ASTL-147 Implement a MockConfigurationManager
-  auto mock_configuration = configuration.value();
+  auto mock_target          = std::make_unique<MockTarget>();
+  auto mock_target2         = std::make_unique<MockTarget>();
+  auto mock_scmi_collector  = std::make_unique<MockCollector>();
+  auto mock_scmi_collector2 = std::make_unique<MockCollector>();
+  auto mock_mmio_collector  = std::make_unique<MockCollector>();
 
   astl::CollectorCapability scmi_capabilities{astl::CollectorType::SCMI};
   astl::CollectorCapability mmio_capabilities{astl::CollectorType::MMIO};
@@ -111,11 +100,8 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
     std::unordered_map<astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
     collectors_map[mock_target.get()] = std::move(collectors);
 
-    astl::CollectorManager collector_manager(
-        mock_empty_target_vector,
-        mock_configuration);  // This will get overwritten immediatly via ForceTargetToCollectorMap
-    collector_manager.ForceTargetToCollectorMap(std::move(collectors_map));  // ASTL-148
-    auto capabilities_map = collector_manager.ReportCollectionCapabilities();
+    astl::CollectorManager collector_manager{std::move(collectors_map)};
+    auto                   capabilities_map = collector_manager.ReportCollectionCapabilities();
     REQUIRE(capabilities_map.size() == 1);  // one supported target
     REQUIRE(capabilities_map.contains(mock_target.get()));
     REQUIRE(capabilities_map[mock_target.get()].size() >= 2);  // maybe SCMI shows up twice, maybe only once.
@@ -141,11 +127,8 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
     collectors_map[mock_target.get()]  = std::move(collectors_t1);
     collectors_map[mock_target2.get()] = std::move(collectors_t2);
 
-    astl::CollectorManager collector_manager(
-        mock_empty_target_vector,
-        mock_configuration);  // This will get overwritten immediatly via ForceTargetToCollectorMap
-    collector_manager.ForceTargetToCollectorMap(std::move(collectors_map));  // ASTL-148
-    auto capabilities_map = collector_manager.ReportCollectionCapabilities();
+    astl::CollectorManager collector_manager{std::move(collectors_map)};
+    auto                   capabilities_map = collector_manager.ReportCollectionCapabilities();
     REQUIRE(capabilities_map.size() == 2);  // two supported targets
     REQUIRE(capabilities_map.contains(mock_target.get()));
     REQUIRE(!capabilities_map[mock_target.get()].empty());  // maybe one SCMI collector for target 1, maybe 2
@@ -165,13 +148,24 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
     std::unordered_map<astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
     collectors_map[empty_target.get()] = std::move(empty_collectors);
 
-    astl::CollectorManager collector_manager(
-        mock_empty_target_vector,
-        mock_configuration);  // This will get overwritten immediatly via ForceTargetToCollectorMap
-    collector_manager.ForceTargetToCollectorMap(std::move(collectors_map));  // ASTL-148
-    auto capabilities_map = collector_manager.ReportCollectionCapabilities();
+    astl::CollectorManager collector_manager{std::move(collectors_map)};
+    auto                   capabilities_map = collector_manager.ReportCollectionCapabilities();
     REQUIRE(!capabilities_map.contains(empty_target.get()));
   }
+
+  // NOLINTEND(readability-function-cognitive-complexity)
+}
+
+TEST_CASE("CollectorManager::BuildCollectorManager", "[collector_manager]") {
+  // NOLINTBEGIN(readability-function-cognitive-complexity)
+
+  // create a collector manager with an empty map of target->collector
+  astl::AstlConfiguration                     configuration;
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  auto                                        collector_manager = astl::BuildCollectorManager(targets, configuration);
+  // with no targets, we should get a collector manager with no capabilities
+  REQUIRE(collector_manager.has_value());
+  REQUIRE(collector_manager.value()->ReportCollectionCapabilities().empty());
 
   // NOLINTEND(readability-function-cognitive-complexity)
 }
