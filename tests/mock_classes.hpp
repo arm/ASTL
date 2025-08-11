@@ -94,7 +94,10 @@ struct MockTopologyManager : public astl::ITopologyManager {
   static constexpr bool trompeloeil_movable_mock = true;
   using InitializeCollectorManagerRtype =
       std::pair<std::vector<std::unique_ptr<astl::ITarget>>, std::unique_ptr<astl::ICollectorManager>>;
+  using InitializeMetricManagerRtype = std::expected<std::unique_ptr<astl::IMetricManager>, astl_status_code>;
   MAKE_MOCK0(ScanForTargets, astl_status_code(), override);
+  MAKE_CONST_MOCK1(InitializeMetricManager, InitializeMetricManagerRtype(const astl::AstlConfiguration& configuration),
+                   override);
   const std::vector<std::unique_ptr<astl::ITarget>>& GetTargets() const override { return _targets; }
   astl_status_code SetTargets(std::vector<std::unique_ptr<astl::ITarget>> new_targets) override {
     _targets = std::move(new_targets);
