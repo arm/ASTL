@@ -16,8 +16,8 @@
  * under the License.
  ******************************************************************************/
 
-#include <expected>
 #include <fstream>
+#include <expected>
 #include <memory>
 #include <vector>
 
@@ -28,8 +28,7 @@
 namespace astl {
 
 /** @brief helper function to parse a system scmi specification json file into MetricConfig objects
- *  IMPROVE - Can we move this out of the astl namespace or mark it as private somehow?  It's an internal-only helper
- * function.
+ *  IMPROVE - Can we move this out of the astl namespace or mark it as private somehow?  It's an internal-only helper function.
  */
 auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& configuration)
     -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
@@ -71,8 +70,8 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& con
   return configurations;
 }
 
-auto BuildMetricManager(const AstlConfiguration& configuration)
-    -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
+auto BuildMetricManager(const AstlConfiguration& configuration) -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
+
   // @todo ASTL-40 - determine Metric configurations by using the configuration and system config files
   astl::CollectorCapability              collector_capabilities{astl::CollectorType::SCMI};
   astl::SystemCapability                 system_capabilities{};
@@ -94,6 +93,7 @@ auto BuildMetricManager(const AstlConfiguration& configuration)
     }
   }
   return metric_manager;
+  
 }
 
 }  // namespace astl

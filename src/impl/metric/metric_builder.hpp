@@ -30,8 +30,7 @@ namespace astl {
 
 /** @brief Builds a metric manager from the given configuration
  */
-auto BuildMetricManager(const AstlConfiguration& configuration)
-    -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code>;
+auto BuildMetricManager(const AstlConfiguration& configuration) -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code>;
 
 }  // namespace astl
 
