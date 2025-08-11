@@ -30,8 +30,8 @@
 #include "collector/i_collector.hpp"
 #include "common/capabilities.hpp"
 #include "config/configuration_manager.hpp"
-#include "metric/metric_manager.hpp"
 #include "metric/metric_builder.hpp"
+#include "metric/metric_manager.hpp"
 #include "target.hpp"
 #include "topology/topology_manager.hpp"
 
