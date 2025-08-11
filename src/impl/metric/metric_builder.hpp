@@ -16,37 +16,22 @@
  * under the License.
  ******************************************************************************/
 
-#include "topology/topology_manager.hpp"
+#ifndef METRIC_BUILDER_HPP_
+#define METRIC_BUILDER_HPP_
 
-#include <algorithm>
-#include <iterator>
+#include <expected>
 #include <memory>
-#include <nlohmann/json.hpp>
 #include <vector>
 
-#include "astl/astl_errors.h"
-#include "astl_file_interface.hpp"
-#include "astl_utils.hpp"
-#include "config/scmi_specification_json.hpp"
-#include "metric/metric_manager.hpp"
-
-using json = nlohmann::json;
+#include "config/astl_configuration.hpp"
+#include "metric/i_metric_manager.hpp"
 
 namespace astl {
 
-auto TopologyManager::ScanForTargets() -> astl_status_code {
-  _targets.clear();
-  /// @todo ASTL-144 Actually implement first topology manager plugin
-  _targets.push_back(
-      std::make_unique<astl::Target>("Scmi0", "The SCMI interface on Socket0"));  // This is a fake target placeholder
-  return ASTL_STATUS_SUCCESS;
-}
-
-const std::vector<std::unique_ptr<ITarget>>& TopologyManager::GetTargets() const { return _targets; }
-
-astl_status_code TopologyManager::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) {
-  _targets = std::move(new_targets);
-  return ASTL_STATUS_SUCCESS;
-}
+/** @brief Builds a metric manager from the given configuration
+ */
+auto BuildMetricManager(const AstlConfiguration& configuration) -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code>;
 
 }  // namespace astl
+
+#endif  // COLLECTOR_BUILDER_HPP_
