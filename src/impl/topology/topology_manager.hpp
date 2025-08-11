@@ -23,6 +23,10 @@
 #include <utility>
 #include <vector>
 
+#include "collector/i_collector.hpp"
+#include "collector/i_collector_manager.hpp"
+#include "config/configuration_manager.hpp"  /// @todo https://jira.arm.com/browse/ASTL-131 - Try to remove dependencies with config/metric managers
+#include "metric/i_metric_manager.hpp"
 #include "target.hpp"
 #include "topology/i_topology_manager.hpp"
 
@@ -33,6 +37,10 @@ class TopologyManager : public ITopologyManager {
   TopologyManager() = default;
 
   auto ScanForTargets() -> astl_status_code override;
+
+  // Initialize the MetricManager based on the configuration and system config files
+  auto InitializeMetricManager(const AstlConfiguration& configuration) const
+      -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> override;
 
   const std::vector<std::unique_ptr<ITarget>>& GetTargets() const override;
 

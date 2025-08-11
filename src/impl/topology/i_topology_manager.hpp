@@ -50,6 +50,13 @@ struct ITopologyManager {
    */
   virtual auto ScanForTargets() -> astl_status_code = 0;
 
+  /** @brief Initialize the MetricManager based on the configuration and system config files
+   *  @todo ASTL-151 InitializeMetricManager will be moved out of the TopologyManager class entireley soon.
+   *        we probably don't want to create a dependency between the abstract ITopologyManager and AstlConfiguration
+   *        but since this will be refactored out soon anyway, we can tolerate the dependency here */
+  virtual auto InitializeMetricManager(const AstlConfiguration& configuration) const
+      -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> = 0;
+
   /** @brief Get the target list from the most recent call of ScanForTargets() */
   virtual const std::vector<std::unique_ptr<ITarget>>& GetTargets() const = 0;
 
