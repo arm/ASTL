@@ -27,6 +27,7 @@ target_sources(
         "${CMAKE_CURRENT_SOURCE_DIR}/metric/sampled_value_metric.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/metric/delta_metric.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/metric/rate_metric.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/metric/residency_metric.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/counter.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/target.cpp"
 )

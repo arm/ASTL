@@ -60,7 +60,7 @@ struct IMetric {
    *
    * @return OperationSequence
    */
-  virtual std::expected<OperationSequence, astl_status_code> GetOperations() const = 0;
+  virtual std::expected<OperationSequence, astl_status_code> GetOperations() = 0;
 
   /**
    * @brief Process the individual sample routed to metric.

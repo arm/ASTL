@@ -81,7 +81,7 @@ class RawMetric : public IMetric {
    *
    * @return OperationSequence
    */
-  std::expected<OperationSequence, astl_status_code> GetOperations() const override {
+  std::expected<OperationSequence, astl_status_code> GetOperations() override {
     // Default implementation returns an empty sequence
     return OperationSequence{};
   }
