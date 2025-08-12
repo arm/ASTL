@@ -178,7 +178,7 @@ struct MockMetric : public astl::IMetric {
   using expected_operation_sequence = std::expected<astl::OperationSequence, astl_status_code>;
 
   MAKE_MOCK1(CheckCapabilities, auto(const astl::Capabilities& capabilities)->bool, const override);
-  MAKE_MOCK0(GetOperations, auto()->expected_operation_sequence, const override);
+  MAKE_MOCK0(GetOperations, auto()->expected_operation_sequence, override);
   MAKE_MOCK1(ReceiveSample, auto(const astl::SampledData& sample)->astl_status_code, override);
 
   using samples_t = std::span<const astl::SampledData>;

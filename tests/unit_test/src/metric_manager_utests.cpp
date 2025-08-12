@@ -75,7 +75,7 @@ struct TestMetric : public IMetric {
   // --- Implement remaining pure-virtuals so TestMetric is concrete ---
   bool CheckCapabilities(const Capabilities& /*caps*/) const override { return true; }
 
-  std::expected<OperationSequence, astl_status_code> GetOperations() const override {
+  std::expected<OperationSequence, astl_status_code> GetOperations() override {
     // Return an empty sequence by default
     return OperationSequence{};
   }

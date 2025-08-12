@@ -22,6 +22,7 @@ add_executable(unit_test
     sampled_value_metric_utests.cpp
     delta_metric_utests.cpp
     rate_metric_utests.cpp
+    residency_metric_utests.cpp
     config_manager_utests.cpp
     metric_manager_utests.cpp
     scmi_specification_json_utests.cpp

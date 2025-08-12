@@ -1,0 +1,271 @@
+/*******************************************************************************
+ * SPDX-FileCopyrightText: Copyright (C) 2025 Arm Limited and/or its affiliates
+ * SPDX-FileCopyrightText: <open-source-office@arm.com>
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ ******************************************************************************/
+
+#ifndef RESIDENCY_METRIC_HPP_
+#define RESIDENCY_METRIC_HPP_
+
+#include <chrono>
+#include <expected>
+#include <map>
+#include <optional>
+#include <span>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "astl/astl.h"
+#include "astl_logger.hpp"
+#include "astl_value.hpp"
+#include "delta_metric.hpp"
+#include "operation.hpp"
+#include "scmi/scmi_read_operation.hpp"
+
+namespace astl {
+
+/**
+ * @brief Holds residency calculation data for a specific state.
+ * note @todo (ASTL-159): Revisit the Residency samples data structure for GetSamples API
+ * This structure stores the residency delta, converted time, and percentage for each state and string_name can be
+ * optimized with a map.
+ */
+struct StateResidencyData {
+  std::string                   state_name;    ///< Name of the power/system state
+  std::chrono::duration<double> time_seconds;  ///< Converted time in seconds
+  SampleTimestamp               timestamp;     ///< Timestamp when calculated
+};
+
+/**
+ * @brief Holds summary data for all states in the residency metric.
+ * This structure stores accumulated residency statistics per state.
+ * note @todo // TODO (ASTL-58): When the output manager is implemented revisit  this datastruct as  a small struct for
+ * time_stats that holds total/avg/min/max, and a single unordered_map<string, time_stats>
+ */
+struct ResidencySummaryData {
+  std::unordered_map<std::string, std::chrono::duration<double>>
+                                          total_time_seconds;         ///< Total time per state in seconds
+  std::unordered_map<std::string, double> average_percentage;         ///< Average percentage per state
+  std::unordered_map<std::string, double> min_percentage;             ///< Minimum percentage per state
+  std::unordered_map<std::string, double> max_percentage;             ///< Maximum percentage per state
+  std::optional<double>                   inferred_state_percentage;  ///< Percentage for inferred state
+  std::optional<double>                   inferred_state_time;        ///< Total time for inferred state
+};
+
+/**
+ * @brief Configuration for a single state in the residency metric.
+ *  * note @todo (ASTL-158):  Abstract the state configuration Events in Residency Metric.
+ */
+struct StateConfiguration {
+  std::string     state_name;      ///< Name of the state (e.g., "C1", "C2", "Active")
+  double          tick_frequency;  ///< Frequency to convert ticks to seconds (Hz)
+  ScmiDataEventId data_event_id;   ///< Data event ID for SCMI operation
+};
+
+/**
+ * @brief Residency metric class for handling state residency metrics.
+ *
+ * ## Residency Metric Concept
+ *
+ * A residency metric measures the time spent in different system states by tracking
+ * hardware counters that increment while the system is in those states. This is
+ * particularly useful for power management analysis and performance optimization.
+ *
+ * ### Example: CPU C-State Residency Measurement
+ *
+ * Consider a CPU with the following power management states:
+ * - **C0 (Active)**: CPU executing instructions, all clocks running, full power
+ * - **C1 (Clock Gated)**: CPU execution halted, clocks stopped, quick wake-up (~1μs)
+ * - **C6 (Power Gated)**: CPU powered down, voltage reduced, longer wake-up (~100μs)
+ *
+ * Each state has a hardware counter that increments at a known frequency while the CPU is in that state and may or may
+ * not have an inferred state when CPU is not in any known state.
+ *
+ * ResidencyMetric inherits from DeltaMetric and adds the ability to:
+ * - Track multiple states (C-states, P-states, etc.)
+ * - Calculate residency deltas for each state
+ * - Convert ticks to time units
+ * - Calculate percentage time spent in each state
+ * - Handle inferred states (time not accounted for by known states)
+ * - Generate comprehensive residency summaries
+ *
+ * Other Examples: P-state residency, GPU state residency
+ */
+class ResidencyMetric : public DeltaMetric {
+ public:
+  ResidencyMetric() = delete;
+
+  /**
+   * @brief Construct a ResidencyMetric with specified name, description, and state configurations.
+   *
+   * Initializes the metric with the provided parameters and sets up state tracking.
+   * The metric will track residency for all configured states.
+   *
+   * @param name The name of the metric (e.g., "CPU_C_State_Residency").
+   * @param description A brief description of the metric.
+   * @param state_configs Vector of state configurations defining the states to track.
+   * @param inferred_state_name Optional name for the inferred state. If not provided, no inferred state is calculated.
+   */
+  explicit ResidencyMetric(const char* name, const char* description,
+                           const std::vector<StateConfiguration>& state_configs,
+                           const std::optional<std::string>&      inferred_state_name = std::nullopt);
+
+  /**
+   * @brief Reset the metric state, dropping all collected samples and residency data.
+   */
+  void Reset() override;
+
+  /**
+   * @brief Process and record a new sample value for a specific state.
+   *
+   * Calculates residency delta for the specific state identified by the sample's operation_id,
+   * converts ticks to time, and calculates percentage residency.
+   *
+   * @param sample A single sampled data point containing state counter value.
+   * @return astl_status_code indicating success or failure.
+   */
+  astl_status_code ReceiveSample(const SampledData& sample) override;
+
+  /**
+   * @brief Summarize collected residency data for all states.
+   *
+   * Finalizes the summary by calculating total time, average percentages,
+   * and inferred state residency. Logs comprehensive residency statistics.
+   *
+   * @return astl_status_code indicating success or failure.
+   */
+  astl_status_code Summarize() override;
+
+  /**
+   * @brief Get the Operations required for this residency metric.
+   *
+   * Creates read operations for each configured state. Each state configuration
+   * corresponds to one operation that will be used to collect counter data for that state.
+   *
+   * @return OperationSequence containing operations for all states, or error code on failure.
+   */
+  std::expected<OperationSequence, astl_status_code> GetOperations() override;
+
+  /**
+   * @brief Retrieve the complete residency summary data.
+   *
+   * Returns the current residency summary data containing statistics for all
+   * tracked states including totals, averages, and inferred state data.
+   *
+   * @return A const reference to ResidencySummaryData struct with complete residency statistics.
+   */
+  const ResidencySummaryData& GetResidencySummaryData() const;
+
+  /**
+   * @brief Get a view of the residency data calculated by this metric.
+   *
+   * This method provides access to the internal residency data for all states.
+   *
+   * note @todo (ASTL-159): Implement a GetSamples API in all Metric types to get a span of processed samples.
+   *
+   * @return A span containing all calculated residency values for all states.
+   */
+  std::span<const StateResidencyData> GetResidencyData() const;
+
+  /**
+   * @brief Get residency data for a specific state.
+   *
+   * @param state_name The name of the state to retrieve data for.
+   * @return Vector of residency data for the specified state.
+   */
+  std::vector<StateResidencyData> GetStateResidencyData(const std::string& state_name) const;
+
+ protected:
+  /**
+   * @brief Initialize/reset residency samples and summary data.
+   *
+   * Resets the metric state by clearing all residency data and reinitializing
+   * the summary data structures for all configured states.
+   */
+  void InitializeResidencyState();
+
+  /**
+   * @brief Convert ticks to microseconds using the configured frequency for a state.
+   *
+   * @param ticks The tick count to convert.
+   * @param config The state configuration containing the tick frequency.
+   * @return Expected time as std::chrono::microseconds or error code.
+   */
+  static std::expected<std::chrono::microseconds, astl_status_code> ConvertTicksToMicroseconds(
+      const AstlValue& ticks, const StateConfiguration& config);
+
+  /**
+   * @brief Calculate percentage residency from time spent in state and total interval.
+   *
+   * @param time_in_state Time spent in the state (std::chrono::microseconds).
+   * @param total_interval Total time interval between samples (microseconds).
+   * @return Expected percentage value or error code.
+   */
+  static std::expected<double, astl_status_code> CalculatePercentage(std::chrono::microseconds time_in_state,
+                                                                     std::chrono::microseconds total_interval);
+
+  /**
+   * @brief Update residency statistics for a specific state.
+   *
+   * @param state_name The name of the state.
+   * @param time_microseconds Converted time in microseconds.
+   * @param percentage Calculated percentage.
+   * @param timestamp Sample timestamp.
+   * @return astl_status_code indicating success or failure.
+   */
+  astl_status_code UpdateStateResidencyStatistics(const std::string&        state_name,
+                                                  std::chrono::microseconds time_microseconds, double percentage,
+                                                  SampleTimestamp timestampsamp);
+
+  /**
+   * @brief Calculate and update inferred state residency for a specific sample interval.
+   *
+   * Calculates the residency of the inferred state for the current sample interval,
+   * creating a StateResidencyData entry for the inferred state.
+   *
+   * @param sample_interval Time interval for this sample.
+   * @param timestamp Timestamp for this sample.
+   * @return astl_status_code indicating success or failure.
+   */
+  astl_status_code CalculateInferredStateResidencyForInterval(std::chrono::microseconds sample_interval,
+                                                              SampleTimestamp           timestamp);
+
+ private:
+  std::vector<StateConfiguration> _state_configs;  ///< Configuration for all states
+  std::unordered_map<OperationId, const StateConfiguration*>
+                             _operation_id_to_config;  ///< Fast lookup map from operation_id to state config
+  std::optional<std::string> _inferred_state_name;     ///< Name of the inferred state (optional)
+  std::unordered_map<std::string, std::optional<SampledData>> _previous_samples;  ///< Previous samples per state
+  std::vector<StateResidencyData>                             _residency_data;    ///< All residency calculations
+  ResidencySummaryData                                        _summary_data;      ///< Summary statistics
+
+  // Per-state running totals for summary calculation
+  std::unordered_map<std::string, std::chrono::duration<double>> _state_time_totals;  ///< Running total time per state
+  std::unordered_map<std::string, double> _state_percentage_sums;  ///< Running percentage sum per state
+  std::unordered_map<std::string, size_t> _state_sample_counts;    ///< Sample count per state
+
+  // Tracking for inferred state calculation
+  std::unordered_map<std::string, std::chrono::microseconds>
+      _processed_states_per_timestamp;  ///< Track states and their time intervals for each timestamp
+
+  // Logger for residency summaries
+  astl::Logger _residency_summary_logger{astl::LogLevel::Info, false /* Console logging disabled */,
+                                         false /* No default formatting */, "residency_summary.log"};
+};
+
+}  // namespace astl
+
+#endif  // RESIDENCY_METRIC_HPP_
