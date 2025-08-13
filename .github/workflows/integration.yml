@@ -88,7 +88,7 @@ jobs:
         id: cpu-cores
 
       - name: ⤵️ Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # fetch all history so we can git diff for clang-tidy relevant files
           fetch-depth: 0
@@ -200,7 +200,7 @@ jobs:
       - name: ⤴️ Code Coverage - Publish to Qlty
         # project overview: https://qlty.sh/gh/Arm-Debug/projects/ASTL
         if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
-        uses: qltysh/qlty-action/coverage@v1
+        uses: qltysh/qlty-action/coverage@v2
         with:
           token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
           files: coverage.xml
