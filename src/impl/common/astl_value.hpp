@@ -59,6 +59,46 @@ struct AstlValue {
   }
 
   /**
+   * @brief Check if the AstlValue contains a string or can be converted to a string representation
+   *
+   * @return true if the value is a string or can be converted to string, false otherwise
+   */
+  auto IsStringConvertible() const -> bool {
+    return std::visit(
+        [](auto&& arg) -> bool {
+          using T = std::decay_t<decltype(arg)>;
+          // Accept strings directly or any arithmetic type that can be converted
+          return std::is_same_v<T, std::string> || std::is_arithmetic_v<T> || std::is_same_v<T, bool>;
+        },
+        value);
+  }
+
+  /**
+   * @brief Convert the AstlValue to a string representation
+   *
+   * @param[out] result_str The string to store the result in
+   * @return true if conversion was successful, false otherwise
+   */
+  auto ToStringValue(std::string& result_str) const -> bool {
+    return std::visit(
+        [&result_str](auto&& arg) -> bool {
+          using T = std::decay_t<decltype(arg)>;
+          if constexpr (std::is_same_v<T, std::string>) {
+            result_str = arg;
+            return true;
+          } else if constexpr (std::is_same_v<T, bool>) {
+            result_str = arg ? "true" : "false";
+            return true;
+          } else if constexpr (std::is_arithmetic_v<T>) {
+            result_str = std::to_string(arg);
+            return true;
+          }
+          return false;
+        },
+        value);
+  }
+
+  /**
    * @brief convert a C-style astl_value_t to a AstlValue according to the specified astl_value_type_t
    *
    * @return an AstlValue instance with the same value as val, or a ASTL_STATUS_INVALID_VALUE_TYPE
