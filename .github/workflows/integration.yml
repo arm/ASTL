@@ -216,7 +216,12 @@ jobs:
 
       - name: 📽️ Run Demo with MockSysFs
         if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
-        run: ${{ github.workspace }}/scripts/demo.sh
+        run: |
+          set -o pipefail
+          EXPECTED_STRING="astlGetMetricSamplesOnTarget Status: SUCCESS"
+          ${{ github.workspace }}/scripts/demo.sh > demo.log
+          cat demo.log
+          grep "${EXPECTED_STRING}" demo.log
         env:
           ASTL_LOG_LEVEL: "DEBUG"
           ASTL_LOG_CONSOLE: 1
