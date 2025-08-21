@@ -28,7 +28,6 @@
 #include "collector/collection_operations.hpp"
 #include "common/i_sample_sink.hpp"
 #include "common/operation.hpp"
-#include "i_metric.hpp"
 #include "metric_config.hpp"
 
 namespace astl {
@@ -53,32 +52,73 @@ struct IMetricManager {
    *
    * This method is called by the orchestrator to register a new metric.
    */
-  virtual astl_status_code RegisterMetric(std::unique_ptr<MetricConfig> metric_config) = 0;
+  virtual astl_status_code RegisterMetric(std::unique_ptr<MetricConfig>      metric_config,
+                                          std::vector<const ITarget*> const& targets) = 0;
 
   /**
    * @brief Get the available metrics.
    *
-   * This method returns a vector of vectors of IMetric pointers.
-   * This is used to retrieve all the metrics that are available for the targets.
+   * This method returns a span of api handles to metrics.
+   * This is used to retrieve all the metrics that are available for all targets.
    *
-   * @return A span<IMetric* const> containing all registered metrics.
+   * @return A span<astl_metric_handle_t> containing all registered metrics, or an error.
    */
-  virtual std::expected<std::span<IMetric* const>, astl_status_code> GetAvailableMetrics() const = 0;
+  virtual auto GetAvailableMetrics() const
+      -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
 
   /**
-   * @brief Initialize the metrics.
+   * @brief Get the available metrics.
    *
-   * This method is called by the orchestrator to initialize metrics for a given target.
+   * This method returns a span of astl_metric_handle_t api handles.
+   * This is used to retrieve all the metrics that are available for the given target.
+   *
+   * @param target The target from which to retrieve associated metrics
+   *
+   * @return A span<astl_metric_handle_t> containing all registered metrics, or an error.
+   */
+  virtual auto GetAvailableMetrics(const ITarget* target) const
+      -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
+
+  /**
+   * @brief Assign values such as name, units, etc to the given properties pointer.
+   *
+   * @param metric The metric API handle for potentially many identical metrics that differ only in their target
+   * @param properties A non-null pointer to a struct containing that GetProperties will fill in
+   *
+   * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
+   */
+  virtual auto GetProperties(astl_metric_handle_t      metric,
+                             astl_metric_properties_t* properties) const -> astl_status_code = 0;
+
+  /**
+   * @brief Get the collection of collector operations needed to sample the given metric on the given target
+   *
+   * This method is called by the orchestrator to retrieve operations to send to CollectorManager
+   *
+   * @param metrics A collection of metric API handles to collect
+   * @param target A poitner to a target on which to collect samples for the given metrics
+   *
+   * @return A CollectionOperations struct with operations for the CollectorManager to execute
+   *         OR a status code indicating the nature of an error
    */
   virtual std::expected<CollectionOperations, astl_status_code> GetRequiredOperations(
-      std::span<IMetric* const> metrics) = 0;
+      std::span<const astl_metric_handle_t> metrics, const ITarget* target) = 0;
 
   /**
    * @brief Process the data and route the messages to metrics.
    *
    * This method is called by the orchestrator to distribute all the samples collected.
+   *
+   * @param data A collection of raw sampled data points for the metrics to process
    */
   virtual astl_status_code ProcessData(std::span<SampledData> data) = 0;
+
+  /**
+   * @brief Retrieve the collected samples for the given target and metric,
+   *        or an error if the target+metric combination isn't valid
+   */
+  virtual auto GetSamples(astl_metric_handle_t metric_handle, const ITarget* target)
+      -> std::expected<std::span<const astl::SampledData>, astl_status_code> = 0;
 
   /**
    * @brief Summarize the metrics messages.

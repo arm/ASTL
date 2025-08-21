@@ -11,6 +11,8 @@
 #include "astl/astl_test_hooks.h"
 #include "astl_impl.hpp"
 #include "counter.hpp"
+#include "metric/metric_config.hpp"
+#include "metric/metric_manager.hpp"
 #include "target.hpp"
 
 using trompeloeil::_;
@@ -477,21 +479,27 @@ TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator][wrapper]") {
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   mock_targets.push_back(std::move(mock_target));
   // set up metric
-  auto metric_manager = std::make_unique<MockMetricManager>();
-  auto mock_metric    = std::make_unique<MockMetric>();
-  ALLOW_CALL(*mock_metric, GetProperties(_))
-      .SIDE_EFFECT(_1->_value_type = ASTL_VALUE_FLOAT64)
-      .RETURN(ASTL_STATUS_SUCCESS);
-  auto mock_metric2 = std::make_unique<MockMetric>();
-  ALLOW_CALL(*mock_metric2, GetProperties(_))
-      .SIDE_EFFECT(_1->_value_type = ASTL_VALUE_FLOAT32)
-      .RETURN(ASTL_STATUS_SUCCESS);
+  auto                              metric_manager = std::make_unique<MockMetricManager>();
+  auto                              junkval0{kJunk};
+  auto                              junkval1{kJunk};
+  astl_metric_handle_t              metric0 = static_cast<astl_metric_handle_t>(&junkval0);
+  astl_metric_handle_t              metric1 = static_cast<astl_metric_handle_t>(&junkval1);
+  std::vector<astl_metric_handle_t> available_metrics;
+  available_metrics.push_back(metric0);
+  available_metrics.push_back(metric1);
 
-  std::vector<astl::IMetric*> available_metrics;
-  available_metrics.push_back(mock_metric.get());
-  available_metrics.push_back(mock_metric2.get());
-
+  // with either target or no, same set of metrics
+  ALLOW_CALL(*metric_manager, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
+
+  ALLOW_CALL(*metric_manager, GetProperties(metric0, _))
+      .SIDE_EFFECT(_2->_value_type = ASTL_VALUE_FLOAT64)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  ALLOW_CALL(*metric_manager, GetProperties(metric1, _))
+      .SIDE_EFFECT(_2->_value_type = ASTL_VALUE_FLOAT32)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
   auto topology_manager  = std::make_unique<MockTopologyManager>();
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -570,28 +578,33 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
   auto                                        mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t                        mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  std::string target_name{"T0"};
+  ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
   mock_targets.push_back(std::move(mock_target));
-  // set up metric
-  auto                 metric_manager     = std::make_unique<MockMetricManager>();
-  auto                 mock_metric        = std::make_unique<MockMetric>();
-  astl_metric_handle_t mock_metric_handle = mock_metric.get();
-  ALLOW_CALL(*mock_metric, GetProperties(_))
-      .SIDE_EFFECT(_1->_value_type = ASTL_VALUE_FLOAT64)
-      .SIDE_EFFECT(_1->_handle = mock_metric_handle)
-      .RETURN(ASTL_STATUS_SUCCESS);
-  auto                 mock_metric2        = std::make_unique<MockMetric>();
-  astl_metric_handle_t mock_metric_handle2 = mock_metric2.get();
-  ALLOW_CALL(*mock_metric2, GetProperties(_))
-      .SIDE_EFFECT(_1->_value_type = ASTL_VALUE_FLOAT32)
-      .SIDE_EFFECT(_1->_handle = mock_metric_handle2)
-      .RETURN(ASTL_STATUS_SUCCESS);
-
-  std::vector<astl::IMetric*> available_metrics;
-  available_metrics.push_back(mock_metric.get());
-  available_metrics.push_back(mock_metric2.get());
+  // set up metrics
+  auto                              metric_manager = std::make_unique<MockMetricManager>();
+  std::vector<astl_metric_handle_t> available_metrics;
+  auto                              junkval0{kJunk};
+  auto                              junkval1{kJunk};
+  astl_metric_handle_t              junk_metric0 = static_cast<astl_metric_handle_t>(&junkval0);
+  astl_metric_handle_t              junk_metric1 = static_cast<astl_metric_handle_t>(&junkval1);
+  available_metrics.push_back(junk_metric0);
+  available_metrics.push_back(junk_metric1);
 
   ALLOW_CALL(*metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
-  ALLOW_CALL(*metric_manager, GetRequiredOperations(_))
+  ALLOW_CALL(*metric_manager, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
+
+  ALLOW_CALL(*metric_manager, GetProperties(junk_metric0, _))
+      .SIDE_EFFECT(_2->_value_type = ASTL_VALUE_FLOAT64)
+      .SIDE_EFFECT(_2->_handle = junk_metric0)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  ALLOW_CALL(*metric_manager, GetProperties(junk_metric1, _))
+      .SIDE_EFFECT(_2->_value_type = ASTL_VALUE_FLOAT32)
+      .SIDE_EFFECT(_2->_handle = junk_metric1)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{100}, astl::CollectorCapability{astl::CollectorType::SCMI}});
   auto collector_manager = std::make_unique<MockCollectorManager>();
@@ -1024,33 +1037,60 @@ TEST_CASE("astlGetAllCounterSamples", "[unimplemented for now][wrapper]") {
 /*** COLLECTED METRIC SAMPLES ***/
 TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]") {
   auto                 mock_target        = std::make_unique<MockTarget>();
-  astl_target_handle_t mock_target_handle = mock_target.get();
+  astl::ITarget*       mock_target_raw    = mock_target.get();
+  astl_target_handle_t mock_target_handle = mock_target_raw;
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
-  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
-  orchestrator->SetTargets(std::move(mock_targets));
-  TestOrchestratorInjector injector(std::move(orchestrator));
 
   uint32_t sample_count{kJunk};
-  auto     mock_metric = std::make_unique<MockMetric>();
+
+  astl::ScmiTargetToDataEventIdMap data_event_ids;
+  data_event_ids["T0"] = 0x1234;
+  auto metric_config =
+      std::make_unique<astl::MetricConfig>("M0", "M0", ASTL_UNITS_AMPS, ASTL_VALUE_UINT64, ASTL_METRIC_UNKNOWN,
+                                           astl::CollectorType::SCMI, std::move(data_event_ids));
+
+  // set up map from metric api handle + target to mock IMetric
+  std::unordered_map<const astl::ITarget*, std::unique_ptr<astl::IMetric>> target_to_metric_map;
+  auto                                                                     mock_metric = std::make_unique<MockMetric>();
+  target_to_metric_map[mock_target_raw]                                                = std::move(mock_metric);
+  auto metric_handle = std::make_unique<astl::MetricHandle>(std::move(metric_config), std::move(target_to_metric_map));
+  astl_metric_handle_t              metric_api_handle = static_cast<astl_metric_handle_t>(metric_handle.get());
+  std::vector<astl_metric_handle_t> available_metrics;
+  available_metrics.push_back(metric_api_handle);
+
+  // set up metric manager
+  auto mock_metric_manager_uptr = std::make_unique<MockMetricManager>();
+  // keep this pointer so we can make expectations after move into orchestrator
+  auto* mock_metric_manager = mock_metric_manager_uptr.get();
+  ALLOW_CALL(*mock_metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
+  ALLOW_CALL(*mock_metric_manager, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                           std::move(mock_metric_manager_uptr));
+  orchestrator->SetTargets(std::move(mock_targets));
+  TestOrchestratorInjector injector(std::move(orchestrator));
 
   SECTION("[bad params][wrapper]") {
     std::vector<astl::SampledData> samples;
     samples.emplace_back(1, astl::AstlValue{uint64_t{1}});
     samples.emplace_back(2, astl::AstlValue{uint64_t{2}});
     samples.emplace_back(3, astl::AstlValue{uint64_t{3}});
-    ALLOW_CALL(*mock_metric, GetSamples()).RETURN(std::span<const astl::SampledData>{samples});
+    ALLOW_CALL(*mock_metric_manager, GetSamples(_, _)).RETURN(std::span<const astl::SampledData>{samples});
 
     // GetMetricSampleCount
     REQUIRE(astlGetMetricSampleCountOnTarget(nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
     int   junk{1};
     auto* invalid_target_handle{static_cast<astl_target_handle_t>(&junk)};
+    auto* invalid_metric_handle{static_cast<astl_metric_handle_t>(&junk)};
     auto  result = astlGetMetricSampleCountOnTarget(invalid_target_handle, nullptr, nullptr);
     REQUIRE((result == ASTL_STATUS_INVALID_TARGET_HANDLE || result == ASTL_STATUS_BAD_ARGUMENT));
-    REQUIRE(astlGetMetricSampleCountOnTarget(mock_target_handle, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
-    REQUIRE(astlGetMetricSampleCountOnTarget(mock_target_handle, nullptr, &sample_count) == ASTL_STATUS_BAD_ARGUMENT);
-    REQUIRE(astlGetMetricSampleCountOnTarget(mock_target_handle, mock_metric.get(), nullptr) ==
+    REQUIRE(astlGetMetricSampleCountOnTarget(mock_target_handle, invalid_metric_handle, nullptr) ==
             ASTL_STATUS_BAD_ARGUMENT);
     REQUIRE(sample_count == kJunk);
     // GetMetricSamples
@@ -1059,34 +1099,33 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
     REQUIRE((result == ASTL_STATUS_INVALID_TARGET_HANDLE || result == ASTL_STATUS_BAD_ARGUMENT));
     result = astlGetMetricSamplesOnTarget(invalid_target_handle, nullptr, nullptr, nullptr);
     REQUIRE((result == ASTL_STATUS_INVALID_TARGET_HANDLE || result == ASTL_STATUS_BAD_ARGUMENT));
-    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
-    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), nullptr, nullptr) ==
+    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, invalid_metric_handle, nullptr, nullptr) ==
             ASTL_STATUS_BAD_ARGUMENT);
     auto samples_out = AllocateAstlVector<astl_metric_sample_t>(kAFew);
-    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), samples_out.data(), nullptr) ==
+    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), nullptr) ==
             ASTL_STATUS_BAD_ARGUMENT);
     sample_count = 1;  // too small a buffer - 3 samples are defined above
-    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), samples_out.data(), &sample_count) ==
+    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), &sample_count) ==
             ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL);
     sample_count = 0;  // 0 is not a valid size for the output buffer, even if 0 samples are expected
-    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), samples_out.data(), &sample_count) ==
+    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), &sample_count) ==
             ASTL_STATUS_BAD_ARGUMENT);
     // ABI compatibility checks
     samples_out[0]._size = sizeof(astl_metric_sample_t) - 1;
     sample_count         = static_cast<uint32_t>(samples.size());
-    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), samples_out.data(), &sample_count) ==
+    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), &sample_count) ==
             ASTL_STATUS_OLD_METRIC_SAMPLE_STRUCT_VERSION);
     samples_out[0]._size = sizeof(astl_metric_sample_t) + 1;
-    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), samples_out.data(), &sample_count) ==
+    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), &sample_count) ==
             ASTL_STATUS_NEW_METRIC_SAMPLE_STRUCT_VERSION);
   }
 
   SECTION("[no samples][wrapper]") {
-    REQUIRE_CALL(*mock_metric, GetSamples()).RETURN(std::span<const astl::SampledData>{});
+    REQUIRE_CALL(*mock_metric_manager, GetSamples(_, _)).RETURN(std::span<const astl::SampledData>{});
 
     auto samples_out = AllocateAstlVector<astl_metric_sample_t>(kAFew);
 
-    auto result = astlGetMetricSampleCountOnTarget(mock_target_handle, mock_metric.get(), &sample_count);
+    auto result = astlGetMetricSampleCountOnTarget(mock_target_handle, metric_handle.get(), &sample_count);
     REQUIRE((result == ASTL_STATUS_SUCCESS || result == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED));
     REQUIRE(sample_count == 0);
   }
@@ -1097,15 +1136,15 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
     samples.emplace_back(1, astl::AstlValue{uint64_t{1}}, astl::SampleTimestamp{microseconds{100}});
     samples.emplace_back(2, astl::AstlValue{uint64_t{2}}, astl::SampleTimestamp{microseconds{101}});
     samples.emplace_back(3, astl::AstlValue{uint64_t{3}}, astl::SampleTimestamp{microseconds{102}});
-    ALLOW_CALL(*mock_metric, GetSamples()).RETURN(std::span<const astl::SampledData>{samples});
-    REQUIRE(astlGetMetricSampleCountOnTarget(mock_target_handle, mock_metric.get(), &sample_count) ==
+    REQUIRE_CALL(*mock_metric_manager, GetSamples(_, _)).RETURN(std::span<const astl::SampledData>{samples}).TIMES(2);
+    REQUIRE(astlGetMetricSampleCountOnTarget(mock_target_handle, metric_handle.get(), &sample_count) ==
             ASTL_STATUS_SUCCESS);
     REQUIRE(sample_count == samples.size());
 
     sample_count     = 3;  // should match samples.size()};
     auto samples_out = AllocateAstlVector<astl_metric_sample_t>(kAFew);
 
-    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, mock_metric.get(), samples_out.data(), &sample_count) ==
+    REQUIRE(astlGetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), &sample_count) ==
             ASTL_STATUS_SUCCESS);
     REQUIRE(sample_count == samples.size());
     REQUIRE(samples_out[0]._value.ui64 == 1);
@@ -1127,9 +1166,6 @@ TEST_CASE("astlGetAllMetricSamplesOnTarget", "[wrapper]") {
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
   // now set up some fake metrics and samples
-  auto mock_metric0 = std::make_unique<MockMetric>();
-  auto mock_metric1 = std::make_unique<MockMetric>();
-  auto mock_metric2 = std::make_unique<MockMetric>();
   using std::chrono::microseconds;
   std::vector<astl::SampledData> samples1;
   samples1.emplace_back(1, astl::AstlValue{uint64_t{1}}, astl::SampleTimestamp{microseconds{101}});
@@ -1137,13 +1173,20 @@ TEST_CASE("astlGetAllMetricSamplesOnTarget", "[wrapper]") {
   samples2.emplace_back(2, astl::AstlValue{uint64_t{2}}, astl::SampleTimestamp{microseconds{102}});
   samples2.emplace_back(3, astl::AstlValue{uint64_t{3}}, astl::SampleTimestamp{microseconds{103}});
   samples2.emplace_back(4, astl::AstlValue{uint64_t{4}}, astl::SampleTimestamp{microseconds{104}});
-  ALLOW_CALL(*mock_metric0, GetSamples()).RETURN(std::span<const astl::SampledData>{});
-  ALLOW_CALL(*mock_metric1, GetSamples()).RETURN(std::span<const astl::SampledData>{samples1});
-  ALLOW_CALL(*mock_metric2, GetSamples()).RETURN(std::span<const astl::SampledData>{samples2});
+  auto                              mock_metric_manager = std::make_unique<MockMetricManager>();
+  auto                              junkval0{kJunk};
+  auto                              junkval1{kJunk};
+  auto                              junkval2{kJunk};
+  astl_metric_handle_t              junk_metric0 = static_cast<astl_metric_handle_t>(&junkval0);
+  astl_metric_handle_t              junk_metric1 = static_cast<astl_metric_handle_t>(&junkval1);
+  astl_metric_handle_t              junk_metric2 = static_cast<astl_metric_handle_t>(&junkval2);
+  std::vector<astl_metric_handle_t> available_metrics{junk_metric0, junk_metric1, junk_metric2};
 
-  auto mock_metric_manager = std::make_unique<MockMetricManager>();
-  auto metrics_pointers    = std::vector<astl::IMetric*>{mock_metric0.get(), mock_metric1.get(), mock_metric2.get()};
-  ALLOW_CALL(*mock_metric_manager, GetAvailableMetrics()).RETURN(metrics_pointers);
+  ALLOW_CALL(*mock_metric_manager, GetAvailableMetrics()).RETURN(available_metrics);
+  ALLOW_CALL(*mock_metric_manager, GetSamples(junk_metric0, _)).RETURN(std::span<const astl::SampledData>{});
+  ALLOW_CALL(*mock_metric_manager, GetSamples(junk_metric1, _)).RETURN(std::span<const astl::SampledData>{samples1});
+  ALLOW_CALL(*mock_metric_manager, GetSamples(junk_metric2, _)).RETURN(std::span<const astl::SampledData>{samples2});
+
   auto topology_manager  = std::make_unique<MockTopologyManager>();
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -1167,7 +1210,7 @@ TEST_CASE("astlGetAllMetricSamplesOnTarget", "[wrapper]") {
   }
   SECTION("astlGetAllMetricSampleCountOnTarget [good params][wrapper]") {
     REQUIRE(astlGetAllMetricSampleCountOnTarget(mock_target_handle, &sample_count) == ASTL_STATUS_SUCCESS);
-    REQUIRE(sample_count == 4);  // 0 for metric0, 1 for metric1, and 3 for metric2
+    REQUIRE(sample_count == 4);  // 0 for junk_metric0, 1 for junk_metric1, and 3 for junk_metric2
   }
 
   SECTION("astlGetAllMetricSamplesOnTarget [bad params][wrapper]") {

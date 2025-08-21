@@ -38,9 +38,11 @@ struct MockTarget : public astl::ITarget {
   MockTarget() = default;
   explicit MockTarget(std::vector<std::unique_ptr<astl::ICounter>> counters) : _counters{std::move(counters)} {}
 
-  MAKE_MOCK1(GetProperties, astl_status_code(astl_target_properties_t* target), override);
-  MAKE_CONST_MOCK0(GetCounterCount, size_t(), override);
-  std::vector<std::unique_ptr<astl::ICounter>> const& GetCounters() const override { return _counters; };
+  MAKE_MOCK0(GetCollectorType, auto()->astl::CollectorType, const override);
+  MAKE_MOCK0(Name, auto()->std::string const&, const override);
+  MAKE_MOCK1(GetProperties, auto(astl_target_properties_t* target)->astl_status_code, override);
+  MAKE_CONST_MOCK0(GetCounterCount, auto()->size_t, override);
+  auto GetCounters() const -> std::vector<std::unique_ptr<astl::ICounter>> const& override { return _counters; };
 };
 
 /**
@@ -186,13 +188,14 @@ struct MockMetric : public astl::IMetric {
   MAKE_MOCK0(Reset, auto()->void, override);
   MAKE_MOCK0(Summarize, auto()->astl_status_code, override);
   MAKE_MOCK1(GetProperties, auto(astl_metric_properties_t* properties)->astl_status_code, const override);
+  MAKE_MOCK0(Name, auto()->std::string const&, const override);
 };
 
 struct MockMetricManager : public astl::IMetricManager {
   static constexpr bool trompeloeil_movable_mock = true;
 
   using expected_collection_operations = std::expected<astl::CollectionOperations, astl_status_code>;
-  using expected_metric_interface      = std::expected<std::span<astl::IMetric* const>, astl_status_code>;
+  using expected_metric_interface      = std::expected<std::span<const astl_metric_handle_t>, astl_status_code>;
 
   /*
    * @brief Register a new metric with the metric manager.
@@ -200,8 +203,9 @@ struct MockMetricManager : public astl::IMetricManager {
    * @param metric_config A unique pointer to a MetricConfig describing the metric to be registered.
    * @return astl_status_code indicating success or failure of the registration process.
    */
-  MAKE_MOCK1(RegisterMetric, auto(std::unique_ptr<astl::MetricConfig>)->astl_status_code, override);
-
+  MAKE_MOCK2(RegisterMetric,
+             auto(std::unique_ptr<astl::MetricConfig>, std::vector<const astl::ITarget*> const&)->astl_status_code,
+             override);
   /*
    * @brief Retrieve a list of all currently registered and available metrics.
    *
@@ -210,6 +214,20 @@ struct MockMetricManager : public astl::IMetricManager {
    */
   MAKE_MOCK0(GetAvailableMetrics, expected_metric_interface(), const override);
 
+  /**
+   * @brief Retrieve all registered metrics.
+   * @param target The target from which to retrieve associated metrics
+   * @return expected containing a span of registered astl_metric_handle_t on success,
+   *         or an error code if retrieval fails.
+   */
+  MAKE_MOCK1(GetAvailableMetrics, auto(const astl::ITarget* target)->expected_metric_interface, const override);
+
+  /**
+   * @brief Assign values such as name, units, etc to the given properties pointer.
+   */
+  MAKE_MOCK2(GetProperties, auto(const astl_metric_handle_t, astl_metric_properties_t*)->astl_status_code,
+             const override);
+
   /*
    * @brief Determine the required operations to support the specified metrics.
    *
@@ -217,7 +235,9 @@ struct MockMetricManager : public astl::IMetricManager {
    * @return A std::expected containing the required CollectionOperations struct if successful,
    *         or an astl_status_code on failure.
    */
-  MAKE_MOCK1(GetRequiredOperations, auto(std::span<astl::IMetric* const>)->expected_collection_operations, override);
+  MAKE_MOCK2(GetRequiredOperations,
+             auto(std::span<const astl_metric_handle_t>, const astl::ITarget*)->expected_collection_operations,
+             override);
 
   /*
    * @brief Process the sampled data for all registered metrics.
@@ -226,6 +246,13 @@ struct MockMetricManager : public astl::IMetricManager {
    * @return astl_status_code indicating success or failure of the processing operation.
    */
   MAKE_MOCK1(ProcessData, auto(std::span<astl::SampledData>)->astl_status_code, override);
+
+  using expected_samples = std::expected<std::span<const astl::SampledData>, astl_status_code>;
+  /**
+   * @brief Retrieve the collected samples for the given target and metric,
+   *        or an error if the target+metric combination isn't valid
+   */
+  MAKE_MOCK2(GetSamples, auto(astl_metric_handle_t, const astl::ITarget*)->expected_samples, override);
 
   /*
    * @brief Perform a final summary or aggregation of all collected metric data.

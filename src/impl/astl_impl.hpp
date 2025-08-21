@@ -110,7 +110,7 @@ class Orchestrator : public ISampleSink {
    *   - ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET: one of the given metrics is not associated with the target
    */
   astl_status_code ConfigureMetricCollection(ITarget *target, const astl_collection_parameters_t *collection_params,
-                                             std::span<IMetric *> metrics);
+                                             std::span<const astl_metric_handle_t> metrics);
 
   /**
    * @brief Apply the previously configured collection on the given target

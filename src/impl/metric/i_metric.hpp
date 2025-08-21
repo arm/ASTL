@@ -94,6 +94,11 @@ struct IMetric {
    * TODO(ASTL-89): External C-interface data structure should be backward compatible.
    */
   virtual astl_status_code GetProperties(astl_metric_properties_t *properties) const = 0;
+
+  /**
+   * @brief Retrieve the metric's name as a string
+   */
+  virtual auto Name() const -> std::string const & = 0;
 };
 
 }  // namespace astl

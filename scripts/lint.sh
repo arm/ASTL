@@ -100,7 +100,7 @@ all)
 	FILES=("${SOURCE_FILES[@]}")
 	;;
 *)
-	echo "Unknown diff mode $2. Use 'all' or pre-commit"
+	echo "Unknown diff mode $2. Use 'pre-commit', 'all', or 'pull-request'"
 	exit 1
 	;;
 esac

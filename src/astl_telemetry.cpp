@@ -50,6 +50,28 @@ std::expected<astl::ICounter*, astl_status_code> GetCounterFromHandle(astl_count
   return std::unexpected(ASTL_STATUS_INVALID_COUNTER_HANDLE);
 }
 
+auto GetMetricManager() -> std::expected<astl::IMetricManager*, astl_status_code> {
+  auto& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return std::unexpected(ASTL_STATUS_NOT_INITIALIZED);
+  }
+  const auto& metric_manager = orchestrator->GetMetricManager();
+  if (!metric_manager) {
+    ASTL_LOG_ERROR("No metric manager assigned to orchestrator");
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+  }
+  return metric_manager.get();
+}
+
+auto GetTarget(astl_target_handle_t target_handle) -> std::expected<const astl::ITarget*, astl_status_code> {
+  auto get_target_result = GetTargetFromHandle(target_handle);
+  if (!get_target_result) {
+    return std::unexpected(get_target_result.error());
+  }
+  auto* target = *get_target_result;
+  return target;
+}
+
 constexpr uint32_t kFirstElementIdx{0};
 
 // Used to get the '_size' field of the first element in the span, array, etc of astl_target_properties_t or other
@@ -252,22 +274,18 @@ astl_status_code astlGetMetricCount(astl_target_handle_t target_handle, uint32_t
   if (!target_handle || !metric_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  const auto get_target_result = GetTargetFromHandle(target_handle);
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager    = *get_metric_manager_result;
+  auto  get_target_result = GetTarget(target_handle);
   if (!get_target_result) {
     return get_target_result.error();
   }
-  // TODO(ASTL-127) Make metric manager target-aware
-  // const auto* target         = get_target_result.value();
-  const auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
-  }
-  const auto& metric_manager = orchestrator->GetMetricManager();
-  if (!metric_manager) {
-    ASTL_LOG_ERROR("No Metric Manager assigned to Orchestrator");
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-  const auto result = metric_manager->GetAvailableMetrics();
+  const auto* target = *get_target_result;
+
+  const auto result = metric_manager->GetAvailableMetrics(target);
   if (!result) {
     return result.error();
   }
@@ -286,26 +304,21 @@ astl_status_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_
   if (!target_handle || !metrics || !metric_count || *metric_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  const auto get_target_result = GetTargetFromHandle(target_handle);
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager    = *get_metric_manager_result;
+  auto  get_target_result = GetTarget(target_handle);
   if (!get_target_result) {
     return get_target_result.error();
   }
+  const auto* target = *get_target_result;
+
   std::span<astl_metric_properties_t> output_metrics{metrics, *metric_count};
-  // TODO(https://github.com/Arm-Debug/ASTL/issues/127) Make metric manager target-aware
-  // const auto* target         = get_target_result.value();
-  const auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
-  }
-  const auto& metric_manager = orchestrator->GetMetricManager();
-  if (!metric_manager) {
-    ASTL_LOG_ERROR("No Metric Manager assigned to Orchestrator");
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
   *metric_count = 0;  // in case there's an error to return
 
-  // TODO(https://github.com/Arm-Debug/ASTL/issues/127) Make metric manager target-aware
-  const auto& available_metrics_result = metric_manager->GetAvailableMetrics();
+  const auto& available_metrics_result = metric_manager->GetAvailableMetrics(target);
   if (!available_metrics_result) {
     return available_metrics_result.error();
   }
@@ -333,7 +346,7 @@ astl_status_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_
   }
   // copy properties from metrics to the provided buffer
   for (size_t i = 0; i < available_metrics.size(); ++i) {
-    auto result = available_metrics[i]->GetProperties(&output_metrics[i]);
+    auto result = metric_manager->GetProperties(available_metrics[i], &output_metrics[i]);
     if (result != ASTL_STATUS_SUCCESS) {
       // on failure, indicate how many we successfully filled in (not the failing one)
       *metric_count = static_cast<uint32_t>(i);
@@ -489,19 +502,13 @@ astl_status_code astlConfigureMetricCollectionOnTarget(astl_target_handle_t     
   if (!get_target_result) {
     return get_target_result.error();
   }
-  std::span<astl_metric_handle_t> metric_handle_span{metric_handles, metric_count};
   auto*                           target = *get_target_result;
-  std::vector<astl::IMetric*>     metrics;
-  metrics.reserve(metric_count);
-  std::transform(std::begin(metric_handle_span), std::end(metric_handle_span), std::back_inserter(metrics),
-                 [](const astl_metric_handle_t& metric_handle) { return static_cast<astl::IMetric*>(metric_handle); });
-  // TODO(https://github.com/Arm-Debug/ASTL/issues/129) - validate metric_handle
-  std::span<astl::IMetric*> metric_span{metrics};
-  auto&                     orchestrator = astl::Orchestrator::GetInstance();
+  std::span<astl_metric_handle_t> metric_handle_span{metric_handles, metric_count};
+  auto&                           orchestrator = astl::Orchestrator::GetInstance();
   if (!orchestrator) {
     return ASTL_STATUS_NOT_INITIALIZED;
   }
-  return orchestrator->ConfigureMetricCollection(target, collection_params, metric_span);
+  return orchestrator->ConfigureMetricCollection(target, collection_params, metric_handle_span);
 }
 
 astl_status_code astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
@@ -742,24 +749,23 @@ astl_status_code astlGetMetricSampleCountOnTarget(astl_target_handle_t target_ha
   if (!target_handle || !metric_handle || !sample_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto result = GetTargetFromHandle(target_handle);
-  if (!result) {
-    return result.error();
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
   }
-  // TODO(https://github.com/Arm-Debug/ASTL/issues/127) Make metric manager target-aware
-  // auto* target = *result;
+  auto* metric_manager    = *get_metric_manager_result;
+  auto  get_target_result = GetTarget(target_handle);
+  if (!get_target_result) {
+    return get_target_result.error();
+  }
+  const auto* target = *get_target_result;
 
-  // TODO(https://github.com/Arm-Debug/ASTL/issues/129) - validate metric_handle
-  const auto* metric  = static_cast<const astl::IMetric*>(metric_handle);
-  const auto  samples = metric->GetSamples();
+  const auto get_samples_result = metric_manager->GetSamples(metric_handle, target);
+  if (!get_samples_result) {
+    return get_samples_result.error();
+  }
+  auto samples = *get_samples_result;
 
-  // TODO(#127) - make metric manager target-aware
-  /*
-  const auto count = std::count_if(samples.begin(), samples.end(),
-                                   [target](const auto& sample) {
-                                     return sample->GetTarget() == target;
-                                   });
-  */
   if (samples.size() > std::numeric_limits<uint32_t>::max()) {
     ASTL_LOG_ERROR("metric->GetSamples reports absurdly large number of samples: {}", samples.size());
     return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
@@ -773,15 +779,24 @@ astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle
   if (!target_handle || !metric_handle || !samples || !sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto result = GetTargetFromHandle(target_handle);
-  if (!result) {
-    return result.error();
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
   }
-  // TODO(#127) Make metric manager target-aware
-  const auto*                     metric = static_cast<const astl::IMetric*>(metric_handle);
+  auto* metric_manager    = *get_metric_manager_result;
+  auto  get_target_result = GetTarget(target_handle);
+  if (!get_target_result) {
+    return get_target_result.error();
+  }
+  const auto* target                     = *get_target_result;
+  auto        collected_samples_or_error = metric_manager->GetSamples(metric_handle, target);
+  if (!collected_samples_or_error) {
+    return collected_samples_or_error.error();
+  }
+  auto collected_samples = *collected_samples_or_error;
+
   std::span<astl_metric_sample_t> output_samples{samples, *sample_count};
-  const auto                      samples_view = metric->GetSamples();
-  if (*sample_count < samples_view.size()) {
+  if (*sample_count < collected_samples.size()) {
     *sample_count = 0;
     return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
   }
@@ -796,7 +811,7 @@ astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle
     return ASTL_STATUS_NEW_METRIC_SAMPLE_STRUCT_VERSION;
   }
   *sample_count = 0;
-  std::for_each(samples_view.begin(), samples_view.end(),
+  std::for_each(collected_samples.begin(), collected_samples.end(),
                 [&sample_count, output_samples, metric_handle, target_handle](const auto& sample) {
                   auto [union_value, value_type] = sample.value.ToAstlUnionValue();
                   output_samples[*sample_count]  = {._size          = sizeof(astl_metric_sample_t),
@@ -813,41 +828,34 @@ astl_status_code astlGetAllMetricSampleCountOnTarget(astl_target_handle_t target
   if (!target_handle || !sample_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto result = GetTargetFromHandle(target_handle);
-  if (!result) {
-    return result.error();
+  *sample_count                  = 0;
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
   }
-  *sample_count = 0;
-  // TODO(https://github.com/Arm-Debug/ASTL/issues/127) Make metric manager target-aware
-  // auto* target = *result;
-  auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
+  auto* metric_manager    = *get_metric_manager_result;
+  auto  get_target_result = GetTarget(target_handle);
+  if (!get_target_result) {
+    return get_target_result.error();
   }
-  const auto& metric_manager = orchestrator->GetMetricManager();
-  if (!metric_manager) {
-    ASTL_LOG_ERROR("No metric manager assigned to orchestrator");
-    *sample_count = 0;
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
+  const auto* target = *get_target_result;
+
   const auto metrics_result = metric_manager->GetAvailableMetrics();
   if (!metrics_result) {
     return metrics_result.error();
   }
   for (const auto& metric : metrics_result.value()) {
-    std::span<const astl::SampledData> samples = metric->GetSamples();
+    auto samples_or_error = metric_manager->GetSamples(metric, target);
+    if (!samples_or_error) {
+      return samples_or_error.error();
+    }
+    auto samples = *samples_or_error;
     if (std::numeric_limits<uint32_t>::max() - *sample_count < samples.size()) {
       ASTL_LOG_ERROR("astlGetAllMetricSampleCountOnTarget reports number of samples exceeding uint32_t max");
       return ASTL_STATUS_INTERNAL_ERROR;
     }
     *sample_count += static_cast<uint32_t>(samples.size());
   }
-  /* TODO(#127) - make metric manager target-aware; something like...
-  const auto count = std::count_if(samples.begin(), samples.end(),
-                                   [target](const auto& sample) {
-                                     return sample->GetTarget() == target;
-                                   });
-  */
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -856,10 +864,16 @@ astl_status_code astlGetAllMetricSamplesOnTarget(astl_target_handle_t target_han
   if (!target_handle || !samples || !sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto result = GetTargetFromHandle(target_handle);
-  if (!result) {
-    return result.error();
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
   }
+  auto* metric_manager    = *get_metric_manager_result;
+  auto  get_target_result = GetTarget(target_handle);
+  if (!get_target_result) {
+    return get_target_result.error();
+  }
+  const auto* target = *get_target_result;
   // convert the pointer+count to a span
   std::span<astl_metric_sample_t> output_samples{samples, *sample_count};
   *sample_count                = 0;
@@ -873,25 +887,17 @@ astl_status_code astlGetAllMetricSamplesOnTarget(astl_target_handle_t target_han
   if (*given_struct_size > sizeof(astl_metric_sample_t)) {
     return ASTL_STATUS_NEW_METRIC_SAMPLE_STRUCT_VERSION;
   }
-  // TODO(https://github.com/Arm-Debug/ASTL/issues/127) Make metric manager target-aware
-  // auto* target = *result;
-  auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
-  }
-  const auto& metric_manager = orchestrator->GetMetricManager();
-  if (!metric_manager) {
-    ASTL_LOG_ERROR("No metric manager assigned to orchestrator");
-    *sample_count = 0;
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
   const auto metrics_result = metric_manager->GetAvailableMetrics();
   if (!metrics_result) {
     return metrics_result.error();
   }
   // for each of the available metrics, copy all of its sampled values into the output buffer
   for (const auto& metric : metrics_result.value()) {
-    std::span<const astl::SampledData> samples_view = metric->GetSamples();
+    auto get_samples_result = metric_manager->GetSamples(metric, target);
+    if (!get_samples_result) {
+      return get_samples_result.error();
+    }
+    std::span<const astl::SampledData> samples_view = *get_samples_result;
     if (output_samples.size() - *sample_count < samples_view.size()) {
       ASTL_LOG_ERROR("astlGetAllMetricSampleCountOnTarget reports number of samples exceeding buffer");
       return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
@@ -899,12 +905,6 @@ astl_status_code astlGetAllMetricSamplesOnTarget(astl_target_handle_t target_han
     std::for_each(samples_view.begin(), samples_view.end(),
                   // for this metrics, copy all samples to the outptu buffer
                   [&sample_count, output_samples, &metric, target_handle](const auto& sample) {
-                    /* TODO(#127) - make metric manager target-aware; something like...
-                    const auto count = std::count_if(samples.begin(), samples.end(),
-                                                    [target](const auto& sample) {
-                                                      return sample->GetTarget() == target;
-                                                    });
-                    */
                     auto [union_value, value_type] = sample.value.ToAstlUnionValue();
                     output_samples[*sample_count]  = {._size          = sizeof(astl_metric_sample_t),
                                                       ._metric_handle = static_cast<astl_metric_handle_t>(metric),
