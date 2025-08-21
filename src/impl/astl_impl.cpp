@@ -64,9 +64,9 @@ astl_status_code Orchestrator::ConfigureCounterCollection(ITarget               
   return ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET;
 }
 
-astl_status_code Orchestrator::ConfigureMetricCollection(ITarget                            *target,
-                                                         const astl_collection_parameters_t *collection_params,
-                                                         std::span<IMetric *>                metrics) {
+astl_status_code Orchestrator::ConfigureMetricCollection(ITarget                              *target,
+                                                         const astl_collection_parameters_t   *collection_params,
+                                                         std::span<const astl_metric_handle_t> metrics) {
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
@@ -81,24 +81,22 @@ astl_status_code Orchestrator::ConfigureMetricCollection(ITarget                
     ASTL_LOG_ERROR("Orchestrator::ConfigureMetricCollection called with null CollectorManager");
     return ASTL_STATUS_INTERNAL_ERROR;
   }
-  auto available_metrics = _metric_manager->GetAvailableMetrics();
+  auto available_metrics = _metric_manager->GetAvailableMetrics(target);
   if (!available_metrics) {
     return available_metrics.error();
   }
+
   // check for supported metrics
-  for (auto &metric : metrics) {
+  for (const auto &metric : metrics) {
+    ASTL_LOG_TRACE("ConfigureMetricCollection for metric_handle {} on target {}", metric, target->Name());
     auto metric_index = std::find_if(std::begin(available_metrics.value()), std::end(available_metrics.value()),
                                      [metric](auto const &available_metric) { return available_metric == metric; });
     if (metric_index == std::end(available_metrics.value())) {
-      astl_metric_properties_t metric_properties;
-      metric->GetProperties(&metric_properties);
-      astl_target_properties_t target_properties;
-      target->GetProperties(&target_properties);
-      ASTL_LOG_ERROR("Metric {} is not supported on target {}", metric_properties._name, target_properties._name);
+      ASTL_LOG_ERROR("Metric {} is not supported on target {}", metric, target->Name());
       return ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET;
     }
   }
-  auto operations = _metric_manager->GetRequiredOperations(metrics);
+  auto operations = _metric_manager->GetRequiredOperations(metrics, target);
   if (!operations) {
     return ASTL_STATUS_INTERNAL_ERROR;
   }

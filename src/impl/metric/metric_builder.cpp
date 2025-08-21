@@ -19,6 +19,7 @@
 #include <expected>
 #include <fstream>
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 #include "config/astl_configuration.hpp"
@@ -71,24 +72,46 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& con
   return configurations;
 }
 
-auto BuildMetricManager(const AstlConfiguration& configuration)
+auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration)
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
-  // @todo ASTL-40 - determine Metric configurations by using the configuration and system config files
-  astl::CollectorCapability              collector_capabilities{astl::CollectorType::SCMI};
-  astl::SystemCapability                 system_capabilities{};
-  std::vector<astl::CollectorCapability> collector_caps_list{collector_capabilities};
-  std::vector<astl::SystemCapability>    system_caps_list{system_capabilities};
-  astl::Capabilities                     capabilities{std::move(collector_caps_list), std::move(system_caps_list)};
+  // arrange the targets by the collector type
+  std::unordered_map<CollectorType, std::vector<const ITarget*>> collector_type_to_targets_map;
+  for (const auto& target : targets) {
+    collector_type_to_targets_map[target->GetCollectorType()].push_back(target.get());
+  }
+  // build a vector of CollectorCapability objects for each unique collector
+  std::vector<astl::CollectorCapability> collector_caps_list;
+  for (const auto& [collector_type, target_list] : collector_type_to_targets_map) {
+    if (collector_type == CollectorType::UNKNOWN) {
+      ASTL_LOG_ERROR("BuildMetricManager: Found target with UNKNOWN collector type, skipping");
+      continue;
+    }
+    ASTL_LOG_DEBUG("BuildMetricManager: Found {} targets with collector type {}", target_list.size(),
+                   static_cast<int>(collector_type));
+    collector_caps_list.emplace_back(collector_type);
+  }
+
+  // create the astl::Capabilities object to pass to the MetricManager
+  astl::SystemCapability              system_capabilities{};
+  std::vector<astl::SystemCapability> system_caps_list{system_capabilities};
+  astl::Capabilities                  capabilities{std::move(collector_caps_list), std::move(system_caps_list)};
 
   std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
 
-  // @todo ASTL-151 - Move InitializeMetricManager out of the topology manager
-  auto metric_configurations = ParseMetricConfigurationsFromScmiSpecification(configuration);
-  if (!metric_configurations) {
-    return std::unexpected(metric_configurations.error());
+  // handle SCMI metrics and targets
+  auto scmi_targets_iter = collector_type_to_targets_map.find(CollectorType::SCMI);
+  if (scmi_targets_iter == collector_type_to_targets_map.end()) {
+    ASTL_LOG_INFO("No targets with SCMI collector type found, skipping SCMI metric registration");
+    return metric_manager;
   }
-  for (auto& metric_config : metric_configurations.value()) {
-    auto status = metric_manager->RegisterMetric(std::move(metric_config));
+  auto scmi_metric_configurations = ParseMetricConfigurationsFromScmiSpecification(configuration);
+  if (!scmi_metric_configurations) {
+    return std::unexpected(scmi_metric_configurations.error());
+  }
+
+  for (auto& scmi_metric_config : scmi_metric_configurations.value()) {
+    // @todo for now, we're assuming tha every metric associated with SCMI can be run on any SCMI target
+    auto status = metric_manager->RegisterMetric(std::move(scmi_metric_config), scmi_targets_iter->second);
     if (status != ASTL_STATUS_SUCCESS) {
       return std::unexpected(status);
     }

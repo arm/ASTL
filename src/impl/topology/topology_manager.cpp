@@ -37,8 +37,8 @@ namespace astl {
 auto TopologyManager::ScanForTargets() -> astl_status_code {
   _targets.clear();
   /// @todo ASTL-144 Actually implement first topology manager plugin
-  _targets.push_back(
-      std::make_unique<astl::Target>("Scmi0", "The SCMI interface on Socket0"));  // This is a fake target placeholder
+  _targets.push_back(std::make_unique<astl::Target>("AP0", "The SCMI interface on Socket0",
+                                                    CollectorType::SCMI));  // This is a fake target placeholder
   return ASTL_STATUS_SUCCESS;
 }
 

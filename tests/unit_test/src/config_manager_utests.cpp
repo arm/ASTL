@@ -22,11 +22,11 @@ inline const astl::MetricConfig kTemperature{"SoC Temperature",
 TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
   MockMetricManager mock_metric_manager;
 
-  ALLOW_CALL(mock_metric_manager, RegisterMetric(_)).RETURN(ASTL_STATUS_NOT_IMPLEMENTED);
+  ALLOW_CALL(mock_metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_NOT_IMPLEMENTED);
   // TODO(ASTL-101): Create unit tests for metric manager
 
   SECTION("Register a valid metric config") {
-    REQUIRE(mock_metric_manager.RegisterMetric(std::make_unique<astl::MetricConfig>(kTemperature)) ==
+    REQUIRE(mock_metric_manager.RegisterMetric(std::make_unique<astl::MetricConfig>(kTemperature), {}) ==
             ASTL_STATUS_NOT_IMPLEMENTED);
   }
 
@@ -37,7 +37,7 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
         "SoC Temperature", "SoC Temperature for abc xyz", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, ASTL_METRIC_VALUE,
         astl::CollectorType::MMIO, invalid_data_event_ids);
 
-    REQUIRE(mock_metric_manager.RegisterMetric(std::move(invalid_metric_config)) == ASTL_STATUS_NOT_IMPLEMENTED);
+    REQUIRE(mock_metric_manager.RegisterMetric(std::move(invalid_metric_config), {}) == ASTL_STATUS_NOT_IMPLEMENTED);
   }
 }
 

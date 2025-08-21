@@ -23,7 +23,7 @@
 
 namespace astl {
 
-enum class CollectorType { SCMI, MMIO };
+enum class CollectorType { UNKNOWN, SCMI, MMIO };
 
 /**
  * @brief Attributes of a collector indicating what it's able to do.

@@ -23,9 +23,12 @@ struct ITarget {
   ITarget(ITarget&&)                 = default;
   ITarget& operator=(ITarget&&)      = default;
 
-  virtual astl_status_code                              GetProperties(astl_target_properties_t* target) = 0;
-  virtual size_t                                        GetCounterCount() const                         = 0;
-  virtual const std::vector<std::unique_ptr<ICounter>>& GetCounters() const                             = 0;
+  virtual auto GetProperties(astl_target_properties_t* target) -> astl_status_code  = 0;
+  virtual auto Name() const -> std::string const&                                   = 0;
+  virtual auto GetCounterCount() const -> size_t                                    = 0;
+  virtual auto GetCounters() const -> const std::vector<std::unique_ptr<ICounter>>& = 0;
+
+  virtual CollectorType GetCollectorType() const = 0;
 };
 
 /**
@@ -34,22 +37,25 @@ struct ITarget {
 class Target : public ITarget {
  public:
   Target() = default;
-  Target(std::string name, std::string description, Target* parent = nullptr);
+  Target(std::string name, std::string description, CollectorType collector_type, Target* parent = nullptr);
   ~Target() override               = default;
   Target(const Target&)            = default;
   Target& operator=(const Target&) = default;
   Target(Target&&)                 = default;
   Target& operator=(Target&&)      = default;
 
-  astl_status_code                              GetProperties(astl_target_properties_t* target) override;
-  const Target*                                 GetParent() const { return _parent; }
-  size_t                                        GetCounterCount() const override { return _counters.size(); }
-  const std::vector<std::unique_ptr<ICounter>>& GetCounters() const override { return _counters; }
+  auto GetProperties(astl_target_properties_t* target) -> astl_status_code override;
+  auto Name() const -> std::string const& override;
+  auto GetCollectorType() const -> CollectorType override;
+  auto GetParent() const -> const Target*;
+  auto GetCounterCount() const -> size_t override;
+  auto GetCounters() const -> const std::vector<std::unique_ptr<ICounter>>& override;
 
  private:
   std::string                            _name;
   std::string                            _description;
-  Target*                                _parent = nullptr;
+  CollectorType                          _collector_type{CollectorType::UNKNOWN};
+  Target*                                _parent{nullptr};
   std::vector<std::unique_ptr<ICounter>> _counters;
 };
 

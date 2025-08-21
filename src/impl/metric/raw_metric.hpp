@@ -112,7 +112,7 @@ class RawMetric : public IMetric {
     // Fill in the metric properties structure
     properties->_size = sizeof(astl_metric_properties_t);
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-    properties->_handle                = static_cast<astl_metric_handle_t>(const_cast<RawMetric *>(this));
+    properties->_handle                = nullptr;  // to be filled in by MetricManager
     properties->_name                  = _name.c_str();
     properties->_description           = _description.c_str();
     properties->_min_sampling_interval = 0;  // TODO(ASTL-40): Set appropriate minimum sampling interval from config.
@@ -122,6 +122,11 @@ class RawMetric : public IMetric {
 
     return ASTL_STATUS_SUCCESS;
   }
+
+  /**
+   * @brief Retrieve the metric's name as a string
+   */
+  auto Name() const -> std::string const & override { return _name; }
 
  protected:
   /**

@@ -58,7 +58,7 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
     return collector_manager.error();
   }
 
-  auto metric_manager_init_result = astl::BuildMetricManager(configuration.value());
+  auto metric_manager_init_result = astl::BuildMetricManager(topology_manager->GetTargets(), configuration.value());
   if (!metric_manager_init_result) {
     return metric_manager_init_result.error();
   }
