@@ -16,31 +16,22 @@
  * under the License.
  ******************************************************************************/
 
-#include "topology/topology_manager.hpp"
+#ifndef TOPOLOGY_BUILDER_HPP_
+#define TOPOLOGY_BUILDER_HPP_
 
-#include <algorithm>
-#include <iterator>
+#include <expected>
 #include <memory>
-#include <nlohmann/json.hpp>
-#include <vector>
 
 #include "astl/astl_errors.h"
-#include "astl_file_interface.hpp"
-#include "astl_utils.hpp"
-#include "config/scmi_specification_json.hpp"
-#include "metric/metric_manager.hpp"
-
-using json = nlohmann::json;
+#include "target.hpp"
+#include "topology/i_topology_manager.hpp"
 
 namespace astl {
-
-TopologyManager::TopologyManager(std::vector<std::unique_ptr<ITarget>>&& targets) : _targets{std::move(targets)} {}
-
-const std::vector<std::unique_ptr<ITarget>>& TopologyManager::GetTargets() const { return _targets; }
-
-astl_status_code TopologyManager::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) {
-  _targets = std::move(new_targets);
-  return ASTL_STATUS_SUCCESS;
-}
-
+/**
+ * @brief Initialize a topology manager.  This will run as many topology plugins as possible
+ * to discover what is available on the current platform.
+ */
+auto BuildTopologyManager() -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code>;
 }  // namespace astl
+
+#endif  // TOPOLOGY_BUILDER_

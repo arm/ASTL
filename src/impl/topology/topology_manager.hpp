@@ -30,9 +30,9 @@ namespace astl {
 
 class TopologyManager : public ITopologyManager {
  public:
-  TopologyManager() = default;
+  TopologyManager() = delete;
 
-  auto ScanForTargets() -> astl_status_code override;
+  explicit TopologyManager(std::vector<std::unique_ptr<ITarget>>&&);
 
   const std::vector<std::unique_ptr<ITarget>>& GetTargets() const override;
 
