@@ -16,31 +16,22 @@
  * under the License.
  ******************************************************************************/
 
-#include "topology/topology_manager.hpp"
+#include "topology/scmi_topology_plugin.hpp"
 
-#include <algorithm>
-#include <iterator>
+#include <expected>
 #include <memory>
-#include <nlohmann/json.hpp>
 #include <vector>
 
 #include "astl/astl_errors.h"
-#include "astl_file_interface.hpp"
-#include "astl_utils.hpp"
-#include "config/scmi_specification_json.hpp"
-#include "metric/metric_manager.hpp"
-
-using json = nlohmann::json;
+#include "target.hpp"
 
 namespace astl {
 
-TopologyManager::TopologyManager(std::vector<std::unique_ptr<ITarget>>&& targets) : _targets{std::move(targets)} {}
-
-const std::vector<std::unique_ptr<ITarget>>& TopologyManager::GetTargets() const { return _targets; }
-
-astl_status_code TopologyManager::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) {
-  _targets = std::move(new_targets);
-  return ASTL_STATUS_SUCCESS;
+auto ScmiTopologyPlugin::ScanForTargets() -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
+  std::vector<std::unique_ptr<ITarget> > targets;
+  // @todo ASTL-144 This is a fake target placeholder
+  targets.push_back(std::make_unique<Target>("AP0", "The SCMI interface on Socket0", CollectorType::SCMI));
+  return targets;
 }
 
 }  // namespace astl

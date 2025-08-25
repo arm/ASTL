@@ -44,12 +44,6 @@ struct ITopologyManager {
   ITopologyManager(ITopologyManager&&)                 = default;
   ITopologyManager& operator=(ITopologyManager&&)      = default;
 
-  /** @brief Probe the system on which this code is running for targets.
-   * Calling ScanForTargets() multiple times discards any old target info and re-initializes
-   * the topology manager from scratch as if it were freshly constructed.
-   */
-  virtual auto ScanForTargets() -> astl_status_code = 0;
-
   /** @brief Get the target list from the most recent call of ScanForTargets() */
   virtual const std::vector<std::unique_ptr<ITarget>>& GetTargets() const = 0;
 

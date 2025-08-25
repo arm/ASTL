@@ -33,6 +33,7 @@
 #include "metric/metric_builder.hpp"
 #include "metric/metric_manager.hpp"
 #include "target.hpp"
+#include "topology/topology_builder.hpp"
 #include "topology/topology_manager.hpp"
 
 /** @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
@@ -42,32 +43,35 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
   if (!init_params) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+
   if (init_params->_size != sizeof(astl_initialization_parameters_t)) {
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
+
   auto configuration = astl::ConfigurationManager::GetConfiguration(init_params);
   if (!configuration) {
     return configuration.error();
   }
 
-  auto topology_manager = std::make_unique<astl::TopologyManager>();
-  topology_manager->ScanForTargets();
+  auto topology_manager = astl::BuildTopologyManager();
+  if (!topology_manager) {
+    return topology_manager.error();
+  }
 
-  auto collector_manager = astl::BuildCollectorManager(topology_manager->GetTargets(), configuration.value());
+  auto collector_manager = astl::BuildCollectorManager(topology_manager.value()->GetTargets(), configuration.value());
   if (!collector_manager) {
     return collector_manager.error();
   }
 
-  auto metric_manager_init_result = astl::BuildMetricManager(topology_manager->GetTargets(), configuration.value());
-  if (!metric_manager_init_result) {
-    return metric_manager_init_result.error();
+  auto metric_manager = astl::BuildMetricManager(topology_manager.value()->GetTargets(), configuration.value());
+  if (!metric_manager) {
+    return metric_manager.error();
   }
-  auto& metric_manager = *metric_manager_init_result;
 
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
-  astl::Orchestrator::InitializeInstance(std::move(topology_manager), std::move(collector_manager.value()),
-                                         std::move(metric_manager));
+  astl::Orchestrator::InitializeInstance(std::move(topology_manager.value()), std::move(collector_manager.value()),
+                                         std::move(metric_manager.value()));
   // the orchestrator owns targets
   return ASTL_STATUS_SUCCESS;
 }
