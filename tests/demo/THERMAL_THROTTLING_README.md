@@ -17,6 +17,7 @@ The ASTL (Arm SoC Telemetry Library) thermal throttling demo simulates real-worl
    ```
 
 2. **Required Binaries**: The demo requires these executables to be built:
+
    - `MockSysfs`: FUSE-based mock SCMI sysfs generator
    - `sample_test`: ASTL sample application
 
@@ -62,11 +63,11 @@ export ASTL_MOCKSYSFS_CSV_FILE_PATH="./tests/demo/data/SoC_Throttling_Simulation
 ./scripts/demo.sh
 ```
 
-
 By default, ASTL runs for 10 seconds with a 500 ms sampling interval, during which it:
-   - collects sampled‐value metrics for temperature and frequency
-   - derives delta metrics from cumulative thermal‐throttle counts
-   - computes power as a rate metric from the joules data
+
+- collects sampled‐value metrics for temperature and frequency
+- derives delta metrics from cumulative thermal‐throttle counts
+- computes power as a rate metric from the joules data
 
 ### Using Custom CSV File
 
@@ -121,7 +122,7 @@ The thermal throttling demo exposes these telemetry data events:
 | -------- | -------------- | ------- | ----------------------------------- |
 | 0x7A9B   | Temperature    | Celsius | SoC temperature reading             |
 | 0x8C3D   | Throttle Count | Count   | Number of thermal throttling events |
-| 0x9E4F   | Energy         | Joules  | Energy consumption                   |
+| 0x9E4F   | Energy         | Joules  | Energy consumption                  |
 | 0x1A68   | Frequency      | MHz     | CPU operating frequency             |
 
 ## Directory Structure
@@ -210,7 +211,6 @@ fusermount -u ~/tmp/fuse/scmi
 ```
 
 ## Environment Variables Reference
-
 
 | Variable                       | Description                                              | Default Value                     |
 | ------------------------------ | -------------------------------------------------------- | --------------------------------- |

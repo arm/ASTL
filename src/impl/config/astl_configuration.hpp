@@ -39,6 +39,10 @@ struct MetricJsonDeclaration {
   std::string unit;                 //!< Unit of measurement for the metric
   std::string metric_type;          //!< Type of metric (e.g., value, delta, rate)
   std::string collection_protocol;  //!< Collector type (e.g., scmi)
+
+  // Residency-specific fields
+  std::optional<std::string> inferred_state;                    //!< Name of inferred state (for residency metrics)
+  std::optional<std::map<std::string, nlohmann::json>> states;  //!< State definitions (for residency metrics)
 };
 
 /** @brief Overall configuration for the ASTL library */
@@ -64,7 +68,7 @@ auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlC
  * @param layout The Scmi layout specification containing the Data Event IDs from platform json spec
  */
 auto CreateMetricConfig(std::string_view metric_name, MetricJsonDeclaration const& metric_declaration,
-                        scmi::Layout const& layout) -> std::unique_ptr<MetricConfig>;
+                        scmi::Layout const& layout) -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code>;
 
 }  // namespace astl
 

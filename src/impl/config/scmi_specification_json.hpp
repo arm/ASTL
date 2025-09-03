@@ -314,7 +314,7 @@ inline auto GetDataEventIdsForMetric(std::string_view register_name,
       // metric can be defined in the library configuration file, and be created
       // for each target that supports it in the spec.
       if (member_name == register_name) {
-        data_event_ids[target_name] = member_entry.de_id;
+        data_event_ids[target_name].push_back(member_entry.de_id);
       }
     }
   }

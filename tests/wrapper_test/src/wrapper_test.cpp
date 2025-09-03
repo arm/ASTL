@@ -1046,7 +1046,7 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
   uint32_t sample_count{kJunk};
 
   astl::ScmiTargetToDataEventIdMap data_event_ids;
-  data_event_ids["T0"] = 0x1234;
+  data_event_ids["T0"] = {0x1234};
   auto metric_config =
       std::make_unique<astl::MetricConfig>("M0", "M0", ASTL_UNITS_AMPS, ASTL_VALUE_UINT64, ASTL_METRIC_UNKNOWN,
                                            astl::CollectorType::SCMI, std::move(data_event_ids));
