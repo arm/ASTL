@@ -45,6 +45,7 @@ To make a successful contribution, please follow these steps:
 2. **Create a Private Branch**: Name your branch with the following format: <user-name>/<change-name>
 
 3. **Make Your Changes**:
+
    - Implement your changes, ensuring that you match the existing coding style and documentation conventions.
    - Write unit tests for your code to ensure it is functional and reliable.
 

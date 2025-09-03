@@ -28,6 +28,7 @@
 #include "i_metric.hpp"
 #include "metric_config.hpp"
 #include "rate_metric.hpp"
+#include "residency_metric.hpp"
 #include "sampled_value_metric.hpp"
 
 namespace astl {
@@ -35,25 +36,62 @@ namespace astl {
 /**
  * @brief Helper to instantiate a metric based on its type
  *
+ * @todo (https://jira.arm.com/browse/ASTL-170) Remove downcasting of ResidencyMetricConfig and target parameter used
+ * only for residency metrics. Consider splitting into CreateMetricFromConfig (for simple metrics) and
+ * CreateResidencyMetricFromConfig (for residency metrics with target-specific configuration), or implement visitor
+ * pattern to maintain abstraction without dynamic_cast.
  */
-auto CreateMetricFromConfig(const MetricConfig* metric_config)
-    -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
+auto CreateMetricFromConfig(const MetricConfig* metric_config,
+                            const ITarget*      target) -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
   switch (metric_config->MetricType()) {
     case astl_metric_type_t::ASTL_METRIC_VALUE:
       ASTL_LOG_INFO("CreateMetricFromConfig: Creating SampledValue metric '{}'", metric_config->Name());
       return std::make_unique<SampledValueMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
                                                   metric_config->Units(), metric_config->ValueType());
-      break;
     case astl_metric_type_t::ASTL_METRIC_DELTA:
       ASTL_LOG_INFO("CreateMetricFromConfig: Creating DeltaMetric '{}'", metric_config->Name());
       return std::make_unique<DeltaMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
                                            metric_config->Units(), metric_config->ValueType());
-      break;
     case astl_metric_type_t::ASTL_METRIC_RATE:
       ASTL_LOG_INFO("CreateMetricFromConfig: Creating RateMetric '{}'", metric_config->Name());
       return std::make_unique<RateMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
                                           metric_config->Units(), metric_config->ValueType());
-      break;
+    case astl_metric_type_t::ASTL_METRIC_RESIDENCY: {
+      ASTL_LOG_INFO("CreateMetricFromConfig: Creating ResidencyMetric '{}'", metric_config->Name());
+
+      // Cast to ResidencyMetricConfig to get state configurations
+      const auto* residency_config = dynamic_cast<const ResidencyMetricConfig*>(metric_config);
+      if (!residency_config) {
+        ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to ResidencyMetricConfig for metric '{}'",
+                       metric_config->Name());
+        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      }
+
+      // Create state configurations from the metric config for the specific target
+      std::vector<StateConfiguration> state_configs;
+      const auto&                     state_info = residency_config->StateInfo();
+
+      // Get states for the specific target
+      auto target_iter = state_info.find(target->Name());
+      if (target_iter != state_info.end()) {
+        const auto& target_states = target_iter->second;
+        for (const auto& [state_name, state_data] : target_states) {
+          // Use the tick frequency from the configuration
+          state_configs.emplace_back(
+              StateConfiguration{state_name, state_data.tick_frequency, state_data.data_event_id});
+        }
+      } else {
+        ASTL_LOG_ERROR("CreateMetricFromConfig: No state configurations found for target '{}' in metric '{}'",
+                       target->Name(), metric_config->Name());
+        return std::unexpected(ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET);
+      }
+
+      // Get the inferred state name from the configuration
+      const auto& inferred_state_name = residency_config->InferredState();
+
+      return std::make_unique<ResidencyMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
+                                               state_configs, inferred_state_name);
+    }
     // TODO (https://jira.arm.com/browse/ASTL-102):
     // handle additional MetricType cases here
     default:
@@ -97,7 +135,7 @@ astl_status_code MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>    
   for (const auto& target : targets) {
     // Register the metric based on its type and add it to the _metric_handles vector and
     // metric config mappings.
-    auto metric_or_error = CreateMetricFromConfig(metric_config.get());
+    auto metric_or_error = CreateMetricFromConfig(metric_config.get(), target);
     if (!metric_or_error.has_value()) {
       return metric_or_error.error();
     }
@@ -202,12 +240,42 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
     }
     IMetric* metric = *metric_or_error;
 
-    auto                               event_id     = target_and_event_id->second;
-    std::unique_ptr<ScmiReadOperation> operation    = std::make_unique<ScmiReadOperation>(event_id);
-    uint32_t                           operation_id = operation->GetId();  // or operation->operation_id if public
-    _operation_to_metric_map[operation_id]          = metric;
-    op_sequence.push_back(std::move(operation));
-    ASTL_LOG_INFO("GetRequiredOperations: Created Operation for event ID {:04X}", event_id);
+    // For residency metrics, use the metric's GetOperations() method.
+    // The residency metric creates state-to-operation_id mapping in the metric instance when it's created,
+    // so that in ReceiveSample() it knows which state the sample is for.
+    if (config->MetricType() == astl_metric_type_t::ASTL_METRIC_RESIDENCY) {
+      auto operations_result = metric->GetOperations();
+      if (!operations_result.has_value()) {
+        ASTL_LOG_ERROR("GetRequiredOperations: Failed to get operations for residency metric '{}'", config->Name());
+        return std::unexpected{operations_result.error()};
+      }
+
+      auto metric_operations = std::move(operations_result.value());
+      for (auto& operation : metric_operations) {
+        uint32_t operation_id                  = operation->GetId();
+        _operation_to_metric_map[operation_id] = metric;
+        op_sequence.push_back(std::move(operation));
+        ASTL_LOG_INFO("GetRequiredOperations: Added operation from ResidencyMetric::GetOperations() for metric '{}'",
+                      config->Name());
+      }
+    } else {
+      // Note: target validation was already done above, so this should not fail
+      const auto& event_ids = target_and_event_id->second;
+      if (event_ids.empty()) {
+        ASTL_LOG_ERROR("GetRequiredOperations: No event IDs found for metric '{}' on target '{}'", config->Name(),
+                       target->Name());
+        return std::unexpected{ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET};
+      }
+
+      // For non-residency metrics, create operations for all event IDs
+      for (const auto& event_id : event_ids) {
+        std::unique_ptr<ScmiReadOperation> operation    = std::make_unique<ScmiReadOperation>(event_id);
+        uint32_t                           operation_id = operation->GetId();
+        _operation_to_metric_map[operation_id]          = metric;
+        op_sequence.push_back(std::move(operation));
+        ASTL_LOG_INFO("GetRequiredOperations: Created Operation for event ID {:04X}", event_id);
+      }
+    }
   }
 
   CollectionOperations operations{.operationsBeforeStart{},

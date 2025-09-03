@@ -30,7 +30,7 @@ using ScmiDataEventId                                   = uint32_t;
 constexpr ScmiDataEventId kScmiFirstReservedDataEventId = 0x10000;
 
 // maps a target name to a data event ID for a DE
-using ScmiTargetToDataEventIdMap = std::unordered_map<std::string, ScmiDataEventId>;
+using ScmiTargetToDataEventIdMap = std::unordered_map<std::string, std::vector<ScmiDataEventId>>;
 
 /*
  * @brief A specialization of Operation that represents a read or write through SCMI
