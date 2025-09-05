@@ -3,6 +3,10 @@
 
 #include <sys/types.h>
 
+#include <chrono>
+#include <optional>
+#include <unordered_map>
+
 #include "common.hpp"
 #include "fsnode.hpp"
 
@@ -15,8 +19,10 @@ enum class TelemetryFile {
   ALL_DES_TSTAMP_ENABLE,
   CURRENT_UPDATE_INTERVAL_MS,
   DES_BULK_READ,
+  DES_SINGLE_SAMPLE_READ,
   TLM_ENABLE,
   VERSION,
+  DE_IMPLEMENTATION_VERSION,
   AVAILABLE_UPDATE_INTERVALS_MS,
   INTERVALS_DISCRETE,
   ENABLE,
@@ -30,6 +36,7 @@ enum class TelemetryFile {
   UNIT_EXP,
   TSTAMP_ENABLE,
   VALUE,
+  COMPOSING_DES,
   UNKNOWN
 };
 
@@ -70,6 +77,21 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
  */
 std::string HandleProtocolTelemetryRead(const FileSystemNode* node);
 
+struct UpdateInterval {
+  bool                                   discrete{false};
+  std::vector<std::chrono::milliseconds> update_intervals_ms;
+  uint32_t                               step_size{1};
+  std::chrono::milliseconds              active_update_interval_ms{};
+};
+
+struct DesGroup {
+  uint32_t              group_id{0};
+  std::vector<uint16_t> des;
+  bool                  enable{false};
+  bool                  tstamp_enable{false};
+  UpdateInterval        intervals{};
+};
+
 /**
  * @brief Abstract base class for telemetry data events.
  *
@@ -84,16 +106,16 @@ class DataEvent {
   DataEvent(DataEvent&&)                 = delete;
   DataEvent& operator=(const DataEvent&) = delete;
   DataEvent& operator=(DataEvent&&)      = delete;
-  DataEvent(uint16_t data_event_id, bool enable, bool tstamp_enable, _astl_value_t latest_value,
-            _astl_value_type_t value_type, uint64_t latest_timestamp, uint32_t compo_instance_id, uint32_t compo_type,
-            uint32_t instance_id, bool persistent, bool tstamp_exp, uint32_t type, std::string unit,
-            std::string unit_exp)
+  DataEvent(uint16_t data_event_id, bool enable, bool tstamp_enable, _astl_value_t last_value,
+            _astl_value_type_t value_type, std::chrono::system_clock::time_point last_timestamp,
+            uint32_t compo_instance_id, uint32_t compo_type, uint32_t instance_id, bool persistent, bool tstamp_exp,
+            uint32_t type, std::string unit, std::string unit_exp, std::optional<const DesGroup*> group = std::nullopt)
       : id_(data_event_id),
         enable_(enable),
         tstamp_enable_(tstamp_enable),
-        latest_value_(latest_value),
+        last_value_(last_value),
         value_type_(value_type),
-        latest_timestamp_(latest_timestamp),
+        last_timestamp_(last_timestamp),
         compo_instance_id_(compo_instance_id),
         compo_type_(compo_type),
         instance_id_(instance_id),
@@ -101,17 +123,18 @@ class DataEvent {
         tstamp_exp_(tstamp_exp),
         type_(type),
         unit_(std::move(unit)),
-        unit_exp_(std::move(unit_exp)) {}
+        unit_exp_(std::move(unit_exp)),
+        group_(group) {}
   virtual ~DataEvent() = default;
 
   virtual astl_value_t Generate() = 0;
 
-  uint16_t          id_;
-  bool              enable_;
-  bool              tstamp_enable_;
-  astl_value_t      latest_value_;
-  astl_value_type_t value_type_;
-  uint64_t          latest_timestamp_;
+  uint16_t                              id_;
+  bool                                  enable_;
+  bool                                  tstamp_enable_;
+  astl_value_t                          last_value_;
+  astl_value_type_t                     value_type_;
+  std::chrono::system_clock::time_point last_timestamp_;
 
   uint32_t    compo_instance_id_;
   uint32_t    compo_type_;
@@ -121,6 +144,8 @@ class DataEvent {
   uint32_t    type_;
   std::string unit_;
   std::string unit_exp_;
+
+  std::optional<const DesGroup*> group_;
 };
 
 /**
@@ -163,7 +188,7 @@ class SCMITelemetryContext {
    * @brief Gets the current update interval in milliseconds.
    * @return uint32_t The update interval in milliseconds.
    */
-  uint32_t GetCurrentUpdateIntervalMs() const { return current_update_interval_ms_; }
+  std::chrono::milliseconds GetCurrentUpdateIntervalMs() const { return intervals_.active_update_interval_ms; }
 
   /**
    * @brief Returns the global telemetry enable flag.
@@ -178,40 +203,52 @@ class SCMITelemetryContext {
   const std::string& GetVersion() const { return version_; }
 
   /**
-   * @brief Gets the available update intervals in milliseconds.
-   * @return const std::vector<uint32_t>& Vector of available update intervals.
+   * @brief DE implementation version: a 128bit value printed in UUID format.
+   * @return const std::string& The de implementation version string.
    */
-  const std::vector<uint32_t>& GetAvailableUpdateIntervalsMs() const { return available_update_intervals_ms_; }
+  const std::string& GetDEImplementationVersion() const { return de_implementation_version_; }
+
+  /**
+   * @brief Gets the available update intervals in milliseconds.
+   * @return Vector of available update intervals.
+   */
+  const std::vector<std::chrono::milliseconds>& GetAvailableUpdateIntervalsMs() const {
+    return intervals_.update_intervals_ms;
+  }
 
   /**
    * @brief Checks if the available update intervals are defined as a discrete set.
    * @return true if intervals are discrete; false if defined by a range.
    */
-  bool GetIntervalsAreDiscreteFlag() const { return intervals_are_discrete_; }
+  bool GetIntervalsAreDiscreteFlag() const { return intervals_.discrete; }
 
   /**
    * @brief Returns the vector of discrete update intervals.
    * @return const std::vector<uint32_t>& Vector of discrete intervals.
    */
-  const std::vector<uint32_t>& GetDiscreteIntervals() const { return discrete_intervals_; }
+  const std::vector<std::chrono::milliseconds>& GetDiscreteIntervals() const { return intervals_.update_intervals_ms; }
 
   /**
    * @brief Gets the lowest update interval.
    * @return uint32_t The lowest update interval.
    */
-  uint32_t GetLowestInterval() const { return lowest_interval_; }
+  std::chrono::milliseconds GetLowestInterval() const {
+    return *std::min_element(intervals_.update_intervals_ms.begin(), intervals_.update_intervals_ms.end());
+  }
 
   /**
    * @brief Gets the highest update interval.
    * @return uint32_t The highest update interval.
    */
-  uint32_t GetHighestInterval() const { return highest_interval_; }
+  std::chrono::milliseconds GetHighestInterval() const {
+    return *std::max_element(intervals_.update_intervals_ms.begin(), intervals_.update_intervals_ms.end());
+  }
 
   /**
    * @brief Retrieves the step size between update intervals.
    * @return uint32_t The step size.
    */
-  uint32_t GetStepSize() const { return step_size_; }
+  uint32_t GetStepSize() const { return intervals_.step_size; }
 
   /**
    * @brief Returns the container of telemetry data events.
@@ -235,7 +272,9 @@ class SCMITelemetryContext {
    * @brief Sets the current update interval in milliseconds.
    * @param interval_ms New update interval in milliseconds.
    */
-  void SetCurrentUpdateIntervalMs(uint32_t interval_ms) { current_update_interval_ms_ = interval_ms; }
+  void SetCurrentUpdateIntervalMs(std::chrono::milliseconds interval_ms) {
+    intervals_.active_update_interval_ms = interval_ms;
+  }
 
   /**
    * @brief Sets the global telemetry enable flag.
@@ -250,28 +289,22 @@ class SCMITelemetryContext {
    */
   DataEvent* GetDataEventById(uint16_t identifier);
 
+  std::unordered_map<uint32_t, std::unique_ptr<DesGroup>>& GetGroups() { return groups_; }
+
  private:
-  SCMITelemetryContext(bool all_des_enable, bool all_des_tstamp_enable, uint32_t current_update_interval_ms,
-                       bool tlm_enable, const std::string& version,
-                       const std::vector<uint32_t>& available_update_intervals_ms, bool intervals_are_discrete,
-                       const std::vector<uint32_t>& discrete_intervals, uint32_t lowest_interval,
-                       uint32_t highest_interval, uint32_t step_size,
+  SCMITelemetryContext(bool all_des_enable, bool all_des_tstamp_enable, UpdateInterval intervals, bool tlm_enable,
+                       std::string version, std::string de_implementation_version,
                        std::vector<std::unique_ptr<DataEvent>> data_events);
 
-  bool        all_des_enable_;
-  bool        all_des_tstamp_enable_;
-  uint32_t    current_update_interval_ms_;
-  bool        tlm_enable_;
-  std::string version_;
+  bool           all_des_enable_;
+  bool           all_des_tstamp_enable_;
+  UpdateInterval intervals_;
+  bool           tlm_enable_;
+  std::string    version_;
+  std::string    de_implementation_version_;
 
-  std::vector<uint32_t> available_update_intervals_ms_;
-  bool                  intervals_are_discrete_;
-  std::vector<uint32_t> discrete_intervals_;
-  uint32_t              lowest_interval_;
-  uint32_t              highest_interval_;
-  uint32_t              step_size_;
-
-  const std::vector<std::unique_ptr<DataEvent>> data_events_;
+  const std::vector<std::unique_ptr<DataEvent>>           data_events_;
+  std::unordered_map<uint32_t, std::unique_ptr<DesGroup>> groups_;
 };
 
 }  // namespace mock_sysfs

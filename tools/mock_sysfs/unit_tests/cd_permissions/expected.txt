@@ -3,17 +3,14 @@
 ./scmi_telemetry
 ./scmi_telemetry/des
 ./scmi_telemetry/des/0x0000
-./scmi_telemetry/des/0x0000/info
 ./scmi_telemetry/des/0x0016
-./scmi_telemetry/des/0x0016/info
 ./scmi_telemetry/des/0x1A68
-./scmi_telemetry/des/0x1A68/info
 ./scmi_telemetry/des/0x7A9B
-./scmi_telemetry/des/0x7A9B/info
 ./scmi_telemetry/des/0x8C3D
-./scmi_telemetry/des/0x8C3D/info
 ./scmi_telemetry/des/0x9E4F
-./scmi_telemetry/des/0x9E4F/info
+./scmi_telemetry/groups
+./scmi_telemetry/groups/0
+./scmi_telemetry/groups/1
 --- . ---
 scmi_telemetry
 --- ./scmi_telemetry ---
@@ -21,8 +18,11 @@ all_des_enable
 all_des_tstamp_enable
 available_update_intervals_ms
 current_update_interval_ms
+de_implementation_version
 des
 des_bulk_read
+des_single_sample_read
+groups
 intervals_discrete
 tlm_enable
 version
@@ -34,86 +34,95 @@ version
 0x8C3D
 0x9E4F
 --- ./scmi_telemetry/des/0x0000 ---
-enable
-info
-tstamp_enable
-value
---- ./scmi_telemetry/des/0x0000/info ---
 compo_instance_id
 compo_type
+enable
 instance_id
 persistent
+tstamp_enable
 tstamp_exp
 type
 unit
 unit_exp
+value
 --- ./scmi_telemetry/des/0x0016 ---
-enable
-info
-tstamp_enable
-value
---- ./scmi_telemetry/des/0x0016/info ---
 compo_instance_id
 compo_type
+enable
 instance_id
 persistent
+tstamp_enable
 tstamp_exp
 type
 unit
 unit_exp
+value
 --- ./scmi_telemetry/des/0x1A68 ---
-enable
-info
-tstamp_enable
-value
---- ./scmi_telemetry/des/0x1A68/info ---
 compo_instance_id
 compo_type
+enable
 instance_id
 persistent
+tstamp_enable
 tstamp_exp
 type
 unit
 unit_exp
+value
 --- ./scmi_telemetry/des/0x7A9B ---
-enable
-info
-tstamp_enable
-value
---- ./scmi_telemetry/des/0x7A9B/info ---
 compo_instance_id
 compo_type
+enable
 instance_id
 persistent
+tstamp_enable
 tstamp_exp
 type
 unit
 unit_exp
+value
 --- ./scmi_telemetry/des/0x8C3D ---
-enable
-info
-tstamp_enable
-value
---- ./scmi_telemetry/des/0x8C3D/info ---
 compo_instance_id
 compo_type
+enable
 instance_id
 persistent
+tstamp_enable
 tstamp_exp
 type
 unit
 unit_exp
+value
 --- ./scmi_telemetry/des/0x9E4F ---
-enable
-info
-tstamp_enable
-value
---- ./scmi_telemetry/des/0x9E4F/info ---
 compo_instance_id
 compo_type
+enable
 instance_id
 persistent
+tstamp_enable
 tstamp_exp
 type
 unit
 unit_exp
+value
+--- ./scmi_telemetry/groups ---
+0
+1
+--- ./scmi_telemetry/groups/0 ---
+available_update_intervals_ms
+composing_des
+current_update_interval_ms
+des_bulk_read
+des_single_sample_read
+enable
+intervals_discrete
+tstamp_enable
+--- ./scmi_telemetry/groups/1 ---
+available_update_intervals_ms
+composing_des
+current_update_interval_ms
+des_bulk_read
+des_single_sample_read
+enable
+intervals_discrete
+tstamp_enable

@@ -15,23 +15,35 @@ namespace mock_sysfs {
  * @see Linux Kernel SCMI Telemetry Support Confluence page:
  *      https://confluence.arm.com/display/CESW/Linux+Kernel+SCMI+Telemetry+Support+-+v4.0+ALPHA_0+--+WIP
  */
-constexpr bool kAllDesEnable         = true;  ///< Enable all Data Events (DE) reporting at once
-constexpr bool kAllDesTstampEnable   = true;  ///< Enable timestamping for all Data Events (DE)
-constexpr bool kTlmEnable            = true;  ///< Enable the Telemetry (TLM) subsystem globally
-constexpr bool kIntervalsAreDiscrete = true;  ///< True = fixed list; False = range (lowest–highest, step)
+constexpr bool kAllDesEnable       = true;  ///< Enable all Data Events (DE) reporting at once
+constexpr bool kAllDesTstampEnable = true;  ///< Enable timestamping for all Data Events (DE)
+constexpr bool kTlmEnable          = true;  ///< Enable the Telemetry (TLM) subsystem globally
 
-constexpr const char* kTelemetryVersion = "1.0";  ///< SCMI Telemetry protocol version
+constexpr const char* kTelemetryVersion   = "1.0";  ///< SCMI Telemetry protocol version
+constexpr const char* kDEDataEventVersion = "0xCAFEBABECAFEBABECAFEBABEBEEF0000";
 
-constexpr uint32_t                 kCurrentUpdateIntervalMs  = 1000;  ///< Selected sampling interval (ms)
-static const std::vector<uint32_t> kAvailableUpdateIntervals = {      ///< Supported intervals (ms) in discrete mode
-    1000, 2000, 5000};
-static const std::vector<uint32_t> kDiscreteIntervals        = {  ///< Alias for discrete-mode intervals
-    1000, 2000, 5000};
+const struct UpdateInterval kUpdateInterval {
+  .discrete = true,
+  .update_intervals_ms =
+      {
+          std::chrono::milliseconds{100},
+          std::chrono::milliseconds{2000},
+          std::chrono::milliseconds{5000},
+  },
+  .active_update_interval_ms = std::chrono::milliseconds{100},
+};
 
-constexpr uint32_t kLowestInterval  = 1000;  ///< Min interval (ms) in continuous-range mode
-constexpr uint32_t kHighestInterval = 5000;  ///< Max interval (ms) in continuous-range mode
-constexpr uint32_t kStepSize        = 1000;  ///< Step size (ms) in continuous-range mode
+// Groups
+const struct DesGroup kDesGroup0 {
+  .group_id = 0, .des = {0x0000, 0x0016}, .enable = false, .tstamp_enable = false, .intervals = kUpdateInterval,
+};
 
+const struct DesGroup kDesGroup1 {
+  .group_id = 1, .des = {0x7A9B, 0x8C3D, 0x9E4F, 0x1A68}, .enable = false, .tstamp_enable = false,
+  .intervals = kUpdateInterval,
+};
+
+// DEs
 constexpr uint64_t kMinRand = 50;
 constexpr uint64_t kMaxRand = 110;
 class ExampleDataEvent : public DataEvent {
@@ -43,43 +55,45 @@ class ExampleDataEvent : public DataEvent {
     std::uniform_int_distribution<uint64_t> dis(kMinRand, kMaxRand);
     uint64_t                                value = dis(gen);
     // TODO(ASTL-116) - Handle all other _astl_value_type_t
-    // NOLINTBEGIN
-    latest_value_.ui64 = value;
-    // NOLINTEND
-    return latest_value_;
+    last_value_.ui64 = value;  // NOLINT
+    last_timestamp_  = std::chrono::system_clock::now();
+    return last_value_;
   }
 };
 
 class CsvDataEvent : public DataEvent {
  public:
-  CsvDataEvent(uint16_t de_id, bool enable, bool tstampEnable, astl_value_t latestValue, astl_value_type_t valueType,
-               uint64_t latestTimestamp, uint32_t compoInstanceId, uint32_t compoType, uint32_t instanceId,
-               bool persistent, bool tstampExp, uint32_t type, const char* unit, const char* unitExp,
-               const std::string& csv_path, uint8_t column)
-      : DataEvent(de_id, enable, tstampEnable, latestValue, valueType, latestTimestamp, compoInstanceId, compoType,
-                  instanceId, persistent, tstampExp, type, unit, unitExp),
+  CsvDataEvent(uint16_t data_event_id, bool enable, bool tstamp_enable, astl_value_t last_value,
+               astl_value_type_t value_type, std::chrono::system_clock::time_point last_timestamp,
+               uint32_t compo_instance_id, uint32_t compo_type, uint32_t instance_id, bool persistent, bool tstamp_exp,
+               uint32_t type, std::string unit, std::string unit_exp, const std::string& csv_path, uint8_t column,
+               std::optional<const DesGroup*> group = std::nullopt)
+      : DataEvent(data_event_id, enable, tstamp_enable, last_value, value_type, last_timestamp, compo_instance_id,
+                  compo_type, instance_id, persistent, tstamp_exp, type, std::move(unit), std::move(unit_exp), group),
         csv_gen_(csv_path, column) {}
 
   astl_value_t Generate() override {
     auto str = csv_gen_.GenerateCSV();
     if (!str.empty()) {
-      latest_value_.ui64 = std::stoull(str);
+      last_value_.ui64 = std::stoull(str);
+      last_timestamp_  = std::chrono::system_clock::now();
     }
-    return latest_value_;
+    return last_value_;
   }
 
  private:
   CSVDataGenerator csv_gen_;
 };
 
-constexpr bool              kExampleDataEventEnable       = false;
-constexpr bool              kExampleDataEventTstampEnable = true;
-constexpr astl_value_t      kExampleDataEventLatestValue{.ui64 = 0ULL};
-constexpr astl_value_type_t kExampleDataEventValueType       = ASTL_VALUE_UINT64;
-constexpr uint64_t          kExampleDataEventLatestTimestamp = 1678901234000ULL;
-constexpr bool              kExampleDataEventPersistent      = true;
-constexpr bool              kExampleDataEventTstampExp       = false;
-constexpr uint32_t          kExampleDataEventType            = 1;
+constexpr bool                              kExampleDataEventEnable       = false;
+constexpr bool                              kExampleDataEventTstampEnable = true;
+constexpr astl_value_t                      kExampleDataEventLatestValue{.ui64 = 0ULL};
+constexpr astl_value_type_t                 kExampleDataEventValueType     = ASTL_VALUE_UINT64;
+const std::chrono::system_clock::time_point kExampleDataEventLastTimestamp = std::chrono::system_clock::now();
+constexpr bool                              kExampleDataEventPersistent    = true;
+constexpr bool                              kExampleDataEventTstampExp     = false;
+constexpr uint32_t                          kExampleDataEventType          = 1;
+constexpr uint32_t                          kExampleDataEventGroup         = 0;
 
 constexpr uint16_t    kExampleDataEventId1              = 0x0000;
 constexpr uint32_t    kExampleDataEventCompoInstanceId1 = 101;
@@ -95,6 +109,7 @@ constexpr uint32_t    kExampleDataEventInstanceId2      = 302;
 constexpr const char* kExampleDataEventUnit2            = "Percent";
 constexpr const char* kExampleDataEventUnitExp2         = "none";
 
+constexpr uint32_t kCsvDataEventGroup = 1;
 // Temperature (Celsius) event – column 1
 constexpr uint16_t     kTemperatureDataEventId = 0x7A9B;
 constexpr astl_value_t kTemperatureDataEventLatestValue{.ui64 = 40ULL};
@@ -141,45 +156,48 @@ inline std::vector<std::unique_ptr<DataEvent>> CreateTelemetryDataEvents() {
 
   events.push_back(std::make_unique<ExampleDataEvent>(
       kExampleDataEventId1, kExampleDataEventEnable, kExampleDataEventTstampEnable, kExampleDataEventLatestValue,
-      kExampleDataEventValueType, kExampleDataEventLatestTimestamp, kExampleDataEventCompoInstanceId1,
+      kExampleDataEventValueType, kExampleDataEventLastTimestamp, kExampleDataEventCompoInstanceId1,
       kExampleDataEventCompoType1, kExampleDataEventInstanceId1, kExampleDataEventPersistent,
-      kExampleDataEventTstampExp, kExampleDataEventType, kExampleDataEventUnit1, kExampleDataEventUnitExp1));
+      kExampleDataEventTstampExp, kExampleDataEventType, kExampleDataEventUnit1, kExampleDataEventUnitExp1,
+      std::optional<const DesGroup*>{&kDesGroup0}));
 
   events.push_back(std::make_unique<ExampleDataEvent>(
       kExampleDataEventId2, kExampleDataEventEnable, kExampleDataEventTstampEnable, kExampleDataEventLatestValue,
-      kExampleDataEventValueType, kExampleDataEventLatestTimestamp, kExampleDataEventCompoInstanceId2,
+      kExampleDataEventValueType, kExampleDataEventLastTimestamp, kExampleDataEventCompoInstanceId2,
       kExampleDataEventCompoType2, kExampleDataEventInstanceId2, kExampleDataEventPersistent,
-      kExampleDataEventTstampExp, kExampleDataEventType, kExampleDataEventUnit2, kExampleDataEventUnitExp2));
+      kExampleDataEventTstampExp, kExampleDataEventType, kExampleDataEventUnit2, kExampleDataEventUnitExp2,
+      std::optional<const DesGroup*>{&kDesGroup0}));
 
   // Temperature (Celsius) event – column 1
   events.push_back(std::make_unique<CsvDataEvent>(
       kTemperatureDataEventId, kExampleDataEventEnable, kExampleDataEventTstampEnable, kTemperatureDataEventLatestValue,
-      kExampleDataEventValueType, kExampleDataEventLatestTimestamp, kTemperatureDataEventCompoInstanceId,
+      kExampleDataEventValueType, kExampleDataEventLastTimestamp, kTemperatureDataEventCompoInstanceId,
       kTemperatureDataEventCompoType, kTemperatureDataEventInstanceId, kExampleDataEventPersistent,
       kExampleDataEventTstampExp, kExampleDataEventType, kTemperatureDataEventUnit, kTemperatureDataEventUnitExp,
-      kCsvFilePath, 1));
+      kCsvFilePath, 1, std::optional<const DesGroup*>{&kDesGroup1}));
 
   // Throttle Count (Count) event – column 2
   events.push_back(std::make_unique<CsvDataEvent>(
       kThrottleCountEventId, kExampleDataEventEnable, kExampleDataEventTstampEnable, kThrottleCountEventLatestValue,
-      kExampleDataEventValueType, kExampleDataEventLatestTimestamp, kThrottleCountEventCompoInstanceId,
+      kExampleDataEventValueType, kExampleDataEventLastTimestamp, kThrottleCountEventCompoInstanceId,
       kThrottleCountEventCompoType, kThrottleCountEventInstanceId, kExampleDataEventPersistent,
       kExampleDataEventTstampExp, kExampleDataEventType, kThrottleCountEventUnit, kThrottleCountEventUnitExp,
-      kCsvFilePath, 2));
+      kCsvFilePath, 2, std::optional<const DesGroup*>{&kDesGroup1}));
 
   // Power (Watts) event – column 3
   events.push_back(std::make_unique<CsvDataEvent>(
       kPowerEventId, kExampleDataEventEnable, kExampleDataEventTstampEnable, kPowerEventLatestValue,
-      kExampleDataEventValueType, kExampleDataEventLatestTimestamp, kPowerEventCompoInstanceId, kPowerEventCompoType,
+      kExampleDataEventValueType, kExampleDataEventLastTimestamp, kPowerEventCompoInstanceId, kPowerEventCompoType,
       kPowerEventInstanceId, kExampleDataEventPersistent, kExampleDataEventTstampExp, kExampleDataEventType,
-      kPowerEventUnit, kPowerEventUnitExp, kCsvFilePath, 3));
+      kPowerEventUnit, kPowerEventUnitExp, kCsvFilePath, 3, std::optional<const DesGroup*>{&kDesGroup1}));
 
   // Frequency (MHz) event – column 4
   events.push_back(std::make_unique<CsvDataEvent>(
       kFreqDataEventId, kExampleDataEventEnable, kExampleDataEventTstampEnable, kFreqDataEventLatestValue,
-      kExampleDataEventValueType, kExampleDataEventLatestTimestamp, kFreqDataEventCompoInstanceId,
+      kExampleDataEventValueType, kExampleDataEventLastTimestamp, kFreqDataEventCompoInstanceId,
       kFreqDataEventCompoType, kFreqDataEventInstanceId, kExampleDataEventPersistent, kExampleDataEventTstampExp,
-      kExampleDataEventType, kFreqDataEventUnit, kFreqDataEventUnitExp, kCsvFilePath, 4));
+      kExampleDataEventType, kFreqDataEventUnit, kFreqDataEventUnitExp, kCsvFilePath, 4,
+      std::optional<const DesGroup*>{&kDesGroup1}));
 
   return events;
 }
