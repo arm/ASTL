@@ -10,9 +10,13 @@
 void HandleTempSensor(const sensors_chip_name* chip, const sensors_feature* feature) {
   const sensors_subfeature* sub = sensors_get_subfeature(chip, feature, SENSORS_SUBFEATURE_TEMP_INPUT);
   if (sub && sub->flags & SENSORS_MODE_R) {
-    double temp = 0.0;
-    if (sensors_get_value(chip, sub->number, &temp) == 0) {
+    double temp   = 0.0;
+    auto   result = sensors_get_value(chip, sub->number, &temp);
+    if (result == 0) {
       std::cout << "Sensor: " << sensors_get_label(chip, feature) << " = " << temp << "°C\n";
+    } else {
+      std::cerr << "Failed (" << result << ") to read temperature for sensor: " << sensors_get_label(chip, feature)
+                << "\n";
     }
   }
 }
@@ -20,9 +24,12 @@ void HandleTempSensor(const sensors_chip_name* chip, const sensors_feature* feat
 void HandlePowerSensor(const sensors_chip_name* chip, const sensors_feature* feature) {
   const sensors_subfeature* sub = sensors_get_subfeature(chip, feature, SENSORS_SUBFEATURE_POWER_INPUT);
   if (sub && sub->flags & SENSORS_MODE_R) {
-    double power = 0.0;
-    if (sensors_get_value(chip, sub->number, &power) == 0) {
+    double power  = 0.0;
+    auto   result = sensors_get_value(chip, sub->number, &power);
+    if (result == 0) {
       std::cout << "Sensor: " << sensors_get_label(chip, feature) << " = " << power << " W\n";
+    } else {
+      std::cerr << "Failed (" << result << ") to read power for sensor: " << sensors_get_label(chip, feature) << "\n";
     }
   }
 }

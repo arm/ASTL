@@ -12,7 +12,7 @@ if(NOT CMAKE_BUILD_TYPE)
     )
 endif()
 
-add_executable(unit_test
+set(UNIT_TEST_SRCS
     astl_value_utests.cpp
     collector_manager_utests.cpp
     file_interface_utests.cpp
@@ -28,6 +28,21 @@ add_executable(unit_test
     metric_manager_utests.cpp
     scmi_specification_json_utests.cpp
 )
+
+find_library(SENSORS_LIB sensors)
+if (SENSORS_LIB)
+    MESSAGE(STATUS "libsensors found, building sensors_collector_utests")
+else()
+    message(STATUS "libsensors not found: please install libsensors-dev package. sensors_collector_utests will not be built")
+endif()
+
+add_executable(unit_test ${UNIT_TEST_SRCS})
+
+if (SENSORS_LIB)
+    target_link_libraries(unit_test PRIVATE ${SENSORS_LIB})
+    target_compile_definitions(unit_test PRIVATE ASTL_HAVE_SENSORS)
+endif()
+
 
 include(Warnings)
 set_project_warnings(unit_test)

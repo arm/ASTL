@@ -52,7 +52,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang clang-format cppcheck cmake yamllint
+          sudo apt-get install -y clang clang-format cppcheck cmake yamllint libsensors-dev
 
       - name: 📂 VCPKG - Create VCPKG_DEFAULT_BINARY_CACHE directory
         run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE

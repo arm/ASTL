@@ -14,7 +14,7 @@ endif()
 include(CheckCXXCompilerFlag)
 
 if (NOT TARGET Astl::astl)
-  find_package(astlREQUIRED)
+  find_package(astl REQUIRED)
 endif()
 
 add_subdirectory (src)

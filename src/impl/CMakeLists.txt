@@ -35,6 +35,16 @@ target_sources(
         "${CMAKE_CURRENT_SOURCE_DIR}/target.cpp"
 )
 
+if (ASTL_INCLUDE_LIBSENSORS)
+    target_sources(
+        ${LIBRARY_NAME}
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/collector/libsensors_collector.cpp"
+    )
+    target_link_libraries(${LIBRARY_NAME} PRIVATE ${SENSORS_LIB})
+    target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_HAVE_SENSORS)
+endif()
+
 # include directories
 target_include_directories(
     ${LIBRARY_NAME}
