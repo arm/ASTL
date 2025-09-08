@@ -133,6 +133,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(render_templates)
 
+# Find libsensors
+set(ASTL_INCLUDE_LIBSENSORS OFF)
+find_library(SENSORS_LIB sensors)
+if (SENSORS_LIB)
+  set(ASTL_INCLUDE_LIBSENSORS ON)
+else()
+  message(STATUS "libsensors not found: please install libsensors-dev package")
+endif()
+
 # define the static library `astl_static` - aka Astl::astl_static
 add_subdirectory(src/impl)
 
@@ -244,7 +253,7 @@ else()
   message(STATUS "Skipping mock_sysfs on this platform")
 endif()
 
-if (UNIX AND NOT APPLE)
+if (SENSORS_LIB)
   add_subdirectory(tools/libsensors_example)
 else()
   message(STATUS "Skipping libsensors example on this platform")
@@ -262,6 +271,7 @@ if(BUILD_TESTING AND ASTL_BUILD_TESTING)
   enable_testing()
   add_subdirectory(tests/unit_test)
   add_subdirectory(tests/wrapper_test)
+  add_subdirectory(tests/libsensors_collector_test)
 endif()
 
 export(

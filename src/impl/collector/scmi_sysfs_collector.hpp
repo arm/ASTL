@@ -55,10 +55,10 @@ class ScmiSysfsCollector : public ICollector {
   ScmiSysfsCollector() = delete;  // needs to be initialized with the base path for the telemetry directory
   explicit ScmiSysfsCollector(FileInterfaceT file_interface);
 
-  ScmiSysfsCollector(const ScmiSysfsCollector&)            = default;
-  ScmiSysfsCollector& operator=(const ScmiSysfsCollector&) = default;
-  ScmiSysfsCollector(ScmiSysfsCollector&&)                 = default;
-  ScmiSysfsCollector& operator=(ScmiSysfsCollector&&)      = default;
+  ScmiSysfsCollector(const ScmiSysfsCollector&)            = delete;
+  ScmiSysfsCollector& operator=(const ScmiSysfsCollector&) = delete;
+  ScmiSysfsCollector(ScmiSysfsCollector&&)                 = delete;
+  ScmiSysfsCollector& operator=(ScmiSysfsCollector&&)      = delete;
 
   /*
    * @brief Get the capabilities of this collector, including the collector type.

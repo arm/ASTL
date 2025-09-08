@@ -6,7 +6,7 @@ alias rt := retest
 
 # build library, samples, unit tests
 build preset='debug':
-    ./scripts/format.sh
+    #./scripts/format.sh
     cmake --build . --parallel=8 --preset {{preset}}
 
 # generate build files through cmake
@@ -16,7 +16,7 @@ config preset='debug':
 
 # run unit tests
 test preset='debug': build
-    ctest --parallel=8 -LE "integration" --preset {{preset}}
+    ctest -LE "integration" --preset {{preset}}
 
 # test everything, generate html coverage file
 test-cov: build

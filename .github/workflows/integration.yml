@@ -100,7 +100,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcovr valgrind parallel jq
+          sudo apt-get install -y gcovr valgrind parallel jq libsensors-dev
 
       - name: ⤵️ Install brew Dependencies (macos-15)
         if: matrix.os == 'macos-15'
