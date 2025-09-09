@@ -2,13 +2,13 @@ name: AI Code Review
 
 on:
   pull_request:
-    types: [labeled, synchronize, opened, reopened]
+    types: [labeled]
     branches: [main]
 permissions: read-all
 jobs:
   review:
     if: contains(github.event.pull_request.labels.*.name, 'request-ai-review')
-    runs-on: [self-hosted, Linux]
+    runs-on: [self-hosted, Linux, aws-debug-prod]
     permissions:
       contents: read
       pull-requests: write
@@ -27,13 +27,12 @@ jobs:
           curl --retry 5 -f -s https://artifactory.arm.com/artifactory/vault.pki/ent-pki/pem/certs/ARM%20Enterprise%20PKI%20Root%20CA.pem -o arm.pem
 
       - name: 🚀 AI Code Review
-        uses: Arm-Debug/ai-code-review@9ac097f58c2c56080be54269c9ca981edbb7b805
+        uses: Arm-Debug/ai-code-review@68243930c050521f8b42eb03969cfa2c1a4d35c5
         continue-on-error: true
         with:
           OPENAI_API_KEY: ${{ secrets.OPENAI_PROXY_KEY_FOR_SELF_HOSTED_RUNNERS }}
-          OPENAI_API_HOSTNAME: "openai-api-proxy.geo.arm.com"
-          OPENAI_API_PATH: "/api/providers/openai-eu/v1/chat/completions"
-          OPENAI_API_MODEL: "o4-mini"
+          OPENAI_BASE_URL: 'https://openai-api-proxy.geo.arm.com/api/providers/openai-eu/v1'
+          OPENAI_API_MODEL: "gpt-5-mini"
           REASONING_EFFORT: "high"
           CODE_REVIEW_GUIDELINES: ".github/workflows/AI_CODE_REVIEW.md"
         env:
