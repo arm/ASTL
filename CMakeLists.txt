@@ -253,12 +253,6 @@ else()
   message(STATUS "Skipping mock_sysfs on this platform")
 endif()
 
-if (SENSORS_LIB)
-  add_subdirectory(tools/libsensors_example)
-else()
-  message(STATUS "Skipping libsensors example on this platform")
-endif()
-
 include(CTest)
 
 # add samples

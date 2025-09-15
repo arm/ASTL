@@ -623,7 +623,7 @@ TEST_CASE("MetricManager::ResidencyMetricConfig DataEventIds returns flattened e
   REQUIRE(actual_ids == expected_ids);
 }
 
-TEST_CASE("MetricManager::ResidencyMetricConfig StateInfo accessor works correctly", "[MetricManager][Residency]") {
+TEST_CASE("MetricManager::ResidencyMetricConfig GetStateInfo accessor works correctly", "[MetricManager][Residency]") {
   auto        target = std::make_unique<MockTarget>();
   std::string target_name{"AP0"};
   ALLOW_CALL(*target, Name()).RETURN(target_name);
@@ -638,8 +638,8 @@ TEST_CASE("MetricManager::ResidencyMetricConfig StateInfo accessor works correct
       astl_value_type_t::ASTL_VALUE_FLOAT64, astl_metric_type_t::ASTL_METRIC_RESIDENCY, CollectorType::SCMI,
       std::move(state_info), "RUNNING");
 
-  // Test StateInfo() accessor
-  const auto& retrieved_state_info = residency_config->StateInfo();
+  // Test GetStateInfo() accessor
+  const auto& retrieved_state_info = residency_config->GetStateInfo();
 
   REQUIRE(retrieved_state_info.contains(target_name));
   const auto& target_states = retrieved_state_info.at(target_name);

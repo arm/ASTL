@@ -34,7 +34,7 @@ if ! command -v gcovr >/dev/null 2>&1; then
 	exit 1
 fi
 
-gcovr -r . \
+gcovr -r . --verbose \
 	--exclude 'samples/*' \
 	--exclude 'tests/*' \
 	--exclude 'src/astl_test_hooks.cpp' \

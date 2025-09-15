@@ -23,12 +23,11 @@
 #include "collector/collector_manager.hpp"
 #include "collector/i_collector.hpp"
 #include "collector/scmi_sysfs_collector.hpp"
+#include "common/scmi/scmi_constants.hpp"
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
 
 namespace astl {
-
-constexpr std::string_view kDefaultScmiSysfsTelemetryRootPath = "/tmp/fuse/scmi/scmi_telemetry";
 
 /**
  * @brief Builds collectors for the given targets based on the provided configuration.
@@ -44,9 +43,8 @@ auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
   for (const auto& cur_target : targets) {
     /// @todo ASTL-146 Instead of hard-coding an SCMI/SysFS collector,
     ///                dynamically assign an appropriate collector for each target
-    astl::FileInterface scmi_sysfs_file_interface{configuration.scmi_sysfs_telemetry_root_path
-                                                      ? *configuration.scmi_sysfs_telemetry_root_path
-                                                      : std::filesystem::path{kDefaultScmiSysfsTelemetryRootPath}};
+    astl::FileInterface scmi_sysfs_file_interface{configuration.scmi_sysfs_telemetry_root_path.value_or(
+        std::filesystem::path{kDefaultScmiSysfsTelemetryRootPath})};
     using ScmiCollector = astl::ScmiSysfsCollector<decltype(scmi_sysfs_file_interface)>;
     std::unique_ptr<astl::ICollector> scmi_collector =
         std::make_unique<ScmiCollector>(std::move(scmi_sysfs_file_interface));

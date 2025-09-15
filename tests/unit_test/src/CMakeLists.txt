@@ -28,6 +28,7 @@ set(UNIT_TEST_SRCS
     config_manager_utests.cpp
     metric_manager_utests.cpp
     scmi_specification_json_utests.cpp
+    topology_manager_utests.cpp
 )
 
 find_library(SENSORS_LIB sensors)

@@ -52,29 +52,29 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& con
 
     // convert all of the metric declarations in the top-level config file into usable MetricConfig objects
     // based on the platform SCMI specification which includes the Data Event IDs.
+    // here the 'metric_name' is more descriptive from the config file like 'Soc Power' and the
+    // 'metric_declaration.register' holds the register name like 'ENERGY_COUNTER'
     for (const auto& [metric_name, metric_declaration] : configuration.metric_declarations) {
-      auto metric_config_result = CreateMetricConfig(metric_name, metric_declaration, specification_data.layout);
-      if (metric_config_result.has_value()) {
-        auto& metric_config = metric_config_result.value();
-
-        // Log metric name and event IDs
-        const auto& data_event_ids = metric_config->DataEventIds();
-        ASTL_LOG_INFO("Created metric config '{}' with {} targets", metric_config->Name(), data_event_ids.size());
-        for (const auto& [target_name, event_ids] : data_event_ids) {
-          ASTL_LOG_DEBUG("  Target '{}': {} Event IDs", target_name, event_ids.size());
-          for (size_t i = 0; i < event_ids.size(); ++i) {
-            ASTL_LOG_DEBUG("    Event ID[{}]: 0x{:04X}", i, event_ids[i]);
+      auto metric_configs_result = CreateMetricConfigs(metric_name, metric_declaration, specification_data);
+      if (metric_configs_result.has_value()) {
+        for (auto& metric_config : metric_configs_result.value()) {
+          // Log metric name and event IDs
+          const auto& data_event_ids = metric_config->DataEventIds();
+          ASTL_LOG_INFO("Created metric config '{}' with {} targets", metric_config->Name(), data_event_ids.size());
+          for (const auto& [target_name, event_ids] : data_event_ids) {
+            ASTL_LOG_DEBUG("  Target '{}': {} Event IDs", target_name, event_ids.size());
+            for (size_t i = 0; i < event_ids.size(); ++i) {
+              ASTL_LOG_DEBUG("    Event ID[{}]: 0x{:04X}", i, event_ids[i]);
+            }
           }
+          configurations.push_back(std::move(metric_config));
         }
-
-        configurations.push_back(std::move(metric_config_result.value()));
       } else {
         ASTL_LOG_ERROR("Failed to create metric config for '{}': error code {}", metric_name,
-                       static_cast<int>(metric_config_result.error()));
+                       static_cast<int>(metric_configs_result.error()));
         // Continue processing other metrics instead of failing completely
       }
     }
-
   } catch (nlohmann::json::parse_error const& e) {
     ASTL_LOG_ERROR("Unable to parse SCMI definition file {}: {}", scmi_specification_path.string(), e.what());
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);

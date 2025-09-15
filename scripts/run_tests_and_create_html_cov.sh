@@ -3,7 +3,8 @@
 set -x
 # first, delete old coverage files
 rm -r coverage*
-# find . | grep -E "\.gcda|\.gcno|\.gcov" | xargs rm
+# note: .gcno files are created at _compile_ time
+# they're necessary to generate coverage reports, so don't delete them
 find . | grep -E "\.gcda|\.gcov" | xargs rm
 
 # run the tests
@@ -18,6 +19,8 @@ mkdir -p build/debug/src/impl/CMakeFiles/astl_static.dir/common/
 mkdir -p build/debug/src/impl/CMakeFiles/astl_static.dir/config/
 mkdir -p build/debug/src/impl/CMakeFiles/astl_static.dir/metric/
 mkdir -p build/debug/src/impl/CMakeFiles/astl_static.dir/topology/
+mkdir -p build/debug/tests/wrapper_test/src/CMakeFiles/libsensors_collector_test.dir/
+mkdir -p build/debug/tests/wrapper_test/src/CMakeFiles/unit_test.dir/
 mkdir -p build/debug/tests/wrapper_test/src/CMakeFiles/wrapper_test.dir/
 
 ./scripts/merge_coverage.sh build/

@@ -60,15 +60,21 @@ struct AstlConfiguration {
   std::optional<std::filesystem::path> scmi_specification_path;
 };
 
+auto ParseConfiguration(std::string_view configuration_data) -> std::expected<AstlConfiguration, astl_status_code>;
+
 auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlConfiguration, astl_status_code>;
 
 /**
  * @brief helper function to create a MetricConfig object from a MetricJsonDeclaration and ScmiSpecification
- * @param metric_declaration The MetricJsonDeclaration object to convert
- * @param layout The Scmi layout specification containing the Data Event IDs from platform json spec
+ * @param metric_key_name    The string key from scmi specification json in the layout.members.<member>. entries list,
+ * e.g. 'ENERGY_COUNTER'
+ * @param metric_declaration The MetricJsonDeclaration json definition of this type of metric from the astl
+ * configuration json. adds info like units on how to interpret the metrics
+ * @param layout             The scmi::Layout relevant 'layout' section of the SCMI spec json for this platform
  */
-auto CreateMetricConfig(std::string_view metric_name, MetricJsonDeclaration const& metric_declaration,
-                        scmi::Layout const& layout) -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code>;
+auto CreateMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
+                         scmi::ScmiSpecification const& scmi_spec)
+    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code>;
 
 }  // namespace astl
 

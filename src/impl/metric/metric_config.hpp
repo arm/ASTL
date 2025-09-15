@@ -177,7 +177,7 @@ class ResidencyMetricConfig final : public MetricConfig {
    *
    * @return Map: target -> (state name -> {data_event_id, tick_frequency})
    */
-  const ScmiTargetToStateToInfoMap &StateInfo() const { return _state_info; }
+  const ScmiTargetToStateToInfoMap &GetStateInfo() const { return _state_info; }
 
   /**
    * @brief Get the state-to-info mapping for a specific target. Throws std::out_of_range if not found.

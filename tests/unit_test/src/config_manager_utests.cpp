@@ -157,15 +157,17 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   // Create a mock SCMI layout with the residency counter data event IDs
   astl::scmi::Layout mock_layout;
   mock_layout.members["AP0"] = {
-      {"C1_RESIDENCY_COUNTER", {.name = "C1_RESIDENCY_COUNTER", .de_id = 0x00001c71}},
-      {"C3_RESIDENCY_COUNTER", {.name = "C3_RESIDENCY_COUNTER", .de_id = 0x00001d82}},
-      {"C6_RESIDENCY_COUNTER", {.name = "C6_RESIDENCY_COUNTER", .de_id = 0x00001e93}}
+      {"C1_RESIDENCY_COUNTER", {.name = "AP0_C1_RESIDENCY_COUNTER", .de_id = 0x00001c71}},
+      {"C3_RESIDENCY_COUNTER", {.name = "AP0_C3_RESIDENCY_COUNTER", .de_id = 0x00001d82}},
+      {"C6_RESIDENCY_COUNTER", {.name = "AP0_C6_RESIDENCY_COUNTER", .de_id = 0x00001e93}}
   };
   mock_layout.members["AP1"] = {
-      {"C1_RESIDENCY_COUNTER", {.name = "C1_RESIDENCY_COUNTER", .de_id = 0x00011c71}},
-      {"C3_RESIDENCY_COUNTER", {.name = "C3_RESIDENCY_COUNTER", .de_id = 0x00011d82}},
-      {"C6_RESIDENCY_COUNTER", {.name = "C6_RESIDENCY_COUNTER", .de_id = 0x00011e93}}
+      {"C1_RESIDENCY_COUNTER", {.name = "AP1_C1_RESIDENCY_COUNTER", .de_id = 0x00011c71}},
+      {"C3_RESIDENCY_COUNTER", {.name = "AP1_C3_RESIDENCY_COUNTER", .de_id = 0x00011d82}},
+      {"C6_RESIDENCY_COUNTER", {.name = "AP1_C6_RESIDENCY_COUNTER", .de_id = 0x00011e93}}
   };
+  astl::scmi::ScmiSpecification mock_scmi_spec;
+  mock_scmi_spec.layout = std::move(mock_layout);
 
   // Create a residency metric declaration
   astl::MetricJsonDeclaration residency_declaration;
@@ -197,56 +199,77 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   residency_declaration.states = states_map;
 
   // Create the metric config
-  auto metric_config_result = astl::CreateMetricConfig("C-State", residency_declaration, mock_layout);
+  auto metric_configs_result = astl::CreateMetricConfigs("C-State", residency_declaration, mock_scmi_spec);
 
-  // Verify the config was created successfully
-  REQUIRE(metric_config_result.has_value());
-  auto metric_config = std::move(metric_config_result.value());
-  REQUIRE(metric_config != nullptr);
+  // Verify the configs were created successfully
+  REQUIRE(metric_configs_result.has_value());
+  auto metric_configs = std::move(metric_configs_result.value());
+  REQUIRE(metric_configs.size() == 2);
 
   // Verify it's a ResidencyMetricConfig (by attempting to cast)
-  auto* residency_config = dynamic_cast<astl::ResidencyMetricConfig*>(metric_config.get());
-  REQUIRE(residency_config != nullptr);
+  auto* residency_config_ap0 = dynamic_cast<astl::ResidencyMetricConfig*>(metric_configs[0].get());
+  auto* residency_config_ap1 = dynamic_cast<astl::ResidencyMetricConfig*>(metric_configs[1].get());
+  REQUIRE(residency_config_ap0 != nullptr);
+  REQUIRE(residency_config_ap1 != nullptr);
+  // since these metric_configs aren't in a specific order, let's make sure the first one corresponds to AP0
+  if (residency_config_ap0->Name().starts_with("AP1")) {
+    std::swap(residency_config_ap0, residency_config_ap1);
+  }
 
   // Verify basic metric properties
-  REQUIRE(residency_config->Name() == "C-State");
-  REQUIRE(residency_config->Description() == "CPU C-State residency");
-  REQUIRE(residency_config->Units() == ASTL_UNITS_SECONDS);
-  REQUIRE(residency_config->ValueType() == ASTL_VALUE_UINT64);
-  REQUIRE(residency_config->MetricType() == ASTL_METRIC_RESIDENCY);
-  REQUIRE(residency_config->GetCollectorType() == astl::CollectorType::SCMI);
+  REQUIRE(residency_config_ap0->Name() == "AP0_C-State");
+  REQUIRE(residency_config_ap0->Description() == "CPU C-State residency");
+  REQUIRE(residency_config_ap0->Units() == ASTL_UNITS_SECONDS);
+  REQUIRE(residency_config_ap0->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(residency_config_ap0->MetricType() == ASTL_METRIC_RESIDENCY);
+  REQUIRE(residency_config_ap0->GetCollectorType() == astl::CollectorType::SCMI);
 
   // Verify the state info (data event IDs and tick frequencies) are correctly stored
-  const auto& state_info = residency_config->StateInfo();
-  REQUIRE(state_info.size() == 2);  // AP0 and AP1
+  const auto& state_info = residency_config_ap0->GetStateInfo();
+  REQUIRE(state_info.size() == 1);  // AP0 and AP1
 
   // Verify AP0 state info (data event IDs and tick frequencies)
-  REQUIRE(state_info.contains("AP0"));
-  const auto& ap0_state_info = state_info.at("AP0");
-  REQUIRE(ap0_state_info.size() == 3);  // C1, C3, C6
-  REQUIRE(ap0_state_info.at("C1").state_name == "C1");
-  REQUIRE(ap0_state_info.at("C1").data_event_id == 0x00001c71);
-  REQUIRE(ap0_state_info.at("C1").tick_frequency == 1000000.0);
-  REQUIRE(ap0_state_info.at("C3").state_name == "C3");
-  REQUIRE(ap0_state_info.at("C3").data_event_id == 0x00001d82);
-  REQUIRE(ap0_state_info.at("C3").tick_frequency == 1000000.0);
-  REQUIRE(ap0_state_info.at("C6").state_name == "C6");
-  REQUIRE(ap0_state_info.at("C6").data_event_id == 0x00001e93);
-  REQUIRE(ap0_state_info.at("C6").tick_frequency == 1000000.0);
+  REQUIRE(state_info.contains("TLM_0"));
+  const auto& tlm_0_ap0_state_info = state_info.at("TLM_0");
+  REQUIRE(tlm_0_ap0_state_info.size() == 3);  // C1, C3, C6
+  REQUIRE(tlm_0_ap0_state_info.at("C1").state_name == "C1");
+  REQUIRE(tlm_0_ap0_state_info.at("C1").data_event_id == 0x00001c71);
+  REQUIRE(tlm_0_ap0_state_info.at("C1").tick_frequency == 1000000.0);
+  REQUIRE(tlm_0_ap0_state_info.at("C3").state_name == "C3");
+  REQUIRE(tlm_0_ap0_state_info.at("C3").data_event_id == 0x00001d82);
+  REQUIRE(tlm_0_ap0_state_info.at("C3").tick_frequency == 1000000.0);
+  REQUIRE(tlm_0_ap0_state_info.at("C6").state_name == "C6");
+  REQUIRE(tlm_0_ap0_state_info.at("C6").data_event_id == 0x00001e93);
+  REQUIRE(tlm_0_ap0_state_info.at("C6").tick_frequency == 1000000.0);
 
-  // Verify AP1 state info (data event IDs and tick frequencies)
-  REQUIRE(state_info.contains("AP1"));
-  const auto& ap1_state_info = state_info.at("AP1");
-  REQUIRE(ap1_state_info.size() == 3);  // C1, C3, C6
-  REQUIRE(ap1_state_info.at("C1").state_name == "C1");
-  REQUIRE(ap1_state_info.at("C1").data_event_id == 0x00011c71);
-  REQUIRE(ap1_state_info.at("C1").tick_frequency == 1000000.0);
-  REQUIRE(ap1_state_info.at("C3").state_name == "C3");
-  REQUIRE(ap1_state_info.at("C3").data_event_id == 0x00011d82);
-  REQUIRE(ap1_state_info.at("C3").tick_frequency == 1000000.0);
-  REQUIRE(ap1_state_info.at("C6").state_name == "C6");
-  REQUIRE(ap1_state_info.at("C6").data_event_id == 0x00011e93);
-  REQUIRE(ap1_state_info.at("C6").tick_frequency == 1000000.0);
+  // now check the metric configuration for AP1
+  REQUIRE(residency_config_ap1 != nullptr);
+
+  // Verify basic metric properties
+  REQUIRE(residency_config_ap1->Name() == "AP1_C-State");
+  REQUIRE(residency_config_ap1->Description() == "CPU C-State residency");
+  REQUIRE(residency_config_ap1->Units() == ASTL_UNITS_SECONDS);
+  REQUIRE(residency_config_ap1->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(residency_config_ap1->MetricType() == ASTL_METRIC_RESIDENCY);
+  REQUIRE(residency_config_ap1->GetCollectorType() == astl::CollectorType::SCMI);
+
+  // Verify the state info (data event IDs and tick frequencies) are correctly stored
+  const auto& state_info_ap1 = residency_config_ap1->GetStateInfo();
+  REQUIRE(state_info_ap1.size() == 1);  // AP0 and AP1
+
+  // Verify AP0 state info (data event IDs and tick frequencies)
+  REQUIRE(state_info_ap1.contains("TLM_0"));
+  const auto& tlm0_state_info_ap1 = state_info_ap1.at("TLM_0");
+  REQUIRE(tlm0_state_info_ap1.size() == 3);  // C1, C3, C6
+  REQUIRE(tlm0_state_info_ap1.at("C1").state_name == "C1");
+  REQUIRE(tlm0_state_info_ap1.at("C1").data_event_id == 0x00011c71);
+  REQUIRE(tlm0_state_info_ap1.at("C1").tick_frequency == 1000000.0);
+  REQUIRE(tlm0_state_info_ap1.at("C3").state_name == "C3");
+  REQUIRE(tlm0_state_info_ap1.at("C3").data_event_id == 0x00011d82);
+  REQUIRE(tlm0_state_info_ap1.at("C3").tick_frequency == 1000000.0);
+  REQUIRE(tlm0_state_info_ap1.at("C6").state_name == "C6");
+  REQUIRE(tlm0_state_info_ap1.at("C6").data_event_id == 0x00011e93);
+  REQUIRE(tlm0_state_info_ap1.at("C6").tick_frequency == 1000000.0);
 }
 // NOLINTEND(readability-function-cognitive-complexity)
 

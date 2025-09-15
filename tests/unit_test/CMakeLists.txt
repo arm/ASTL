@@ -11,8 +11,6 @@ if (NOT CMAKE_BUILD_TYPE)
         FORCE)
 endif()
 
-include(CheckCXXCompilerFlag)
-
 if (NOT TARGET Astl::astl_static)
   find_package(astl_static REQUIRED)
 endif()

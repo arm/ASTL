@@ -31,7 +31,8 @@ namespace astl {
  * @brief Initialize a topology manager.  This will run as many topology plugins as possible
  * to discover what is available on the current platform.
  */
-auto BuildTopologyManager() -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code>;
+auto BuildTopologyManager(const AstlConfiguration& configuration)
+    -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code>;
 }  // namespace astl
 
 #endif  // TOPOLOGY_BUILDER_

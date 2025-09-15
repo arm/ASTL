@@ -297,28 +297,48 @@ inline void from_json(const json& json_data, ScmiSpecification& root) {
   root.layout      = json_data.at("layout").get<Layout>();
 }
 
+inline auto GetDataEventIdForLayoutMember(std::string_view register_name, std::string_view member_name,
+                                          std::map<std::string, LayoutMemberEntry> const& registers)
+    -> std::optional<ScmiDataEventId> {
+  for (const auto& [metric_type_name, layout_member] : registers) {
+    // note, we're using the key name for the register, e.g. 'CPU_CYCLES',
+    // not the .name field of the entry, e.g. 'AP0_CPU_CYCLES', so that one
+    // metric can be defined in the library configuration file, and be created
+    // for each target that supports it in the spec.
+    if (metric_type_name == register_name) {
+      ASTL_LOG_TRACE("GetDataEventIdForLayoutMember matched '{}' with '{}' for member {}", metric_type_name,
+                     register_name, member_name);
+      return layout_member.de_id;
+    }
+  }
+  return std::nullopt;
+}
+
 /**
- * @brief Get the map of target names to Data Event IDs for a given metric register name
- * @param register_name The register name to look up
+ * @brief Get the collection of metric names (i.e. AP0_ENERGY_COUNTER) that match the given register name, and their
+ * corresponding data event ids.
+ * @param register_name The register name to look up (i.e. ENERGY_COUNTER)
  * @param layout The Scmi layout specification containing the Data Event IDs from platform json spec
  * @return A map of target names to Data Event IDs for the metric
  */
-inline auto GetDataEventIdsForMetric(std::string_view register_name,
-                                     Layout const&    layout) -> ScmiTargetToDataEventIdMap {
-  ScmiTargetToDataEventIdMap data_event_ids;
-  for (const auto& [target_name, members] : layout.members) {
-    for (const auto& [member_name, member_entry] : members) {
-      ASTL_LOG_TRACE("Comparing {} with {}", member_entry.name, register_name);
+inline auto GetMetricRegisters(std::string_view register_name,
+                               Layout const&    layout) -> std::vector<std::pair<std::string, ScmiDataEventId>> {
+  std::vector<std::pair<std::string, ScmiDataEventId>> metric_names_and_de_id;
+
+  for (const auto& [member_name, metrics] : layout.members) {  // e.g. AP0, AP1
+    for (const auto& [metric_type_name, metric_entry] : metrics) {
       // note, we're using the key name for the register, e.g. 'CPU_CYCLES',
       // not the .name field of the entry, e.g. 'AP0_CPU_CYCLES', so that one
       // metric can be defined in the library configuration file, and be created
       // for each target that supports it in the spec.
-      if (member_name == register_name) {
-        data_event_ids[target_name].push_back(member_entry.de_id);
+      if (metric_type_name == register_name) {
+        ASTL_LOG_TRACE("GetMetricRegisters matched '{}' (from {}) with '{}' for member {}", metric_type_name,
+                       metric_entry.name, register_name, member_name);
+        metric_names_and_de_id.emplace_back(metric_entry.name, metric_entry.de_id);
       }
     }
   }
-  return data_event_ids;
+  return metric_names_and_de_id;
 }
 
 }  // namespace scmi
