@@ -115,6 +115,8 @@ class FileInterface {
     return ASTL_STATUS_SUCCESS;
   }
 
+  const std::filesystem::path &GetBasePath() const { return _basePath; }
+
  private:
   // Resolve a given path relative to the base path if set.
   std::filesystem::path Resolve(const std::filesystem::path &path) const {

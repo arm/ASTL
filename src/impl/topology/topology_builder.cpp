@@ -20,35 +20,43 @@
 #include <memory>
 
 #include "astl/astl_errors.h"
+#include "astl_file_interface.hpp"
 #include "target.hpp"
 #include "topology/i_topology_manager.hpp"
-#include "topology/i_topology_plugin.hpp"
 #include "topology/scmi_topology_plugin.hpp"
 #include "topology/topology_manager.hpp"
 
 namespace astl {
 
-auto BuildTopologyManager() -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
-  std::vector<std::unique_ptr<ITarget> > targets;
+// Helper function which runs a single topology plugin and does some error handling
+// 2nd parameter is a function pointer to the ScanForTargets() member of a given plugin
+void ActivateOnePlugin(
+    std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration,
+    std::expected<std::vector<std::unique_ptr<ITarget>>, astl_status_code> (*scanFunc)(const AstlConfiguration&)) {
+  auto targets_detected_from_this_plugin = scanFunc(configuration);
+  if (!targets_detected_from_this_plugin) {
+    throw targets_detected_from_this_plugin.error();
+  }
 
-  // If you add more topology plugins, construct an instance and add them to this vector
-  std::vector<std::unique_ptr<ITopologyPlugin> > topology_plugins;
-  topology_plugins.push_back(std::make_unique<ScmiTopologyPlugin>());
+  auto validated_new_targets = std::move(targets_detected_from_this_plugin.value());
 
-  for (auto& cur_plugin : topology_plugins) {
-    auto targets_detected_from_this_plugin = cur_plugin->ScanForTargets();
-    if (!targets_detected_from_this_plugin) {
-      return std::unexpected(targets_detected_from_this_plugin.error());
-    }
+  // std::vector::append_range() would be better,
+  // but g++ 13.1.0 doesn't seem to implement __cpp_lib_containers_ even when using -std=c++23
+  targets.reserve(targets.size() + validated_new_targets.size());
+  for (size_t ix = 0; ix < validated_new_targets.size(); ix++) {
+    targets.push_back(std::move(validated_new_targets[ix]));
+  }
+}
 
-    auto validated_new_targets = std::move(targets_detected_from_this_plugin.value());
+auto BuildTopologyManager(const AstlConfiguration& configuration)
+    -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
+  std::vector<std::unique_ptr<ITarget>> targets;
 
-    // std::vector::append_range() would be better,
-    // but g++ 13.1.0 doesn't seem to implement __cpp_lib_containers_ even when using -std=c++23
-    targets.reserve(targets.size() + validated_new_targets.size());
-    for (size_t ix = 0; ix < validated_new_targets.size(); ix++) {
-      targets.push_back(std::move(validated_new_targets[ix]));
-    }
+  try {
+    // Add more topology plugins here by calling ActivateOnePlugin on each
+    ActivateOnePlugin(targets, configuration, ScmiTopologyPlugin::ScanForTargets);
+  } catch (astl_status_code& error_code) {
+    return std::unexpected(error_code);
   }
 
   return std::make_unique<TopologyManager>(std::move(targets));

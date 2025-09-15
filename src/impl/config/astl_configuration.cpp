@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "astl/astl_errors.h"
@@ -69,11 +70,7 @@ inline void from_json(const json& json_data, AstlConfiguration& cfg) {
   }
 }
 
-auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlConfiguration, astl_status_code> {
-  if (!configuration_data) {
-    ASTL_LOG_ERROR("Null configuration data given to GetConfiguration");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
+auto ParseConfiguration(std::string_view configuration_data) -> std::expected<AstlConfiguration, astl_status_code> {
   try {
     json json_data = json::parse(configuration_data);
     return json_data.get<AstlConfiguration>();
@@ -83,8 +80,16 @@ auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlC
   }
 }
 
-// @todo (https://jira.arm.com/browse/ASTL-169) Adopt a unit conversion library to provide type-safe unit handling,
-// automatic conversions, and better compile-time unit validation instead of the current string-based parsing approach.
+auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlConfiguration, astl_status_code> {
+  if (!configuration_data) {
+    ASTL_LOG_ERROR("Null configuration data given to GetConfiguration");
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  // Read the entire content of the istream into a string buffer
+  std::string file_content((std::istreambuf_iterator<char>(configuration_data)), std::istreambuf_iterator<char>());
+  return ParseConfiguration(std::string_view(file_content));
+}
+
 auto ParseUnits(const MetricJsonDeclaration& metric_declaration) -> astl_units_t {
   auto unit_str = astl::ToLowerCopy(metric_declaration.unit);
   if (unit_str == "none" || unit_str.empty()) {
@@ -161,27 +166,41 @@ auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std:
 }
 
 /**
- * @brief Create a ResidencyMetricConfig from a MetricJsonDeclaration
+ * @brief Given a residency metric name, scan the metric declarations (from config file) and scmi_spec
+ * defining the platform to create a map of layout member (e.g. AP0) to collection of StateInfo (holding state names,
+ * data event ids)
+ *
+ * @param metric_key_name    The string value used as an index into the contents of a layout member (e.g.
+ * 'ENERGY_COUNTER' within 'AP0')
+ * @param metric_declaration The data from the json configuration file specifying this metric's states
+ * @param scmi_spec          The scmi::ScmiSpecification including the relevant 'layout' section of the SCMI spec json
+ * for this platform
+ *
+ * @returns a map of layout member name to StateToInfoMap representing the states of this metric.
  */
-auto CreateResidencyMetricConfig(std::string_view metric_name, MetricJsonDeclaration const& metric_declaration,
-                                 scmi::Layout const& layout)
-    -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code> {
+auto GetResidencyMetricStateToInfoMap(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
+                                      scmi::ScmiSpecification const& scmi_spec)
+    -> std::expected<std::unordered_map<std::string, ResidencyMetricConfig::StateToInfoMap>, astl_status_code> {
   // Check if states are defined
   if (!metric_declaration.states.has_value()) {
-    ASTL_LOG_ERROR("Residency metric {} missing 'states' configuration", metric_name);
+    ASTL_LOG_ERROR("Residency metric {} missing 'states' configuration", metric_key_name);
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
+  auto collector_type = ParseCollectorType(metric_declaration);
+  if (!collector_type || collector_type != CollectorType::SCMI) {
+    ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection_protocol,
+                   metric_key_name);
+    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+  }
+  std::unordered_map<std::string, ResidencyMetricConfig::StateToInfoMap> per_member_state_infos;
 
-  ResidencyMetricConfig::ScmiTargetToStateToInfoMap state_info;
-
-  // Process each state definition
+  // for each configured state in the defined metric, identify its register (scmi data event)
   for (const auto& [state_name, state_config] : metric_declaration.states.value()) {
     // Extract register name from state configuration
     if (!state_config.contains("register")) {
-      ASTL_LOG_ERROR("State '{}' in residency metric {} missing 'register' field", state_name, metric_name);
+      ASTL_LOG_ERROR("State '{}' in residency metric {} missing 'register' field", state_name, metric_key_name);
       continue;
     }
-
     std::string register_name = state_config["register"].get<std::string>();
 
     // Extract tick frequency from state configuration (required field)
@@ -189,106 +208,133 @@ auto CreateResidencyMetricConfig(std::string_view metric_name, MetricJsonDeclara
     // This is used to convert raw counter values to time units (e.g., ticks to seconds).
     if (!state_config.contains("tick_frequency")) {
       ASTL_LOG_ERROR("State '{}' in residency metric {} missing required 'tick_frequency' field", state_name,
-                     metric_name);
+                     metric_key_name);
       return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     double tick_frequency = state_config["tick_frequency"].get<double>();  // Frequency in Hz
 
-    // Find data event IDs for this register across all targets
-    auto register_data_event_ids = scmi::GetDataEventIdsForMetric(register_name, layout);
-    if (register_data_event_ids.empty()) {
-      ASTL_LOG_ERROR("No Data Event IDs found for state '{}' register '{}' in metric {}", state_name, register_name,
-                     metric_name);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-    }
-
-    // Add the data event IDs and tick frequency for this state to each target
-    for (const auto& [target_name, data_event_ids] : register_data_event_ids) {
-      // Note: For residency metrics, there is only one event ID per state, but data_event_ids is a vector
-      // as it's a generic data structure designed to support all metric types.
-
-      // Check for empty data_event_ids
-      if (data_event_ids.empty()) {
-        ASTL_LOG_ERROR("No data event IDs found for state '{}' register '{}' on target '{}'", state_name, register_name,
-                       target_name);
-        continue;
+    // each layout member is a pair of string names (e.g. 'AP0') and a map of string names to register info
+    for (const auto& [member_name, registers] : scmi_spec.layout.members) {
+      auto data_event_id = scmi::GetDataEventIdForLayoutMember(register_name, member_name, registers);
+      if (!data_event_id) {
+        ASTL_LOG_ERROR("No Data Event IDs found for state '{}' register '{}' in metric {}", state_name, register_name,
+                       metric_key_name);
+        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
       }
-
-      // Check for multiple data_event_ids and warn
-      if (data_event_ids.size() > 1) {
-        ASTL_LOG_WARNING(
-            "Expected exactly one data event ID for state '{}' register '{}' on target '{}', found {}. Using first "
-            "event ID.",
-            state_name, register_name, target_name, data_event_ids.size());
-      }
-
-      // Use the first data event ID
-      ScmiDataEventId data_event_id =
-          data_event_ids[0];  // data_event_ids is std::vector<ScmiDataEventId> - generic for all metric types
-      state_info[target_name][state_name] = {state_name, data_event_id, tick_frequency};
-      ASTL_LOG_DEBUG("Found residency state '{}' for target '{}' with data event ID {} and tick frequency {}Hz",
-                     state_name, target_name, data_event_id, tick_frequency);
+      ResidencyMetricConfig::StateInfo      state_info{state_name, data_event_id.value(), tick_frequency};
+      ResidencyMetricConfig::StateToInfoMap state_to_info_map;
+      per_member_state_infos[member_name][state_info.state_name] = std::move(state_info);
     }
   }
-
-  if (state_info.empty()) {
-    ASTL_LOG_ERROR("No state data event IDs found for residency metric {}", metric_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-
-  auto collector_type = ParseCollectorType(metric_declaration);
-  if (!collector_type) {
-    ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection_protocol,
-                   metric_name);
-    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
-  }
-
-  return std::make_unique<ResidencyMetricConfig>(std::string(metric_name), metric_declaration.description,
-                                                 ParseUnits(metric_declaration), ParseValueType(metric_declaration),
-                                                 ASTL_METRIC_RESIDENCY, collector_type.value(), std::move(state_info),
-                                                 metric_declaration.inferred_state);
+  return per_member_state_infos;
 }
 
 /**
- * @brief Create a basic MetricConfig from a MetricJsonDeclaration
+ * @brief Create a ResidencyMetricConfig from a MetricJsonDeclaration for each member in the layout that has a matching
+ * metric_key_name
+ * @param scmi_spec          The scmi::ScmiSpecification including the relevant 'layout' section of the SCMI spec json
+ * for this platform
  */
-auto CreateBasicMetricConfig(std::string_view metric_name, MetricJsonDeclaration const& metric_declaration,
-                             scmi::Layout const& layout, astl_metric_type_t metric_type)
-    -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code> {
-  // For non-residency metrics, use the existing logic
-  auto data_event_ids = scmi::GetDataEventIdsForMetric(metric_declaration.register_name, layout);
-  if (data_event_ids.empty()) {
-    ASTL_LOG_ERROR("No Data Event IDs found for metric {}", metric_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
+                                  scmi::ScmiSpecification const& scmi_spec)
+    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
+  auto per_member_state_info = GetResidencyMetricStateToInfoMap(metric_key_name, metric_declaration, scmi_spec);
+  if (!per_member_state_info) {
+    return std::unexpected(per_member_state_info.error());
   }
 
-  auto collector_type = ParseCollectorType(metric_declaration);
-  if (!collector_type) {
+  const auto units          = ParseUnits(metric_declaration);
+  const auto value_type     = ParseValueType(metric_declaration);
+  const auto collector_type = ParseCollectorType(metric_declaration);
+  if (!collector_type || collector_type != CollectorType::SCMI) {
     ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection_protocol,
-                   metric_name);
+                   metric_key_name);
     return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
   }
 
-  return std::make_unique<MetricConfig>(std::string(metric_name), metric_declaration.description,
-                                        ParseUnits(metric_declaration), ParseValueType(metric_declaration), metric_type,
-                                        collector_type.value(), std::move(data_event_ids));
+  std::vector<std::unique_ptr<MetricConfig>> metric_configs;
+  for (const auto& [layout_member_name, state_info_map] : per_member_state_info.value()) {
+    //  @todo ASTL-165 - use the scmi_spec to determine the target names and how the map to the layout section
+    const std::string                                 target_name{"TLM_0"};
+    ResidencyMetricConfig::ScmiTargetToStateToInfoMap per_target_state_info;
+    ResidencyMetricConfig::StateToInfoMap             state_to_info;
+
+    per_target_state_info[target_name] = std::move(state_info_map);
+    // assemble a name for this metric config - use the layout member name (e.g. 'AP0' with an '_' as a prefix to more
+    // uniquely identify it)
+    std::string metric_name{layout_member_name + "_" + std::string(metric_key_name)};
+    metric_configs.push_back(std::make_unique<ResidencyMetricConfig>(
+        std::move(metric_name), metric_declaration.description, units, value_type, ASTL_METRIC_RESIDENCY,
+        collector_type.value(), std::move(per_target_state_info), metric_declaration.inferred_state));
+  }
+  return metric_configs;
+}
+
+/**
+ * @brief Create a collection of basic MetricConfig instances from a MetricJsonDeclarations, each of which matches the
+ * 'metric_key_name'. Could return up to N metrics, where N is the number of members in the given `layout`. (Say the
+ * members are AP0-7, we might get 8 metrics back with names like AP[0-7]_ENERGY_COUNTER)
+ * @param metric_key_name    The string key from scmi specification json in the layout.members.<member>. entries list,
+ * e.g. 'ENERGY_COUNTER'
+ * @param metric_declaration The MetricJsonDeclaration json definition of this type of metric from the astl
+ * configuration json. adds info like units on how to interpret the metrics
+ * @param scmi_spec          The scmi::ScmiSpecification including the relevant 'layout' section of the SCMI spec json
+ * for this platform
+ * @param metric_type        The astl_metric_type_t enum specifying this metric type (e.g. SampledValue, Delta, etc)
+ */
+auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
+                              scmi::ScmiSpecification const& scmi_spec, astl_metric_type_t metric_type)
+    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
+  auto collector_type = ParseCollectorType(metric_declaration);
+  if (!collector_type || collector_type != CollectorType::SCMI) {
+    ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection_protocol,
+                   metric_key_name);
+    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+  }
+  // @todo ASTL-165 - use the scmi_spec to determine the target names and how they map to the layout section
+  const std::string target_name{"TLM_0"};
+
+  // For non-residency metrics, use the existing logic
+  auto metric_registers = scmi::GetMetricRegisters(metric_declaration.register_name, scmi_spec.layout);
+  if (metric_registers.empty()) {
+    ASTL_LOG_INFO("No Data Event IDs found for metric {}", metric_key_name);
+  }
+  std::vector<std::unique_ptr<MetricConfig>> metric_configs;
+  metric_configs.reserve(metric_registers.size());
+  const auto units                = ParseUnits(metric_declaration);
+  const auto value_type           = ParseValueType(metric_declaration);
+  auto       create_metric_config = [&](const auto& metric_name_and_de_id) {
+    const auto& [metric_name, de_id] = metric_name_and_de_id;
+    ScmiTargetToDataEventIdMap data_event_ids;
+    data_event_ids[target_name].push_back(de_id);
+    return std::make_unique<MetricConfig>(metric_name, metric_declaration.description, units, value_type, metric_type,
+                                                collector_type.value(), data_event_ids);
+  };
+
+  std::transform(std::begin(metric_registers), std::end(metric_registers), std::back_inserter(metric_configs),
+                 create_metric_config);
+  return metric_configs;
 }
 
 /**
  * @brief helper function to create a MetricConfig object from a MetricJsonDeclaration and ScmiSpecification
- * @param metric_declaration The MetricJsonDeclaration object to convert
- * @param layout The Scmi layout specification containing the Data Event IDs from platform json spec
+ * @param metric_key_name    The string key from scmi specification json in the layout.members.<member>. entries list,
+ * e.g. 'ENERGY_COUNTER'
+ * @param metric_declaration The MetricJsonDeclaration json definition of this type of metric from the astl
+ * configuration json. adds info like units on how to interpret the metrics
+ * @param layout             The scmi::Layout relevant 'layout' section of the SCMI spec json for this platform
  */
-auto CreateMetricConfig(std::string_view metric_name, MetricJsonDeclaration const& metric_declaration,
-                        scmi::Layout const& layout) -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code> {
+auto CreateMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
+                         scmi::ScmiSpecification const& scmi_spec)
+    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
   auto metric_type = ParseMetricType(metric_declaration);
 
   // Route to appropriate creation function based on metric type
   if (metric_type == ASTL_METRIC_RESIDENCY) {
-    return CreateResidencyMetricConfig(metric_name, metric_declaration, layout);
+    return CreateResidencyMetricConfigs(metric_key_name, metric_declaration, scmi_spec);
   }
 
-  return CreateBasicMetricConfig(metric_name, metric_declaration, layout, metric_type);
+  return CreateBasicMetricConfigs(metric_key_name, metric_declaration, scmi_spec, metric_type);
 }
 
 }  // namespace astl

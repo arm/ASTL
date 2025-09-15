@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <expected>
 #include <iostream>
 #include <string>
@@ -105,9 +106,15 @@ astl_status_code GetTargets(std::vector<astl_target_properties_t>& target_proper
   }
 
   target_properties_buffer.resize(target_count);
-  if (!target_properties_buffer.empty()) {
-    target_properties_buffer[0]._size = sizeof(astl_target_properties_t);
+
+  /// @todo ASTL-167 After https://github.com/Arm-Debug/ASTL/pull/180 is merged,
+  /// we should probably make this sample test fail when zero targets are detected.
+  if (target_count == 0) {
+    return ASTL_STATUS_SUCCESS;
   }
+
+  target_properties_buffer[0]._size = sizeof(astl_target_properties_t);
+
   status = astlGetTargets(target_properties_buffer.data(), &target_count);
   target_properties_buffer.resize(target_count);
   std::cout << "astlGetTargets Status: " << astlStatusString(status) << '\n';
@@ -132,6 +139,9 @@ astl_status_code GetMetrics(astl_target_handle_t target_handle, std::vector<astl
   astl_status_code status = astlGetMetricCount(target_handle, &metric_count);
   std::cout << "Metric count: " << metric_count << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
+    std::cout << "astlGetMetricCount Status: " << astlStatusString(status) << '\n';
+    std::cout << "target_handle: " << target_handle << " \n";
+    std::cout << "&metric_count: " << &metric_count << " \n";
     return status;
   }
 
@@ -145,8 +155,7 @@ astl_status_code GetMetrics(astl_target_handle_t target_handle, std::vector<astl
 }
 
 astl_status_code ConfigureAndRunCollection(astl_target_handle_t                         target_handle,
-                                           const std::vector<astl_metric_properties_t>& metric_buffer,
-                                           uint32_t metric_count, bool do_interval,
+                                           const std::vector<astl_metric_properties_t>& metric_buffer, bool do_interval,
                                            std::chrono::seconds      duration_seconds,
                                            std::chrono::milliseconds sampling_interval) {
   ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params,
@@ -158,8 +167,14 @@ astl_status_code ConfigureAndRunCollection(astl_target_handle_t                 
   std::vector<astl_metric_handle_t> metric_handles_vec;
   metric_handles_vec.reserve(metric_buffer.size());
 
-  std::transform(metric_buffer.begin(), metric_buffer.end(), std::back_inserter(metric_handles_vec),
-                 [](auto const& prop) { return prop._handle; });
+  // let's only deal with AP0 for now, as mock sysfs doesn't implement the AP1 events as listed in
+  // example_scmi_specification.json
+  for (const auto& metric_properties : metric_buffer) {
+    if (std::strncmp(metric_properties._name, "AP0", 3) == 0) {
+      metric_handles_vec.push_back(metric_properties._handle);
+    }
+  }
+  const auto metric_count = static_cast<uint32_t>(metric_handles_vec.size());
 
   astl_status_code status =
       astlConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles_vec.data(), metric_count);
@@ -278,6 +293,8 @@ int main(int argc, char* argv[]) {
   uint32_t                              metric_count{};
   status = GetMetrics(target_properties._handle, metric_buffer, metric_count);
   if (status != ASTL_STATUS_SUCCESS) {
+    std::cout << "Masking error code " << status
+              << " from GetMetrics so sample integration tests will pass w/out mock sysfs\n";
     // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
     // even without mock sysfs running
     return 0;
@@ -289,8 +306,8 @@ int main(int argc, char* argv[]) {
   }
 
   // Configure and run collection
-  status = ConfigureAndRunCollection(target_properties._handle, metric_buffer, metric_count, do_interval,
-                                     duration_seconds, sampling_interval_ms);
+  status = ConfigureAndRunCollection(target_properties._handle, metric_buffer, do_interval, duration_seconds,
+                                     sampling_interval_ms);
   if (status != ASTL_STATUS_SUCCESS) {
     // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
     // even without mock sysfs running

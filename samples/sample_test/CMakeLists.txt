@@ -13,8 +13,6 @@ if (NOT CMAKE_BUILD_TYPE)
         FORCE)
 endif()
 
-include(CheckCXXCompilerFlag)
-
 if (NOT TARGET Astl::astl)
   find_package(astl REQUIRED)
 endif()

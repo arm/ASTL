@@ -383,7 +383,7 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
       }
 
       context.SetAllDesEnableFlag(std::atoi(value.c_str()) == 1);
-      std::cout << "Set all_des_enable to " << (std::atoi(value.c_str()) == 1 ? "1" : "0") << '\n';
+      std::cout << "Set all_des_enable to " << (std::atoi(value.c_str()) == 1 ? "2" : "0") << '\n';
 
       for (const auto& event : context.GetDataEvents()) {
         event->enable_ = (std::atoi(value.c_str()) != 0);

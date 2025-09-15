@@ -69,7 +69,7 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config,
 
       // Create state configurations from the metric config for the specific target
       std::vector<StateConfiguration> state_configs;
-      const auto&                     state_info = residency_config->StateInfo();
+      const auto&                     state_info = residency_config->GetStateInfo();
 
       // Get states for the specific target
       auto target_iter = state_info.find(target->Name());
@@ -126,6 +126,7 @@ auto GetMetricOnTarget(astl_metric_handle_t metric_handle,
 
 astl_status_code MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_config,
                                                std::vector<const ITarget*> const& targets) {
+  ASTL_LOG_TRACE("RegisterMetric {} on {} targets", metric_config ? metric_config->Name() : "<null>", targets.size());
   CollectorType collector_type = metric_config->GetCollectorType();
   if (!IsCollectorTypeSupported(collector_type)) {
     return astl_status_code::ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE;
@@ -167,7 +168,11 @@ auto MetricManager::GetAvailableMetrics(const ITarget* target) const
     -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> {
   const auto target_iter = _target_to_metrics_map.find(target);
   if (target_iter == _target_to_metrics_map.end()) {
-    ASTL_LOG_ERROR("GetAvailableMetrics: Target '{}' not found.", target->Name());
+    std::string targets;
+    for (const auto& target_metrics : _target_to_metrics_map) {
+      targets.append(target_metrics.first->Name() + ", ");
+    }
+    ASTL_LOG_ERROR("GetAvailableMetrics: Target '{}' not found in '{}'.", target->Name(), targets);
     return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
   std::span<const astl_metric_handle_t> handles_span(target_iter->second);
@@ -224,9 +229,9 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
     // Currently, only SCMI collector type is supported for metrics.
     // MetricConfig provides a DataEventIds field specifying the SCMI event IDs.
     // TODO (https://jira.arm.com/browse/ASTL-114): handle other collector types
-    const auto& data_event_ids      = config->DataEventIds();
-    auto        target_and_event_id = data_event_ids.find(target->Name());
+    const auto& data_event_ids = config->DataEventIds();
 
+    auto target_and_event_id = data_event_ids.find(target->Name());
     if (target_and_event_id == data_event_ids.end()) {
       ASTL_LOG_ERROR("GetRequiredOperations: Target '{}' not found in DataEventIds for metric '{}'", target->Name(),
                      config->Name());

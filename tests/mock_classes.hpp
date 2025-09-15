@@ -90,6 +90,7 @@ struct MockFileInterface {
   MAKE_MOCK1(HasWritePermission, auto(const std::filesystem::path&)->expected_bool, const noexcept);
   MAKE_MOCK2(Read, auto(const std::filesystem::path&, std::string&)->astl_status_code, const);
   MAKE_MOCK2(Write, auto(const std::filesystem::path&, const std::string_view)->astl_status_code, const);
+  MAKE_MOCK0(GetBasePath, auto()->const std::filesystem::path&, const);
 };
 
 struct MockTopologyManager : public astl::ITopologyManager {

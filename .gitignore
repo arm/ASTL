@@ -80,7 +80,7 @@ html
 latex
 
 # ASTL demo outputs
-SoC_Power_rate_intervals.csv
+*_rate_intervals.csv
 raw_samples.csv
 
 # Add more exclusions as needed

@@ -53,7 +53,7 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
     return configuration.error();
   }
 
-  auto topology_manager = astl::BuildTopologyManager();
+  auto topology_manager = astl::BuildTopologyManager(configuration.value());
   if (!topology_manager) {
     return topology_manager.error();
   }

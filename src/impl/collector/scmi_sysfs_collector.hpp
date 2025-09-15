@@ -388,7 +388,7 @@ std::expected<std::vector<ScmiDataEvent>, astl_status_code> ScmiSysfsCollector<F
   for (const auto& data_event_id : data_events_to_enable) {
     auto data_event_dir_path = scmi_detail::GetDataEventDirPath(data_event_id);
     if (!data_event_dir_path) {
-      ASTL_LOG_ERROR("Failed to get data event directory path for ID: {}", data_event_id);
+      ASTL_LOG_ERROR("Failed to get data event directory path for ID: {:08X}", data_event_id);
       return std::unexpected{ASTL_STATUS_FILE_OPEN_FAILED};
     }
     const auto enable_file_path = data_event_dir_path.value() / kScmiDataEventEnableFileName;
@@ -396,7 +396,7 @@ std::expected<std::vector<ScmiDataEvent>, astl_status_code> ScmiSysfsCollector<F
     std::string enabled_text;
     auto        result = _scmi_file_interface.Read(enable_file_path, enabled_text);
     if (result != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("Failed to read enable file for data event ID: {:04X} with error: {}", data_event_id, result);
+      ASTL_LOG_ERROR("Failed to read enable file for data event ID: {:08X} with error: {}", data_event_id, result);
       return std::unexpected{result};
     }
     const bool originally_enabled = (enabled_text == kScmiDataEventEnableValue);
