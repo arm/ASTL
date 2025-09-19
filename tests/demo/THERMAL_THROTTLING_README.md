@@ -225,10 +225,10 @@ While the demo is running, you can monitor the mock telemetry in another termina
 
 ```bash
 # Watch temperature readings
-watch -n 0.5 "cat ~/tmp/fuse/scmi/scmi_telemetry/des/0x7A9B/value"
+watch -n 0.5 "cat ~/tmp/fuse/scmi/scmi_telemetry/tlm-0/des/0x7A9B/value"
 
 # Watch throttle count
-watch -n 0.5 "cat ~/tmp/fuse/scmi/scmi_telemetry/des/0x8C3D/value"
+watch -n 0.5 "cat ~/tmp/fuse/scmi/scmi_telemetry/tlm-0/des/0x8C3D/value"
 ```
 
 #### Viewing MockSysfs Log

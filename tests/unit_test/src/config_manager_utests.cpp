@@ -169,6 +169,10 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   astl::scmi::ScmiSpecification mock_scmi_spec;
   mock_scmi_spec.layout = std::move(mock_layout);
 
+  std::vector<const astl::ITarget*> mock_scmi_targets;
+  astl::Target                      mock_target_tlm0("tlm-0", "dummy test target", astl::CollectorType::SCMI, nullptr);
+  mock_scmi_targets.push_back(&mock_target_tlm0);
+
   // Create a residency metric declaration
   astl::MetricJsonDeclaration residency_declaration;
   residency_declaration.description         = "CPU C-State residency";
@@ -199,7 +203,8 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   residency_declaration.states = states_map;
 
   // Create the metric config
-  auto metric_configs_result = astl::CreateMetricConfigs("C-State", residency_declaration, mock_scmi_spec);
+  auto metric_configs_result =
+      astl::CreateMetricConfigs("C-State", residency_declaration, mock_scmi_spec, mock_scmi_targets);
 
   // Verify the configs were created successfully
   REQUIRE(metric_configs_result.has_value());
@@ -229,8 +234,8 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   REQUIRE(state_info.size() == 1);  // AP0 and AP1
 
   // Verify AP0 state info (data event IDs and tick frequencies)
-  REQUIRE(state_info.contains("TLM_0"));
-  const auto& tlm_0_ap0_state_info = state_info.at("TLM_0");
+  REQUIRE(state_info.contains(mock_target_tlm0.Name()));
+  const auto& tlm_0_ap0_state_info = state_info.at(mock_target_tlm0.Name());
   REQUIRE(tlm_0_ap0_state_info.size() == 3);  // C1, C3, C6
   REQUIRE(tlm_0_ap0_state_info.at("C1").state_name == "C1");
   REQUIRE(tlm_0_ap0_state_info.at("C1").data_event_id == 0x00001c71);
@@ -258,8 +263,8 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   REQUIRE(state_info_ap1.size() == 1);  // AP0 and AP1
 
   // Verify AP0 state info (data event IDs and tick frequencies)
-  REQUIRE(state_info_ap1.contains("TLM_0"));
-  const auto& tlm0_state_info_ap1 = state_info_ap1.at("TLM_0");
+  REQUIRE(state_info_ap1.contains(mock_target_tlm0.Name()));
+  const auto& tlm0_state_info_ap1 = state_info_ap1.at(mock_target_tlm0.Name());
   REQUIRE(tlm0_state_info_ap1.size() == 3);  // C1, C3, C6
   REQUIRE(tlm0_state_info_ap1.at("C1").state_name == "C1");
   REQUIRE(tlm0_state_info_ap1.at("C1").data_event_id == 0x00011c71);

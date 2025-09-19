@@ -91,7 +91,7 @@ You can also optionally override the root path for the Scmi file system, and the
 ```json
 {
 {
-  "scmi_sysfs_telemetry_root_path": "/tmp/fuse/scmi/scmi_telemetry",
+  "scmi_sysfs_telemetry_root_path": "/sys/class/scmi_telemetry",
 
   "metrics": {
     "SoC Temperature": {

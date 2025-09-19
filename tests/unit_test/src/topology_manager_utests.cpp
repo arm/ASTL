@@ -23,6 +23,7 @@
 #include "topology/scmi_topology_plugin.hpp"
 
 using trompeloeil::_;
+using trompeloeil::re;
 
 TEST_CASE("Topology::ScmiPlugin", "[TopologyManager]") {
   auto configuration = astl::ParseConfiguration("{\"metrics\": {}}");
@@ -32,13 +33,28 @@ TEST_CASE("Topology::ScmiPlugin", "[TopologyManager]") {
   std::filesystem::path scmi_sysfs_path{"/tmp/fake/scmi/sysfs"};
   ALLOW_CALL(mock_file_interface, GetBasePath()).RETURN(scmi_sysfs_path);
   // scmi_topology_plugin looks at `de_implementation_version` file, so let it 'read' it
+  constexpr auto failed_uuid_file = "/tmp/fake/scmi/sysfs/not_a_target/de_implementation_version";
+  constexpr auto tlm0_uuid_file   = "/tmp/fake/scmi/sysfs/tlm-0/de_implementation_version";
+  constexpr auto tlm1_uuid_file   = "/tmp/fake/scmi/sysfs/tlm-1/de_implementation_version";
+
   ALLOW_CALL(mock_file_interface, IsValid(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, IsValid(failed_uuid_file)).RETURN(false);
   ALLOW_CALL(mock_file_interface, HasReadPermission(_)).RETURN(true);
   ALLOW_CALL(mock_file_interface, Read(_, _)).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Read(tlm0_uuid_file, _)).SIDE_EFFECT(_2 = "0000").RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Read(tlm1_uuid_file, _)).SIDE_EFFECT(_2 = "0001").RETURN(ASTL_STATUS_SUCCESS);
+  // match anything other than a tlm UUID
+  ALLOW_CALL(mock_file_interface, GetSubdirectories())
+      .RETURN(std::vector<std::filesystem::directory_entry>{
+          std::filesystem::directory_entry{scmi_sysfs_path / "tlm-0"},
+          std::filesystem::directory_entry{scmi_sysfs_path / "not_a_target"},
+          std::filesystem::directory_entry{scmi_sysfs_path / "tlm-1"},
+      });
 
   auto targets = astl::ScmiTopologyPlugin::detail::ScanForTargetsOnFileInterface(configuration.value(),
                                                                                  std::move(mock_file_interface));
   REQUIRE(targets.has_value());
-  /// @todo ASTL-165 Get rid of hard-coded AP0 name
-  REQUIRE(targets->size() == 1);
+  REQUIRE(targets->size() == 2);
+  REQUIRE((*targets)[0]->Name() == "tlm-0");
+  REQUIRE((*targets)[1]->Name() == "tlm-1");
 }

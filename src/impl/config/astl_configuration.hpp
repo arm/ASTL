@@ -28,6 +28,7 @@
 #include "astl/astl_errors.h"
 #include "config/scmi_specification_json.hpp"
 #include "metric/metric_config.hpp"
+#include "target.hpp"
 
 using json = nlohmann::json;
 
@@ -47,7 +48,7 @@ struct MetricJsonDeclaration {
 
 /** @brief Overall configuration for the ASTL library */
 struct AstlConfiguration {
-  /** @brief scmi_sysfs_telemetry_root_override is an optional path to replace "/tmp/fuse/scmi/scmi_telemetry"
+  /** @brief scmi_sysfs_telemetry_root_override is an optional path to replace "/sys/class/scmi_telemetry"
    *         This is a placeholder example of something that _could_ be configured.
    *         subject to change, not currently modified.
    */
@@ -70,10 +71,12 @@ auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlC
  * e.g. 'ENERGY_COUNTER'
  * @param metric_declaration The MetricJsonDeclaration json definition of this type of metric from the astl
  * configuration json. adds info like units on how to interpret the metrics
- * @param layout             The scmi::Layout relevant 'layout' section of the SCMI spec json for this platform
+ * @param scmi_spec          The scmi json spec, especially scmi::Layout for this platform
+ * @param targets A vector of ITarget pointers represending the detected SCMI targets on this platform
+ *
  */
 auto CreateMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
-                         scmi::ScmiSpecification const& scmi_spec)
+                         scmi::ScmiSpecification const& scmi_spec, std::vector<const ITarget*> const& scmi_targets)
     -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code>;
 
 }  // namespace astl
