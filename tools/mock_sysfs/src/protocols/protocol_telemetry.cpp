@@ -63,8 +63,17 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode* g
   auto& context = SCMITelemetryContext::Instance();
 
   // Create the telemetry directory under g_root.
-  auto telemetry = FileSystemNode::CreateDirectory("scmi_telemetry", g_root, ProtocolType::SCMI_TELEMETRY);
+  auto scmi_telemetry = FileSystemNode::CreateDirectory("scmi_telemetry", g_root, ProtocolType::SCMI_TELEMETRY);
 
+  if (!scmi_telemetry) {
+    std::cerr << "Error: scmi_telemetry is null!" << '\n';
+    abort();
+  }
+  // will call `scmi_telemetry->AddChild(std::move(telemetry))` later when we're done with telemetry
+
+  // @todo ASTL-165: support multiple targets for testing
+  // Create the tlm-0 target directory under scmi_telemetry.
+  auto telemetry = FileSystemNode::CreateDirectory("tlm-0", scmi_telemetry.get(), ProtocolType::SCMI_TELEMETRY);
   if (!telemetry) {
     std::cerr << "Error: telemetry is null!" << '\n';
     abort();
@@ -245,7 +254,9 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode* g
 
   telemetry->AddChild(std::move(des_dir));
   telemetry->AddChild(std::move(groups_dir));
-  return telemetry;
+
+  scmi_telemetry->AddChild(std::move(telemetry));
+  return scmi_telemetry;
 }
 
 TelemetryFile GetTelemetryFile(const std::string& name) {

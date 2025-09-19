@@ -31,7 +31,7 @@ jobs:
         continue-on-error: true
         with:
           OPENAI_API_KEY: ${{ secrets.OPENAI_PROXY_KEY_FOR_SELF_HOSTED_RUNNERS }}
-          OPENAI_BASE_URL: 'https://openai-api-proxy.geo.arm.com/api/providers/openai-eu/v1'
+          OPENAI_BASE_URL: "https://openai-api-proxy.geo.arm.com/api/providers/openai-eu/v1"
           OPENAI_API_MODEL: "gpt-5-mini"
           REASONING_EFFORT: "high"
           CODE_REVIEW_GUIDELINES: ".github/workflows/AI_CODE_REVIEW.md"

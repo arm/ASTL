@@ -45,6 +45,24 @@ class FileInterface {
     // TODO(https://jira.arm.com/browse/ASTL-76) - Unhandled exception are caught at the top level.
   }
 
+  auto GetSubdirectories() const -> std::expected<std::vector<std::filesystem::directory_entry>, astl_status_code> {
+    try {
+      std::vector<std::filesystem::directory_entry> entries;
+      for (const auto &entry : std::filesystem::directory_iterator(Resolve(std::filesystem::path{}))) {
+        if (entry.is_directory()) {
+          entries.push_back(entry);
+        }
+      }
+      return entries;
+    } catch (const std::bad_alloc &e) {
+      ASTL_LOG_ERROR("GetSubdirectories: {}", e.what());
+      return std::unexpected(ASTL_STATUS_OUT_OF_MEMORY);
+    } catch (const std::filesystem::filesystem_error &e) {
+      ASTL_LOG_ERROR("GetSubdirectories: {}", e.what());
+      return std::unexpected(ASTL_STATUS_FILE_ERROR);
+    }
+  }
+
   /**
    * @brief Check if the given file has read permissions.
    * @param path Relative or absolute path to the file.

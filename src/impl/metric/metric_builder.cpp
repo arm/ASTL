@@ -30,10 +30,15 @@
 namespace astl {
 
 /** @brief helper function to parse a system scmi specification json file into MetricConfig objects
+ *
+ * @param configuration The overall ASTL configuration including the path to the SCMI specification file
+ * @param scmi_targets A vector of ITarget pointers representing the detected targets in the system
+ *
  *  IMPROVE - Can we move this out of the astl namespace or mark it as private somehow?  It's an internal-only helper
  * function.
  */
-auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& configuration)
+auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration&           configuration,
+                                                    std::vector<const ITarget*> const& scmi_targets)
     -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
   std::vector<std::unique_ptr<MetricConfig>> configurations;
   if (!configuration.scmi_specification_path) {
@@ -55,7 +60,8 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration& con
     // here the 'metric_name' is more descriptive from the config file like 'Soc Power' and the
     // 'metric_declaration.register' holds the register name like 'ENERGY_COUNTER'
     for (const auto& [metric_name, metric_declaration] : configuration.metric_declarations) {
-      auto metric_configs_result = CreateMetricConfigs(metric_name, metric_declaration, specification_data);
+      auto metric_configs_result =
+          CreateMetricConfigs(metric_name, metric_declaration, specification_data, scmi_targets);
       if (metric_configs_result.has_value()) {
         for (auto& metric_config : metric_configs_result.value()) {
           // Log metric name and event IDs
@@ -122,7 +128,8 @@ auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, co
     ASTL_LOG_INFO("No targets with SCMI collector type found, skipping SCMI metric registration");
     return metric_manager;
   }
-  auto scmi_metric_configurations = ParseMetricConfigurationsFromScmiSpecification(configuration);
+  auto scmi_metric_configurations =
+      ParseMetricConfigurationsFromScmiSpecification(configuration, scmi_targets_iter->second);
   if (!scmi_metric_configurations) {
     return std::unexpected(scmi_metric_configurations.error());
   }

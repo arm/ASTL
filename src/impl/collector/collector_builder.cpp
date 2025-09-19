@@ -40,17 +40,24 @@ namespace astl {
 auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration)
     -> std::expected<std::unique_ptr<ICollectorManager>, astl_status_code> {
   std::unordered_map<ITarget*, std::vector<std::unique_ptr<ICollector>>> collectors;
+  std::filesystem::path                                                  scmi_sysfs_root_path =
+      configuration.scmi_sysfs_telemetry_root_path.value_or(std::filesystem::path{kDefaultScmiSysfsTelemetryRootPath});
+
+  using ScmiCollector = astl::ScmiSysfsCollector<astl::FileInterface>;
+
   for (const auto& cur_target : targets) {
-    /// @todo ASTL-146 Instead of hard-coding an SCMI/SysFS collector,
-    ///                dynamically assign an appropriate collector for each target
-    astl::FileInterface scmi_sysfs_file_interface{configuration.scmi_sysfs_telemetry_root_path.value_or(
-        std::filesystem::path{kDefaultScmiSysfsTelemetryRootPath})};
-    using ScmiCollector = astl::ScmiSysfsCollector<decltype(scmi_sysfs_file_interface)>;
-    std::unique_ptr<astl::ICollector> scmi_collector =
-        std::make_unique<ScmiCollector>(std::move(scmi_sysfs_file_interface));
-    std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
-    collectors_for_target.push_back(std::move(scmi_collector));
-    collectors.emplace(cur_target.get(), std::move(collectors_for_target));
+    if (cur_target->GetCollectorType() == CollectorType::SCMI) {
+      std::filesystem::path             scmi_target_path = scmi_sysfs_root_path / cur_target->Name();
+      astl::FileInterface               scmi_target_file_interface{scmi_target_path};
+      std::unique_ptr<astl::ICollector> scmi_collector =
+          std::make_unique<ScmiCollector>(std::move(scmi_target_file_interface));
+      std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
+      collectors_for_target.push_back(std::move(scmi_collector));
+      collectors.emplace(cur_target.get(), std::move(collectors_for_target));
+    } else {
+      ASTL_LOG_ERROR("BuildCollectorManager: Unsupported collector type for target {}", cur_target->Name());
+      return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+    }
   }
 
   return std::make_unique<CollectorManager>(std::move(collectors));

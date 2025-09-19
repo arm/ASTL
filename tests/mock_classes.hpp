@@ -86,6 +86,8 @@ struct MockFileInterface {
 
   using expected_bool = std::expected<bool, astl_status_code>;
   MAKE_MOCK1(IsValid, auto(const std::filesystem::path&)->expected_bool, const noexcept);
+  using expected_children = std::expected<std::vector<std::filesystem::directory_entry>, astl_status_code>;
+  MAKE_MOCK0(GetSubdirectories, auto()->expected_children, const);
   MAKE_MOCK1(HasReadPermission, auto(const std::filesystem::path&)->expected_bool, const noexcept);
   MAKE_MOCK1(HasWritePermission, auto(const std::filesystem::path&)->expected_bool, const noexcept);
   MAKE_MOCK2(Read, auto(const std::filesystem::path&, std::string&)->astl_status_code, const);

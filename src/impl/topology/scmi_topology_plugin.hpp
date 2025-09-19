@@ -36,16 +36,18 @@ namespace ScmiTopologyPlugin {
 namespace detail {
 
 /**
- * @brief Returns a list of targets accessible via SCMI on this platform
+ * @brief Returns a Target (e.g. named "tlm-0") accessible via SCMI from the given subdirectory scmi_telemetry
  *
- * @param configuration The ASTL configuration containing SCMI sysfs path overrides
- * @param scmi_sysfs_file_interface A FileInterface (or mock) to use for exploring the SCMI targets
+ * @param scmi_sysfs_file_interface a FileInterface implementation (or mock) to use to explore the SCMI targets
+ * @param telemetry_subdirectory A string representing the subdirectory under which to look for SCMI targets (e.g.
+ * "tlm-0")
  */
 template <typename FileInterfaceType>
-auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileInterfaceType scmi_sysfs_file_interface)
-    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
-  std::vector<std::unique_ptr<ITarget> > targets;
-  auto de_implementation_version_path = scmi_sysfs_file_interface.GetBasePath() / "de_implementation_version";
+auto DetectTarget(FileInterfaceType const& scmi_sysfs_file_interface, std::string const& telemetry_subdirectory)
+    -> std::expected<std::unique_ptr<ITarget>, astl_status_code> {
+  std::unique_ptr<ITarget> target;
+  auto                     de_implementation_version_path =
+      scmi_sysfs_file_interface.GetBasePath() / telemetry_subdirectory / "de_implementation_version";
 
   auto is_valid = scmi_sysfs_file_interface.IsValid(de_implementation_version_path);
   if (!is_valid) {
@@ -55,8 +57,9 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
   if (!(is_valid.value())) {
     ASTL_LOG_INFO(
         "ScmiTopologyPlugin::ScanForTargets: Info file de_implementation_version did not exist.  "
-        "Generating 0 targets for SCMI/SysFS");
-    return std::vector<std::unique_ptr<ITarget> >();
+        "skipping target directory {}",
+        telemetry_subdirectory);
+    return {};
   }
 
   auto has_read_permission = scmi_sysfs_file_interface.HasReadPermission(de_implementation_version_path);
@@ -67,24 +70,62 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
   if (!(has_read_permission.value())) {
     ASTL_LOG_INFO(
         "ScmiTopologyPlugin::ScanForTargets: Info file de_implementation_version did not have read permissions.  "
-        "Generating 0 targets for SCMI/SysFS");
-    return std::vector<std::unique_ptr<ITarget> >();
+        "skipping target directory {}",
+        telemetry_subdirectory);
+    return {};
   }
 
   std::string read_content;
   auto        read_status = scmi_sysfs_file_interface.Read(de_implementation_version_path, read_content);
   if (read_status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to read content of de_implementation_version");
+    ASTL_LOG_ERROR(
+        "ScmiTopologyPlugin::ScanForTargets: Failed to read content of de_implementation_version "
+        "for target {}",
+        telemetry_subdirectory);
     return std::unexpected(read_status);
   }
-
-  /// @todo ASTL-165 Get rid of hard-coded target name, single instance
   /// @todo ASTL-166 Create a proper member variable or structure to store the UUID
-  (void)configuration;
-  ASTL_LOG_INFO("ScmiTopologyPlugin::ScanForTargets: Successfully detected 1 SCMI/SysFS target with UUID {}",
+  ASTL_LOG_INFO("ScmiTopologyPlugin::ScanForTargets: Successfully detected SCMI/SysFS target with UUID {}",
                 read_content);
-  targets.push_back(std::make_unique<Target>("TLM_0", "UUID:" + read_content, CollectorType::SCMI));
+  return std::make_unique<Target>(telemetry_subdirectory, "UUID:" + read_content, CollectorType::SCMI);
+}
 
+/**
+ * @brief Returns a list of targets accessible via SCMI on this platform
+ *
+ * @param configuration The ASTL configuration containing SCMI sysfs path overrides
+ * @param scmi_sysfs_file_interface A FileInterface (or mock) to use for exploring the SCMI targets
+ */
+template <typename FileInterfaceType>
+auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileInterfaceType scmi_sysfs_file_interface)
+    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
+  std::vector<std::unique_ptr<ITarget> > targets;
+  (void)configuration;  // currently unused
+  if (!scmi_sysfs_file_interface.IsValid(scmi_sysfs_file_interface.GetBasePath())) {
+    ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: SCMI sysfs telemetry root path is not valid");
+    return {};
+  }
+  auto telemetry_root_children = scmi_sysfs_file_interface.GetSubdirectories();
+  if (!telemetry_root_children) {
+    ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to list children of SCMI sysfs telemetry root");
+    return {};
+  }
+
+  for (const auto& entry : telemetry_root_children.value()) {
+    auto target = DetectTarget(scmi_sysfs_file_interface, entry.path().filename().string());
+    if (!target) {
+      if (target.error() == ASTL_STATUS_SUCCESS) {
+        // Not an error, just no target found in this directory
+        continue;
+      }
+      ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to detect target in directory {}",
+                     entry.path().string());
+      return std::unexpected(target.error());
+    }
+    if (target.value()) {
+      targets.push_back(std::move(target.value()));
+    }
+  }
   return targets;
 }
 
