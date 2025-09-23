@@ -43,7 +43,7 @@ enum class TelemetryFile {
 /**
  * @brief Initializes the telemetry protocol.
  *
- * @details This function creates the SCMI telemetry context instance, starts the data event generators,
+ * @details This function creates the SCMI telemetry target instance, starts the data event generators,
  * and then calls construction of the telemetry file tree @ref InitProtocolTelemetryFileTree.
  *
  * TODO(ASTL-13): Discover config vector to dynamically build DE structure.
@@ -149,7 +149,7 @@ class DataEvent {
 };
 
 /**
- * @brief Singleton class managing the SCMI telemetry context.
+ * @brief Class managing an SCMI target.
  *
  * This class provides configuration and operational control for SCMI telemetry.
  * It maintains telemetry settings, handles data event management, and offers
@@ -157,20 +157,24 @@ class DataEvent {
  *
  * Set default config in config_protocol_telemetry.hpp
  */
-class SCMITelemetryContext {
+class SCMITelemetryTarget {
  public:
-  SCMITelemetryContext()                                       = delete;
-  ~SCMITelemetryContext()                                      = default;
-  SCMITelemetryContext(const SCMITelemetryContext&)            = delete;
-  SCMITelemetryContext& operator=(const SCMITelemetryContext&) = delete;
-  SCMITelemetryContext(SCMITelemetryContext&&)                 = delete;
-  SCMITelemetryContext& operator=(SCMITelemetryContext&&)      = delete;
+  SCMITelemetryTarget() = default;
+  SCMITelemetryTarget(std::string const& tlm_id, bool all_des_enable, bool all_des_tstamp_enable,
+                      UpdateInterval intervals, bool tlm_enable, std::string version,
+                      std::string de_implementation_version, std::vector<std::unique_ptr<DataEvent>> data_events);
+
+  ~SCMITelemetryTarget()                                     = default;
+  SCMITelemetryTarget(const SCMITelemetryTarget&)            = delete;
+  SCMITelemetryTarget& operator=(const SCMITelemetryTarget&) = delete;
+  SCMITelemetryTarget(SCMITelemetryTarget&&)                 = delete;
+  SCMITelemetryTarget& operator=(SCMITelemetryTarget&&)      = delete;
 
   /**
-   * @brief Returns the singleton instance of the telemetry context.
-   * @return SCMITelemetryContext& Reference to the global telemetry context.
+   * @brief Returns an instance of the telemetry target.
+   * @return SCMITelemetryTarget& Reference to the global telemetry target.
    */
-  static SCMITelemetryContext& Instance();
+  static SCMITelemetryTarget& Instance(const std::string& tlm_id);
 
   /**
    * @brief Retrieves the "all data event enable" flag.
@@ -292,19 +296,15 @@ class SCMITelemetryContext {
   std::unordered_map<uint32_t, std::unique_ptr<DesGroup>>& GetGroups() { return groups_; }
 
  private:
-  SCMITelemetryContext(bool all_des_enable, bool all_des_tstamp_enable, UpdateInterval intervals, bool tlm_enable,
-                       std::string version, std::string de_implementation_version,
-                       std::vector<std::unique_ptr<DataEvent>> data_events);
-
-  bool           all_des_enable_;
-  bool           all_des_tstamp_enable_;
+  bool           all_des_enable_{};
+  bool           all_des_tstamp_enable_{};
   UpdateInterval intervals_;
-  bool           tlm_enable_;
+  bool           tlm_enable_{};
   std::string    version_;
   std::string    de_implementation_version_;
 
-  const std::vector<std::unique_ptr<DataEvent>>           data_events_;
   std::unordered_map<uint32_t, std::unique_ptr<DesGroup>> groups_;
+  const std::vector<std::unique_ptr<DataEvent>>           data_events_;
 };
 
 }  // namespace mock_sysfs

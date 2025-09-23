@@ -12,10 +12,22 @@
 ./scmi_telemetry/tlm-0/groups
 ./scmi_telemetry/tlm-0/groups/0
 ./scmi_telemetry/tlm-0/groups/1
+./scmi_telemetry/tlm-1
+./scmi_telemetry/tlm-1/des
+./scmi_telemetry/tlm-1/des/0x0000
+./scmi_telemetry/tlm-1/des/0x0016
+./scmi_telemetry/tlm-1/des/0x1A68
+./scmi_telemetry/tlm-1/des/0x7A9B
+./scmi_telemetry/tlm-1/des/0x8C3D
+./scmi_telemetry/tlm-1/des/0x9E4F
+./scmi_telemetry/tlm-1/groups
+./scmi_telemetry/tlm-1/groups/0
+./scmi_telemetry/tlm-1/groups/1
 --- . ---
 scmi_telemetry
 --- ./scmi_telemetry ---
 tlm-0
+tlm-1
 --- ./scmi_telemetry/tlm-0 ---
 all_des_enable
 all_des_tstamp_enable
@@ -121,6 +133,119 @@ enable
 intervals_discrete
 tstamp_enable
 --- ./scmi_telemetry/tlm-0/groups/1 ---
+available_update_intervals_ms
+composing_des
+current_update_interval_ms
+des_bulk_read
+des_single_sample_read
+enable
+intervals_discrete
+tstamp_enable
+--- ./scmi_telemetry/tlm-1 ---
+all_des_enable
+all_des_tstamp_enable
+available_update_intervals_ms
+current_update_interval_ms
+de_implementation_version
+des
+des_bulk_read
+des_single_sample_read
+groups
+intervals_discrete
+tlm_enable
+version
+--- ./scmi_telemetry/tlm-1/des ---
+0x0000
+0x0016
+0x1A68
+0x7A9B
+0x8C3D
+0x9E4F
+--- ./scmi_telemetry/tlm-1/des/0x0000 ---
+compo_instance_id
+compo_type
+enable
+instance_id
+persistent
+tstamp_enable
+tstamp_exp
+type
+unit
+unit_exp
+value
+--- ./scmi_telemetry/tlm-1/des/0x0016 ---
+compo_instance_id
+compo_type
+enable
+instance_id
+persistent
+tstamp_enable
+tstamp_exp
+type
+unit
+unit_exp
+value
+--- ./scmi_telemetry/tlm-1/des/0x1A68 ---
+compo_instance_id
+compo_type
+enable
+instance_id
+persistent
+tstamp_enable
+tstamp_exp
+type
+unit
+unit_exp
+value
+--- ./scmi_telemetry/tlm-1/des/0x7A9B ---
+compo_instance_id
+compo_type
+enable
+instance_id
+persistent
+tstamp_enable
+tstamp_exp
+type
+unit
+unit_exp
+value
+--- ./scmi_telemetry/tlm-1/des/0x8C3D ---
+compo_instance_id
+compo_type
+enable
+instance_id
+persistent
+tstamp_enable
+tstamp_exp
+type
+unit
+unit_exp
+value
+--- ./scmi_telemetry/tlm-1/des/0x9E4F ---
+compo_instance_id
+compo_type
+enable
+instance_id
+persistent
+tstamp_enable
+tstamp_exp
+type
+unit
+unit_exp
+value
+--- ./scmi_telemetry/tlm-1/groups ---
+0
+1
+--- ./scmi_telemetry/tlm-1/groups/0 ---
+available_update_intervals_ms
+composing_des
+current_update_interval_ms
+des_bulk_read
+des_single_sample_read
+enable
+intervals_discrete
+tstamp_enable
+--- ./scmi_telemetry/tlm-1/groups/1 ---
 available_update_intervals_ms
 composing_des
 current_update_interval_ms
