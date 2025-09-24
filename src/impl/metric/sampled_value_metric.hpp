@@ -62,7 +62,8 @@ class SampledValueMetric : public RawMetric {
    * @param value_type The type of values this metric will process (e.g., UINT64).
    */
   explicit SampledValueMetric(const char *name, const char *description, astl_units_t units,
-                              astl_value_type_t value_type);
+                              astl_value_type_t value_type, const ITarget *target,
+                              IProcessedSampleSink *processed_sample_sink);
 
   /**
    * @brief Process and record a new sample value.
@@ -73,12 +74,12 @@ class SampledValueMetric : public RawMetric {
    * @param sample A single sampled data point to be processed.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code ReceiveSample(const SampledData &sample) override;
+  astl_status_code ReceiveRawSample(const RawSampledData &raw_sample) override;
 
   /**
    * @brief Return a view of the samples received by this metric
    */
-  std::span<const SampledData> GetSamples() const override;
+  std::span<const ProcessedSampledData> GetProcessedSamples() const override;
 
   /**
    * @brief Reset the metric state, dropping all collected samples
@@ -107,13 +108,14 @@ class SampledValueMetric : public RawMetric {
 
  private:
   /** @brief private helper to update statistics for summary later */
-  astl_status_code UpdateStatistics(const SampledData &sample);
+  astl_status_code UpdateStatistics(const ProcessedSampledData &processed_sample);
 
   // private helper to initialize or reset the samples + statistics
   void InitializeSamples();
 
-  std::vector<SampledData> _samples;
-  MinMaxAvgSummaryData     _summary_data;  // Summary data for min, max, avg
+  std::vector<ProcessedSampledData> _processed_samples;
+  mutable std::mutex                _samples_mutex;  // protects _processed_samples & summary data
+  MinMaxAvgSummaryData              _summary_data;   // Summary data for min, max, avg
   // Sum of sample values for average calculation. Uses max representation to reduce risk of overflow.
   // uint64_t or double are the largest natively support integer/float type across Windows, macOS and Linux.
   AstlValue _sum_sample_value;

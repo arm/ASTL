@@ -27,13 +27,13 @@ using namespace std::chrono_literals;
 // Test fixture class to access protected members
 class EventMetricTestFixture : public astl::EventMetric {
  public:
-  EventMetricTestFixture() : astl::EventMetric("test_event_metric", "Unit test event metric") {}
+  EventMetricTestFixture() : astl::EventMetric("test_event_metric", "Unit test event metric", nullptr, nullptr) {}
 
   // Helper method to inject events for testing
   astl_status_code InjectEvent(const std::string& event_description) {
-    astl::SampledData sample(0, astl::AstlValue{std::string{event_description}},
-                             CreateTimestamp(std::chrono::steady_clock::now()));
-    return ReceiveSample(sample);
+    astl::RawSampledData sample(0, astl::AstlValue{std::string{event_description}},
+                                CreateTimestamp(std::chrono::steady_clock::now()));
+    return ReceiveRawSample(sample);
   }
   // Helper method to create properly typed timestamps
   static astl::SampleTimestamp CreateTimestamp(std::chrono::steady_clock::time_point timePoint) {
@@ -42,7 +42,7 @@ class EventMetricTestFixture : public astl::EventMetric {
 };
 
 TEST_CASE("EventMetric: construction", "[EventMetric]") {
-  astl::EventMetric metric("test_event", "Unit test event metric");
+  astl::EventMetric metric("test_event", "Unit test event metric", nullptr, nullptr);
 
   // Verify initial state
   auto events = metric.GetEvents();
@@ -51,7 +51,7 @@ TEST_CASE("EventMetric: construction", "[EventMetric]") {
   auto summary = metric.GetEventSummaryData();
   REQUIRE(summary.counts.empty());
 
-  auto samples = metric.GetSamples();
+  auto samples = metric.GetProcessedSamples();
   REQUIRE(samples.empty());
 }
 
@@ -87,18 +87,18 @@ TEST_CASE("EventMetric: multiple event capture", "[EventMetric]") {
 }
 
 TEST_CASE("EventMetric: numeric sample type conversion", "[EventMetric]") {
-  astl::EventMetric metric("test_event", "Unit test event metric");
+  astl::EventMetric metric("test_event", "Unit test event metric", nullptr, nullptr);
 
   // Test acceptance and conversion of numeric samples to strings
-  auto              timestamp = EventMetricTestFixture::CreateTimestamp(std::chrono::steady_clock::now());
-  astl::SampledData uint64_sample(0, astl::AstlValue{uint64_t{42}}, timestamp);
-  astl::SampledData bool_sample(1, astl::AstlValue{true}, timestamp);
-  astl::SampledData float_sample(2, astl::AstlValue{3.14F}, timestamp);
+  auto                 timestamp = EventMetricTestFixture::CreateTimestamp(std::chrono::steady_clock::now());
+  astl::RawSampledData uint64_sample(0, astl::AstlValue{uint64_t{42}}, timestamp);
+  astl::RawSampledData bool_sample(1, astl::AstlValue{true}, timestamp);
+  astl::RawSampledData float_sample(2, astl::AstlValue{3.14F}, timestamp);
 
   // These should now succeed with automatic conversion
-  REQUIRE(metric.ReceiveSample(uint64_sample) == ASTL_STATUS_SUCCESS);
-  REQUIRE(metric.ReceiveSample(bool_sample) == ASTL_STATUS_SUCCESS);
-  REQUIRE(metric.ReceiveSample(float_sample) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(uint64_sample) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(bool_sample) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(float_sample) == ASTL_STATUS_SUCCESS);
 
   // Verify events were stored with string representations
   auto events = metric.GetEvents();
@@ -148,18 +148,18 @@ TEST_CASE("EventMetric: summarize functionality", "[EventMetric]") {
 }
 
 TEST_CASE("EventMetric: event timestamp ordering", "[EventMetric]") {
-  astl::EventMetric metric("test_event", "Unit test event metric");
+  astl::EventMetric metric("test_event", "Unit test event metric", nullptr, nullptr);
 
   auto start_time       = std::chrono::steady_clock::now();
   auto first_timestamp  = EventMetricTestFixture::CreateTimestamp(start_time);
   auto second_timestamp = EventMetricTestFixture::CreateTimestamp(start_time + 100ms);
 
   // Create samples with explicit timestamps
-  astl::SampledData first_sample(0, astl::AstlValue{std::string{"FIRST_EVENT"}}, first_timestamp);
-  astl::SampledData second_sample(0, astl::AstlValue{std::string{"SECOND_EVENT"}}, second_timestamp);
+  astl::RawSampledData first_sample(0, astl::AstlValue{std::string{"FIRST_EVENT"}}, first_timestamp);
+  astl::RawSampledData second_sample(0, astl::AstlValue{std::string{"SECOND_EVENT"}}, second_timestamp);
 
-  REQUIRE(metric.ReceiveSample(first_sample) == ASTL_STATUS_SUCCESS);
-  REQUIRE(metric.ReceiveSample(second_sample) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(first_sample) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(second_sample) == ASTL_STATUS_SUCCESS);
 
   auto events = metric.GetEvents();
   REQUIRE(events.size() == 2);

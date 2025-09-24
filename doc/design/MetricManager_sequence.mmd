@@ -33,7 +33,8 @@ sequenceDiagram
 
     User->>Orchestrator: astlStopCollection()
     Orchestrator->>Orchestrator: stop collection
-    Orchestrator->>MetricManager: processData(iSampleSink)
+    Orchestrator->>MetricManager: processRawData(iRawSampleSink)
+    MetricManager->>Orchestrator: GetProcessedData(iProcessedSampleSink)
     MetricManager->>Metric1: RecieveSamples(messages)
 
 

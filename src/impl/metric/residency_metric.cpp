@@ -28,10 +28,11 @@
 
 namespace astl {
 
-ResidencyMetric::ResidencyMetric(const char* name, const char* description,
+ResidencyMetric::ResidencyMetric(const char* name, const char* description, const ITarget* target,
                                  const std::vector<StateConfiguration>& state_configs,
+                                 IProcessedSampleSink*                  processed_sample_sink,
                                  const std::optional<std::string>&      inferred_state_name)
-    : DeltaMetric(name, description, ASTL_UNITS_TICKS, ASTL_VALUE_UINT64),
+    : DeltaMetric(name, description, ASTL_UNITS_TICKS, ASTL_VALUE_UINT64, target, processed_sample_sink),
       _state_configs(state_configs),
       _inferred_state_name(inferred_state_name) {
   InitializeResidencyState();
@@ -96,11 +97,11 @@ std::expected<OperationSequence, astl_status_code> ResidencyMetric::GetOperation
   return operations_seq;
 }
 
-astl_status_code ResidencyMetric::ReceiveSample(const SampledData& sample) {
+astl_status_code ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
   // Find the state configuration for this sample's operation_id using fast map lookup
-  auto config_it = _operation_id_to_config.find(sample.operation_id);
+  auto config_it = _operation_id_to_config.find(raw_sample.operation_id);
   if (config_it == _operation_id_to_config.end()) {
-    ASTL_LOG_ERROR("ResidencyMetric: No state configuration found for operation_id {}", sample.operation_id);
+    ASTL_LOG_ERROR("ResidencyMetric: No state configuration found for operation_id {}", raw_sample.operation_id);
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
 
@@ -112,25 +113,25 @@ astl_status_code ResidencyMetric::ReceiveSample(const SampledData& sample) {
   // Each sampling interval we need to ensure the samples for other states are received before we can compute the
   // inferred state.
 
-  // Check if the sample's value type matches the metric's expected type
-  auto type_check_result = CheckSampleValueType(sample);
+  // Check if the raw sample's value type matches the metric's expected type
+  auto type_check_result = CheckSampleValueType(raw_sample);
   if (type_check_result != ASTL_STATUS_SUCCESS) {
     return type_check_result;
   }
 
   // Log the raw sample using the base class method
-  LogRawSample(sample);
+  LogRawSample(raw_sample);
 
   const std::string& state_name = state_config->state_name;
 
   // If this is the first sample for this state, store it and return
   if (_previous_samples[state_name] == std::nullopt) {
-    _previous_samples[state_name] = sample;
+    _previous_samples[state_name] = raw_sample;
     return ASTL_STATUS_SUCCESS;
   }
 
   // Calculate delta between current and previous sample for this state
-  auto delta_result = CalculateDelta(sample.value, _previous_samples[state_name]->value);
+  auto delta_result = CalculateDelta(raw_sample.value, _previous_samples[state_name]->value);
   if (!delta_result.has_value()) {
     ASTL_LOG_ERROR("ResidencyMetric: failed to calculate delta for state {} in metric {}: {}", state_name,
                    _name.c_str(), astlStatusString(delta_result.error()));
@@ -146,7 +147,7 @@ astl_status_code ResidencyMetric::ReceiveSample(const SampledData& sample) {
   }
 
   // Calculate time interval between samples
-  auto time_interval = std::chrono::duration_cast<std::chrono::microseconds>(sample.timestamp -
+  auto time_interval = std::chrono::duration_cast<std::chrono::microseconds>(raw_sample.timestamp -
                                                                              _previous_samples[state_name]->timestamp);
 
   // Calculate percentage residency
@@ -159,14 +160,14 @@ astl_status_code ResidencyMetric::ReceiveSample(const SampledData& sample) {
 
   // Update state residency statistics
   auto status =
-      UpdateStateResidencyStatistics(state_name, time_result.value(), percentage_result.value(), sample.timestamp);
+      UpdateStateResidencyStatistics(state_name, time_result.value(), percentage_result.value(), raw_sample.timestamp);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
 
   // Calculate inferred state residency if configured and all states have been processed for this timestamp
   if (_inferred_state_name.has_value() && (_state_configs.size() == _processed_states_per_timestamp.size())) {
-    auto inferred_status = CalculateInferredStateResidencyForInterval(time_interval, sample.timestamp);
+    auto inferred_status = CalculateInferredStateResidencyForInterval(time_interval, raw_sample.timestamp);
     if (inferred_status != ASTL_STATUS_SUCCESS) {
       ASTL_LOG_ERROR("ResidencyMetric: failed to calculate inferred state residency for metric {}: {}", _name.c_str(),
                      astlStatusString(inferred_status));
@@ -178,7 +179,7 @@ astl_status_code ResidencyMetric::ReceiveSample(const SampledData& sample) {
   }
 
   // Store current sample as previous for next iteration for this state
-  _previous_samples[state_name] = sample;
+  _previous_samples[state_name] = raw_sample;
 
   return ASTL_STATUS_SUCCESS;
 }
@@ -216,7 +217,9 @@ astl_status_code ResidencyMetric::Summarize() {
 
 const ResidencySummaryData& ResidencyMetric::GetResidencySummaryData() const { return _summary_data; }
 
-std::span<const StateResidencyData> ResidencyMetric::GetResidencyData() const { return _residency_data; }
+std::span<const StateResidencyData> ResidencyMetric::GetResidencyData() const {
+  return std::span<const StateResidencyData>(_residency_data);
+}
 
 std::vector<StateResidencyData> ResidencyMetric::GetStateResidencyData(const std::string& state_name) const {
   std::vector<StateResidencyData> state_data;

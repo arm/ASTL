@@ -16,6 +16,10 @@
  * under the License.
  ******************************************************************************/
 
+/**
+ * @file metric_config.hpp
+ * @brief Metric configuration interfaces and concrete config specializations.
+ */
 #ifndef METRIC_CONFIG_HPP_
 #define METRIC_CONFIG_HPP_
 
@@ -30,9 +34,12 @@
 
 namespace astl {
 
-/* @brief Interface for metric configuration.
+/**
+ * @brief Abstract interface describing the immutable configuration of a metric.
  *
- * This class defines the interface that all metric configuration types must implement.
+ * Provides the common descriptive & structural fields (name, description, units, value type,
+ * semantic metric type, collector type and underlying per-target data event IDs) used during
+ * registration & validation before collection begins.
  */
 class MetricConfig {
  public:

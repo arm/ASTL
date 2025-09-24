@@ -42,8 +42,9 @@ inline astl::Logger& RateSummaryLogger() {
 
 namespace astl {
 
-RateMetric::RateMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type)
-    : DeltaMetric(name, description, units, value_type),
+RateMetric::RateMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type,
+                       const ITarget* target, IProcessedSampleSink* processed_sample_sink)
+    : DeltaMetric(name, description, units, value_type, target, processed_sample_sink),
       _rate_summary_data{},
       _interval_logger(astl::LogLevel::Info, false, false,
                        RawMetric::SanitizeMetricNameForFilename(std::string(name)) + "_rate_intervals.csv") {
@@ -60,9 +61,9 @@ RateMetric::RateMetric(const char* name, const char* description, astl_units_t u
   _interval_logger.LogInfo("Metric, Rate Value, Time Interval (us), Timestamp \n");
 }
 
-astl_status_code RateMetric::ReceiveSample(const SampledData& sample) {
+astl_status_code RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
   // Check if the sample's value type matches the metric's expected type
-  auto type_check_result = CheckSampleValueType(sample);
+  auto type_check_result = CheckSampleValueType(raw_sample);
   if (type_check_result != ASTL_STATUS_SUCCESS) {
     return type_check_result;
   }
@@ -75,7 +76,7 @@ astl_status_code RateMetric::ReceiveSample(const SampledData& sample) {
   }
 
   // First, let the base DeltaMetric process the sample and calculate delta
-  auto delta_status = DeltaMetric::ReceiveSample(sample);
+  auto delta_status = DeltaMetric::ReceiveRawSample(raw_sample);
   if (delta_status != ASTL_STATUS_SUCCESS) {
     return delta_status;
   }
@@ -89,7 +90,7 @@ astl_status_code RateMetric::ReceiveSample(const SampledData& sample) {
   const auto& delta_data = _deltas.back();
 
   // Calculate time interval between samples
-  auto time_interval = sample.timestamp - previous_timestamp.value();
+  auto time_interval = raw_sample.timestamp - previous_timestamp.value();
 
   // Prevent division by zero
   if (time_interval.count() == 0) {
@@ -98,7 +99,7 @@ astl_status_code RateMetric::ReceiveSample(const SampledData& sample) {
   }
 
   // Calculate rate: delta / time_interval
-  auto rate_result = CalculateRate(delta_data.delta_value, time_interval);
+  auto rate_result = CalculateRate(delta_data.value, time_interval);
   if (!rate_result.has_value()) {
     ASTL_LOG_ERROR("RateMetric: failed to calculate rate for metric {}: {}", _name.c_str(),
                    astlStatusString(rate_result.error()));
@@ -106,7 +107,7 @@ astl_status_code RateMetric::ReceiveSample(const SampledData& sample) {
   }
 
   // Update rate statistics
-  auto rate_status = UpdateRateStatistics(rate_result.value(), sample.timestamp, time_interval);
+  auto rate_status = UpdateRateStatistics(rate_result.value(), raw_sample.timestamp, time_interval);
   if (rate_status != ASTL_STATUS_SUCCESS) {
     return rate_status;
   }
@@ -152,6 +153,10 @@ astl_status_code RateMetric::UpdateRateStatistics(const AstlValue& rate_value, S
 
   // Store rate data for analysis
   _rates.push_back({rate_value_in_double, timestamp, time_interval});
+
+  ProcessedSampledData processed_sampled_data{static_cast<AstlValue>(rate_value_in_double), timestamp};
+
+  SinkProcessedSample(processed_sampled_data);
 
   // Update sum for average calculation
   _sum_rate_value += rate_value_in_double;
@@ -201,6 +206,9 @@ astl_status_code RateMetric::OutputTimeIntervalPackets() {
 
 RateSummaryData RateMetric::GetRateSummaryData() const { return _rate_summary_data; }
 
+/**
+ * @brief Return a view of the samples processed by this metric
+ */
 std::span<const RateData> RateMetric::GetRates() const { return std::span<const RateData>(_rates); }
 
 }  // namespace astl

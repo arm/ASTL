@@ -36,7 +36,7 @@
 #include "collector/periodic_sampler.hpp"
 #include "collector/scmi_data_event.hpp"
 #include "common/capabilities.hpp"
-#include "common/i_sample_sink.hpp"
+#include "common/i_raw_sample_sink.hpp"
 #include "common/operation.hpp"
 #include "common/scmi/scmi_read_operation.hpp"
 
@@ -67,9 +67,9 @@ class ScmiSysfsCollector : public ICollector {
 
   /*
    * @brief Set the destination for where sampled data should be sent.
-   *       This is typically the CollectorManager, but can be any ISampleSink.
+   *       This is typically the CollectorManager, but can be any IRawSampleSink.
    */
-  void SetSampleSink(ISampleSink* sample_sink) override;
+  void SetRawSampleSink(IRawSampleSink* raw_sample_sink) override;
 
   /*
    * @brief Configure the collector to collect data, but don't start sampling it yet.
@@ -112,7 +112,7 @@ class ScmiSysfsCollector : public ICollector {
   // data members
 
   CollectorCapability _collector_capability{CollectorType::SCMI};  //!< The capabilities of this collector
-  ISampleSink*        _sample_sink = nullptr;  //!< The (optional) destination for where sampled data should be sent
+  IRawSampleSink*     _raw_sample_sink = nullptr;  //!< The (optional) destination for where sampled data should be sent
   CollectionState     _collection_state = CollectionState::UNCONFIGURED;
   std::optional<CollectionConfiguration> _configuration;  //!< The current active configuration for this collector
   FileInterfaceT                         _scmi_file_interface;
@@ -145,7 +145,7 @@ class ScmiSysfsCollector : public ICollector {
   astl_status_code ExecuteCollectionOperations(OperationSequence const& operations);
 
   /*
-   * @brief Execute a single Scmi read operation, creates a new SampledData object from the read value
+   * @brief Execute a single Scmi read operation, creates a new RawSampledData object from the read value
    * and sends it to the sample sink.
    */
   astl_status_code ExecuteScmiReadOperation(ScmiReadOperation const& operation);
@@ -196,12 +196,12 @@ CollectorCapability const& ScmiSysfsCollector<FileInterfaceT>::GetCapabilities()
 
 /*
  * @brief Set the destination for where sampled data should be sent.
- *       This is typically the CollectorManager, but can be any ISampleSink.
+ *       This is typically the CollectorManager, but can be any IRawSampleSink.
  */
 template <typename FileInterfaceT>
-void ScmiSysfsCollector<FileInterfaceT>::SetSampleSink(ISampleSink* sample_sink) {
+void ScmiSysfsCollector<FileInterfaceT>::SetRawSampleSink(IRawSampleSink* raw_sample_sink) {
   std::scoped_lock lock{_collection_mutex};
-  _sample_sink = sample_sink;
+  _raw_sample_sink = raw_sample_sink;
 };
 
 /*
@@ -484,7 +484,7 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ExecuteCollectionOperations
 /*
  * @brief Executes a single ScmiReadOperation
  *        This will handle the actual file operations in the sysfs SCMI directory.
- *        creates a new SampledData object from the read value
+ *        creates a new RawSampledData object from the read value
  *        and sends it to the sample sink.
  */
 template <typename FileInterfaceT>
@@ -510,7 +510,7 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(Sc
     return parsed_value.error();
   }
   auto timestamp = parsed_value->first;
-  auto value     = AstlValue{parsed_value->second.value};
+  auto raw_value = AstlValue{parsed_value->second.value};
 
   /**
    * @brief Discard samples that arrive with the same timestamp as the previous one.
@@ -528,10 +528,10 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(Sc
   // Update the previous timestamp for this data event
   _previous_timestamps[operation.scmi_data_event_id] = timestamp;
 
-  SampledData sampled_data{operation.GetId(), value, timestamp};
+  RawSampledData raw_sampled_data{operation.GetId(), raw_value, timestamp};
 
-  if (_sample_sink) {
-    return _sample_sink->SinkSamples(_configuration->Target(), {&sampled_data, 1});
+  if (_raw_sample_sink) {
+    return _raw_sample_sink->SinkRawSamples(_configuration->Target(), {&raw_sampled_data, 1});
   }
 
   return ASTL_STATUS_SUCCESS;  // Successfully read and sent the sample

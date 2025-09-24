@@ -35,7 +35,7 @@ namespace astl {
  * @param targets The list of targets for which collectors are to be built.
  * @param configuration The configuration containing parameters for collector creation.
  * @return An initialized ICollectorManager associating each target with its corresponding collectors, or an error code.
- *         Note the RegisterSampleSink() function will still need to be called on the returned collector manager
+ *         Note the RegisterRawSampleSink() function will still need to be called on the returned collector manager
  */
 auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration)
     -> std::expected<std::unique_ptr<ICollectorManager>, astl_status_code>;

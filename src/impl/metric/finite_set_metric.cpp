@@ -21,18 +21,21 @@
 namespace astl {
 
 FiniteSetMetric::FiniteSetMetric(const char* name, const char* description, astl_units_t units,
-                                 astl_value_type_t value_type, const std::set<AstlValue>& finite_set)
-    : SampledValueMetric(name, description, units, value_type), _finite_set{finite_set}, _finite_set_summary{} {}
+                                 astl_value_type_t value_type, const std::set<AstlValue>& finite_set,
+                                 const ITarget* target, IProcessedSampleSink* processed_sample_sink)
+    : SampledValueMetric(name, description, units, value_type, target, processed_sample_sink),
+      _finite_set{finite_set},
+      _finite_set_summary{} {}
 
-astl_status_code FiniteSetMetric::ReceiveSample(const SampledData& sample) {
+astl_status_code FiniteSetMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
   // First call the parent class to handle basic sample processing
-  auto status = SampledValueMetric::ReceiveSample(sample);
+  auto status = SampledValueMetric::ReceiveRawSample(raw_sample);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
 
   // Update finite set specific statistics
-  return UpdateFiniteSetStatistics(sample);
+  return UpdateFiniteSetStatistics(raw_sample);
 }
 
 void FiniteSetMetric::Reset() {
@@ -52,21 +55,21 @@ astl_status_code FiniteSetMetric::Summarize() {
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code FiniteSetMetric::UpdateFiniteSetStatistics(const SampledData& sample) {
+astl_status_code FiniteSetMetric::UpdateFiniteSetStatistics(const RawSampledData& raw_sample) {
   _finite_set_summary.total_samples++;
 
   // Check if the value exists in our finite set
-  if (IsInFiniteSet(sample.value)) {
+  if (IsInFiniteSet(raw_sample.value)) {
     // Value is in the finite set - update counts
-    _finite_set_summary.value_counts[sample.value]++;
+    _finite_set_summary.value_counts[raw_sample.value]++;
   } else {
     // Value is not in the finite set - track as unknown
     _finite_set_summary.unknown_values++;
-    _finite_set_summary.value_counts[sample.value]++;  // Still track the count
+    _finite_set_summary.value_counts[raw_sample.value]++;  // Still track the count
 
     // Log warning for unknown sample
     std::string warning_msg = "FiniteSetMetric '" + std::string(_name) + "': Received unknown sample value " +
-                              to_string(sample.value) + " not in finite set";
+                              to_string(raw_sample.value) + " not in finite set";
     ASTL_LOG_WARNING("{}", warning_msg);
   }
 

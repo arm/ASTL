@@ -10,7 +10,7 @@ namespace astl {
 Target::Target(std::string name, std::string description, CollectorType collector_type, Target* parent)
     : _name{std::move(name)}, _description{std::move(description)}, _collector_type{collector_type}, _parent{parent} {}
 
-astl_status_code Target::GetProperties(astl_target_properties_t* target) {
+astl_status_code Target::GetProperties(astl_target_properties_t* target) const {
   if (!target) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }

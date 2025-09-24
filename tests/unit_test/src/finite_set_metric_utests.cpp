@@ -35,7 +35,8 @@ TEST_CASE("FiniteSetMetric: construction & basic functionality", "[FiniteSetMetr
                                           astl::AstlValue{uint64_t{2}}};
 
   // Construct a metric for 64-bit unsigned samples
-  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set);
+  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
+                               nullptr, nullptr);
 
   // Test that we can construct the metric successfully and call basic methods
   const auto& retrieved_set = metric.GetFiniteSet();
@@ -46,7 +47,8 @@ TEST_CASE("FiniteSetMetric: finite set checking", "[FiniteSetMetric]") {
   std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
                                           astl::AstlValue{uint64_t{2}}};
 
-  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set);
+  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
+                               nullptr, nullptr);
 
   // Test finite set membership
   REQUIRE(metric.IsInFiniteSet(astl::AstlValue{uint64_t{0}}) == true);
@@ -61,7 +63,8 @@ TEST_CASE("FiniteSetMetric: get finite set values", "[FiniteSetMetric]") {
   std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
                                           astl::AstlValue{uint64_t{2}}};
 
-  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set);
+  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
+                               nullptr, nullptr);
 
   const auto& retrieved_set = metric.GetFiniteSet();
   REQUIRE(retrieved_set.size() == 3);
@@ -75,14 +78,15 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with valid values", "[FiniteSetMetric]
   std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
                                           astl::AstlValue{uint64_t{2}}};
 
-  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set);
+  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
+                               nullptr, nullptr);
 
   // Add samples from the finite set
   std::vector<uint64_t> sample_values = {0, 1, 1, 2, 0, 1, 2, 2, 2};
 
   for (size_t i = 0; i < sample_values.size(); ++i) {
-    astl::SampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
-    auto              status = metric.ReceiveSample(sample);
+    astl::RawSampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
+    auto                 status = metric.ReceiveRawSample(sample);
     REQUIRE(status == ASTL_STATUS_SUCCESS);
   }
 
@@ -103,14 +107,15 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with unknown values", "[FiniteSetMetri
   std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
                                           astl::AstlValue{uint64_t{2}}};
 
-  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set);
+  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
+                               nullptr, nullptr);
 
   // Add samples including unknown values
   std::vector<uint64_t> sample_values = {0, 1, 5, 2, 10, 1, 0};  // 5 and 10 are unknown
 
   for (size_t i = 0; i < sample_values.size(); ++i) {
-    astl::SampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
-    auto              status = metric.ReceiveSample(sample);
+    astl::RawSampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
+    auto                 status = metric.ReceiveRawSample(sample);
     REQUIRE(status == ASTL_STATUS_SUCCESS);
   }
 
@@ -132,14 +137,15 @@ TEST_CASE("FiniteSetMetric: Reset functionality", "[FiniteSetMetric]") {
   std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
                                           astl::AstlValue{uint64_t{2}}};
 
-  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set);
+  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
+                               nullptr, nullptr);
 
   // Add some samples
-  astl::SampledData sample1(1, astl::AstlValue{uint64_t{0}});
-  astl::SampledData sample2(2, astl::AstlValue{uint64_t{1}});
+  astl::RawSampledData sample1(1, astl::AstlValue{uint64_t{0}});
+  astl::RawSampledData sample2(2, astl::AstlValue{uint64_t{1}});
 
-  metric.ReceiveSample(sample1);
-  metric.ReceiveSample(sample2);
+  metric.ReceiveRawSample(sample1);
+  metric.ReceiveRawSample(sample2);
 
   auto summary_before = metric.GetFiniteSetSummaryData();
   REQUIRE(summary_before.total_samples == 2);
@@ -157,14 +163,15 @@ TEST_CASE("FiniteSetMetric: Summarize operation", "[FiniteSetMetric]") {
   std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
                                           astl::AstlValue{uint64_t{2}}};
 
-  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set);
+  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
+                               nullptr, nullptr);
 
   // Add some samples
   std::vector<uint64_t> sample_values = {0, 1, 2, 1, 0};
 
   for (size_t i = 0; i < sample_values.size(); ++i) {
-    astl::SampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
-    metric.ReceiveSample(sample);
+    astl::RawSampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
+    metric.ReceiveRawSample(sample);
   }
 
   // Summarize should succeed and not change the data
@@ -180,12 +187,13 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with unsupported type", "[FiniteSetMet
   std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint32_t{0}}, astl::AstlValue{uint32_t{1}},
                                           astl::AstlValue{uint32_t{2}}};
 
-  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT32, finite_set);
+  astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT32, finite_set,
+                               nullptr, nullptr);
 
   // Try to send a UINT64 value (which should be rejected by the base class)
-  astl::AstlValue   val{uint64_t{40}};
-  astl::SampledData sample(1, val);
-  auto              status = metric.ReceiveSample(sample);
+  astl::AstlValue      val{uint64_t{40}};
+  astl::RawSampledData sample(1, val);
+  auto                 status = metric.ReceiveRawSample(sample);
   REQUIRE(status == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 }
 
@@ -195,17 +203,18 @@ TEST_CASE("FiniteSetMetric: String values handling", "[FiniteSetMetric]") {
   std::set<astl::AstlValue> finite_set = {astl::AstlValue{std::string{"LOW"}}, astl::AstlValue{std::string{"MEDIUM"}},
                                           astl::AstlValue{std::string{"HIGH"}}};
 
-  astl::FiniteSetMetric metric("power_level", "Power level states", ASTL_UNITS_WATTS, ASTL_VALUE_STRING, finite_set);
+  astl::FiniteSetMetric metric("power_level", "Power level states", ASTL_UNITS_WATTS, ASTL_VALUE_STRING, finite_set,
+                               nullptr, nullptr);
 
-  astl::SampledData sample1(1, astl::AstlValue{std::string{"LOW"}});
-  astl::SampledData sample2(2, astl::AstlValue{std::string{"MEDIUM"}});
-  astl::SampledData sample3(3, astl::AstlValue{std::string{"HIGH"}});
-  astl::SampledData sample4(4, astl::AstlValue{std::string{"UNKNOWN"}});  // Not in finite set
+  astl::RawSampledData sample1(1, astl::AstlValue{std::string{"LOW"}});
+  astl::RawSampledData sample2(2, astl::AstlValue{std::string{"MEDIUM"}});
+  astl::RawSampledData sample3(3, astl::AstlValue{std::string{"HIGH"}});
+  astl::RawSampledData sample4(4, astl::AstlValue{std::string{"UNKNOWN"}});  // Not in finite set
 
-  REQUIRE(metric.ReceiveSample(sample1) == ASTL_STATUS_SUCCESS);
-  REQUIRE(metric.ReceiveSample(sample2) == ASTL_STATUS_SUCCESS);
-  REQUIRE(metric.ReceiveSample(sample3) == ASTL_STATUS_SUCCESS);
-  REQUIRE(metric.ReceiveSample(sample4) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(sample1) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(sample2) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(sample3) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(sample4) == ASTL_STATUS_SUCCESS);
 
   auto summary = metric.GetFiniteSetSummaryData();
   REQUIRE(summary.total_samples == 4);

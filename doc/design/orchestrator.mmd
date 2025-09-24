@@ -1,7 +1,11 @@
 ---
 title: ASTL Orchestrator
 ---
+%% Regenerate with:
+%%   node tools/render_mermaid_sequence.js doc/design/orchestrator.mmd doc/design/orchestrator.svg orchestrator_class
+%% (Keep only one Mermaid diagram type per file to avoid parser errors.)
 classDiagram
+direction TB
 %% Class Diagram for the ASTL Orchestrator and other high-level components
 %% This markup is Mermaid syntax, and can be uploaded into draw.io
 %% https://www.drawio.com/blog/mermaid-diagrams
@@ -190,13 +194,18 @@ namespace AstlCore{
         <<Interface>>
     }
 
+    class IRawSampleSink{
+        <<Interface>>
+        +OnRawSample(CounterSample)
+    }
+
 }
 %% end namespace AstlCore
 
 
 %% Orchestrator implements the ITelemetryAPI interface, essentially the entry points of the C API
 Orchestrator ..|> ITelemetryAPI 
-Orchestrator ..|> ISampleSink 
+Orchestrator ..|> IRawSampleSink 
 
 %% Orchestrator has a composition relationship with several managers
 ITopologyManager <--* Orchestrator 
@@ -267,7 +276,7 @@ class SampledValueMetric{
 }
 
 class DeltaMetric{
-    +Sample(ITarget) Operation,Interval,Operation
+    +Sample(ITarget) Operation %% interval handling omitted for diagram clarity
 }
 
 class ResidencyMetric{
@@ -318,8 +327,8 @@ namespace Collector{
   class ICollectorManager{
     <<Interface>>
     +ReportCollectionCapabilities() map~ITarget, vector[CollectorCapability]>~
-    +RegisterSampleSink(ISampleSink)
-    +UnregisterSampleSink(ISampleSink)
+    +RegisterRawSampleSink(IRawSampleSink)
+    +UnregisterRawSampleSink(IRawSampleSink)
     +ConfigureCollection(ITarget, astl_collection_parameters, CollectionOperations)
     %% if a collection is configured on the given target, get the Operations from that CollectionConfiguration to run, and execute them
     +Start(ITarget)
@@ -346,7 +355,7 @@ namespace Collector{
 
   class CollectorManager{
     %% Members
-    +_registered_sample_sinks vector~ISampleSink~
+    +_registered_raw_sample_sinks vector~IRawSampleSink~
     +_collectors map~ITarget, vector[unique_ptr[ICollector]]~
     %% Methods
     %% The TopologyManager and ConfigurationManager are responsible for creating the ICollector objects,
@@ -366,11 +375,11 @@ namespace Collector{
   }
 }
 
-%% CollectorManager implements the ICollectorManager and ISampleSink interfaces
+%% CollectorManager implements the ICollectorManager and IRawSampleSink interfaces
 ICollectorManager <|.. CollectorManager
-ISampleSink <|.. CollectorManager
+IRawSampleSink <|.. CollectorManager
 CollectorManager "1" *-- "*" CollectionConfiguration
-CollectorManager "1" --> "*" ISampleSink: registers
+CollectorManager "1" --> "*" IRawSampleSink: registers
 %% The collector manages the lifetimes of the ICollector objects,
 %% but these ICollectors aren't used for much in this context. Their concrete implementations are referenced by
 %% specific counters/metrics.

@@ -28,7 +28,7 @@ struct ICounter {
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    */
-  virtual astl_status_code GetProperties(astl_counter_properties_t *properties) = 0;
+  virtual astl_status_code GetProperties(astl_counter_properties_t *properties) const = 0;
 
   /**
    * @brief Prepare for collection based on the given set of parameters
@@ -69,7 +69,7 @@ class Counter : public ICounter {
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    */
-  astl_status_code GetProperties(astl_counter_properties_t *properties) override;
+  astl_status_code GetProperties(astl_counter_properties_t *properties) const override;
 
  private:
   CounterProperties _properties;

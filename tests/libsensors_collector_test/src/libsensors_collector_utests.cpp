@@ -23,9 +23,9 @@ TEST_CASE("SensorsCollector::GetCapabilities", "[sensors_collector]") {
 
 TEST_CASE("SensorsCollector::CollectOneSensor", "[sensors_collector]") {
   astl::LibsensorsCollector collector;
-  MockSampleSink            sample_sink;
-  REQUIRE_CALL(sample_sink, SinkSamples(_, _)).RETURN(ASTL_STATUS_SUCCESS);
-  collector.SetSampleSink(&sample_sink);
+  MockRawSampleSink         sample_sink;
+  REQUIRE_CALL(sample_sink, SinkRawSamples(_, _)).RETURN(ASTL_STATUS_SUCCESS);
+  collector.SetRawSampleSink(&sample_sink);
 
   ALLOW_CALL(mock_libsensors, sensors_init(_)).RETURN(0);
   ALLOW_CALL(mock_libsensors, sensors_cleanup());

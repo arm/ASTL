@@ -73,8 +73,10 @@ class EventMetric : public RawMetric {
    * @param name The name of the metric (e.g., "system_events").
    * @param description A brief description of the metric.
    */
-  explicit EventMetric(const char* name, const char* description)
-      : RawMetric(name, description, ASTL_UNITS_NONE, ASTL_VALUE_STRING, ASTL_METRIC_EVENT) {
+  explicit EventMetric(const char* name, const char* description, const ITarget* target,
+                       IProcessedSampleSink* processed_sample_sink)
+      : RawMetric(name, description, ASTL_UNITS_NONE, ASTL_VALUE_STRING, ASTL_METRIC_EVENT, target,
+                  processed_sample_sink) {
     // Summary: Metric, Event, Count
     _event_summary_logger.LogInfo("Metric, Event, Count\n");
     // Timeline: Metric, Event, Timestamp(µs)
@@ -92,7 +94,7 @@ class EventMetric : public RawMetric {
    * @retval ASTL_STATUS_SUCCESS Event was successfully processed and recorded.
    * @retval ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE Sample does not contain a string convertible value.
    */
-  astl_status_code ReceiveSample(const SampledData& sample) override;
+  astl_status_code ReceiveRawSample(const RawSampledData& sample) override;
 
   /**
    * @brief Summarize collected event data.
@@ -119,18 +121,18 @@ class EventMetric : public RawMetric {
    * EventMetric does not store raw samples as they are immediately processed
    * into structured EventData objects. This method currently returns an empty span.
    *
-   * @note @todo (ASTL-159): Return the EventData samples in GetSamples API
+   * @note @todo (ASTL-159): Return the EventData samples in GetProcessedSamples API
    *
    * @return Empty span since raw samples are not returned.
    */
-  std::span<const SampledData> GetSamples() const override { return {}; }
+  std::span<const ProcessedSampledData> GetProcessedSamples() const override { return {}; }
 
   /**
    * @brief Get a view of all captured events in chronological order.
    *
    * Returns a span containing all EventData objects, providing access to
    * the complete timeline of events with their descriptions and timestamps.
-   * @note @todo (ASTL-159): Remove this API when GetSamples API returns EventData
+   * @note @todo (ASTL-159): Remove this API when GetProcessedSamples API returns EventData
    *
    * @return Span of EventData objects in the order they were received.
    */
@@ -157,7 +159,7 @@ class EventMetric : public RawMetric {
    * @param sample The sample data containing the event information.
    * @return astl_status_code indicating success or validation failure.
    */
-  astl_status_code CheckAndStoreEvent(const SampledData& sample);
+  astl_status_code CheckAndStoreEvent(const RawSampledData& raw_sample);
 
   /**
    * @brief Initialize/reset internal data structures.

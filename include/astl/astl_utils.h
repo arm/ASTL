@@ -1,3 +1,12 @@
+/**
+ * @file astl_utils.h
+ * @brief Utility macros and visibility decoration helpers for the public ASTL C API.
+ *
+ * Defines the `ASTL_API` macro which annotates exported functions for the
+ * supported toolchains / platforms (dllexport/dllimport on Windows and default
+ * ELF symbol visibility elsewhere).  For older compilers lacking visibility
+ * controls the macro is defined empty.
+ */
 #ifndef ASTL_UTILS_H_
 #define ASTL_UTILS_H_
 

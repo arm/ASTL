@@ -1,3 +1,11 @@
+/**
+ * @file astl_version.h
+ * @brief Build / compiled version query helpers for ASTL.
+ *
+ * Provides compile-time macros and runtime helpers for retrieving the library
+ * semantic version. The `astl_version_t` struct layout is stable and must not
+ * be altered in future API revisions.
+ */
 #ifndef INCLUDE_ASTL_VERSION_H_
 #define INCLUDE_ASTL_VERSION_H_
 

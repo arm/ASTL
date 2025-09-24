@@ -16,6 +16,10 @@
  * under the License.
  ******************************************************************************/
 
+/**
+ * @file scmi_read_operation.hpp
+ * @brief SCMI-specific operation types and data event ID abstractions.
+ */
 #ifndef SCMI_READ_OPERATION_HPP_
 #define SCMI_READ_OPERATION_HPP_
 

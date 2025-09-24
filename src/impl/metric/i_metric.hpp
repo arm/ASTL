@@ -25,10 +25,14 @@
 
 #include "astl/astl.h"
 #include "common/capabilities.hpp"
-#include "common/i_sample_sink.hpp"
+#include "common/i_processed_sample_sink.hpp"
+#include "common/i_raw_sample_sink.hpp"
 #include "common/operation.hpp"
 
 namespace astl {
+
+struct ProcessedSampledData;
+struct IProcessedSampleSink;
 
 /**
  * @brief Abstract interface for all ASTL metric implementations.
@@ -63,19 +67,25 @@ struct IMetric {
   virtual std::expected<OperationSequence, astl_status_code> GetOperations() = 0;
 
   /**
-   * @brief Process the individual sample routed to metric.
+   * @brief Process the individual raw sample routed to metric.
    * This method is called by the Metric Manager to send individual samples to the metric plugin.
-   * The Metric Manager ensures that the samples are monotonically increasing in time.
+   * The Metric Manager ensures that the raw samples are monotonically increasing in time.
    *
    * @param sample The sample to process.
    * @return astl_status_code
    */
-  virtual astl_status_code ReceiveSample(const SampledData &sample) = 0;
+  virtual astl_status_code ReceiveRawSample(const RawSampledData &raw_sample) = 0;
+
+  /*
+   * @brief Set the destination for where processed sampled data should be sent.
+   *       This is typically the MetricManager, but can be any IProcessedSampleSink.
+   */
+  virtual void SetProcessedSampleSink(IProcessedSampleSink *processed_sample_sink) = 0;
 
   /**
-   * @brief Return a view of the samples received by this metric
+   * @brief Return a view of the samples processed by this metric
    */
-  virtual std::span<const SampledData> GetSamples() const = 0;
+  virtual std::span<const ProcessedSampledData> GetProcessedSamples() const = 0;
 
   /**
    * @brief Reset the metric state, dropping all collected samples
@@ -99,6 +109,46 @@ struct IMetric {
    * @brief Retrieve the metric's name as a string
    */
   virtual auto Name() const -> std::string const & = 0;
+  /**
+   * @brief Forward a single processed sample produced by this metric to the currently configured sink.
+   *
+   * This function is the final hand-off point in the metric processing pipeline. Implementations
+   * typically perform minimal work here (e.g. validation, lightweight transformation, buffering)
+   * before delegating to the `IProcessedSampleSink` previously installed via
+   * `SetProcessedSampleSink`.
+   *
+   * Ownership / Lifetime:
+   *  - The referenced `processed_sample` remains owned by the metric implementation; the sink MUST
+   *    NOT retain references into the object beyond the duration of the call unless the metric
+   *    provides a documented stability guarantee for its underlying storage (e.g. ring buffer).
+   *  - If durable retention is required, the sink should copy the data it needs.
+   *
+   * Thread Safety:
+   *  - Unless a specific metric documents otherwise, calls are expected to be serialized by the
+   *    `MetricManager`. Implementations may assume single-threaded invocation unless explicitly
+   *    stated.
+   *
+   * Ordering:
+   *  - Samples are delivered in monotonically non-decreasing timestamp order (enforced earlier in
+   *    the pipeline). Implementations may rely on this for incremental computations.
+   *
+   * Error Handling:
+   *  - Returns `ASTL_STATUS_SUCCESS` on successful forwarding.
+   *  - `ASTL_STATUS_NOT_INITIALIZED` if no sink has been configured.
+   *  - `ASTL_STATUS_BAD_ARGUMENT` if the sample is structurally invalid (e.g. missing size
+   *    initialization) – implementations may add additional validation criteria.
+   *  - Other metric-specific error codes are permitted (e.g. capacity / overflow) and should be
+   *    documented if introduced.
+   *
+   * Performance Considerations:
+   *  - Keep this path allocation-free in the steady state to minimize perturbation of sampling
+   *    cadence.
+   *  - Avoid logging on the hot path except for error conditions.
+   *
+   * @param processed_sample The processed sample to be forwarded.
+   * @return astl_status_code See Error Handling section above.
+   */
+  virtual astl_status_code SinkProcessedSample(const ProcessedSampledData &processed_sample) = 0;
 };
 
 }  // namespace astl

@@ -23,6 +23,7 @@
 
 #include "astl/astl_errors.h"
 #include "collector/collection_operations.hpp"
+#include "common/astl_defines.hpp"
 #include "common/scmi/scmi_read_operation.hpp"
 #include "delta_metric.hpp"
 #include "i_metric.hpp"
@@ -33,6 +34,15 @@
 
 namespace astl {
 
+astl_status_code MetricManager::SinkProcessedSamples(const IMetric*                        metric,
+                                                     std::span<const ProcessedSampledData> processed_samples) {
+  auto target_or_error = GetTargetForMetric(metric);
+  if (!target_or_error.has_value()) {
+    return target_or_error.error();
+  }
+  return SinkProcessedSamples(*target_or_error, metric, processed_samples);
+}
+
 /**
  * @brief Helper to instantiate a metric based on its type
  *
@@ -41,29 +51,50 @@ namespace astl {
  * CreateResidencyMetricFromConfig (for residency metrics with target-specific configuration), or implement visitor
  * pattern to maintain abstraction without dynamic_cast.
  */
-auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* target)
+auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* target, IProcessedSampleSink* sink)
     -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
-  switch (metric_config->MetricType()) {
+  if (!target) {
+    ASTL_LOG_ERROR("CreateMetricFromConfig: Invalid target");
+    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+  }
+
+  if (!metric_config) {
+    ASTL_LOG_ERROR("CreateMetricFromConfig: Invalid metric config");
+    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+  }
+
+  auto        metric_type        = metric_config->MetricType();
+  const auto* metric_name        = metric_config->Name().c_str();
+  const auto* metric_description = metric_config->Description().c_str();
+  auto        metric_units       = metric_config->Units();
+  auto        metric_value_type  = metric_config->ValueType();
+
+  switch (metric_type) {
     case astl_metric_type_t::ASTL_METRIC_VALUE:
-      ASTL_LOG_INFO("CreateMetricFromConfig: Creating SampledValue metric '{}'", metric_config->Name());
-      return std::make_unique<SampledValueMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
-                                                  metric_config->Units(), metric_config->ValueType());
+      ASTL_LOG_INFO("CreateMetricFromConfig: Creating SampledValue metric '{}'", metric_name);
+      return std::make_unique<SampledValueMetric>(metric_name, metric_description, metric_units, metric_value_type,
+                                                  target, sink);
+      break;
+
     case astl_metric_type_t::ASTL_METRIC_DELTA:
-      ASTL_LOG_INFO("CreateMetricFromConfig: Creating DeltaMetric '{}'", metric_config->Name());
-      return std::make_unique<DeltaMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
-                                           metric_config->Units(), metric_config->ValueType());
+      ASTL_LOG_INFO("CreateMetricFromConfig: Creating DeltaMetric '{}'", metric_name);
+      return std::make_unique<DeltaMetric>(metric_name, metric_description, metric_units, metric_value_type, target,
+                                           sink);
+      break;
+
     case astl_metric_type_t::ASTL_METRIC_RATE:
-      ASTL_LOG_INFO("CreateMetricFromConfig: Creating RateMetric '{}'", metric_config->Name());
-      return std::make_unique<RateMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
-                                          metric_config->Units(), metric_config->ValueType());
+      ASTL_LOG_INFO("CreateMetricFromConfig: Creating RateMetric '{}'", metric_name);
+      return std::make_unique<RateMetric>(metric_name, metric_description, metric_units, metric_value_type, target,
+                                          sink);
+      break;
+
     case astl_metric_type_t::ASTL_METRIC_RESIDENCY: {
-      ASTL_LOG_INFO("CreateMetricFromConfig: Creating ResidencyMetric '{}'", metric_config->Name());
+      ASTL_LOG_INFO("CreateMetricFromConfig: Creating ResidencyMetric '{}'", metric_name);
 
       // Cast to ResidencyMetricConfig to get state configurations
       const auto* residency_config = dynamic_cast<const ResidencyMetricConfig*>(metric_config);
       if (!residency_config) {
-        ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to ResidencyMetricConfig for metric '{}'",
-                       metric_config->Name());
+        ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to ResidencyMetricConfig for metric '{}'", metric_name);
         return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
       }
 
@@ -82,21 +113,22 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
         }
       } else {
         ASTL_LOG_ERROR("CreateMetricFromConfig: No state configurations found for target '{}' in metric '{}'",
-                       target->Name(), metric_config->Name());
+                       target->Name(), metric_name);
         return std::unexpected(ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET);
       }
 
       // Get the inferred state name from the configuration
       const auto& inferred_state_name = residency_config->InferredState();
 
-      return std::make_unique<ResidencyMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
-                                               state_configs, inferred_state_name);
+      return std::make_unique<ResidencyMetric>(metric_name, metric_description, target, state_configs, sink,
+                                               inferred_state_name);
     }
+
     // TODO (https://jira.arm.com/browse/ASTL-102):
     // handle additional MetricType cases here
     default:
       // Unknown metric type; ignore or log an error.
-      ASTL_LOG_ERROR("CreateMetricFromConfig: unknown metric type received: {}", metric_config->MetricType());
+      ASTL_LOG_ERROR("CreateMetricFromConfig: unknown metric type received: {}", metric_type);
       return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
   }
 }
@@ -104,9 +136,10 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
 /**
  * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
  */
-auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target)
+auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target)
     -> std::expected<IMetric*, astl_status_code> {
-  auto* metric_details = static_cast<MetricHandle*>(metric_handle);
+  const auto* metric_details = static_cast<const MetricHandle*>(metric_handle);
+
   if (!metric_details) {
     ASTL_LOG_ERROR("GetMetricOnTarget: Invalid metric handle {}", metric_handle);
     return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
@@ -124,6 +157,25 @@ auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target
   return target_iter->second.get();
 }
 
+astl_status_code MetricManager::RegisterProcessedSampleSink(IProcessedSampleSink* sink) {
+  if (!sink) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  _registered_processed_sample_sinks.insert(sink);
+  return ASTL_STATUS_SUCCESS;
+}
+
+astl_status_code MetricManager::UnregisterProcessedSampleSink(IProcessedSampleSink* sink) {
+  if (!sink) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  // Unregistration is a no-op if the sink was not registered. no need to check for num_removed
+  _registered_processed_sample_sinks.erase(sink);
+
+  return ASTL_STATUS_SUCCESS;
+}
+
 astl_status_code MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_config,
                                                std::vector<const ITarget*> const& targets) {
   ASTL_LOG_TRACE("RegisterMetric {} on {} targets", metric_config ? metric_config->Name() : "<null>", targets.size());
@@ -136,7 +188,8 @@ astl_status_code MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>    
   for (const auto& target : targets) {
     // Register the metric based on its type and add it to the _metric_handles vector and
     // metric config mappings.
-    auto metric_or_error = CreateMetricFromConfig(metric_config.get(), target);
+    auto metric_or_error = CreateMetricFromConfig(metric_config.get(), target, this);
+
     if (!metric_or_error.has_value()) {
       return metric_or_error.error();
     }
@@ -184,7 +237,7 @@ auto MetricManager::GetAvailableMetrics(const ITarget* target) const
  */
 auto MetricManager::GetProperties(astl_metric_handle_t metric, astl_metric_properties_t* properties) const
     -> astl_status_code {
-  auto* metric_details = static_cast<MetricHandle*>(metric);
+  const auto* metric_details = static_cast<const MetricHandle*>(metric);
   if (!metric_details) {
     ASTL_LOG_ERROR("GetProperties: Invalid metric handle {}", metric);
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -214,12 +267,12 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
 
   OperationSequence op_sequence;
 
-  for (auto* metric_api_handle : metrics) {
+  for (const auto* metric_api_handle : metrics) {
     if (std::ranges::find(_metric_api_handles, metric_api_handle) == _metric_api_handles.end()) {
       ASTL_LOG_ERROR("GetRequiredOperations: unrecognized astl_metric_handle {}", metric_api_handle);
       return std::unexpected(ASTL_STATUS_INVALID_METRIC_HANDLE);
     }
-    auto*       metric_handle = static_cast<MetricHandle*>(metric_api_handle);
+    const auto* metric_handle = static_cast<const MetricHandle*>(metric_api_handle);
     const auto& config        = metric_handle->config;
 
     if (!IsCollectorTypeSupported(config->GetCollectorType())) {
@@ -247,7 +300,7 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
 
     // For residency metrics, use the metric's GetOperations() method.
     // The residency metric creates state-to-operation_id mapping in the metric instance when it's created,
-    // so that in ReceiveSample() it knows which state the sample is for.
+    // so that in ReceiveRawSample() it knows which state the sample is for.
     if (config->MetricType() == astl_metric_type_t::ASTL_METRIC_RESIDENCY) {
       auto operations_result = metric->GetOperations();
       if (!operations_result.has_value()) {
@@ -292,41 +345,27 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
   return operations;
 }
 
-astl_status_code MetricManager::ProcessData(std::span<SampledData> data) {
-  for (const auto& sample : data) {
-    // Find the metric handle corresponding to this operation ID
-    auto op_iter = _operation_to_metric_map.find(sample.operation_id);
-    if (op_iter == _operation_to_metric_map.end()) {
-      ASTL_LOG_ERROR("ProcessData: No metric associated with operation ID {}", sample.operation_id);
-      return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
-    }
-    IMetric* metric_handle = op_iter->second;
-    // Process the sample and propagate errors
-    // TODO (https://jira.arm.com/browse/ASTL-130): MetricManager needs to ensure Monotonicity in timestamp.
-    astl_status_code status = metric_handle->ReceiveSample(sample);
-    if (status != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} with status {}", sample.operation_id,
-                     astlStatusString(status));
-      return status;
+astl_status_code MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) {
+  for (const auto& [target, samples] : raw_samples) {
+    for (const auto& sample : samples) {
+      // Find the metric handle corresponding to this operation ID
+      auto op_iter = _operation_to_metric_map.find(sample.operation_id);
+      if (op_iter == _operation_to_metric_map.end()) {
+        ASTL_LOG_ERROR("ProcessData: No metric associated with operation ID {}", sample.operation_id);
+        return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+      }
+      IMetric* metric_handle = op_iter->second;
+      // Process the sample and propagate errors
+      // TODO (https://jira.arm.com/browse/ASTL-130): MetricManager needs to ensure Monotonicity in timestamp.
+      astl_status_code status = metric_handle->ReceiveRawSample(sample);
+      if (status != ASTL_STATUS_SUCCESS) {
+        ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} with status {}", sample.operation_id,
+                       astlStatusString(status));
+        return status;
+      }
     }
   }
   return ASTL_STATUS_SUCCESS;
-}
-
-/**
- * @brief Retrieve the collected samples for the given target and metric,
- *        or an error if the target+metric combination isn't valid
- */
-auto MetricManager::GetSamples(astl_metric_handle_t metric_handle, const ITarget* target)
-    -> std::expected<std::span<const astl::SampledData>, astl_status_code> {
-  auto metric_or_error = GetMetricOnTarget(metric_handle, target);
-  if (!metric_or_error.has_value()) {
-    ASTL_LOG_ERROR("GetSamples: Failed to get metric on target {} for handle {}", target->Name(), metric_handle);
-    return std::unexpected{metric_or_error.error()};
-  }
-  const IMetric* metric         = *metric_or_error;
-  auto           samples_result = metric->GetSamples();
-  return samples_result;
 }
 
 astl_status_code MetricManager::SummarizeMetrics() {
@@ -351,4 +390,27 @@ bool MetricManager::IsCollectorTypeSupported(CollectorType required_collector_ty
                      [&](const CollectorCapability& cap) { return cap.GetCollectorType() == required_collector_type; });
 }
 
+auto MetricManager::GetTargetForMetric(const IMetric* metric) const -> std::expected<const ITarget*, astl_status_code> {
+  for (const auto& metric_details : _metric_handles) {
+    for (const auto& [target, metric_instance] : metric_details->target_to_metric_map) {
+      if (metric_instance.get() == metric) {
+        return target;
+      }
+    }
+  }
+  ASTL_LOG_ERROR("GetTargetForMetric: Metric instance not found in any registered metrics.");
+  return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+}
+
+astl_status_code MetricManager::SinkProcessedSamples(const ITarget* target, const IMetric* metric,
+                                                     std::span<const ProcessedSampledData> processed_samples) {
+  astl_status_code result = ASTL_STATUS_SUCCESS;
+  for (const auto& sink : _registered_processed_sample_sinks) {
+    auto sink_result = sink->SinkProcessedSamples(target, metric, processed_samples);
+    if (sink_result != ASTL_STATUS_SUCCESS) {
+      result = sink_result;  // record last failure and continue
+    }
+  }
+  return result;
+}
 }  // namespace astl

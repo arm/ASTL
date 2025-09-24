@@ -23,8 +23,9 @@
 
 namespace astl {
 
-DeltaMetric::DeltaMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type)
-    : RawMetric(name, description, units, value_type, ASTL_METRIC_DELTA),
+DeltaMetric::DeltaMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type,
+                         const ITarget* target, IProcessedSampleSink* processed_sample_sink)
+    : RawMetric(name, description, units, value_type, ASTL_METRIC_DELTA, target, processed_sample_sink),
       _previous_sample{std::nullopt},
       _delta_summary_data{},
       _sum_delta_value{uint64_t{0}} {
@@ -34,24 +35,24 @@ DeltaMetric::DeltaMetric(const char* name, const char* description, astl_units_t
   _delta_summary_logger.LogInfo("Metric, Description, Units, Delta Value \n");
 }
 
-astl_status_code DeltaMetric::ReceiveSample(const SampledData& sample) {
+astl_status_code DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
   // Check if the sample's value type matches the metric's expected type
-  auto type_check_result = CheckSampleValueType(sample);
+  auto type_check_result = CheckSampleValueType(raw_sample);
   if (type_check_result != ASTL_STATUS_SUCCESS) {
     return type_check_result;
   }
 
   // Log the raw sample using the base class method
-  LogRawSample(sample);
+  LogRawSample(raw_sample);
 
   // If this is the first sample, store it and return
   if (!_previous_sample.has_value()) {
-    _previous_sample = sample;
+    _previous_sample = raw_sample;
     return ASTL_STATUS_SUCCESS;
   }
 
   // Calculate delta between current and previous sample
-  auto delta_result = CalculateDelta(sample.value, _previous_sample->value);
+  auto delta_result = CalculateDelta(raw_sample.value, _previous_sample->value);
   if (!delta_result.has_value()) {
     ASTL_LOG_ERROR("DeltaMetric: failed to calculate delta for metric {}: {}", _name.c_str(),
                    astlStatusString(delta_result.error()));
@@ -59,13 +60,13 @@ astl_status_code DeltaMetric::ReceiveSample(const SampledData& sample) {
   }
 
   // Update delta statistics
-  auto status = UpdateDeltaStatistics(delta_result.value(), sample.timestamp);
+  auto status = UpdateDeltaStatistics(delta_result.value(), raw_sample.timestamp);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
 
-  // Store current sample as previous for next iteration
-  _previous_sample = sample;
+  // Store current raw sample as previous for next iteration
+  _previous_sample = raw_sample;
 
   return ASTL_STATUS_SUCCESS;
 }
@@ -99,7 +100,11 @@ astl_status_code DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value
                                       ? std::max(_delta_summary_data.max_delta.value(), delta_value)
                                       : delta_value;
 
-  // Store delta data for later analysis and GetSamples invocation.
+  ProcessedSampledData processed_sampled_data{delta_value, timestamp};
+
+  SinkProcessedSample(processed_sampled_data);
+
+  // Store delta data for later analysis and GetProcessedSamples invocation.
   _deltas.push_back({delta_value, timestamp});
 
   // Update sum for average calculation
@@ -142,15 +147,9 @@ astl_status_code DeltaMetric::Summarize() {
 
 DeltaSummaryData DeltaMetric::GetDeltaSummaryData() const { return _delta_summary_data; }
 
-std::span<const SampledData> DeltaMetric::GetSamples() const {
-  // DeltaMetric doesn't store original samples, only delta data
-  // Return an empty span since we don't have access to the original samples
-  // TODO(ASTL-58): when OutputManager is implemented, revisit to see if DeltaData can be send.
-  static const std::vector<SampledData> empty_samples;
-  return std::span<const SampledData>(empty_samples);
+std::span<const ProcessedSampledData> DeltaMetric::GetProcessedSamples() const {
+  return std::span<const ProcessedSampledData>(_deltas);
 }
-
-std::span<const DeltaData> DeltaMetric::GetDeltas() const { return std::span<const DeltaData>(_deltas); }
 
 void DeltaMetric::Reset() { InitializeSamples(); }
 

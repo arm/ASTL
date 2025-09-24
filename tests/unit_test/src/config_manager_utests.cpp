@@ -2,10 +2,10 @@
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl_errors.h"
 #include "common/capabilities.hpp"
+#include "common/metric_config.hpp"
 #include "common/scmi/scmi_read_operation.hpp"
 #include "config/astl_configuration.hpp"
 #include "config/configuration_manager.hpp"
-#include "metric/metric_config.hpp"
 
 using trompeloeil::_;
 

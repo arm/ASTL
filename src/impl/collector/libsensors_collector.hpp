@@ -35,7 +35,7 @@
 #include "collector/i_collector.hpp"
 #include "collector/periodic_sampler.hpp"
 #include "common/capabilities.hpp"
-#include "common/i_sample_sink.hpp"
+#include "common/i_raw_sample_sink.hpp"
 #include "common/libsensors.hpp"
 #include "common/operation.hpp"
 
@@ -66,7 +66,7 @@ class LibsensorsCollector : public ICollector {
    * @brief Set the destination for where sampled data should be sent.
    *       This is typically the CollectorManager, but can be any ISampleSink.
    */
-  void SetSampleSink(ISampleSink* sample_sink) override;
+  void SetRawSampleSink(IRawSampleSink* raw_sample_sink) override;
 
   /*
    * @brief Configure the collector to collect data, but don't start sampling it yet.
@@ -109,7 +109,7 @@ class LibsensorsCollector : public ICollector {
   // data members
 
   CollectorCapability _collector_capability{CollectorType::LIBSENSORS};  //!< The capabilities of this collector
-  ISampleSink*        _sample_sink = nullptr;  //!< The (optional) destination for where sampled data should be sent
+  IRawSampleSink*     _sample_sink = nullptr;  //!< The (optional) destination for where sampled data should be sent
   CollectionState     _collection_state = CollectionState::UNCONFIGURED;
   std::optional<CollectionConfiguration> _configuration;  //!< The current active configuration for this collector
 

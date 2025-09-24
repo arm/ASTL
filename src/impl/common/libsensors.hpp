@@ -16,6 +16,10 @@
  * under the License.
  ******************************************************************************/
 
+/**
+ * @file libsensors.hpp
+ * @brief Operation specialization for reading sensor values via libsensors.
+ */
 #ifndef SENSORS_HPP_
 #define SENSORS_HPP_
 
@@ -27,6 +31,11 @@
 
 namespace astl {
 
+/**
+ * @brief Operation describing a single libsensors read of a subfeature on a chip.
+ *
+ * Validates construction arguments to avoid null chip pointers at runtime.
+ */
 struct LibsensorsReadOperation : public Operation {
   const sensors_chip_name* chip;
   int                      subfeature_number{0};

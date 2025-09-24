@@ -14,11 +14,14 @@
 #include "collector/i_collector.hpp"
 #include "collector/i_collector_manager.hpp"
 #include "common/capabilities.hpp"
-#include "common/i_sample_sink.hpp"
+#include "common/i_processed_sample_sink.hpp"
+#include "common/i_raw_sample_sink.hpp"
 #include "common/operation.hpp"
 #include "counter.hpp"
 #include "metric/i_metric.hpp"
 #include "metric/i_metric_manager.hpp"
+#include "output/i_output.hpp"
+#include "output/i_output_manager.hpp"
 #include "target.hpp"
 #include "test_includes.hpp"
 #include "topology/i_topology_manager.hpp"
@@ -40,7 +43,7 @@ struct MockTarget : public astl::ITarget {
 
   MAKE_MOCK0(GetCollectorType, auto()->astl::CollectorType, const override);
   MAKE_MOCK0(Name, auto()->std::string const&, const override);
-  MAKE_MOCK1(GetProperties, auto(astl_target_properties_t* target)->astl_status_code, override);
+  MAKE_MOCK1(GetProperties, auto(astl_target_properties_t* target)->astl_status_code, const override);
   MAKE_CONST_MOCK0(GetCounterCount, auto()->size_t, override);
   auto GetCounters() const -> std::vector<std::unique_ptr<astl::ICounter>> const& override { return _counters; };
 };
@@ -56,16 +59,16 @@ struct MockOrchestrator {
   static constexpr bool trompeloeil_movable_mock = true;  // cppcheck-suppress unusedStructMember
 
   MAKE_MOCK3(ConfigureCounterCollection,
-             astl_status_code(astl::ITarget* target, astl_collection_parameters_t const* const collection_params,
+             astl_status_code(const astl::ITarget* target, astl_collection_parameters_t const* const collection_params,
                               std::span<astl::ICounter*> counters));
 
-  MAKE_MOCK1(ReadImmediate, astl_status_code(astl::ITarget* target));
-  MAKE_MOCK1(StartCollection, astl_status_code(astl::ITarget* target));
-  MAKE_MOCK1(PauseCollection, astl_status_code(astl::ITarget* target));
-  MAKE_MOCK1(ResumeCollection, astl_status_code(astl::ITarget* target));
-  MAKE_MOCK1(StopCollection, astl_status_code(astl::ITarget* target));
+  MAKE_MOCK1(ReadImmediate, astl_status_code(const astl::ITarget* target));
+  MAKE_MOCK1(StartCollection, astl_status_code(const astl::ITarget* target));
+  MAKE_MOCK1(PauseCollection, astl_status_code(const astl::ITarget* target));
+  MAKE_MOCK1(ResumeCollection, astl_status_code(const astl::ITarget* target));
+  MAKE_MOCK1(StopCollection, astl_status_code(const astl::ITarget* target));
   using RType = std::expected<uint32_t, astl_status_code>;  // define this separately to avoid MACRO expansion quirk
-  MAKE_CONST_MOCK2(GetCounterSampleCount, RType(astl::ITarget const* target, const astl::ICounter*));
+  MAKE_CONST_MOCK2(GetCounterSampleCount, RType(const astl::ITarget* target, const astl::ICounter*));
 };
 
 /**
@@ -75,7 +78,7 @@ struct MockOrchestrator {
  */
 struct MockCounter : public astl::ICounter {
   // clang-format off
-  MAKE_MOCK1(GetProperties, auto(astl_counter_properties_t*) -> astl_status_code, override);
+  MAKE_MOCK1(GetProperties, auto(astl_counter_properties_t*) -> astl_status_code, const override);
   MAKE_MOCK1(ConfigureCollection, auto(astl_collection_parameters_t const* const) -> astl_status_code, override);
   // clang-format on
 };
@@ -112,21 +115,21 @@ struct MockTopologyManager : public astl::ITopologyManager {
 struct MockCollectorManager : public astl::ICollectorManager {
   static constexpr bool trompeloeil_movable_mock = true;
 
-  using CollectionCapabilitiesRtype = std::unordered_map<astl::ITarget*, std::vector<astl::CollectorCapability>>;
+  using CollectionCapabilitiesRtype = std::unordered_map<const astl::ITarget*, std::vector<astl::CollectorCapability>>;
   MAKE_CONST_MOCK0(ReportCollectionCapabilities, CollectionCapabilitiesRtype(), override);
-  MAKE_MOCK1(RegisterSampleSink, astl_status_code(astl::ISampleSink* sink), override);
-  MAKE_MOCK1(UnregisterSampleSink, astl_status_code(astl::ISampleSink* sink), override);
+  MAKE_MOCK1(RegisterRawSampleSink, astl_status_code(astl::IRawSampleSink* sink), override);
+  MAKE_MOCK1(UnregisterRawSampleSink, astl_status_code(astl::IRawSampleSink* sink), override);
 
   MAKE_MOCK3(ConfigureCollectionOnTarget,
-             astl_status_code(astl::ITarget* target, astl_collection_parameters_t const& collection_params,
+             astl_status_code(const astl::ITarget* target, astl_collection_parameters_t const& collection_params,
                               astl::CollectionOperations&& configuration),
              override);
 
-  MAKE_MOCK1(StartOnTarget, astl_status_code(astl::ITarget* target), override);
-  MAKE_MOCK1(PauseOnTarget, astl_status_code(astl::ITarget* target), override);
-  MAKE_MOCK1(ResumeOnTarget, astl_status_code(astl::ITarget* target), override);
-  MAKE_MOCK1(ReadImmediateOnTarget, astl_status_code(astl::ITarget* target), override);
-  MAKE_MOCK1(StopOnTarget, astl_status_code(astl::ITarget* target), override);
+  MAKE_MOCK1(StartOnTarget, astl_status_code(const astl::ITarget* target), override);
+  MAKE_MOCK1(PauseOnTarget, astl_status_code(const astl::ITarget* target), override);
+  MAKE_MOCK1(ResumeOnTarget, astl_status_code(const astl::ITarget* target), override);
+  MAKE_MOCK1(ReadImmediateOnTarget, astl_status_code(const astl::ITarget* target), override);
+  MAKE_MOCK1(StopOnTarget, astl_status_code(const astl::ITarget* target), override);
 
  private:
 };
@@ -137,9 +140,9 @@ struct MockCollector : public astl::ICollector {
 
   /*
    * @brief Set the destination for where sampled data should be sent.
-   *       This is typically the CollectorManager, but can be any ISampleSink.
+   *       This is typically the CollectorManager, but can be any IRawSampleSink.
    */
-  MAKE_MOCK1(SetSampleSink, void(astl::ISampleSink* sample_sink), override);
+  MAKE_MOCK1(SetRawSampleSink, void(astl::IRawSampleSink* raw_sample_sink), override);
 
   /*
    * @brief Configure the collector to collect data, but don't start sampling it yet.
@@ -171,11 +174,24 @@ struct MockCollector : public astl::ICollector {
   MAKE_MOCK0(ReadImmediate, astl_status_code(), override);
 };
 
-struct MockSampleSink : public astl::ISampleSink {
+struct MockRawSampleSink : public astl::IRawSampleSink {
   /*
-   * Deliver Some number of samples collected from the given target to this ISampleSink
+   * Deliver Some number of samples collected from the given target to this IRawSampleSink
    */
-  MAKE_MOCK2(SinkSamples, astl_status_code(astl::ITarget* target, std::span<astl::SampledData> samples), override);
+  MAKE_MOCK2(SinkRawSamples, astl_status_code(const astl::ITarget* target, std::span<astl::RawSampledData> raw_samples),
+             override);
+};
+
+struct MockProcessedSampleSink : public astl::IProcessedSampleSink {
+  /*
+   * Deliver some number of processed samples from the given target/metric to this sink.
+   * Signature must match IProcessedSampleSink exactly (span<const ProcessedSampledData>).
+   */
+  MAKE_MOCK3(SinkProcessedSamples,
+             auto(const astl::ITarget* target, const astl::IMetric* metric,
+                  std::span<const astl::ProcessedSampledData> processed_samples)
+                 ->astl_status_code,
+             override);
 };
 
 struct MockMetric : public astl::IMetric {
@@ -183,10 +199,12 @@ struct MockMetric : public astl::IMetric {
 
   MAKE_MOCK1(CheckCapabilities, auto(const astl::Capabilities& capabilities)->bool, const override);
   MAKE_MOCK0(GetOperations, auto()->expected_operation_sequence, override);
-  MAKE_MOCK1(ReceiveSample, auto(const astl::SampledData& sample)->astl_status_code, override);
+  MAKE_MOCK1(ReceiveRawSample, auto(const astl::RawSampledData& raw_sample)->astl_status_code, override);
+  MAKE_MOCK1(SetProcessedSampleSink, auto(astl::IProcessedSampleSink* sink)->void, final);
+  MAKE_MOCK1(SinkProcessedSample, auto(astl::ProcessedSampledData const& processed_sample)->astl_status_code, override);
 
-  using samples_t = std::span<const astl::SampledData>;
-  MAKE_MOCK0(GetSamples, auto()->samples_t, const override);
+  using samples_t = std::span<const astl::ProcessedSampledData>;
+  MAKE_MOCK0(GetProcessedSamples, auto()->samples_t, const override);
   MAKE_MOCK0(Reset, auto()->void, override);
   MAKE_MOCK0(Summarize, auto()->astl_status_code, override);
   MAKE_MOCK1(GetProperties, auto(astl_metric_properties_t* properties)->astl_status_code, const override);
@@ -198,6 +216,14 @@ struct MockMetricManager : public astl::IMetricManager {
 
   using expected_collection_operations = std::expected<astl::CollectionOperations, astl_status_code>;
   using expected_metric_interface      = std::expected<std::span<const astl_metric_handle_t>, astl_status_code>;
+  using metric_expected_t              = std::expected<astl::IMetric*, astl_status_code>;
+
+  // New in interface: map a metric API handle + target to an IMetric implementation
+  MAKE_MOCK2(GetMetricOnTarget, metric_expected_t(astl_metric_handle_t metric_handle, const astl::ITarget* target),
+             override);
+
+  MAKE_MOCK1(RegisterProcessedSampleSink, astl_status_code(astl::IProcessedSampleSink* sink), override);
+  MAKE_MOCK1(UnregisterProcessedSampleSink, astl_status_code(astl::IProcessedSampleSink* sink), override);
 
   /*
    * @brief Register a new metric with the metric manager.
@@ -244,17 +270,19 @@ struct MockMetricManager : public astl::IMetricManager {
   /*
    * @brief Process the sampled data for all registered metrics.
    *
-   * @param data A span of SampledData objects to process.
+   * @param data A span of RawSampledData objects to process.
    * @return astl_status_code indicating success or failure of the processing operation.
    */
-  MAKE_MOCK1(ProcessData, auto(std::span<astl::SampledData>)->astl_status_code, override);
+  MAKE_MOCK1(ProcessRawSamples, auto(astl::RawSamplesMap&)->astl_status_code, override);
 
-  using expected_samples = std::expected<std::span<const astl::SampledData>, astl_status_code>;
-  /**
-   * @brief Retrieve the collected samples for the given target and metric,
-   *        or an error if the target+metric combination isn't valid
-   */
-  MAKE_MOCK2(GetSamples, auto(astl_metric_handle_t, const astl::ITarget*)->expected_samples, override);
+  MAKE_MOCK2(SinkProcessedSamples,
+             auto(const astl::IMetric* metric, std::span<const astl::ProcessedSampledData> processed_samples)
+                 ->astl_status_code,
+             override);
+
+  // NOTE: The GetProcessedSamples(metric_handle, target) method was removed from IMetricManager.
+  // Tests should obtain processed samples via Orchestrator::GetProcessedMetricSamples after sinking them with
+  // Orchestrator::SinkProcessedSamples. If legacy expectations are still present they should be updated.
 
   /*
    * @brief Perform a final summary or aggregation of all collected metric data.
@@ -262,6 +290,22 @@ struct MockMetricManager : public astl::IMetricManager {
    * @return astl_status_code indicating success or failure of the summarization process.
    */
   MAKE_MOCK0(SummarizeMetrics, astl_status_code(), override);
+};
+
+struct MockOutput : public astl::IOutput {
+  static constexpr bool trompeloeil_movable_mock = true;
+};
+
+struct MockOutputManager : public astl::IOutputManager {
+  static constexpr bool trompeloeil_movable_mock = true;
+
+  MAKE_MOCK2(CreateBufferOutput,
+             astl_status_code(std::span<astl_metric_sample_t> samples_buffer, uint32_t* buffer_sample_count), override);
+  MAKE_MOCK0(DestroyBufferOutput, astl_status_code(), override);
+  MAKE_MOCK4(OutputProcessedSamples,
+             astl_status_code(const astl::ProcessedSamplesMap& processed_samples, astl::OutputType output_type,
+                              const astl::ITarget* target, const astl::IMetric* metric),
+             override);
 };
 
 #endif  // ASTL_MOCK_CLASSES_H_

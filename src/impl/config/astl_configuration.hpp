@@ -26,8 +26,8 @@
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "common/metric_config.hpp"
 #include "config/scmi_specification_json.hpp"
-#include "metric/metric_config.hpp"
 #include "target.hpp"
 
 using json = nlohmann::json;
@@ -35,6 +35,7 @@ using json = nlohmann::json;
 namespace astl {
 
 struct MetricJsonDeclaration {
+  MetricJsonDeclaration() = default;
   std::string description;          //!< Description of the metric
   std::string register_name;        //!< Register name associated with the metric
   std::string unit;                 //!< Unit of measurement for the metric
@@ -48,6 +49,7 @@ struct MetricJsonDeclaration {
 
 /** @brief Overall configuration for the ASTL library */
 struct AstlConfiguration {
+  AstlConfiguration() = default;
   /** @brief scmi_sysfs_telemetry_root_override is an optional path to replace "/sys/class/scmi_telemetry"
    *         This is a placeholder example of something that _could_ be configured.
    *         subject to change, not currently modified.

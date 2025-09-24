@@ -37,7 +37,14 @@ using SampleTimestamp    = std::chrono::time_point<std::chrono::steady_clock, Sa
 using OperationId                    = uint16_t;
 constexpr size_t kOperationIdInvalid = std::numeric_limits<OperationId>::max();
 
-// base class for operations for collectors to perform to enable or sample metrics
+/**
+ * @brief Base class for concrete operations executed by collectors to enable or sample metrics.
+ *
+ * Each operation instance receives a monotonically increasing 16-bit identifier used to
+ * correlate raw samples with higher-level metric processing. If the ID space is exhausted
+ * (wraps to the sentinel invalid value) an exception is thrown because continued correlation
+ * would no longer be reliable.
+ */
 class Operation {
  public:
   virtual ~Operation() = default;
@@ -48,19 +55,24 @@ class Operation {
   Operation(Operation&&)                 = default;
   Operation& operator=(Operation&&)      = default;
 
-  /*
-   * @brief Get an identifier associated with this Operation instance.
+  /**
+   * @brief Get the unique identifier for this operation instance.
    * Useful for when a Collector needs to send SampledData back to Orchestrator and tie it to Metrics
+   *
+   * @return OperationId value (never equal to kOperationIdInvalid during a valid lifetime).
    */
   OperationId GetId() const { return operation_id; }
 
  private:
   OperationId operation_id{kOperationIdInvalid};
 
-  /*
-   * @brief increment an operation base-class level identifier and return the current value
+  /**
+   * @brief Atomically fetch-and-increment the global operation ID counter.
+   *
    * Since this is used in the constructor, this simply raises an exception if it gets all the way up to
    * an invalid kOperationIdInvalid value.
+   *
+   * @throws std::runtime_error if the counter reaches kOperationIdInvalid.
    */
   static OperationId GetNextOperationId() {
     static std::atomic<OperationId> next_operation_id{0};

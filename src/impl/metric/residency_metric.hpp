@@ -39,7 +39,7 @@ namespace astl {
 
 /**
  * @brief Holds residency calculation data for a specific state.
- * note @todo (ASTL-159): Revisit the Residency samples data structure for GetSamples API
+ * note @todo (ASTL-159): Revisit the Residency samples data structure for GetProcessedSamples API
  * This structure stores the residency delta, converted time, and percentage for each state and string_name can be
  * optimized with a map.
  */
@@ -119,8 +119,9 @@ class ResidencyMetric : public DeltaMetric {
    * @param state_configs Vector of state configurations defining the states to track.
    * @param inferred_state_name Optional name for the inferred state. If not provided, no inferred state is calculated.
    */
-  explicit ResidencyMetric(const char* name, const char* description,
+  explicit ResidencyMetric(const char* name, const char* description, const ITarget* target,
                            const std::vector<StateConfiguration>& state_configs,
+                           IProcessedSampleSink*                  processed_sample_sink,
                            const std::optional<std::string>&      inferred_state_name = std::nullopt);
 
   /**
@@ -137,7 +138,7 @@ class ResidencyMetric : public DeltaMetric {
    * @param sample A single sampled data point containing state counter value.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code ReceiveSample(const SampledData& sample) override;
+  astl_status_code ReceiveRawSample(const RawSampledData& raw_sample) override;
 
   /**
    * @brief Summarize collected residency data for all states.
@@ -174,7 +175,7 @@ class ResidencyMetric : public DeltaMetric {
    *
    * This method provides access to the internal residency data for all states.
    *
-   * note @todo (ASTL-159): Implement a GetSamples API in all Metric types to get a span of processed samples.
+   * note @todo (ASTL-159): Implement a GetProcessedSamples API in all Metric types to get a span of processed samples.
    *
    * @return A span containing all calculated residency values for all states.
    */
@@ -248,9 +249,9 @@ class ResidencyMetric : public DeltaMetric {
   std::unordered_map<OperationId, const StateConfiguration*>
                              _operation_id_to_config;  ///< Fast lookup map from operation_id to state config
   std::optional<std::string> _inferred_state_name;     ///< Name of the inferred state (optional)
-  std::unordered_map<std::string, std::optional<SampledData>> _previous_samples;  ///< Previous samples per state
-  std::vector<StateResidencyData>                             _residency_data;    ///< All residency calculations
-  ResidencySummaryData                                        _summary_data;      ///< Summary statistics
+  std::unordered_map<std::string, std::optional<RawSampledData>> _previous_samples;  ///< Previous samples per state
+  std::vector<StateResidencyData>                                _residency_data;    ///< All residency calculations
+  ResidencySummaryData                                           _summary_data;      ///< Summary statistics
 
   // Per-state running totals for summary calculation
   std::unordered_map<std::string, std::chrono::duration<double>> _state_time_totals;  ///< Running total time per state

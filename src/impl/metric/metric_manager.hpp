@@ -26,14 +26,15 @@
 
 #include <span>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "collector/collection_operations.hpp"
 #include "common/capabilities.hpp"
-#include "metric/i_metric.hpp"
-#include "metric/i_metric_manager.hpp"
+#include "common/i_processed_sample_sink.hpp"
+#include "i_metric_manager.hpp"
 
 namespace astl {
 
@@ -52,7 +53,8 @@ struct MetricHandle {
  * @class MetricManager
  * @brief Implements IMetricManager to manage metrics and generate collection operations.
  */
-class MetricManager : public IMetricManager {
+class MetricManager : public IMetricManager, public IProcessedSampleSink {
+  friend class MetricManagerTestAccessor;  // for unit test injection of mock metrics
  public:
   ~MetricManager() override = default;
 
@@ -64,6 +66,36 @@ class MetricManager : public IMetricManager {
   MetricManager& operator=(MetricManager&&)      = default;
 
   explicit MetricManager(const Capabilities& capabilities) : _capabilities(capabilities) {}
+
+  // IMetricManager implementation
+  /**
+   * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
+   */
+  auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target)
+      -> std::expected<IMetric*, astl_status_code> override;
+
+  /**
+   * @brief Register a sink to receive processed metric samples as they are produced.
+   *
+   * Multiple sinks may be registered (e.g. an output manager plus a test probe). Registration
+   * is idempotent; attempting to register the same pointer twice returns success without changes.
+   *
+   * @param sink Non-null pointer to a sink implementation whose lifetime must outlive its
+   *             unregistration or destruction of this manager.
+   * @return ASTL_STATUS_SUCCESS on success, ASTL_STATUS_BAD_ARGUMENT if sink is null.
+   */
+  astl_status_code RegisterProcessedSampleSink(IProcessedSampleSink* sink) override;
+
+  /**
+   * @brief Unregister a previously registered processed sample sink.
+   *
+   * A no-op if the sink was not registered. After this call the sink will receive no further
+   * callbacks.
+   *
+   * @param sink Pointer previously passed to RegisterProcessedSampleSink.
+   * @return ASTL_STATUS_SUCCESS (even if sink not found), ASTL_STATUS_BAD_ARGUMENT if null.
+   */
+  astl_status_code UnregisterProcessedSampleSink(IProcessedSampleSink* sink) override;
 
   /**
    * @brief Register a new metric configuration.
@@ -109,23 +141,54 @@ class MetricManager : public IMetricManager {
 
   /**
    * @brief Distribute collected sample data to registered metrics.
-   * @param data Span of SampledData to process.
+   * @param data Span of RawSampledData to process.
    * @return ASTL_STATUS_SUCCESS or an appropriate error code.
    */
-  astl_status_code ProcessData(std::span<SampledData> data) override;
+  astl_status_code ProcessRawSamples(RawSamplesMap& raw_samples) override;
 
   /**
    * @brief Retrieve the collected samples for the given target and metric,
    *        or an error if the target+metric combination isn't valid
    */
-  auto GetSamples(astl_metric_handle_t metric_handle, const ITarget* target)
-      -> std::expected<std::span<const astl::SampledData>, astl_status_code> override;
+  // TODO (fayben01) delete this function. Processed samples should automatically sinked
+  // auto GetProcessedSamples(const IMetric* metric, const ITarget* target)
+  //    -> std::expected<std::span<const astl::ProcessedSampledData>, astl_status_code> override;
 
   /**
    * @brief Finalize and summarize metrics after data processing.
    * @return ASTL_STATUS_SUCCESS or an appropriate error code.
    */
   astl_status_code SummarizeMetrics() override;
+
+  /**
+   * @brief Look up the target associated with a specific metric instance.
+   *
+   * Some metrics may exist on multiple targets; this helper returns the target that owns the
+   * provided metric pointer.
+   *
+   * @param metric Metric instance pointer.
+   * @return expected containing target on success or ASTL_STATUS_BAD_ARGUMENT / NOT_FOUND.
+   */
+  auto GetTargetForMetric(const IMetric* metric) const -> std::expected<const ITarget*, astl_status_code>;
+
+  // IProcessSampleSink implementation
+  /**
+   * @brief Receive processed samples from a metric and forward to registered sinks.
+   *
+   * This implements the `IProcessedSampleSink` interface allowing metrics to push their completed
+   * samples back into the manager which then fan-outs to external sinks (e.g. outputs).
+   *
+   * @param metric Metric instance producing the samples.
+   * @param processed_samples Span of processed samples valid for the duration of the call.
+   * @return ASTL_STATUS_SUCCESS or a propagated error code if dispatch fails.
+   */
+  // Original interface override (without explicit target) required by IMetricManager
+  astl_status_code SinkProcessedSamples(const IMetric*                        metric,
+                                        std::span<const ProcessedSampledData> processed_samples) override;
+
+  // Extended helper allowing direct target specification (used by metrics via RawMetric -> manager fan-out)
+  astl_status_code SinkProcessedSamples(const ITarget* target, const IMetric* metric,
+                                        std::span<const ProcessedSampledData> processed_samples) override;
 
   /**
    * TODO (https://jira.arm.com/browse/ASTL-112) : remove this friend declaration
@@ -135,13 +198,19 @@ class MetricManager : public IMetricManager {
 
  private:
   /**
-   * @brief Check if a collector type is supported by this manager.
-   * @param required_collector_type The collector type to verify support for.
-   * @return true if supported, false otherwise.
+   * @brief Determine whether a collector type required by a metric configuration is supported.
+   *
+   * This inspects the capabilities provided at construction and verifies the caller requested
+   * collector type is available before registering metrics or generating operations that depend on it.
+   *
+   * @param required_collector_type Collector type required by a metric.
+   * @return true if the capability is present, false otherwise.
    */
   bool IsCollectorTypeSupported(CollectorType required_collector_type) const;
 
   Capabilities _capabilities;
+
+  std::unordered_set<IProcessedSampleSink*> _registered_processed_sample_sinks;
 
   // an API astl_metric_handle_t can represent one metric runnable on multiple targets
   // our internal representation of astl_metric_handle is `MetricHandle*`

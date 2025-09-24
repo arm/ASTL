@@ -16,6 +16,10 @@
  * under the License.
  ******************************************************************************/
 
+/**
+ * @file capabilities.hpp
+ * @brief Capability descriptors for collectors and the system aggregation thereof.
+ */
 #ifndef CAPABILITIES_HPP_
 #define CAPABILITIES_HPP_
 

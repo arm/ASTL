@@ -27,9 +27,9 @@
 #include "astl/astl.h"
 #include "astl/astl_telemetry.h"
 #include "common/capabilities.hpp"
+#include "common/metric_config.hpp"
 #include "common/scmi/scmi_read_operation.hpp"
 #include "metric/i_metric.hpp"
-#include "metric/metric_config.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/sampled_value_metric.hpp"
 
@@ -37,10 +37,12 @@ using astl::Capabilities;
 using astl::CollectorCapability;
 using astl::CollectorType;
 using astl::IMetric;
+using astl::IProcessedSampleSink;
 using astl::MetricConfig;
 using astl::MetricManager;
 using astl::OperationSequence;
-using astl::SampledData;
+using astl::ProcessedSampledData;
+using astl::RawSampledData;
 using astl::ScmiTargetToDataEventIdMap;
 using astl::SystemCapability;
 
@@ -51,7 +53,7 @@ class MetricManagerTestAccessor {
  public:
   static void InjectMetric(astl::MetricManager& mgr, std::unique_ptr<astl::IMetric> metric,
                            std::unique_ptr<astl::MetricConfig> cfg, const astl::ITarget* target) {
-    std::unordered_map<const ITarget*, std::unique_ptr<IMetric>> target_to_metric;
+    std::unordered_map<const astl::ITarget*, std::unique_ptr<IMetric>> target_to_metric;
     auto metric_handle = std::make_unique<astl::MetricHandle>(std::move(cfg), std::move(target_to_metric));
     metric_handle->target_to_metric_map[target] = std::move(metric);
     astl_metric_handle_t metric_api_handle      = static_cast<astl_metric_handle_t>(metric_handle.get());
@@ -71,12 +73,14 @@ class MetricManagerTestAccessor {
 // This metric simply collects samples and stores them in a vector.
 // It can be configured to return a specific status code when processing samples.
 struct TestMetric : public IMetric {
-  astl_status_code         lastStatus      = ASTL_STATUS_SUCCESS;
-  astl_status_code         summarizeStatus = ASTL_STATUS_SUCCESS;
-  std::vector<SampledData> received;
+  astl_status_code                  lastStatus      = ASTL_STATUS_SUCCESS;
+  astl_status_code                  summarizeStatus = ASTL_STATUS_SUCCESS;
+  std::vector<RawSampledData>       received;
+  std::vector<ProcessedSampledData> processed;
+  IProcessedSampleSink*             sink = nullptr;
 
-  astl_status_code ReceiveSample(const SampledData& sample) override {
-    received.push_back(sample);
+  astl_status_code ReceiveRawSample(const RawSampledData& raw_sample) override {
+    received.push_back(raw_sample);
     return lastStatus;
   }
   // --- Implement remaining pure-virtuals so TestMetric is concrete ---
@@ -87,9 +91,23 @@ struct TestMetric : public IMetric {
     return OperationSequence{};
   }
 
-  std::span<const SampledData> GetSamples() const override { return {received}; }
+  void SetProcessedSampleSink(IProcessedSampleSink* processed_sample_sink) override { sink = processed_sample_sink; };
 
-  void Reset() override { received.clear(); }
+  std::span<const ProcessedSampledData> GetProcessedSamples() const override { return {processed}; }
+
+  astl_status_code SinkProcessedSample(const ProcessedSampledData& processed_sample) override {
+    if (sink) {
+      processed.push_back(processed_sample);
+      ProcessedSampledData sample = processed_sample;
+      return sink->SinkProcessedSamples(nullptr, this, {&sample, 1});
+    }
+    return ASTL_STATUS_BAD_ARGUMENT;
+  };
+
+  void Reset() override {
+    received.clear();
+    processed.clear();
+  }
 
   astl_status_code Summarize() override {
     // No-op summary
@@ -191,7 +209,7 @@ TEST_CASE("MetricManager::GetRequiredOperations fails for unregistered metric", 
 
   // Metric pointer not registered
   auto                                      junkval{kJunk};
-  auto* const                               unregistered_metric = static_cast<astl_metric_handle_t>(&junkval);
+  const auto* const                         unregistered_metric = static_cast<astl_metric_handle_t>(&junkval);
   std::array<const astl_metric_handle_t, 1> metrics_array{unregistered_metric};
   std::span<const astl_metric_handle_t>     metric_span(metrics_array);
   auto                                      result = mgr.GetRequiredOperations(metric_span, &target);
@@ -204,7 +222,7 @@ TEST_CASE("MetricManager::GetRequiredOperations fails for non-SCMI metric", "[Me
   MetricManager                  mgr(caps);
   MockTarget                     target;
   std::unique_ptr<astl::IMetric> owner_metric_mmio(new astl::SampledValueMetric(
-      "metricA", "descr", astl_units_t::ASTL_UNITS_CELSIUS, astl_value_type_t::ASTL_VALUE_UINT64));
+      "metricA", "descr", astl_units_t::ASTL_UNITS_CELSIUS, astl_value_type_t::ASTL_VALUE_UINT64, &target, nullptr));
 
   // Manually associate the metric pointer
   astl::MetricManagerTestAccessor::InjectMetric(
@@ -319,10 +337,12 @@ TEST_CASE("MetricManager::ProcessData processes valid sample and returns success
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, op_id, metric_ptr);
 
-  astl::AstlValue          val1{uint64_t{256}};  // Sample value
-  astl::SampledData        sample1(op_id, val1);
-  std::vector<SampledData> data{sample1};
-  REQUIRE(mgr.ProcessData(data) == ASTL_STATUS_SUCCESS);
+  astl::AstlValue             val1{uint64_t{256}};  // Sample value
+  astl::RawSampledData        sample1(op_id, val1);
+  std::vector<RawSampledData> samples{sample1};
+  astl::RawSamplesMap         samples_map;
+  samples_map[&target] = samples;
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric_ptr->received.size() == 1);
   REQUIRE(metric_ptr->received[0].get<uint64_t>() == 256);
 }
@@ -343,13 +363,15 @@ TEST_CASE("MetricManager::ProcessData processes multiple samples for the same me
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, op_id, metric_ptr);
 
-  astl::AstlValue          val1{uint64_t{100}};
-  astl::AstlValue          val2{uint64_t{200}};
-  SampledData              sample1(op_id, val1);
-  SampledData              sample2(op_id, val2);
-  std::vector<SampledData> data{sample1, sample2};
+  astl::AstlValue                   val1{uint64_t{100}};
+  astl::AstlValue                   val2{uint64_t{200}};
+  astl::RawSampledData              sample1(op_id, val1);
+  astl::RawSampledData              sample2(op_id, val2);
+  std::vector<astl::RawSampledData> samples{sample1, sample2};
+  astl::RawSamplesMap               samples_map;
+  samples_map[&target] = samples;
 
-  REQUIRE(mgr.ProcessData(data) == ASTL_STATUS_SUCCESS);
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric_ptr->received.size() == 2);
   REQUIRE(metric_ptr->received[0].get<uint64_t>() == 100);
   REQUIRE(metric_ptr->received[1].get<uint64_t>() == 200);
@@ -379,15 +401,17 @@ TEST_CASE("MetricManager::ProcessData processes different metrics for different 
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 1, metric_ptr1);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 2, metric_ptr2);
 
-  astl::AstlValue          val1{uint64_t{5}};
-  astl::AstlValue          val2{uint64_t{7}};
-  SampledData              sample1(1, val1);
-  SampledData              sample2(2, val2);
-  SampledData              sample3(1, val1);
-  SampledData              sample4(2, val2);
-  std::vector<SampledData> data{sample1, sample2, sample3, sample4};
+  astl::AstlValue                   val1{uint64_t{5}};
+  astl::AstlValue                   val2{uint64_t{7}};
+  astl::RawSampledData              sample1(1, val1);
+  astl::RawSampledData              sample2(2, val2);
+  astl::RawSampledData              sample3(1, val1);
+  astl::RawSampledData              sample4(2, val2);
+  std::vector<astl::RawSampledData> samples{sample1, sample2, sample3, sample4};
+  astl::RawSamplesMap               samples_map;
+  samples_map[&target] = samples;
 
-  REQUIRE(mgr.ProcessData(data) == ASTL_STATUS_SUCCESS);
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric_ptr1->received.size() == 2);
   REQUIRE(metric_ptr2->received.size() == 2);
 }
@@ -417,14 +441,15 @@ TEST_CASE("MetricManager::ProcessData stops on error and does not process furthe
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 1, metric_ptr1);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, 2, metric_ptr2);
 
-  astl::AstlValue          val1{uint64_t{1}};
-  astl::AstlValue          val2{uint64_t{2}};
-  SampledData              sample1(1, val1);
-  SampledData              sample2(2, val2);
-  SampledData              sample3(1, val1);
-  std::vector<SampledData> data{sample1, sample2, sample3};
-
-  REQUIRE(mgr.ProcessData(data) == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+  astl::AstlValue                   val1{uint64_t{1}};
+  astl::AstlValue                   val2{uint64_t{2}};
+  astl::RawSampledData              sample1(1, val1);
+  astl::RawSampledData              sample2(2, val2);
+  astl::RawSampledData              sample3(1, val1);
+  std::vector<astl::RawSampledData> samples{sample1, sample2, sample3};
+  astl::RawSamplesMap               samples_map;
+  samples_map[&target] = samples;
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   REQUIRE(metric_ptr1->received.size() == 1);
   REQUIRE(metric_ptr2->received.size() == 1);
 }

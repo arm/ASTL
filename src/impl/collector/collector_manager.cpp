@@ -25,13 +25,14 @@
 #include "collection_configuration.hpp"
 namespace astl {
 
-CollectorManager::CollectorManager(std::unordered_map<ITarget*, std::vector<std::unique_ptr<ICollector>>>&& collectors)
+CollectorManager::CollectorManager(
+    std::unordered_map<const ITarget*, std::vector<std::unique_ptr<ICollector>>>&& collectors)
     : _collectors{std::move(collectors)} {
   // tell each collector to send their samples to CollectorManager. Each Collector has only one sample-sink,
   // but collector manager can support multiple sinks.
   for (auto& [_, cur_collector_vector] : _collectors) {
     for (auto& cur_collector : cur_collector_vector) {
-      cur_collector->SetSampleSink(this);
+      cur_collector->SetRawSampleSink(this);
     }
   }
 }
@@ -39,8 +40,9 @@ CollectorManager::CollectorManager(std::unordered_map<ITarget*, std::vector<std:
 // ICollectorManager implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unordered_map<ITarget*, std::vector<CollectorCapability>> CollectorManager::ReportCollectionCapabilities() const {
-  std::unordered_map<ITarget*, std::vector<CollectorCapability>> capabilities;
+std::unordered_map<const ITarget*, std::vector<CollectorCapability>> CollectorManager::ReportCollectionCapabilities()
+    const {
+  std::unordered_map<const ITarget*, std::vector<CollectorCapability>> capabilities;
   for (const auto& [target, collectors] : _collectors) {
     for (const auto& collector : collectors) {
       capabilities[target].push_back(collector->GetCapabilities());
@@ -49,26 +51,26 @@ std::unordered_map<ITarget*, std::vector<CollectorCapability>> CollectorManager:
   return capabilities;
 }
 
-astl_status_code CollectorManager::RegisterSampleSink(ISampleSink* sink) {
+astl_status_code CollectorManager::RegisterRawSampleSink(IRawSampleSink* sink) {
   if (!sink) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  _registered_sample_sinks.insert(sink);
+  _registered_raw_sample_sinks.insert(sink);
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code CollectorManager::UnregisterSampleSink(ISampleSink* sink) {
+astl_status_code CollectorManager::UnregisterRawSampleSink(IRawSampleSink* sink) {
   if (!sink) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto num_removed = _registered_sample_sinks.erase(sink);
+  auto num_removed = _registered_raw_sample_sinks.erase(sink);
   if (num_removed == 0) {
     return ASTL_STATUS_INTERNAL_ERROR;  // sink was not registered
   }
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code CollectorManager::ConfigureCollectionOnTarget(ITarget*                            target,
+astl_status_code CollectorManager::ConfigureCollectionOnTarget(const ITarget*                      target,
                                                                astl_collection_parameters_t const& collection_params,
                                                                CollectionOperations&&              operations) {
   auto collector = SelectCollector(target, operations.requirements);
@@ -79,7 +81,7 @@ astl_status_code CollectorManager::ConfigureCollectionOnTarget(ITarget*         
   return collector.value()->ConfigureCollection(std::move(configuration_instance));
 }
 
-astl_status_code CollectorManager::StartOnTarget(ITarget* target) {
+astl_status_code CollectorManager::StartOnTarget(const ITarget* target) {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
     // if we have a collector for this target, start it
     return collector->second.front()->StartCollection();
@@ -87,21 +89,21 @@ astl_status_code CollectorManager::StartOnTarget(ITarget* target) {
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
 
-astl_status_code CollectorManager::PauseOnTarget(ITarget* target) {
+astl_status_code CollectorManager::PauseOnTarget(const ITarget* target) {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
     return collector->second.front()->PauseCollection();
   }
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
 
-astl_status_code CollectorManager::ResumeOnTarget(ITarget* target) {
+astl_status_code CollectorManager::ResumeOnTarget(const ITarget* target) {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
     return collector->second.front()->ResumeCollection();
   }
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
 
-astl_status_code CollectorManager::ReadImmediateOnTarget(ITarget* target) {
+astl_status_code CollectorManager::ReadImmediateOnTarget(const ITarget* target) {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
     // if we have a collector for this target, sample from it
     return collector->second.front()->ReadImmediate();
@@ -109,7 +111,7 @@ astl_status_code CollectorManager::ReadImmediateOnTarget(ITarget* target) {
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
 
-astl_status_code CollectorManager::StopOnTarget(ITarget* target) {
+astl_status_code CollectorManager::StopOnTarget(const ITarget* target) {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
     // if we have a collector for this target, start it
     return collector->second.front()->StopCollection();
@@ -118,12 +120,12 @@ astl_status_code CollectorManager::StopOnTarget(ITarget* target) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ISampleSink implementation
+// IRawSampleSink implementation
 ////////////////////////////////////////////////////////////////////////////////
-astl_status_code CollectorManager::SinkSamples(ITarget* target, std::span<SampledData> samples) {
+astl_status_code CollectorManager::SinkRawSamples(const ITarget* target, std::span<RawSampledData> raw_samples) {
   astl_status_code result = ASTL_STATUS_SUCCESS;
-  for (const auto& sink : _registered_sample_sinks) {
-    auto sink_result = sink->SinkSamples(target, samples);
+  for (const auto& sink : _registered_raw_sample_sinks) {
+    auto sink_result = sink->SinkRawSamples(target, raw_samples);
     // will return the most recent failure, but continues trying to send samples to all sinks
     if (sink_result != ASTL_STATUS_SUCCESS) {
       result = sink_result;
@@ -138,7 +140,7 @@ astl_status_code CollectorManager::SinkSamples(ITarget* target, std::span<Sample
 
 // given a target and a set of desired capabilities, choose a suitable collector
 std::expected<ICollector*, astl_status_code> CollectorManager::SelectCollector(
-    ITarget* target, CollectorCapability const& requirements) {
+    const ITarget* target, CollectorCapability const& requirements) {
   // find a set of collectors associated with the given target
   const auto& potential_collectors = _collectors.find(target);
   if (potential_collectors == _collectors.end()) {
