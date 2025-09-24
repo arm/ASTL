@@ -94,8 +94,8 @@ class MetricManager : public IMetricManager {
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    */
-  auto GetProperties(astl_metric_handle_t      metric,
-                     astl_metric_properties_t* properties) const -> astl_status_code override;
+  auto GetProperties(astl_metric_handle_t metric, astl_metric_properties_t* properties) const
+      -> astl_status_code override;
 
   /**
    * @brief Build the sequence of operations required to collect the given metrics.
@@ -104,8 +104,8 @@ class MetricManager : public IMetricManager {
    * @return expected containing an CollectionOperations group of SCMI read operations on success,
    *         or an error code (e.g., BAD_ARGUMENT, UNSUPPORTED_COLLECTOR_TYPE).
    */
-  auto GetRequiredOperations(std::span<const astl_metric_handle_t> metrics,
-                             const ITarget* target) -> std::expected<CollectionOperations, astl_status_code> override;
+  auto GetRequiredOperations(std::span<const astl_metric_handle_t> metrics, const ITarget* target)
+      -> std::expected<CollectionOperations, astl_status_code> override;
 
   /**
    * @brief Distribute collected sample data to registered metrics.

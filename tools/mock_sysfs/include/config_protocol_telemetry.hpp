@@ -22,25 +22,32 @@ constexpr bool kTlmEnable          = true;  ///< Enable the Telemetry (TLM) subs
 constexpr const char* kTelemetryVersion   = "1.0";  ///< SCMI Telemetry protocol version
 constexpr const char* kDEDataEventVersion = "0xCAFEBABECAFEBABECAFEBABEBEEF0000";
 
-const struct UpdateInterval kUpdateInterval {
-  .discrete = true,
-  .update_intervals_ms =
-      {
-          std::chrono::milliseconds{100},
-          std::chrono::milliseconds{2000},
-          std::chrono::milliseconds{5000},
-  },
-  .active_update_interval_ms = std::chrono::milliseconds{100},
+const struct UpdateInterval kUpdateInterval{
+    .discrete = true,
+    .update_intervals_ms =
+        {
+                              std::chrono::milliseconds{100},
+                              std::chrono::milliseconds{2000},
+                              std::chrono::milliseconds{5000},
+                              },
+    .active_update_interval_ms = std::chrono::milliseconds{100},
 };
 
 // Groups
-const struct DesGroup kDesGroup0 {
-  .group_id = 0, .des = {0x0000, 0x0016}, .enable = false, .tstamp_enable = false, .intervals = kUpdateInterval,
+const struct DesGroup kDesGroup0{
+    .group_id      = 0,
+    .des           = {0x0000, 0x0016},
+    .enable        = false,
+    .tstamp_enable = false,
+    .intervals     = kUpdateInterval,
 };
 
-const struct DesGroup kDesGroup1 {
-  .group_id = 1, .des = {0x7A9B, 0x8C3D, 0x9E4F, 0x1A68}, .enable = false, .tstamp_enable = false,
-  .intervals = kUpdateInterval,
+const struct DesGroup kDesGroup1{
+    .group_id      = 1,
+    .des           = {0x7A9B, 0x8C3D, 0x9E4F, 0x1A68},
+    .enable        = false,
+    .tstamp_enable = false,
+    .intervals     = kUpdateInterval,
 };
 
 // DEs

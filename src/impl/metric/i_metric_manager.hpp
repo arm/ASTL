@@ -87,8 +87,8 @@ struct IMetricManager {
    *
    * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
    */
-  virtual auto GetProperties(astl_metric_handle_t      metric,
-                             astl_metric_properties_t* properties) const -> astl_status_code = 0;
+  virtual auto GetProperties(astl_metric_handle_t metric, astl_metric_properties_t* properties) const
+      -> astl_status_code = 0;
 
   /**
    * @brief Get the collection of collector operations needed to sample the given metric on the given target

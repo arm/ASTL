@@ -321,8 +321,8 @@ inline auto GetDataEventIdForLayoutMember(std::string_view register_name, std::s
  * @param layout The Scmi layout specification containing the Data Event IDs from platform json spec
  * @return A map of target names to Data Event IDs for the metric
  */
-inline auto GetMetricRegisters(std::string_view register_name,
-                               Layout const&    layout) -> std::vector<std::pair<std::string, ScmiDataEventId>> {
+inline auto GetMetricRegisters(std::string_view register_name, Layout const& layout)
+    -> std::vector<std::pair<std::string, ScmiDataEventId>> {
   std::vector<std::pair<std::string, ScmiDataEventId>> metric_names_and_de_id;
 
   for (const auto& [member_name, metrics] : layout.members) {  // e.g. AP0, AP1

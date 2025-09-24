@@ -41,8 +41,8 @@ namespace astl {
  * CreateResidencyMetricFromConfig (for residency metrics with target-specific configuration), or implement visitor
  * pattern to maintain abstraction without dynamic_cast.
  */
-auto CreateMetricFromConfig(const MetricConfig* metric_config,
-                            const ITarget*      target) -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
+auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* target)
+    -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
   switch (metric_config->MetricType()) {
     case astl_metric_type_t::ASTL_METRIC_VALUE:
       ASTL_LOG_INFO("CreateMetricFromConfig: Creating SampledValue metric '{}'", metric_config->Name());
@@ -104,8 +104,8 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config,
 /**
  * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
  */
-auto GetMetricOnTarget(astl_metric_handle_t metric_handle,
-                       const ITarget*       target) -> std::expected<IMetric*, astl_status_code> {
+auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target)
+    -> std::expected<IMetric*, astl_status_code> {
   auto* metric_details = static_cast<MetricHandle*>(metric_handle);
   if (!metric_details) {
     ASTL_LOG_ERROR("GetMetricOnTarget: Invalid metric handle {}", metric_handle);
@@ -182,8 +182,8 @@ auto MetricManager::GetAvailableMetrics(const ITarget* target) const
 /**
  * @brief Assign values such as name, units, etc to the given properties pointer.
  */
-auto MetricManager::GetProperties(astl_metric_handle_t      metric,
-                                  astl_metric_properties_t* properties) const -> astl_status_code {
+auto MetricManager::GetProperties(astl_metric_handle_t metric, astl_metric_properties_t* properties) const
+    -> astl_status_code {
   auto* metric_details = static_cast<MetricHandle*>(metric);
   if (!metric_details) {
     ASTL_LOG_ERROR("GetProperties: Invalid metric handle {}", metric);
