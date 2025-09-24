@@ -280,8 +280,8 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
  * target
  *
  */
-auto CreateScmiTargetToDataEventIdMap(std::vector<const ITarget*> const& scmi_targets,
-                                      ScmiDataEventId                    de_id) -> ScmiTargetToDataEventIdMap {
+auto CreateScmiTargetToDataEventIdMap(std::vector<const ITarget*> const& scmi_targets, ScmiDataEventId de_id)
+    -> ScmiTargetToDataEventIdMap {
   ScmiTargetToDataEventIdMap data_event_ids;
   for (const auto* target : scmi_targets) {
     if (target->GetCollectorType() == CollectorType::SCMI) {
