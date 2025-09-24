@@ -107,16 +107,16 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 
-  MockSampleSink        mock_sample_sink;
+  MockRawSampleSink     mock_raw_sample_sink;
   const astl::AstlValue expected_value{uint64_t{0x42}};
-  REQUIRE_CALL(mock_sample_sink, SinkSamples(_, _))
+  REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
       .WITH(_2.size() == 1)
       .WITH(_2[0].value == expected_value)
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // create the collector and its operations
   astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
-  collector.SetSampleSink(&mock_sample_sink);
+  collector.SetRawSampleSink(&mock_raw_sample_sink);
 
   constexpr uint32_t      raw_id = 0x1234;
   astl::ScmiDataEventId   data_event_id{raw_id};
@@ -213,7 +213,7 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 
-  MockSampleSink               mock_sample_sink;
+  MockRawSampleSink            mock_raw_sample_sink;
   const std::vector<uint64_t>  expected_raw_data_samples{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
   std::vector<astl::AstlValue> expected_samples;
   expected_samples.reserve(expected_raw_data_samples.size());
@@ -221,21 +221,21 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
                  std::back_inserter(expected_samples),
                  [](const auto& raw_value) { return astl::AstlValue{uint64_t{raw_value}}; });
   std::vector<astl::AstlValue> samples;
-  // each time SinkSamples is called, we push all of the values of the samples to our local `samples` vector
+  // each time SinkRawSamples is called, we push all of the values of the samples to our local `samples` vector
   // in the end, `samples` should match expected_samples, regardless of how many samples come in each call to
-  // SinkSamples
-  REQUIRE_CALL(mock_sample_sink, SinkSamples(_, _))
+  // SinkRawSamples
+  REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
       // extra parens needed for proper macro parse, letting us mutate `samples`
       .TIMES(10)
       .LR_SIDE_EFFECT((std::for_each(std::begin(_2), std::end(_2),
                                      [&samples](auto const& sample) { samples.push_back(sample.value); })))
       .RETURN(ASTL_STATUS_SUCCESS);
 
-  // ALLOW_CALL(mock_sample_sink, SinkSamples(_, _)).RETURN(ASTL_STATUS_SUCCESS);
+  // ALLOW_CALL(mock_raw_sample_sink, SinkRawSamples(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   // create the collector and its operations
   astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
-  collector.SetSampleSink(&mock_sample_sink);
+  collector.SetRawSampleSink(&mock_raw_sample_sink);
 
   constexpr uint32_t      raw_id = 0x1234;
   astl::ScmiDataEventId   data_event_id{raw_id};
@@ -336,11 +336,11 @@ TEST_CASE("ScmiSysfsCollector::DuplicateTimestampHandling", "[scmi_sysfs_collect
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // Track samples received by the sink
-  MockSampleSink               mock_sample_sink;
+  MockRawSampleSink            mock_raw_sample_sink;
   std::vector<astl::AstlValue> received_samples;
 
   // We expect only 3 samples to be received (duplicate timestamps should be discarded)
-  REQUIRE_CALL(mock_sample_sink, SinkSamples(_, _))
+  REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
       .TIMES(3)
       .LR_SIDE_EFFECT(
           (std::for_each(std::begin(_2), std::end(_2),
@@ -349,7 +349,7 @@ TEST_CASE("ScmiSysfsCollector::DuplicateTimestampHandling", "[scmi_sysfs_collect
 
   // Create the collector and configure it
   astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
-  collector.SetSampleSink(&mock_sample_sink);
+  collector.SetRawSampleSink(&mock_raw_sample_sink);
 
   constexpr uint32_t      raw_id = 0x5678;
   astl::ScmiDataEventId   data_event_id{raw_id};

@@ -21,50 +21,50 @@
 #include "collector/collector_builder.hpp"
 #include "collector/collector_manager.hpp"
 
-TEST_CASE("CollectorManager::RegisterSampleSink", "[collector_manager]") {
+TEST_CASE("CollectorManager::RegisterRawSampleSink", "[collector_manager]") {
   // create a collector manager with an empty map of target-collector
   astl::CollectorManager collector_manager{{}};
 
-  auto mock_sink  = std::make_unique<MockSampleSink>();
-  auto mock_sink2 = std::make_unique<MockSampleSink>();
+  auto mock_sink  = std::make_unique<MockRawSampleSink>();
+  auto mock_sink2 = std::make_unique<MockRawSampleSink>();
 
   SECTION("Register a valid sample sink") {
-    REQUIRE(collector_manager.RegisterSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
+    REQUIRE(collector_manager.RegisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
   }
 
   SECTION("Register two sample sinks") {
-    REQUIRE(collector_manager.RegisterSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
-    REQUIRE(collector_manager.RegisterSampleSink(mock_sink2.get()) == ASTL_STATUS_SUCCESS);
+    REQUIRE(collector_manager.RegisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
+    REQUIRE(collector_manager.RegisterRawSampleSink(mock_sink2.get()) == ASTL_STATUS_SUCCESS);
   }
 
   SECTION("Register a null sample sink") {
-    REQUIRE(collector_manager.RegisterSampleSink(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+    REQUIRE(collector_manager.RegisterRawSampleSink(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
   }
 
   SECTION("Unregister a valid sample sink") {
-    collector_manager.RegisterSampleSink(mock_sink.get());
-    REQUIRE(collector_manager.UnregisterSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
+    collector_manager.RegisterRawSampleSink(mock_sink.get());
+    REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
   }
 
   SECTION("Unregister a sample sink that was not registered") {
-    REQUIRE(collector_manager.UnregisterSampleSink(mock_sink.get()) == ASTL_STATUS_INTERNAL_ERROR);
+    REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_INTERNAL_ERROR);
   }
 
-  SECTION("Unregister a null sample sink") {
-    REQUIRE(collector_manager.UnregisterSampleSink(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+  SECTION("Unregister a null raw sample sink") {
+    REQUIRE(collector_manager.UnregisterRawSampleSink(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
   }
 
   SECTION("Unregister a sample sink that was registered") {
-    collector_manager.RegisterSampleSink(mock_sink.get());
-    collector_manager.RegisterSampleSink(mock_sink2.get());
-    REQUIRE(collector_manager.UnregisterSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
-    REQUIRE(collector_manager.UnregisterSampleSink(mock_sink2.get()) == ASTL_STATUS_SUCCESS);
+    collector_manager.RegisterRawSampleSink(mock_sink.get());
+    collector_manager.RegisterRawSampleSink(mock_sink2.get());
+    REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
+    REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink2.get()) == ASTL_STATUS_SUCCESS);
   }
 
   SECTION("Unregister a sample sink twice") {
-    collector_manager.RegisterSampleSink(mock_sink.get());
-    REQUIRE(collector_manager.UnregisterSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
-    REQUIRE(collector_manager.UnregisterSampleSink(mock_sink.get()) == ASTL_STATUS_INTERNAL_ERROR);
+    collector_manager.RegisterRawSampleSink(mock_sink.get());
+    REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
+    REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_INTERNAL_ERROR);
   }
 }
 
@@ -82,10 +82,10 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
   astl::CollectorCapability scmi_capabilities{astl::CollectorType::SCMI};
   astl::CollectorCapability mmio_capabilities{astl::CollectorType::MMIO};
 
-  // when CollectorManager is instantiated, it should set itself as the sample sink for each collector
-  ALLOW_CALL(*mock_scmi_collector, SetSampleSink(trompeloeil::_));
-  ALLOW_CALL(*mock_scmi_collector2, SetSampleSink(trompeloeil::_));
-  ALLOW_CALL(*mock_mmio_collector, SetSampleSink(trompeloeil::_));
+  // when CollectorManager is instantiated, it should set itself as the raw sample sink for each collector
+  ALLOW_CALL(*mock_scmi_collector, SetRawSampleSink(trompeloeil::_));
+  ALLOW_CALL(*mock_scmi_collector2, SetRawSampleSink(trompeloeil::_));
+  ALLOW_CALL(*mock_mmio_collector, SetRawSampleSink(trompeloeil::_));
 
   // Set up the mock collectors to return the capabilities
   ALLOW_CALL(*mock_scmi_collector, GetCapabilities()).RETURN(scmi_capabilities);
@@ -97,7 +97,7 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
     collectors.push_back(std::move(mock_scmi_collector));
     collectors.push_back(std::move(mock_scmi_collector2));
     collectors.push_back(std::move(mock_mmio_collector));
-    std::unordered_map<astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+    std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
     collectors_map[mock_target.get()] = std::move(collectors);
 
     astl::CollectorManager collector_manager{std::move(collectors_map)};
@@ -123,7 +123,7 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
     collectors_t1.push_back(std::move(mock_scmi_collector2));  // cppcheck-suppress accessMoved
     std::vector<std::unique_ptr<astl::ICollector>> collectors_t2;
     collectors_t2.push_back(std::move(mock_mmio_collector));  // cppcheck-suppress accessMoved
-    std::unordered_map<astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+    std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
     collectors_map[mock_target.get()]  = std::move(collectors_t1);
     collectors_map[mock_target2.get()] = std::move(collectors_t2);
 
@@ -145,7 +145,7 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
   SECTION("Report capabilities for a target with no collectors") {
     auto                                           empty_target = std::make_unique<MockTarget>();
     std::vector<std::unique_ptr<astl::ICollector>> empty_collectors;
-    std::unordered_map<astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+    std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
     collectors_map[empty_target.get()] = std::move(empty_collectors);
 
     astl::CollectorManager collector_manager{std::move(collectors_map)};

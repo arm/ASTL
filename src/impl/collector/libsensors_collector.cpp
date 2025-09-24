@@ -33,7 +33,7 @@
 #include "collector/i_collector.hpp"
 #include "collector/periodic_sampler.hpp"
 #include "common/capabilities.hpp"
-#include "common/i_sample_sink.hpp"
+#include "common/i_raw_sample_sink.hpp"
 #include "common/libsensors.hpp"
 #include "common/operation.hpp"
 
@@ -50,9 +50,9 @@ CollectorCapability const& LibsensorsCollector::GetCapabilities() const { return
  * @brief Set the destination for where sampled data should be sent.
  *       This is typically the CollectorManager, but can be any ISampleSink.
  */
-void LibsensorsCollector::SetSampleSink(ISampleSink* sample_sink) {
+void LibsensorsCollector::SetRawSampleSink(IRawSampleSink* raw_sample_sink) {
   std::scoped_lock lock{_collection_mutex};
-  _sample_sink = sample_sink;
+  _sample_sink = raw_sample_sink;
 };
 
 /*
@@ -197,7 +197,7 @@ astl_status_code LibsensorsCollector::ReadImmediate() {
  * @brief Casts a sequence of abstract operations and executes them.
  */
 astl_status_code LibsensorsCollector::ExecuteCollectionOperations(OperationSequence const& operations) {
-  std::vector<SampledData> collected_samples;
+  std::vector<RawSampledData> collected_samples;
   collected_samples.reserve(operations.size());
 
   for (const auto& operation_ptr : operations) {
@@ -220,7 +220,7 @@ astl_status_code LibsensorsCollector::ExecuteCollectionOperations(OperationSeque
   }
 
   if (!collected_samples.empty() && _sample_sink) {
-    return _sample_sink->SinkSamples(_configuration->Target(), collected_samples);
+    return _sample_sink->SinkRawSamples(_configuration->Target(), collected_samples);
   }
 
   return ASTL_STATUS_SUCCESS;  // Successfully read and sent the samples

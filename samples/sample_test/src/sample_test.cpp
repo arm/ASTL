@@ -12,6 +12,32 @@
 #include "astl/astl.h"
 #include "astl/astl_telemetry.h"
 
+namespace {
+std::string ValueToString(const astl_value_t& value, astl_value_type_t type) {
+  switch (type) {
+    case ASTL_VALUE_UINT8:
+      return std::to_string(value.ui8);
+    case ASTL_VALUE_UINT16:
+      return std::to_string(value.ui16);
+    case ASTL_VALUE_UINT32:
+      return std::to_string(value.ui32);
+    case ASTL_VALUE_UINT64:
+      return std::to_string(value.ui64);
+    case ASTL_VALUE_FLOAT32:
+      return std::to_string(static_cast<double>(value.fp32));
+    case ASTL_VALUE_FLOAT64:
+      return std::to_string(value.fp64);
+    case ASTL_VALUE_BOOL8:
+      return value.b8 ? "true" : "false";
+    case ASTL_VALUE_STRING:
+      return value.str ? std::string(value.str) : std::string("<null>");
+    case ASTL_VALUE_UNKNOWN:
+    default:
+      return "<unknown>";
+  }
+}
+}  // namespace
+
 // NOLINTBEGIN
 std::unordered_map<std::string, std::string> ParseArgs(int argc, char* argv[]) {
   std::unordered_map<std::string, std::string> args;
@@ -206,18 +232,29 @@ void RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
   if (metric_buffer.empty()) {
     return;
   }
-
-  uint32_t         sample_count{};
-  astl_status_code status =
-      astlGetMetricSampleCountOnTarget(target_handle, metric_buffer.front()._handle, &sample_count);
-  std::cout << "astlGetMetricSampleCountOnTarget Status: " << astlStatusString(status) << '\n';
-
+  const auto& metric_props = metric_buffer.front();
+  uint32_t    sample_count{};
+  auto        status = astlGetMetricSampleCountOnTarget(target_handle, metric_props._handle, &sample_count);
+  std::cout << "astlGetMetricSampleCountOnTarget Status: " << astlStatusString(status) << " (count=" << sample_count
+            << ")\n";
+  if (status != ASTL_STATUS_SUCCESS || sample_count == 0) {
+    return;
+  }
   std::vector<astl_metric_sample_t> samples(sample_count);
-  if (sample_count > 0) {
+  if (!samples.empty()) {
     samples[0]._size = sizeof(astl_metric_sample_t);
   }
-  status = astlGetMetricSamplesOnTarget(target_handle, metric_buffer.front()._handle, samples.data(), &sample_count);
+  status = astlGetMetricSamplesOnTarget(target_handle, metric_props._handle, samples.data(), &sample_count);
   std::cout << "astlGetMetricSamplesOnTarget Status: " << astlStatusString(status) << '\n';
+  if (status != ASTL_STATUS_SUCCESS) {
+    return;
+  }
+  std::cout << "Collected Samples for metric '" << (metric_props._name ? metric_props._name : "<null>") << "':\n";
+  for (uint32_t i = 0; i < sample_count; ++i) {
+    const auto& sample_entry = samples[i];
+    std::cout << "  [" << i << "] ts=" << sample_entry._timestamp
+              << " value=" << ValueToString(sample_entry._value, metric_props._value_type) << '\n';
+  }
 }
 
 /**

@@ -21,7 +21,7 @@
 
 #include "collection_configuration.hpp"
 #include "common/capabilities.hpp"
-#include "common/i_sample_sink.hpp"
+#include "common/i_raw_sample_sink.hpp"
 
 namespace astl {
 
@@ -45,10 +45,10 @@ struct ICollector {
   virtual CollectorCapability const& GetCapabilities() const = 0;
 
   /*
-   * @brief Set the destination for where sampled data should be sent.
-   *       This is typically the CollectorManager, but can be any ISampleSink.
+   * @brief Set the destination for where raw sampled data should be sent.
+   *       This is typically the CollectorManager, but can be any IRawSampleSink.
    */
-  virtual void SetSampleSink(ISampleSink* sample_sink) = 0;
+  virtual void SetRawSampleSink(IRawSampleSink* raw_sample_sink) = 0;
 
   /*
    * @brief Configure the collector to collect data, but don't start sampling it yet.

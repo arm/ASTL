@@ -1,3 +1,17 @@
+/**
+ * @file astl_telemetry.h
+ * @brief Core public telemetry collection C API for the Arm SoC Telemetry Library (ASTL).
+ *
+ * This header exposes functions to initialize the library, enumerate targets,
+ * discover counters/metrics/groups, configure collection parameters (sampling,
+ * snapshot, immediate), control collection lifecycle (start / pause / resume /
+ * stop / immediate read) and retrieve collected counter & metric samples. All
+ * API structs include a leading `_size` field for versioning; callers MUST set
+ * this field to `sizeof(struct_type)` before calling into the API so that
+ * forward/backward compatibility can be managed. Buffer-returning APIs follow a
+ * two-step pattern: query required counts, allocate & initialize (setting the
+ * first element's `_size`), then call the getter to populate data.
+ */
 #ifndef INCLUDE_ASTL_TELEMETRY_H_
 #define INCLUDE_ASTL_TELEMETRY_H_
 
@@ -68,7 +82,7 @@ ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t*
  * firmware, driver, OS or any data source on the system.
  */
 
-typedef void* astl_target_handle_t;  //!< Abstraction of a target handle
+typedef const void* astl_target_handle_t;  //!< Abstraction of a target handle
 
 /** A target properties structure describes a target on which telemetry can be collected
  */
@@ -181,29 +195,27 @@ typedef union _astl_value_t {
  * themselves
  */
 
-typedef void* astl_counter_handle_t;  //!< Abstraction of a counter handle
+typedef const void* astl_counter_handle_t;  //!< Abstraction of a counter handle
 
 /** A counter sample is the raw form of the data we read. It contains both the timestamp when the
  * reading was made and the reading itself
+ * Note: The sample is relevant to the target and counter specified in GetSamples API
  */
 typedef struct _astl_counter_sample_t {
-  size_t                _size;            //!< Size of this struct for versioning
-  astl_counter_handle_t _counter_handle;  //!< The handle of the counter for this data point. Found
-                                          //!< in astl_counter_properties_t
-  astl_target_handle_t _target_handle;    //!< The handle of the target for this data point. Found in
-                                          //!< astl_target_properties_t
-  uint64_t     _timestamp;                //!< The timestamp when this value was captured
-  astl_value_t _value;                    //!< The value captured
+  size_t _size;  //!< Size of this struct for versioning
+
+  uint64_t     _timestamp;  //!< The timestamp when this value was captured
+  astl_value_t _value;      //!< The value captured
 } astl_counter_sample_t;
 
 /** The type of the counter. The type helps decide how to process the counter and how to display the
  * processed data
  */
 typedef enum _astl_counter_type_t {
-  ASTL_COUNTER_TYPE_VALUE = 1,  //!< Point in time value. Example: temperature
-  ASTL_COUNTER_TYPE_COUNT = 2,  //!< Free running count. Example: Bytes transferred, joules,
+  ASTL_COUNTER_TYPE_VALUE = 0,  //!< Point in time value. Example: temperature
+  ASTL_COUNTER_TYPE_COUNT = 1,  //!< Free running count. Example: Bytes transferred, joules,
                                 //!< time residency
-  ASTL_COUNTER_TYPE_EVENT = 3,  //!< Point in time event. Example: Wakeup. Events are traced and
+  ASTL_COUNTER_TYPE_EVENT = 2,  //!< Point in time event. Example: Wakeup. Events are traced and
                                 //!< cannot be controlled with sampling or immediate reads
 
   ASTL_COUNTER_TYPE_UNKNOWN = 0xFFFFFFFF,  //!< Unknown
@@ -283,20 +295,17 @@ ASTL_API astl_status_code astlGetCounters(astl_target_handle_t       target_hand
  * post processing of the counters.
  */
 
-typedef void* astl_metric_handle_t;  //!< Abstraction of a metric handle
+typedef const void* astl_metric_handle_t;  //!< Abstraction of a metric handle
 
 /** A metric sample structure describes a collected and processed value of a metric.
  * It contains both the timestamp when the reading was made and the reading itself
+ * Note: The sample is relevant to the target and metric specified in GetSamples API
  */
 typedef struct _astl_metric_sample_t {
-  size_t               _size;           //!< Size of this struct for versioning
-  astl_metric_handle_t _metric_handle;  //!< The handle of the metric for this data point. Found in
-                                        //!< astl_metric_properties_t
-  astl_target_handle_t _target_handle;  //!< The handle of the target for this data point. Found in
-                                        //!< astl_target_properties_t
-  uint64_t     _timestamp;              //!< the timestamp when this value was captured
-  astl_value_t _value;                  //!< The value captured. Should use _value_type in the
-                                        //!< astl_metric_properties_t structure to properly interpret _value
+  size_t       _size;       //!< Size of this struct for versioning
+  uint64_t     _timestamp;  //!< the timestamp when this value was captured
+  astl_value_t _value;      //!< The value captured. Should use _value_type in the
+                            //!< astl_metric_properties_t structure to properly interpret _value
 } astl_metric_sample_t;
 
 /** The type of the metric. The type helps decide how to further process, summarize and display metric data
@@ -385,7 +394,7 @@ ASTL_API astl_status_code astlGetMetrics(astl_target_handle_t target_handle, ast
  * the metrics within the metric groups to interpret the data.
  */
 
-typedef void* astl_metric_group_handle_t;  //!< Abstraction of a metric group handle
+typedef const void* astl_metric_group_handle_t;  //!< Abstraction of a metric group handle
 
 /** A metric group properties structure describes a metric group.
  */
@@ -770,64 +779,6 @@ ASTL_API astl_status_code astlGetCounterSamplesOnTarget(astl_target_handle_t   t
                                                         astl_counter_handle_t  counter_handle,
                                                         astl_counter_sample_t* samples, uint32_t* sample_count);
 
-/**
- * @brief Get the number of samples collected for all counters on a specific target
- *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
- */
-ASTL_API astl_status_code astlGetAllCounterSampleCountOnTarget(astl_target_handle_t target_handle,
-                                                               uint32_t*            sample_count);
-
-/**
- * @brief Get the samples collected for all counters on a specific target
- *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @param[in/out] samples                  Array of collected samples. Cannot be
- *                                         NULL. It should point to the buffer of
- *                                         sizeof(aslt_counter_sample_t) * (sample_count)
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_counter_sample_t)
- *                                         for versioning
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
- */
-ASTL_API astl_status_code astlGetAllCounterSamplesOnTarget(astl_target_handle_t   target_handle,
-                                                           astl_counter_sample_t* samples, uint32_t* sample_count);
-
-/**
- * @brief Get the number of samples collected for all counters on all targets
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
- */
-ASTL_API astl_status_code astlGetAllCounterSampleCount(uint32_t* sample_count);
-
-/**
- * @brief Get the samples collected for all counters on all targets
- *
- * @param[in/out] samples                  Array of collected samples. Cannot be
- *                                         NULL. It should point to the buffer of
- *                                         sizeof(aslt_counter_sample_t) * (sample_count)
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_counter_sample_t)
- *                                         for versioning
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
- */
-ASTL_API astl_status_code astlGetAllCounterSamples(astl_counter_sample_t* counter_samples, uint32_t* sample_count);
-
 /*** COLLECTED METRIC SAMPLES ***/
 /**
  * @brief Get the number of samples collected for specific metric on a specific target
@@ -868,64 +819,6 @@ ASTL_API astl_status_code astlGetMetricSampleCountOnTarget(astl_target_handle_t 
 ASTL_API astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t  target_handle,
                                                        astl_metric_handle_t  metric_handle,
                                                        astl_metric_sample_t* samples, uint32_t* sample_count);
-
-/**
- * @brief Get the number of samples collected for all metrics on a specific target
- *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
- */
-ASTL_API astl_status_code astlGetAllMetricSampleCountOnTarget(astl_target_handle_t target_handle,
-                                                              uint32_t*            sample_count);
-
-/**
- * @brief Get the samples collected for all metrics on a specific target
- *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @param[in/out] samples                  Array of collected samples. Cannot be
- *                                         NULL. It should point to the buffer of
- *                                         sizeof(aslt_metric_sample_t) * (sample_count)
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_metric_sample_t)
- *                                         for versioning
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
- */
-ASTL_API astl_status_code astlGetAllMetricSamplesOnTarget(astl_target_handle_t  target_handle,
-                                                          astl_metric_sample_t* samples, uint32_t* sample_count);
-
-/**
- * @brief Get the number of samples collected for all metrics on all targets
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
- */
-ASTL_API astl_status_code astlGetAllMetricSampleCount(uint32_t* sample_count);
-
-/**
- * @brief Get the samples collected for all metrics on all targets
- *
- * @param[in/out] samples                  Array of collected samples. Cannot be
- *                                         NULL. It should point to the buffer of
- *                                         sizeof(aslt_metric_sample_t) * (sample_count)
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_metric_sample_t)
- *                                         for versioning
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
- */
-ASTL_API astl_status_code astlGetAllMetricSamples(astl_metric_sample_t* samples, uint32_t* sample_count);
 
 #if defined(__cplusplus)
 }

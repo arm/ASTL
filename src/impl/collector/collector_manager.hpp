@@ -26,7 +26,7 @@
 
 #include "astl/astl.h"
 #include "collector/collection_configuration.hpp"
-#include "common/i_sample_sink.hpp"
+#include "common/i_raw_sample_sink.hpp"
 #include "common/operation.hpp"
 #include "counter.hpp"
 #include "i_collector.hpp"
@@ -35,7 +35,7 @@
 
 namespace astl {
 
-class CollectorManager : public ICollectorManager, public ISampleSink {
+class CollectorManager : public ICollectorManager, public IRawSampleSink {
  public:
   CollectorManager() = delete;
 
@@ -48,7 +48,7 @@ class CollectorManager : public ICollectorManager, public ISampleSink {
    *
    * @note Collection must be stopped and CollectorManager destroyed before the given ITarget keys are destroyed
    */
-  explicit CollectorManager(std::unordered_map<ITarget*, std::vector<std::unique_ptr<ICollector>>>&& collectors);
+  explicit CollectorManager(std::unordered_map<const ITarget*, std::vector<std::unique_ptr<ICollector>>>&& collectors);
 
   // CollectorManager owns its ICollector instances, so it can be moved, but not copied
   CollectorManager(CollectorManager const&)            = delete;
@@ -58,37 +58,38 @@ class CollectorManager : public ICollectorManager, public ISampleSink {
 
   ~CollectorManager() override = default;
 
-  std::unordered_map<ITarget*, std::vector<CollectorCapability>> ReportCollectionCapabilities() const override;
+  std::unordered_map<const ITarget*, std::vector<CollectorCapability>> ReportCollectionCapabilities() const override;
 
   // ICollectorManager implementation
-  astl_status_code RegisterSampleSink(ISampleSink* sink) override;
-  astl_status_code UnregisterSampleSink(ISampleSink* sink) override;
+  astl_status_code RegisterRawSampleSink(IRawSampleSink* sink) override;
+  astl_status_code UnregisterRawSampleSink(IRawSampleSink* sink) override;
 
-  astl_status_code ConfigureCollectionOnTarget(ITarget* target, astl_collection_parameters_t const& collection_params,
-                                               CollectionOperations&& operations) override;
+  astl_status_code ConfigureCollectionOnTarget(const ITarget*                      target,
+                                               astl_collection_parameters_t const& collection_params,
+                                               CollectionOperations&&              operations) override;
 
-  astl_status_code StartOnTarget(ITarget* target) override;
+  astl_status_code StartOnTarget(const ITarget* target) override;
 
-  astl_status_code PauseOnTarget(ITarget* target) override;
+  astl_status_code PauseOnTarget(const ITarget* target) override;
 
-  astl_status_code ResumeOnTarget(ITarget* target) override;
+  astl_status_code ResumeOnTarget(const ITarget* target) override;
 
-  astl_status_code ReadImmediateOnTarget(ITarget* target) override;
+  astl_status_code ReadImmediateOnTarget(const ITarget* target) override;
 
-  astl_status_code StopOnTarget(ITarget* target) override;
+  astl_status_code StopOnTarget(const ITarget* target) override;
 
-  // ISampleSink implementation
-  astl_status_code SinkSamples(ITarget* target, std::span<SampledData> samples) override;
+  // IRawSampleSink implementation
+  astl_status_code SinkRawSamples(const ITarget* target, std::span<RawSampledData> samples) override;
 
  private:
-  std::unordered_set<ISampleSink*> _registered_sample_sinks;
+  std::unordered_set<IRawSampleSink*> _registered_raw_sample_sinks;
 
   /// @todo ASTL-145 It's a bit of an anti-pattern to take a raw pointer to a unique_ptr for ITarget*
-  std::unordered_map<ITarget*, std::vector<std::unique_ptr<ICollector>>> _collectors;
+  std::unordered_map<const ITarget*, std::vector<std::unique_ptr<ICollector>>> _collectors;
 
   /// given a target and a set of desired capabilities, choose a suitable collector
   /// @todo ASTL-145 It's a bit of an anti-pattern to take a raw pointer to a unique_ptr for ITarget*
-  std::expected<ICollector*, astl_status_code> SelectCollector(ITarget*                   target,
+  std::expected<ICollector*, astl_status_code> SelectCollector(const ITarget*             target,
                                                                CollectorCapability const& requirements);
 };
 

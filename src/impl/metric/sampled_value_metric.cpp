@@ -20,45 +20,67 @@
 
 namespace astl {
 
+namespace {
+// Initial reservation for processed samples per metric. Chosen as a modest
+// size to avoid several small reallocations during the first burst of
+// samples while keeping footprint tiny (< 1KB for typical sample structs).
+constexpr std::size_t kInitialProcessedSampleCapacity = 16;
+}  // namespace
+
 SampledValueMetric::SampledValueMetric(const char* name, const char* description, astl_units_t units,
-                                       astl_value_type_t value_type)
-    : RawMetric(name, description, units, value_type, ASTL_METRIC_VALUE),
+                                       astl_value_type_t value_type, const ITarget* target,
+                                       IProcessedSampleSink* processed_sample_sink)
+    : RawMetric(name, description, units, value_type, ASTL_METRIC_VALUE, target, processed_sample_sink),
       _summary_data{},
       _sum_sample_value{uint64_t{0}} {
   InitializeSamples();
 }
 
-astl_status_code SampledValueMetric::ReceiveSample(const SampledData& sample) {
+astl_status_code SampledValueMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
   // Check if the sample's value type matches the metric's expected type
-  auto type_check_result = CheckSampleValueType(sample);
+  auto type_check_result = CheckSampleValueType(raw_sample);
   if (type_check_result != ASTL_STATUS_SUCCESS) {
     return type_check_result;
   }
 
   // Log the raw sample using the base class method
-  LogRawSample(sample);
-  auto status = UpdateStatistics(sample);
-  _samples.push_back(sample);
-  return status;
+  LogRawSample(raw_sample);
+  // TODO(fayben01): need to process the sample before updating the statistics. Processing involves potential masking,
+  // bit shifting, applying formulas or scaling
+  ProcessedSampledData processed_sample{raw_sample.value, raw_sample.timestamp};
+  (void)UpdateStatistics(processed_sample);  // statistics errors are logged inside helper
+
+  {
+    std::lock_guard<std::mutex> lock(_samples_mutex);
+    _processed_samples.push_back(processed_sample);
+  }
+  // fan-out to manager / external sinks
+  SinkProcessedSample(processed_sample);
+  return ASTL_STATUS_SUCCESS;
 }
 
-std::span<const SampledData> SampledValueMetric::GetSamples() const {
-  // Return a span of the samples received by this metric
-  return std::span<const SampledData>(_samples);
+std::span<const ProcessedSampledData> SampledValueMetric::GetProcessedSamples() const {
+  std::lock_guard<std::mutex> lock(_samples_mutex);
+  return std::span<const ProcessedSampledData>(_processed_samples);
 }
 
-void SampledValueMetric::Reset() { InitializeSamples(); }
+void SampledValueMetric::Reset() {
+  std::lock_guard<std::mutex> lock(_samples_mutex);
+  InitializeSamples();
+}
 
-astl_status_code SampledValueMetric::UpdateStatistics(const SampledData& sample) {
-  if (!sample.value.IsArithmetic()) {
+astl_status_code SampledValueMetric::UpdateStatistics(const ProcessedSampledData& processed_sample) {
+  if (!processed_sample.value.IsArithmetic()) {
     ASTL_LOG_TRACE("SampledValueMetric: received sample with non-arithmetic value type for metric: {}", _name);
     return ASTL_STATUS_SUCCESS;
   }
   // For numeric types, update min, max and sum values.
-  _summary_data.min = _summary_data.min.has_value() ? std::min(_summary_data.min.value(), sample.value) : sample.value;
-  _summary_data.max = _summary_data.max.has_value() ? std::max(_summary_data.max.value(), sample.value) : sample.value;
+  _summary_data.min = _summary_data.min.has_value() ? std::min(_summary_data.min.value(), processed_sample.value)
+                                                    : processed_sample.value;
+  _summary_data.max = _summary_data.max.has_value() ? std::max(_summary_data.max.value(), processed_sample.value)
+                                                    : processed_sample.value;
   // Update sum for average calculation
-  auto new_sum_for_avg = AstlValue::Add(sample.value, _sum_sample_value);
+  auto new_sum_for_avg = AstlValue::Add(processed_sample.value, _sum_sample_value);
   if (!new_sum_for_avg) {
     return new_sum_for_avg.error();
   }
@@ -68,7 +90,15 @@ astl_status_code SampledValueMetric::UpdateStatistics(const SampledData& sample)
 
 void SampledValueMetric::InitializeSamples() {
   // Reset the metric state
-  _samples.clear();
+  if (!_processed_samples.empty()) {
+    _processed_samples.clear();
+  }
+  // Heuristic: pre-reserve a small initial capacity if this is a cold vector. Metrics often receive
+  // a handful of samples quickly after configuration; reserving avoids several tiny reallocations.
+  // Reserve initial capacity if this is a cold vector.
+  if (_processed_samples.capacity() == 0) {
+    _processed_samples.reserve(kInitialProcessedSampleCapacity);
+  }
   _summary_data          = MinMaxAvgSummaryData{};
   auto from_union_result = AstlValue::FromUnionPromoting(_value_type);
   if (from_union_result.has_value()) {
@@ -91,11 +121,12 @@ void SampledValueMetric::InitializeSamples() {
 astl_status_code SampledValueMetric::Summarize() {
   // Compute min, max, and average values for the received samples.
   // Only one numeric type is valid for a given metric instance.
-  if (_samples.empty()) {
+  std::lock_guard<std::mutex> lock(_samples_mutex);
+  if (_processed_samples.empty()) {
     _summary_logger.LogInfo("No samples to summarize.");
     return ASTL_STATUS_SUCCESS;
   }
-  auto average = AstlValue::Divide(_sum_sample_value, _samples.size());
+  auto average = AstlValue::Divide(_sum_sample_value, _processed_samples.size());
   if (average) {
     _summary_data.avg = average.value();
   } else {

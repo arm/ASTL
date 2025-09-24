@@ -28,19 +28,9 @@
 #include "astl/astl.h"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
-#include "i_sample_sink.hpp"
 #include "raw_metric.hpp"
 
 namespace astl {
-
-/**
- * @brief Holds delta calculation data between consecutive samples.
- * This structure is used to store the delta value and timestamp information.
- */
-struct DeltaData {
-  AstlValue       delta_value;  ///< The delta value between consecutive samples
-  SampleTimestamp timestamp;    ///< Timestamp when the delta was calculated
-};
 
 /**
  * @brief Holds summary values for delta statistics.
@@ -73,8 +63,10 @@ class DeltaMetric : public RawMetric {
    * @param description A brief description of the metric.
    * @param units The units of measurement for this metric.
    * @param value_type The type of values this metric will process (e.g., UINT64).
+   * @param target Pointer to the target device or context associated with this metric.
    */
-  explicit DeltaMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type);
+  explicit DeltaMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type,
+                       const ITarget* target, IProcessedSampleSink* processed_sample_sink);
 
   /**
    * @brief Process and record a new sample value, calculating delta from previous sample.
@@ -85,7 +77,7 @@ class DeltaMetric : public RawMetric {
    * @param sample A single sampled data point to be processed.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code ReceiveSample(const SampledData& sample) override;
+  astl_status_code ReceiveRawSample(const RawSampledData& raw_sample) override;
 
   /**
    * @brief Summarize collected delta data.
@@ -108,22 +100,17 @@ class DeltaMetric : public RawMetric {
   DeltaSummaryData GetDeltaSummaryData() const;
 
   /**
-   * @brief Return a view of the samples received by this metric
-   */
-  std::span<const SampledData> GetSamples() const override;
-
-  /**
    * @brief Get a view of the delta data calculated by this metric.
    *
    * This method provides access to the internal delta data for testing purposes.
    *
    * @note TODO(ASTL-58): When OutputManager is implemented, evaluate whether this method
-   * can be consolidated with GetSamples() or if DeltaData should be handled through
+   * can be consolidated with GetProcessedSamples() or if DeltaData should be handled through
    * a unified output interface. Currently exposed primarily for unit testing.
    *
    * @return A span containing all calculated delta values with their timestamps.
    */
-  std::span<const DeltaData> GetDeltas() const;
+  std::span<const ProcessedSampledData> GetProcessedSamples() const override;
 
   /**
    * @brief Reset the metric state, dropping all collected samples
@@ -160,10 +147,10 @@ class DeltaMetric : public RawMetric {
 
   // NOLINTBEGIN - Disable clang-tidy checks for protected members - required by RateMetric class inherited from
   // DeltaMetric
-  std::optional<SampledData> _previous_sample;               // Previous sample for delta calculation
-  DeltaSummaryData           _delta_summary_data;            // Summary data for delta statistics
-  AstlValue                  _sum_delta_value{uint64_t{0}};  // Sum of delta values for average calculation
-  std::vector<DeltaData>     _deltas;                        ///< Vector of all delta values with timestamps
+  std::optional<RawSampledData>     _previous_sample;               // Previous sample for delta calculation
+  DeltaSummaryData                  _delta_summary_data;            // Summary data for delta statistics
+  AstlValue                         _sum_delta_value{uint64_t{0}};  // Sum of delta values for average calculation
+  std::vector<ProcessedSampledData> _deltas;                        ///< Vector of all delta values with timestamps
 
   // NOLINTEND
  private:

@@ -29,13 +29,13 @@ using namespace std::chrono_literals;
 class ResidencyMetricTestFixture : public astl::ResidencyMetric {
  public:
   ResidencyMetricTestFixture()
-      : astl::ResidencyMetric("test_cpu_cstate_residency", "Unit test CPU C-state residency metric",
-                              CreateTestStateConfigurations(), "Active") {}
+      : astl::ResidencyMetric("test_cpu_cstate_residency", "Unit test CPU C-state residency metric", nullptr,
+                              CreateTestStateConfigurations(), nullptr, "Active") {}
 
   // Constructor with custom frequency
   explicit ResidencyMetricTestFixture(double frequency)
-      : astl::ResidencyMetric("test_cpu_cstate_residency", "Unit test CPU C-state residency metric",
-                              CreateTestStateConfigurations(frequency), "Active") {}
+      : astl::ResidencyMetric("test_cpu_cstate_residency", "Unit test CPU C-state residency metric", nullptr,
+                              CreateTestStateConfigurations(frequency), nullptr, "Active") {}
 
   static std::vector<astl::StateConfiguration> CreateTestStateConfigurations() {
     return CreateTestStateConfigurations(1000000.0);  // Default 1MHz frequency
@@ -78,7 +78,8 @@ TEST_CASE("ResidencyMetric: construction", "[ResidencyMetric]") {
       {"C2", 1000000.0, 0x69DE},
   };
 
-  astl::ResidencyMetric metric("cpu_cstate_residency", "CPU C-state residency metric", configs, std::string("Active"));
+  astl::ResidencyMetric metric("cpu_cstate_residency", "CPU C-state residency metric", nullptr, configs, nullptr,
+                               std::string("Active"));
 
   // Verify initial state
   auto summary = metric.GetResidencySummaryData();
@@ -98,7 +99,7 @@ TEST_CASE("ResidencyMetric: construction without inferred state", "[ResidencyMet
   };
 
   // Create metric without inferred state
-  astl::ResidencyMetric metric("cpu_cstate_residency", "CPU C-state residency metric", configs);
+  astl::ResidencyMetric metric("cpu_cstate_residency", "CPU C-state residency metric", nullptr, configs, nullptr);
 
   // Verify initial state - no inferred state should be calculated
   auto summary = metric.GetResidencySummaryData();
@@ -187,11 +188,11 @@ TEST_CASE("ResidencyMetric: single sample processing", "[ResidencyMetric]") {
   auto first_operation_id = operations[0]->GetId();
 
   // First sample for C6 state - should store but not calculate residency
-  astl::AstlValue   c6_val1{uint64_t{1000000}};  // 1 million ticks
-  auto              timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(std::chrono::steady_clock::now());
-  astl::SampledData c6_sample1(first_operation_id, c6_val1, timestamp1);
+  astl::AstlValue      c6_val1{uint64_t{1000000}};  // 1 million ticks
+  auto                 timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(std::chrono::steady_clock::now());
+  astl::RawSampledData c6_sample1(first_operation_id, c6_val1, timestamp1);
 
-  auto status = fixture.ReceiveSample(c6_sample1);
+  auto status = fixture.ReceiveRawSample(c6_sample1);
   REQUIRE(status == ASTL_STATUS_SUCCESS);
 
   // No residency data should be generated yet
@@ -212,18 +213,18 @@ TEST_CASE("ResidencyMetric: two samples processing", "[ResidencyMetric]") {
   auto first_operation_id = operations[0]->GetId();
 
   // First sample for C6 state
-  astl::AstlValue   c6_val1{uint64_t{1000000}};  // 1 million ticks
-  auto              base_time  = std::chrono::steady_clock::now();
-  auto              timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(base_time);
-  astl::SampledData c6_sample1(first_operation_id, c6_val1, timestamp1);
-  fixture.ReceiveSample(c6_sample1);
+  astl::AstlValue      c6_val1{uint64_t{1000000}};  // 1 million ticks
+  auto                 base_time  = std::chrono::steady_clock::now();
+  auto                 timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(base_time);
+  astl::RawSampledData c6_sample1(first_operation_id, c6_val1, timestamp1);
+  fixture.ReceiveRawSample(c6_sample1);
 
   // Second sample for C6 state - 10ms later
-  astl::AstlValue   c6_val2{uint64_t{2000000}};  // 2 million ticks (delta = 1 million)
-  auto              timestamp2 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(10));
-  astl::SampledData c6_sample2(first_operation_id, c6_val2, timestamp2);
+  astl::AstlValue c6_val2{uint64_t{2000000}};  // 2 million ticks (delta = 1 million)
+  auto            timestamp2 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(10));
+  astl::RawSampledData c6_sample2(first_operation_id, c6_val2, timestamp2);
 
-  auto status = fixture.ReceiveSample(c6_sample2);
+  auto status = fixture.ReceiveRawSample(c6_sample2);
   REQUIRE(status == ASTL_STATUS_SUCCESS);
 
   // Should have one residency data entry
@@ -250,27 +251,27 @@ TEST_CASE("ResidencyMetric: multiple states processing", "[ResidencyMetric]") {
   auto second_operation_id = operations[1]->GetId();  // C1 state
 
   // C6 state samples - using explicit timestamps
-  auto              base_time = std::chrono::steady_clock::now();
-  astl::AstlValue   c6_val1{uint64_t{1000000}};
-  auto              timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(base_time);
-  astl::SampledData c6_sample1(first_operation_id, c6_val1, timestamp1);
-  fixture.ReceiveSample(c6_sample1);
+  auto                 base_time = std::chrono::steady_clock::now();
+  astl::AstlValue      c6_val1{uint64_t{1000000}};
+  auto                 timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(base_time);
+  astl::RawSampledData c6_sample1(first_operation_id, c6_val1, timestamp1);
+  fixture.ReceiveRawSample(c6_sample1);
 
-  astl::AstlValue   c6_val2{uint64_t{2500000}};  // Delta: 1.5 million ticks = 1.5 seconds
-  auto              timestamp2 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(10));
-  astl::SampledData c6_sample2(first_operation_id, c6_val2, timestamp2);
-  fixture.ReceiveSample(c6_sample2);
+  astl::AstlValue c6_val2{uint64_t{2500000}};  // Delta: 1.5 million ticks = 1.5 seconds
+  auto            timestamp2 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(10));
+  astl::RawSampledData c6_sample2(first_operation_id, c6_val2, timestamp2);
+  fixture.ReceiveRawSample(c6_sample2);
 
   // C1 state samples
-  astl::AstlValue   c1_val1{uint64_t{500000}};
-  auto              timestamp3 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(20));
-  astl::SampledData c1_sample1(second_operation_id, c1_val1, timestamp3);
-  fixture.ReceiveSample(c1_sample1);
+  astl::AstlValue c1_val1{uint64_t{500000}};
+  auto            timestamp3 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(20));
+  astl::RawSampledData c1_sample1(second_operation_id, c1_val1, timestamp3);
+  fixture.ReceiveRawSample(c1_sample1);
 
-  astl::AstlValue   c1_val2{uint64_t{1000000}};  // Delta: 500000 ticks = 0.5 seconds
-  auto              timestamp4 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(30));
-  astl::SampledData c1_sample2(second_operation_id, c1_val2, timestamp4);
-  fixture.ReceiveSample(c1_sample2);
+  astl::AstlValue c1_val2{uint64_t{1000000}};  // Delta: 500000 ticks = 0.5 seconds
+  auto            timestamp4 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(30));
+  astl::RawSampledData c1_sample2(second_operation_id, c1_val2, timestamp4);
+  fixture.ReceiveRawSample(c1_sample2);
 
   // Should have two residency data entries
   auto residency_data = fixture.GetResidencyData();
@@ -309,16 +310,16 @@ TEST_CASE("ResidencyMetric: summarization", "[ResidencyMetric]") {
   auto first_operation_id = operations[0]->GetId();
 
   // Generate simple data: only C6 state for simplicity
-  auto              base_timestamp = std::chrono::steady_clock::now();
-  auto              timestamp1     = ResidencyMetricTestFixture::CreateTimestamp(base_timestamp);
-  astl::SampledData c6_s1(first_operation_id, astl::AstlValue{uint64_t{1000000}}, timestamp1);  // 1M ticks baseline
+  auto                 base_timestamp = std::chrono::steady_clock::now();
+  auto                 timestamp1     = ResidencyMetricTestFixture::CreateTimestamp(base_timestamp);
+  astl::RawSampledData c6_s1(first_operation_id, astl::AstlValue{uint64_t{1000000}}, timestamp1);  // 1M ticks baseline
 
-  fixture.ReceiveSample(c6_s1);
+  fixture.ReceiveRawSample(c6_s1);
 
   auto timestamp2 = ResidencyMetricTestFixture::CreateTimestamp(base_timestamp + std::chrono::milliseconds(10));
-  astl::SampledData c6_s2(first_operation_id, astl::AstlValue{uint64_t{2000000}},
-                          timestamp2);  // 2M ticks (+1M = 1 second)
-  fixture.ReceiveSample(c6_s2);
+  astl::RawSampledData c6_s2(first_operation_id, astl::AstlValue{uint64_t{2000000}},
+                             timestamp2);  // 2M ticks (+1M = 1 second)
+  fixture.ReceiveRawSample(c6_s2);
 
   // Summarize
   auto status = fixture.Summarize();
@@ -345,11 +346,11 @@ TEST_CASE("ResidencyMetric: invalid samples", "[ResidencyMetric]") {
   ResidencyMetricTestFixture fixture;
 
   SECTION("Invalid operation ID") {
-    astl::AstlValue   invalid_val{uint64_t{1000000}};
-    auto              timestamp = ResidencyMetricTestFixture::CreateTimestamp(std::chrono::steady_clock::now());
-    astl::SampledData invalid_sample(999, invalid_val, timestamp);  // operation_id 999 doesn't exist
+    astl::AstlValue      invalid_val{uint64_t{1000000}};
+    auto                 timestamp = ResidencyMetricTestFixture::CreateTimestamp(std::chrono::steady_clock::now());
+    astl::RawSampledData invalid_sample(999, invalid_val, timestamp);  // operation_id 999 doesn't exist
 
-    auto status = fixture.ReceiveSample(invalid_sample);
+    auto status = fixture.ReceiveRawSample(invalid_sample);
     REQUIRE(status == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
 }
@@ -367,15 +368,15 @@ TEST_CASE("ResidencyMetric: reset functionality", "[ResidencyMetric]") {
   auto first_operation_id = operations[0]->GetId();
 
   // Add some data
-  auto              base_timestamp = std::chrono::steady_clock::now();
-  auto              timestamp1     = ResidencyMetricTestFixture::CreateTimestamp(base_timestamp);
-  astl::SampledData sample1(first_operation_id, astl::AstlValue{uint64_t{1000000}}, timestamp1);
+  auto                 base_timestamp = std::chrono::steady_clock::now();
+  auto                 timestamp1     = ResidencyMetricTestFixture::CreateTimestamp(base_timestamp);
+  astl::RawSampledData sample1(first_operation_id, astl::AstlValue{uint64_t{1000000}}, timestamp1);
 
-  fixture.ReceiveSample(sample1);
+  fixture.ReceiveRawSample(sample1);
 
   auto timestamp2 = ResidencyMetricTestFixture::CreateTimestamp(base_timestamp + std::chrono::milliseconds(10));
-  astl::SampledData sample2(first_operation_id, astl::AstlValue{uint64_t{2000000}}, timestamp2);
-  fixture.ReceiveSample(sample2);
+  astl::RawSampledData sample2(first_operation_id, astl::AstlValue{uint64_t{2000000}}, timestamp2);
+  fixture.ReceiveRawSample(sample2);
 
   // Verify data exists
   auto residency_data = fixture.GetResidencyData();
@@ -410,14 +411,14 @@ TEST_CASE("ResidencyMetric: state-specific data retrieval", "[ResidencyMetric]")
   // Add samples for both C6 and C1
   auto base_timestamp = std::chrono::steady_clock::now();
   auto timestamp1     = ResidencyMetricTestFixture::CreateTimestamp(base_timestamp);
-  fixture.ReceiveSample(astl::SampledData(first_operation_id, astl::AstlValue{uint64_t{1000000}}, timestamp1));
+  fixture.ReceiveRawSample(astl::RawSampledData(first_operation_id, astl::AstlValue{uint64_t{1000000}}, timestamp1));
   auto timestamp2 = ResidencyMetricTestFixture::CreateTimestamp(base_timestamp + std::chrono::milliseconds(10));
-  fixture.ReceiveSample(astl::SampledData(first_operation_id, astl::AstlValue{uint64_t{2000000}}, timestamp2));
+  fixture.ReceiveRawSample(astl::RawSampledData(first_operation_id, astl::AstlValue{uint64_t{2000000}}, timestamp2));
 
   auto timestamp3 = ResidencyMetricTestFixture::CreateTimestamp(base_timestamp + std::chrono::milliseconds(10));
-  fixture.ReceiveSample(astl::SampledData(second_operation_id, astl::AstlValue{uint64_t{500000}}, timestamp3));
+  fixture.ReceiveRawSample(astl::RawSampledData(second_operation_id, astl::AstlValue{uint64_t{500000}}, timestamp3));
   auto timestamp4 = ResidencyMetricTestFixture::CreateTimestamp(base_timestamp + std::chrono::milliseconds(20));
-  fixture.ReceiveSample(astl::SampledData(second_operation_id, astl::AstlValue{uint64_t{1000000}}, timestamp4));
+  fixture.ReceiveRawSample(astl::RawSampledData(second_operation_id, astl::AstlValue{uint64_t{1000000}}, timestamp4));
 
   // Get C6-specific data
   auto c6_data = fixture.GetStateResidencyData("C6");
@@ -473,9 +474,12 @@ TEST_CASE("ResidencyMetric: inferred state baseline samples", "[ResidencyMetric]
   auto timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(base_time);
 
   // First samples for all states (baseline) - no residency calculation yet
-  auto status1 = fixture.ReceiveSample(astl::SampledData(c6_operation_id, astl::AstlValue{uint64_t{1000}}, timestamp1));
-  auto status2 = fixture.ReceiveSample(astl::SampledData(c1_operation_id, astl::AstlValue{uint64_t{500}}, timestamp1));
-  auto status3 = fixture.ReceiveSample(astl::SampledData(c2_operation_id, astl::AstlValue{uint64_t{250}}, timestamp1));
+  auto status1 =
+      fixture.ReceiveRawSample(astl::RawSampledData(c6_operation_id, astl::AstlValue{uint64_t{1000}}, timestamp1));
+  auto status2 =
+      fixture.ReceiveRawSample(astl::RawSampledData(c1_operation_id, astl::AstlValue{uint64_t{500}}, timestamp1));
+  auto status3 =
+      fixture.ReceiveRawSample(astl::RawSampledData(c2_operation_id, astl::AstlValue{uint64_t{250}}, timestamp1));
 
   REQUIRE(status1 == ASTL_STATUS_SUCCESS);
   REQUIRE(status2 == ASTL_STATUS_SUCCESS);
@@ -502,22 +506,22 @@ TEST_CASE("ResidencyMetric: inferred state calculation when all states receive s
   // Send baseline samples
   auto base_time  = std::chrono::steady_clock::now();
   auto timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(base_time);
-  fixture.ReceiveSample(astl::SampledData(c6_operation_id, astl::AstlValue{uint64_t{1000}}, timestamp1));
-  fixture.ReceiveSample(astl::SampledData(c1_operation_id, astl::AstlValue{uint64_t{500}}, timestamp1));
-  fixture.ReceiveSample(astl::SampledData(c2_operation_id, astl::AstlValue{uint64_t{250}}, timestamp1));
+  fixture.ReceiveRawSample(astl::RawSampledData(c6_operation_id, astl::AstlValue{uint64_t{1000}}, timestamp1));
+  fixture.ReceiveRawSample(astl::RawSampledData(c1_operation_id, astl::AstlValue{uint64_t{500}}, timestamp1));
+  fixture.ReceiveRawSample(astl::RawSampledData(c2_operation_id, astl::AstlValue{uint64_t{250}}, timestamp1));
 
   // Wait and send second samples to trigger residency calculations
   auto timestamp2 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(100));
 
   // C6: delta = 50 ticks = 0.05 seconds (50 ticks / 1000 Hz)
-  fixture.ReceiveSample(astl::SampledData(c6_operation_id, astl::AstlValue{uint64_t{1050}}, timestamp2));
+  fixture.ReceiveRawSample(astl::RawSampledData(c6_operation_id, astl::AstlValue{uint64_t{1050}}, timestamp2));
 
   // C1: delta = 25 ticks = 0.025 seconds (25 ticks / 1000 Hz)
-  fixture.ReceiveSample(astl::SampledData(c1_operation_id, astl::AstlValue{uint64_t{525}}, timestamp2));
+  fixture.ReceiveRawSample(astl::RawSampledData(c1_operation_id, astl::AstlValue{uint64_t{525}}, timestamp2));
 
   // C2: delta = 15 ticks = 0.015 seconds (15 ticks / 1000 Hz)
   // After this sample, inferred state should be calculated since all states have been processed
-  fixture.ReceiveSample(astl::SampledData(c2_operation_id, astl::AstlValue{uint64_t{265}}, timestamp2));
+  fixture.ReceiveRawSample(astl::RawSampledData(c2_operation_id, astl::AstlValue{uint64_t{265}}, timestamp2));
 
   // Verify residency data includes inferred state
   auto residency_data = fixture.GetResidencyData();
@@ -548,14 +552,14 @@ TEST_CASE("ResidencyMetric: inferred state summary verification", "[ResidencyMet
   // Create samples with known values
   auto base_time  = std::chrono::steady_clock::now();
   auto timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(base_time);
-  fixture.ReceiveSample(astl::SampledData(c6_operation_id, astl::AstlValue{uint64_t{1000}}, timestamp1));
-  fixture.ReceiveSample(astl::SampledData(c1_operation_id, astl::AstlValue{uint64_t{500}}, timestamp1));
-  fixture.ReceiveSample(astl::SampledData(c2_operation_id, astl::AstlValue{uint64_t{250}}, timestamp1));
+  fixture.ReceiveRawSample(astl::RawSampledData(c6_operation_id, astl::AstlValue{uint64_t{1000}}, timestamp1));
+  fixture.ReceiveRawSample(astl::RawSampledData(c1_operation_id, astl::AstlValue{uint64_t{500}}, timestamp1));
+  fixture.ReceiveRawSample(astl::RawSampledData(c2_operation_id, astl::AstlValue{uint64_t{250}}, timestamp1));
 
   auto timestamp2 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(100));
-  fixture.ReceiveSample(astl::SampledData(c6_operation_id, astl::AstlValue{uint64_t{1050}}, timestamp2));
-  fixture.ReceiveSample(astl::SampledData(c1_operation_id, astl::AstlValue{uint64_t{525}}, timestamp2));
-  fixture.ReceiveSample(astl::SampledData(c2_operation_id, astl::AstlValue{uint64_t{265}}, timestamp2));
+  fixture.ReceiveRawSample(astl::RawSampledData(c6_operation_id, astl::AstlValue{uint64_t{1050}}, timestamp2));
+  fixture.ReceiveRawSample(astl::RawSampledData(c1_operation_id, astl::AstlValue{uint64_t{525}}, timestamp2));
+  fixture.ReceiveRawSample(astl::RawSampledData(c2_operation_id, astl::AstlValue{uint64_t{265}}, timestamp2));
 
   // Summarize and verify results
   auto status = fixture.Summarize();

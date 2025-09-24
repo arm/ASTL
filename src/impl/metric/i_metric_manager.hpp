@@ -26,9 +26,11 @@
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
 #include "collector/collection_operations.hpp"
-#include "common/i_sample_sink.hpp"
+#include "common/astl_defines.hpp"
+#include "common/i_processed_sample_sink.hpp"
+#include "common/i_raw_sample_sink.hpp"
+#include "common/metric_config.hpp"
 #include "common/operation.hpp"
-#include "metric_config.hpp"
 
 namespace astl {
 
@@ -46,6 +48,32 @@ struct IMetricManager {
   IMetricManager& operator=(const IMetricManager&) = default;
   IMetricManager(IMetricManager&&)                 = default;
   IMetricManager& operator=(IMetricManager&&)      = default;
+
+  /**
+   * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
+   */
+  virtual auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target)
+      -> std::expected<IMetric*, astl_status_code> = 0;
+
+  /**
+   * @brief Register a sink to receive processed samples produced by metrics.
+   *
+   * Multiple sinks may be registered. Typical sinks include the output manager or test harnesses.
+   *
+   * @param sink Non-null pointer whose lifetime must exceed the period of registration.
+   * @return ASTL_STATUS_SUCCESS on success, ASTL_STATUS_BAD_ARGUMENT if sink is null.
+   */
+  virtual astl_status_code RegisterProcessedSampleSink(IProcessedSampleSink* sink) = 0;
+
+  /**
+   * @brief Remove a previously registered processed sample sink.
+   *
+   * A no-op if the sink was not registered.
+   *
+   * @param sink Pointer passed during registration.
+   * @return ASTL_STATUS_SUCCESS (even if not found), ASTL_STATUS_BAD_ARGUMENT if sink is null.
+   */
+  virtual astl_status_code UnregisterProcessedSampleSink(IProcessedSampleSink* sink) = 0;
 
   /**
    * @brief Register the metric.
@@ -111,14 +139,20 @@ struct IMetricManager {
    *
    * @param data A collection of raw sampled data points for the metrics to process
    */
-  virtual astl_status_code ProcessData(std::span<SampledData> data) = 0;
+  virtual astl_status_code ProcessRawSamples(RawSamplesMap& raw_samples) = 0;
 
   /**
-   * @brief Retrieve the collected samples for the given target and metric,
-   *        or an error if the target+metric combination isn't valid
+   * @brief Accept processed samples from a metric implementation.
+   *
+   * This allows the metric manager (or another upstream component) to act as an aggregator
+   * and forward samples to registered sinks.
+   *
+   * @param metric Producing metric instance.
+   * @param processed_samples Span of processed samples, valid only during the call.
+   * @return ASTL_STATUS_SUCCESS or an error code from dispatching to sinks.
    */
-  virtual auto GetSamples(astl_metric_handle_t metric_handle, const ITarget* target)
-      -> std::expected<std::span<const astl::SampledData>, astl_status_code> = 0;
+  virtual astl_status_code SinkProcessedSamples(const IMetric*                        metric,
+                                                std::span<const ProcessedSampledData> processed_samples) = 0;
 
   /**
    * @brief Summarize the metrics messages.

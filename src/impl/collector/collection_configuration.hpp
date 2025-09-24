@@ -42,18 +42,18 @@ class CollectionConfiguration {
    *
    * @param[in] collection_params     Collection parameters (interval, strategy, etc)
    **/
-  CollectionConfiguration(ITarget *target, CollectionOperations collectionOperations,
-                          astl_collection_parameters_t const &collection_params)
+  CollectionConfiguration(const ITarget* target, CollectionOperations collectionOperations,
+                          astl_collection_parameters_t const& collection_params)
       : _target{target}, _operations{std::move(collectionOperations)}, _collection_params{collection_params} {}
 
-  ITarget *Target() const { return _target; }
+  const ITarget* Target() const { return _target; }
 
-  CollectionOperations const &Operations() const { return _operations; }
+  CollectionOperations const& Operations() const { return _operations; }
 
   astl_collection_parameters_t CollectionParams() const { return _collection_params; }
 
  private:
-  ITarget *_target = nullptr;
+  const ITarget* _target = nullptr;
 
   CollectionOperations _operations;
 

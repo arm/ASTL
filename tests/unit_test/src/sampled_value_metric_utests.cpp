@@ -3,37 +3,40 @@
 #include "../../test_includes.hpp"  // include before catch2
 #include "metric/sampled_value_metric.hpp"
 
-TEST_CASE("SampledValueMetric: construction & ReceiveSample single sample", "[SampledValueMetric]") {
+TEST_CASE("SampledValueMetric: construction & ReceiveRawSample single sample", "[SampledValueMetric]") {
   // 1) Construct a metric for 64-bit unsigned samples
-  astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64);
+  astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
+                                  nullptr);
   // 2) Create a sample with a random value.
   // NOLINTNEXTLINE
-  astl::AstlValue   val1{uint64_t{40}};
-  astl::SampledData sample1(1, val1);
-  auto              status1 = metric.ReceiveSample(sample1);
+  astl::AstlValue      val1{uint64_t{40}};
+  astl::RawSampledData sample1(1, val1);
+  auto                 status1 = metric.ReceiveRawSample(sample1);
   REQUIRE(status1 == ASTL_STATUS_SUCCESS);
 }
 
-TEST_CASE("SampledValueMetric & ReceiveSample with not supported type", "[SampledValueMetric]") {
+TEST_CASE("SampledValueMetric & ReceiveRawSample with not supported type", "[SampledValueMetric]") {
   // 1) Construct a metric for 32-bit unsigned samples
-  astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT32);
+  astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT32, nullptr,
+                                  nullptr);
   // 2) Create a sample with a random value.
   // NOLINTNEXTLINE
-  astl::AstlValue   val1{uint64_t{40}};
-  astl::SampledData sample1(1, val1);
-  auto              status1 = metric.ReceiveSample(sample1);
+  astl::AstlValue      val1{uint64_t{40}};
+  astl::RawSampledData sample1(1, val1);
+  auto                 status1 = metric.ReceiveRawSample(sample1);
   REQUIRE(status1 == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 }
 
 TEST_CASE("SampledValueMetric: GetSummaryData returns correct summary", "[SampledValueMetric]") {
   // Construct metric and feed samples
-  astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64);
+  astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
+                                  nullptr);
   // NOLINTNEXTLINE
   std::vector<uint64_t> values = {10, 20, 30, 40};
   for (auto value : values) {
-    astl::AstlValue   sample_value{uint64_t{value}};
-    astl::SampledData sample(1, sample_value);
-    auto              status = metric.ReceiveSample(sample);
+    astl::AstlValue      sample_value{uint64_t{value}};
+    astl::RawSampledData sample(1, sample_value);
+    auto                 status = metric.ReceiveRawSample(sample);
     REQUIRE(status == ASTL_STATUS_SUCCESS);
   }
 

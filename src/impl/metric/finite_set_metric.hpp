@@ -71,9 +71,11 @@ class FiniteSetMetric : public SampledValueMetric {
    * @param units The units of measurement for this metric.
    * @param value_type The type of values this metric will process (e.g., UINT64).
    * @param finite_set The set of valid AstlValue objects that define the finite set.
+   * @param target The target associated with this metric.
    */
   explicit FiniteSetMetric(const char *name, const char *description, astl_units_t units, astl_value_type_t value_type,
-                           const std::set<AstlValue> &finite_set);
+                           const std::set<AstlValue> &finite_set, const ITarget *target,
+                           IProcessedSampleSink *processed_sample_sink);
 
   /**
    * @brief Process and record a new sample value.
@@ -82,10 +84,10 @@ class FiniteSetMetric : public SampledValueMetric {
    * updates occurrence counts accordingly. Values not in the finite set
    * are tracked as unknown values.
    *
-   * @param sample A single sampled data point to be processed.
+   * @param raw_sample A single raw sampled data point to be processed.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code ReceiveSample(const SampledData &sample) override;
+  astl_status_code ReceiveRawSample(const RawSampledData &raw_sample) override;
 
   /**
    * @brief Reset the metric state, dropping all collected samples and counts.
@@ -128,7 +130,7 @@ class FiniteSetMetric : public SampledValueMetric {
 
  private:
   /** @brief Update finite set statistics for the received sample */
-  astl_status_code UpdateFiniteSetStatistics(const SampledData &sample);
+  astl_status_code UpdateFiniteSetStatistics(const RawSampledData &raw_sample);
 
   /** @brief Log detailed finite set summary information */
   void LogFiniteSetSummary();

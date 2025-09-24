@@ -32,34 +32,41 @@ void EventMetric::Initialize() {
 
 void EventMetric::Reset() { Initialize(); }
 
-astl_status_code EventMetric::CheckAndStoreEvent(const SampledData& sample) {
+astl_status_code EventMetric::CheckAndStoreEvent(const RawSampledData& raw_sample) {
   // Check if the value can be converted to a string
-  if (!sample.value.IsStringConvertible()) {
+  if (!raw_sample.value.IsStringConvertible()) {
     ASTL_LOG_ERROR("EventMetric {}: received sample that cannot be converted to string", _name.c_str());
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
 
   // Convert value to string
   std::string event_str;
-  if (!sample.value.ToStringValue(event_str)) {
+  if (!raw_sample.value.ToStringValue(event_str)) {
     ASTL_LOG_ERROR("EventMetric {}: failed to convert sample to string", _name.c_str());
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
 
   // Create timeline entry
-  _events.push_back(EventData{.description = event_str, .timestamp = sample.timestamp});
+  _events.push_back(EventData{.description = event_str, .timestamp = raw_sample.timestamp});
+
+  // TODO(fayben01): May need to process the raw sample further depending on requirements
+  ProcessedSampledData processed_sampled_data{raw_sample.value, raw_sample.timestamp};
+
+  SinkProcessedSample(processed_sampled_data);
 
   // Update counts
   _summary.counts[event_str]++;
 
   // Log timeline entry (timestamp in microseconds)
-  auto ts_us = std::chrono::duration_cast<std::chrono::microseconds>(sample.timestamp.time_since_epoch()).count();
+  auto ts_us = std::chrono::duration_cast<std::chrono::microseconds>(raw_sample.timestamp.time_since_epoch()).count();
   _event_timeline_logger.LogInfo("{}, {}, {}\n", _name, event_str, ts_us);
 
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code EventMetric::ReceiveSample(const SampledData& sample) { return CheckAndStoreEvent(sample); }
+astl_status_code EventMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
+  return CheckAndStoreEvent(raw_sample);
+}
 
 astl_status_code EventMetric::Summarize() {
   // Log summary counts

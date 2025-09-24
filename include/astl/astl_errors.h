@@ -1,3 +1,12 @@
+/**
+ * @file astl_errors.h
+ * @brief Public status / error code enumeration and helpers for ASTL.
+ *
+ * The `astl_status_code` enumeration provides granular reporting for argument
+ * validation, version mismatches, buffer sizing issues, unsupported features,
+ * collection state transitions and internal failures. New codes must remain
+ * below 128 (0x80) to preserve existing stringify logic constraints.
+ */
 #ifndef INCLUDE_ASTL_ERRORS_H_
 #define INCLUDE_ASTL_ERRORS_H_
 

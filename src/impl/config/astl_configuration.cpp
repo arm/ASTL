@@ -28,7 +28,7 @@
 #include "astl/astl_telemetry.h"
 #include "astl_logger.hpp"
 #include "common/capabilities.hpp"
-#include "metric/metric_config.hpp"
+#include "common/metric_config.hpp"
 
 using json = nlohmann::json;
 
