@@ -2,6 +2,7 @@
 #define INCLUDE_COMMON_HPP_
 
 #include <cstdint>
+#include <string>
 
 namespace mock_sysfs {
 
@@ -51,6 +52,37 @@ typedef union _astl_value_t {
   bool     b8;    //!< 8bits boolean for BOOL8
   char*    str;   //!< 64bits pointer to string for STRING
 } astl_value_t;
+
+inline astl_value_type_t ToValueType(const std::string& str) {
+  if (str == "UINT8") {
+    return ASTL_VALUE_UINT8;
+  }
+  if (str == "UINT16") {
+    return ASTL_VALUE_UINT16;
+  }
+  if (str == "UINT32") {
+    return ASTL_VALUE_UINT32;
+  }
+  if (str == "UINT64") {
+    return ASTL_VALUE_UINT64;
+  }
+  if (str == "FLOAT32") {
+    return ASTL_VALUE_FLOAT32;
+  }
+  if (str == "FLOAT64") {
+    return ASTL_VALUE_FLOAT64;
+  }
+  if (str == "BOOL8") {
+    return ASTL_VALUE_BOOL8;
+  }
+  if (str == "STRING") {
+    return ASTL_VALUE_STRING;
+  }
+  return ASTL_VALUE_UNKNOWN;
+}
+
+using group_id_t      = uint16_t;
+using data_event_id_t = uint16_t;
 
 }  // namespace mock_sysfs
 

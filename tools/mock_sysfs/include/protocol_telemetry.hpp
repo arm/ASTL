@@ -85,11 +85,14 @@ struct UpdateInterval {
 };
 
 struct DesGroup {
-  uint32_t              group_id{0};
-  std::vector<uint16_t> des;
-  bool                  enable{false};
-  bool                  tstamp_enable{false};
-  UpdateInterval        intervals{};
+  DesGroup(group_id_t group_id, bool enable, bool tstamp_enable, UpdateInterval intervals)
+      : group_id_(group_id), enable_(enable), tstamp_enable_(tstamp_enable), intervals_(intervals) {}
+
+  group_id_t                   group_id_{};
+  std::vector<data_event_id_t> des_;
+  bool                         enable_{false};
+  bool                         tstamp_enable_{false};
+  UpdateInterval               intervals_{};
 };
 
 /**
@@ -106,10 +109,10 @@ class DataEvent {
   DataEvent(DataEvent&&)                 = delete;
   DataEvent& operator=(const DataEvent&) = delete;
   DataEvent& operator=(DataEvent&&)      = delete;
-  DataEvent(uint16_t data_event_id, bool enable, bool tstamp_enable, _astl_value_t last_value,
+  DataEvent(data_event_id_t data_event_id, bool enable, bool tstamp_enable, _astl_value_t last_value,
             _astl_value_type_t value_type, std::chrono::system_clock::time_point last_timestamp,
             uint32_t compo_instance_id, uint32_t compo_type, uint32_t instance_id, bool persistent, bool tstamp_exp,
-            uint32_t type, std::string unit, std::string unit_exp, std::optional<const DesGroup*> group = std::nullopt)
+            uint32_t type, std::string unit, std::string unit_exp, std::optional<group_id_t> group_id = std::nullopt)
       : id_(data_event_id),
         enable_(enable),
         tstamp_enable_(tstamp_enable),
@@ -124,12 +127,12 @@ class DataEvent {
         type_(type),
         unit_(std::move(unit)),
         unit_exp_(std::move(unit_exp)),
-        group_(group) {}
+        group_id_(group_id) {}
   virtual ~DataEvent() = default;
 
   virtual astl_value_t Generate() = 0;
 
-  uint16_t                              id_;
+  data_event_id_t                       id_;
   bool                                  enable_;
   bool                                  tstamp_enable_;
   astl_value_t                          last_value_;
@@ -145,7 +148,7 @@ class DataEvent {
   std::string unit_;
   std::string unit_exp_;
 
-  std::optional<const DesGroup*> group_;
+  std::optional<group_id_t> group_id_;
 };
 
 /**
@@ -291,9 +294,9 @@ class SCMITelemetryTarget {
    * @param identifier The unique identifier of the data event.
    * @return DataEvent* Pointer to the corresponding data event, or nullptr if not found.
    */
-  DataEvent* GetDataEventById(uint16_t identifier);
+  DataEvent* GetDataEventById(data_event_id_t identifier);
 
-  std::unordered_map<uint32_t, std::unique_ptr<DesGroup>>& GetGroups() { return groups_; }
+  std::unordered_map<group_id_t, std::unique_ptr<DesGroup>>& GetGroups() { return groups_; }
 
  private:
   bool           all_des_enable_{};
@@ -303,8 +306,8 @@ class SCMITelemetryTarget {
   std::string    version_;
   std::string    de_implementation_version_;
 
-  std::unordered_map<uint32_t, std::unique_ptr<DesGroup>> groups_;
-  const std::vector<std::unique_ptr<DataEvent>>           data_events_;
+  std::unordered_map<group_id_t, std::unique_ptr<DesGroup>> groups_;
+  const std::vector<std::unique_ptr<DataEvent>>             data_events_;
 };
 
 }  // namespace mock_sysfs

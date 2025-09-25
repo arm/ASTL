@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "targets": [
+    {
+      "instance": "tlm-0",
+      "settings": {
+        "all_des_enable": true,
+        "all_des_tstamp_enable": true,
+        "tlm_enable": true,
+        "telemetry_version": "1.0",
+        "data_event_version": "0xCAFEBABECAFEBABECAFEBABEBEEF0000",
+        "data_events_path": "data_events.json"
+      },
+      "update_intervals_ms": [100, 1000, 5000],
+      "active_update_interval_ms": 100,
+      "generator_type_ids": [1, 2]
+    },
+    {
+      "instance": "tlm-1",
+      "settings": {
+        "all_des_enable": true,
+        "all_des_tstamp_enable": true,
+        "tlm_enable": true,
+        "telemetry_version": "1.0",
+        "data_event_version": "0xCAFEBABECAFEBABECAFEBABEBEEF0000",
+        "data_events_path": "data_events.json"
+      },
+      "update_intervals_ms": [100, 1000, 5000],
+      "active_update_interval_ms": 100,
+      "generator_type_ids": [1, 2]
+    }
+  ]
+}

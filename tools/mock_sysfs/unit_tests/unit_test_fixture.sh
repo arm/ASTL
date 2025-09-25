@@ -8,6 +8,20 @@
 
 set -eu -o pipefail
 
+# --- Configure env for MockSysfs JSON path ---
+# Script path: astl/tools/mock_sysfs/unit_tests/unit_test_fixture.sh
+# Repo root is three directories up from here.
+MSYS_UNIT_TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ASTL_ROOT="$(realpath "${MSYS_UNIT_TEST_DIR}/../../..")"
+DEFAULT_TLM_JSON="${ASTL_ROOT}/tools/mock_sysfs/config/tlm.json"
+: "${ASTL_MOCKSYSFS_TLM_JSON_PATH:=${DEFAULT_TLM_JSON}}"
+export ASTL_MOCKSYSFS_TLM_JSON_PATH
+if [[ ! -f ${ASTL_MOCKSYSFS_TLM_JSON_PATH} ]]; then
+	echo "❌ ASTL_MOCKSYSFS_TLM_JSON_PATH not found: ${ASTL_MOCKSYSFS_TLM_JSON_PATH}" >&2
+	exit 1
+fi
+echo "✅ ASTL_MOCKSYSFS_TLM_JSON_PATH = ${ASTL_MOCKSYSFS_TLM_JSON_PATH}"
+
 TIMEOUT=30 # Maximum seconds to wait for guid
 PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 

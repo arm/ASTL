@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdint>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -54,26 +55,50 @@ inline void UpdateEventByInterval(DataEvent* event, std::chrono::system_clock::t
 }
 
 std::unique_ptr<FileSystemNode> InitProtocolTelemetry(FileSystemNode* g_root) {
-  // TODO(ASTL-13): Dynamically build file tree from schema
   auto& tlm_to_tgt = Instances();
 
-  std::string const& tlm_id_0 = "tlm-0";
-  auto               tlm_0 =
-      std::make_unique<SCMITelemetryTarget>(tlm_id_0, kAllDesEnable, kAllDesTstampEnable, kUpdateInterval, kTlmEnable,
-                                            kTelemetryVersion, kDEDataEventVersion, CreateTelemetryDataEvents());
-  tlm_to_tgt.emplace(tlm_id_0, std::move(tlm_0));
+  const char* env = std::getenv("ASTL_MOCKSYSFS_TLM_JSON_PATH");
+  if (env == nullptr) {
+    throw std::runtime_error("ASTL_MOCKSYSFS_TLM_JSON_PATH environment variable is not set.");
+  }
 
-  std::string const& tlm_id_1 = "tlm-1";
-  auto               tlm_1 =
-      std::make_unique<SCMITelemetryTarget>(tlm_id_1, kAllDesEnable, kAllDesTstampEnable, kUpdateInterval, kTlmEnable,
-                                            kTelemetryVersion, kDEDataEventVersion, CreateTelemetryDataEvents());
-  tlm_to_tgt.emplace(tlm_id_1, std::move(tlm_1));
+  std::ifstream tlm_json_file(env);
+  if (!tlm_json_file) {
+    throw std::runtime_error(std::string("Could not open file: ") + env);
+  }
+  const json tlm_json = json::parse(tlm_json_file);
+
+  std::cout << "tlm schema version: " << tlm_json.at("schema_version") << "\n";
+
+  for (const auto& target : tlm_json.at("targets")) {
+    const auto&           settings              = target["settings"];
+    const auto&           tlm_id                = static_cast<std::string>(target["instance"]);
+    const auto&           all_des_enable        = static_cast<bool>(settings["all_des_enable"]);
+    const auto&           all_des_tstamp_enable = static_cast<bool>(settings["all_des_tstamp_enable"]);
+    const auto&           tlm_enable            = static_cast<bool>(settings["tlm_enable"]);
+    const auto&           telemetry_version     = static_cast<std::string>(settings["telemetry_version"]);
+    const auto&           de_version            = static_cast<std::string>(settings["data_event_version"]);
+    std::string           raw_data_events_path  = settings.at("data_events_path").get<std::string>();
+    std::filesystem::path data_events_path      = std::filesystem::path(env).parent_path() / raw_data_events_path;
+
+    UpdateInterval update_intervals{};
+    for (const auto& interval : target["update_intervals_ms"]) {
+      update_intervals.update_intervals_ms.emplace_back(std::chrono::milliseconds(interval.get<int64_t>()));
+    }
+    update_intervals.active_update_interval_ms =
+        std::chrono::milliseconds(target["active_update_interval_ms"].get<int64_t>());
+
+    auto tlm = std::make_unique<SCMITelemetryTarget>(tlm_id, all_des_enable, all_des_tstamp_enable, update_intervals,
+                                                     tlm_enable, telemetry_version, de_version,
+                                                     CreateTelemetryDataEvents(data_events_path, update_intervals));
+    tlm_to_tgt.emplace(tlm_id, std::move(tlm));
+  }
 
   auto scmi_telemetry = FileSystemNode::CreateDirectory("scmi_telemetry", g_root, ProtocolType::SCMI_TELEMETRY);
 
-  for (int i = 0; i < 2; i++) {
-    auto tlm = BuildProtocolTelemetryFileTree(scmi_telemetry.get(), (i == 0) ? tlm_id_0 : tlm_id_1);
-    scmi_telemetry->AddChild(std::move(tlm));
+  for (const auto& [cur_tlm_id, tlm] : tlm_to_tgt) {
+    auto tlm_file_node = BuildProtocolTelemetryFileTree(scmi_telemetry.get(), cur_tlm_id);
+    scmi_telemetry->AddChild(std::move(tlm_file_node));
   }
 
   return scmi_telemetry;
@@ -209,7 +234,7 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode*  
                                                     ProtocolType::SCMI_TELEMETRY);
 
     group_n_dir->AddChild(FileSystemNode::CreateFile(
-        "current_update_interval_ms", ToRawString(group->intervals.active_update_interval_ms), FileAccess::READ_WRITE,
+        "current_update_interval_ms", ToRawString(group->intervals_.active_update_interval_ms), FileAccess::READ_WRITE,
         group_n_dir.get(), ProtocolType::SCMI_TELEMETRY));
 
     group_n_dir->AddChild(FileSystemNode::CreateFile("des_bulk_read", "", FileAccess::READ_ONLY, group_n_dir.get(),
@@ -218,12 +243,12 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode*  
     group_n_dir->AddChild(FileSystemNode::CreateFile("des_single_sample_read", "", FileAccess::READ_ONLY,
                                                      group_n_dir.get(), ProtocolType::SCMI_TELEMETRY));
 
-    group_n_dir->AddChild(FileSystemNode::CreateFile("enable", group->enable ? "1" : "0", FileAccess::READ_WRITE,
+    group_n_dir->AddChild(FileSystemNode::CreateFile("enable", group->enable_ ? "1" : "0", FileAccess::READ_WRITE,
                                                      group_n_dir.get(), ProtocolType::SCMI_TELEMETRY));
 
     initial_value.clear();
-    if (group->intervals.discrete) {
-      const auto& intervals = group->intervals.update_intervals_ms;
+    if (group->intervals_.discrete) {
+      const auto& intervals = group->intervals_.update_intervals_ms;
       for (auto interval : intervals) {
         initial_value += ToRawString(interval) + " ";
       }
@@ -232,9 +257,9 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode*  
       }
     } else {
       auto min_it =
-          std::min_element(group->intervals.update_intervals_ms.begin(), group->intervals.update_intervals_ms.end());
+          std::min_element(group->intervals_.update_intervals_ms.begin(), group->intervals_.update_intervals_ms.end());
       auto max_it =
-          std::max_element(group->intervals.update_intervals_ms.begin(), group->intervals.update_intervals_ms.end());
+          std::max_element(group->intervals_.update_intervals_ms.begin(), group->intervals_.update_intervals_ms.end());
       initial_value = std::to_string(min_it->count()) + " " + std::to_string(max_it->count()) + " " +
                       std::to_string(tlm.GetStepSize());
     }
@@ -243,16 +268,16 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode*  
                                                      FileAccess::READ_ONLY, group_n_dir.get(),
                                                      ProtocolType::SCMI_TELEMETRY));
 
-    group_n_dir->AddChild(FileSystemNode::CreateFile("intervals_discrete", group->intervals.discrete ? "1" : "0",
+    group_n_dir->AddChild(FileSystemNode::CreateFile("intervals_discrete", group->intervals_.discrete ? "1" : "0",
                                                      FileAccess::READ_ONLY, group_n_dir.get(),
                                                      ProtocolType::SCMI_TELEMETRY));
 
-    group_n_dir->AddChild(FileSystemNode::CreateFile("tstamp_enable", group->tstamp_enable ? "1" : "0",
+    group_n_dir->AddChild(FileSystemNode::CreateFile("tstamp_enable", group->tstamp_enable_ ? "1" : "0",
                                                      FileAccess::READ_WRITE, group_n_dir.get(),
                                                      ProtocolType::SCMI_TELEMETRY));
 
     // de specific changes
-    for (auto event : group->des) {
+    for (auto event : group->des_) {
       auto& file_content = composing_des->GetFileContent();
       file_content += std::format("0x{:04X} ", event);
     }
@@ -354,14 +379,17 @@ SCMITelemetryTarget::SCMITelemetryTarget(std::string const& tlm_id, bool all_des
       de_implementation_version_(std::move(de_implementation_version)),
       data_events_(std::move(data_events)) {
   for (const auto& event : data_events_) {
-    if (!event->group_.has_value()) {
+    if (!event->group_id_.has_value()) {
       continue;
     }
 
-    const DesGroup* src        = event->group_.value();
-    auto [groups_it, inserted] = groups_.try_emplace(src->group_id, std::make_unique<DesGroup>(*src));
-
-    event->group_ = groups_it->second.get();
+    const group_id_t gid = *event->group_id_;
+    auto [it, inserted]  = groups_.try_emplace(gid, nullptr);
+    if (inserted || it->second == nullptr) {
+      auto group = std::make_unique<DesGroup>(gid, all_des_enable_, all_des_tstamp_enable_, intervals_);
+      it->second = std::move(group);
+    }
+    it->second->des_.push_back(event->id_);
   }
 }
 
@@ -373,7 +401,7 @@ SCMITelemetryTarget& SCMITelemetryTarget::Instance(std::string const& tlm_id) {
   return *(it->second);
 }
 
-DataEvent* SCMITelemetryTarget::GetDataEventById(uint16_t identifier) {
+DataEvent* SCMITelemetryTarget::GetDataEventById(data_event_id_t identifier) {
   auto       id_matches = [identifier](const auto& event) { return event->id_ == identifier; };
   const auto it         = std::find_if(data_events_.begin(), data_events_.end(), id_matches);
   return (it != data_events_.end()) ? it->get() : nullptr;
@@ -393,13 +421,13 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
   std::string   file_name = node->GetName();
   TelemetryFile file_type = GetTelemetryFile(file_name);
 
-  const FileSystemNode*   parent       = node->GetParent();
-  const FileSystemNode*   grand_parent = parent ? parent->GetParent() : nullptr;
-  bool                    is_group     = ((grand_parent != nullptr) && grand_parent->GetName() == "groups");
-  std::optional<uint32_t> group_id;
+  const FileSystemNode*     parent       = node->GetParent();
+  const FileSystemNode*     grand_parent = parent ? parent->GetParent() : nullptr;
+  bool                      is_group     = ((grand_parent != nullptr) && grand_parent->GetName() == "groups");
+  std::optional<group_id_t> group_id;
 
   if (is_group) {
-    group_id = static_cast<uint32_t>(std::stoul(parent->GetName()));
+    group_id = static_cast<group_id_t>(std::stoul(parent->GetName()));
   }
 
   switch (file_type) {
@@ -407,7 +435,7 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
       if (is_group) {
         auto& group = tlm.GetGroups().at(group_id.value());
         for (const auto& event : tlm.GetDataEvents()) {
-          if (event->group_.has_value() && event->group_.value()->group_id == group_id.value()) {
+          if (event->group_id_.value() == group_id.value()) {
             event->enable_ = (std::atoi(value.c_str()) != 0);
           }
         }
@@ -438,11 +466,11 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
 
       if (is_group) {
         const auto& group               = tlm.GetGroups().at(group_id.value());
-        const auto& available_intervals = group->intervals.update_intervals_ms;
+        const auto& available_intervals = group->intervals_.update_intervals_ms;
 
         // TODO(danngu01): implement check for if not discrete intervals
         if (std::find(available_intervals.begin(), available_intervals.end(), interval) != available_intervals.end()) {
-          group->intervals.active_update_interval_ms = interval;
+          group->intervals_.active_update_interval_ms = interval;
           std::cout << "Set group current_update_interval_ms to " << interval << "\n";
           return ErrorCode::SUCCESS;
         }
@@ -470,12 +498,12 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
     case TelemetryFile::ENABLE: {
       if (is_group) {
         for (const auto& event : tlm.GetDataEvents()) {
-          if (event->group_.has_value() && event->group_.value()->group_id == group_id.value()) {
+          if (event->group_id_.value() == group_id.value()) {
             event->enable_ = (std::atoi(value.c_str()) != 0);
           }
         }
       } else {
-        uint16_t data_event_id = static_cast<uint16_t>(std::stoul(parent->GetName(), nullptr, kHexRadix));
+        data_event_id_t data_event_id = static_cast<data_event_id_t>(std::stoul(parent->GetName(), nullptr, kHexRadix));
         if (auto* event = tlm.GetDataEventById(data_event_id)) {
           event->enable_ = (std::atoi(value.c_str()) != 0);
         }
@@ -487,12 +515,13 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
     case TelemetryFile::TSTAMP_ENABLE: {
       if (is_group) {
         for (const auto& event : tlm.GetDataEvents()) {
-          if (event->group_.has_value() && event->group_.value()->group_id == group_id.value()) {
+          if (event->group_id_.value() == group_id.value()) {
             event->tstamp_enable_ = (std::atoi(value.c_str()) != 0);
           }
         }
       } else {
-        uint16_t data_event_id = static_cast<uint16_t>(std::stoul(node->GetParent()->GetName(), nullptr, kHexRadix));
+        data_event_id_t data_event_id =
+            static_cast<data_event_id_t>(std::stoul(node->GetParent()->GetName(), nullptr, kHexRadix));
         std::cout << "id is: " << data_event_id << "\n";
         DataEvent* data_event = tlm.GetDataEventById(data_event_id);
 
@@ -521,13 +550,13 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
   std::string   file_name = node->GetName();
   TelemetryFile file_type = GetTelemetryFile(file_name);
 
-  const FileSystemNode*   parent       = node->GetParent();
-  const FileSystemNode*   grand_parent = parent ? parent->GetParent() : nullptr;
-  bool                    is_group     = ((grand_parent != nullptr) && grand_parent->GetName() == "groups");
-  std::optional<uint32_t> group_id;
+  const FileSystemNode*     parent       = node->GetParent();
+  const FileSystemNode*     grand_parent = parent ? parent->GetParent() : nullptr;
+  bool                      is_group     = ((grand_parent != nullptr) && grand_parent->GetName() == "groups");
+  std::optional<group_id_t> group_id;
 
   if (is_group) {
-    group_id = static_cast<uint32_t>(std::stoul(parent->GetName()));
+    group_id = static_cast<group_id_t>(std::stoul(parent->GetName()));
   }
 
   switch (file_type) {
@@ -540,7 +569,7 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
     case TelemetryFile::CURRENT_UPDATE_INTERVAL_MS:
       if (is_group) {
         const auto& group = tlm.GetGroups().at(group_id.value());
-        return ToRawString(group->intervals.active_update_interval_ms);
+        return ToRawString(group->intervals_.active_update_interval_ms);
       }
       return ToRawString(tlm.GetCurrentUpdateIntervalMs());
 
@@ -549,7 +578,7 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
       // unique_ptrs
       std::vector<DataEvent*> events_list;
       for (const auto& event : tlm.GetDataEvents()) {
-        if (!is_group || (event->group_.has_value() && event->group_.value()->group_id == group_id.value())) {
+        if (!is_group || (event->group_id_.value() == group_id.value())) {
           events_list.push_back(event.get());
         }
       }
@@ -557,7 +586,7 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
       auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
 
       // Update interval in milliseconds.
-      auto interval_ms = is_group ? tlm.GetGroups().at(group_id.value())->intervals.active_update_interval_ms
+      auto interval_ms = is_group ? tlm.GetGroups().at(group_id.value())->intervals_.active_update_interval_ms
                                   : tlm.GetCurrentUpdateIntervalMs();
 
       std::string result;
@@ -583,7 +612,7 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
     case TelemetryFile::INTERVALS_DISCRETE: {
       if (is_group) {
         const auto& group     = tlm.GetGroups().at(group_id.value());
-        const auto& intervals = group->intervals.update_intervals_ms;
+        const auto& intervals = group->intervals_.update_intervals_ms;
 
         if (intervals.empty()) {
           return "";
@@ -593,7 +622,7 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
         auto max_it = std::max_element(intervals.begin(), intervals.end());
 
         return std::to_string(min_it->count()) + " " + std::to_string(max_it->count()) + " " +
-               std::to_string(group->intervals.step_size) + "\n";
+               std::to_string(group->intervals_.step_size) + "\n";
       }
 
       if (tlm.GetIntervalsAreDiscreteFlag()) {
@@ -611,10 +640,10 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
     case TelemetryFile::ENABLE: {
       if (is_group) {
         const auto& groups = tlm.GetGroups().at(group_id.value());
-        return groups->enable ? "1" : "0";
+        return groups->enable_ ? "1" : "0";
       }
 
-      uint16_t data_event_id = static_cast<uint16_t>(std::stoul(parent->GetName(), nullptr, kHexRadix));
+      data_event_id_t data_event_id = static_cast<data_event_id_t>(std::stoul(parent->GetName(), nullptr, kHexRadix));
       if (auto* event = tlm.GetDataEventById(data_event_id)) {
         return event->enable_ ? "1" : "0";
       }
@@ -625,19 +654,21 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
     case TelemetryFile::TSTAMP_ENABLE: {
       if (is_group) {
         const auto& groups = tlm.GetGroups().at(group_id.value());
-        return groups->tstamp_enable ? "1" : "0";
+        return groups->tstamp_enable_ ? "1" : "0";
       }
 
-      uint16_t   data_event_id = static_cast<uint16_t>(std::stoul(node->GetParent()->GetName(), nullptr, kHexRadix));
-      DataEvent* data_event    = tlm.GetDataEventById(data_event_id);
+      data_event_id_t data_event_id =
+          static_cast<data_event_id_t>(std::stoul(node->GetParent()->GetName(), nullptr, kHexRadix));
+      DataEvent* data_event = tlm.GetDataEventById(data_event_id);
 
       return std::to_string(static_cast<int>(data_event->tstamp_enable_));
     }
 
     case TelemetryFile::VALUE: {
       // Retrieve DE id from the parent's name (hexadecimal conversion)
-      uint16_t   data_event_id = static_cast<uint16_t>(std::stoul(node->GetParent()->GetName(), nullptr, kHexRadix));
-      DataEvent* data_event    = tlm.GetDataEventById(data_event_id);
+      data_event_id_t data_event_id =
+          static_cast<data_event_id_t>(std::stoul(node->GetParent()->GetName(), nullptr, kHexRadix));
+      DataEvent* data_event = tlm.GetDataEventById(data_event_id);
 
       // If the event is not enabled, report as "0\n".
       if (!data_event->enable_ || !tlm.GetTlmEnableFlag()) {
@@ -661,7 +692,7 @@ std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
       // unique_ptrs
       std::vector<DataEvent*> events_list;
       for (const auto& event : tlm.GetDataEvents()) {
-        if (!is_group || (event->group_ && event->group_.value()->group_id == group_id.value())) {
+        if (!is_group || (event->group_id_.value() == group_id.value())) {
           events_list.push_back(event.get());
         }
       }

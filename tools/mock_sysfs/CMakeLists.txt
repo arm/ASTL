@@ -3,6 +3,7 @@ project(MockSysfs LANGUAGES CXX)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FUSE3 REQUIRED fuse3)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 file(GLOB_RECURSE MOCK_SYSFS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
@@ -54,4 +55,5 @@ target_link_directories(MockSysfs
 target_link_libraries(MockSysfs
   PRIVATE
     ${FUSE3_LIBRARIES}
+    nlohmann_json::nlohmann_json
 )
