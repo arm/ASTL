@@ -11,6 +11,8 @@ echo "ASTL_ROOT = $ASTL_ROOT"
 ########################################
 # Launch MockSysfs (FUSE) demo         #
 ########################################
+export ASTL_MOCKSYSFS_TLM_JSON_PATH="$ASTL_ROOT/tools/mock_sysfs/config/tlm.json"
+echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = $ASTL_MOCKSYSFS_TLM_JSON_PATH"
 MOCK_SYSFS="$ASTL_ROOT/build/debug/bin/MockSysfs"
 MOUNT_POINT=~/tmp/fuse/scmi
 
