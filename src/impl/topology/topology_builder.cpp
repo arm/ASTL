@@ -23,6 +23,7 @@
 #include "astl_file_interface.hpp"
 #include "target.hpp"
 #include "topology/i_topology_manager.hpp"
+#include "topology/libsensors_topology_plugin.hpp"
 #include "topology/scmi_topology_plugin.hpp"
 #include "topology/topology_manager.hpp"
 
@@ -55,6 +56,7 @@ auto BuildTopologyManager(const AstlConfiguration& configuration)
   try {
     // Add more topology plugins here by calling ActivateOnePlugin on each
     ActivateOnePlugin(targets, configuration, ScmiTopologyPlugin::ScanForTargets);
+    ActivateOnePlugin(targets, configuration, LibsensorsTopologyPlugin::ScanForTargets);
   } catch (astl_status_code& error_code) {
     return std::unexpected(error_code);
   }

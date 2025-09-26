@@ -46,7 +46,6 @@ if (ASTL_INCLUDE_LIBSENSORS)
             "${CMAKE_CURRENT_SOURCE_DIR}/collector/libsensors_collector.cpp"
     )
     target_link_libraries(${LIBRARY_NAME} PRIVATE ${SENSORS_LIB})
-    target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_HAVE_SENSORS)
 endif()
 
 # include directories
