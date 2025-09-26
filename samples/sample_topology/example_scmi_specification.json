@@ -2267,6 +2267,15 @@
           "line_addr": "0x74008100",
           "value_addr": "0x74008108",
           "de_id": "0x00001a68"
+        },
+        "P_STATE": {
+          "instance_id": 0,
+          "local_id": 57,
+          "offset": "0x0108",
+          "name": "AP0_P_STATE",
+          "line_addr": "0x74008108",
+          "value_addr": "0x74008110",
+          "de_id": "0x00001a68"
         }
       },
       "AP1": {
@@ -2412,6 +2421,15 @@
           "name": "AP1_FREQUENCY",
           "line_addr": "0x740081D0",
           "value_addr": "0x740081D8",
+          "de_id": "0x00011a68"
+        },
+        "P_STATE": {
+          "instance_id": 0,
+          "local_id": 57,
+          "offset": "0x01D8",
+          "name": "AP1_P_STATE",
+          "line_addr": "0x740081D8",
+          "value_addr": "0x740081E0",
           "de_id": "0x00011a68"
         }
       }

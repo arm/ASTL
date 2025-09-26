@@ -45,6 +45,9 @@ struct MetricJsonDeclaration {
   // Residency-specific fields
   std::optional<std::string> inferred_state;                    //!< Name of inferred state (for residency metrics)
   std::optional<std::map<std::string, nlohmann::json>> states;  //!< State definitions (for residency metrics)
+
+  // Finite set specific fields
+  std::optional<std::vector<nlohmann::json>> finite_set_values;  //!< Valid values for finite set metrics
 };
 
 /** @brief Overall configuration for the ASTL library */

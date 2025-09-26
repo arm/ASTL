@@ -276,7 +276,91 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   REQUIRE(tlm0_state_info_ap1.at("C6").data_event_id == 0x00011e93);
   REQUIRE(tlm0_state_info_ap1.at("C6").tick_frequency == 1000000.0);
 }
-// NOLINTEND(readability-function-cognitive-complexity)
+
+TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet]") {
+  SECTION("Valid finite set metric configuration") {
+    astl::scmi::Layout mock_layout;
+    mock_layout.members["AP0"] = {
+        {"P_STATE", {.name = "AP0_P_STATE", .de_id = 0x00001a69}}
+    };
+    mock_layout.members["AP1"] = {
+        {"P_STATE", {.name = "AP1_P_STATE", .de_id = 0x00011a69}}
+    };
+    astl::scmi::ScmiSpecification mock_scmi_spec;
+    mock_scmi_spec.layout = std::move(mock_layout);
+
+    std::vector<const astl::ITarget*> mock_scmi_targets;
+    astl::Target mock_target_tlm0("tlm-0", "dummy test target", astl::CollectorType::SCMI, nullptr);
+    mock_scmi_targets.push_back(&mock_target_tlm0);
+
+    astl::MetricJsonDeclaration finite_decl;
+    finite_decl.description         = "Current CPU performance state (P-state)";
+    finite_decl.register_name       = "P_STATE";
+    finite_decl.unit                = "";
+    finite_decl.metric_type         = "finite_set";
+    finite_decl.collection_protocol = "scmi";
+
+    // json finite_set_values representation: array of single-key objects
+    std::vector<nlohmann::json> finite_json{nlohmann::json{{"P0", 0}}, nlohmann::json{{"P1", 1}},
+                                            nlohmann::json{{"P2", 2}}, nlohmann::json{{"P3", 3}}};
+    finite_decl.finite_set_values = finite_json;
+
+    auto metric_configs_result = astl::CreateMetricConfigs("P-State", finite_decl, mock_scmi_spec, mock_scmi_targets);
+    REQUIRE(metric_configs_result);
+    auto metric_configs = std::move(metric_configs_result.value());
+    REQUIRE(metric_configs.size() == 2);
+
+    std::unordered_map<std::string, astl::FiniteSetMetricConfig*> by_name;
+    for (auto& cfg_ptr : metric_configs) {
+      auto* fs_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(cfg_ptr.get());
+      REQUIRE(fs_cfg != nullptr);
+      by_name[fs_cfg->Name()] = fs_cfg;
+    }
+    REQUIRE(by_name.contains("AP0_P_STATE"));
+    REQUIRE(by_name.contains("AP1_P_STATE"));
+
+    auto* ap0_cfg = by_name["AP0_P_STATE"];
+    auto* ap1_cfg = by_name["AP1_P_STATE"];
+    REQUIRE(ap0_cfg->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
+    REQUIRE(ap1_cfg->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
+
+    // Expect 4 unique values
+    REQUIRE(ap0_cfg->FiniteSetSize() == 4);
+    REQUIRE(ap1_cfg->FiniteSetSize() == 4);
+
+    std::vector<uint64_t> expected_set{0, 1, 2, 3};
+    for (auto const& value : expected_set) {
+      REQUIRE(ap0_cfg->GetFiniteSet().contains(astl::AstlValue{value}));
+      REQUIRE(ap1_cfg->GetFiniteSet().contains(astl::AstlValue{value}));
+    }
+  }
+  // NOLINTEND(readability-function-cognitive-complexity)
+
+  SECTION("Invalid finite set metric (empty values)") {
+    astl::scmi::Layout mock_layout;
+    mock_layout.members["AP0"] = {
+        {"P_STATE", {.name = "AP0_P_STATE", .de_id = 0x00001a69}}
+    };
+    astl::scmi::ScmiSpecification mock_scmi_spec;
+    mock_scmi_spec.layout = std::move(mock_layout);
+
+    std::vector<const astl::ITarget*> mock_scmi_targets;
+    astl::Target mock_target_tlm0("tlm-0", "dummy test target", astl::CollectorType::SCMI, nullptr);
+    mock_scmi_targets.push_back(&mock_target_tlm0);
+
+    astl::MetricJsonDeclaration bad_decl;
+    bad_decl.description         = "Bad P-State metric";
+    bad_decl.register_name       = "P_STATE";
+    bad_decl.unit                = "";
+    bad_decl.metric_type         = "finite_set";
+    bad_decl.collection_protocol = "scmi";
+    // finite_set_values left empty (optional disengaged)
+
+    auto bad_result = astl::CreateMetricConfigs("P-State", bad_decl, mock_scmi_spec, mock_scmi_targets);
+    REQUIRE_FALSE(bad_result.has_value());
+    REQUIRE(bad_result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+}
 
 TEST_CASE("Invalid file path", "[ConfigManager]") {
   ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = "not_a_valid_file.wav");

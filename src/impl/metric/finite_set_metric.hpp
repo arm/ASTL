@@ -61,6 +61,9 @@ struct FiniteSetSummaryData {
  */
 class FiniteSetMetric : public SampledValueMetric {
  public:
+  using FiniteSet    = std::set<AstlValue>;
+  using ValueToLabel = std::map<AstlValue, std::string>;
+
   FiniteSetMetric() = delete;
 
   /**
@@ -71,10 +74,13 @@ class FiniteSetMetric : public SampledValueMetric {
    * @param units The units of measurement for this metric.
    * @param value_type The type of values this metric will process (e.g., UINT64).
    * @param finite_set The set of valid AstlValue objects that define the finite set.
+   * @param labels Optional mapping from finite set values to human-readable labels.
    * @param target The target associated with this metric.
+   * @param processed_sample_sink The sample_sink for processed samples.
    */
+
   explicit FiniteSetMetric(const char *name, const char *description, astl_units_t units, astl_value_type_t value_type,
-                           const std::set<AstlValue> &finite_set, const ITarget *target,
+                           const FiniteSet &finite_set, const ValueToLabel &labels, const ITarget *target,
                            IProcessedSampleSink *processed_sample_sink);
 
   /**
@@ -135,8 +141,9 @@ class FiniteSetMetric : public SampledValueMetric {
   /** @brief Log detailed finite set summary information */
   void LogFiniteSetSummary();
 
-  std::set<AstlValue>  _finite_set;          ///< The set of valid AstlValue objects
+  FiniteSet            _finite_set;          ///< The set of valid AstlValue objects
   FiniteSetSummaryData _finite_set_summary;  ///< Summary statistics for finite set values
+  ValueToLabel         _labels;              ///< Mapping from values to human-readable labels
 
   // Create a logger instance to explicitly log finite set summary
   astl::Logger _finite_summary_logger{astl::LogLevel::Info, false /* Console logging disabled */,

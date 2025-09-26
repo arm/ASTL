@@ -52,6 +52,11 @@ inline void from_json(const json& json_data, MetricJsonDeclaration& metric) {
   if (json_data.contains("states")) {
     metric.states = json_data["states"].get<std::map<std::string, nlohmann::json>>();
   }
+
+  // Handle finite set specific fields
+  if (json_data.contains("finite_set_values")) {
+    metric.finite_set_values = json_data["finite_set_values"].get<std::vector<nlohmann::json>>();
+  }
 }
 
 inline void from_json(const json& json_data, AstlConfiguration& cfg) {
@@ -165,6 +170,22 @@ auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std:
   return std::nullopt;
 }
 
+/** @brief Given a list of targets (should be SCMI, but this checks it again), create a map of target to data event id.
+ *         Current implementation assumes that all targets use the same data event id if a metric is supported on that
+ * target
+ *
+ */
+auto CreateScmiTargetToDataEventIdMap(std::vector<const ITarget*> const& scmi_targets, ScmiDataEventId de_id)
+    -> ScmiTargetToDataEventIdMap {
+  ScmiTargetToDataEventIdMap data_event_ids;
+  for (const auto* target : scmi_targets) {
+    if (target->GetCollectorType() == CollectorType::SCMI) {
+      data_event_ids[target->Name()].push_back(de_id);
+    }
+  }
+  return data_event_ids;
+}
+
 /**
  * @brief Given a residency metric name, scan the metric declarations (from config file) and scmi_spec
  * defining the platform to create a map of layout member (e.g. AP0) to collection of StateInfo (holding state names,
@@ -230,6 +251,117 @@ auto GetResidencyMetricStateToInfoMap(std::string_view metric_key_name, MetricJs
 }
 
 /**
+ * @brief Parse a JSON value into an AstlValue based on its type.
+ *
+ * @param val The JSON value to parse
+ * @param label The label associated with the value (for error reporting)
+ * @param metric_key_name The metric name (for error reporting)
+ * @return std::expected<AstlValue, astl_status_code> The parsed AstlValue or error status
+ */
+auto ParseJsonValueToAstlValue(const nlohmann::json& val, const std::string& label, std::string_view metric_key_name)
+    -> std::expected<AstlValue, astl_status_code> {
+  if (val.is_number_integer()) {
+    return AstlValue{val.get<uint64_t>()};
+  }
+  if (val.is_number_float()) {
+    return AstlValue{val.get<double>()};
+  }
+  if (val.is_boolean()) {
+    return AstlValue{val.get<bool>()};
+  }
+  if (val.is_string()) {
+    return AstlValue{val.get<std::string>()};
+  }
+
+  ASTL_LOG_ERROR("Unsupported JSON value type for label '{}' in finite_set_values (metric {})", label, metric_key_name);
+  return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+}
+
+auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
+                                  scmi::ScmiSpecification const&     scmi_spec,
+                                  std::vector<const ITarget*> const& scmi_targets)
+    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
+  if (!metric_declaration.finite_set_values.has_value()) {
+    ASTL_LOG_ERROR("Finite set metric {} missing 'finite_set_values' configuration", metric_key_name);
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  auto collector_type = ParseCollectorType(metric_declaration);
+  if (!collector_type) {
+    ASTL_LOG_ERROR("Unsupported collector type '{}' for finite set metric {}", metric_declaration.collection_protocol,
+                   metric_key_name);
+    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+  }
+  auto metric_registers = scmi::GetMetricRegisters(metric_declaration.register_name, scmi_spec.layout);
+  if (metric_registers.empty()) {
+    ASTL_LOG_ERROR("No Data Event IDs found for finite set metric {} (register '{}')", metric_key_name,
+                   metric_declaration.register_name);
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  // Expect: finite_set_values = [ {"P0":0}, {"P1":1}, ... ] each element exactly one key -> primitive value
+  FiniteSetMetricConfig::FiniteSet           finite_set;      // unique values
+  std::unordered_map<std::string, AstlValue> label_to_value;  // label to AstlValue mapping (temporary use for parsing)
+
+  for (const auto& obj : metric_declaration.finite_set_values.value()) {
+    if (!obj.is_object() || obj.size() != 1) {
+      ASTL_LOG_ERROR("Each element of finite_set_values for metric {} must be an object with exactly one key",
+                     metric_key_name);
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+    const auto  it    = obj.begin();
+    const auto& label = it.key();
+    const auto& val   = it.value();
+    if (label.empty()) {
+      ASTL_LOG_ERROR("Empty label in finite_set_values for metric {}", metric_key_name);
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+
+    auto parsed_value_result = ParseJsonValueToAstlValue(val, label, metric_key_name);
+    if (!parsed_value_result) {
+      return std::unexpected(parsed_value_result.error());
+    }
+
+    if (!label_to_value.emplace(label, *parsed_value_result).second) {
+      ASTL_LOG_ERROR("Duplicate finite set label '{}' in metric {}", label, metric_key_name);
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+    finite_set.emplace(*parsed_value_result);
+  }
+
+  if (finite_set.empty()) {
+    ASTL_LOG_ERROR("Empty finite set for metric {}", metric_key_name);
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  ASTL_LOG_INFO("Parsed finite set metric '{}' with {} labels and {} unique values", metric_key_name,
+                label_to_value.size(), finite_set.size());
+
+  // Convert label_to_value map to value_to_label map for use in FiniteSetMetricConfig
+  FiniteSetMetricConfig::ValueToLabelMap value_to_label;
+  for (const auto& [label, value] : label_to_value) {
+    value_to_label[value] = label;
+  }
+
+  std::vector<std::unique_ptr<MetricConfig>> metric_configs;
+  metric_configs.reserve(metric_registers.size());
+  const auto units      = ParseUnits(metric_declaration);
+  const auto value_type = ParseValueType(metric_declaration);
+  for (const auto& name_and_de_id : metric_registers) {
+    const auto&                metric_name     = name_and_de_id.first;
+    const auto&                de_id           = name_and_de_id.second;
+    ScmiTargetToDataEventIdMap data_event_ids  = CreateScmiTargetToDataEventIdMap(scmi_targets, de_id);
+    auto                       finite_set_copy = finite_set;      // copy for this metric instance
+    auto                       labels_copy     = value_to_label;  // copy for this metric instance
+    metric_configs.push_back(std::make_unique<FiniteSetMetricConfig>(
+        metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE,
+        collector_type.value(), std::move(data_event_ids), std::move(finite_set_copy), std::move(labels_copy)));
+  }
+  ASTL_LOG_INFO("Created {} finite set metric config(s) for '{}' with {} valid values", metric_configs.size(),
+                metric_key_name, finite_set.size());
+  return metric_configs;
+}
+
+/**
  * @brief Create a ResidencyMetricConfig from a MetricJsonDeclaration for each member in the layout that has a matching
  * metric_key_name
  * @param scmi_spec          The scmi::ScmiSpecification including the relevant 'layout' section of the SCMI spec json
@@ -273,22 +405,6 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
         collector_type.value(), std::move(per_target_state_info), metric_declaration.inferred_state));
   }
   return metric_configs;
-}
-
-/** @brief Given a list of targets (should be SCMI, but this checks it again), create a map of target to data event id.
- *         Current implementation assumes that all targets use the same data event id if a metric is supported on that
- * target
- *
- */
-auto CreateScmiTargetToDataEventIdMap(std::vector<const ITarget*> const& scmi_targets, ScmiDataEventId de_id)
-    -> ScmiTargetToDataEventIdMap {
-  ScmiTargetToDataEventIdMap data_event_ids;
-  for (const auto* target : scmi_targets) {
-    if (target->GetCollectorType() == CollectorType::SCMI) {
-      data_event_ids[target->Name()].push_back(de_id);
-    }
-  }
-  return data_event_ids;
 }
 
 /**
@@ -348,14 +464,14 @@ auto CreateMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration
                          scmi::ScmiSpecification const& scmi_spec, std::vector<const ITarget*> const& scmi_targets)
     -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
   auto metric_type = ParseMetricType(metric_declaration);
-
   switch (metric_type) {
     case ASTL_METRIC_VALUE:
     case ASTL_METRIC_EVENT:
     case ASTL_METRIC_DELTA:
     case ASTL_METRIC_RATE:
-    case ASTL_METRIC_FINITE_SET_VALUE:
       return CreateBasicMetricConfigs(metric_key_name, metric_declaration, scmi_spec, metric_type, scmi_targets);
+    case ASTL_METRIC_FINITE_SET_VALUE:
+      return CreateFiniteSetMetricConfigs(metric_key_name, metric_declaration, scmi_spec, scmi_targets);
     case ASTL_METRIC_RESIDENCY:
       return CreateResidencyMetricConfigs(metric_key_name, metric_declaration, scmi_spec, scmi_targets);
     default:
