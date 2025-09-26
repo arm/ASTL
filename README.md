@@ -56,6 +56,10 @@ The library has a C-interface for the API and a C++ implementation. There is als
 
 ![image](https://github.com/user-attachments/assets/e514cfb8-7d15-45f6-899e-2b70c2c6c5db)
 
+# High level Internal Design and status
+
+<img width="708" height="436" alt="image" src="https://github.com/user-attachments/assets/16aceb9e-b837-47fc-a2d9-e7fee2a3d236" />
+
 # Testing and Isolation Methodology
 
 ![image](https://github.com/user-attachments/assets/0a2b1e39-cb08-4e04-9f62-bba5329bfe56)
@@ -64,7 +68,8 @@ The library has a C-interface for the API and a C++ implementation. There is als
 - Mock mode SCMI sysfs file/folder generator
 - Mock mode data generator
 
-- Gtest API bench testing suite
+- Bench testing suite
+- Trompleil and Catch2 unit testing
 - Mock command line collector executable
 
 # Installation and usage
