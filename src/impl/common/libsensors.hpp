@@ -23,7 +23,9 @@
 #ifndef SENSORS_HPP_
 #define SENSORS_HPP_
 
-#include <sensors/sensors.h>
+#if defined(ASTL_INCLUDE_LIBSENSORS)
+#  include <sensors/sensors.h>
+#endif
 
 #include <utility>
 
@@ -31,6 +33,7 @@
 
 namespace astl {
 
+#if defined(ASTL_INCLUDE_LIBSENSORS)
 /**
  * @brief Operation describing a single libsensors read of a subfeature on a chip.
  *
@@ -48,6 +51,7 @@ struct LibsensorsReadOperation : public Operation {
     }
   }
 };
+#endif
 
 }  // namespace astl
 

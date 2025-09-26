@@ -14,9 +14,10 @@ endif()
 
 set(SRCS
     libsensors_collector_utests.cpp
+    libsensors_topology_plugin_utests.cpp
     mock_libsensors.cpp
 )
-set(TARGET "sensors_collector_tests")
+set(TARGET "libsensors_test")
 
 # find libsensors, just for the header
 find_library(SENSORS_LIB sensors)
