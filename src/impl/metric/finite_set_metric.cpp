@@ -18,14 +18,17 @@
 
 #include "finite_set_metric.hpp"
 
+#include "astl_logger.hpp"
+
 namespace astl {
 
 FiniteSetMetric::FiniteSetMetric(const char* name, const char* description, astl_units_t units,
-                                 astl_value_type_t value_type, const std::set<AstlValue>& finite_set,
+                                 astl_value_type_t value_type, const FiniteSet& finite_set, const ValueToLabel& labels,
                                  const ITarget* target, IProcessedSampleSink* processed_sample_sink)
     : SampledValueMetric(name, description, units, value_type, target, processed_sample_sink),
-      _finite_set{finite_set},
-      _finite_set_summary{} {}
+      _finite_set(finite_set),
+      _finite_set_summary(),
+      _labels(labels) {}
 
 astl_status_code FiniteSetMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
   // First call the parent class to handle basic sample processing
@@ -84,23 +87,29 @@ void FiniteSetMetric::LogFiniteSetSummary() {
 
   // Log header
   _finite_summary_logger.LogInfo("=== Finite Set Metric Summary: {} ===", _name.c_str());
-  _finite_summary_logger.LogInfo("Description: {}", _description.c_str());
-  _finite_summary_logger.LogInfo("Units: {}", _units);
-  _finite_summary_logger.LogInfo("Total Samples: {}", _finite_set_summary.total_samples);
-  _finite_summary_logger.LogInfo("Finite Set Size: {}", _finite_set.size());
+  _finite_summary_logger.LogInfo("\n Description: {}", _description.c_str());
+  _finite_summary_logger.LogInfo("\n Units: {}", _units);
+  _finite_summary_logger.LogInfo("\n Total Samples: {}", _finite_set_summary.total_samples);
+  _finite_summary_logger.LogInfo("\n Finite Set Size: {}", _finite_set.size());
 
   if (_finite_set_summary.unknown_values > 0) {
-    _finite_summary_logger.LogInfo("Unknown Values: {}", _finite_set_summary.unknown_values);
+    _finite_summary_logger.LogInfo("\n Unknown Values: {}", _finite_set_summary.unknown_values);
   }
 
-  _finite_summary_logger.LogInfo("--- Distribution ---");
+  _finite_summary_logger.LogInfo("\n --- Distribution --- \n");
 
   // Log known values in the finite set
   for (const auto& value : _finite_set) {
     auto     count_it = _finite_set_summary.value_counts.find(value);
     uint64_t count    = (count_it != _finite_set_summary.value_counts.end()) ? count_it->second : 0;
 
-    std::string log_msg = "Value " + to_string(value) + ": " + std::to_string(count) + " samples";
+    std::string value_display = to_string(value);
+    auto        label_it      = _labels.find(value);
+    if (label_it != _labels.end()) {
+      value_display += " (" + label_it->second + ")";
+    }
+
+    std::string log_msg = "\n Value " + value_display + ": " + std::to_string(count) + " samples";
     _finite_summary_logger.LogInfo("{}", log_msg);
   }
 
@@ -109,11 +118,12 @@ void FiniteSetMetric::LogFiniteSetSummary() {
   for (const auto& pair : _finite_set_summary.value_counts) {
     if (!IsInFiniteSet(pair.first)) {
       if (!has_unknowns) {
-        _finite_summary_logger.LogInfo("--- Unknown Values ---");
+        _finite_summary_logger.LogInfo("\n --- Unknown Values ---\n");
         has_unknowns = true;
       }
 
-      std::string log_msg = "Unknown Value " + to_string(pair.first) + ": " + std::to_string(pair.second) + " samples";
+      std::string log_msg =
+          "\n Unknown Value " + to_string(pair.first) + ": " + std::to_string(pair.second) + " samples \n";
       _finite_summary_logger.LogInfo("{}", log_msg);
     }
   }

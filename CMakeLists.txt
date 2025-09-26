@@ -165,6 +165,9 @@ target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_BUILD)
 #   and used here in the conditional below
 # - the preprocessor definition JSON_DIAGNOSTICS which nlohmann::json looks for at compile time.
 if (JSON_DIAGNOSTICS)
+    # Apply globally so all subsequent targets (including tests) inherit it
+    add_compile_definitions(JSON_DIAGNOSTICS=1)
+    # Also ensure the shared lib explicitly has it (redundant but clear)
     target_compile_definitions(${LIBRARY_NAME} PRIVATE JSON_DIAGNOSTICS=1)
 endif()
 

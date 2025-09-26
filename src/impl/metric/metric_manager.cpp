@@ -26,6 +26,7 @@
 #include "common/astl_defines.hpp"
 #include "common/scmi/scmi_read_operation.hpp"
 #include "delta_metric.hpp"
+#include "finite_set_metric.hpp"
 #include "i_metric.hpp"
 #include "metric_config.hpp"
 #include "rate_metric.hpp"
@@ -123,7 +124,25 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
       return std::make_unique<ResidencyMetric>(metric_name, metric_description, target, state_configs, sink,
                                                inferred_state_name);
     }
+    case astl_metric_type_t::ASTL_METRIC_FINITE_SET_VALUE: {
+      ASTL_LOG_INFO("CreateMetricFromConfig: Creating FiniteSetMetric '{}'", metric_config->Name());
 
+      // Cast to FiniteSetMetricConfig to get finite set configuration
+      const auto* finite_set_config = dynamic_cast<const FiniteSetMetricConfig*>(metric_config);
+      if (!finite_set_config) {
+        ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to FiniteSetMetricConfig for metric '{}'",
+                       metric_config->Name());
+        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      }
+
+      // Get the finite set from the configuration
+      const auto& finite_set = finite_set_config->GetFiniteSet();
+      const auto& labels     = finite_set_config->GetLabels();
+
+      return std::make_unique<FiniteSetMetric>(metric_config->Name().c_str(), metric_config->Description().c_str(),
+                                               metric_config->Units(), metric_config->ValueType(), finite_set, labels,
+                                               target, sink);
+    }
     // TODO (https://jira.arm.com/browse/ASTL-102):
     // handle additional MetricType cases here
     default:

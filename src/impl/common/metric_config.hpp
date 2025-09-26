@@ -24,11 +24,13 @@
 #define METRIC_CONFIG_HPP_
 
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "astl/astl.h"
+#include "astl_value.hpp"
 #include "common/capabilities.hpp"
 #include "common/scmi/scmi_read_operation.hpp"
 
@@ -229,6 +231,90 @@ class ResidencyMetricConfig final : public MetricConfig {
  private:
   ScmiTargetToStateToInfoMap _state_info;      // Mapping of target -> (state name -> {data_event_id, tick_frequency})
   std::optional<std::string> _inferred_state;  // Optional inferred state name
+};
+
+/**
+ * @brief Metric configuration for finite set metrics.
+ *
+ * Finite set metrics track values that can only take on a predefined set of known values.
+ * This class extends MetricConfig to include the finite set definition and validation.
+ */
+class FiniteSetMetricConfig final : public MetricConfig {
+ public:
+  // Forward declaration for AstlValue - will need to include the appropriate header
+  using FiniteSet       = std::set<AstlValue>;
+  using ValueToLabelMap = std::map<AstlValue, std::string>;  ///< Mapping from value -> human-readable label
+
+  /**
+   * @brief Construct a FiniteSetMetricConfig with a predefined set of valid values.
+   *
+   * @param name            Metric name.
+   * @param description     Human-readable description.
+   * @param units           Measurement units.
+   * @param value_type      Value representation type.
+   * @param metric_type     Expected to be a finite set metric type.
+   * @param collector_type  Collector type responsible for gathering finite set data.
+   * @param data_event_ids  Mapping from target to data event IDs.
+   * @param finite_set      Set of valid AstlValue objects that define the finite set.
+   * @param labels          Mapping from finite set values to human-readable labels.
+   */
+  explicit FiniteSetMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
+                                 astl_value_type_t value_type, astl_metric_type_t metric_type,
+                                 CollectorType collector_type, ScmiTargetToDataEventIdMap data_event_ids,
+                                 FiniteSet finite_set, ValueToLabelMap labels)
+      : MetricConfig(name, description, units, value_type, metric_type, collector_type, std::move(data_event_ids)),
+        _finite_set(std::move(finite_set)),
+        _labels(std::move(labels)) {}
+
+  FiniteSetMetricConfig(const FiniteSetMetricConfig &)            = default;
+  FiniteSetMetricConfig &operator=(const FiniteSetMetricConfig &) = default;
+  FiniteSetMetricConfig(FiniteSetMetricConfig &&)                 = default;
+  FiniteSetMetricConfig &operator=(FiniteSetMetricConfig &&)      = default;
+  ~FiniteSetMetricConfig() override                               = default;
+
+  /**
+   * @brief Get the finite set of valid values.
+   *
+   * @return The set of valid AstlValue objects.
+   */
+  const FiniteSet &GetFiniteSet() const { return _finite_set; }
+
+  /**
+   * @brief Check if a value is in the predefined finite set.
+   *
+   * @param value The AstlValue to check.
+   * @return true if the value is in the finite set, false otherwise.
+   */
+  bool IsInFiniteSet(const AstlValue &value) const { return _finite_set.contains(value); }
+
+  /**
+   * @brief Get the size of the finite set.
+   *
+   * @return Number of valid values in the finite set.
+   */
+  size_t FiniteSetSize() const { return _finite_set.size(); }
+
+  /**
+   * @brief Get the labels mapping from values to human-readable labels.
+   *
+   * @return Map of finite set values to their labels.
+   */
+  const ValueToLabelMap &GetLabels() const { return _labels; }
+
+  /**
+   * @brief Get the label for a specific value, if it exists.
+   *
+   * @param value The AstlValue to get the label for.
+   * @return The label string if found, empty string otherwise.
+   */
+  std::string GetLabelForValue(const AstlValue &value) const {
+    auto it = _labels.find(value);
+    return (it != _labels.end()) ? it->second : "";
+  }
+
+ private:
+  FiniteSet       _finite_set;  ///< The set of valid AstlValue objects
+  ValueToLabelMap _labels;      ///< Mapping from finite set values to human-readable labels
 };
 
 }  // namespace astl

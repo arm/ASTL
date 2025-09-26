@@ -26,17 +26,32 @@
 #include <string>
 #include <vector>
 
+#include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "metric/finite_set_metric.hpp"
 
 TEST_CASE("FiniteSetMetric: construction & basic functionality", "[FiniteSetMetric]") {
   // Define a simple finite set for testing
-  std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
-                                          astl::AstlValue{uint64_t{2}}};
+  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
+                                                 astl::AstlValue{uint64_t{2}}};
+
+  // Provide labels for readability
+  astl::FiniteSetMetric::ValueToLabel labels = {
+      {astl::AstlValue{uint64_t{0}}, "STATE_ZERO"},
+      {astl::AstlValue{uint64_t{1}}, "STATE_ONE" },
+      {astl::AstlValue{uint64_t{2}}, "STATE_TWO" },
+  };
+
+  // Create mock objects
+  MockTarget mock_target;
+  ALLOW_CALL(mock_target, Name()).RETURN("mock_target");
+  ALLOW_CALL(mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  MockProcessedSampleSink mock_sink;
 
   // Construct a metric for 64-bit unsigned samples
   astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
-                               nullptr, nullptr);
+                               labels, &mock_target, &mock_sink);
 
   // Test that we can construct the metric successfully and call basic methods
   const auto& retrieved_set = metric.GetFiniteSet();
@@ -44,11 +59,24 @@ TEST_CASE("FiniteSetMetric: construction & basic functionality", "[FiniteSetMetr
 }
 
 TEST_CASE("FiniteSetMetric: finite set checking", "[FiniteSetMetric]") {
-  std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
-                                          astl::AstlValue{uint64_t{2}}};
+  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
+                                                 astl::AstlValue{uint64_t{2}}};
+
+  astl::FiniteSetMetric::ValueToLabel labels = {
+      {astl::AstlValue{uint64_t{0}}, "ZERO"},
+      {astl::AstlValue{uint64_t{1}}, "ONE" },
+      {astl::AstlValue{uint64_t{2}}, "TWO" },
+  };
+
+  // Create mock objects
+  MockTarget mock_target;
+  ALLOW_CALL(mock_target, Name()).RETURN("mock_target");
+  ALLOW_CALL(mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  MockProcessedSampleSink mock_sink;
 
   astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
-                               nullptr, nullptr);
+                               labels, &mock_target, &mock_sink);
 
   // Test finite set membership
   REQUIRE(metric.IsInFiniteSet(astl::AstlValue{uint64_t{0}}) == true);
@@ -60,11 +88,24 @@ TEST_CASE("FiniteSetMetric: finite set checking", "[FiniteSetMetric]") {
 }
 
 TEST_CASE("FiniteSetMetric: get finite set values", "[FiniteSetMetric]") {
-  std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
-                                          astl::AstlValue{uint64_t{2}}};
+  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
+                                                 astl::AstlValue{uint64_t{2}}};
+
+  astl::FiniteSetMetric::ValueToLabel labels = {
+      {astl::AstlValue{uint64_t{0}}, "VAL0"},
+      {astl::AstlValue{uint64_t{1}}, "VAL1"},
+      {astl::AstlValue{uint64_t{2}}, "VAL2"},
+  };
+
+  // Create mock objects
+  MockTarget mock_target;
+  ALLOW_CALL(mock_target, Name()).RETURN("mock_target");
+  ALLOW_CALL(mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  MockProcessedSampleSink mock_sink;
 
   astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
-                               nullptr, nullptr);
+                               labels, &mock_target, &mock_sink);
 
   const auto& retrieved_set = metric.GetFiniteSet();
   REQUIRE(retrieved_set.size() == 3);
@@ -75,11 +116,26 @@ TEST_CASE("FiniteSetMetric: get finite set values", "[FiniteSetMetric]") {
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("FiniteSetMetric: ReceiveSample with valid values", "[FiniteSetMetric]") {
-  std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
-                                          astl::AstlValue{uint64_t{2}}};
+  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
+                                                 astl::AstlValue{uint64_t{2}}};
+
+  astl::FiniteSetMetric::ValueToLabel labels = {
+      {astl::AstlValue{uint64_t{0}}, "S0"},
+      {astl::AstlValue{uint64_t{1}}, "S1"},
+      {astl::AstlValue{uint64_t{2}}, "S2"},
+  };
+
+  // Create mock objects
+  MockTarget mock_target;
+  ALLOW_CALL(mock_target, Name()).RETURN("mock_target");
+  ALLOW_CALL(mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  MockProcessedSampleSink mock_sink;
+  ALLOW_CALL(mock_sink, SinkProcessedSamples(trompeloeil::_, trompeloeil::_, trompeloeil::_))
+      .RETURN(ASTL_STATUS_SUCCESS);
 
   astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
-                               nullptr, nullptr);
+                               labels, &mock_target, &mock_sink);
 
   // Add samples from the finite set
   std::vector<uint64_t> sample_values = {0, 1, 1, 2, 0, 1, 2, 2, 2};
@@ -104,11 +160,26 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with valid values", "[FiniteSetMetric]
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("FiniteSetMetric: ReceiveSample with unknown values", "[FiniteSetMetric]") {
-  std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
-                                          astl::AstlValue{uint64_t{2}}};
+  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
+                                                 astl::AstlValue{uint64_t{2}}};
+
+  astl::FiniteSetMetric::ValueToLabel labels = {
+      {astl::AstlValue{uint64_t{0}}, "A"},
+      {astl::AstlValue{uint64_t{1}}, "B"},
+      {astl::AstlValue{uint64_t{2}}, "C"},
+  };
+
+  // Create mock objects
+  MockTarget mock_target;
+  ALLOW_CALL(mock_target, Name()).RETURN("mock_target");
+  ALLOW_CALL(mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  MockProcessedSampleSink mock_sink;
+  ALLOW_CALL(mock_sink, SinkProcessedSamples(trompeloeil::_, trompeloeil::_, trompeloeil::_))
+      .RETURN(ASTL_STATUS_SUCCESS);
 
   astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
-                               nullptr, nullptr);
+                               labels, &mock_target, &mock_sink);
 
   // Add samples including unknown values
   std::vector<uint64_t> sample_values = {0, 1, 5, 2, 10, 1, 0};  // 5 and 10 are unknown
@@ -134,11 +205,26 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with unknown values", "[FiniteSetMetri
 // NOLINTEND(readability-function-cognitive-complexity)
 
 TEST_CASE("FiniteSetMetric: Reset functionality", "[FiniteSetMetric]") {
-  std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
-                                          astl::AstlValue{uint64_t{2}}};
+  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
+                                                 astl::AstlValue{uint64_t{2}}};
+
+  astl::FiniteSetMetric::ValueToLabel labels = {
+      {astl::AstlValue{uint64_t{0}}, "RESET0"},
+      {astl::AstlValue{uint64_t{1}}, "RESET1"},
+      {astl::AstlValue{uint64_t{2}}, "RESET2"},
+  };
+
+  // Create mock objects
+  MockTarget mock_target;
+  ALLOW_CALL(mock_target, Name()).RETURN("mock_target");
+  ALLOW_CALL(mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  MockProcessedSampleSink mock_sink;
+  ALLOW_CALL(mock_sink, SinkProcessedSamples(trompeloeil::_, trompeloeil::_, trompeloeil::_))
+      .RETURN(ASTL_STATUS_SUCCESS);
 
   astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
-                               nullptr, nullptr);
+                               labels, &mock_target, &mock_sink);
 
   // Add some samples
   astl::RawSampledData sample1(1, astl::AstlValue{uint64_t{0}});
@@ -160,11 +246,26 @@ TEST_CASE("FiniteSetMetric: Reset functionality", "[FiniteSetMetric]") {
 }
 
 TEST_CASE("FiniteSetMetric: Summarize operation", "[FiniteSetMetric]") {
-  std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
-                                          astl::AstlValue{uint64_t{2}}};
+  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{uint64_t{0}}, astl::AstlValue{uint64_t{1}},
+                                                 astl::AstlValue{uint64_t{2}}};
+
+  astl::FiniteSetMetric::ValueToLabel labels = {
+      {astl::AstlValue{uint64_t{0}}, "SUM0"},
+      {astl::AstlValue{uint64_t{1}}, "SUM1"},
+      {astl::AstlValue{uint64_t{2}}, "SUM2"},
+  };
+
+  // Create mock objects
+  MockTarget mock_target;
+  ALLOW_CALL(mock_target, Name()).RETURN("mock_target");
+  ALLOW_CALL(mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  MockProcessedSampleSink mock_sink;
+  ALLOW_CALL(mock_sink, SinkProcessedSamples(trompeloeil::_, trompeloeil::_, trompeloeil::_))
+      .RETURN(ASTL_STATUS_SUCCESS);
 
   astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, finite_set,
-                               nullptr, nullptr);
+                               labels, &mock_target, &mock_sink);
 
   // Add some samples
   std::vector<uint64_t> sample_values = {0, 1, 2, 1, 0};
@@ -184,11 +285,24 @@ TEST_CASE("FiniteSetMetric: Summarize operation", "[FiniteSetMetric]") {
 
 TEST_CASE("FiniteSetMetric: ReceiveSample with unsupported type", "[FiniteSetMetric]") {
   // Create a metric expecting UINT32 values
-  std::set<astl::AstlValue> finite_set = {astl::AstlValue{uint32_t{0}}, astl::AstlValue{uint32_t{1}},
-                                          astl::AstlValue{uint32_t{2}}};
+  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{uint32_t{0}}, astl::AstlValue{uint32_t{1}},
+                                                 astl::AstlValue{uint32_t{2}}};
+
+  astl::FiniteSetMetric::ValueToLabel labels = {
+      {astl::AstlValue{uint32_t{0}}, "U32_0"},
+      {astl::AstlValue{uint32_t{1}}, "U32_1"},
+      {astl::AstlValue{uint32_t{2}}, "U32_2"},
+  };
+
+  // Create mock objects
+  MockTarget mock_target;
+  ALLOW_CALL(mock_target, Name()).RETURN("mock_target");
+  ALLOW_CALL(mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  MockProcessedSampleSink mock_sink;
 
   astl::FiniteSetMetric metric("test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT32, finite_set,
-                               nullptr, nullptr);
+                               labels, &mock_target, &mock_sink);
 
   // Try to send a UINT64 value (which should be rejected by the base class)
   astl::AstlValue      val{uint64_t{40}};
@@ -200,11 +314,17 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with unsupported type", "[FiniteSetMet
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("FiniteSetMetric: String values handling", "[FiniteSetMetric]") {
   // Define a finite set with string values
-  std::set<astl::AstlValue> finite_set = {astl::AstlValue{std::string{"LOW"}}, astl::AstlValue{std::string{"MEDIUM"}},
-                                          astl::AstlValue{std::string{"HIGH"}}};
+  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{std::string{"LOW"}},
+                                                 astl::AstlValue{std::string{"MEDIUM"}},
+                                                 astl::AstlValue{std::string{"HIGH"}}};
 
+  astl::FiniteSetMetric::ValueToLabel labels = {
+      {astl::AstlValue{std::string{"LOW"}},    "LOW_L" },
+      {astl::AstlValue{std::string{"MEDIUM"}}, "MED_L" },
+      {astl::AstlValue{std::string{"HIGH"}},   "HIGH_L"},
+  };
   astl::FiniteSetMetric metric("power_level", "Power level states", ASTL_UNITS_WATTS, ASTL_VALUE_STRING, finite_set,
-                               nullptr, nullptr);
+                               labels, nullptr, nullptr);
 
   astl::RawSampledData sample1(1, astl::AstlValue{std::string{"LOW"}});
   astl::RawSampledData sample2(2, astl::AstlValue{std::string{"MEDIUM"}});
