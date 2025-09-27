@@ -1,0 +1,88 @@
+%% System End-to-End (Overview)
+%% This concise diagram replaces the previously giant sequence.
+%% Detailed phases are now split into separate, smaller diagrams:
+%%   1. system_phase_init_discovery.mmd
+%%   2. system_phase_metric_config.mmd
+%%   3. system_phase_collection.mmd
+%%   4. system_phase_stop_processing.mmd
+%%   5. system_phase_retrieval_shutdown.mmd
+%% Regenerate all with: node scripts/render_mermaid.js --all
+sequenceDiagram
+    autonumber
+    participant User
+    participant API as C_API
+    participant Orchestrator
+    participant CollectorManager as CollectorManager
+    participant MetricManager as MetricManager
+    participant Targets
+    participant Metrics
+
+    rect rgb(230,230,255)
+    Note over User,Orchestrator: Initialization & Discovery (see phase 1)
+    User->>API: astlInitialize()
+    API->>Orchestrator: InitializeInstance(...)
+    Orchestrator-->>API: status
+    User->>API: astlGetTargets()
+    API->>Orchestrator: GetTargets()
+    Orchestrator-->>API: targets
+    end
+
+    rect rgb(230,255,230)
+    Note over API,MetricManager: Metric Config (see phase 2)
+    User->>API: astlConfigureMetricCollectionOnTarget(target, metrics, params)
+    API->>Orchestrator: ConfigureMetricCollectionOnTarget(...)
+    Orchestrator->>MetricManager: Derive ops
+    MetricManager-->>Orchestrator: ops | error
+    Orchestrator->>CollectorManager: Configure
+    CollectorManager-->>Orchestrator: status
+    Orchestrator-->>API: status
+    end
+
+    rect rgb(255,245,230)
+    Note over User,CollectorManager: Collection & Immediate Read (phase 3)
+    User->>API: astlStartCollectionOnTarget(target)
+    API->>Orchestrator: StartCollectionOnTarget(target)
+    Orchestrator->>CollectorManager: StartOnTarget(target)
+    loop Sampling
+    CollectorManager-->>Orchestrator: Raw samples
+        Orchestrator->>Orchestrator: buffer
+    end
+    alt Immediate read
+        User->>API: astlReadImmediateOnTarget(target)
+        API->>Orchestrator: ReadImmediateOnTarget(target)
+    Orchestrator->>CollectorManager: ReadImmediateOnTarget(target)
+    CollectorManager-->>Orchestrator: Raw sample
+        Orchestrator->>Orchestrator: buffer
+    end
+    end
+
+    rect rgb(255,235,235)
+    Note over API,MetricManager: Stop & Processing (phase 4)
+    User->>API: astlStopCollectionOnTarget(target)
+    API->>Orchestrator: StopCollectionOnTarget(target)
+    Orchestrator->>MetricManager: ProcessRawSamples()
+    MetricManager-->>Orchestrator: summaries
+    Orchestrator->>CollectorManager: StopOnTarget()
+    CollectorManager-->>Orchestrator: status
+    Orchestrator-->>API: status
+    end
+
+    rect rgb(240,240,240)
+    Note over User,Orchestrator: Retrieval & Shutdown (phase 5)
+    %% Metric retrieval (two-step example)
+    User->>API: astlGetMetricSampleCountOnTarget(target, metric)
+    API->>Orchestrator: GetMetricSampleCountOnTarget(target, metric)
+    Orchestrator-->>API: count | error
+    User->>API: astlGetMetricSamplesOnTarget(target, metric, buffer, count)
+    API->>Orchestrator: GetMetricSamplesOnTarget(target, metric, buffer, count)
+    Orchestrator-->>API: samples | error
+    %% Shutdown (no astlShutdown API implemented yet)
+    API->>Orchestrator: Destroy()
+    Orchestrator-->>API: status
+    end
+
+    opt Representative errors
+        Orchestrator-->>API: error codes (invalid handle, unsupported metric, invalid mode)
+    end
+
+    Note over Orchestrator,MetricManager: Deferred processing model (work at Stop)

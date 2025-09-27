@@ -1,10 +1,14 @@
 ---
 title: ASTL Orchestrator
+description: High-level class relationships (targets, counters, metrics, collectors, managers, orchestrator entry points)
+updated: 2025-09-25
+source: impl headers + implementation files
 ---
 %% Regenerate with:
-%%   node tools/render_mermaid_sequence.js doc/design/orchestrator.mmd doc/design/orchestrator.svg orchestrator_class
+%%   node scripts/render_mermaid.js doc/design/orchestrator.mmd doc/design/orchestrator.svg
 %% (Keep only one Mermaid diagram type per file to avoid parser errors.)
 classDiagram
+%% Force overall top-to-bottom layout to increase vertical height and reduce extreme horizontal sprawl
 direction TB
 %% Class Diagram for the ASTL Orchestrator and other high-level components
 %% This markup is Mermaid syntax, and can be uploaded into draw.io
@@ -12,6 +16,7 @@ direction TB
 %% a Handy preview extension for VSCode is 
 %% https://marketplace.visualstudio.com/items/?itemName=MermaidChart.vscode-mermaid-chart
 
+%% Group 1: Public API object/value types (targets, counters, metrics)
 namespace AstlApiObjects{
 
     %% target
@@ -158,6 +163,7 @@ MetricSample --> IMetric
 MetricGroup o-- IMetric: contains
 
 
+%% Group 2: Core orchestrator + API + sinks (center column)
 namespace AstlCore{
 
     %% The entry point for the C API
@@ -222,6 +228,7 @@ IOutputManager <--* Orchestrator
 %% https://jira.arm.com/browse/ASTL-56
 %% https://jira.arm.com/browse/ASTL-57
 
+%% Group 3: Metric subsystem (placed under core visually)
 namespace Metrics{
 
 class CollectionOperations{
@@ -237,11 +244,11 @@ class IMetricManager{
     <<Interface>>
     +GetMetricCount()
     +GetMetrics()
-    +GetCollectionOperations(std::spand~ITarget~, std::span~IMetric~) CollectionOperations
+    +GetCollectionOperations(std::span~ITarget~, std::span~IMetric~) CollectionOperations
 }
 
 %% Operations generically represent a functor, or something with an operator()
-%% Some implmen
+%% Some implementation notes / examples may be added later
 class Operation{
     <<Interface>>
     +Execute()
@@ -321,6 +328,7 @@ IMetricManager --> CollectionOperations
 %% https://jira.arm.com/browse/ASTL-46
 %% https://jira.arm.com/browse/ASTL-47
 %% https://jira.arm.com/browse/ASTL-48
+%% Group 4: Collector subsystem
 namespace Collector{
 
   %% Abstract interface for CollectorManager
@@ -388,6 +396,7 @@ CollectionConfiguration *-- CollectionState
 CollectionConfiguration *-- CollectionOperations
 
 
+%% Group 5: SCMI specific collectors / strategies
 namespace Scmi{
   class ScmiCollector{
     SysFsInterface sysfs
@@ -420,6 +429,7 @@ class SysFsInterface{
 
 SysFsInterface --* ScmiCollector
 
+%% Group 6: Topology & Configuration managers (placed near collector + metrics)
 namespace TopologyAndConfiguration {
     class TopologyManager{
 

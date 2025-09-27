@@ -189,6 +189,26 @@ ASTL_FREE_ARRAY(target_properties_buffer)
 
 Run `scripts/demo.sh` to run this flow. This sets up the mock driver and performs a sample run. To run manually, start a mock server and execute build/debug/bin/sample_test. Use --help for usage details.
 
+## Design Diagrams (Mermaid)
+
+The detailed runtime and structural diagrams are authored in Mermaid (`doc/design/*.mmd`) and rendered to SVG via `node scripts/render_mermaid.js --all`.
+
+Because extremely tall single sequence diagrams became unreadable when constrained to a uniform viewport, the original monolithic system sequence was split into phased diagrams:
+
+1. `system_phase_init_discovery.mmd` – Initialization & target/metric discovery
+2. `system_phase_metric_config.mmd` – Metric configuration & operations derivation
+3. `system_phase_collection.mmd` – Interval sampling loop, immediate reads, pause/resume stubs
+4. `system_phase_stop_processing.mmd` – Deferred processing at stop & summarization
+5. `system_phase_retrieval_shutdown.mmd` – Retrieval APIs, shutdown, representative errors
+
+An overview diagram remains in `system_end_to_end_sequence.mmd` that references these phases at a high level.
+
+Regenerate all diagrams after editing any `.mmd` file:
+
+```sh
+node scripts/render_mermaid.js --all
+```
+
 ## Running the Mock SCMI Sysfs Generator
 
 To run the mock SCMI sysfs generator:
@@ -288,3 +308,15 @@ Note: you need to install both doxygen and dot on your system:
 ```sh
 sudo apt-get -y install doxygen graphviz
 ```
+
+## Design Diagrams
+
+Mermaid source (`.mmd`) and rendered SVG documentation diagrams live in `doc/design/`.
+See `doc/design/DIAGRAMS.md` for:
+
+- Diagram inventory and purposes
+- Regeneration instructions (`node scripts/render_mermaid.js --all`)
+- Optional vertical height compression for tall sequence diagrams via `SEQ_MAX_HEIGHT` environment variable
+- CI drift detection snippet
+
+Please regenerate diagrams whenever you change a `.mmd` file.
