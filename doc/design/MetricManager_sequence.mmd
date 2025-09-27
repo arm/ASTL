@@ -1,47 +1,52 @@
 sequenceDiagram
+    %% Participants reflect concrete / interface names in codebase
     participant User
     participant Orchestrator
     participant MetricManager
-    participant Metric1 as Metric1_samplevalue
-    participant Metric2 as Metric2_samplevalue
+    participant Metric1 as IMetric<<SampledValueMetric>>
+    participant Metric2 as IMetric<<FiniteSetMetric>>
 
-    User->>Orchestrator: Constructor()
-    Orchestrator->>MetricManager: Constructor(capabilities)
-    Orchestrator->>MetricManager: registerMetric(metric1_config)
-    MetricManager->>Metric1: checkCapabilities(capabilities)
-    Metric1-->>MetricManager: true
-    MetricManager->>MetricManager: store Metric1
-    Orchestrator->>MetricManager: registerMetric(metric2_config)
-    MetricManager->>Metric2: checkCapabilities(capabilities)
-    Metric2-->>MetricManager: false
-    MetricManager->>Metric2: shutdown()
-    MetricManager->>MetricManager: discard Metric1
+    %% Construction
+    User->>Orchestrator: Orchestrator()
+    Orchestrator->>MetricManager: MetricManager(capabilities)
 
+    %% Register first metric configuration
+    Orchestrator->>MetricManager: RegisterMetric(metric_config_1, targets)
+    MetricManager->>MetricManager: Capability check (Capabilities)
+    MetricManager->>Metric1: construct concrete metric
+    MetricManager->>MetricManager: store MetricHandle{config, target_to_metric_map}
+
+    %% Register second metric configuration (FiniteSetMetric example)
+    Orchestrator->>MetricManager: RegisterMetric(metric_config_2, targets)
+    MetricManager->>MetricManager: Capability check
+    MetricManager->>Metric2: construct concrete metric
+    MetricManager->>MetricManager: store MetricHandle
+
+    %% Enumeration from public API call (astlGetMetrics -> GetAvailableMetrics)
     User->>Orchestrator: astlGetMetrics()
-    Orchestrator->>MetricManager: getAvailableMetrics()
-    MetricManager->>Orchestrator: [Metric handle]
-    Orchestrator->>Orchestrator: find target metrics
-    Orchestrator->>User: [target metrics handle]
+    Orchestrator->>MetricManager: GetAvailableMetrics()
+    MetricManager-->>Orchestrator: span<astl_metric_handle_t>
+    Orchestrator-->>User: metric handles
 
-    User->>Orchestrator: astlConfigureCounterCollection()
-    Orchestrator->>MetricManager: InitializeMetrics(span::metrics, operations)
-    MetricManager->>Metric1: Initialize(operations)
-    Orchestrator->>Orchestrator: configure collectors(span::operations)
+    %% Build required operations for a target prior to collection
+    User->>Orchestrator: astlConfigureMetricCollectionOnTarget(target, params, metrics)
+    Orchestrator->>MetricManager: GetRequiredOperations(metrics, target)
+    MetricManager-->>Orchestrator: CollectionOperations
+    Orchestrator->>Orchestrator: configure collectors (CollectorManager)
 
-    User->>Orchestrator: astlStartCollection()
-    Orchestrator->>Orchestrator: start collection
+    %% Collection lifecycle (simplified)
+    User->>Orchestrator: astlStartCollectionOnTarget(target)
+    Orchestrator->>CollectorManager: Start(target)
+    User->>Orchestrator: astlReadImmediateOnTarget(target)
+    Orchestrator->>CollectorManager: ReadImmediate(target)
+    CollectorManager->>MetricManager: SinkProcessedSamples(metric, processed)
+    MetricManager->>Metric1: ReceiveRawSample / Summarize (as needed)
+    MetricManager->>Metric2: ReceiveRawSample / Summarize (as needed)
+    User->>Orchestrator: astlStopCollectionOnTarget(target)
+    Orchestrator->>CollectorManager: Stop(target)
 
-    User->>Orchestrator: astlStopCollection()
-    Orchestrator->>Orchestrator: stop collection
-    Orchestrator->>MetricManager: processRawData(iRawSampleSink)
-    MetricManager->>Orchestrator: GetProcessedData(iProcessedSampleSink)
-    MetricManager->>Metric1: RecieveSamples(messages)
-
-
-    Orchestrator->>MetricManager: SummarizeMetrics()
-    MetricManager->>Metric1: Summarize()
- 
-
-    Orchestrator->>MetricManager: ~Destructor()
-    MetricManager->>Metric1: ~Destructor()
+    %% Destruction
+    Orchestrator->>MetricManager: ~MetricManager()
+    MetricManager->>Metric1: destructor
+    MetricManager->>Metric2: destructor
 

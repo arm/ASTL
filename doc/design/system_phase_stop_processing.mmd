@@ -1,0 +1,25 @@
+%% System Phase: Stop & Deferred Processing
+%% Focus: stop, processing raw→processed, summarization
+sequenceDiagram
+    autonumber
+    participant User
+    participant API as C_API
+    participant Orchestrator
+    participant MetricManager as MetricManager
+    participant Metrics
+    participant CollectorManager as CollectorManager
+
+    User->>API: astlStopCollectionOnTarget(target)
+    API->>Orchestrator: StopCollectionOnTarget(target)
+    Orchestrator->>MetricManager: ProcessRawSamples(buffers)
+    MetricManager->>Metrics: ReceiveRawSample(each)
+    Metrics-->>MetricManager: ProcessedSampledData
+    MetricManager->>MetricManager: Accumulate stats
+    Orchestrator->>MetricManager: SummarizeMetrics()
+    MetricManager->>Metrics: Summarize()
+    Metrics-->>MetricManager: Summary stats
+    MetricManager-->>Orchestrator: summaries ready
+    Orchestrator->>CollectorManager: StopOnTarget(target)
+    CollectorManager-->>Orchestrator: status
+    Orchestrator-->>API: ASTL_STATUS_SUCCESS | error
+    note over Orchestrator,MetricManager: Deferred model (work at stop)

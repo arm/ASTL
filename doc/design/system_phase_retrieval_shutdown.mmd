@@ -1,0 +1,48 @@
+%% System Phase: Retrieval & Shutdown + Representative Errors
+sequenceDiagram
+    autonumber
+    participant User
+    participant API as C_API
+    participant Orchestrator
+    participant MetricManager as MetricManager
+    participant CollectorManager as CollectorManager
+    participant OutputManager as OutputManager
+
+    %% Retrieval
+    %% Counter samples retrieval (two-step: count then fetch)
+    User->>API: astlGetCounterSampleCountOnTarget(target,counter)
+    API->>Orchestrator: GetCounterSampleCountOnTarget(target,counter)
+    Orchestrator-->>API: invalid handle | count
+    User->>API: astlGetCounterSamplesOnTarget(target,counter,buffer,count)
+    API->>Orchestrator: GetCounterSamplesOnTarget(target,counter,buffer,count)
+    Orchestrator-->>API: samples | error
+
+    %% Metric samples retrieval (two-step: count then fetch)
+    User->>API: astlGetMetricSampleCountOnTarget(target,metric)
+    API->>Orchestrator: GetMetricSampleCountOnTarget(target,metric)
+    Orchestrator-->>API: invalid handle | count
+    User->>API: astlGetMetricSamplesOnTarget(target,metric,buffer,count)
+    API->>Orchestrator: GetMetricSamplesOnTarget(target,metric,buffer,count)
+    Orchestrator-->>API: samples | error
+
+    %% Shutdown
+    %% Shutdown (no astlShutdown API implemented yet)
+    API->>Orchestrator: Destroy()
+    Orchestrator->>CollectorManager: UnregisterRawSampleSink()
+    Orchestrator->>MetricManager: UnregisterProcessedSampleSink()
+    Orchestrator->>OutputManager: Teardown (future)
+    Orchestrator-->>API: status
+
+    %% Representative Errors
+    opt Invalid target
+        Orchestrator-->>API: ASTL_STATUS_INVALID_TARGET_HANDLE
+        API-->>User: error
+    end
+    opt Unsupported metric
+    MetricManager-->>Orchestrator: ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET
+        Orchestrator-->>API: error
+    end
+    opt Collector selection failure
+    CollectorManager-->>Orchestrator: ASTL_STATUS_INVALID_COLLECTION_MODE
+        Orchestrator-->>API: error
+    end

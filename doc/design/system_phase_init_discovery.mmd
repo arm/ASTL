@@ -1,0 +1,46 @@
+%% System Phase: Initialization & Discovery
+%% Focus: initialization sequence + target & metric enumeration (condensed)
+sequenceDiagram
+    autonumber
+    participant User
+    participant API as C_API
+    participant Orchestrator
+    participant ConfigurationManager as ConfigurationManager
+    participant TopologyManager as TopologyManager
+    participant CollectorManager as CollectorManager
+    participant MetricManager as MetricManager
+    participant OutputManager as OutputManager
+
+    %% Init
+    User->>API: astlInitialize(params)
+    API->>ConfigurationManager: GetConfiguration()
+    ConfigurationManager-->>API: configuration | error
+    API->>TopologyManager: BuildTopologyManager()
+    TopologyManager-->>API: TopologyManager | error
+    API->>CollectorManager: BuildCollectorManager()
+    CollectorManager-->>API: CollectorManager | error
+    API->>MetricManager: BuildMetricManager()
+    MetricManager-->>API: MetricManager | error
+    API->>OutputManager: BuildOutputManager()
+    OutputManager-->>API: OutputManager | error
+    API->>Orchestrator: InitializeInstance(...)
+    Orchestrator-->>API: ASTL_STATUS_SUCCESS
+    API-->>User: status
+
+    %% Discovery (condensed)
+    User->>API: astlGetTargets()
+    API->>Orchestrator: GetTargets()
+    Orchestrator-->>API: vector<ITarget*>
+    API-->>User: targets
+
+    %% Metric enumeration (two-step using count + list)
+    User->>API: astlGetMetricCount(target)
+    API->>Orchestrator: GetMetricCountOnTarget(target)
+    Orchestrator-->>API: count | error
+    API-->>User: count | error
+    User->>API: astlGetMetrics(target, buffer, &count)
+    API->>Orchestrator: GetMetricsOnTarget(target, buffer, &count)
+    Orchestrator->>MetricManager: GetAvailableMetrics(target)
+    MetricManager-->>Orchestrator: metric props | error
+    Orchestrator-->>API: metric props | error
+    API-->>User: metrics | error

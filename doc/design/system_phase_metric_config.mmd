@@ -1,0 +1,30 @@
+%% System Phase: Metric Configuration
+%% Focus: configuring metric collection (operations derivation)
+sequenceDiagram
+    autonumber
+    participant User
+    participant API as C_API
+    participant Orchestrator
+    participant MetricManager as MetricManager
+    participant CollectorManager as CollectorManager
+
+    User->>API: astlConfigureMetricCollectionOnTarget(target, metrics, params)
+    API->>Orchestrator: ConfigureMetricCollectionOnTarget(...)
+    Orchestrator->>MetricManager: GetRequiredOperations()
+    MetricManager->>MetricManager: DeriveOperations
+    MetricManager-->>Orchestrator: operations | error
+    alt OK
+    Orchestrator->>CollectorManager: ConfigureCollectionOnTarget()
+    CollectorManager-->>Orchestrator: status
+        Orchestrator-->>API: status
+        API-->>User: ASTL_STATUS_SUCCESS
+    else Failure
+        Orchestrator-->>API: error status
+        API-->>User: error
+    end
+
+    opt Counter collection placeholder
+    User->>API: astlConfigureCounterCollectionOnTarget(target,...)
+    API->>Orchestrator: ConfigureCounterCollectionOnTarget(...)
+        Orchestrator-->>API: NOT_SUPPORTED
+    end

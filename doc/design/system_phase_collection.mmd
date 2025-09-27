@@ -1,0 +1,38 @@
+%% System Phase: Interval Collection & Immediate Read
+%% Focus: start, sampling loop, immediate read, pause/resume stubs
+sequenceDiagram
+    autonumber
+    participant User
+    participant API as C_API
+    participant Orchestrator
+    participant CollectorManager as CollectorManager
+    participant MetricManager as MetricManager
+    participant Collectors
+
+    User->>API: astlStartCollectionOnTarget(target)
+    API->>Orchestrator: StartCollectionOnTarget(target)
+    Orchestrator->>CollectorManager: StartOnTarget()
+    CollectorManager-->>Orchestrator: status
+    Orchestrator-->>API: status
+
+    loop Sampling interval
+    Collectors-->>CollectorManager: RawSampledData[]
+    CollectorManager->>Orchestrator: SinkRawSamples()
+        Orchestrator->>Orchestrator: buffer raw samples
+    end
+
+    alt Immediate read
+        User->>API: astlReadImmediateOnTarget(target)
+        API->>Orchestrator: ReadImmediateOnTarget(target)
+    Orchestrator->>CollectorManager: ReadImmediateOnTarget(target)
+    CollectorManager-->>Orchestrator: RawSampledData[]
+        Orchestrator->>Orchestrator: buffer raw samples
+    end
+
+    User->>API: astlPauseCollectionOnTarget(target)
+    API->>Orchestrator: PauseCollectionOnTarget(target)
+    Orchestrator-->>API: NOT_IMPLEMENTED
+
+    User->>API: astlResumeCollectionOnTarget(target)
+    API->>Orchestrator: ResumeCollectionOnTarget(target)
+    Orchestrator-->>API: NOT_IMPLEMENTED
