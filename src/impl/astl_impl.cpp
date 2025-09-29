@@ -1,5 +1,7 @@
 #include "astl_impl.hpp"
 
+#include <algorithm>  // for std::max used in bulk reserve heuristic
+
 #include "astl/astl_errors.h"
 #include "astl_logger.hpp"
 
@@ -238,21 +240,30 @@ astl_status_code Orchestrator::SinkRawSamples(const ITarget *target, std::span<R
     return result;
   }
   ASTL_LOG_DEBUG("Received {} samples for target {}", raw_samples.size(), properties._name);
-  for (const auto &sample : raw_samples) {
+  if (!raw_samples.empty()) [[likely]] {
     auto &target_samples_vec = _raw_samples[target];
-    // Reserve strategy: grow by ~1.5x + small constant. This trades a tiny amount of slack space for
-    // fewer heap allocations when ingesting streaming samples without knowing total count in advance.
-    if (target_samples_vec.capacity() < target_samples_vec.size() + 1) {
+
+    // Bulk reserve once based on total required size rather than per-sample growth decisions.
+    // We keep the 1.5x + bias heuristic but ensure we always meet the exact required size.
+    const auto required_size = target_samples_vec.size() + raw_samples.size();
+    if (target_samples_vec.capacity() < required_size) {
       auto current = target_samples_vec.size();
-      auto new_cap =
+      auto heuristic_cap =
           static_cast<size_t>(current * kRawSampleGrowthNumerator / kRawSampleGrowthDenominator + kRawSampleGrowthBias);
+      // Guarantee capacity is at least the immediate requirement (heuristic may be smaller when current==0).
+      auto new_cap = std::max(required_size, heuristic_cap);
       target_samples_vec.reserve(new_cap);
     }
-    target_samples_vec.push_back(sample);
-    auto timestamp_ns = sample.timestamp.time_since_epoch().count();
-    auto value        = sample.value;
 
-    ASTL_LOG_DEBUG("Sample - timestamp (ns since epoch): {}, value: {}", timestamp_ns, value);
+    // Single bulk insert instead of repeated push_back calls.
+    target_samples_vec.insert(target_samples_vec.end(), raw_samples.begin(), raw_samples.end());
+
+    // Preserve per-sample debug logging (separate pass keeps insertion branch-predictable / cache-friendly).
+    for (const auto &sample : raw_samples) {
+      auto timestamp_ns = sample.timestamp.time_since_epoch().count();
+      auto value        = sample.value;
+      ASTL_LOG_DEBUG("Sample - timestamp (ns since epoch): {}, value: {}", timestamp_ns, value);
+    }
   }
 
   return ASTL_STATUS_SUCCESS;
