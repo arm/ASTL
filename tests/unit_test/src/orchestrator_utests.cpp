@@ -146,4 +146,36 @@ TEST_CASE("Orchestrator-SinkRawSamples", "[Orchestrator]") {
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
   REQUIRE(orchestrator.SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
+
+  auto* target = orchestrator.GetTargets()[0].get();
+
+  SECTION("empty span no-op") {
+    std::vector<astl::RawSampledData> none;
+    REQUIRE(orchestrator.SinkRawSamples(target, none) == ASTL_STATUS_SUCCESS);
+  }
+
+  SECTION("bulk insert growth and skip reserve branches") {
+    // 1) First insertion (size 0 -> 1) forces initial reserve (growth branch)
+    {
+      std::vector<astl::RawSampledData> batch1;
+      batch1.emplace_back(static_cast<astl::OperationId>(0), astl::AstlValue{uint64_t{42}});
+      REQUIRE(orchestrator.SinkRawSamples(target, batch1) == ASTL_STATUS_SUCCESS);
+    }
+    // 2) Second insertion small enough to fit existing capacity (skip reserve branch)
+    {
+      std::vector<astl::RawSampledData> batch2;
+      batch2.emplace_back(static_cast<astl::OperationId>(1), astl::AstlValue{uint64_t{43}});
+      batch2.emplace_back(static_cast<astl::OperationId>(2), astl::AstlValue{uint64_t{44}});
+      REQUIRE(orchestrator.SinkRawSamples(target, batch2) == ASTL_STATUS_SUCCESS);
+    }
+    // 3) Third insertion large enough to exceed prior capacity and trigger another growth reserve.
+    {
+      std::vector<astl::RawSampledData> batch3;
+      for (int i = 3; i < 9; ++i) {  // 6 samples ensuring required_size surpasses initial capacity heuristic usage span
+        auto v = static_cast<uint64_t>(100 + static_cast<uint64_t>(i));
+        batch3.emplace_back(static_cast<astl::OperationId>(i), astl::AstlValue{v});
+      }
+      REQUIRE(orchestrator.SinkRawSamples(target, batch3) == ASTL_STATUS_SUCCESS);
+    }
+  }
 }
