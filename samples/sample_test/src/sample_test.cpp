@@ -36,6 +36,7 @@ std::string ValueToString(const astl_value_t& value, astl_value_type_t type) {
       return "<unknown>";
   }
 }
+
 }  // namespace
 
 // NOLINTBEGIN
@@ -245,15 +246,26 @@ void RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
     samples[0]._size = sizeof(astl_metric_sample_t);
   }
   status = astlGetMetricSamplesOnTarget(target_handle, metric_props._handle, samples.data(), &sample_count);
-  std::cout << "astlGetMetricSamplesOnTarget Status: " << astlStatusString(status) << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
     return;
   }
+
+  // Check if all samples are non-zero
+  bool all_samples_non_zero = std::all_of(samples.begin(), samples.begin() + sample_count,
+                                          [](const astl_metric_sample_t& sample) { return sample._value.ui64 != 0; });
+
   std::cout << "Collected Samples for metric '" << (metric_props._name ? metric_props._name : "<null>") << "':\n";
   for (uint32_t i = 0; i < sample_count; ++i) {
     const auto& sample_entry = samples[i];
     std::cout << "  [" << i << "] ts=" << sample_entry._timestamp
               << " value=" << ValueToString(sample_entry._value, metric_props._value_type) << '\n';
+  }
+
+  // Only print success status if all samples are non-zero
+  if (all_samples_non_zero) {
+    std::cout << "astlGetMetricSamplesOnTarget Status: " << astlStatusString(status) << '\n';
+  } else {
+    std::cout << "astlGetMetricSamplesOnTarget Status: Failed - contains zero values" << '\n';
   }
 }
 

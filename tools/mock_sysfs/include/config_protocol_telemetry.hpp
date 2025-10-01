@@ -88,9 +88,9 @@ inline std::vector<std::unique_ptr<DataEvent>> CreateTelemetryDataEvents(std::st
   for (const auto& data_event : data_events_json.at("data_events")) {
     const auto data_event_id = static_cast<data_event_id_t>(
         std::stoul(data_event["data_event_id"].get<std::string>(), nullptr, 16));  // NOLINT
-    const auto              enable        = static_cast<bool>(data_event["enable"]);
-    const auto              tstamp_enable = static_cast<bool>(data_event["tstamp_enable"]);
-    const astl_value_t      last_value{};
+    const auto              enable            = static_cast<bool>(data_event["enable"]);
+    const auto              tstamp_enable     = static_cast<bool>(data_event["tstamp_enable"]);
+    const auto              last_value        = static_cast<astl_value_t>(data_event["last_value"]);  // NOLINT
     const astl_value_type_t value_type        = ToValueType(data_event.at("value_type").get<std::string>());
     const auto              last_timestamp    = std::chrono::system_clock::now();
     const auto              compo_instance_id = static_cast<uint32_t>(data_event["compo_instance_id"]);
