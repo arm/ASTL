@@ -24,6 +24,7 @@
 
 #include "astl_logger.hpp"
 #include "config/astl_configuration.hpp"
+#include "libsensors_metric_builder.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "metric/metric_manager.hpp"
 
@@ -34,11 +35,9 @@ namespace astl {
  * @param configuration The overall ASTL configuration including the path to the SCMI specification file
  * @param scmi_targets A vector of ITarget pointers representing the detected targets in the system
  *
- *  IMPROVE - Can we move this out of the astl namespace or mark it as private somehow?  It's an internal-only helper
- * function.
  */
-auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration&           configuration,
-                                                    std::vector<const ITarget*> const& scmi_targets)
+static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration&           configuration,
+                                                           std::vector<const ITarget*> const& scmi_targets)
     -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
   std::vector<std::unique_ptr<MetricConfig>> configurations;
   if (!configuration.scmi_specification_path) {
@@ -61,20 +60,11 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration&    
     // 'metric_declaration.register' holds the register name like 'ENERGY_COUNTER'
     for (const auto& [metric_name, metric_declaration] : configuration.metric_declarations) {
       auto metric_configs_result =
-          CreateMetricConfigs(metric_name, metric_declaration, specification_data, scmi_targets);
+          CreateScmiMetricConfigs(metric_name, metric_declaration, specification_data, scmi_targets);
       if (metric_configs_result.has_value()) {
-        for (auto& metric_config : metric_configs_result.value()) {
-          // Log metric name and event IDs
-          const auto& data_event_ids = metric_config->DataEventIds();
-          ASTL_LOG_INFO("Created metric config '{}' with {} targets", metric_config->Name(), data_event_ids.size());
-          for (const auto& [target_name, event_ids] : data_event_ids) {
-            ASTL_LOG_DEBUG("  Target '{}': {} Event IDs", target_name, event_ids.size());
-            for (size_t i = 0; i < event_ids.size(); ++i) {
-              ASTL_LOG_DEBUG("    Event ID[{}]: 0x{:04X}", i, event_ids[i]);
-            }
-          }
-          configurations.push_back(std::move(metric_config));
-        }
+        std::transform(metric_configs_result.value().begin(), metric_configs_result.value().end(),
+                       std::back_inserter(configurations),
+                       [](auto& metric_config) { return std::move(metric_config); });
       } else {
         ASTL_LOG_ERROR("Failed to create metric config for '{}': error code {}", metric_name,
                        static_cast<int>(metric_configs_result.error()));
@@ -94,6 +84,38 @@ auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration&    
   }
 
   return configurations;
+}
+
+/**
+ * @brief Scan the collector_type_to_targets_map for SCMI targets.
+ *        Use the given configuration to create metrics and register them in the metric_manager.
+ */
+static auto RegisterScmiMetrics(
+    const AstlConfiguration&                                              configuration,
+    const std::unordered_map<CollectorType, std::vector<const ITarget*>>& collector_type_to_targets_map,
+    IMetricManager*                                                       metric_manager) -> astl_status_code {
+  if (!metric_manager) {
+    ASTL_LOG_ERROR("metric_manager is null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  auto scmi_targets_iter = collector_type_to_targets_map.find(CollectorType::SCMI);
+  if (scmi_targets_iter == collector_type_to_targets_map.end()) {
+    ASTL_LOG_INFO("No targets with SCMI collector type found, skipping SCMI metric registration");
+    return ASTL_STATUS_SUCCESS;
+  }
+  auto scmi_metric_configurations =
+      ParseMetricConfigurationsFromScmiSpecification(configuration, scmi_targets_iter->second);
+  if (!scmi_metric_configurations) {
+    return scmi_metric_configurations.error();
+  }
+
+  for (auto& scmi_metric_config : scmi_metric_configurations.value()) {
+    auto status = metric_manager->RegisterMetric(std::move(scmi_metric_config), scmi_targets_iter->second);
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
 }
 
 auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration)
@@ -123,23 +145,13 @@ auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, co
   std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
 
   // handle SCMI metrics and targets
-  auto scmi_targets_iter = collector_type_to_targets_map.find(CollectorType::SCMI);
-  if (scmi_targets_iter == collector_type_to_targets_map.end()) {
-    ASTL_LOG_INFO("No targets with SCMI collector type found, skipping SCMI metric registration");
-    return metric_manager;
+  auto status = RegisterScmiMetrics(configuration, collector_type_to_targets_map, metric_manager.get());
+  if (status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
   }
-  auto scmi_metric_configurations =
-      ParseMetricConfigurationsFromScmiSpecification(configuration, scmi_targets_iter->second);
-  if (!scmi_metric_configurations) {
-    return std::unexpected(scmi_metric_configurations.error());
-  }
-
-  for (auto& scmi_metric_config : scmi_metric_configurations.value()) {
-    // @todo for now, we're assuming tha every metric associated with SCMI can be run on any SCMI target
-    auto status = metric_manager->RegisterMetric(std::move(scmi_metric_config), scmi_targets_iter->second);
-    if (status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(status);
-    }
+  status = RegisterLibsensorsMetrics(configuration, collector_type_to_targets_map, metric_manager.get());
+  if (status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
   }
   return metric_manager;
 }

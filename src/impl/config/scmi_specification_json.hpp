@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-#include "common/scmi/scmi_read_operation.hpp"
+#include "operation/scmi_read_operation.hpp"
 
 using json = nlohmann::json;
 

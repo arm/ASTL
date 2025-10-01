@@ -16,30 +16,26 @@
  * under the License.
  ******************************************************************************/
 
-#ifndef COLLECTION_OPERATIONS_HPP_
-#define COLLECTION_OPERATIONS_HPP_
+#include "operation/libsensors_operation_builder.hpp"
 
-#include <memory>
-#include <vector>
-
-#include "common/capabilities.hpp"
+#include "operation/libsensors_read_operation.hpp"
 #include "operation/operation.hpp"
+#include "target.hpp"
 
+#if defined(ASTL_INCLUDE_LIBSENSORS)
 namespace astl {
 
-// Everything a collector needs to know to start, stop, pause, resume a set of counters or metrics,
-// as well as how often to sample. Metric manager should provide this set of operations,
-// Collector manager should decide which collector executes them, and concrete collectors will cast these
-// operations to concrete types to actually run them.
-struct CollectionOperations {
-  OperationSequence   operationsBeforeStart;
-  OperationSequence   operationsAtStart;
-  OperationSequence   operationsOnSample;
-  OperationSequence   operationsAtStop;
-  SamplingInterval    samplingInterval;
-  CollectorCapability requirements;
-};
+LibsensorsOperationBuilder::LibsensorsOperationBuilder(const sensors_chip_name* chip, int subfeature_number)
+    : _chip(chip), _subfeature_number(subfeature_number) {}
+
+[[nodiscard]] auto LibsensorsOperationBuilder::BuildOperations(const ITarget* target) const
+    -> std::expected<OperationSequence, astl_status_code> {
+  (void)target;
+  OperationSequence seq;
+  seq.push_back(std::make_unique<LibsensorsReadOperation>(_chip, _subfeature_number));
+  return seq;
+}
 
 }  // namespace astl
 
-#endif  // COLLECTION_OPERATIONS_HPP_
+#endif  // defined(ASTL_INCLUDE_LIBSENSORS)

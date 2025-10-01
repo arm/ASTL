@@ -9,7 +9,7 @@
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl.h"
 #include "collector/scmi_sysfs_collector.hpp"
-#include "common/scmi/scmi_read_operation.hpp"
+#include "operation/scmi_read_operation.hpp"
 
 using namespace std::chrono_literals;
 

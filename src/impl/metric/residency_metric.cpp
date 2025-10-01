@@ -24,17 +24,16 @@
 
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
-#include "scmi/scmi_read_operation.hpp"
+#include "operation/scmi_read_operation.hpp"
 
 namespace astl {
 
-ResidencyMetric::ResidencyMetric(const char* name, const char* description, const ITarget* target,
-                                 const std::vector<StateConfiguration>& state_configs,
-                                 IProcessedSampleSink*                  processed_sample_sink,
-                                 const std::optional<std::string>&      inferred_state_name)
-    : DeltaMetric(name, description, ASTL_UNITS_TICKS, ASTL_VALUE_UINT64, target, processed_sample_sink),
-      _state_configs(state_configs),
-      _inferred_state_name(inferred_state_name) {
+ResidencyMetric::ResidencyMetric(const ResidencyMetricConfig*                  configuration,
+                                 std::vector<ResidencyMetricConfig::StateInfo> state_configs, const ITarget* target,
+                                 IProcessedSampleSink* processed_sample_sink)
+    : DeltaMetric{configuration, target, processed_sample_sink},
+      _residency_configuration{configuration},
+      _state_configs{std::move(state_configs)} {
   InitializeResidencyState();
 
   // Header initialization for residency summary logger
@@ -42,10 +41,7 @@ ResidencyMetric::ResidencyMetric(const char* name, const char* description, cons
       "Metric, State, Total_Time_Seconds, Average_Percentage, Min_Percentage, Max_Percentage\n");
 }
 
-void ResidencyMetric::Reset() {
-  DeltaMetric::Reset();
-  InitializeResidencyState();
-}
+void ResidencyMetric::Reset() { InitializeResidencyState(); }
 
 void ResidencyMetric::InitializeResidencyState() {
   _previous_samples.clear();
@@ -67,12 +63,12 @@ void ResidencyMetric::InitializeResidencyState() {
   }
 
   // Initialize tracking for inferred state if configured
-  if (_inferred_state_name.has_value()) {
-    _state_time_totals[_inferred_state_name.value()]           = std::chrono::duration<double>(0.0);
-    _state_percentage_sums[_inferred_state_name.value()]       = 0.0;
-    _state_sample_counts[_inferred_state_name.value()]         = 0;
-    _summary_data.min_percentage[_inferred_state_name.value()] = std::numeric_limits<double>::max();
-    _summary_data.max_percentage[_inferred_state_name.value()] = 0.0;
+  if (const auto& inferred_state = _residency_configuration->InferredState().value_or(""); !inferred_state.empty()) {
+    _state_time_totals[inferred_state]           = std::chrono::duration<double>(0.0);
+    _state_percentage_sums[inferred_state]       = 0.0;
+    _state_sample_counts[inferred_state]         = 0;
+    _summary_data.min_percentage[inferred_state] = std::numeric_limits<double>::max();
+    _summary_data.max_percentage[inferred_state] = 0.0;
   }
 }
 
@@ -81,18 +77,25 @@ std::expected<OperationSequence, astl_status_code> ResidencyMetric::GetOperation
 
   // Create an operation for each configured state
   for (const auto& state_config : _state_configs) {
-    // Create SCMI read operation for this state's data event
-    auto        operation = std::make_unique<ScmiReadOperation>(state_config.data_event_id);
-    OperationId op_id     = operation->GetId();
-    operations_seq.push_back(std::move(operation));
-    // Build the operation_id to config map for fast lookup
-    _operation_id_to_config[op_id] = &state_config;
+    auto operations = BuildOperations(state_config.operation_builder, _target);
+    if (!operations.has_value()) {
+      ASTL_LOG_ERROR("ResidencyMetric: Failed to build operations for state '{}' in metric '{}': {}",
+                     state_config.state_name, _configuration->Name(), astlStatusString(operations.error()));
+      return std::unexpected(operations.error());
+    }
+    for (auto& operation : operations.value()) {
+      OperationId op_id = operation->GetId();
+      operations_seq.push_back(std::move(operation));
+      // Build the operation_id to config map for fast lookup
+      _operation_id_to_config[op_id] = &state_config;
 
-    ASTL_LOG_DEBUG("ResidencyMetric: Created operation for state '{}' with data_event_id '{}'", state_config.state_name,
-                   state_config.data_event_id);
+      ASTL_LOG_DEBUG("ResidencyMetric: Created operation for state '{}' with operation_id '{}' in metric '{}'",
+                     state_config.state_name, op_id, _configuration->Name());
+    }
   }
 
-  ASTL_LOG_INFO("ResidencyMetric: Created {} operations for metric '{}'", operations_seq.size(), _name);
+  ASTL_LOG_INFO("ResidencyMetric: Created {} operations for metric '{}'", operations_seq.size(),
+                _configuration->Name());
 
   return operations_seq;
 }
@@ -105,7 +108,7 @@ astl_status_code ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sam
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
 
-  const StateConfiguration* state_config = config_it->second;
+  const auto& state_config = config_it->second;
 
   // @todo: Currently the inferred state residency is only computed in the Summarize method.
   // If the state is inferred, we skip processing it in each sampling interval.
@@ -134,7 +137,7 @@ astl_status_code ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sam
   auto delta_result = CalculateDelta(raw_sample.value, _previous_samples[state_name]->value);
   if (!delta_result.has_value()) {
     ASTL_LOG_ERROR("ResidencyMetric: failed to calculate delta for state {} in metric {}: {}", state_name,
-                   _name.c_str(), astlStatusString(delta_result.error()));
+                   _configuration->Name(), astlStatusString(delta_result.error()));
     return delta_result.error();
   }
 
@@ -142,7 +145,7 @@ astl_status_code ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sam
   auto time_result = ConvertTicksToMicroseconds(delta_result.value(), *state_config);
   if (!time_result.has_value()) {
     ASTL_LOG_ERROR("ResidencyMetric: failed to convert ticks to microseconds for state {} in metric {}: {}", state_name,
-                   _name.c_str(), astlStatusString(time_result.error()));
+                   _configuration->Name(), astlStatusString(time_result.error()));
     return time_result.error();
   }
 
@@ -154,7 +157,7 @@ astl_status_code ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sam
   auto percentage_result = CalculatePercentage(time_result.value(), time_interval);
   if (!percentage_result.has_value()) {
     ASTL_LOG_ERROR("ResidencyMetric: failed to calculate percentage for state {} in metric {}: {}", state_name,
-                   _name.c_str(), astlStatusString(percentage_result.error()));
+                   _configuration->Name(), astlStatusString(percentage_result.error()));
     return percentage_result.error();
   }
 
@@ -166,11 +169,12 @@ astl_status_code ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sam
   }
 
   // Calculate inferred state residency if configured and all states have been processed for this timestamp
-  if (_inferred_state_name.has_value() && (_state_configs.size() == _processed_states_per_timestamp.size())) {
+  if (_residency_configuration->InferredState().has_value() &&
+      (_state_configs.size() == _processed_states_per_timestamp.size())) {
     auto inferred_status = CalculateInferredStateResidencyForInterval(time_interval, raw_sample.timestamp);
     if (inferred_status != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("ResidencyMetric: failed to calculate inferred state residency for metric {}: {}", _name.c_str(),
-                     astlStatusString(inferred_status));
+      ASTL_LOG_ERROR("ResidencyMetric: failed to calculate inferred state residency for metric {}: {}",
+                     _configuration->Name(), astlStatusString(inferred_status));
       return inferred_status;
     }
 
@@ -200,16 +204,17 @@ astl_status_code ResidencyMetric::Summarize() {
     auto min_percentage = _summary_data.min_percentage[state_name];
     auto max_percentage = _summary_data.max_percentage[state_name];
 
-    _residency_summary_logger.LogInfo("{}, {}, {:.6f}, {:.2f}, {:.2f}, {:.2f}\n", _name, state_name, total_time.count(),
-                                      avg_percentage, min_percentage, max_percentage);
+    _residency_summary_logger.LogInfo("{}, {}, {:.6f}, {:.2f}, {:.2f}, {:.2f}\n", _configuration->Name(), state_name,
+                                      total_time.count(), avg_percentage, min_percentage, max_percentage);
   }
 
   // Log inferred state if present
-  if (_summary_data.inferred_state_percentage.has_value() && _inferred_state_name.has_value()) {
+  if (_summary_data.inferred_state_percentage.has_value() && _residency_configuration->InferredState().has_value()) {
     _residency_summary_logger.LogInfo(
-        "{}, {}, {:.6f}, {:.2f}, {:.2f}, {:.2f}\n", _name, _inferred_state_name.value(),
-        _summary_data.inferred_state_time.value_or(0.0), _summary_data.inferred_state_percentage.value(),
-        _summary_data.inferred_state_percentage.value(), _summary_data.inferred_state_percentage.value());
+        "{}, {}, {:.6f}, {:.2f}, {:.2f}, {:.2f}\n", _configuration->Name(),
+        _residency_configuration->InferredState().value(), _summary_data.inferred_state_time.value_or(0.0),
+        _summary_data.inferred_state_percentage.value(), _summary_data.inferred_state_percentage.value(),
+        _summary_data.inferred_state_percentage.value());
   }
 
   return ASTL_STATUS_SUCCESS;
@@ -229,7 +234,7 @@ std::vector<StateResidencyData> ResidencyMetric::GetStateResidencyData(const std
 }
 
 std::expected<std::chrono::microseconds, astl_status_code> ResidencyMetric::ConvertTicksToMicroseconds(
-    const AstlValue& ticks, const StateConfiguration& config) {
+    const AstlValue& ticks, const ResidencyMetricConfig::StateInfo& config) {
   if (config.tick_frequency <= 0.0) {
     return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
@@ -324,7 +329,7 @@ astl_status_code ResidencyMetric::CalculateInferredStateResidencyForInterval(std
     ASTL_LOG_CRITICAL(
         "ResidencyMetric: Accounted time ({} μs) exceeds total interval time ({} μs) for metric '{}' - this "
         "indicates a calculation error",
-        accounted_time.count(), sample_interval.count(), _name.c_str());
+        accounted_time.count(), sample_interval.count(), _configuration->Name());
   }
 
   // Calculate inferred state time (time not accounted for in this interval)
@@ -342,8 +347,8 @@ astl_status_code ResidencyMetric::CalculateInferredStateResidencyForInterval(std
     AstlValue inferred_ticks{uint64_t{0}};  // Inferred state doesn't have raw tick data
 
     // Use UpdateStateResidencyStatistics to update the statistics and store the inferred state data
-    auto status = UpdateStateResidencyStatistics(_inferred_state_name.value(), inferred_time_microseconds,
-                                                 inferred_percentage, timestamp);
+    auto status = UpdateStateResidencyStatistics(_residency_configuration->InferredState().value(),
+                                                 inferred_time_microseconds, inferred_percentage, timestamp);
     if (status != ASTL_STATUS_SUCCESS) {
       return status;
     }

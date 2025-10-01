@@ -56,13 +56,11 @@ class SampledValueMetric : public RawMetric {
    * TODO (https://jira.arm.com/browse/ASTL-97) : Add support for masks, formula to allow more complex processing of
    * metrics.
    *
-   * @param name The name of the metric.
-   * @param description A brief description of the metric.
-   * @param units The units of measurement for this metric.
-   * @param value_type The type of values this metric will process (e.g., UINT64).
+   * @param configuration The configuration for the metric, including name, units, and how to build operations
+   * @param target The telemetry source for the metric.
+   * @param processed_sample_sink Output for where processed samples should be sent.
    */
-  explicit SampledValueMetric(const char *name, const char *description, astl_units_t units,
-                              astl_value_type_t value_type, const ITarget *target,
+  explicit SampledValueMetric(const MetricConfig *configuration, const ITarget *target,
                               IProcessedSampleSink *processed_sample_sink);
 
   /**

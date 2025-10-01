@@ -24,10 +24,25 @@
 
 using namespace std::chrono_literals;
 
+static auto GetEventMetricConfig() -> const astl::MetricConfig* {
+  static astl::MetricConfig config{"test_event",
+                                   "Unit test event metric",
+                                   ASTL_UNITS_NONE,
+                                   ASTL_VALUE_STRING,
+                                   ASTL_METRIC_EVENT,
+                                   astl::CollectorType::UNKNOWN,
+                                   astl::NullOperationBuilder{}};
+  return &config;
+}
+
+static auto CreateEventMetric() -> astl::EventMetric {
+  return astl::EventMetric(GetEventMetricConfig(), nullptr, nullptr);
+}
+
 // Test fixture class to access protected members
 class EventMetricTestFixture : public astl::EventMetric {
  public:
-  EventMetricTestFixture() : astl::EventMetric("test_event_metric", "Unit test event metric", nullptr, nullptr) {}
+  EventMetricTestFixture() : astl::EventMetric(GetEventMetricConfig(), nullptr, nullptr) {}
 
   // Helper method to inject events for testing
   astl_status_code InjectEvent(const std::string& event_description) {
@@ -42,7 +57,7 @@ class EventMetricTestFixture : public astl::EventMetric {
 };
 
 TEST_CASE("EventMetric: construction", "[EventMetric]") {
-  astl::EventMetric metric("test_event", "Unit test event metric", nullptr, nullptr);
+  astl::EventMetric metric = CreateEventMetric();
 
   // Verify initial state
   auto events = metric.GetEvents();
@@ -87,7 +102,7 @@ TEST_CASE("EventMetric: multiple event capture", "[EventMetric]") {
 }
 
 TEST_CASE("EventMetric: numeric sample type conversion", "[EventMetric]") {
-  astl::EventMetric metric("test_event", "Unit test event metric", nullptr, nullptr);
+  astl::EventMetric metric = CreateEventMetric();
 
   // Test acceptance and conversion of numeric samples to strings
   auto                 timestamp = EventMetricTestFixture::CreateTimestamp(std::chrono::steady_clock::now());
@@ -148,7 +163,7 @@ TEST_CASE("EventMetric: summarize functionality", "[EventMetric]") {
 }
 
 TEST_CASE("EventMetric: event timestamp ordering", "[EventMetric]") {
-  astl::EventMetric metric("test_event", "Unit test event metric", nullptr, nullptr);
+  astl::EventMetric metric = CreateEventMetric();
 
   auto start_time       = std::chrono::steady_clock::now();
   auto first_timestamp  = EventMetricTestFixture::CreateTimestamp(start_time);

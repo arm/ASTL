@@ -23,13 +23,33 @@
 
 #include "../../test_includes.hpp"  // include before catch2
 #include "metric/delta_metric.hpp"
+#include "operation/operation_builder.hpp"
+
+// some helpers to cut down duplicated code initializing metrics and their configuration
+static astl::MetricConfig* GetDeltaConfig() {
+  static astl::MetricConfig config{
+      "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT64,
+      ASTL_METRIC_DELTA, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  return &config;
+}
+astl::DeltaMetric GetDeltaMetricUINT64() { return astl::DeltaMetric{GetDeltaConfig(), nullptr, nullptr}; }
+astl::DeltaMetric GetDeltaMetricUINT32() {
+  static astl::MetricConfig config{
+      "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT32,
+      ASTL_METRIC_DELTA, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  return astl::DeltaMetric{&config, nullptr, nullptr};
+}
+astl::DeltaMetric GetDeltaMetricFLOAT64() {
+  static astl::MetricConfig config{
+      "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_FLOAT64,
+      ASTL_METRIC_DELTA, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  return astl::DeltaMetric{&config, nullptr, nullptr};
+}
 
 // Test fixture class to access protected members
 class DeltaMetricTestFixture : public astl::DeltaMetric {
  public:
-  DeltaMetricTestFixture()
-      : astl::DeltaMetric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                          nullptr) {}
+  DeltaMetricTestFixture() : astl::DeltaMetric(GetDeltaConfig(), nullptr, nullptr) {}
 
   // Expose protected methods for testing
   static std::expected<astl::AstlValue, astl_status_code> TestCalculateDelta(const astl::AstlValue& current_sample,
@@ -44,9 +64,7 @@ class DeltaMetricTestFixture : public astl::DeltaMetric {
 
 TEST_CASE("DeltaMetric: construction", "[DeltaMetric]") {
   // Test basic construction
-  astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                           nullptr);
-
+  astl::DeltaMetric metric = GetDeltaMetricUINT64();
   // Verify initial state
   auto summary = metric.GetDeltaSummaryData();
   REQUIRE(!summary.min_delta.has_value());
@@ -57,9 +75,7 @@ TEST_CASE("DeltaMetric: construction", "[DeltaMetric]") {
 }
 
 TEST_CASE("DeltaMetric: single sample - no delta calculated", "[DeltaMetric]") {
-  astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                           nullptr);
-
+  astl::DeltaMetric metric = GetDeltaMetricUINT64();
   // First sample should not produce a delta
   astl::AstlValue      val1{uint64_t{100}};
   astl::RawSampledData sample1(1, val1);
@@ -76,8 +92,7 @@ TEST_CASE("DeltaMetric: single sample - no delta calculated", "[DeltaMetric]") {
 }
 
 TEST_CASE("DeltaMetric: two samples - delta calculated", "[DeltaMetric]") {
-  astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                           nullptr);
+  astl::DeltaMetric metric = GetDeltaMetricUINT64();
 
   // First sample
   astl::AstlValue      val1{uint64_t{100}};
@@ -104,9 +119,7 @@ TEST_CASE("DeltaMetric: two samples - delta calculated", "[DeltaMetric]") {
 }
 
 TEST_CASE("DeltaMetric: multiple samples - deltas calculated", "[DeltaMetric]") {
-  astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                           nullptr);
-
+  astl::DeltaMetric metric = GetDeltaMetricUINT64();
   // Feed multiple samples with known deltas
   std::vector<uint64_t> values = {100, 150, 170, 180, 200};
   // Expected deltas: 50, 20, 10, 20
@@ -132,9 +145,7 @@ TEST_CASE("DeltaMetric: multiple samples - deltas calculated", "[DeltaMetric]") 
 
 TEST_CASE("DeltaMetric: invalid sample type", "[DeltaMetric]") {
   // Create metric expecting UINT32 samples
-  astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT32, nullptr,
-                           nullptr);
-
+  astl::DeltaMetric metric = GetDeltaMetricUINT32();
   // Try to feed a UINT64 sample
   astl::AstlValue      val1{uint64_t{100}};
   astl::RawSampledData sample1(1, val1);
@@ -183,8 +194,7 @@ TEST_CASE("DeltaMetric: static CalculateDelta function", "[DeltaMetric]") {
 
 TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
   SECTION("UINT32 values") {
-    astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT32, nullptr,
-                             nullptr);
+    astl::DeltaMetric metric = GetDeltaMetricUINT32();
 
     astl::AstlValue      val1{uint32_t{100}};
     astl::AstlValue      val2{uint32_t{150}};
@@ -205,9 +215,7 @@ TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
   }
 
   SECTION("Large UINT64 values") {
-    astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                             nullptr);
-
+    astl::DeltaMetric    metric = GetDeltaMetricUINT64();
     astl::AstlValue      val1{uint64_t{100}};
     astl::AstlValue      val2{uint64_t{150}};
     astl::RawSampledData sample1(1, val1);
@@ -227,9 +235,7 @@ TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
   }
 
   SECTION("FLOAT64 values") {
-    astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_FLOAT64, nullptr,
-                             nullptr);
-
+    astl::DeltaMetric    metric = GetDeltaMetricFLOAT64();
     astl::AstlValue      val1{100.5};
     astl::AstlValue      val2{150.5};
     astl::RawSampledData sample1(1, val1);
@@ -251,8 +257,7 @@ TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
 
 TEST_CASE("DeltaMetric: edge cases", "[DeltaMetric]") {
   SECTION("Zero delta") {
-    astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                             nullptr);
+    astl::DeltaMetric metric = GetDeltaMetricUINT64();
 
     astl::AstlValue      val1{uint64_t{100}};
     astl::AstlValue      val2{uint64_t{100}};
@@ -273,9 +278,7 @@ TEST_CASE("DeltaMetric: edge cases", "[DeltaMetric]") {
   }
 
   SECTION("Large delta values") {
-    astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                             nullptr);
-
+    astl::DeltaMetric    metric = GetDeltaMetricUINT64();
     astl::AstlValue      val1{uint64_t{0}};
     astl::AstlValue      val2{std::numeric_limits<uint64_t>::max()};
     astl::RawSampledData sample1(1, val1);
@@ -296,8 +299,7 @@ TEST_CASE("DeltaMetric: edge cases", "[DeltaMetric]") {
 }
 
 TEST_CASE("DeltaMetric: summarize calculates statistics", "[DeltaMetric]") {
-  astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                           nullptr);
+  astl::DeltaMetric metric = GetDeltaMetricUINT64();
 
   // Feed samples with known deltas
   std::vector<uint64_t> values = {100, 110, 120, 130};
@@ -326,8 +328,7 @@ TEST_CASE("DeltaMetric: summarize calculates statistics", "[DeltaMetric]") {
 }
 
 TEST_CASE("DeltaMetric: min/max statistics for datatype : double", "[DeltaMetric]") {
-  astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_FLOAT64, nullptr,
-                           nullptr);
+  astl::DeltaMetric metric = GetDeltaMetricFLOAT64();
 
   // Feed samples with varying deltas
   std::vector<double> values = {100.0, 110.0, 105.0, 125.0, 120.0};
@@ -357,9 +358,7 @@ TEST_CASE("DeltaMetric: min/max statistics for datatype : double", "[DeltaMetric
 }
 
 TEST_CASE("DeltaMetric: no samples summarize", "[DeltaMetric]") {
-  astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                           nullptr);
-
+  astl::DeltaMetric metric = GetDeltaMetricUINT64();
   // Summarize without any samples
   auto status = metric.Summarize();
   REQUIRE(status == ASTL_STATUS_SUCCESS);
@@ -373,9 +372,7 @@ TEST_CASE("DeltaMetric: no samples summarize", "[DeltaMetric]") {
 }
 
 TEST_CASE("DeltaMetric: Reset functionality", "[DeltaMetric]") {
-  astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                           nullptr);
-
+  astl::DeltaMetric metric = GetDeltaMetricUINT64();
   // Feed some samples to create state
   std::vector<uint64_t> values = {100, 150, 200};
   for (size_t i = 0; i < values.size(); ++i) {
@@ -398,9 +395,7 @@ TEST_CASE("DeltaMetric: Reset functionality", "[DeltaMetric]") {
 }
 
 TEST_CASE("DeltaMetric: GetProcessedSamples returns empty span", "[DeltaMetric]") {
-  astl::DeltaMetric metric("test_delta", "unit-test delta metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                           nullptr);
-
+  astl::DeltaMetric metric = GetDeltaMetricUINT64();
   // Test GetProcessedSamples when no samples have been received
   auto samples_empty = metric.GetProcessedSamples();
   REQUIRE(samples_empty.empty());

@@ -32,7 +32,7 @@
 #include "astl/astl.h"
 #include "astl_value.hpp"
 #include "common/capabilities.hpp"
-#include "common/scmi/scmi_read_operation.hpp"
+#include "operation/operation_builder.hpp"
 
 namespace astl {
 
@@ -49,24 +49,33 @@ class MetricConfig {
    * @brief allow destroying metric config instances by base class pointer
    */
   virtual ~MetricConfig() = default;
+
   /**
    * @brief Default constructor is deleted to ensure that MetricConfig cannot be instantiated directly.
    */
   MetricConfig() = delete;
+
   /**
    * @brief Construct a MetricConfig with the given parameters.
+   * @param name           Metric name.
+   * @param description    Human-readable description of the metric.
+   * @param units          Measurement units for the metric (e.g., Watts, Joules).
+   * @param value_type     Data type of the metric value (e.g., uint32, float64).
+   * @param metric_type    Semantic type of the metric defined by ASTL design doc (e.g. value, delta, residency)
+   * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
+   * @param operation_builder The operation builder associated with this metric's collector type,
+   *                          including collector-specific parameters like data event id or libsensors chip
    */
-
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                         astl_value_type_t value_type, astl_metric_type_t metric_type, CollectorType collector_type,
-                        ScmiTargetToDataEventIdMap data_event_ids)
+                        AnyOperationBuilder operation_builder)
       : _metric_name(name),
         _description(description),
         _units(units),
         _value_type(value_type),
         _metric_type(metric_type),
         _collector_type(collector_type),
-        _data_event_ids(std::move(data_event_ids)) {}
+        _operation_builder(std::move(operation_builder)) {}
 
   MetricConfig(const MetricConfig &)            = default;
   MetricConfig &operator=(const MetricConfig &) = default;
@@ -113,22 +122,21 @@ class MetricConfig {
    * @param collector_type The collector type to set.
    */
   void SetCollectorType(CollectorType collector_type) { _collector_type = collector_type; }
+
   /**
-   * @brief Return a map of target name to Data Event ID of the metric.
-   *
-   * @return map of target name to data event id
+   * @brief return the operation builder, for use with operation_builder.hpp's `BuildOperations`
    */
-  virtual auto DataEventIds() const -> const ScmiTargetToDataEventIdMap & { return _data_event_ids; }
+  auto GetOperationBuilder() const -> AnyOperationBuilder const & { return _operation_builder; }
 
  private:
   std::string       _metric_name;  // Metric name as specified in the configuration file
   std::string       _description;  // Human-readable description of the metric
   astl_units_t      _units;        // Measurement units for the metric (e.g., seconds, bytes)
   astl_value_type_t _value_type;   // Data type of the metric value (e.g., raw, processed)
-  astl_metric_type_t
-                _metric_type;  // Semantic type of the metric defined by ASTL design doc(e.g., value, delta, residency)
-  CollectorType _collector_type;  // Collector type to support this metric
-  ScmiTargetToDataEventIdMap _data_event_ids;
+  // Semantic type of the metric defined by ASTL design doc(e.g., value, delta, residency)
+  astl_metric_type_t  _metric_type;
+  CollectorType       _collector_type;  // Collector type to support this metric
+  AnyOperationBuilder _operation_builder;
 };
 
 /**
@@ -139,18 +147,18 @@ class MetricConfig {
  */
 class ResidencyMetricConfig final : public MetricConfig {
  public:
-  // Reuse the underlying data event id type from ScmiTargetToDataEventIdMap to ensure consistency.
+  // Reuse the underlying data event id type from TargetToDataEventIdMap to ensure consistency.
   using DataEventId = ScmiDataEventId;  // For residency, each state has a single data event ID
 
   // Structure to hold both data event ID and tick frequency for a state
   struct StateInfo {
-    std::string state_name;  // State name (e.g., "C1", "C6") - same as register name in JSON
-    DataEventId data_event_id;
-    double      tick_frequency;
+    std::string         state_name;  // State name (e.g., "C1", "C6") - same as register name in JSON
+    double              tick_frequency;
+    AnyOperationBuilder operation_builder;
   };
 
-  using StateToInfoMap             = std::unordered_map<std::string, StateInfo>;       // state name -> state info
-  using ScmiTargetToStateToInfoMap = std::unordered_map<std::string, StateToInfoMap>;  // target -> (state -> info)
+  using StateToInfoMap         = std::unordered_map<std::string, StateInfo>;       // state name -> state info
+  using TargetToStateToInfoMap = std::unordered_map<std::string, StateToInfoMap>;  // target -> (state -> info)
 
   /**
    * @brief Construct a ResidencyMetricConfig with state-specific data event IDs and tick frequencies.
@@ -164,14 +172,14 @@ class ResidencyMetricConfig final : public MetricConfig {
    * @param value_type      Value representation.
    * @param metric_type     Expected to be the ASTL "residency" metric type.
    * @param collector_type  Collector type responsible for gathering residency counters.
-   * @param state_info      Mapping from target -> (state name -> {data_event_id, tick_frequency}).
+   * @param state_info      Mapping from target -> (state name -> {operation_builder, tick_frequency}).
    * @param inferred_state  Optional state name to be inferred from the metric (e.g., "C0").
    */
   explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type,
-                                 CollectorType collector_type, ScmiTargetToStateToInfoMap state_info,
+                                 CollectorType collector_type, TargetToStateToInfoMap state_info,
                                  std::optional<std::string> inferred_state = std::nullopt)
-      : MetricConfig(name, description, units, value_type, metric_type, collector_type, {}),
+      : MetricConfig(name, description, units, value_type, metric_type, collector_type, NullOperationBuilder{}),
         _state_info(std::move(state_info)),
         _inferred_state(std::move(inferred_state)) {}
 
@@ -186,40 +194,12 @@ class ResidencyMetricConfig final : public MetricConfig {
    *
    * @return Map: target -> (state name -> {data_event_id, tick_frequency})
    */
-  const ScmiTargetToStateToInfoMap &GetStateInfo() const { return _state_info; }
+  const TargetToStateToInfoMap &GetStateInfo() const { return _state_info; }
 
   /**
    * @brief Get the state-to-info mapping for a specific target. Throws std::out_of_range if not found.
    */
   const StateToInfoMap &StatesForTarget(const std::string &target) const { return _state_info.at(target); }
-
-  /**
-   * @brief Override DataEventIds to return flattened state event IDs for target validation.
-   *
-   * For residency metrics, this flattens the state-specific event IDs into a simple
-   * target -> event_id map for compatibility with existing validation logic.
-   * Note: Only returns the first state's event ID per target for validation purposes.
-   *
-   * @return Map of target name to first state's data event ID
-   */
-  auto DataEventIds() const -> const ScmiTargetToDataEventIdMap & override {
-    // Create a static cache to return a reference
-    static ScmiTargetToDataEventIdMap flattened_event_ids;
-    flattened_event_ids.clear();
-
-    for (const auto &[target_name, state_to_info] : _state_info) {
-      if (!state_to_info.empty()) {
-        // Collect all data event IDs for this target
-        std::vector<ScmiDataEventId> target_event_ids;
-        for (const auto &[state_name, state_info] : state_to_info) {
-          target_event_ids.push_back(state_info.data_event_id);
-        }
-        flattened_event_ids[target_name] = std::move(target_event_ids);
-      }
-    }
-
-    return flattened_event_ids;
-  }
 
   /**
    * @brief Get the inferred state name if specified.
@@ -229,7 +209,7 @@ class ResidencyMetricConfig final : public MetricConfig {
   const std::optional<std::string> &InferredState() const { return _inferred_state; }
 
  private:
-  ScmiTargetToStateToInfoMap _state_info;      // Mapping of target -> (state name -> {data_event_id, tick_frequency})
+  TargetToStateToInfoMap     _state_info;      // Mapping of target -> (state name -> {data_event_id, tick_frequency})
   std::optional<std::string> _inferred_state;  // Optional inferred state name
 };
 
@@ -254,15 +234,16 @@ class FiniteSetMetricConfig final : public MetricConfig {
    * @param value_type      Value representation type.
    * @param metric_type     Expected to be a finite set metric type.
    * @param collector_type  Collector type responsible for gathering finite set data.
-   * @param data_event_ids  Mapping from target to data event IDs.
+   * @param operation_builder  variant type that will create operations for the given target for a certain collector
+   * type
    * @param finite_set      Set of valid AstlValue objects that define the finite set.
    * @param labels          Mapping from finite set values to human-readable labels.
    */
   explicit FiniteSetMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type,
-                                 CollectorType collector_type, ScmiTargetToDataEventIdMap data_event_ids,
+                                 CollectorType collector_type, AnyOperationBuilder operation_builder,
                                  FiniteSet finite_set, ValueToLabelMap labels)
-      : MetricConfig(name, description, units, value_type, metric_type, collector_type, std::move(data_event_ids)),
+      : MetricConfig(name, description, units, value_type, metric_type, collector_type, std::move(operation_builder)),
         _finite_set(std::move(finite_set)),
         _labels(std::move(labels)) {}
 

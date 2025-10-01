@@ -42,19 +42,20 @@ inline astl::Logger& RateSummaryLogger() {
 
 namespace astl {
 
-RateMetric::RateMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type,
-                       const ITarget* target, IProcessedSampleSink* processed_sample_sink)
-    : DeltaMetric(name, description, units, value_type, target, processed_sample_sink),
+RateMetric::RateMetric(const MetricConfig* configuration, const ITarget* target,
+                       IProcessedSampleSink* processed_sample_sink)
+    : DeltaMetric(configuration, target, processed_sample_sink),
       _rate_summary_data{},
       _interval_logger(astl::LogLevel::Info, false, false,
-                       RawMetric::SanitizeMetricNameForFilename(std::string(name)) + "_rate_intervals.csv") {
+                       RawMetric::SanitizeMetricNameForFilename(_configuration->Name()) + "_rate_intervals.csv") {
   // Initialize rate summary data - rates are always double
   astl_value_t val{0};
-  auto         zero_val = AstlValue::FromUnion(val, _value_type);
+  auto         zero_val = AstlValue::FromUnion(val, _configuration->ValueType());
   if (zero_val.has_value()) {
     _rate_summary_data = {.min_rate = std::nullopt, .max_rate = std::nullopt, .avg_rate = std::nullopt};
   } else {
-    ASTL_LOG_INFO("RateMetric: unsupported type {} for rate statistics for metric: {}", value_type, name);
+    ASTL_LOG_INFO("RateMetric: unsupported type {} for rate statistics for metric: {}", _configuration->ValueType(),
+                  _configuration->Name());
   }
 
   // Header initialization of rate loggers
@@ -94,14 +95,15 @@ astl_status_code RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) 
 
   // Prevent division by zero
   if (time_interval.count() == 0) {
-    ASTL_LOG_ERROR("RateMetric: zero time interval detected for metric {}, skipping rate calculation", _name);
+    ASTL_LOG_ERROR("RateMetric: zero time interval detected for metric {}, skipping rate calculation",
+                   _configuration->Name());
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
 
   // Calculate rate: delta / time_interval
   auto rate_result = CalculateRate(delta_data.value, time_interval);
   if (!rate_result.has_value()) {
-    ASTL_LOG_ERROR("RateMetric: failed to calculate rate for metric {}: {}", _name.c_str(),
+    ASTL_LOG_ERROR("RateMetric: failed to calculate rate for metric {}: {}", _configuration->Name(),
                    astlStatusString(rate_result.error()));
     return rate_result.error();
   }
@@ -136,7 +138,7 @@ std::expected<AstlValue, astl_status_code> RateMetric::CalculateRate(const AstlV
 astl_status_code RateMetric::UpdateRateStatistics(const AstlValue& rate_value, SampleTimestamp timestamp,
                                                   std::chrono::microseconds time_interval) {
   if (!rate_value.IsArithmetic()) {
-    ASTL_LOG_TRACE("RateMetric: received rate with non-arithmetic value type for metric: {}", _name);
+    ASTL_LOG_TRACE("RateMetric: received rate with non-arithmetic value type for metric: {}", _configuration->Name());
     return ASTL_STATUS_SUCCESS;
   }
 
@@ -173,7 +175,7 @@ astl_status_code RateMetric::Summarize() {
 
   // Compute rate statistics
   if (_rates.empty()) {
-    RateSummaryLogger().LogInfo("No rates to summarize for metric: {}.", _name.c_str());
+    RateSummaryLogger().LogInfo("No rates to summarize for metric: {}.", _configuration->Name());
   } else {
     // Calculate average rate
     _rate_summary_data.avg_rate = _sum_rate_value / static_cast<double>(_rates.size());
@@ -181,24 +183,25 @@ astl_status_code RateMetric::Summarize() {
     // Output time interval packets
     auto interval_status = OutputTimeIntervalPackets();
     if (interval_status != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("Failed to output time interval packets for metric {}", _name.c_str());
+      ASTL_LOG_ERROR("Failed to output time interval packets for metric {}", _configuration->Name());
     }
 
     // Log rate summary
-    RateSummaryLogger().LogInfo("{}, {}, {}, {}, {}, {}, {}, {} \n", _name.c_str(), _description.c_str(), _units,
+    RateSummaryLogger().LogInfo("{}, {}, {}, {}, {}, {}, {}, {} \n", _configuration->Name(),
+                                _configuration->Description(), _configuration->Units(),
                                 _rate_summary_data.min_rate.value_or(-1.0), _rate_summary_data.max_rate.value_or(-1.0),
-                                _rate_summary_data.avg_rate.value_or(-1.0), _rates.size(), _value_type);
+                                _rate_summary_data.avg_rate.value_or(-1.0), _rates.size(), _configuration->ValueType());
   }
 
   return ASTL_STATUS_SUCCESS;
 }
 
 astl_status_code RateMetric::OutputTimeIntervalPackets() {
-  _interval_logger.LogInfo("Time Interval Packets for metric: {} \n", _name.c_str());
+  _interval_logger.LogInfo("Time Interval Packets for metric: {} \n", _configuration->Name());
 
   for (const auto& rate_data : _rates) {
-    _interval_logger.LogInfo("{}, {}, {}, {} \n", _name.c_str(), rate_data.rate_value, rate_data.time_interval.count(),
-                             rate_data.timestamp.time_since_epoch().count());
+    _interval_logger.LogInfo("{}, {}, {}, {} \n", _configuration->Name(), rate_data.rate_value,
+                             rate_data.time_interval.count(), rate_data.timestamp.time_since_epoch().count());
   }
 
   return ASTL_STATUS_SUCCESS;

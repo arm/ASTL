@@ -27,7 +27,7 @@
 #include "astl_value.hpp"
 #include "counter.hpp"
 #include "metric/i_metric.hpp"
-#include "operation.hpp"
+#include "operation/operation.hpp"
 #include "target.hpp"
 
 namespace astl {

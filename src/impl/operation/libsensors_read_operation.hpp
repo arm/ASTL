@@ -16,30 +16,43 @@
  * under the License.
  ******************************************************************************/
 
-#ifndef COLLECTION_OPERATIONS_HPP_
-#define COLLECTION_OPERATIONS_HPP_
+/**
+ * @file libsensors.hpp
+ * @brief Operation specialization for reading sensor values via libsensors.
+ */
+#ifndef SENSORS_HPP_
+#define SENSORS_HPP_
 
-#include <memory>
-#include <vector>
+#if defined(ASTL_INCLUDE_LIBSENSORS)
+#  include <sensors/sensors.h>
+#endif
 
-#include "common/capabilities.hpp"
-#include "operation/operation.hpp"
+#include <utility>
+
+#include "operation.hpp"
 
 namespace astl {
 
-// Everything a collector needs to know to start, stop, pause, resume a set of counters or metrics,
-// as well as how often to sample. Metric manager should provide this set of operations,
-// Collector manager should decide which collector executes them, and concrete collectors will cast these
-// operations to concrete types to actually run them.
-struct CollectionOperations {
-  OperationSequence   operationsBeforeStart;
-  OperationSequence   operationsAtStart;
-  OperationSequence   operationsOnSample;
-  OperationSequence   operationsAtStop;
-  SamplingInterval    samplingInterval;
-  CollectorCapability requirements;
+#if defined(ASTL_INCLUDE_LIBSENSORS)
+/**
+ * @brief Operation describing a single libsensors read of a subfeature on a chip.
+ *
+ * Validates construction arguments to avoid null chip pointers at runtime.
+ */
+struct LibsensorsReadOperation : public Operation {
+  const sensors_chip_name* chip;
+  int                      subfeature_number{0};
+
+  LibsensorsReadOperation() = delete;
+  LibsensorsReadOperation(const sensors_chip_name* chip, int subfeature_number)
+      : chip{chip}, subfeature_number{subfeature_number} {
+    if (!chip) {
+      throw std::invalid_argument("LibsensorsReadOperation requires non-null chip");
+    }
+  }
 };
+#endif
 
 }  // namespace astl
 
-#endif  // COLLECTION_OPERATIONS_HPP_
+#endif  // SENSORS_HPP_

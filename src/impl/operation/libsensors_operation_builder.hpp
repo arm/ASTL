@@ -16,43 +16,33 @@
  * under the License.
  ******************************************************************************/
 
-/**
- * @file libsensors.hpp
- * @brief Operation specialization for reading sensor values via libsensors.
- */
-#ifndef SENSORS_HPP_
-#define SENSORS_HPP_
+#ifndef I_LIBSENSORS_OPERATION_BUILDER_HPP_
+#define I_LIBSENSORS_OPERATION_BUILDER_HPP_
 
 #if defined(ASTL_INCLUDE_LIBSENSORS)
 #  include <sensors/sensors.h>
-#endif
 
-#include <utility>
-
-#include "operation.hpp"
+#  include "operation/operation.hpp"
+#  include "target.hpp"
 
 namespace astl {
 
-#if defined(ASTL_INCLUDE_LIBSENSORS)
-/**
- * @brief Operation describing a single libsensors read of a subfeature on a chip.
- *
- * Validates construction arguments to avoid null chip pointers at runtime.
- */
-struct LibsensorsReadOperation : public Operation {
-  const sensors_chip_name* chip;
-  int                      subfeature_number{0};
+class LibsensorsOperationBuilder {
+ public:
+  LibsensorsOperationBuilder(const sensors_chip_name* chip, int subfeature_number);
 
-  LibsensorsReadOperation() = delete;
-  LibsensorsReadOperation(const sensors_chip_name* chip, const int subfeature_number)
-      : chip{chip}, subfeature_number{subfeature_number} {
-    if (!chip) {
-      throw std::invalid_argument("LibsensorsReadOperation requires non-null chip");
-    }
-  }
+  [[nodiscard]] auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code>;
+
+ private:
+  const sensors_chip_name* _chip;
+  int                      _subfeature_number;
 };
-#endif
+
+static_assert(OperationBuilder<LibsensorsOperationBuilder>,
+              "LibsensorsOperationBuilder does not satisfy OperationBuilder concept");
 
 }  // namespace astl
 
-#endif  // SENSORS_HPP_
+#endif  // defined(ASTL_INCLUDE_LIBSENSORS)
+
+#endif  // I_LIBSENSORS_OPERATION_BUILDER_HPP_

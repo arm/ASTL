@@ -25,12 +25,19 @@
 #include "../../test_includes.hpp"  // include before catch2
 #include "metric/rate_metric.hpp"
 
+static const astl::MetricConfig* GetRateConfig() {
+  static astl::MetricConfig config{
+      "test_rate",      "unit-test rate metric",      ASTL_UNITS_JOULES,           ASTL_VALUE_UINT64,
+      ASTL_METRIC_RATE, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  return &config;
+}
+
+static astl::RateMetric GetRateMetric() { return astl::RateMetric{GetRateConfig(), nullptr, nullptr}; }
+
 // Test fixture class to access protected members
 class RateMetricTestFixture : public astl::RateMetric {
  public:
-  RateMetricTestFixture()
-      : astl::RateMetric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr) {
-  }
+  RateMetricTestFixture() : astl::RateMetric(GetRateConfig(), nullptr, nullptr) {}
 
   // Expose protected methods for testing
   static std::expected<astl::AstlValue, astl_status_code> TestCalculateRate(const astl::AstlValue&    delta_value,
@@ -41,7 +48,7 @@ class RateMetricTestFixture : public astl::RateMetric {
 
 TEST_CASE("RateMetric: construction", "[RateMetric]") {
   // Test basic construction
-  astl::RateMetric metric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr);
+  astl::RateMetric metric = GetRateMetric();
 
   // Verify initial state
   auto summary = metric.GetRateSummaryData();
@@ -53,7 +60,7 @@ TEST_CASE("RateMetric: construction", "[RateMetric]") {
 }
 
 TEST_CASE("RateMetric: single sample - no rate calculated", "[RateMetric]") {
-  astl::RateMetric metric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr);
+  astl::RateMetric metric = GetRateMetric();
 
   // First sample should not produce a rate
   astl::AstlValue      val1{uint64_t{100}};
@@ -71,7 +78,7 @@ TEST_CASE("RateMetric: single sample - no rate calculated", "[RateMetric]") {
 }
 
 TEST_CASE("RateMetric: two samples - rate calculated", "[RateMetric]") {
-  astl::RateMetric metric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr);
+  astl::RateMetric metric = GetRateMetric();
 
   using microseconds = std::chrono::microseconds;
 
@@ -99,7 +106,7 @@ TEST_CASE("RateMetric: two samples - rate calculated", "[RateMetric]") {
 }
 
 TEST_CASE("RateMetric: multiple samples - rate statistics", "[RateMetric]") {
-  astl::RateMetric metric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr);
+  astl::RateMetric metric = GetRateMetric();
 
   using microseconds = std::chrono::microseconds;
 
@@ -147,7 +154,7 @@ TEST_CASE("RateMetric: multiple samples - rate statistics", "[RateMetric]") {
 }
 
 TEST_CASE("RateMetric: zero time interval handling", "[RateMetric]") {
-  astl::RateMetric metric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr);
+  astl::RateMetric metric = GetRateMetric();
 
   using microseconds = std::chrono::microseconds;
 
@@ -169,7 +176,7 @@ TEST_CASE("RateMetric: zero time interval handling", "[RateMetric]") {
 }
 
 TEST_CASE("RateMetric: invalid sample type handling", "[RateMetric]") {
-  astl::RateMetric metric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr);
+  astl::RateMetric metric = GetRateMetric();
 
   // Try to send a sample with wrong type (string instead of uint64)
   astl::AstlValue      invalid_val{std::string{"invalid"}};
@@ -204,7 +211,7 @@ TEST_CASE("RateMetric: CalculateRate with non-arithmetic value", "[RateMetric]")
 }
 
 TEST_CASE("RateMetric: GetRates span interface", "[RateMetric]") {
-  astl::RateMetric metric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr);
+  astl::RateMetric metric = GetRateMetric();
 
   using microseconds = std::chrono::microseconds;
 
@@ -229,7 +236,7 @@ TEST_CASE("RateMetric: GetRates span interface", "[RateMetric]") {
 }
 
 TEST_CASE("RateMetric: edge case - very small time intervals", "[RateMetric]") {
-  astl::RateMetric metric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr);
+  astl::RateMetric metric = GetRateMetric();
 
   using microseconds = std::chrono::microseconds;
 
@@ -251,7 +258,7 @@ TEST_CASE("RateMetric: edge case - very small time intervals", "[RateMetric]") {
 }
 
 TEST_CASE("RateMetric: summarize with no rates", "[RateMetric]") {
-  astl::RateMetric metric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr);
+  astl::RateMetric metric = GetRateMetric();
 
   // Summarize without any samples
   auto status = metric.Summarize();
@@ -264,7 +271,7 @@ TEST_CASE("RateMetric: summarize with no rates", "[RateMetric]") {
 }
 
 TEST_CASE("RateMetric: inheritance from DeltaMetric", "[RateMetric]") {
-  astl::RateMetric metric("test_rate", "unit-test rate metric", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, nullptr, nullptr);
+  astl::RateMetric metric = GetRateMetric();
 
   using microseconds = std::chrono::microseconds;
 

@@ -36,11 +36,10 @@
 #include "collector/periodic_sampler.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
-#include "common/libsensors.hpp"
-#include "common/operation.hpp"
+#include "operation/libsensors_read_operation.hpp"
+#include "operation/operation.hpp"
 
 namespace astl {
-
 /*
  * @brief A specialization of ICollector that interracts with the libsensors library for HWMON telemetry
  *

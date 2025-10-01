@@ -7,7 +7,6 @@
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl.h"
-#include "common/libsensors.hpp"
 #include "mock_libsensors.hpp"  // for global mock_libsensors object
 #include "topology/libsensors_topology_plugin.hpp"
 
@@ -28,6 +27,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
 
   // allow calls to sensors_snprintf_chip_name to succeed
   ALLOW_CALL(mock_libsensors, sensors_snprintf_chip_name(_, _, _))
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
       .SIDE_EFFECT(std::snprintf(_1, _2, "%s-%d-%d", chip1.prefix, chip1.bus.type, chip1.bus.nr))
       .RETURN(0);
 
@@ -42,6 +42,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 0)  // first call, index=0
       .RETURN([]() -> sensors_feature* {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
         static char*           temp1_name   = const_cast<char*>("temp1");
         static sensors_feature feature_temp = {
             .name = temp1_name, .number = 1, .type = SENSORS_FEATURE_TEMP, .first_subfeature = 0, .padding1 = 0};
@@ -51,6 +52,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 1)  // second call, index=1
       .RETURN([]() -> sensors_feature* {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
         static char*           fan1_name   = const_cast<char*>("fan1");
         static sensors_feature feature_fan = {
             .name = fan1_name, .number = 2, .type = SENSORS_FEATURE_FAN, .first_subfeature = 0, .padding1 = 0};
@@ -60,6 +62,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 2)  // third call, index=2, for voltage
       .RETURN([]() -> sensors_feature* {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
         static char*           in1_name   = const_cast<char*>("in1");
         static sensors_feature feature_in = {
             .name = in1_name, .number = 3, .type = SENSORS_FEATURE_IN, .first_subfeature = 0, .padding1 = 0};
@@ -69,6 +72,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 3)  // fourth call, index=3, for power
       .RETURN([]() -> sensors_feature* {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
         static char*           power1_name   = const_cast<char*>("power1");
         static sensors_feature feature_power = {
             .name = power1_name, .number = 4, .type = SENSORS_FEATURE_POWER, .first_subfeature = 0, .padding1 = 0};
@@ -78,6 +82,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 4)  // fifth call, index=4, for humidity
       .RETURN([]() -> sensors_feature* {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
         static char*           humidity1_name   = const_cast<char*>("humidity1");
         static sensors_feature feature_humidity = {.name             = humidity1_name,
                                                    .number           = 5,
@@ -90,6 +95,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 5)  // sixth call, index=5, for VID
       .RETURN([]() -> sensors_feature* {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
         static char*           vid1_name   = const_cast<char*>("vid1");
         static sensors_feature feature_vid = {
             .name = vid1_name, .number = 6, .type = SENSORS_FEATURE_VID, .first_subfeature = 0, .padding1 = 0};

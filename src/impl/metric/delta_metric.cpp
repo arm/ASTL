@@ -23,9 +23,9 @@
 
 namespace astl {
 
-DeltaMetric::DeltaMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type,
-                         const ITarget* target, IProcessedSampleSink* processed_sample_sink)
-    : RawMetric(name, description, units, value_type, ASTL_METRIC_DELTA, target, processed_sample_sink),
+DeltaMetric::DeltaMetric(const MetricConfig* configuration, const ITarget* target,
+                         IProcessedSampleSink* processed_sample_sink)
+    : RawMetric(configuration, target, processed_sample_sink),
       _previous_sample{std::nullopt},
       _delta_summary_data{},
       _sum_delta_value{uint64_t{0}} {
@@ -54,7 +54,7 @@ astl_status_code DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample)
   // Calculate delta between current and previous sample
   auto delta_result = CalculateDelta(raw_sample.value, _previous_sample->value);
   if (!delta_result.has_value()) {
-    ASTL_LOG_ERROR("DeltaMetric: failed to calculate delta for metric {}: {}", _name.c_str(),
+    ASTL_LOG_ERROR("DeltaMetric: failed to calculate delta for metric {}: {}", _configuration->Name(),
                    astlStatusString(delta_result.error()));
     return delta_result.error();
   }
@@ -88,7 +88,7 @@ astl_status_code DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample)
 
 astl_status_code DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value, SampleTimestamp timestamp) {
   if (!delta_value.IsArithmetic()) {
-    ASTL_LOG_TRACE("DeltaMetric: received delta with non-arithmetic value type for metric: {}", _name);
+    ASTL_LOG_TRACE("DeltaMetric: received delta with non-arithmetic value type for metric: {}", _configuration->Name());
     return ASTL_STATUS_SUCCESS;
   }
 
@@ -115,7 +115,8 @@ astl_status_code DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value
   _sum_delta_value = new_sum_for_avg.value();
 
   // Log the delta value
-  _delta_summary_logger.LogInfo("{}, {}, {}, {} \n", _name.c_str(), _description.c_str(), _units, delta_value);
+  _delta_summary_logger.LogInfo("{}, {}, {}, {} \n", _configuration->Name(), _configuration->Description(),
+                                _configuration->Units(), delta_value);
 
   return ASTL_STATUS_SUCCESS;
 }
@@ -123,14 +124,14 @@ astl_status_code DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value
 astl_status_code DeltaMetric::Summarize() {
   // Compute min, max, and average delta values
   if (_deltas.empty()) {
-    _delta_summary_logger.LogInfo("No deltas to summarize for metric: {}.", _name.c_str());
+    _delta_summary_logger.LogInfo("No deltas to summarize for metric: {}.", _configuration->Name());
     return ASTL_STATUS_SUCCESS;
   }
   auto average = AstlValue::Divide(_sum_delta_value, _deltas.size());
   if (average.has_value()) {
     _delta_summary_data.avg_delta = average.value();
   } else {
-    ASTL_LOG_ERROR("Error computing average delta value for metric {}: {}", _name.c_str(),
+    ASTL_LOG_ERROR("Error computing average delta value for metric {}: {}", _configuration->Name(),
                    astlStatusString(average.error()));
   }
 
@@ -138,9 +139,9 @@ astl_status_code DeltaMetric::Summarize() {
   _delta_summary_logger.LogInfo(
       "SUMMARY - Metric: {}, Description: {}, Units: {}, Max Delta: {}, Min Delta: {}, Avg Delta: {}, Delta Count: {}, "
       "Type: {} \n",
-      _name.c_str(), _description.c_str(), _units, _delta_summary_data.max_delta.value_or(none),
-      _delta_summary_data.min_delta.value_or(none), _delta_summary_data.avg_delta.value_or(none), _deltas.size(),
-      _value_type);
+      _configuration->Name(), _configuration->Description(), _configuration->Units(),
+      _delta_summary_data.max_delta.value_or(none), _delta_summary_data.min_delta.value_or(none),
+      _delta_summary_data.avg_delta.value_or(none), _deltas.size(), _configuration->ValueType());
 
   return ASTL_STATUS_SUCCESS;
 }
@@ -160,22 +161,23 @@ void DeltaMetric::InitializeSamples() {
   _deltas.clear();
 
   // Initialize sum for delta calculations
-  auto from_union_result = AstlValue::FromUnionPromoting(_value_type);
+  auto from_union_result = AstlValue::FromUnionPromoting(_configuration->ValueType());
   if (from_union_result.has_value()) {
     _sum_delta_value = from_union_result.value();
   } else {
     ASTL_LOG_ERROR(
         "DeltaMetric: failed to create initial sum for metric: "
         "{} with type {} because it's a non-arithmetic type",
-        _name, _value_type);
+        _configuration->Name(), _configuration->ValueType());
   }
 
   // Initialize delta summary data based on the value type
-  auto zero_val = AstlValue::FromZero(_value_type);
+  auto zero_val = AstlValue::FromZero(_configuration->ValueType());
   if (zero_val.has_value()) {
     _delta_summary_data = {.min_delta = std::nullopt, .max_delta = std::nullopt, .avg_delta = zero_val.value()};
   } else {
-    ASTL_LOG_INFO("DeltaMetric: unsupported type {} for delta statistics for metric: {}", _value_type, _name);
+    ASTL_LOG_INFO("DeltaMetric: unsupported type {} for delta statistics for metric: {}", _configuration->ValueType(),
+                  _configuration->Name());
   }
 }
 

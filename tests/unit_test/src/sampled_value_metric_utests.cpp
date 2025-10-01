@@ -2,11 +2,24 @@
 
 #include "../../test_includes.hpp"  // include before catch2
 #include "metric/sampled_value_metric.hpp"
+#include "operation/operation_builder.hpp"
+
+astl::SampledValueMetric GetSampledValueMetricUINT64() {
+  static astl::MetricConfig config{
+      "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT64,
+      ASTL_METRIC_VALUE, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  return astl::SampledValueMetric{&config, nullptr, nullptr};
+}
+astl::SampledValueMetric GetSampledValueMetricUINT32() {
+  static astl::MetricConfig config{
+      "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT32,
+      ASTL_METRIC_VALUE, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  return astl::SampledValueMetric{&config, nullptr, nullptr};
+}
 
 TEST_CASE("SampledValueMetric: construction & ReceiveRawSample single sample", "[SampledValueMetric]") {
   // 1) Construct a metric for 64-bit unsigned samples
-  astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                                  nullptr);
+  astl::SampledValueMetric metric = GetSampledValueMetricUINT64();
   // 2) Create a sample with a random value.
   // NOLINTNEXTLINE
   astl::AstlValue      val1{uint64_t{40}};
@@ -17,8 +30,7 @@ TEST_CASE("SampledValueMetric: construction & ReceiveRawSample single sample", "
 
 TEST_CASE("SampledValueMetric & ReceiveRawSample with not supported type", "[SampledValueMetric]") {
   // 1) Construct a metric for 32-bit unsigned samples
-  astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT32, nullptr,
-                                  nullptr);
+  astl::SampledValueMetric metric = GetSampledValueMetricUINT32();
   // 2) Create a sample with a random value.
   // NOLINTNEXTLINE
   astl::AstlValue      val1{uint64_t{40}};
@@ -29,8 +41,7 @@ TEST_CASE("SampledValueMetric & ReceiveRawSample with not supported type", "[Sam
 
 TEST_CASE("SampledValueMetric: GetSummaryData returns correct summary", "[SampledValueMetric]") {
   // Construct metric and feed samples
-  astl::SampledValueMetric metric("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, nullptr,
-                                  nullptr);
+  astl::SampledValueMetric metric = GetSampledValueMetricUINT64();
   // NOLINTNEXTLINE
   std::vector<uint64_t> values = {10, 20, 30, 40};
   for (auto value : values) {

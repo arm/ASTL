@@ -26,7 +26,7 @@
 #include <string_view>
 
 #include "astl/astl.h"
-#include "common/scmi/scmi_read_operation.hpp"
+#include "operation/scmi_read_operation.hpp"
 
 namespace astl {
 
