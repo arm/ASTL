@@ -105,17 +105,6 @@ all)
 	;;
 esac
 
-## Check for presense of libsensors, to determine if we should bother linting
-## the libsensors examples
-if echo '#include <sensors/sensors.h>
-int main(void){return 0;}' | gcc -xc - -o /dev/null 2>/dev/null; then
-	echo "libsensors header is available"
-	LIBSENSORS_AVAILABLE=true
-else
-	echo "libsensors header is unavailable"
-	LIBSENSORS_AVAILABLE=false
-fi
-
 ## split files into
 ##  - C++ source and header files,
 ##  - C++ test files (which have more lax linter rules)
@@ -129,9 +118,6 @@ for FILE in "${FILES[@]}"; do
 		continue
 	elif [[ $FILE == *tools/mock_sysfs* && "$(uname -s)" != "Linux" ]]; then
 		# mock_sysfs code only compiles on Linux, so skip these files if on other OS
-		continue
-	elif [[ $FILE == *tools/libsensors_example* && ${LIBSENSORS_AVAILABLE} != true ]]; then
-		# libsensors code only compiles on Linux, so skip these files if on other OS
 		continue
 	elif [[ $FILE == *.h ]]; then
 		C_HEADERS_TO_LINT+=("$FILE")
@@ -149,6 +135,16 @@ EXTRA_ARGS+=(--extra-arg=-std=c++23)
 EXTRA_ARGS+=(--extra-arg=-D__cpp_concepts=202002L)
 # set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_sysfs/CMakeLists.txt
 EXTRA_ARGS+=(--extra-arg=-DFUSE_USE_VERSION=316)
+
+## Check for presense of libsensors, to determine if we should bother linting
+## the libsensors examples
+if echo '#include <sensors/sensors.h>
+int main(void){return 0;}' | gcc -xc - -o /dev/null 2>/dev/null; then
+	echo "libsensors header is available"
+	EXTRA_ARGS+=(--extra-arg=-DASTL_INCLUDE_LIBSENSORS)
+else
+	echo "libsensors header is unavailable"
+fi
 
 if [[ ${#SOURCE_FILES_TO_LINT[@]} -gt 0 ]]; then
 	echo "🧹 Linting C++ Sources"

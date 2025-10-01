@@ -59,14 +59,13 @@ class DeltaMetric : public RawMetric {
    *
    * Initializes the metric with the provided parameters and sets up initial delta tracking.
    *
-   * @param name The name of the metric.
-   * @param description A brief description of the metric.
-   * @param units The units of measurement for this metric.
-   * @param value_type The type of values this metric will process (e.g., UINT64).
-   * @param target Pointer to the target device or context associated with this metric.
+   * @param configuration The non-owned pointer to configuration for the metric, including name, units, and how to build
+   * operations
+   * @param target The telemetry source for the metric.
+   * @param processed_sample_sink Output for where processed samples should be sent.
    */
-  explicit DeltaMetric(const char* name, const char* description, astl_units_t units, astl_value_type_t value_type,
-                       const ITarget* target, IProcessedSampleSink* processed_sample_sink);
+  explicit DeltaMetric(const MetricConfig* configuration, const ITarget* target,
+                       IProcessedSampleSink* processed_sample_sink);
 
   /**
    * @brief Process and record a new sample value, calculating delta from previous sample.

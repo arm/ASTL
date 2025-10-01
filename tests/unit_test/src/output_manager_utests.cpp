@@ -22,9 +22,9 @@
 
 #include "../../test_includes.hpp"  // must come first before any Catch2 usage
 #include "common/i_processed_sample_sink.hpp"
-#include "common/operation.hpp"
 #include "config/astl_configuration.hpp"
 #include "metric/i_metric.hpp"
+#include "operation/operation.hpp"
 #include "output/buffer_output.hpp"
 #include "output/output_manager.hpp"
 #include "target.hpp"
@@ -43,9 +43,9 @@ std::vector<astl::ProcessedSampledData> MakeSamples(size_t n) {
 }  // namespace
 
 TEST_CASE("BufferOutput::WriteProcessedSamples basic behaviors", "[output_manager][buffer_output]") {  // NOLINT
-  constexpr size_t                            kCapacity = 5;
-  std::array<astl_metric_sample_t, kCapacity> buffer{};
-  uint32_t           count_capacity = static_cast<uint32_t>(kCapacity);  // caller provided capacity
+  constexpr size_t                           capacity = 5;
+  std::array<astl_metric_sample_t, capacity> buffer{};
+  uint32_t           count_capacity = static_cast<uint32_t>(capacity);  // caller provided capacity
   astl::BufferOutput buffer_output(std::span<astl_metric_sample_t>(buffer), &count_capacity);
 
   SECTION("Null count pointer causes INTERNAL_ERROR") {

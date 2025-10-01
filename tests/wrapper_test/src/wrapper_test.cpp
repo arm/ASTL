@@ -1047,9 +1047,10 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
 
   astl::ScmiTargetToDataEventIdMap data_event_ids;
   data_event_ids["T0"] = {0x1234};
-  auto metric_config =
+  astl::ScmiMultiTargetOperationBuilder op_builder{data_event_ids};
+  auto                                  metric_config =
       std::make_unique<astl::MetricConfig>("M0", "M0", ASTL_UNITS_AMPS, ASTL_VALUE_UINT64, ASTL_METRIC_UNKNOWN,
-                                           astl::CollectorType::SCMI, std::move(data_event_ids));
+                                           astl::CollectorType::SCMI, std::move(op_builder));
 
   // set up map from metric api handle + target to mock IMetric
   std::unordered_map<const astl::ITarget*, std::unique_ptr<astl::IMetric>> target_to_metric_map;

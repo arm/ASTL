@@ -3,9 +3,10 @@
 #include "astl/astl_errors.h"
 #include "common/capabilities.hpp"
 #include "common/metric_config.hpp"
-#include "common/scmi/scmi_read_operation.hpp"
 #include "config/astl_configuration.hpp"
 #include "config/configuration_manager.hpp"
+#include "operation/scmi_operation_builder.hpp"
+#include "operation/scmi_read_operation.hpp"
 
 using trompeloeil::_;
 
@@ -17,7 +18,14 @@ inline const astl::MetricConfig kTemperature{"SoC Temperature",
                                              ASTL_VALUE_UINT64,
                                              ASTL_METRIC_VALUE,
                                              astl::CollectorType::SCMI,
-                                             astl::ScmiTargetToDataEventIdMap{{"AP0", {0x1234}}}};
+                                             astl::ScmiOperationBuilder{0x1234}};
+
+astl::ScmiDataEventId GetDataEventId(const astl::ResidencyMetricConfig::StateInfo& state_info) {
+  if (const auto* scmi_builder = std::get_if<astl::ScmiOperationBuilder>(&state_info.operation_builder)) {
+    return scmi_builder->GetDataEventId();
+  }
+  return astl::ScmiDataEventId{0xFFFFFFFF};  // invalid id
+}
 
 TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
   MockMetricManager mock_metric_manager;
@@ -31,11 +39,9 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
   }
 
   SECTION("Register an invalid metric config") {
-    astl::ScmiTargetToDataEventIdMap invalid_data_event_ids{};
-
     auto invalid_metric_config = std::make_unique<astl::MetricConfig>(
         "SoC Temperature", "SoC Temperature for abc xyz", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, ASTL_METRIC_VALUE,
-        astl::CollectorType::MMIO, invalid_data_event_ids);
+        astl::CollectorType::MMIO, astl::NullOperationBuilder{});
 
     REQUIRE(mock_metric_manager.RegisterMetric(std::move(invalid_metric_config), {}) == ASTL_STATUS_NOT_IMPLEMENTED);
   }
@@ -204,7 +210,7 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
 
   // Create the metric config
   auto metric_configs_result =
-      astl::CreateMetricConfigs("C-State", residency_declaration, mock_scmi_spec, mock_scmi_targets);
+      astl::CreateScmiMetricConfigs("C-State", residency_declaration, mock_scmi_spec, mock_scmi_targets);
 
   // Verify the configs were created successfully
   REQUIRE(metric_configs_result.has_value());
@@ -238,13 +244,13 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   const auto& tlm_0_ap0_state_info = state_info.at(mock_target_tlm0.Name());
   REQUIRE(tlm_0_ap0_state_info.size() == 3);  // C1, C3, C6
   REQUIRE(tlm_0_ap0_state_info.at("C1").state_name == "C1");
-  REQUIRE(tlm_0_ap0_state_info.at("C1").data_event_id == 0x00001c71);
+  REQUIRE(GetDataEventId(tlm_0_ap0_state_info.at("C1")) == 0x00001c71);
   REQUIRE(tlm_0_ap0_state_info.at("C1").tick_frequency == 1000000.0);
   REQUIRE(tlm_0_ap0_state_info.at("C3").state_name == "C3");
-  REQUIRE(tlm_0_ap0_state_info.at("C3").data_event_id == 0x00001d82);
+  REQUIRE(GetDataEventId(tlm_0_ap0_state_info.at("C3")) == 0x00001d82);
   REQUIRE(tlm_0_ap0_state_info.at("C3").tick_frequency == 1000000.0);
   REQUIRE(tlm_0_ap0_state_info.at("C6").state_name == "C6");
-  REQUIRE(tlm_0_ap0_state_info.at("C6").data_event_id == 0x00001e93);
+  REQUIRE(GetDataEventId(tlm_0_ap0_state_info.at("C6")) == 0x00001e93);
   REQUIRE(tlm_0_ap0_state_info.at("C6").tick_frequency == 1000000.0);
 
   // now check the metric configuration for AP1
@@ -267,13 +273,13 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   const auto& tlm0_state_info_ap1 = state_info_ap1.at(mock_target_tlm0.Name());
   REQUIRE(tlm0_state_info_ap1.size() == 3);  // C1, C3, C6
   REQUIRE(tlm0_state_info_ap1.at("C1").state_name == "C1");
-  REQUIRE(tlm0_state_info_ap1.at("C1").data_event_id == 0x00011c71);
+  REQUIRE(GetDataEventId(tlm0_state_info_ap1.at("C1")) == 0x00011c71);
   REQUIRE(tlm0_state_info_ap1.at("C1").tick_frequency == 1000000.0);
   REQUIRE(tlm0_state_info_ap1.at("C3").state_name == "C3");
-  REQUIRE(tlm0_state_info_ap1.at("C3").data_event_id == 0x00011d82);
+  REQUIRE(GetDataEventId(tlm0_state_info_ap1.at("C3")) == 0x00011d82);
   REQUIRE(tlm0_state_info_ap1.at("C3").tick_frequency == 1000000.0);
   REQUIRE(tlm0_state_info_ap1.at("C6").state_name == "C6");
-  REQUIRE(tlm0_state_info_ap1.at("C6").data_event_id == 0x00011e93);
+  REQUIRE(GetDataEventId(tlm0_state_info_ap1.at("C6")) == 0x00011e93);
   REQUIRE(tlm0_state_info_ap1.at("C6").tick_frequency == 1000000.0);
 }
 
@@ -305,7 +311,8 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
                                             nlohmann::json{{"P2", 2}}, nlohmann::json{{"P3", 3}}};
     finite_decl.finite_set_values = finite_json;
 
-    auto metric_configs_result = astl::CreateMetricConfigs("P-State", finite_decl, mock_scmi_spec, mock_scmi_targets);
+    auto metric_configs_result =
+        astl::CreateScmiMetricConfigs("P-State", finite_decl, mock_scmi_spec, mock_scmi_targets);
     REQUIRE(metric_configs_result);
     auto metric_configs = std::move(metric_configs_result.value());
     REQUIRE(metric_configs.size() == 2);
@@ -356,7 +363,7 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
     bad_decl.collection_protocol = "scmi";
     // finite_set_values left empty (optional disengaged)
 
-    auto bad_result = astl::CreateMetricConfigs("P-State", bad_decl, mock_scmi_spec, mock_scmi_targets);
+    auto bad_result = astl::CreateScmiMetricConfigs("P-State", bad_decl, mock_scmi_spec, mock_scmi_targets);
     REQUIRE_FALSE(bad_result.has_value());
     REQUIRE(bad_result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }

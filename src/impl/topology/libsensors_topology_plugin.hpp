@@ -29,7 +29,6 @@
 
 #include "astl/astl_errors.h"
 #include "astl_file_interface.hpp"
-#include "common/libsensors.hpp"
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
 
@@ -83,7 +82,7 @@ auto ScanForTargetsWithLibsensors(const AstlConfiguration& configuration)
     }
     // if we find any chips with features, create a target for them.
     // continue scanning for more chips, only so we can log their features for now.
-    if (sensor_feature_count > 0 && targets.size() == 0) {
+    if (sensor_feature_count > 0 && targets.empty()) {
       targets.push_back(std::make_unique<Target>("libsensors", "Collection of sensors from libsensors library",
                                                  CollectorType::LIBSENSORS));
     }

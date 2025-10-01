@@ -27,10 +27,10 @@
 #include "astl/astl.h"
 #include "collector/collection_configuration.hpp"
 #include "common/i_raw_sample_sink.hpp"
-#include "common/operation.hpp"
 #include "counter.hpp"
 #include "i_collector.hpp"
 #include "i_collector_manager.hpp"
+#include "operation/operation.hpp"
 #include "target.hpp"
 
 namespace astl {

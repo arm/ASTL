@@ -26,8 +26,8 @@
 
 #include "astl_logger.hpp"
 #include "collector/scmi_data_event.hpp"
-#include "common/scmi/scmi_read_operation.hpp"
-#include "operation.hpp"
+#include "operation/operation.hpp"
+#include "operation/scmi_read_operation.hpp"
 
 namespace astl {
 

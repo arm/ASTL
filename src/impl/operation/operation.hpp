@@ -27,6 +27,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "target.hpp"
+
 namespace astl {
 
 using SamplingInterval = std::chrono::duration<uint32_t, std::milli>;
@@ -86,6 +88,14 @@ class Operation {
 };
 
 using OperationSequence = std::vector<std::unique_ptr<Operation>>;
+
+/**
+ * @brief OperationBuilder concept - interface for building operations for a given target
+ */
+template <typename OperationBuilderType>
+concept OperationBuilder = requires(const OperationBuilderType& operation_builder, const ITarget* target) {
+  { operation_builder.BuildOperations(target) } -> std::same_as<std::expected<OperationSequence, astl_status_code>>;
+};
 
 }  // namespace astl
 

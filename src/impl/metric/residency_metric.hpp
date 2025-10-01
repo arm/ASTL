@@ -31,9 +31,10 @@
 #include "astl/astl.h"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
+#include "common/metric_config.hpp"
 #include "delta_metric.hpp"
-#include "operation.hpp"
-#include "scmi/scmi_read_operation.hpp"
+#include "operation/operation.hpp"
+#include "operation/scmi_read_operation.hpp"
 
 namespace astl {
 
@@ -63,16 +64,6 @@ struct ResidencySummaryData {
   std::unordered_map<std::string, double> max_percentage;             ///< Maximum percentage per state
   std::optional<double>                   inferred_state_percentage;  ///< Percentage for inferred state
   std::optional<double>                   inferred_state_time;        ///< Total time for inferred state
-};
-
-/**
- * @brief Configuration for a single state in the residency metric.
- *  * note @todo (ASTL-158):  Abstract the state configuration Events in Residency Metric.
- */
-struct StateConfiguration {
-  std::string     state_name;      ///< Name of the state (e.g., "C1", "C2", "Active")
-  double          tick_frequency;  ///< Frequency to convert ticks to seconds (Hz)
-  ScmiDataEventId data_event_id;   ///< Data event ID for SCMI operation
 };
 
 /**
@@ -114,15 +105,15 @@ class ResidencyMetric : public DeltaMetric {
    * Initializes the metric with the provided parameters and sets up state tracking.
    * The metric will track residency for all configured states.
    *
-   * @param name The name of the metric (e.g., "CPU_C_State_Residency").
-   * @param description A brief description of the metric.
+   * @param configuration The name, description, units, representation, inferred state, and operation builder of this
+   * metric
    * @param state_configs Vector of state configurations defining the states to track.
-   * @param inferred_state_name Optional name for the inferred state. If not provided, no inferred state is calculated.
+   * @param target The telemetry source for this metric instance
+   * @param processed_sample_sink Output for where processed samples should be sent
    */
-  explicit ResidencyMetric(const char* name, const char* description, const ITarget* target,
-                           const std::vector<StateConfiguration>& state_configs,
-                           IProcessedSampleSink*                  processed_sample_sink,
-                           const std::optional<std::string>&      inferred_state_name = std::nullopt);
+  explicit ResidencyMetric(const ResidencyMetricConfig*                  configuration,
+                           std::vector<ResidencyMetricConfig::StateInfo> state_configs, const ITarget* target,
+                           IProcessedSampleSink* processed_sample_sink);
 
   /**
    * @brief Reset the metric state, dropping all collected samples and residency data.
@@ -206,7 +197,7 @@ class ResidencyMetric : public DeltaMetric {
    * @return Expected time as std::chrono::microseconds or error code.
    */
   static std::expected<std::chrono::microseconds, astl_status_code> ConvertTicksToMicroseconds(
-      const AstlValue& ticks, const StateConfiguration& config);
+      const AstlValue& ticks, const ResidencyMetricConfig::StateInfo& config);
 
   /**
    * @brief Calculate percentage residency from time spent in state and total interval.
@@ -245,10 +236,12 @@ class ResidencyMetric : public DeltaMetric {
                                                               SampleTimestamp           timestamp);
 
  private:
-  std::vector<StateConfiguration> _state_configs;  ///< Configuration for all states
-  std::unordered_map<OperationId, const StateConfiguration*>
-                             _operation_id_to_config;  ///< Fast lookup map from operation_id to state config
-  std::optional<std::string> _inferred_state_name;     ///< Name of the inferred state (optional)
+  // non-owned pointer to the configuration for this metric (owned by the MetricHandle)
+  const ResidencyMetricConfig*                  _residency_configuration;
+  std::vector<ResidencyMetricConfig::StateInfo> _state_configs;  ///< Configuration for all states
+
+  std::unordered_map<OperationId, const ResidencyMetricConfig::StateInfo*>
+      _operation_id_to_config;  ///< Fast lookup map from operation_id to state config
   std::unordered_map<std::string, std::optional<RawSampledData>> _previous_samples;  ///< Previous samples per state
   std::vector<StateResidencyData>                                _residency_data;    ///< All residency calculations
   ResidencySummaryData                                           _summary_data;      ///< Summary statistics

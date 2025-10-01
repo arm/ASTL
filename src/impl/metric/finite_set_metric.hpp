@@ -69,18 +69,13 @@ class FiniteSetMetric : public SampledValueMetric {
   /**
    * @brief Construct a FiniteSetMetric with specified parameters and finite set.
    *
-   * @param name The name of the metric.
-   * @param description A brief description of the metric.
-   * @param units The units of measurement for this metric.
-   * @param value_type The type of values this metric will process (e.g., UINT64).
+   * @param configuration The configuration for the metric, including name, units, and how to build operations
    * @param finite_set The set of valid AstlValue objects that define the finite set.
    * @param labels Optional mapping from finite set values to human-readable labels.
    * @param target The target associated with this metric.
    * @param processed_sample_sink The sample_sink for processed samples.
    */
-
-  explicit FiniteSetMetric(const char *name, const char *description, astl_units_t units, astl_value_type_t value_type,
-                           const FiniteSet &finite_set, const ValueToLabel &labels, const ITarget *target,
+  explicit FiniteSetMetric(const FiniteSetMetricConfig *configuration, const ITarget *target,
                            IProcessedSampleSink *processed_sample_sink);
 
   /**
@@ -125,14 +120,14 @@ class FiniteSetMetric : public SampledValueMetric {
    * @param value The AstlValue to check.
    * @return true if the value is in the finite set, false otherwise.
    */
-  bool IsInFiniteSet(const AstlValue &value) const { return _finite_set.contains(value); }
+  bool IsInFiniteSet(const AstlValue &value) const { return _finite_set_configuration->IsInFiniteSet(value); }
 
   /**
    * @brief Get the finite set of valid values.
    *
    * @return The complete set of valid AstlValue objects.
    */
-  const std::set<AstlValue> &GetFiniteSet() const { return _finite_set; }
+  const std::set<AstlValue> &GetFiniteSet() const { return _finite_set_configuration->GetFiniteSet(); }
 
  private:
   /** @brief Update finite set statistics for the received sample */
@@ -141,9 +136,8 @@ class FiniteSetMetric : public SampledValueMetric {
   /** @brief Log detailed finite set summary information */
   void LogFiniteSetSummary();
 
-  FiniteSet            _finite_set;          ///< The set of valid AstlValue objects
-  FiniteSetSummaryData _finite_set_summary;  ///< Summary statistics for finite set values
-  ValueToLabel         _labels;              ///< Mapping from values to human-readable labels
+  FiniteSetMetricConfig const *_finite_set_configuration{nullptr};
+  FiniteSetSummaryData         _finite_set_summary;  ///< Summary statistics for finite set values
 
   // Create a logger instance to explicitly log finite set summary
   astl::Logger _finite_summary_logger{astl::LogLevel::Info, false /* Console logging disabled */,

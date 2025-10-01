@@ -30,7 +30,7 @@
 #include "common/i_processed_sample_sink.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "common/metric_config.hpp"
-#include "common/operation.hpp"
+#include "operation/operation.hpp"
 
 namespace astl {
 

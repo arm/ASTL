@@ -80,8 +80,8 @@ auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlC
  * @param targets A vector of ITarget pointers represending the detected SCMI targets on this platform
  *
  */
-auto CreateMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
-                         scmi::ScmiSpecification const& scmi_spec, std::vector<const ITarget*> const& scmi_targets)
+auto CreateScmiMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
+                             scmi::ScmiSpecification const& scmi_spec, std::vector<const ITarget*> const& scmi_targets)
     -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code>;
 
 }  // namespace astl

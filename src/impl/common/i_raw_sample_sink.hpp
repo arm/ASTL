@@ -26,7 +26,7 @@
 #include "astl/astl.h"
 #include "astl_value.hpp"
 #include "counter.hpp"
-#include "operation.hpp"
+#include "operation/operation.hpp"
 #include "target.hpp"
 
 namespace astl {

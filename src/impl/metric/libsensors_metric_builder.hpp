@@ -16,30 +16,26 @@
  * under the License.
  ******************************************************************************/
 
-#ifndef COLLECTION_OPERATIONS_HPP_
-#define COLLECTION_OPERATIONS_HPP_
+#ifndef LIBSENSORS_METRIC_BUILDER_HPP_
+#define LIBSENSORS_METRIC_BUILDER_HPP_
 
-#include <memory>
+#include <unordered_map>
 #include <vector>
 
-#include "common/capabilities.hpp"
-#include "operation/operation.hpp"
+#include "config/astl_configuration.hpp"
+#include "metric/i_metric_manager.hpp"
+#include "target.hpp"
 
 namespace astl {
 
-// Everything a collector needs to know to start, stop, pause, resume a set of counters or metrics,
-// as well as how often to sample. Metric manager should provide this set of operations,
-// Collector manager should decide which collector executes them, and concrete collectors will cast these
-// operations to concrete types to actually run them.
-struct CollectionOperations {
-  OperationSequence   operationsBeforeStart;
-  OperationSequence   operationsAtStart;
-  OperationSequence   operationsOnSample;
-  OperationSequence   operationsAtStop;
-  SamplingInterval    samplingInterval;
-  CollectorCapability requirements;
-};
+/**
+ * @brief Scan the collector_type_to_targets_map for Libsensors targets.
+ *        Use the given configuration to create metrics and register them in the metric_manager.
+ */
+auto RegisterLibsensorsMetrics(
+    const AstlConfiguration&                                              configuration,
+    const std::unordered_map<CollectorType, std::vector<const ITarget*>>& collector_type_to_targets_map,
+    IMetricManager*                                                       metric_manager) -> astl_status_code;
 
 }  // namespace astl
-
-#endif  // COLLECTION_OPERATIONS_HPP_
+#endif  // LIBSENSORS_METRIC_BUILDER_HPP_

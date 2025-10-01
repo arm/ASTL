@@ -70,13 +70,14 @@ class EventMetric : public RawMetric {
    * Initializes the metric with the provided parameters and sets up event tracking.
    * The metric will capture and count discrete string-valued events.
    *
-   * @param name The name of the metric (e.g., "system_events").
-   * @param description A brief description of the metric.
+   * @param configuration The non-owned pointer to configuration for the metric, including name, units, and how to build
+   * operations
+   * @param target The telemetry source for the metric.
+   * @param processed_sample_sink Output for where processed samples should be sent.
    */
-  explicit EventMetric(const char* name, const char* description, const ITarget* target,
+  explicit EventMetric(const MetricConfig* configuration, const ITarget* target,
                        IProcessedSampleSink* processed_sample_sink)
-      : RawMetric(name, description, ASTL_UNITS_NONE, ASTL_VALUE_STRING, ASTL_METRIC_EVENT, target,
-                  processed_sample_sink) {
+      : RawMetric(configuration, target, processed_sample_sink) {
     // Summary: Metric, Event, Count
     _event_summary_logger.LogInfo("Metric, Event, Count\n");
     // Timeline: Metric, Event, Timestamp(µs)
