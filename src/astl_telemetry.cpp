@@ -833,7 +833,7 @@ astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle
   auto* output_manager = *get_output_manager_result;
 
   auto create_buffer_result = output_manager->CreateBufferOutput(output_samples, sample_count);
-  if (!create_buffer_result) {
+  if (ASTL_STATUS_SUCCESS != create_buffer_result) {
     return create_buffer_result;
   }
 
