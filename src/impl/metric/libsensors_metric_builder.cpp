@@ -32,33 +32,82 @@
 namespace astl {
 
 #if defined(ASTL_INCLUDE_LIBSENSORS)
-static auto RegisterTempSensor(IMetricManager* metric_manager, std::vector<const ITarget*> const& targets,
-                               const sensors_chip_name* chip, const sensors_feature* feature) -> astl_status_code {
-  const sensors_subfeature* sub = sensors_get_subfeature(chip, feature, SENSORS_SUBFEATURE_TEMP_INPUT);
-  if (!sub || (sub->flags & SENSORS_MODE_R) == 0) {
-    ASTL_LOG_WARNING("No valid input subfeature found for temperature sensor: {}", sensors_get_label(chip, feature));
-    return ASTL_STATUS_BAD_CONFIGURATION;
-  }
-  auto metric_config = std::make_unique<MetricConfig>(
-      sensors_get_label(chip, feature), "Temperature sensor", ASTL_UNITS_CELSIUS, ASTL_VALUE_FLOAT32, ASTL_METRIC_VALUE,
-      CollectorType::LIBSENSORS, LibsensorsOperationBuilder{chip, sub->number});
 
-  return metric_manager->RegisterMetric(std::move(metric_config), targets);
+auto GetSubfeature(const sensors_chip_name* chip, const sensors_feature* feature)
+    -> std::expected<const sensors_subfeature*, astl_status_code> {
+  if (!chip || !feature) {
+    ASTL_LOG_ERROR("GetSubfeature: Invalid chip or feature pointer");
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  // @todo(ASTL-187) Extend libsensors support with additional features/subfeatures
+  sensors_subfeature_type subtype = SENSORS_SUBFEATURE_UNKNOWN;
+  switch (feature->type) {
+    case SENSORS_FEATURE_TEMP:
+      subtype = SENSORS_SUBFEATURE_TEMP_INPUT;
+      break;
+    case SENSORS_FEATURE_POWER:
+      subtype = SENSORS_SUBFEATURE_POWER_INPUT;
+      break;
+    default:
+      ASTL_LOG_WARNING("GetSubfeature: Unrecognized feature type {}", feature->type);
+      return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+  }
+  const sensors_subfeature* sub = sensors_get_subfeature(chip, feature, subtype);
+  if (!sub || (sub->flags & SENSORS_MODE_R) == 0) {
+    ASTL_LOG_WARNING("GetSubfeature: No valid input subfeature found for {} sensor: {}", feature->name,
+                     sensors_get_label(chip, feature));
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  return sub;
 }
 
-static auto RegisterPowerSensor(IMetricManager* metric_manager, std::vector<const ITarget*> const& targets,
-                                const sensors_chip_name* chip, const sensors_feature* feature) -> astl_status_code {
-  const sensors_subfeature* sub = sensors_get_subfeature(chip, feature, SENSORS_SUBFEATURE_POWER_INPUT);
-  if (!sub || (sub->flags & SENSORS_MODE_R) == 0) {
-    ASTL_LOG_WARNING("No valid input subfeature found for power sensor: {}", sensors_get_label(chip, feature));
-    return ASTL_STATUS_BAD_CONFIGURATION;
-  }
-  LibsensorsOperationBuilder operation_builder{chip, sub->number};
-  auto metric_config = std::make_unique<MetricConfig>(sensors_get_label(chip, feature), "Power sensor",
-                                                      ASTL_UNITS_WATTS, ASTL_VALUE_FLOAT32, ASTL_METRIC_VALUE,
-                                                      CollectorType::LIBSENSORS, std::move(operation_builder));
+/**
+ * @brief Register sensors from a detected chip.
+ */
+static auto RegisterSensorsFromChip(const astl::AstlConfiguration& configuration, IMetricManager* metric_manager,
+                                    const std::vector<const ITarget*>& libsensors_targets,
+                                    const sensors_chip_name*           chip) -> astl_status_code {
+  const sensors_feature*            feature              = nullptr;
+  int                               sensor_feature_count = 0;
+  constexpr size_t                  max_name_length      = 200;
+  std::array<char, max_name_length> chip_name{'\0'};
+  sensors_snprintf_chip_name(chip_name.data(), max_name_length, chip);
+  ASTL_LOG_INFO("Scanning {} for features", chip_name.data());
+  while ((feature = sensors_get_features(chip, &sensor_feature_count))) {
+    ASTL_LOG_DEBUG("  Found sensor: {} type {} with name {}", sensors_get_label(chip, feature), feature->type,
+                   feature->name);
+    const auto sub = GetSubfeature(chip, feature);
+    if (!sub) {
+      if (sub.error() == ASTL_STATUS_NOT_IMPLEMENTED) {
+        continue;
+      }
+      return sub.error();
+    }
+    const auto& metric_iter =
+        std::find_if(configuration.metric_declarations.begin(), configuration.metric_declarations.end(),
+                     [&](const auto& metric_declaration_iter) {
+                       const auto& metric_declaration = metric_declaration_iter.second;
+                       return (metric_declaration.collection_protocol == "libsensors" &&
+                               metric_declaration.register_name == chip_name.data()) &&
+                              (metric_declaration.offset == feature->name);
+                     });
+    if (metric_iter == configuration.metric_declarations.end()) {
+      ASTL_LOG_INFO("Skipping sensor {} as not configured in ASTL configuration", sensors_get_label(chip, feature));
+      continue;
+    }
+    const auto& [metric_name, metric_declaration] = *metric_iter;
 
-  return metric_manager->RegisterMetric(std::move(metric_config), targets);
+    auto metric_config =
+        std::make_unique<MetricConfig>(metric_name, feature->name, ParseUnits(metric_declaration), ASTL_VALUE_FLOAT64,
+                                       ParseMetricType(metric_declaration), CollectorType::LIBSENSORS,
+                                       LibsensorsOperationBuilder{chip, (*sub)->number});
+
+    auto status = metric_manager->RegisterMetric(std::move(metric_config), libsensors_targets);
+    if (ASTL_STATUS_SUCCESS != status) {
+      return status;
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
 }
 #endif  // defined(ASTL_INCLUDE_LIBSENSORS)
 
@@ -87,25 +136,9 @@ auto RegisterLibsensorsMetrics(
   const sensors_chip_name* chip       = nullptr;
   int                      chip_index = 0;
   while ((chip = sensors_get_detected_chips(nullptr, &chip_index))) {
-    const sensors_feature*            feature              = nullptr;
-    int                               sensor_feature_count = 0;
-    constexpr size_t                  max_name_length      = 200;
-    std::array<char, max_name_length> chip_name{'\0'};
-    sensors_snprintf_chip_name(chip_name.data(), max_name_length, chip);
-    ASTL_LOG_INFO("Scanning {} for features", chip_name.data());
-    // @todo(ASTL-187) Extend libsensors support with additional features/subfeatures
-    // @todo(ASTL-139) match the chip/feature to the configuration to determine metric type, and whether to include
-    while ((feature = sensors_get_features(chip, &sensor_feature_count))) {
-      switch (feature->type) {
-        case SENSORS_FEATURE_TEMP:
-          RegisterTempSensor(metric_manager, libsensors_targets, chip, feature);
-          break;
-        case SENSORS_FEATURE_POWER:
-          RegisterPowerSensor(metric_manager, libsensors_targets, chip, feature);
-          break;
-        default:
-          ASTL_LOG_WARNING("Skipping unrecognized feature: {}", sensors_get_label(chip, feature));
-      }
+    auto status = RegisterSensorsFromChip(configuration, metric_manager, libsensors_targets, chip);
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
     }
   }
 #else

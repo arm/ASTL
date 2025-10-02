@@ -148,7 +148,9 @@ astl_status_code Orchestrator::StartCollection(const ITarget *target) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
 
+  std::unique_lock lock{_raw_samples_mtx};
   _raw_samples[target].clear();
+  lock.unlock();  // in case _collector_manager runs operations on Start that try to sink samples to us
   return _collector_manager->StartOnTarget(target);
 }
 
@@ -196,6 +198,7 @@ astl_status_code Orchestrator::StopCollection(const ITarget *target) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
 
+  std::unique_lock lock{_raw_samples_mtx};
   astl_status_code status = _metric_manager->ProcessRawSamples(_raw_samples);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
@@ -206,6 +209,7 @@ astl_status_code Orchestrator::StopCollection(const ITarget *target) {
     return status;
   }
 
+  lock.unlock();  // allow collector periodic samples to proceed
   status = _collector_manager->StopOnTarget(target);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
@@ -241,7 +245,8 @@ astl_status_code Orchestrator::SinkRawSamples(const ITarget *target, std::span<R
   }
   ASTL_LOG_DEBUG("Received {} samples for target {}", raw_samples.size(), properties._name);
   if (!raw_samples.empty()) [[likely]] {
-    auto &target_samples_vec = _raw_samples[target];
+    std::scoped_lock lock{_raw_samples_mtx};
+    auto            &target_samples_vec = _raw_samples[target];
 
     // Bulk reserve once based on total required size rather than per-sample growth decisions.
     // We keep the 1.5x + bias heuristic but ensure we always meet the exact required size.
@@ -299,8 +304,9 @@ astl_status_code Orchestrator::SinkProcessedSamples(const ITarget *target, const
                  target_properties._name);
 
   {
-    auto &metric_map = _processed_samples[target];
-    auto &vec        = metric_map[metric];
+    std::scoped_lock lock{_processed_samples_mtx};
+    auto            &metric_map = _processed_samples[target];
+    auto            &vec        = metric_map[metric];
     // Batch reserve up-front to avoid repeated reallocations when adding N new processed samples.
     if (vec.capacity() < vec.size() + processed_samples.size()) {
       auto required = vec.size() + processed_samples.size();
@@ -327,7 +333,8 @@ astl_status_code Orchestrator::SinkProcessedSamples(const ITarget *target, const
 auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarget *target) const
     -> std::expected<std::span<const astl::ProcessedSampledData>, astl_status_code> {
   // Use find() to avoid modifying the map in this const method (operator[] would insert elements)
-  auto target_it = _processed_samples.find(target);
+  std::scoped_lock lock{_processed_samples_mtx};
+  auto             target_it = _processed_samples.find(target);
   if (target_it == _processed_samples.end()) {
     ASTL_LOG_ERROR("GetProcessedMetricSamples: No samples found for metric {} on target {}", metric->Name(),
                    target->Name());

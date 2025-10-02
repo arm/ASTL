@@ -123,6 +123,50 @@ astl_status_code InitializeASTL(const char* config_file_path) {
   return status;
 }
 
+astl_status_code GetTargetByName(std::string const&                     target_name,
+                                 std::vector<astl_target_properties_t>& target_properties_buffer,
+                                 astl_target_properties_t&              target_properties) {
+  uint32_t         target_count = 0;
+  astl_status_code status       = astlGetTargetCount(&target_count);
+  std::cout << "Target count: " << target_count << "\n";
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  target_properties_buffer.resize(target_count);
+
+  /// @todo ASTL-167 After https://github.com/Arm-Debug/ASTL/pull/180 is merged,
+  /// we should probably make this sample test fail when zero targets are detected.
+  if (target_count == 0) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  target_properties_buffer[0]._size = sizeof(astl_target_properties_t);
+
+  status = astlGetTargets(target_properties_buffer.data(), &target_count);
+  target_properties_buffer.resize(target_count);
+  std::cout << "astlGetTargets Status: " << astlStatusString(status) << '\n';
+
+  if (target_count > 0 && (status == ASTL_STATUS_SUCCESS || status == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED)) {
+    std::ranges::for_each(
+        target_properties_buffer, [&target_properties, target_name](const auto& target_properties_entry) {
+          std::cout << "Target info:" << '\n';
+          std::cout << "  Name:        " << (target_properties_entry._name ? target_properties_entry._name : "<null>")
+                    << '\n';
+          std::cout << "  Description: "
+                    << (target_properties_entry._description ? target_properties_entry._description : "<null>") << '\n';
+          std::cout << "compare to target_name:" << target_name << '\n';
+          if (target_properties_entry._name == target_name) {
+            std::cout << "  --> Selected target\n";
+            target_properties = target_properties_entry;
+          }
+        });
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  std::cerr << "Failed to get target info.\n";
+  return ASTL_STATUS_INTERNAL_ERROR;
+}
+
 astl_status_code GetTargets(std::vector<astl_target_properties_t>& target_properties_buffer,
                             astl_target_properties_t&              target_properties) {
   uint32_t         target_count = 0;
@@ -161,13 +205,13 @@ astl_status_code GetTargets(std::vector<astl_target_properties_t>& target_proper
   return ASTL_STATUS_INTERNAL_ERROR;
 }
 
-astl_status_code GetMetrics(astl_target_handle_t target_handle, std::vector<astl_metric_properties_t>& metric_buffer,
-                            uint32_t& metric_count) {
-  astl_status_code status = astlGetMetricCount(target_handle, &metric_count);
+astl_status_code GetMetrics(const astl_target_properties_t&        target_properties,
+                            std::vector<astl_metric_properties_t>& metric_buffer, uint32_t& metric_count) {
+  astl_status_code status = astlGetMetricCount(target_properties._handle, &metric_count);
   std::cout << "Metric count: " << metric_count << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetMetricCount Status: " << astlStatusString(status) << '\n';
-    std::cout << "target_handle: " << target_handle << " \n";
+    std::cout << "target_handle: " << target_properties._handle << " \n";
     std::cout << "&metric_count: " << &metric_count << " \n";
     return status;
   }
@@ -176,12 +220,12 @@ astl_status_code GetMetrics(astl_target_handle_t target_handle, std::vector<astl
   if (metric_count > 0) {
     metric_buffer[0]._size = sizeof(astl_metric_properties_t);
   }
-  status = astlGetMetrics(target_handle, metric_buffer.data(), &metric_count);
+  status = astlGetMetrics(target_properties._handle, metric_buffer.data(), &metric_count);
   std::cout << "astlGetMetrics Status: " << astlStatusString(status) << '\n';
   return status;
 }
 
-astl_status_code ConfigureAndRunCollection(astl_target_handle_t                         target_handle,
+astl_status_code ConfigureAndRunCollection(const astl_target_properties_t&              target_properties,
                                            const std::vector<astl_metric_properties_t>& metric_buffer, bool do_interval,
                                            std::chrono::seconds      duration_seconds,
                                            std::chrono::milliseconds sampling_interval) {
@@ -193,15 +237,11 @@ astl_status_code ConfigureAndRunCollection(astl_target_handle_t                 
   // Build a vector of metric handles from metric_buffer
   std::vector<astl_metric_handle_t> metric_handles_vec;
   metric_handles_vec.reserve(metric_buffer.size());
+  std::transform(metric_buffer.begin(), metric_buffer.end(), std::back_inserter(metric_handles_vec),
+                 [](const astl_metric_properties_t& metric_properties) { return metric_properties._handle; });
 
-  // let's only deal with AP0 for now, as mock sysfs doesn't implement the AP1 events as listed in
-  // example_scmi_specification.json
-  for (const auto& metric_properties : metric_buffer) {
-    if (std::strncmp(metric_properties._name, "AP0", 3) == 0) {
-      metric_handles_vec.push_back(metric_properties._handle);
-    }
-  }
-  const auto metric_count = static_cast<uint32_t>(metric_handles_vec.size());
+  const auto metric_count  = static_cast<uint32_t>(metric_handles_vec.size());
+  auto       target_handle = target_properties._handle;
 
   astl_status_code status =
       astlConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles_vec.data(), metric_count);
@@ -230,42 +270,41 @@ astl_status_code ConfigureAndRunCollection(astl_target_handle_t                 
 }
 
 void RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_metric_properties_t>& metric_buffer) {
-  if (metric_buffer.empty()) {
-    return;
-  }
-  const auto& metric_props = metric_buffer.front();
-  uint32_t    sample_count{};
-  auto        status = astlGetMetricSampleCountOnTarget(target_handle, metric_props._handle, &sample_count);
-  std::cout << "astlGetMetricSampleCountOnTarget Status: " << astlStatusString(status) << " (count=" << sample_count
-            << ")\n";
-  if (status != ASTL_STATUS_SUCCESS || sample_count == 0) {
-    return;
-  }
-  std::vector<astl_metric_sample_t> samples(sample_count);
-  if (!samples.empty()) {
-    samples[0]._size = sizeof(astl_metric_sample_t);
-  }
-  status = astlGetMetricSamplesOnTarget(target_handle, metric_props._handle, samples.data(), &sample_count);
-  if (status != ASTL_STATUS_SUCCESS) {
-    return;
-  }
+  for (const auto& metric_props : metric_buffer) {
+    if (std::strncmp(metric_props._name, "AP1", 3) == 0) {
+      continue;  // skip AP1 as mock sysfs doesn't implement the AP1 events as listed in example_scmi_specification.json
+    }
+    uint32_t sample_count{};
+    auto     status = astlGetMetricSampleCountOnTarget(target_handle, metric_props._handle, &sample_count);
+    std::cout << "astlGetMetricSampleCountOnTarget Status: " << astlStatusString(status) << " (count=" << sample_count
+              << ")\n";
+    if (status != ASTL_STATUS_SUCCESS || sample_count == 0) {
+      continue;
+    }
+    std::vector<astl_metric_sample_t> samples(sample_count);
+    if (!samples.empty()) {
+      samples[0]._size = sizeof(astl_metric_sample_t);
+    }
+    status = astlGetMetricSamplesOnTarget(target_handle, metric_props._handle, samples.data(), &sample_count);
+    if (status != ASTL_STATUS_SUCCESS) {
+      return;
+    }
+    // Check if all samples are non-zero
+    bool all_samples_non_zero = std::all_of(samples.begin(), samples.begin() + sample_count,
+                                            [](const astl_metric_sample_t& sample) { return sample._value.ui64 != 0; });
 
-  // Check if all samples are non-zero
-  bool all_samples_non_zero = std::all_of(samples.begin(), samples.begin() + sample_count,
-                                          [](const astl_metric_sample_t& sample) { return sample._value.ui64 != 0; });
-
-  std::cout << "Collected Samples for metric '" << (metric_props._name ? metric_props._name : "<null>") << "':\n";
-  for (uint32_t i = 0; i < sample_count; ++i) {
-    const auto& sample_entry = samples[i];
-    std::cout << "  [" << i << "] ts=" << sample_entry._timestamp
-              << " value=" << ValueToString(sample_entry._value, metric_props._value_type) << '\n';
-  }
-
-  // Only print success status if all samples are non-zero
-  if (all_samples_non_zero) {
-    std::cout << "astlGetMetricSamplesOnTarget Status: " << astlStatusString(status) << '\n';
-  } else {
-    std::cout << "astlGetMetricSamplesOnTarget Status: Failed - contains zero values" << '\n';
+    std::cout << "Collected Samples for metric '" << (metric_props._name ? metric_props._name : "<null>") << "':\n";
+    for (uint32_t i = 0; i < sample_count; ++i) {
+      const auto& sample_entry = samples[i];
+      std::cout << "  [" << i << "] ts=" << sample_entry._timestamp
+                << " value=" << ValueToString(sample_entry._value, metric_props._value_type) << '\n';
+    }
+    // Only print success status if all samples are non-zero
+    if (all_samples_non_zero) {
+      std::cout << "astlGetMetricSamplesOnTarget Status: " << astlStatusString(status) << '\n';
+    } else {
+      std::cout << "astlGetMetricSamplesOnTarget Status: Failed - contains zero values" << '\n';
+    }
   }
 }
 
@@ -332,7 +371,11 @@ int main(int argc, char* argv[]) {
   // Get targets
   std::vector<astl_target_properties_t> target_properties_buffer;
   astl_target_properties_t              target_properties;
-  status = GetTargets(target_properties_buffer, target_properties);
+  if (args.contains("target")) {
+    status = GetTargetByName(args["target"], target_properties_buffer, target_properties);
+  } else {
+    status = GetTargets(target_properties_buffer, target_properties);
+  }
   if (status != ASTL_STATUS_SUCCESS) {
     return 4;
   }
@@ -340,7 +383,7 @@ int main(int argc, char* argv[]) {
   // Get metrics
   std::vector<astl_metric_properties_t> metric_buffer;
   uint32_t                              metric_count{};
-  status = GetMetrics(target_properties._handle, metric_buffer, metric_count);
+  status = GetMetrics(target_properties, metric_buffer, metric_count);
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "Masking error code " << status
               << " from GetMetrics so sample integration tests will pass w/out mock sysfs\n";
@@ -355,8 +398,8 @@ int main(int argc, char* argv[]) {
   }
 
   // Configure and run collection
-  status = ConfigureAndRunCollection(target_properties._handle, metric_buffer, do_interval, duration_seconds,
-                                     sampling_interval_ms);
+  status =
+      ConfigureAndRunCollection(target_properties, metric_buffer, do_interval, duration_seconds, sampling_interval_ms);
   if (status != ASTL_STATUS_SUCCESS) {
     // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
     // even without mock sysfs running
