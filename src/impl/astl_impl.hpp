@@ -240,7 +240,9 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   std::unique_ptr<IMetricManager>    _metric_manager;     // manages the processing of raw samples into metrics
   std::unique_ptr<IOutputManager>    _output_manager;     // manages the output of processed samples
   RawSamplesMap                      _raw_samples;        // collected raw samples, organized by target
+  mutable std::mutex                 _raw_samples_mtx;    // protect the _raw_samples container
   ProcessedSamplesMap                _processed_samples;  // processed metric samples, organized by target and metric
+  mutable std::mutex                 _processed_samples_mtx;  // protect the _processed_samples container
 };
 
 }  // namespace astl

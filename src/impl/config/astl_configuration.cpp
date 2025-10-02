@@ -44,6 +44,10 @@ inline void from_json(const json& json_data, MetricJsonDeclaration& metric) {
   if (json_data.contains("register")) {
     json_data.at("register").get_to(metric.register_name);
   }
+  // Offset field is optional, depends on collector type
+  if (json_data.contains("offset")) {
+    json_data.at("offset").get_to(metric.offset);
+  }
 
   // Handle residency-specific fields
   if (json_data.contains("inferred_state")) {

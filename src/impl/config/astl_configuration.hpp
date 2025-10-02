@@ -38,9 +38,10 @@ struct MetricJsonDeclaration {
   MetricJsonDeclaration() = default;
   std::string description;          //!< Description of the metric
   std::string register_name;        //!< Register name associated with the metric
+  std::string offset;               //!< Register offset - exact meaning depends on collection_protocol
   std::string unit;                 //!< Unit of measurement for the metric
   std::string metric_type;          //!< Type of metric (e.g., value, delta, rate)
-  std::string collection_protocol;  //!< Collector type (e.g., scmi)
+  std::string collection_protocol;  //!< Collector type (e.g., scmi, libsensors)
 
   // Residency-specific fields
   std::optional<std::string> inferred_state;                    //!< Name of inferred state (for residency metrics)
@@ -69,6 +70,10 @@ struct AstlConfiguration {
 auto ParseConfiguration(std::string_view configuration_data) -> std::expected<AstlConfiguration, astl_status_code>;
 
 auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlConfiguration, astl_status_code>;
+
+auto ParseUnits(const MetricJsonDeclaration& metric_declaration) -> astl_units_t;
+
+auto ParseMetricType(const MetricJsonDeclaration& metric_declaration) -> astl_metric_type_t;
 
 /**
  * @brief helper function to create a MetricConfig object from a MetricJsonDeclaration and ScmiSpecification

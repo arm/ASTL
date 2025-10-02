@@ -125,7 +125,7 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
     // handle additional MetricType cases here
     default:
       // Unknown metric type; ignore or log an error.
-      ASTL_LOG_ERROR("CreateMetricFromConfig: unknown metric type received: {}", metric_config->MetricType());
+      ASTL_LOG_ERROR("CreateMetricFromConfig: unknown metric type received: {}", metric_type);
       return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
   }
 }

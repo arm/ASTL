@@ -120,7 +120,7 @@ jq --arg telemetry_root "$TELEMETRY_ROOT" \
 	'.scmi_sysfs_telemetry_root_path = $telemetry_root' \
 	./samples/sample_configuration/astl_configuration.json >$UPDATED_JSON_FILE
 
-"$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --config="$UPDATED_JSON_FILE"
+"$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --config="$UPDATED_JSON_FILE" --target="tlm-0"
 ERR=$?
 if [[ $ERR -ne 0 ]]; then
 	echo "❌ Error: $SAMPLE_TEST_BIN returned a non-zero return code $ERR" >&2
