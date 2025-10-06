@@ -109,7 +109,7 @@ Collects samples at regular intervals:
 
 When running the thermal throttling demo, you'll see:
 
-1. **MockSysfs Startup**: The FUSE-based mock filesystem mounts at `~/tmp/fuse/scmi`
+1. **MockSysfs Startup**: The FUSE-based mock filesystem mounts at `~/tmp/fuse/arm_telemetry`
 2. **SCMI Telemetry Structure**: Creates the mock SCMI telemetry hierarchy
 3. **Sample Collection**: The `sample_test` application collects telemetry data
 4. **Thermal Data**: Real-time simulation of thermal throttling events
@@ -130,7 +130,7 @@ The thermal throttling demo exposes these telemetry data events:
 During demo execution, the following structure is created:
 
 ```
-~/tmp/fuse/scmi/scmi_telemetry/
+~/tmp/fuse/arm_telemetry/
 ├── des/
 │   ├── 0x7A9B/          # Temperature data event
 │   ├── 0x8C3D/          # Throttle count data event
@@ -207,7 +207,7 @@ The demo automatically cleans up on exit, but if needed, manually unmount:
 killall MockSysfs
 
 # If mount point is stuck
-fusermount -u ~/tmp/fuse/scmi
+fusermount -u ~/tmp/fuse/arm_telemetry
 ```
 
 ## Environment Variables Reference
@@ -225,10 +225,10 @@ While the demo is running, you can monitor the mock telemetry in another termina
 
 ```bash
 # Watch temperature readings
-watch -n 0.5 "cat ~/tmp/fuse/scmi/scmi_telemetry/tlm-0/des/0x7A9B/value"
+watch -n 0.5 "cat ~/tmp/fuse/arm_telemetry/tlm-0/des/0x7A9B/value"
 
 # Watch throttle count
-watch -n 0.5 "cat ~/tmp/fuse/scmi/scmi_telemetry/tlm-0/des/0x8C3D/value"
+watch -n 0.5 "cat ~/tmp/fuse/arm_telemetry/tlm-0/des/0x8C3D/value"
 ```
 
 #### Viewing MockSysfs Log

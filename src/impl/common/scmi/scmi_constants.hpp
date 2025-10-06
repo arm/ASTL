@@ -5,7 +5,7 @@
 
 namespace astl {
 
-constexpr std::string_view kDefaultScmiSysfsTelemetryRootPath = "/sys/class/scmi_telemetry";
+constexpr std::string_view kDefaultScmiSysfsTelemetryRootPath = "/sys/fs/arm_telemetry";
 
 }  // namespace astl
 

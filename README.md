@@ -88,6 +88,10 @@ The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_
 #include "astl_telemetry.h"     // Function calls
 ```
 
+0. Mount the Sysfs interface:
+```sh
+	mount -t stlmfs none /sys/fs/arm_telemetry/
+```
 1. Initialize ASTL
 
 First, create or select an astl json configuration file specifying which metrics should be made available at the API to collect.
@@ -96,7 +100,7 @@ You can also optionally override the root path for the Scmi file system, and the
 ```json
 {
 {
-  "scmi_sysfs_telemetry_root_path": "/sys/class/scmi_telemetry",
+  "scmi_sysfs_telemetry_root_path": "/sys/fs/arm_telemetry",
 
   "metrics": {
     "SoC Temperature": {
