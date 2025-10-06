@@ -52,6 +52,7 @@ void ResidencyMetric::InitializeResidencyState() {
   _state_sample_counts.clear();
   _operation_id_to_config.clear();
   _processed_states_per_timestamp.clear();
+  _first_operation_id.reset();
 
   // Initialize tracking for all configured states
   for (const auto& config : _state_configs) {
@@ -72,6 +73,15 @@ void ResidencyMetric::InitializeResidencyState() {
   }
 }
 
+// NOTE: Ordering Contract
+// This method MUST NOT be invoked concurrently from multiple threads for the different Metric instance.
+// ResidencyMetric relies on OperationIds being assigned in strictly increasing, contiguous order corresponding
+// to the sequence of configured states. That invariant is captured by storing the first OperationId and then
+// later assuming a dense block [first, first + N) when sinking pending processed samples (see SinkOrderedStateSamples).
+// If GetOperations were to run in parallel with itself (or interleaved with other Operation creation affecting
+// global id assignment), the contiguity or relative ordering of OperationIds could be broken, leading to
+// non‑deterministic sink ordering. Keep this single‑threaded or introduce stronger ordering guarantees in the
+// OperationId allocator before removing this constraint.
 std::expected<OperationSequence, astl_status_code> ResidencyMetric::GetOperations() {
   OperationSequence operations_seq;
 
@@ -85,6 +95,9 @@ std::expected<OperationSequence, astl_status_code> ResidencyMetric::GetOperation
     }
     for (auto& operation : operations.value()) {
       OperationId op_id = operation->GetId();
+      if (!_first_operation_id.has_value()) {
+        _first_operation_id = op_id;  // capture baseline for contiguous ordering
+      }
       operations_seq.push_back(std::move(operation));
       // Build the operation_id to config map for fast lookup
       _operation_id_to_config[op_id] = &state_config;
@@ -148,6 +161,11 @@ astl_status_code ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sam
                    _configuration->Name(), astlStatusString(time_result.error()));
     return time_result.error();
   }
+  // Collect processed sample (do not sink yet; enforce ordering across states later)
+  // Use insert_or_assign to avoid default-constructing ProcessedSampledData (no default ctor)
+  _pending_processed_samples.insert_or_assign(
+      raw_sample.operation_id,
+      ProcessedSampledData{AstlValue{static_cast<uint64_t>(time_result.value().count())}, raw_sample.timestamp});
 
   // Calculate time interval between samples
   auto time_interval = std::chrono::duration_cast<std::chrono::microseconds>(raw_sample.timestamp -
@@ -178,8 +196,18 @@ astl_status_code ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sam
       return inferred_status;
     }
 
+    // Now sink all pending samples in deterministic order
+    auto sink_status = SinkOrderedStateSamples();
+    if (sink_status != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("ResidencyMetric: failed to sink ordered processed samples for metric {}: {}",
+                     _configuration->Name(), astlStatusString(sink_status));
+      return sink_status;
+    }
+
     // Clear the tracking set since we've processed all states for this timestamp
     _processed_states_per_timestamp.clear();
+    _pending_processed_samples.clear();
+    _pending_inferred_sample.reset();
   }
 
   // Store current sample as previous for next iteration for this state
@@ -342,19 +370,56 @@ astl_status_code ResidencyMetric::CalculateInferredStateResidencyForInterval(std
   // Clamp percentage to [0, 100] range
   inferred_percentage = std::clamp(inferred_percentage, 0.0, 100.0);
 
-  // Create StateResidencyData for the inferred state
+  // Create StateResidencyData for the inferred state and capture time for pending sink ordering
   if (inferred_time_microseconds.count() > 0) {
-    AstlValue inferred_ticks{uint64_t{0}};  // Inferred state doesn't have raw tick data
-
-    // Use UpdateStateResidencyStatistics to update the statistics and store the inferred state data
     auto status = UpdateStateResidencyStatistics(_residency_configuration->InferredState().value(),
                                                  inferred_time_microseconds, inferred_percentage, timestamp);
     if (status != ASTL_STATUS_SUCCESS) {
       return status;
     }
+    // Also push a processed sample immediately (collected for ordered sink)
+    _pending_inferred_sample =
+        ProcessedSampledData{AstlValue{static_cast<uint64_t>(inferred_time_microseconds.count())}, timestamp};
   }
 
   return ASTL_STATUS_SUCCESS;
+}
+
+astl_status_code ResidencyMetric::SinkOrderedStateSamples() {
+  // Assumption: OperationIds are sequential, contiguous, and assigned in configuration order.
+  // Therefore, we can sink by iterating from the smallest id for count entries.
+  if (!_pending_processed_samples.empty() && _first_operation_id.has_value()) {
+    OperationId  base  = _first_operation_id.value();
+    const size_t count = _pending_processed_samples.size();
+    for (OperationId op = base, end = static_cast<OperationId>(base + count); op < end; ++op) {
+      auto it_sample = _pending_processed_samples.find(op);
+      // The contiguous OperationId invariant guarantees the element exists; use a descriptive name for clarity.
+      const auto& processed_sample = it_sample->second;
+      auto        status           = SinkProcessedSample(processed_sample);
+      if (status != ASTL_STATUS_SUCCESS) {
+        return status;
+      }
+    }
+  }
+  // Inferred sample last (if present)
+  if (_pending_inferred_sample.has_value()) {
+    auto status = SinkProcessedSample(_pending_inferred_sample.value());
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+std::vector<std::string> ResidencyMetric::GetOrderedStates() const {
+  std::vector<std::string> order;
+  order.reserve(_state_configs.size() + (_residency_configuration->InferredState().has_value() ? 1 : 0));
+  std::transform(_state_configs.begin(), _state_configs.end(), std::back_inserter(order),
+                 [](const auto& cfg) { return cfg.state_name; });
+  if (_residency_configuration->InferredState().has_value()) {
+    order.push_back(_residency_configuration->InferredState().value());
+  }
+  return order;
 }
 
 }  // namespace astl

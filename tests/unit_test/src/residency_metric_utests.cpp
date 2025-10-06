@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <span>
 #include <thread>
 #include <vector>
 
@@ -92,6 +93,79 @@ class ResidencyMetricTestFixture : public astl::ResidencyMetric {
     return std::chrono::time_point_cast<astl::SampleTimestamp::duration>(timePoint);
   }
 };
+
+// Recording sink capturing microsecond values in the order delivered. Does not assume
+// how many samples arrive per sink invocation (future batching friendly).
+struct RecordingProcessedSampleSink : public astl::IProcessedSampleSink {
+  std::vector<uint64_t> values_in_order;  // microsecond values in sink order
+  astl_status_code      SinkProcessedSamples(const astl::ITarget* target, const astl::IMetric* metric,
+                                             std::span<const astl::ProcessedSampledData> samples) override {
+    (void)target;  // unused
+    (void)metric;  // unused
+    for (const auto& sample : samples) {
+      REQUIRE(std::holds_alternative<uint64_t>(sample.value.value));
+      values_in_order.push_back(std::get<uint64_t>(sample.value.value));
+    }
+    return ASTL_STATUS_SUCCESS;
+  }
+};
+
+TEST_CASE("ResidencyMetric: deterministic processed sample sink order", "[ResidencyMetric]") {
+  // Setup recording sink
+  RecordingProcessedSampleSink recording_sink;
+
+  // Build custom metric with sink registered
+  astl::ResidencyMetric metric{GetResidencyConfig(), CreateTestStateInfos(), nullptr, &recording_sink};
+
+  // Acquire operations and baseline samples for all states to initialize previous samples
+  auto operations_result = metric.GetOperations();
+  REQUIRE(operations_result.has_value());
+  const auto& operations = operations_result.value();
+  REQUIRE(operations.size() == 3);  // C6, C1, C2
+
+  // Baseline timestamp (all share same baseline so no interval yet)
+  auto base_time  = std::chrono::steady_clock::now();
+  auto timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(base_time);
+
+  // Initial baseline samples (no processed samples expected yet)
+  metric.ReceiveRawSample(astl::RawSampledData(operations[0]->GetId(), astl::AstlValue{uint64_t{1000}}, timestamp1));
+  metric.ReceiveRawSample(astl::RawSampledData(operations[1]->GetId(), astl::AstlValue{uint64_t{500}}, timestamp1));
+  metric.ReceiveRawSample(astl::RawSampledData(operations[2]->GetId(), astl::AstlValue{uint64_t{250}}, timestamp1));
+  REQUIRE(recording_sink.values_in_order.empty());
+
+  // Second timestamp (delta interval)
+  auto timestamp2 = ResidencyMetricTestFixture::CreateTimestamp(base_time + std::chrono::milliseconds(50));
+
+  // Provide second samples in an intentionally shuffled order (not matching configured order) to verify
+  // that sink order is independent from arrival order.
+  // Arrival order: C1, C2, C6
+  metric.ReceiveRawSample(
+      astl::RawSampledData(operations[1]->GetId(), astl::AstlValue{uint64_t{525}}, timestamp2));  // C1 delta 25
+  metric.ReceiveRawSample(
+      astl::RawSampledData(operations[2]->GetId(), astl::AstlValue{uint64_t{265}}, timestamp2));  // C2 delta 15
+  // At this point not all states processed yet -> no sinking
+  REQUIRE(recording_sink.values_in_order.empty());
+  metric.ReceiveRawSample(astl::RawSampledData(operations[0]->GetId(), astl::AstlValue{uint64_t{1050}},
+                                               timestamp2));  // C6 delta 50 (triggers flush)
+
+  // After processing all three, inferred state (Active) also added => total samples sunk should be 4.
+  REQUIRE(recording_sink.values_in_order.size() == 4);
+
+  // Retrieve configured deterministic order
+  auto configured_order = metric.GetOrderedStates();
+  // configured_order should have 4 entries: C6, C1, C2, Active
+  REQUIRE(configured_order.size() == 4);
+  REQUIRE(configured_order[0] == "C6");
+  REQUIRE(configured_order[1] == "C1");
+  REQUIRE(configured_order[2] == "C2");
+  REQUIRE(configured_order[3] == "Active");
+
+  // Pre-computed expected microsecond residency per state in deterministic order (C6, C1, C2, Active):
+  // Frequencies = 1,000,000 Hz so ticks == microseconds.
+  // Deltas: C6=50, C1=25, C2=15; Interval length = 50ms = 50,000us -> Active = 50,000 - (50+25+15) = 49,910
+  const std::vector<uint64_t> expected_values_in_order{50, 25, 15, 49910};
+  REQUIRE(recording_sink.values_in_order == expected_values_in_order);
+}
 
 TEST_CASE("ResidencyMetric: construction", "[ResidencyMetric]") {
   auto metric = GetResidencyMetric();
