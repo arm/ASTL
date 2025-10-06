@@ -17,7 +17,7 @@
 
 namespace mock_sysfs {
 
-std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode*    scmi_telemetry_root,
+std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode*    arm_telemetry_root,
                                                                std::string const& tlm_id);
 
 template <typename ToDuration = std::chrono::milliseconds, typename Rep, typename Period>
@@ -94,14 +94,14 @@ std::unique_ptr<FileSystemNode> InitProtocolTelemetry(FileSystemNode* g_root) {
     tlm_to_tgt.emplace(tlm_id, std::move(tlm));
   }
 
-  auto scmi_telemetry = FileSystemNode::CreateDirectory("scmi_telemetry", g_root, ProtocolType::SCMI_TELEMETRY);
+  auto arm_telemetry = FileSystemNode::CreateDirectory("arm_telemetry", g_root, ProtocolType::SCMI_TELEMETRY);
 
   for (const auto& [cur_tlm_id, tlm] : tlm_to_tgt) {
-    auto tlm_file_node = BuildProtocolTelemetryFileTree(scmi_telemetry.get(), cur_tlm_id);
-    scmi_telemetry->AddChild(std::move(tlm_file_node));
+    auto tlm_file_node = BuildProtocolTelemetryFileTree(arm_telemetry.get(), cur_tlm_id);
+    arm_telemetry->AddChild(std::move(tlm_file_node));
   }
 
-  return scmi_telemetry;
+  return arm_telemetry;
 };
 
 std::string GetInitialIntervalValue(const SCMITelemetryTarget& tlm) {
@@ -269,12 +269,12 @@ void BuildTelemetryGroupFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetr
 };
 
 // TODO(ASTL-13): Dynamically build file tree from schema
-std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode*    scmi_telemetry_root,
+std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode*    arm_telemetry_root,
                                                                const std::string& tlm_id) {
   auto& tlm = SCMITelemetryTarget::Instance(tlm_id);
 
-  // Create tlm-N under scmi_telemetry_root.
-  auto telemetry = FileSystemNode::CreateDirectory(tlm_id, scmi_telemetry_root, ProtocolType::SCMI_TELEMETRY);
+  // Create tlm-N under arm_telemetry_root.
+  auto telemetry = FileSystemNode::CreateDirectory(tlm_id, arm_telemetry_root, ProtocolType::SCMI_TELEMETRY);
 
   BuildTelemetryTopLevelFiles(tlm, telemetry.get());
   BuildTelemetryDesFiles(tlm, telemetry.get());
@@ -358,9 +358,9 @@ DataEvent* SCMITelemetryTarget::GetDataEventById(data_event_id_t identifier) {
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::string& value) {
-  // find tlm_id by traversing up file tree until we find a parent named "scmi_telemetry"
+  // find tlm_id by traversing up file tree until we find a parent named "arm_telemetry"
   const FileSystemNode* tlm_id = node;
-  while (tlm_id->GetParent() && tlm_id->GetParent()->GetName() != "scmi_telemetry") {
+  while (tlm_id->GetParent() && tlm_id->GetParent()->GetName() != "arm_telemetry") {
     tlm_id = tlm_id->GetParent();
   }
 
@@ -487,7 +487,7 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
   const FileSystemNode* tlm_id = node;
-  while (tlm_id->GetParent() && tlm_id->GetParent()->GetName() != "scmi_telemetry") {
+  while (tlm_id->GetParent() && tlm_id->GetParent()->GetName() != "arm_telemetry") {
     tlm_id = tlm_id->GetParent();
   }
 

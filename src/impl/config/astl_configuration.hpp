@@ -54,7 +54,8 @@ struct MetricJsonDeclaration {
 /** @brief Overall configuration for the ASTL library */
 struct AstlConfiguration {
   AstlConfiguration() = default;
-  /** @brief scmi_sysfs_telemetry_root_override is an optional path to replace "/sys/class/scmi_telemetry"
+
+  /** @brief scmi_sysfs_telemetry_root_override is an optional path to replace "/sys/fs/arm_telemetry"
    *         This is a placeholder example of something that _could_ be configured.
    *         subject to change, not currently modified.
    */

@@ -14,7 +14,7 @@ echo "ASTL_ROOT = $ASTL_ROOT"
 export ASTL_MOCKSYSFS_TLM_JSON_PATH="$ASTL_ROOT/tools/mock_sysfs/config/tlm.json"
 echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = $ASTL_MOCKSYSFS_TLM_JSON_PATH"
 MOCK_SYSFS="$ASTL_ROOT/build/debug/bin/MockSysfs"
-MOUNT_POINT=~/tmp/fuse/scmi
+MOUNT_POINT=~/tmp/fuse
 
 # Constants for startup detection
 TIMEOUT=30
@@ -27,7 +27,7 @@ PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 		exit 1
 	}
 
-TELEMETRY_ROOT="$MOUNT_POINT/scmi_telemetry"
+TELEMETRY_ROOT="$MOUNT_POINT/arm_telemetry"
 
 # Default mode duration and interval
 # Default to interval mode with 10 seconds duration and 500ms interval
@@ -68,6 +68,10 @@ echo "Logs Directory = $LOG_DIR"
 echo "🚀 Launching MockSysfs..."
 "$MOCK_SYSFS" -f -s "$MOUNT_POINT" &>"$SYSFS_LOG" &
 SYSFS_PID=$!
+
+# Note, if not mocksysfs, use
+# `	mount -t stlmfs none /sys/fs/arm_telemetry/ `
+# to mount the real sysfs interface
 
 find "$MOUNT_POINT"
 

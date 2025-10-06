@@ -50,7 +50,7 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
 TEST_CASE("ParseConfiguration", "[ConfigManager]") {
   constexpr auto     json_config_data = R"json(
   {
-    "scmi_sysfs_telemetry_root_path": "~/tmp/fuse/scmi",
+    "scmi_sysfs_telemetry_root_path": "~/tmp/fuse/arm_telemetry",
 
     "metrics": {
       "SoC Type": {
@@ -77,14 +77,14 @@ TEST_CASE("ParseConfiguration", "[ConfigManager]") {
   REQUIRE(result);
   auto config = result.value();
   REQUIRE(config.metric_declarations.size() == 2);
-  REQUIRE(config.scmi_sysfs_telemetry_root_path == "~/tmp/fuse/scmi");
+  REQUIRE(config.scmi_sysfs_telemetry_root_path == "~/tmp/fuse/arm_telemetry");
   REQUIRE(config.scmi_specification_path == "/etc/arm/astl/scmi_specification.json");
 }
 
 TEST_CASE("ParseConfiguration with Residency Metric", "[ConfigManager]") {
   constexpr auto json_config_data = R"json(
   {
-    "scmi_sysfs_telemetry_root_path": "~/tmp/fuse/scmi",
+    "scmi_sysfs_telemetry_root_path": "~/tmp/fuse/arm_telemetry",
 
     "metrics": {
       "C-State": {
@@ -120,7 +120,7 @@ TEST_CASE("ParseConfiguration with Residency Metric", "[ConfigManager]") {
 
   auto config = result.value();
   REQUIRE(config.metric_declarations.size() == 1);
-  REQUIRE(config.scmi_sysfs_telemetry_root_path == "~/tmp/fuse/scmi");
+  REQUIRE(config.scmi_sysfs_telemetry_root_path == "~/tmp/fuse/arm_telemetry");
   REQUIRE(config.scmi_specification_path == "/etc/arm/astl/scmi_specification.json");
 
   // Verify residency metric specific fields
