@@ -290,6 +290,10 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
     }
     IMetric* metric = *metric_or_error;
 
+    // NOTE: GetOperations() carries a constraint to run
+    // single-threaded so that OperationIds are allocated in contiguous ascending order.
+    // See comment in ResidencyMetric::GetOperations() for ordering contract relied upon when sinking
+    // processed residency samples deterministically.
     auto operations_result = metric->GetOperations();
     if (!operations_result.has_value()) {
       ASTL_LOG_ERROR("GetRequiredOperations: Failed to get operations for residency metric '{}'", config->Name());

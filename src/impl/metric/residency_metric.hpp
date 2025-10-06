@@ -180,6 +180,11 @@ class ResidencyMetric : public DeltaMetric {
    */
   std::vector<StateResidencyData> GetStateResidencyData(const std::string& state_name) const;
 
+  /**
+   * @brief Return the deterministic configured sink order (states in configuration order, then inferred state if any).
+   */
+  std::vector<std::string> GetOrderedStates() const;
+
  protected:
   /**
    * @brief Initialize/reset residency samples and summary data.
@@ -242,6 +247,8 @@ class ResidencyMetric : public DeltaMetric {
 
   std::unordered_map<OperationId, const ResidencyMetricConfig::StateInfo*>
       _operation_id_to_config;  ///< Fast lookup map from operation_id to state config
+  // First (smallest) operation id assigned (captures ordering baseline). Set when operations are built.
+  std::optional<OperationId>                                     _first_operation_id;
   std::unordered_map<std::string, std::optional<RawSampledData>> _previous_samples;  ///< Previous samples per state
   std::vector<StateResidencyData>                                _residency_data;    ///< All residency calculations
   ResidencySummaryData                                           _summary_data;      ///< Summary statistics
@@ -254,6 +261,14 @@ class ResidencyMetric : public DeltaMetric {
   // Tracking for inferred state calculation
   std::unordered_map<std::string, std::chrono::microseconds>
       _processed_states_per_timestamp;  ///< Track states and their time intervals for each timestamp
+
+  // Pending processed samples keyed by OperationId (raw sample source). Inferred state (derived) stored separately.
+  std::unordered_map<OperationId, ProcessedSampledData>
+                                      _pending_processed_samples;  ///< Collected samples awaiting ordered sink
+  std::optional<ProcessedSampledData> _pending_inferred_sample;    ///< Inferred sample (if any) for interval
+
+  // Sink all pending processed samples in the order of _state_configs then inferred state (if any)
+  astl_status_code SinkOrderedStateSamples();
 
   // Logger for residency summaries
   astl::Logger _residency_summary_logger{astl::LogLevel::Info, false /* Console logging disabled */,
