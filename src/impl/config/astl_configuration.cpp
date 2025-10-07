@@ -34,7 +34,7 @@ using json = nlohmann::json;
 
 namespace astl {
 
-inline void from_json(const json& json_data, MetricJsonDeclaration& metric) {
+inline auto from_json(const json& json_data, MetricJsonDeclaration& metric) -> void {
   json_data.at("description").get_to(metric.description);
   json_data.at("unit").get_to(metric.unit);
   json_data.at("metric_type").get_to(metric.metric_type);
@@ -63,7 +63,7 @@ inline void from_json(const json& json_data, MetricJsonDeclaration& metric) {
   }
 }
 
-inline void from_json(const json& json_data, AstlConfiguration& cfg) {
+inline auto from_json(const json& json_data, AstlConfiguration& cfg) -> void {
   // optional string: j.value(key, default_opt) works nicely
   //  cfg.scmi_sysfs_telemetry_root_path =
   if (const auto path = json_data.value("scmi_sysfs_telemetry_root_path", ""); !path.empty()) {

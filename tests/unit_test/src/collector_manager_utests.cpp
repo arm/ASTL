@@ -42,7 +42,7 @@ TEST_CASE("CollectorManager::RegisterRawSampleSink", "[collector_manager]") {
   }
 
   SECTION("Unregister a valid sample sink") {
-    collector_manager.RegisterRawSampleSink(mock_sink.get());
+    REQUIRE(collector_manager.RegisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
     REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
   }
 
@@ -55,14 +55,14 @@ TEST_CASE("CollectorManager::RegisterRawSampleSink", "[collector_manager]") {
   }
 
   SECTION("Unregister a sample sink that was registered") {
-    collector_manager.RegisterRawSampleSink(mock_sink.get());
-    collector_manager.RegisterRawSampleSink(mock_sink2.get());
+    REQUIRE(collector_manager.RegisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
+    REQUIRE(collector_manager.RegisterRawSampleSink(mock_sink2.get()) == ASTL_STATUS_SUCCESS);
     REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
     REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink2.get()) == ASTL_STATUS_SUCCESS);
   }
 
   SECTION("Unregister a sample sink twice") {
-    collector_manager.RegisterRawSampleSink(mock_sink.get());
+    REQUIRE(collector_manager.RegisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
     REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_SUCCESS);
     REQUIRE(collector_manager.UnregisterRawSampleSink(mock_sink.get()) == ASTL_STATUS_INTERNAL_ERROR);
   }

@@ -13,7 +13,7 @@
 #include "astl/astl_telemetry.h"
 
 namespace {
-std::string ValueToString(const astl_value_t& value, astl_value_type_t type) {
+auto ValueToString(const astl_value_t& value, astl_value_type_t type) -> std::string {
   switch (type) {
     case ASTL_VALUE_UINT8:
       return std::to_string(value.ui8);
@@ -40,7 +40,7 @@ std::string ValueToString(const astl_value_t& value, astl_value_type_t type) {
 }  // namespace
 
 // NOLINTBEGIN
-std::unordered_map<std::string, std::string> ParseArgs(int argc, char* argv[]) {
+auto ParseArgs(int argc, char* argv[]) -> std::unordered_map<std::string, std::string> {
   std::unordered_map<std::string, std::string> args;
 
   for (int i = 1; i < argc; ++i) {
@@ -60,7 +60,7 @@ std::unordered_map<std::string, std::string> ParseArgs(int argc, char* argv[]) {
 }
 // NOLINTEND
 
-void PrintHelp() {
+auto PrintHelp() -> void {
   std::cout << "Usage: sample_test [options]\n\n"
             << "Options:\n"
             << "  --help              Show this help message.\n"
@@ -72,14 +72,14 @@ void PrintHelp() {
             << "  Default: interval mode, 10 seconds duration and 500 milliseconds sampling interval.\n";
 }
 
-void PrintVersion() {
+auto PrintVersion() -> void {
   astl_version_t version = astlVersion();
   std::cout << "ASTL v" << version._major << "." << version._minor << "." << version._micro << "\n";
   std::cout << "Version string: " << astlVersionString() << "\n";
 }
 
-std::expected<std::chrono::milliseconds, int> GetIntervalArgument(
-    const std::unordered_map<std::string, std::string>& args) {
+auto GetIntervalArgument(const std::unordered_map<std::string, std::string>& args)
+    -> std::expected<std::chrono::milliseconds, int> {
   if (args.contains("interval")) {
     try {
       int tmp_interval = std::stoi(args.at("interval"));
@@ -97,7 +97,8 @@ std::expected<std::chrono::milliseconds, int> GetIntervalArgument(
   }
   return std::chrono::milliseconds{};
 }
-std::expected<std::chrono::seconds, int> GetDurationArgument(const std::unordered_map<std::string, std::string>& args) {
+auto GetDurationArgument(const std::unordered_map<std::string, std::string>& args)
+    -> std::expected<std::chrono::seconds, int> {
   if (args.contains("duration")) {
     try {
       int tmp_duration = std::stoi(args.at("duration"));
@@ -116,16 +117,15 @@ std::expected<std::chrono::seconds, int> GetDurationArgument(const std::unordere
   return std::chrono::seconds{};
 }
 
-astl_status_code InitializeASTL(const char* config_file_path) {
+auto InitializeASTL(const char* config_file_path) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = config_file_path);
   astl_status_code status = astlInitialize(&init_params);
   std::cout << "Initialize status: " << astlStatusString(status) << "\n";
   return status;
 }
 
-astl_status_code GetTargetByName(std::string const&                     target_name,
-                                 std::vector<astl_target_properties_t>& target_properties_buffer,
-                                 astl_target_properties_t&              target_properties) {
+auto GetTargetByName(std::string const& target_name, std::vector<astl_target_properties_t>& target_properties_buffer,
+                     astl_target_properties_t& target_properties) -> astl_status_code {
   uint32_t         target_count = 0;
   astl_status_code status       = astlGetTargetCount(&target_count);
   std::cout << "Target count: " << target_count << "\n";
@@ -167,8 +167,8 @@ astl_status_code GetTargetByName(std::string const&                     target_n
   return ASTL_STATUS_INTERNAL_ERROR;
 }
 
-astl_status_code GetTargets(std::vector<astl_target_properties_t>& target_properties_buffer,
-                            astl_target_properties_t&              target_properties) {
+auto GetTargets(std::vector<astl_target_properties_t>& target_properties_buffer,
+                astl_target_properties_t&              target_properties) -> astl_status_code {
   uint32_t         target_count = 0;
   astl_status_code status       = astlGetTargetCount(&target_count);
   std::cout << "Target count: " << target_count << "\n";
@@ -178,10 +178,8 @@ astl_status_code GetTargets(std::vector<astl_target_properties_t>& target_proper
 
   target_properties_buffer.resize(target_count);
 
-  /// @todo ASTL-167 After https://github.com/Arm-Debug/ASTL/pull/180 is merged,
-  /// we should probably make this sample test fail when zero targets are detected.
   if (target_count == 0) {
-    return ASTL_STATUS_SUCCESS;
+    return ASTL_STATUS_NO_TARGETS_FOUND;
   }
 
   target_properties_buffer[0]._size = sizeof(astl_target_properties_t);
@@ -205,8 +203,8 @@ astl_status_code GetTargets(std::vector<astl_target_properties_t>& target_proper
   return ASTL_STATUS_INTERNAL_ERROR;
 }
 
-astl_status_code GetMetrics(const astl_target_properties_t&        target_properties,
-                            std::vector<astl_metric_properties_t>& metric_buffer, uint32_t& metric_count) {
+auto GetMetrics(const astl_target_properties_t& target_properties, std::vector<astl_metric_properties_t>& metric_buffer,
+                uint32_t& metric_count) -> astl_status_code {
   astl_status_code status = astlGetMetricCount(target_properties._handle, &metric_count);
   std::cout << "Metric count: " << metric_count << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
@@ -217,6 +215,11 @@ astl_status_code GetMetrics(const astl_target_properties_t&        target_proper
   }
 
   metric_buffer.resize(metric_count);
+
+  if (metric_count == 0) {
+    return ASTL_STATUS_NO_METRICS_FOUND;
+  }
+
   if (metric_count > 0) {
     metric_buffer[0]._size = sizeof(astl_metric_properties_t);
   }
@@ -225,10 +228,10 @@ astl_status_code GetMetrics(const astl_target_properties_t&        target_proper
   return status;
 }
 
-astl_status_code ConfigureAndRunCollection(const astl_target_properties_t&              target_properties,
-                                           const std::vector<astl_metric_properties_t>& metric_buffer, bool do_interval,
-                                           std::chrono::seconds      duration_seconds,
-                                           std::chrono::milliseconds sampling_interval) {
+auto ConfigureAndRunCollection(const astl_target_properties_t&              target_properties,
+                               const std::vector<astl_metric_properties_t>& metric_buffer, bool do_interval,
+                               std::chrono::seconds duration_seconds, std::chrono::milliseconds sampling_interval)
+    -> astl_status_code {
   ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params,
                    ._sampling_interval = do_interval ? static_cast<uint32_t>(sampling_interval.count()) : 0,
                    ._collection_mode   = do_interval ? ASTL_COLLECTION_MODE_SAMPLING : ASTL_COLLECTION_MODE_IMMEDIATE,
@@ -269,7 +272,8 @@ astl_status_code ConfigureAndRunCollection(const astl_target_properties_t&      
   return status;
 }
 
-void RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_metric_properties_t>& metric_buffer) {
+auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_metric_properties_t>& metric_buffer)
+    -> void {
   for (const auto& metric_props : metric_buffer) {
     if (std::strncmp(metric_props._name, "AP1", 3) == 0) {
       continue;  // skip AP1 as mock sysfs doesn't implement the AP1 events as listed in example_scmi_specification.json
@@ -321,7 +325,7 @@ void RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
  * A lightweight argument parser interprets these flags and
  * runs the corresponding ASTL actions.
  */
-int main(int argc, char* argv[]) {
+auto main(int argc, char* argv[]) -> int {
   auto args = ParseArgs(argc, argv);
 
   if (args.contains("help")) {
@@ -377,6 +381,10 @@ int main(int argc, char* argv[]) {
     status = GetTargets(target_properties_buffer, target_properties);
   }
   if (status != ASTL_STATUS_SUCCESS) {
+    if (status == ASTL_STATUS_NO_TARGETS_FOUND) {
+      std::cout << "No targets discovered; exiting successfully for integration environment.\n";
+      return 0;  // treat absence of targets as non-fatal in integration runs
+    }
     return 4;
   }
 

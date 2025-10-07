@@ -13,7 +13,7 @@ astl::CounterProperties::CounterProperties(std::string name, std::string descrip
       _value_type(value_type),
       _counter_type(counter_type) {}
 
-astl_status_code astl::Counter::GetProperties(astl_counter_properties_t *properties) const {
+auto astl::Counter::GetProperties(astl_counter_properties_t *properties) const -> astl_status_code {
   if (!properties) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }

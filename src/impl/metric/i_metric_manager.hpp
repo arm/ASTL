@@ -52,7 +52,7 @@ struct IMetricManager {
   /**
    * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
    */
-  virtual auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target)
+  [[nodiscard]] virtual auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target)
       -> std::expected<IMetric*, astl_status_code> = 0;
 
   /**
@@ -63,7 +63,7 @@ struct IMetricManager {
    * @param sink Non-null pointer whose lifetime must exceed the period of registration.
    * @return ASTL_STATUS_SUCCESS on success, ASTL_STATUS_BAD_ARGUMENT if sink is null.
    */
-  virtual astl_status_code RegisterProcessedSampleSink(IProcessedSampleSink* sink) = 0;
+  [[nodiscard]] virtual auto RegisterProcessedSampleSink(IProcessedSampleSink* sink) -> astl_status_code = 0;
 
   /**
    * @brief Remove a previously registered processed sample sink.
@@ -73,15 +73,15 @@ struct IMetricManager {
    * @param sink Pointer passed during registration.
    * @return ASTL_STATUS_SUCCESS (even if not found), ASTL_STATUS_BAD_ARGUMENT if sink is null.
    */
-  virtual astl_status_code UnregisterProcessedSampleSink(IProcessedSampleSink* sink) = 0;
+  [[nodiscard]] virtual auto UnregisterProcessedSampleSink(IProcessedSampleSink* sink) -> astl_status_code = 0;
 
   /**
    * @brief Register the metric.
    *
    * This method is called by the orchestrator to register a new metric.
    */
-  virtual astl_status_code RegisterMetric(std::unique_ptr<MetricConfig>      metric_config,
-                                          std::vector<const ITarget*> const& targets) = 0;
+  [[nodiscard]] virtual auto RegisterMetric(std::unique_ptr<MetricConfig>      metric_config,
+                                            std::vector<const ITarget*> const& targets) -> astl_status_code = 0;
 
   /**
    * @brief Get the available metrics.
@@ -91,7 +91,7 @@ struct IMetricManager {
    *
    * @return A span<astl_metric_handle_t> containing all registered metrics, or an error.
    */
-  virtual auto GetAvailableMetrics() const
+  [[nodiscard]] virtual auto GetAvailableMetrics() const
       -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
 
   /**
@@ -104,7 +104,7 @@ struct IMetricManager {
    *
    * @return A span<astl_metric_handle_t> containing all registered metrics, or an error.
    */
-  virtual auto GetAvailableMetrics(const ITarget* target) const
+  [[nodiscard]] virtual auto GetAvailableMetrics(const ITarget* target) const
       -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
 
   /**
@@ -115,7 +115,7 @@ struct IMetricManager {
    *
    * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
    */
-  virtual auto GetProperties(astl_metric_handle_t metric, astl_metric_properties_t* properties) const
+  [[nodiscard]] virtual auto GetProperties(astl_metric_handle_t metric, astl_metric_properties_t* properties) const
       -> astl_status_code = 0;
 
   /**
@@ -129,8 +129,8 @@ struct IMetricManager {
    * @return A CollectionOperations struct with operations for the CollectorManager to execute
    *         OR a status code indicating the nature of an error
    */
-  virtual std::expected<CollectionOperations, astl_status_code> GetRequiredOperations(
-      std::span<const astl_metric_handle_t> metrics, const ITarget* target) = 0;
+  [[nodiscard]] virtual auto GetRequiredOperations(std::span<const astl_metric_handle_t> metrics, const ITarget* target)
+      -> std::expected<CollectionOperations, astl_status_code> = 0;
 
   /**
    * @brief Process the data and route the messages to metrics.
@@ -139,7 +139,7 @@ struct IMetricManager {
    *
    * @param data A collection of raw sampled data points for the metrics to process
    */
-  virtual astl_status_code ProcessRawSamples(RawSamplesMap& raw_samples) = 0;
+  [[nodiscard]] virtual auto ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code = 0;
 
   /**
    * @brief Accept processed samples from a metric implementation.
@@ -151,15 +151,16 @@ struct IMetricManager {
    * @param processed_samples Span of processed samples, valid only during the call.
    * @return ASTL_STATUS_SUCCESS or an error code from dispatching to sinks.
    */
-  virtual astl_status_code SinkProcessedSamples(const IMetric*                        metric,
-                                                std::span<const ProcessedSampledData> processed_samples) = 0;
+  [[nodiscard]] virtual auto SinkProcessedSamples(const IMetric*                        metric,
+                                                  std::span<const ProcessedSampledData> processed_samples)
+      -> astl_status_code = 0;
 
   /**
    * @brief Summarize the metrics messages.
    *
    * This method should be called to create a summary for all the metrics.
    */
-  virtual astl_status_code SummarizeMetrics() = 0;
+  [[nodiscard]] virtual auto SummarizeMetrics() -> astl_status_code = 0;
 };
 
 }  // namespace astl

@@ -87,7 +87,7 @@ class RateMetric : public DeltaMetric {
    * @param sample A single sampled data point to be processed.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code ReceiveRawSample(const RawSampledData &raw_sample) override;
+  auto ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code override;
 
   /**
    * @brief Summarize collected rate data.
@@ -97,7 +97,7 @@ class RateMetric : public DeltaMetric {
    *
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code Summarize() override;
+  auto Summarize() -> astl_status_code override;
 
   /**
    * @brief Retrieve the rate summary data.
@@ -107,7 +107,7 @@ class RateMetric : public DeltaMetric {
    *
    * @return A RateSummaryData struct with rate statistics.
    */
-  RateSummaryData GetRateSummaryData() const;
+  auto GetRateSummaryData() const -> RateSummaryData;
 
   /**
    * @brief Get a view of the rate data calculated by this metric.
@@ -120,7 +120,7 @@ class RateMetric : public DeltaMetric {
    *
    * @return A span containing all calculated rate values with their timestamps.
    */
-  std::span<const RateData> GetRates() const;
+  auto GetRates() const -> std::span<const RateData>;
 
  protected:
   /**
@@ -141,15 +141,15 @@ class RateMetric : public DeltaMetric {
    * @param time_interval The time interval for this rate calculation.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code UpdateRateStatistics(const AstlValue &rate_value, SampleTimestamp timestamp,
-                                        std::chrono::microseconds time_interval);
+  auto UpdateRateStatistics(const AstlValue &rate_value, SampleTimestamp timestamp,
+                            std::chrono::microseconds time_interval) -> astl_status_code;
 
   /**
    * @brief Output time interval packets for each rate calculation.
    *
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code OutputTimeIntervalPackets();
+  auto OutputTimeIntervalPackets() -> astl_status_code;
 
  private:
   std::vector<RateData> _rates;                ///< Vector of all rate values with timestamps

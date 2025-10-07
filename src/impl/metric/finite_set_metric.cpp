@@ -28,7 +28,7 @@ FiniteSetMetric::FiniteSetMetric(const FiniteSetMetricConfig* configuration, con
       _finite_set_configuration{configuration},
       _finite_set_summary{} {}
 
-astl_status_code FiniteSetMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
+auto FiniteSetMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
   // First call the parent class to handle basic sample processing
   auto status = SampledValueMetric::ReceiveRawSample(raw_sample);
   if (status != ASTL_STATUS_SUCCESS) {
@@ -39,12 +39,12 @@ astl_status_code FiniteSetMetric::ReceiveRawSample(const RawSampledData& raw_sam
   return UpdateFiniteSetStatistics(raw_sample);
 }
 
-void FiniteSetMetric::Reset() {
+auto FiniteSetMetric::Reset() -> void {
   SampledValueMetric::Reset();
   _finite_set_summary = FiniteSetSummaryData{};
 }
 
-astl_status_code FiniteSetMetric::Summarize() {
+auto FiniteSetMetric::Summarize() -> astl_status_code {
   // Call parent class summarize first
   auto status = SampledValueMetric::Summarize();
   if (status != ASTL_STATUS_SUCCESS) {
@@ -56,7 +56,7 @@ astl_status_code FiniteSetMetric::Summarize() {
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code FiniteSetMetric::UpdateFiniteSetStatistics(const RawSampledData& raw_sample) {
+auto FiniteSetMetric::UpdateFiniteSetStatistics(const RawSampledData& raw_sample) -> astl_status_code {
   _finite_set_summary.total_samples++;
 
   // Check if the value exists in our finite set
@@ -77,7 +77,7 @@ astl_status_code FiniteSetMetric::UpdateFiniteSetStatistics(const RawSampledData
   return ASTL_STATUS_SUCCESS;
 }
 
-void FiniteSetMetric::LogFiniteSetSummary() {
+auto FiniteSetMetric::LogFiniteSetSummary() -> void {
   if (_finite_set_summary.total_samples == 0) {
     _finite_summary_logger.LogInfo("No samples to summarize for finite set metric: {}", _configuration->Name());
     return;

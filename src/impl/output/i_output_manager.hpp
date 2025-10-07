@@ -77,14 +77,14 @@ struct IOutputManager {
    *  - ASTL_STATUS_OUT_OF_MEMORY if allocation for the output fails
    *  - ASTL_STATUS_INTERNAL_ERROR for unexpected failures
    */
-  [[nodiscard]] virtual astl_status_code CreateBufferOutput(std::span<astl_metric_sample_t> samples_buffer,
-                                                            uint32_t*                       buffer_sample_count) = 0;
+  [[nodiscard]] virtual auto CreateBufferOutput(std::span<astl_metric_sample_t> samples_buffer,
+                                                uint32_t* buffer_sample_count) -> astl_status_code = 0;
 
   /**
    * @brief Destroy and de-register the buffer output (idempotent).
    * @return ASTL_STATUS_SUCCESS (even if no buffer was registered) or error.
    */
-  virtual astl_status_code DestroyBufferOutput() = 0;
+  [[nodiscard]] virtual auto DestroyBufferOutput() -> astl_status_code = 0;
 
   /**
    * @brief Dispatch processed samples to the selected output type.
@@ -107,9 +107,9 @@ struct IOutputManager {
    *   - ASTL_STATUS_NO_DATA_COLLECTED if no matching samples exist
    *   - Implementation-specific error codes (e.g. capacity issues) from the underlying writer
    */
-  [[nodiscard]] virtual astl_status_code OutputProcessedSamples(const ProcessedSamplesMap& processed_samples,
-                                                                OutputType output_type, const ITarget* target,
-                                                                const IMetric* metric) = 0;
+  [[nodiscard]] virtual auto OutputProcessedSamples(const ProcessedSamplesMap& processed_samples,
+                                                    OutputType output_type, const ITarget* target,
+                                                    const IMetric* metric) -> astl_status_code = 0;
 };
 }  // namespace astl
 

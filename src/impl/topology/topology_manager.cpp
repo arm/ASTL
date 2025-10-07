@@ -36,9 +36,9 @@ namespace astl {
 
 TopologyManager::TopologyManager(std::vector<std::unique_ptr<ITarget>>&& targets) : _targets{std::move(targets)} {}
 
-const std::vector<std::unique_ptr<ITarget>>& TopologyManager::GetTargets() const { return _targets; }
+auto TopologyManager::GetTargets() const -> const std::vector<std::unique_ptr<ITarget>>& { return _targets; }
 
-astl_status_code TopologyManager::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) {
+auto TopologyManager::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) -> astl_status_code {
   _targets = std::move(new_targets);
   return ASTL_STATUS_SUCCESS;
 }

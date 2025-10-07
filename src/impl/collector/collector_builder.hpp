@@ -37,7 +37,8 @@ namespace astl {
  * @return An initialized ICollectorManager associating each target with its corresponding collectors, or an error code.
  *         Note the RegisterRawSampleSink() function will still need to be called on the returned collector manager
  */
-auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration)
+[[nodiscard]] auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
+                                         const AstlConfiguration&                     configuration)
     -> std::expected<std::unique_ptr<ICollectorManager>, astl_status_code>;
 
 }  // namespace astl

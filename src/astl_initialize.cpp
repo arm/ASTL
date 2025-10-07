@@ -41,7 +41,7 @@
 /** @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
  *  @todo https://jira.arm.com/browse/ASTL-131 clean up the dependency entanglement between the various managers.
  */
-ASTL_API astl_status_code astlInitialize(const astl_initialization_parameters_t* init_params) {
+ASTL_API auto astlInitialize(const astl_initialization_parameters_t* init_params) -> astl_status_code {
   if (!init_params) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }

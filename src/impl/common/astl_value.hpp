@@ -103,7 +103,7 @@ struct AstlValue {
    *
    * @return an AstlValue instance with the same value as val, or a ASTL_STATUS_INVALID_VALUE_TYPE
    */
-  static std::expected<AstlValue, astl_status_code> FromUnion(const astl_value_t& val, astl_value_type_t type);
+  static auto FromUnion(const astl_value_t& val, astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Create an AstlValue of 0 value of the largest representative of the given type
@@ -112,21 +112,21 @@ struct AstlValue {
    *
    *        This is useful for creating a base for arithmetic operations, like a running sum for average
    */
-  static std::expected<AstlValue, astl_status_code> FromUnionPromoting(astl_value_type_t type);
+  static auto FromUnionPromoting(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Create an AstlValue of the given type with the minimal possible value
    *
    * @return an AstlValue instance with the minimum possible value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
    */
-  static std::expected<AstlValue, astl_status_code> FromMinimum(astl_value_type_t type);
+  static auto FromMinimum(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Create an AstlValue of the given type as close to '0' as possible
    *
    * @return an AstlValue instance of 0 value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
    */
-  static std::expected<AstlValue, astl_status_code> FromZero(astl_value_type_t type);
+  static auto FromZero(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Create an AstlValue of the given type with the maximum possible value
@@ -134,7 +134,7 @@ struct AstlValue {
    * @return an AstlValue instance with the max representable value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
    * @note if type == ASTL_VALUE_STRING, this returns ASTL_STATUS_VALID_VALUE_TYPE
    */
-  static std::expected<AstlValue, astl_status_code> FromMaximum(astl_value_type_t type);
+  static auto FromMaximum(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Compute the sum of two AstlValues of the same underlying type.
@@ -143,7 +143,7 @@ struct AstlValue {
    *   - ASTL_STATUS_METRIC_OVERFLOW_DETECTED if this would overflow their representations
    *   - ASTL_STATUS_INVALID_VALUE_TYPE if operands aren't similar types
    */
-  static std::expected<AstlValue, astl_status_code> Add(const AstlValue& addend, const AstlValue& augend);
+  static auto Add(const AstlValue& addend, const AstlValue& augend) -> std::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Compute the difference of two AstlValues of the same underlying type.
@@ -152,14 +152,16 @@ struct AstlValue {
    *   - ASTL_STATUS_METRIC_OVERFLOW_DETECTED if this would overflow their representations
    *   - ASTL_STATUS_INVALID_VALUE_TYPE if operands aren't similar types
    */
-  static std::expected<AstlValue, astl_status_code> Subtract(const AstlValue& minuend, const AstlValue& subtrahend);
+  static auto Subtract(const AstlValue& minuend, const AstlValue& subtrahend)
+      -> std::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Divide the dividend by the divisor. May truncate if dividend or divisor are integral types
    * @return The quotient, or a ASTL_STATUS_INVALID_VALUE_TYPE error if dividend is not arithmetic.
    */
   template <typename DivisorType>
-  static std::expected<AstlValue, astl_status_code> Divide(const AstlValue& dividend, const DivisorType divisor) {
+  static auto Divide(const AstlValue& dividend, const DivisorType divisor)
+      -> std::expected<AstlValue, astl_status_code> {
     return std::visit(
         [=](auto&& dividend_x) -> std::expected<AstlValue, astl_status_code> {
           using DividendType = std::decay_t<decltype(dividend_x)>;
@@ -190,7 +192,7 @@ struct AstlValue {
    *       pointing to the AstlValue's internal string buffer. So the AstlValue must outlive the returned
    *       astl_value_t.
    */
-  std::pair<astl_value_t, astl_value_type_t> ToAstlUnionValue() const;
+  auto ToAstlUnionValue() const -> std::pair<astl_value_t, astl_value_type_t>;
 
   auto operator<=>(AstlValue const&) const = default;
 };
@@ -198,7 +200,7 @@ struct AstlValue {
 /**
  * @brief convert the AstlValue to a string suitable for Log debugging
  */
-std::string to_string(const AstlValue& variant_value);
+auto to_string(const AstlValue& variant_value) -> std::string;
 
 }  // namespace astl
 
@@ -209,7 +211,10 @@ std::string to_string(const AstlValue& variant_value);
 template <>
 struct std::formatter<astl::AstlValue> {
   template <typename ParseContext>
-  constexpr auto parse(ParseContext& ctx) {  // cppcheck-suppress unusedFunction
+  constexpr auto parse(ParseContext& ctx) {
+    // Note: parse() is required by the std::formatter contract even if some translation units
+    // don't instantiate format patterns that exercise it; retaining it (rather than suppressing)
+    // avoids ad-hoc cppcheck suppression.
     // Save full format specifier for forwarding
     auto it = ctx.begin();
     while (it != ctx.end() && *it != '}') {

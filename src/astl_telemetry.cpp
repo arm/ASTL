@@ -145,7 +145,7 @@ auto GetFirstElementSizeField(Container const& elements)
  **********************               TARGETS               ************************
  **********************************************************************************/
 
-astl_status_code astlGetTargetCount(uint32_t* target_count) {
+auto astlGetTargetCount(uint32_t* target_count) -> astl_status_code {
   if (!target_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -171,8 +171,8 @@ using VersionedPropertiesSpan = std::variant<std::span<astl_target_properties_t>
  * declaration and rename it astl_target_properties_v1_t so we can provide overloaded functions
  * for it.
  */
-std::expected<VersionedPropertiesSpan, astl_status_code> GetVersionedTargetPropertiesSpan(
-    astl_target_properties_t* targets, uint32_t target_count) {
+auto GetVersionedTargetPropertiesSpan(astl_target_properties_t* targets, uint32_t target_count)
+    -> std::expected<VersionedPropertiesSpan, astl_status_code> {
   // at first, assume the caller's targets are the same size as the astl_target_properties_t struct in our header.
   std::span<astl_target_properties_t> target_span{targets, target_count};
   auto                                given_struct_size = GetFirstElementSizeField(target_span);
@@ -199,7 +199,7 @@ std::expected<VersionedPropertiesSpan, astl_status_code> GetVersionedTargetPrope
   }
 }
 
-astl_status_code astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) {
+auto astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) -> astl_status_code {
   if (!targets) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -253,8 +253,8 @@ astl_status_code astlGetTargets(astl_target_properties_t* targets, uint32_t* tar
 /***********************************************************************************
  **********************              COUNTER                   *********************
  **********************************************************************************/
-// TODO(fayben01) counter should be re-implemented as just a RawMetric.
-astl_status_code astlGetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_count) {
+// TODO(ASTL-180) counter should be re-implemented as just a RawMetric.
+auto astlGetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_count) -> astl_status_code {
   if (!target_handle || !counter_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -272,8 +272,8 @@ astl_status_code astlGetCounterCount(astl_target_handle_t target_handle, uint32_
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties_t* counters,
-                                 uint32_t* counter_count) {
+auto astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties_t* counters, uint32_t* counter_count)
+    -> astl_status_code {
   if (!target_handle || !counters || !counter_count || *counter_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -327,7 +327,7 @@ astl_status_code astlGetCounters(astl_target_handle_t target_handle, astl_counte
  **********************              METRIC                    *********************
  **********************************************************************************/
 
-astl_status_code astlGetMetricCount(astl_target_handle_t target_handle, uint32_t* metric_count) {
+auto astlGetMetricCount(astl_target_handle_t target_handle, uint32_t* metric_count) -> astl_status_code {
   if (!target_handle || !metric_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -355,8 +355,8 @@ astl_status_code astlGetMetricCount(astl_target_handle_t target_handle, uint32_t
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t* metrics,
-                                uint32_t* metric_count) {
+auto astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t* metrics, uint32_t* metric_count)
+    -> astl_status_code {
   // check input arguments
   if (!target_handle || !metrics || !metric_count || *metric_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -420,7 +420,7 @@ astl_status_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_
  **********************              METRIC GROUPS             *********************
  **********************************************************************************/
 
-astl_status_code astlGetMetricGroupCount(astl_target_handle_t target_handle, uint32_t* metric_group_count) {
+auto astlGetMetricGroupCount(astl_target_handle_t target_handle, uint32_t* metric_group_count) -> astl_status_code {
   (void)target_handle;
   if (!metric_group_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -430,8 +430,8 @@ astl_status_code astlGetMetricGroupCount(astl_target_handle_t target_handle, uin
   return result;
 }
 
-astl_status_code astlGetMetricGroups(astl_target_handle_t target_handle, astl_metric_group_properties_t* metric_groups,
-                                     uint32_t* metric_group_count) {
+auto astlGetMetricGroups(astl_target_handle_t target_handle, astl_metric_group_properties_t* metric_groups,
+                         uint32_t* metric_group_count) -> astl_status_code {
   (void)target_handle;
   if (!metric_groups) {
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -447,9 +447,8 @@ astl_status_code astlGetMetricGroups(astl_target_handle_t target_handle, astl_me
   return result;
 }
 
-astl_status_code astlGetMetricGroupMetrics(astl_target_handle_t                  target_handle,
-                                           const astl_metric_group_properties_t* metric_groups,
-                                           astl_metric_properties_t*             metrics) {
+auto astlGetMetricGroupMetrics(astl_target_handle_t target_handle, const astl_metric_group_properties_t* metric_groups,
+                               astl_metric_properties_t* metrics) -> astl_status_code {
   (void)target_handle;
   if (!metric_groups || !metrics || metric_groups->_metric_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -466,10 +465,10 @@ astl_status_code astlGetMetricGroupMetrics(astl_target_handle_t                 
  **********************************************************************************/
 
 /*** CONFIGURE COUNTERS ***/
-astl_status_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t                target_handle,
-                                                        const astl_collection_parameters_t* collection_params,
-                                                        const astl_counter_handle_t*        counter_handles,
-                                                        uint32_t                            counter_count) {
+auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                target_handle,
+                                            const astl_collection_parameters_t* collection_params,
+                                            const astl_counter_handle_t* counter_handles, uint32_t counter_count)
+    -> astl_status_code {
   if (!target_handle || !collection_params || !counter_handles || counter_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -505,8 +504,9 @@ astl_status_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t    
   return orchestrator->ConfigureCounterCollection(target, collection_params, counters);
 }
 
-astl_status_code astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,
-                                                const astl_counter_handle_t* counter_handles, uint32_t counter_count) {
+auto astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,
+                                    const astl_counter_handle_t* counter_handles, uint32_t counter_count)
+    -> astl_status_code {
   if (!collection_params || !counter_handles) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -542,9 +542,10 @@ astl_status_code astlConfigureCounterCollection(const astl_collection_parameters
 }
 
 /*** CONFIGURE METRICS ***/
-astl_status_code astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
-                                                       astl_collection_parameters_t* collection_params,
-                                                       astl_metric_handle_t* metric_handles, uint32_t metric_count) {
+auto astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
+                                           astl_collection_parameters_t* collection_params,
+                                           astl_metric_handle_t* metric_handles, uint32_t metric_count)
+    -> astl_status_code {
   // check input arguments for null and api version
   if (!target_handle || !collection_params || !metric_handles || !metric_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -568,8 +569,8 @@ astl_status_code astlConfigureMetricCollectionOnTarget(astl_target_handle_t     
   return orchestrator->ConfigureMetricCollection(target, collection_params, metric_handle_span);
 }
 
-astl_status_code astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
-                                               astl_metric_handle_t* metric_handles, uint32_t metric_count) {
+auto astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
+                                   astl_metric_handle_t* metric_handles, uint32_t metric_count) -> astl_status_code {
   (void)collection_params;
   (void)metric_handles;
   (void)metric_count;
@@ -578,10 +579,10 @@ astl_status_code astlConfigureMetricCollection(astl_collection_parameters_t* col
 }
 
 /*** CONFIGURE METRIC GROUPS ***/
-astl_status_code astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          target_handle,
-                                                            astl_collection_parameters_t* collection_params,
-                                                            astl_metric_group_handle_t*   metric_group_handles,
-                                                            uint32_t                      metric_group_count) {
+auto astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          target_handle,
+                                                astl_collection_parameters_t* collection_params,
+                                                astl_metric_group_handle_t*   metric_group_handles,
+                                                uint32_t                      metric_group_count) -> astl_status_code {
   (void)target_handle;
   (void)collection_params;
   (void)metric_group_handles;
@@ -590,9 +591,9 @@ astl_status_code astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t
   return result;
 }
 
-astl_status_code astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
-                                                    astl_metric_group_handle_t*   metric_group_handles,
-                                                    uint32_t                      metric_group_count) {
+auto astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
+                                        astl_metric_group_handle_t* metric_group_handles, uint32_t metric_group_count)
+    -> astl_status_code {
   (void)collection_params;
   (void)metric_group_handles;
   (void)metric_group_count;
@@ -600,7 +601,7 @@ astl_status_code astlConfigureMetricGroupCollection(astl_collection_parameters_t
   return result;
 }
 
-astl_status_code astlReadImmediateOnTarget(astl_target_handle_t target_handle) {
+auto astlReadImmediateOnTarget(astl_target_handle_t target_handle) -> astl_status_code {
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -617,7 +618,7 @@ astl_status_code astlReadImmediateOnTarget(astl_target_handle_t target_handle) {
   return orchestrator->ReadImmediate(target);
 }
 
-astl_status_code astlReadImmediate() {
+auto astlReadImmediate() -> astl_status_code {
   auto& orchestrator = astl::Orchestrator::GetInstance();
   if (!orchestrator) {
     return ASTL_STATUS_NOT_INITIALIZED;
@@ -633,7 +634,7 @@ astl_status_code astlReadImmediate() {
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code astlStartCollectionOnTarget(astl_target_handle_t target_handle) {
+auto astlStartCollectionOnTarget(astl_target_handle_t target_handle) -> astl_status_code {
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -651,34 +652,34 @@ astl_status_code astlStartCollectionOnTarget(astl_target_handle_t target_handle)
   return orchestrator->StartCollection(target);
 }
 
-astl_status_code astlStartCollection() {
+auto astlStartCollection() -> astl_status_code {
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
-astl_status_code astlPauseCollectionOnTarget(astl_target_handle_t target_handle) {
+auto astlPauseCollectionOnTarget(astl_target_handle_t target_handle) -> astl_status_code {
   (void)target_handle;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
-astl_status_code astlPauseCollection() {
+auto astlPauseCollection() -> astl_status_code {
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
-astl_status_code astlResumeCollectionOnTarget(astl_target_handle_t target_handle) {
+auto astlResumeCollectionOnTarget(astl_target_handle_t target_handle) -> astl_status_code {
   (void)target_handle;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
-astl_status_code astlResumeCollection() {
+auto astlResumeCollection() -> astl_status_code {
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
-astl_status_code astlStopCollectionOnTarget(astl_target_handle_t target_handle) {
+auto astlStopCollectionOnTarget(astl_target_handle_t target_handle) -> astl_status_code {
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -696,14 +697,14 @@ astl_status_code astlStopCollectionOnTarget(astl_target_handle_t target_handle) 
   return orchestrator->StopCollection(target);
 }
 
-astl_status_code astlStopCollection() {
+auto astlStopCollection() -> astl_status_code {
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
 /*** COLLECTED COUNTER SAMPLES ***/
-astl_status_code astlGetCounterSampleCountOnTarget(astl_target_handle_t  target_handle,
-                                                   astl_counter_handle_t counter_handle, uint32_t* sample_count) {
+auto astlGetCounterSampleCountOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
+                                       uint32_t* sample_count) -> astl_status_code {
   if (!target_handle || !counter_handle || !sample_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -731,8 +732,8 @@ astl_status_code astlGetCounterSampleCountOnTarget(astl_target_handle_t  target_
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code astlGetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
-                                               astl_counter_sample_t* samples, uint32_t* sample_count) {
+auto astlGetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
+                                   astl_counter_sample_t* samples, uint32_t* sample_count) -> astl_status_code {
   (void)target_handle;
   (void)counter_handle;
   if (!samples) {
@@ -746,14 +747,14 @@ astl_status_code astlGetCounterSamplesOnTarget(astl_target_handle_t target_handl
   samples_span[0]._size       = sizeof(astl_counter_sample_t);
   samples_span[0]._timestamp  = 0U;
   samples_span[0]._value.ui64 = 0ULL;  // cppcheck-suppress unreadVariable
-
-  *sample_count = 0;
+  *sample_count               = 0;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
+
 /*** COLLECTED METRIC SAMPLES ***/
-astl_status_code astlGetMetricSampleCountOnTarget(astl_target_handle_t target_handle,
-                                                  astl_metric_handle_t metric_handle, uint32_t* sample_count) {
+auto astlGetMetricSampleCountOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
+                                      uint32_t* sample_count) -> astl_status_code {
   if (!target_handle || !metric_handle || !sample_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -786,8 +787,8 @@ astl_status_code astlGetMetricSampleCountOnTarget(astl_target_handle_t target_ha
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                              astl_metric_sample_t* samples, uint32_t* sample_count) {
+auto astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
+                                  astl_metric_sample_t* samples, uint32_t* sample_count) -> astl_status_code {
   if (!target_handle || !metric_handle || !samples || !sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -839,6 +840,7 @@ astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle
 
   astl_status_code status =
       output_manager->OutputProcessedSamples(collected_samples.get(), astl::OutputType::BUFFER, target, metric);
-  output_manager->DestroyBufferOutput();
+  // Intentionally ignore the result of DestroyBufferOutput; cleanup best-effort during sample retrieval.
+  (void)output_manager->DestroyBufferOutput();
   return status;
 }

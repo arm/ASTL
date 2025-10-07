@@ -30,7 +30,8 @@ namespace astl {
 
 /** @brief Builds a metric manager from the given set of targets and the configuration
  */
-auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration)
+[[nodiscard]] auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets,
+                                      const AstlConfiguration&                     configuration)
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code>;
 
 }  // namespace astl

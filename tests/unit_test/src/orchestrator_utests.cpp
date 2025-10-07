@@ -77,7 +77,7 @@ TEST_CASE("Orchestrator-Collection", "[Orchestrator]") {
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
-  orchestrator.SetTargets(std::move(mock_targets));
+  REQUIRE(orchestrator.SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
 
   auto unexpected_target = std::make_unique<MockTarget>();
 

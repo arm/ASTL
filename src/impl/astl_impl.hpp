@@ -59,10 +59,10 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *                         then post-process the sampled data
    * @param output_manager - Can turn a set of processed metric samples into desired output formats
    */
-  static void InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
+  static auto InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
                                  std::unique_ptr<ICollectorManager> collector_manager,
                                  std::unique_ptr<IMetricManager>    metric_manager,
-                                 std::unique_ptr<IOutputManager>    output_manager);
+                                 std::unique_ptr<IOutputManager>    output_manager) -> void;
 
   /**
    * @brief Return a reference to the single Orchestrator instance
@@ -73,12 +73,12 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *
    * @return a reference to an owning pointer to Orchestrator. Will return nullptr before InitializeInstance is called
    */
-  static std::unique_ptr<Orchestrator> &GetInstance();
+  static auto GetInstance() -> std::unique_ptr<Orchestrator> &;
 
   /**
    * @brief Returns a const reference to the set of Targets managed by this orchestrator.
    */
-  std::vector<std::unique_ptr<ITarget>> const &GetTargets() const;
+  auto GetTargets() const -> std::vector<std::unique_ptr<ITarget>> const &;
 
   /**
    * @brief Reassign the set of Targets managed by this orchestrator.
@@ -87,7 +87,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *  For example, we could add member functions to enable/disable specific targets or
    *  modify the list internally when we read the configuration.
    */
-  astl_status_code SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets);
+  auto SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) -> astl_status_code;
 
   /**
    * @brief For a given target, enable collection on a set of measurable Counters.
@@ -101,9 +101,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
    *   - ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET: one of the given counters is not associated with the target
    */
-  astl_status_code ConfigureCounterCollection(const ITarget                      *target,
-                                              const astl_collection_parameters_t *collection_params,
-                                              std::span<const ICounter *>         counters);
+  auto ConfigureCounterCollection(const ITarget *target, const astl_collection_parameters_t *collection_params,
+                                  std::span<const ICounter *> counters) -> astl_status_code;
 
   /**
    * @brief For a given target, enable collection on a set of measurable Metrics.
@@ -117,9 +116,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
    *   - ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET: one of the given metrics is not associated with the target
    */
-  astl_status_code ConfigureMetricCollection(const ITarget                        *target,
-                                             const astl_collection_parameters_t   *collection_params,
-                                             std::span<const astl_metric_handle_t> metrics);
+  auto ConfigureMetricCollection(const ITarget *target, const astl_collection_parameters_t *collection_params,
+                                 std::span<const astl_metric_handle_t> metrics) -> astl_status_code;
 
   /**
    * @brief Apply the previously configured collection on the given target
@@ -132,7 +130,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
    *   - others: according to individual Collector implementations
    */
-  astl_status_code StartCollection(const ITarget *target);
+  auto StartCollection(const ITarget *target) -> astl_status_code;
 
   /**
    * @brief Collect one sample of data on a target with an active configured collection
@@ -144,7 +142,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
    *   - others: according to individual Collector implementations
    */
-  astl_status_code ReadImmediate(const ITarget *target);
+  auto ReadImmediate(const ITarget *target) -> astl_status_code;
 
   /**
    * @brief Stop the collection of samples, but leave configuration in place
@@ -157,7 +155,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
    *   - others: according to individual Collector implementations
    */
-  astl_status_code PauseCollection(const ITarget *target);
+  auto PauseCollection(const ITarget *target) -> astl_status_code;
 
   /**
    * @brief Re-enable the collection of samples, based on previous configuration
@@ -169,7 +167,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
    *   - others: according to individual Collector implementations
    */
-  astl_status_code ResumeCollection(const ITarget *target);
+  auto ResumeCollection(const ITarget *target) -> astl_status_code;
 
   /**
    * @brief Stop the collection of samples
@@ -185,7 +183,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
    *   - others: according to individual Collector implementations
    */
-  astl_status_code StopCollection(const ITarget *target);
+  auto StopCollection(const ITarget *target) -> astl_status_code;
 
   /**
    * @brief Return the number of collected samples for a given counter on the given target
@@ -196,23 +194,24 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - a value: the count of samples taken for the given ICounter on the target
    *   - OR an error status code such as an invalid handle or bad argument
    */
-  std::expected<uint32_t, astl_status_code> GetCounterSampleCount(const ITarget *target, const ICounter *counter) const;
+  auto GetCounterSampleCount(const ITarget *target, const ICounter *counter) const
+      -> std::expected<uint32_t, astl_status_code>;
 
   // TODO(ASTL-58): when OutputManager is implemented, revisit to see if GetMetricManager is even needed
   /**
    * @brief Return a reference to a pointer to the MetricManager, used to enumerate metrics
    */
-  const std::unique_ptr<IMetricManager> &GetMetricManager() const { return _metric_manager; }
+  auto GetMetricManager() const -> const std::unique_ptr<IMetricManager> & { return _metric_manager; }
 
   /**
    * @brief Return a reference to a pointer to the OutputManager, used to enumerate outputs
    */
-  const std::unique_ptr<IOutputManager> &GetOutputManager() const { return _output_manager; }
+  auto GetOutputManager() const -> const std::unique_ptr<IOutputManager> & { return _output_manager; }
 
   /**
    * @brief Implementation of the IRawSampleSink interface - Receives raw samples from CollectorManager
    */
-  astl_status_code SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) override;
+  auto SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) -> astl_status_code override;
 
   // std::expected cannot hold reference types directly (C++23 lib enforces this),
   // so expose a reference via std::reference_wrapper
@@ -230,17 +229,17 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   /**
    * @brief Implementation of the IProcessedSampleSink interface - Receives processed samples from MetricManager
    */
-  astl_status_code SinkProcessedSamples(const ITarget *target, const IMetric *metric,
-                                        std::span<const ProcessedSampledData> processed_samples) override;
+  auto SinkProcessedSamples(const ITarget *target, const IMetric *metric,
+                            std::span<const ProcessedSampledData> processed_samples) -> astl_status_code override;
 
  private:
-  static std::mutex                 &GetMutex();          // manage thread-safe access   to singleton instance
-  std::unique_ptr<ITopologyManager>  _topology_manager;   // manages the set of Targets
-  std::unique_ptr<ICollectorManager> _collector_manager;  // manages the collection of raw samples
-  std::unique_ptr<IMetricManager>    _metric_manager;     // manages the processing of raw samples into metrics
-  std::unique_ptr<IOutputManager>    _output_manager;     // manages the output of processed samples
-  RawSamplesMap                      _raw_samples;        // collected raw samples, organized by target
-  mutable std::mutex                 _raw_samples_mtx;    // protect the _raw_samples container
+  static auto                        GetMutex() -> std::mutex &;  // manage thread-safe access   to singleton instance
+  std::unique_ptr<ITopologyManager>  _topology_manager;           // manages the set of Targets
+  std::unique_ptr<ICollectorManager> _collector_manager;          // manages the collection of raw samples
+  std::unique_ptr<IMetricManager>    _metric_manager;             // manages the processing of raw samples into metrics
+  std::unique_ptr<IOutputManager>    _output_manager;             // manages the output of processed samples
+  RawSamplesMap                      _raw_samples;                // collected raw samples, organized by target
+  mutable std::mutex                 _raw_samples_mtx;            // protect the _raw_samples container
   ProcessedSamplesMap                _processed_samples;  // processed metric samples, organized by target and metric
   mutable std::mutex                 _processed_samples_mtx;  // protect the _processed_samples container
 };

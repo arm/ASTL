@@ -35,8 +35,8 @@
 
 namespace astl {
 
-astl_status_code MetricManager::SinkProcessedSamples(const IMetric*                        metric,
-                                                     std::span<const ProcessedSampledData> processed_samples) {
+auto MetricManager::SinkProcessedSamples(const IMetric* metric, std::span<const ProcessedSampledData> processed_samples)
+    -> astl_status_code {
   auto target_or_error = GetTargetForMetric(metric);
   if (!target_or_error.has_value()) {
     return target_or_error.error();
@@ -154,7 +154,7 @@ auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const 
   return target_iter->second.get();
 }
 
-astl_status_code MetricManager::RegisterProcessedSampleSink(IProcessedSampleSink* sink) {
+auto MetricManager::RegisterProcessedSampleSink(IProcessedSampleSink* sink) -> astl_status_code {
   if (!sink) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -162,7 +162,7 @@ astl_status_code MetricManager::RegisterProcessedSampleSink(IProcessedSampleSink
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code MetricManager::UnregisterProcessedSampleSink(IProcessedSampleSink* sink) {
+auto MetricManager::UnregisterProcessedSampleSink(IProcessedSampleSink* sink) -> astl_status_code {
   if (!sink) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -173,8 +173,8 @@ astl_status_code MetricManager::UnregisterProcessedSampleSink(IProcessedSampleSi
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_config,
-                                               std::vector<const ITarget*> const& targets) {
+auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_config,
+                                   std::vector<const ITarget*> const& targets) -> astl_status_code {
   ASTL_LOG_TRACE("RegisterMetric {} on {} targets", metric_config ? metric_config->Name() : "<null>", targets.size());
   CollectorType collector_type = metric_config->GetCollectorType();
   if (!IsCollectorTypeSupported(collector_type)) {
@@ -318,7 +318,7 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
   return operations;
 }
 
-astl_status_code MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) {
+auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code {
   for (const auto& [target, samples] : raw_samples) {
     for (const auto& sample : samples) {
       // Find the metric handle corresponding to this operation ID
@@ -341,7 +341,7 @@ astl_status_code MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) {
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code MetricManager::SummarizeMetrics() {
+auto MetricManager::SummarizeMetrics() -> astl_status_code {
   _operation_to_metric_map.clear();  // release the memory tying operation IDs to metrics
   for (const auto& metric_details : _metric_handles) {
     for (auto& [target, metric] : metric_details->target_to_metric_map) {
@@ -356,7 +356,7 @@ astl_status_code MetricManager::SummarizeMetrics() {
   return ASTL_STATUS_SUCCESS;
 }
 
-bool MetricManager::IsCollectorTypeSupported(CollectorType required_collector_type) const {
+auto MetricManager::IsCollectorTypeSupported(CollectorType required_collector_type) const -> bool {
   // Check against the manager's capabilities
   const std::vector<CollectorCapability>& collector_caps = _capabilities.GetCollectorCapability();
   return std::any_of(collector_caps.begin(), collector_caps.end(),
@@ -375,8 +375,8 @@ auto MetricManager::GetTargetForMetric(const IMetric* metric) const -> std::expe
   return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
 }
 
-astl_status_code MetricManager::SinkProcessedSamples(const ITarget* target, const IMetric* metric,
-                                                     std::span<const ProcessedSampledData> processed_samples) {
+auto MetricManager::SinkProcessedSamples(const ITarget* target, const IMetric* metric,
+                                         std::span<const ProcessedSampledData> processed_samples) -> astl_status_code {
   astl_status_code result = ASTL_STATUS_SUCCESS;
   for (const auto& sink : _registered_processed_sample_sinks) {
     auto sink_result = sink->SinkProcessedSamples(target, metric, processed_samples);

@@ -43,7 +43,7 @@ namespace astl {
  *  - Returns `std::unexpected(astl_status_code)` if configuration parsing, allocation, or output
  *    instantiation fails.
  */
-auto BuildOutputManager() -> std::expected<std::unique_ptr<IOutputManager>, astl_status_code>;
+[[nodiscard]] auto BuildOutputManager() -> std::expected<std::unique_ptr<IOutputManager>, astl_status_code>;
 
 }  // namespace astl
 

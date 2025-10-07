@@ -35,7 +35,7 @@ DeltaMetric::DeltaMetric(const MetricConfig* configuration, const ITarget* targe
   _delta_summary_logger.LogInfo("Metric, Description, Units, Delta Value \n");
 }
 
-astl_status_code DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
+auto DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
   // Check if the sample's value type matches the metric's expected type
   auto type_check_result = CheckSampleValueType(raw_sample);
   if (type_check_result != ASTL_STATUS_SUCCESS) {
@@ -71,8 +71,8 @@ astl_status_code DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample)
   return ASTL_STATUS_SUCCESS;
 }
 
-/* static */ std::expected<AstlValue, astl_status_code> DeltaMetric::CalculateDelta(const AstlValue& current_sample,
-                                                                                    const AstlValue& previous_sample) {
+/* static */ auto DeltaMetric::CalculateDelta(const AstlValue& current_sample, const AstlValue& previous_sample)
+    -> std::expected<AstlValue, astl_status_code> {
   if (!current_sample.IsArithmetic() || !previous_sample.IsArithmetic()) {
     return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
@@ -86,7 +86,7 @@ astl_status_code DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample)
   return delta_result.value();
 }
 
-astl_status_code DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value, SampleTimestamp timestamp) {
+auto DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value, SampleTimestamp timestamp) -> astl_status_code {
   if (!delta_value.IsArithmetic()) {
     ASTL_LOG_TRACE("DeltaMetric: received delta with non-arithmetic value type for metric: {}", _configuration->Name());
     return ASTL_STATUS_SUCCESS;
@@ -121,7 +121,7 @@ astl_status_code DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code DeltaMetric::Summarize() {
+auto DeltaMetric::Summarize() -> astl_status_code {
   // Compute min, max, and average delta values
   if (_deltas.empty()) {
     _delta_summary_logger.LogInfo("No deltas to summarize for metric: {}.", _configuration->Name());
@@ -146,15 +146,15 @@ astl_status_code DeltaMetric::Summarize() {
   return ASTL_STATUS_SUCCESS;
 }
 
-DeltaSummaryData DeltaMetric::GetDeltaSummaryData() const { return _delta_summary_data; }
+auto DeltaMetric::GetDeltaSummaryData() const -> DeltaSummaryData { return _delta_summary_data; }
 
-std::span<const ProcessedSampledData> DeltaMetric::GetProcessedSamples() const {
+auto DeltaMetric::GetProcessedSamples() const -> std::span<const ProcessedSampledData> {
   return std::span<const ProcessedSampledData>(_deltas);
 }
 
-void DeltaMetric::Reset() { InitializeSamples(); }
+auto DeltaMetric::Reset() -> void { InitializeSamples(); }
 
-void DeltaMetric::InitializeSamples() {
+auto DeltaMetric::InitializeSamples() -> void {
   // Reset the metric state
   _previous_sample.reset();
   _delta_summary_data = DeltaSummaryData{};

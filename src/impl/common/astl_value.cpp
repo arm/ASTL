@@ -45,7 +45,8 @@ AstlValue::AstlValue(std::string val) : value{std::move(val)} {}
  *
  * @return an AstlValue instance with the same value as val, or a ASTL_STATUS_INVALID_VALUE_TYPE
  */
-std::expected<AstlValue, astl_status_code> AstlValue::FromUnion(const astl_value_t& val, astl_value_type_t type) {
+auto AstlValue::FromUnion(const astl_value_t& val, astl_value_type_t type)
+    -> std::expected<AstlValue, astl_status_code> {
   // clang-format off
   switch (type) {
     case ASTL_VALUE_UINT8:       return AstlValue{val.ui8};
@@ -62,7 +63,7 @@ std::expected<AstlValue, astl_status_code> AstlValue::FromUnion(const astl_value
   // clang-format on
 }
 
-std::expected<AstlValue, astl_status_code> AstlValue::FromUnionPromoting(astl_value_type_t type) {
+auto AstlValue::FromUnionPromoting(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code> {
   // clang-format off
   switch (type) {
     case ASTL_VALUE_UINT8:     return AstlValue{uint64_t{0}};
@@ -84,7 +85,7 @@ std::expected<AstlValue, astl_status_code> AstlValue::FromUnionPromoting(astl_va
  *
  * @return an AstlValue instance with the minimum possible value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
  */
-std::expected<AstlValue, astl_status_code> AstlValue::FromMinimum(astl_value_type_t type) {
+auto AstlValue::FromMinimum(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code> {
   // clang-format off
   switch (type) {
     case ASTL_VALUE_UINT8:       return AstlValue{std::numeric_limits<uint8_t>::min()};
@@ -106,7 +107,7 @@ std::expected<AstlValue, astl_status_code> AstlValue::FromMinimum(astl_value_typ
  *
  * @return an AstlValue instance of 0 value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
  */
-std::expected<AstlValue, astl_status_code> AstlValue::FromZero(astl_value_type_t type) {
+auto AstlValue::FromZero(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code> {
   // clang-format off
   switch (type) {
     case ASTL_VALUE_UINT8:       return AstlValue{uint8_t{0}};
@@ -129,7 +130,7 @@ std::expected<AstlValue, astl_status_code> AstlValue::FromZero(astl_value_type_t
  * @return an AstlValue instance with the max representable value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
  * @note if type == ASTL_VALUE_STRING, this returns ASTL_STATUS_INVALID_VALUE_TYPE
  */
-std::expected<AstlValue, astl_status_code> AstlValue::FromMaximum(astl_value_type_t type) {
+auto AstlValue::FromMaximum(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code> {
   // clang-format off
   switch (type) {
     case ASTL_VALUE_UINT8:       return AstlValue{std::numeric_limits<uint8_t>::max()};
@@ -154,7 +155,7 @@ std::expected<AstlValue, astl_status_code> AstlValue::FromMaximum(astl_value_typ
  *       pointing to the AstlValue's internal string buffer. So the AstlValue must outlive the returned
  *       astl_value_t.
  */
-std::pair<astl_value_t, astl_value_type_t> AstlValue::ToAstlUnionValue() const {
+auto AstlValue::ToAstlUnionValue() const -> std::pair<astl_value_t, astl_value_type_t> {
   astl_value_t      union_val{};
   astl_value_type_t type{ASTL_VALUE_UNKNOWN};
 
@@ -184,7 +185,7 @@ std::pair<astl_value_t, astl_value_type_t> AstlValue::ToAstlUnionValue() const {
  *   - ASTL_STATUS_METRIC_OVERFLOW_DETECTED if this would overflow their representations
  *   - ASTL_STATUS_INVALID_VALUE_TYPE if operands aren't similar types
  */
-std::expected<AstlValue, astl_status_code> AstlValue::Add(const AstlValue& addend, const AstlValue& augend) {
+auto AstlValue::Add(const AstlValue& addend, const AstlValue& augend) -> std::expected<AstlValue, astl_status_code> {
   return std::visit(
       [](auto&& left, auto&& right) -> std::expected<AstlValue, astl_status_code> {
         using X = std::decay_t<decltype(left)>;
@@ -227,7 +228,8 @@ std::expected<AstlValue, astl_status_code> AstlValue::Add(const AstlValue& adden
  *   - ASTL_STATUS_METRIC_OVERFLOW_DETECTED if this would overflow their representations
  *   - ASTL_STATUS_INVALID_VALUE_TYPE if operands aren't similar types
  */
-std::expected<AstlValue, astl_status_code> AstlValue::Subtract(const AstlValue& minuend, const AstlValue& subtrahend) {
+auto AstlValue::Subtract(const AstlValue& minuend, const AstlValue& subtrahend)
+    -> std::expected<AstlValue, astl_status_code> {
   return std::visit(
       [](auto&& left, auto&& right) -> std::expected<AstlValue, astl_status_code> {
         using X = std::decay_t<decltype(left)>;
@@ -257,7 +259,7 @@ std::expected<AstlValue, astl_status_code> AstlValue::Subtract(const AstlValue& 
 /**
  * @brief convert the AstlValue to a string suitable for Log debugging
  */
-std::string to_string(const AstlValue& variant_value) {
+auto to_string(const AstlValue& variant_value) -> std::string {
   return std::visit(
       [](const auto& visited_value) -> std::string {
         using T = std::decay_t<decltype(visited_value)>;

@@ -190,7 +190,7 @@ ScmiSysfsCollector<FileInterfaceT>::ScmiSysfsCollector(FileInterfaceT file_inter
  * @brief Get the capabilities of this collector, including the collector type.
  */
 template <typename FileInterfaceT>
-CollectorCapability const& ScmiSysfsCollector<FileInterfaceT>::GetCapabilities() const {
+auto ScmiSysfsCollector<FileInterfaceT>::GetCapabilities() const -> CollectorCapability const& {
   return _collector_capability;
 };
 
@@ -199,7 +199,7 @@ CollectorCapability const& ScmiSysfsCollector<FileInterfaceT>::GetCapabilities()
  *       This is typically the CollectorManager, but can be any IRawSampleSink.
  */
 template <typename FileInterfaceT>
-void ScmiSysfsCollector<FileInterfaceT>::SetRawSampleSink(IRawSampleSink* raw_sample_sink) {
+auto ScmiSysfsCollector<FileInterfaceT>::SetRawSampleSink(IRawSampleSink* raw_sample_sink) -> void {
   std::scoped_lock lock{_collection_mutex};
   _raw_sample_sink = raw_sample_sink;
 };
@@ -211,7 +211,8 @@ void ScmiSysfsCollector<FileInterfaceT>::SetRawSampleSink(IRawSampleSink* raw_sa
  *        the interval to sample at.
  */
 template <typename FileInterfaceT>
-astl_status_code ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfiguration&& configuration) {
+auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfiguration&& configuration)
+    -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::STOPPED) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot reconfigure while already started
@@ -249,7 +250,7 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(Collect
  * @brief Start the collection of data, performing any setup operations, starting sampling async tasks, etc.
  */
 template <typename FileInterfaceT>
-astl_status_code ScmiSysfsCollector<FileInterfaceT>::StartCollection() {
+auto ScmiSysfsCollector<FileInterfaceT>::StartCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (_collection_state == CollectionState::STARTED) {
     return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
@@ -433,8 +434,8 @@ std::expected<std::vector<ScmiDataEvent>, astl_status_code> ScmiSysfsCollector<F
  *        Also restores the tstamp_enable file
  */
 template <typename FileInterfaceT>
-astl_status_code ScmiSysfsCollector<FileInterfaceT>::RestoreDataEventEnabledState(
-    std::vector<ScmiDataEvent> const& data_events) {
+auto ScmiSysfsCollector<FileInterfaceT>::RestoreDataEventEnabledState(std::vector<ScmiDataEvent> const& data_events)
+    -> astl_status_code {
   for (const auto& data_event : data_events) {
     auto data_event_dir_path = scmi_detail::GetDataEventDirPath(data_event.id);
     if (!data_event_dir_path) {
@@ -467,7 +468,8 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::RestoreDataEventEnabledStat
  * @brief Casts a sequence of abstract operations to ScmiReadOperation and executes them.
  */
 template <typename FileInterfaceT>
-astl_status_code ScmiSysfsCollector<FileInterfaceT>::ExecuteCollectionOperations(OperationSequence const& operations) {
+auto ScmiSysfsCollector<FileInterfaceT>::ExecuteCollectionOperations(OperationSequence const& operations)
+    -> astl_status_code {
   for (const auto& operation_ptr : operations) {
     const auto* scmi_operation = dynamic_cast<ScmiReadOperation*>(operation_ptr.get());
     if (!scmi_operation) {
@@ -488,7 +490,8 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ExecuteCollectionOperations
  *        and sends it to the sample sink.
  */
 template <typename FileInterfaceT>
-astl_status_code ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(ScmiReadOperation const& operation) {
+auto ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(ScmiReadOperation const& operation)
+    -> astl_status_code {
   auto data_event_dir_path = scmi_detail::GetDataEventDirPath(operation.scmi_data_event_id);
   if (!data_event_dir_path) {
     ASTL_LOG_CRITICAL("Error {} getting dir path for SCMI read operation for data event ID: {:04X}",

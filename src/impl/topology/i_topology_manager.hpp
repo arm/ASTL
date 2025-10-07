@@ -45,7 +45,7 @@ struct ITopologyManager {
   ITopologyManager& operator=(ITopologyManager&&)      = default;
 
   /** @brief Get the target list from the most recent call of ScanForTargets() */
-  virtual const std::vector<std::unique_ptr<ITarget>>& GetTargets() const = 0;
+  virtual auto GetTargets() const -> const std::vector<std::unique_ptr<ITarget>>& = 0;
 
   /** @todo ASTL-132
    *  Refactor: We probably want to provide a more controlled interface for modifying the target list
@@ -53,7 +53,7 @@ struct ITopologyManager {
    *  modify the list internally when we read the configuration.
    *
    *  Ideally we would just call ScanForTargets() and never set the target list directly */
-  virtual astl_status_code SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) = 0;
+  virtual auto SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) -> astl_status_code = 0;
 };
 
 }  // namespace astl

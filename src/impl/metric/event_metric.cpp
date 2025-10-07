@@ -25,14 +25,14 @@
 
 namespace astl {
 
-void EventMetric::Initialize() {
+auto EventMetric::Initialize() -> void {
   _events.clear();
   _summary.counts.clear();
 }
 
-void EventMetric::Reset() { Initialize(); }
+auto EventMetric::Reset() -> void { Initialize(); }
 
-astl_status_code EventMetric::CheckAndStoreEvent(const RawSampledData& raw_sample) {
+auto EventMetric::CheckAndStoreEvent(const RawSampledData& raw_sample) -> astl_status_code {
   // Check if the value can be converted to a string
   if (!raw_sample.value.IsStringConvertible()) {
     ASTL_LOG_ERROR("EventMetric {}: received sample that cannot be converted to string", _configuration->Name());
@@ -64,11 +64,11 @@ astl_status_code EventMetric::CheckAndStoreEvent(const RawSampledData& raw_sampl
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code EventMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
+auto EventMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
   return CheckAndStoreEvent(raw_sample);
 }
 
-astl_status_code EventMetric::Summarize() {
+auto EventMetric::Summarize() -> astl_status_code {
   // Log summary counts
   for (const auto& [event, count] : _summary.counts) {
     _event_summary_logger.LogInfo("{}, {}, {}\n", _configuration->Name(), event, count);

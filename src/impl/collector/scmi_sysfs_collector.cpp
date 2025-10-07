@@ -87,7 +87,7 @@ std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> 
 
 // TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen optimization
 
-std::unordered_set<ScmiDataEventId> GetUniqueDataEventsIds(CollectionOperations const& operations) {
+auto GetUniqueDataEventsIds(CollectionOperations const& operations) -> std::unordered_set<ScmiDataEventId> {
   // just get a unique set of all data events in all the operations
   std::unordered_set<ScmiDataEventId> all_data_events;
   auto                                insert_unique_event_ids = [&all_data_events](const auto& operations_list) {
