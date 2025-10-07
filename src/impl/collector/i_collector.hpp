@@ -42,13 +42,13 @@ struct ICollector {
   /*
    * @brief Get the capabilities of this collector, including the collector type.
    */
-  virtual CollectorCapability const& GetCapabilities() const = 0;
+  virtual auto GetCapabilities() const -> CollectorCapability const& = 0;
 
   /*
    * @brief Set the destination for where raw sampled data should be sent.
    *       This is typically the CollectorManager, but can be any IRawSampleSink.
    */
-  virtual void SetRawSampleSink(IRawSampleSink* raw_sample_sink) = 0;
+  virtual auto SetRawSampleSink(IRawSampleSink* raw_sample_sink) -> void = 0;
 
   /*
    * @brief Configure the collector to collect data, but don't start sampling it yet.
@@ -56,32 +56,32 @@ struct ICollector {
    * @param configuration The configuration to apply to this collector, including the set of operations to run,
    *        the interval to sample at.
    */
-  virtual astl_status_code ConfigureCollection(CollectionConfiguration&& configuration) = 0;
+  virtual auto ConfigureCollection(CollectionConfiguration&& configuration) -> astl_status_code = 0;
 
   /*
    * @brief Start the collection of data, performing any setup operations, starting sampling async tasks, etc.
    */
-  virtual astl_status_code StartCollection() = 0;
+  virtual auto StartCollection() -> astl_status_code = 0;
 
   /*
    * @brief Pause the collection of data, stopping any async tasks, but keeping the configuration intact.
    */
-  virtual astl_status_code PauseCollection() = 0;
+  virtual auto PauseCollection() -> astl_status_code = 0;
 
   /*
    * @brief Resume the collection of data, starting any async tasks
    */
-  virtual astl_status_code ResumeCollection() = 0;
+  virtual auto ResumeCollection() -> astl_status_code = 0;
 
   /*
    * @brief Stop the collection of data, performing any cleanup operations, stopping async tasks, etc.
    */
-  virtual astl_status_code StopCollection() = 0;
+  virtual auto StopCollection() -> astl_status_code = 0;
 
   /*
    * @brief Collect a single sample of all the configured metics.
    */
-  virtual astl_status_code ReadImmediate() = 0;
+  virtual auto ReadImmediate() -> astl_status_code = 0;
 };
 
 }  // namespace astl

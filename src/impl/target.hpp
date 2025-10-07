@@ -28,7 +28,7 @@ struct ITarget {
   virtual auto GetCounterCount() const -> size_t                                         = 0;
   virtual auto GetCounters() const -> const std::vector<std::unique_ptr<ICounter>>&      = 0;
 
-  virtual CollectorType GetCollectorType() const = 0;
+  virtual auto GetCollectorType() const -> CollectorType = 0;
 };
 
 /**

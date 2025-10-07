@@ -34,9 +34,9 @@ class TopologyManager : public ITopologyManager {
 
   explicit TopologyManager(std::vector<std::unique_ptr<ITarget>>&&);
 
-  const std::vector<std::unique_ptr<ITarget>>& GetTargets() const override;
+  auto GetTargets() const -> const std::vector<std::unique_ptr<ITarget>>& override;
 
-  astl_status_code SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) override;
+  auto SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) -> astl_status_code override;
 
  private:
   std::vector<std::unique_ptr<ITarget>> _targets;

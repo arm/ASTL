@@ -8,13 +8,13 @@
 
 namespace mock_sysfs {
 
-void InitProtocol(FileSystemNode* g_root) {
+auto InitProtocol(FileSystemNode* g_root) -> void {
   // Initialize additional protocols here
   std::unique_ptr<FileSystemNode> telemetry_tree = InitProtocolTelemetry(g_root);
   g_root->AddChild(std::move(telemetry_tree));
 }
 
-ErrorCode HandleProtocolWrite(const FileSystemNode* node, const std::string& value) {
+auto HandleProtocolWrite(const FileSystemNode* node, const std::string& value) -> ErrorCode {
   switch (node->GetProtocol()) {
     case ProtocolType::SCMI_TELEMETRY:
       return HandleProtocolTelemetryWrite(node, value);
@@ -29,7 +29,7 @@ ErrorCode HandleProtocolWrite(const FileSystemNode* node, const std::string& val
   }
 }
 
-std::string HandleProtocolRead(const FileSystemNode* node) {
+auto HandleProtocolRead(const FileSystemNode* node) -> std::string {
   switch (node->GetProtocol()) {
     case ProtocolType::SCMI_TELEMETRY:
       return HandleProtocolTelemetryRead(node);

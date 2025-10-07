@@ -45,32 +45,33 @@ struct ICollectorManager {
   ICollectorManager(ICollectorManager&&)                 = default;
   ICollectorManager& operator=(ICollectorManager&&)      = default;
 
-  virtual std::unordered_map<const ITarget*, std::vector<CollectorCapability>> ReportCollectionCapabilities() const = 0;
+  [[nodiscard]] virtual auto ReportCollectionCapabilities() const
+      -> std::unordered_map<const ITarget*, std::vector<CollectorCapability>> = 0;
 
   /* The CollectorManager can support a number of destinations for raw sampled data to go to.
    * This might include Orchestrator, a logger, a think translator for a API callback, etc.
    * When data is sampled, or generated asynchronously, it'll be sent to each IRawSampleSink in turn
    */
-  virtual astl_status_code RegisterRawSampleSink(IRawSampleSink* sink)   = 0;
-  virtual astl_status_code UnregisterRawSampleSink(IRawSampleSink* sink) = 0;
+  [[nodiscard]] virtual auto RegisterRawSampleSink(IRawSampleSink* sink) -> astl_status_code   = 0;
+  [[nodiscard]] virtual auto UnregisterRawSampleSink(IRawSampleSink* sink) -> astl_status_code = 0;
 
   /* CollectorManager should choose a suitable collector for the given operations and target,
    * and enable it according to the collection parameters.
    */
-  virtual astl_status_code ConfigureCollectionOnTarget(const ITarget*                      target,
-                                                       astl_collection_parameters_t const& collection_params,
-                                                       CollectionOperations&&              configuration) = 0;
+  [[nodiscard]] virtual auto ConfigureCollectionOnTarget(const ITarget*                      target,
+                                                         astl_collection_parameters_t const& collection_params,
+                                                         CollectionOperations&& configuration) -> astl_status_code = 0;
 
   /* Start the configured collection for the given target */
-  virtual astl_status_code StartOnTarget(const ITarget* target) = 0;
+  [[nodiscard]] virtual auto StartOnTarget(const ITarget* target) -> astl_status_code = 0;
 
-  virtual astl_status_code PauseOnTarget(const ITarget* target) = 0;
+  [[nodiscard]] virtual auto PauseOnTarget(const ITarget* target) -> astl_status_code = 0;
 
-  virtual astl_status_code ResumeOnTarget(const ITarget* target) = 0;
+  [[nodiscard]] virtual auto ResumeOnTarget(const ITarget* target) -> astl_status_code = 0;
 
-  virtual astl_status_code ReadImmediateOnTarget(const ITarget* target) = 0;
+  [[nodiscard]] virtual auto ReadImmediateOnTarget(const ITarget* target) -> astl_status_code = 0;
 
-  virtual astl_status_code StopOnTarget(const ITarget* target) = 0;
+  [[nodiscard]] virtual auto StopOnTarget(const ITarget* target) -> astl_status_code = 0;
 };
 
 }  // namespace astl

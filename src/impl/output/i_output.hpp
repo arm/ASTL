@@ -62,8 +62,8 @@ struct IOutput {
    * unless documented otherwise).
    * @retval ASTL_STATUS_INTERNAL_ERROR Implementation-specific failure (e.g. null internal pointer, IO error).
    */
-  [[nodiscard]] virtual astl_status_code WriteProcessedSamples(
-      const std::span<const ProcessedSampledData>& samples) const = 0;
+  [[nodiscard]] virtual auto WriteProcessedSamples(const std::span<const ProcessedSampledData>& samples) const
+      -> astl_status_code = 0;
 };
 
 }  // namespace astl

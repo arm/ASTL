@@ -95,7 +95,7 @@ class EventMetric : public RawMetric {
    * @retval ASTL_STATUS_SUCCESS Event was successfully processed and recorded.
    * @retval ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE Sample does not contain a string convertible value.
    */
-  astl_status_code ReceiveRawSample(const RawSampledData& sample) override;
+  auto ReceiveRawSample(const RawSampledData& sample) -> astl_status_code override;
 
   /**
    * @brief Summarize collected event data.
@@ -106,7 +106,7 @@ class EventMetric : public RawMetric {
    * @return astl_status_code indicating success or failure.
    * @retval ASTL_STATUS_SUCCESS Summary was successfully generated and logged.
    */
-  astl_status_code Summarize() override;
+  auto Summarize() -> astl_status_code override;
 
   /**
    * @brief Reset the metric state, clearing all collected events and counts.
@@ -160,7 +160,7 @@ class EventMetric : public RawMetric {
    * @param sample The sample data containing the event information.
    * @return astl_status_code indicating success or validation failure.
    */
-  astl_status_code CheckAndStoreEvent(const RawSampledData& raw_sample);
+  auto CheckAndStoreEvent(const RawSampledData& raw_sample) -> astl_status_code;
 
   /**
    * @brief Initialize/reset internal data structures.

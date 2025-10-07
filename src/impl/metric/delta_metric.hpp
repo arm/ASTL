@@ -76,7 +76,7 @@ class DeltaMetric : public RawMetric {
    * @param sample A single sampled data point to be processed.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code ReceiveRawSample(const RawSampledData& raw_sample) override;
+  auto ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code override;
 
   /**
    * @brief Summarize collected delta data.
@@ -86,7 +86,7 @@ class DeltaMetric : public RawMetric {
    *
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code Summarize() override;
+  auto Summarize() -> astl_status_code override;
 
   /**
    * @brief Retrieve the delta summary data.
@@ -96,7 +96,7 @@ class DeltaMetric : public RawMetric {
    *
    * @return A DeltaSummaryData struct with delta statistics.
    */
-  DeltaSummaryData GetDeltaSummaryData() const;
+  auto GetDeltaSummaryData() const -> DeltaSummaryData;
 
   /**
    * @brief Get a view of the delta data calculated by this metric.
@@ -109,12 +109,12 @@ class DeltaMetric : public RawMetric {
    *
    * @return A span containing all calculated delta values with their timestamps.
    */
-  std::span<const ProcessedSampledData> GetProcessedSamples() const override;
+  auto GetProcessedSamples() const -> std::span<const ProcessedSampledData> override;
 
   /**
    * @brief Reset the metric state, dropping all collected samples
    */
-  void Reset() override;
+  auto Reset() -> void override;
 
  protected:
   /**
@@ -123,7 +123,7 @@ class DeltaMetric : public RawMetric {
    * Resets the metric state by clearing all delta data and reinitializing
    * the summary data structures.
    */
-  void InitializeSamples();
+  auto InitializeSamples() -> void;
 
   /**
    * @brief Calculate delta between current and previous sample.
@@ -132,8 +132,8 @@ class DeltaMetric : public RawMetric {
    * @param previous_sample The previous sample value.
    * @return Expected delta value or error code.
    */
-  static std::expected<AstlValue, astl_status_code> CalculateDelta(const AstlValue& current_sample,
-                                                                   const AstlValue& previous_sample);
+  static auto CalculateDelta(const AstlValue& current_sample, const AstlValue& previous_sample)
+      -> std::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Update delta statistics with a new delta value.
@@ -142,7 +142,7 @@ class DeltaMetric : public RawMetric {
    * @param timestamp The timestamp when the delta was calculated.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code UpdateDeltaStatistics(const AstlValue& delta_value, SampleTimestamp timestamp);
+  auto UpdateDeltaStatistics(const AstlValue& delta_value, SampleTimestamp timestamp) -> astl_status_code;
 
   // NOLINTBEGIN - Disable clang-tidy checks for protected members - required by RateMetric class inherited from
   // DeltaMetric

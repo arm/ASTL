@@ -36,19 +36,22 @@ Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>  topology_manager,
     throw std::invalid_argument(
         "Orchestrator requires non-null inputs for topology, collector, metric, and output managers.");
   }
-  _collector_manager->RegisterRawSampleSink(this);
-  _metric_manager->RegisterProcessedSampleSink(this);
+  // Registration return codes intentionally ignored: constructor cannot recover.
+  // If registration fails, later operations using sinks will surface errors.
+  (void)_collector_manager->RegisterRawSampleSink(this);
+  (void)_metric_manager->RegisterProcessedSampleSink(this);
 }
 
 Orchestrator::~Orchestrator() {
-  _collector_manager->UnregisterRawSampleSink(this);
-  _metric_manager->UnregisterProcessedSampleSink(this);
+  // Best-effort cleanup; ignore status in destructor.
+  (void)_collector_manager->UnregisterRawSampleSink(this);
+  (void)_metric_manager->UnregisterProcessedSampleSink(this);
 }
 
-void Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
+auto Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
                                       std::unique_ptr<ICollectorManager> collector_manager,
                                       std::unique_ptr<IMetricManager>    metric_manager,
-                                      std::unique_ptr<IOutputManager>    output_manager) {
+                                      std::unique_ptr<IOutputManager>    output_manager) -> void {
   std::scoped_lock lock(GetMutex());
   auto            &inst = GetInstance();
   if (!inst) {
@@ -57,28 +60,28 @@ void Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topolog
   }
 }
 
-std::unique_ptr<Orchestrator> &Orchestrator::GetInstance() {
+auto Orchestrator::GetInstance() -> std::unique_ptr<Orchestrator> & {
   static std::unique_ptr<Orchestrator> instance;
   return instance;
 }
 
-std::mutex &Orchestrator::GetMutex() {
+auto Orchestrator::GetMutex() -> std::mutex & {
   static std::mutex initialization_mutex;
   return initialization_mutex;
 }
 
-std::vector<std::unique_ptr<ITarget>> const &Orchestrator::GetTargets() const {
+auto Orchestrator::GetTargets() const -> std::vector<std::unique_ptr<ITarget>> const & {
   return _topology_manager->GetTargets();
 }
 
-astl_status_code Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) {
+auto Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) -> astl_status_code {
   _topology_manager->SetTargets(std::move(new_targets));
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code Orchestrator::ConfigureCounterCollection(const ITarget                      *target,
-                                                          const astl_collection_parameters_t *collection_params,
-                                                          std::span<const ICounter *>         counters) {
+auto Orchestrator::ConfigureCounterCollection(const ITarget                      *target,
+                                              const astl_collection_parameters_t *collection_params,
+                                              std::span<const ICounter *>         counters) -> astl_status_code {
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
@@ -91,9 +94,9 @@ astl_status_code Orchestrator::ConfigureCounterCollection(const ITarget         
   return ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET;
 }
 
-astl_status_code Orchestrator::ConfigureMetricCollection(const ITarget                        *target,
-                                                         const astl_collection_parameters_t   *collection_params,
-                                                         std::span<const astl_metric_handle_t> metrics) {
+auto Orchestrator::ConfigureMetricCollection(const ITarget                        *target,
+                                             const astl_collection_parameters_t   *collection_params,
+                                             std::span<const astl_metric_handle_t> metrics) -> astl_status_code {
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
@@ -136,7 +139,7 @@ astl_status_code Orchestrator::ConfigureMetricCollection(const ITarget          
   return status;
 }
 
-astl_status_code Orchestrator::StartCollection(const ITarget *target) {
+auto Orchestrator::StartCollection(const ITarget *target) -> astl_status_code {
   if (!_collector_manager) {
     ASTL_LOG_ERROR("Orchestrator::StartCollection called with null CollectorManager");
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -154,7 +157,7 @@ astl_status_code Orchestrator::StartCollection(const ITarget *target) {
   return _collector_manager->StartOnTarget(target);
 }
 
-astl_status_code Orchestrator::ReadImmediate(const ITarget *target) {
+auto Orchestrator::ReadImmediate(const ITarget *target) -> astl_status_code {
   if (!_collector_manager) {
     ASTL_LOG_ERROR("Orchestrator::ReadImmediate called with null CollectorManager");
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -162,7 +165,7 @@ astl_status_code Orchestrator::ReadImmediate(const ITarget *target) {
   return _collector_manager->ReadImmediateOnTarget(target);
 }
 
-astl_status_code Orchestrator::PauseCollection(const ITarget *target) {
+auto Orchestrator::PauseCollection(const ITarget *target) -> astl_status_code {
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
@@ -172,7 +175,7 @@ astl_status_code Orchestrator::PauseCollection(const ITarget *target) {
   return ASTL_STATUS_NOT_IMPLEMENTED;
 }
 
-astl_status_code Orchestrator::ResumeCollection(const ITarget *target) {
+auto Orchestrator::ResumeCollection(const ITarget *target) -> astl_status_code {
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
@@ -182,7 +185,7 @@ astl_status_code Orchestrator::ResumeCollection(const ITarget *target) {
   return ASTL_STATUS_NOT_IMPLEMENTED;
 }
 
-astl_status_code Orchestrator::StopCollection(const ITarget *target) {
+auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
   if (!_metric_manager) {
     ASTL_LOG_ERROR("null _metric_manager in Orchestrator::StopCollection");
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -218,8 +221,8 @@ astl_status_code Orchestrator::StopCollection(const ITarget *target) {
   return ASTL_STATUS_SUCCESS;
 }
 
-std::expected<uint32_t, astl_status_code> Orchestrator::GetCounterSampleCount(const ITarget  *target,
-                                                                              const ICounter *counter) const {
+auto Orchestrator::GetCounterSampleCount(const ITarget *target, const ICounter *counter) const
+    -> std::expected<uint32_t, astl_status_code> {
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
@@ -231,7 +234,7 @@ std::expected<uint32_t, astl_status_code> Orchestrator::GetCounterSampleCount(co
   return std::unexpected(ASTL_STATUS_INVALID_COUNTER_HANDLE);
 }
 
-astl_status_code Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) {
+auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) -> astl_status_code {
   if (!target) {
     ASTL_LOG_ERROR("Orchestrator::SinkSamples called with null target");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -274,8 +277,8 @@ astl_status_code Orchestrator::SinkRawSamples(const ITarget *target, std::span<R
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code Orchestrator::SinkProcessedSamples(const ITarget *target, const IMetric *metric,
-                                                    std::span<const ProcessedSampledData> processed_samples) {
+auto Orchestrator::SinkProcessedSamples(const ITarget *target, const IMetric *metric,
+                                        std::span<const ProcessedSampledData> processed_samples) -> astl_status_code {
   if (!target) {
     ASTL_LOG_ERROR("Orchestrator::SinkProcessedSamples called with null target");
     return ASTL_STATUS_BAD_ARGUMENT;

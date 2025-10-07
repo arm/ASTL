@@ -84,7 +84,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    *             unregistration or destruction of this manager.
    * @return ASTL_STATUS_SUCCESS on success, ASTL_STATUS_BAD_ARGUMENT if sink is null.
    */
-  astl_status_code RegisterProcessedSampleSink(IProcessedSampleSink* sink) override;
+  auto RegisterProcessedSampleSink(IProcessedSampleSink* sink) -> astl_status_code override;
 
   /**
    * @brief Unregister a previously registered processed sample sink.
@@ -95,7 +95,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @param sink Pointer previously passed to RegisterProcessedSampleSink.
    * @return ASTL_STATUS_SUCCESS (even if sink not found), ASTL_STATUS_BAD_ARGUMENT if null.
    */
-  astl_status_code UnregisterProcessedSampleSink(IProcessedSampleSink* sink) override;
+  auto UnregisterProcessedSampleSink(IProcessedSampleSink* sink) -> astl_status_code override;
 
   /**
    * @brief Register a new metric configuration.
@@ -104,8 +104,8 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    *
    * @return ASTL_STATUS_SUCCESS on success, or an error code (e.g., ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE).
    */
-  astl_status_code RegisterMetric(std::unique_ptr<MetricConfig>      metric_config,
-                                  std::vector<const ITarget*> const& targets) override;
+  auto RegisterMetric(std::unique_ptr<MetricConfig> metric_config, std::vector<const ITarget*> const& targets)
+      -> astl_status_code override;
 
   /**
    * @brief Retrieve all registered metrics.
@@ -144,21 +144,13 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @param data Span of RawSampledData to process.
    * @return ASTL_STATUS_SUCCESS or an appropriate error code.
    */
-  astl_status_code ProcessRawSamples(RawSamplesMap& raw_samples) override;
-
-  /**
-   * @brief Retrieve the collected samples for the given target and metric,
-   *        or an error if the target+metric combination isn't valid
-   */
-  // TODO (fayben01) delete this function. Processed samples should automatically sinked
-  // auto GetProcessedSamples(const IMetric* metric, const ITarget* target)
-  //    -> std::expected<std::span<const astl::ProcessedSampledData>, astl_status_code> override;
+  auto ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code override;
 
   /**
    * @brief Finalize and summarize metrics after data processing.
    * @return ASTL_STATUS_SUCCESS or an appropriate error code.
    */
-  astl_status_code SummarizeMetrics() override;
+  auto SummarizeMetrics() -> astl_status_code override;
 
   /**
    * @brief Look up the target associated with a specific metric instance.
@@ -183,12 +175,12 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @return ASTL_STATUS_SUCCESS or a propagated error code if dispatch fails.
    */
   // Original interface override (without explicit target) required by IMetricManager
-  astl_status_code SinkProcessedSamples(const IMetric*                        metric,
-                                        std::span<const ProcessedSampledData> processed_samples) override;
+  auto SinkProcessedSamples(const IMetric* metric, std::span<const ProcessedSampledData> processed_samples)
+      -> astl_status_code override;
 
   // Extended helper allowing direct target specification (used by metrics via RawMetric -> manager fan-out)
-  astl_status_code SinkProcessedSamples(const ITarget* target, const IMetric* metric,
-                                        std::span<const ProcessedSampledData> processed_samples) override;
+  auto SinkProcessedSamples(const ITarget* target, const IMetric* metric,
+                            std::span<const ProcessedSampledData> processed_samples) -> astl_status_code override;
 
   /**
    * TODO (https://jira.arm.com/browse/ASTL-112) : remove this friend declaration
@@ -206,7 +198,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @param required_collector_type Collector type required by a metric.
    * @return true if the capability is present, false otherwise.
    */
-  bool IsCollectorTypeSupported(CollectorType required_collector_type) const;
+  auto IsCollectorTypeSupported(CollectorType required_collector_type) const -> bool;
 
   Capabilities _capabilities;
 

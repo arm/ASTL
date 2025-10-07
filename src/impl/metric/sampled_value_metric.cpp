@@ -33,7 +33,7 @@ SampledValueMetric::SampledValueMetric(const MetricConfig* configuration, const 
   InitializeSamples();
 }
 
-astl_status_code SampledValueMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
+auto SampledValueMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
   // Check if the sample's value type matches the metric's expected type
   auto type_check_result = CheckSampleValueType(raw_sample);
   if (type_check_result != ASTL_STATUS_SUCCESS) {
@@ -56,17 +56,17 @@ astl_status_code SampledValueMetric::ReceiveRawSample(const RawSampledData& raw_
   return ASTL_STATUS_SUCCESS;
 }
 
-std::span<const ProcessedSampledData> SampledValueMetric::GetProcessedSamples() const {
+auto SampledValueMetric::GetProcessedSamples() const -> std::span<const ProcessedSampledData> {
   std::lock_guard<std::mutex> lock(_samples_mutex);
   return std::span<const ProcessedSampledData>(_processed_samples);
 }
 
-void SampledValueMetric::Reset() {
+auto SampledValueMetric::Reset() -> void {
   std::lock_guard<std::mutex> lock(_samples_mutex);
   InitializeSamples();
 }
 
-astl_status_code SampledValueMetric::UpdateStatistics(const ProcessedSampledData& processed_sample) {
+auto SampledValueMetric::UpdateStatistics(const ProcessedSampledData& processed_sample) -> astl_status_code {
   if (!processed_sample.value.IsArithmetic()) {
     ASTL_LOG_TRACE("SampledValueMetric: received sample with non-arithmetic value type for metric: {}",
                    _configuration->Name());
@@ -86,7 +86,7 @@ astl_status_code SampledValueMetric::UpdateStatistics(const ProcessedSampledData
   return ASTL_STATUS_SUCCESS;
 }
 
-void SampledValueMetric::InitializeSamples() {
+auto SampledValueMetric::InitializeSamples() -> void {
   // Reset the metric state
   if (!_processed_samples.empty()) {
     _processed_samples.clear();
@@ -117,7 +117,7 @@ void SampledValueMetric::InitializeSamples() {
   }
 }
 
-astl_status_code SampledValueMetric::Summarize() {
+auto SampledValueMetric::Summarize() -> astl_status_code {
   // Compute min, max, and average values for the received samples.
   // Only one numeric type is valid for a given metric instance.
   std::lock_guard<std::mutex> lock(_samples_mutex);
@@ -139,6 +139,6 @@ astl_status_code SampledValueMetric::Summarize() {
   return ASTL_STATUS_SUCCESS;
 }
 
-MinMaxAvgSummaryData SampledValueMetric::GetSummaryData() const { return _summary_data; }
+auto SampledValueMetric::GetSummaryData() const -> MinMaxAvgSummaryData { return _summary_data; }
 
 }  // namespace astl

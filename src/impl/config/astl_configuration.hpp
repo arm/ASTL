@@ -62,15 +62,17 @@ struct AstlConfiguration {
   std::optional<std::filesystem::path> scmi_sysfs_telemetry_root_path;
 
   /** @brief collection of metric declarations for ASTL to present to user */
-  std::map<std::string, MetricJsonDeclaration> metric_declarations;
+  std::unordered_map<std::string, MetricJsonDeclaration> metric_declarations;  // unordered for faster lookup
 
   /** @brief Override path for configuration file containing SCMI metric definitions */
   std::optional<std::filesystem::path> scmi_specification_path;
 };
 
-auto ParseConfiguration(std::string_view configuration_data) -> std::expected<AstlConfiguration, astl_status_code>;
+[[nodiscard]] auto ParseConfiguration(std::string_view configuration_data)
+    -> std::expected<AstlConfiguration, astl_status_code>;
 
-auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlConfiguration, astl_status_code>;
+[[nodiscard]] auto ParseConfiguration(std::istream& configuration_data)
+    -> std::expected<AstlConfiguration, astl_status_code>;
 
 auto ParseUnits(const MetricJsonDeclaration& metric_declaration) -> astl_units_t;
 
@@ -86,8 +88,10 @@ auto ParseMetricType(const MetricJsonDeclaration& metric_declaration) -> astl_me
  * @param targets A vector of ITarget pointers represending the detected SCMI targets on this platform
  *
  */
-auto CreateScmiMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
-                             scmi::ScmiSpecification const& scmi_spec, std::vector<const ITarget*> const& scmi_targets)
+[[nodiscard]] auto CreateScmiMetricConfigs(std::string_view                   metric_key_name,
+                                           MetricJsonDeclaration const&       metric_declaration,
+                                           scmi::ScmiSpecification const&     scmi_spec,
+                                           std::vector<const ITarget*> const& scmi_targets)
     -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code>;
 
 }  // namespace astl

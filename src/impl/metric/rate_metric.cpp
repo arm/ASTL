@@ -29,7 +29,7 @@
 #include "astl_value.hpp"
 
 namespace {
-inline astl::Logger& RateSummaryLogger() {
+inline auto RateSummaryLogger() -> astl::Logger& {
   static astl::Logger logger(astl::LogLevel::Info, false, false, "rate_summary.log");
   static bool         header = []() {
     logger.LogInfo("Metric, Description, Units, Min Rate, Max Rate, Avg Rate, Rate Count, Type \n");
@@ -62,7 +62,7 @@ RateMetric::RateMetric(const MetricConfig* configuration, const ITarget* target,
   _interval_logger.LogInfo("Metric, Rate Value, Time Interval (us), Timestamp \n");
 }
 
-astl_status_code RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
+auto RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
   // Check if the sample's value type matches the metric's expected type
   auto type_check_result = CheckSampleValueType(raw_sample);
   if (type_check_result != ASTL_STATUS_SUCCESS) {
@@ -117,8 +117,8 @@ astl_status_code RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) 
   return ASTL_STATUS_SUCCESS;
 }
 
-std::expected<AstlValue, astl_status_code> RateMetric::CalculateRate(const AstlValue&          delta_value,
-                                                                     std::chrono::microseconds time_interval) {
+auto RateMetric::CalculateRate(const AstlValue& delta_value, std::chrono::microseconds time_interval)
+    -> std::expected<AstlValue, astl_status_code> {
   if (!delta_value.IsArithmetic()) {
     return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
@@ -135,8 +135,8 @@ std::expected<AstlValue, astl_status_code> RateMetric::CalculateRate(const AstlV
   return rate_result.value();
 }
 
-astl_status_code RateMetric::UpdateRateStatistics(const AstlValue& rate_value, SampleTimestamp timestamp,
-                                                  std::chrono::microseconds time_interval) {
+auto RateMetric::UpdateRateStatistics(const AstlValue& rate_value, SampleTimestamp timestamp,
+                                      std::chrono::microseconds time_interval) -> astl_status_code {
   if (!rate_value.IsArithmetic()) {
     ASTL_LOG_TRACE("RateMetric: received rate with non-arithmetic value type for metric: {}", _configuration->Name());
     return ASTL_STATUS_SUCCESS;
@@ -166,7 +166,7 @@ astl_status_code RateMetric::UpdateRateStatistics(const AstlValue& rate_value, S
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code RateMetric::Summarize() {
+auto RateMetric::Summarize() -> astl_status_code {
   // First, let the base DeltaMetric summarize
   auto delta_status = DeltaMetric::Summarize();
   if (delta_status != ASTL_STATUS_SUCCESS) {
@@ -196,7 +196,7 @@ astl_status_code RateMetric::Summarize() {
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code RateMetric::OutputTimeIntervalPackets() {
+auto RateMetric::OutputTimeIntervalPackets() -> astl_status_code {
   _interval_logger.LogInfo("Time Interval Packets for metric: {} \n", _configuration->Name());
 
   for (const auto& rate_data : _rates) {
@@ -207,11 +207,11 @@ astl_status_code RateMetric::OutputTimeIntervalPackets() {
   return ASTL_STATUS_SUCCESS;
 }
 
-RateSummaryData RateMetric::GetRateSummaryData() const { return _rate_summary_data; }
+auto RateMetric::GetRateSummaryData() const -> RateSummaryData { return _rate_summary_data; }
 
 /**
  * @brief Return a view of the samples processed by this metric
  */
-std::span<const RateData> RateMetric::GetRates() const { return std::span<const RateData>(_rates); }
+auto RateMetric::GetRates() const -> std::span<const RateData> { return std::span<const RateData>(_rates); }
 
 }  // namespace astl

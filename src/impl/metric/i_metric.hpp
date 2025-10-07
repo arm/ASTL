@@ -55,7 +55,7 @@ struct IMetric {
    * @param capabilities The capabilities to check against.
    * @return true if the capabilities are met, false otherwise.
    */
-  virtual bool CheckCapabilities(const Capabilities &capabilities) const = 0;
+  virtual auto CheckCapabilities(const Capabilities &capabilities) const -> bool = 0;
 
   /**
    * @brief Get the Operations required to the metric.
@@ -64,7 +64,7 @@ struct IMetric {
    *
    * @return OperationSequence
    */
-  virtual std::expected<OperationSequence, astl_status_code> GetOperations() = 0;
+  virtual auto GetOperations() -> std::expected<OperationSequence, astl_status_code> = 0;
 
   /**
    * @brief Process the individual raw sample routed to metric.
@@ -74,36 +74,36 @@ struct IMetric {
    * @param sample The sample to process.
    * @return astl_status_code
    */
-  virtual astl_status_code ReceiveRawSample(const RawSampledData &raw_sample) = 0;
+  virtual auto ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code = 0;
 
   /*
    * @brief Set the destination for where processed sampled data should be sent.
    *       This is typically the MetricManager, but can be any IProcessedSampleSink.
    */
-  virtual void SetProcessedSampleSink(IProcessedSampleSink *processed_sample_sink) = 0;
+  virtual auto SetProcessedSampleSink(IProcessedSampleSink *processed_sample_sink) -> void = 0;
 
   /**
    * @brief Return a view of the samples processed by this metric
    */
-  virtual std::span<const ProcessedSampledData> GetProcessedSamples() const = 0;
+  virtual auto GetProcessedSamples() const -> std::span<const ProcessedSampledData> = 0;
 
   /**
    * @brief Reset the metric state, dropping all collected samples
    */
-  virtual void Reset() = 0;
+  virtual auto Reset() -> void = 0;
 
   /**
    * @brief Summarize the metric.
    * Depending on the metric type, this may mean aggregating samples, calculating averages, etc.
    * This is called once all the samples are processed.
    */
-  virtual astl_status_code Summarize() = 0;
+  virtual auto Summarize() -> astl_status_code = 0;
 
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    * TODO(ASTL-89): External C-interface data structure should be backward compatible.
    */
-  virtual astl_status_code GetProperties(astl_metric_properties_t *properties) const = 0;
+  virtual auto GetProperties(astl_metric_properties_t *properties) const -> astl_status_code = 0;
 
   /**
    * @brief Retrieve the metric's name as a string
@@ -148,7 +148,7 @@ struct IMetric {
    * @param processed_sample The processed sample to be forwarded.
    * @return astl_status_code See Error Handling section above.
    */
-  virtual astl_status_code SinkProcessedSample(const ProcessedSampledData &processed_sample) = 0;
+  virtual auto SinkProcessedSample(const ProcessedSampledData &processed_sample) -> astl_status_code = 0;
 };
 
 }  // namespace astl

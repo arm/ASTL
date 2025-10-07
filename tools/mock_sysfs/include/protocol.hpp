@@ -15,7 +15,7 @@ namespace mock_sysfs {
  *
  * @param g_root Pointer to the root file system node.
  */
-void InitProtocol(FileSystemNode* g_root);
+auto InitProtocol(FileSystemNode* g_root) -> void;
 
 /**
  * @brief Dispatches the write operation for a file system node based on its protocol.
@@ -30,7 +30,7 @@ void InitProtocol(FileSystemNode* g_root);
  * @param value The string value to be written.
  * @return ErrorCode Status code indicating success (e.g. ErrorCode::SUCCESS) or the type of error encountered.
  */
-ErrorCode HandleProtocolWrite(const FileSystemNode* node, const std::string& value);
+auto HandleProtocolWrite(const FileSystemNode* node, const std::string& value) -> ErrorCode;
 
 /**
  * @brief Dispatches the read operation for a file system node based on its protocol.
@@ -44,7 +44,7 @@ ErrorCode HandleProtocolWrite(const FileSystemNode* node, const std::string& val
  * @param node A pointer to the file system node to be read.
  * @return std::string The data read from the node as a string, or an empty string if the protocol is unsupported.
  */
-std::string HandleProtocolRead(const FileSystemNode* node);
+auto HandleProtocolRead(const FileSystemNode* node) -> std::string;
 
 }  // namespace mock_sysfs
 

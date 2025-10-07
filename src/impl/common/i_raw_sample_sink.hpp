@@ -100,7 +100,7 @@ struct IRawSampleSink {
    * @param raw_samples Span of raw samples; valid only for the duration of the call.
    * @return ASTL_STATUS_SUCCESS on success or an error status if the sink cannot consume the data.
    */
-  virtual astl_status_code SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) = 0;
+  virtual auto SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) -> astl_status_code = 0;
 };
 
 }  // namespace astl

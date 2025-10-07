@@ -40,8 +40,8 @@ static std::unordered_map<std::string, std::unique_ptr<SCMITelemetryTarget>>& In
   return tlm_to_target;
 }
 
-inline void UpdateEventByInterval(DataEvent* event, std::chrono::system_clock::time_point now,
-                                  std::chrono::milliseconds interval) {
+inline auto UpdateEventByInterval(DataEvent* event, std::chrono::system_clock::time_point now,
+                                  std::chrono::milliseconds interval) -> void {
   auto elapsed = now - event->last_timestamp_;
   if (elapsed < interval) {
     return;
@@ -54,7 +54,7 @@ inline void UpdateEventByInterval(DataEvent* event, std::chrono::system_clock::t
   }
 }
 
-std::unique_ptr<FileSystemNode> InitProtocolTelemetry(FileSystemNode* g_root) {
+auto InitProtocolTelemetry(FileSystemNode* g_root) -> std::unique_ptr<FileSystemNode> {
   auto& tlm_to_tgt = Instances();
 
   const char* env = std::getenv("ASTL_MOCKSYSFS_TLM_JSON_PATH");
@@ -104,7 +104,7 @@ std::unique_ptr<FileSystemNode> InitProtocolTelemetry(FileSystemNode* g_root) {
   return arm_telemetry;
 };
 
-std::string GetInitialIntervalValue(const SCMITelemetryTarget& tlm) {
+auto GetInitialIntervalValue(const SCMITelemetryTarget& tlm) -> std::string {
   std::string initial_value;
   if (tlm.GetIntervalsAreDiscreteFlag()) {
     const auto& intervals = tlm.GetAvailableUpdateIntervalsMs();
@@ -121,7 +121,7 @@ std::string GetInitialIntervalValue(const SCMITelemetryTarget& tlm) {
   return initial_value;
 }
 
-void BuildTelemetryTopLevelFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetry) {
+auto BuildTelemetryTopLevelFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetry) -> void {
   telemetry->AddChild(FileSystemNode::CreateFile("all_des_enable",
                                                  std::to_string(static_cast<int>(tlm.GetAllDesEnableFlag())),
                                                  FileAccess::WRITE_ONLY, telemetry, ProtocolType::SCMI_TELEMETRY));
@@ -158,7 +158,7 @@ void BuildTelemetryTopLevelFiles(SCMITelemetryTarget& tlm, FileSystemNode* telem
                                                  FileAccess::READ_WRITE, telemetry, ProtocolType::SCMI_TELEMETRY));
 };
 
-void BuildTelemetryDesFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetry) {
+auto BuildTelemetryDesFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetry) -> void {
   auto des_dir = FileSystemNode::CreateDirectory("des", telemetry, ProtocolType::SCMI_TELEMETRY);
   // For each data event, create its event directory and add files.
   for (const auto& data_event : tlm.GetDataEvents()) {
@@ -213,7 +213,7 @@ void BuildTelemetryDesFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetry)
   telemetry->AddChild(std::move(des_dir));
 }
 
-void BuildTelemetryGroupFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetry) {
+auto BuildTelemetryGroupFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetry) -> void {
   auto groups_dir = FileSystemNode::CreateDirectory("groups", telemetry, ProtocolType::SCMI_TELEMETRY);
   for (const auto& [group_id, group] : tlm.GetGroups()) {
     // directory for group n, where "n" is the numeric group ID used
@@ -269,8 +269,8 @@ void BuildTelemetryGroupFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetr
 };
 
 // TODO(ASTL-13): Dynamically build file tree from schema
-std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode*    arm_telemetry_root,
-                                                               const std::string& tlm_id) {
+auto BuildProtocolTelemetryFileTree(FileSystemNode* arm_telemetry_root, const std::string& tlm_id)
+    -> std::unique_ptr<FileSystemNode> {
   auto& tlm = SCMITelemetryTarget::Instance(tlm_id);
 
   // Create tlm-N under arm_telemetry_root.
@@ -283,7 +283,7 @@ std::unique_ptr<FileSystemNode> BuildProtocolTelemetryFileTree(FileSystemNode*  
   return telemetry;
 }
 
-TelemetryFile GetTelemetryFile(const std::string& name) {
+auto GetTelemetryFile(const std::string& name) -> TelemetryFile {
   static const std::unordered_map<std::string, TelemetryFile> lookup = {
       {"all_des_enable",                TelemetryFile::ALL_DES_ENABLE               },
       {"all_des_tstamp_enable",         TelemetryFile::ALL_DES_TSTAMP_ENABLE        },
@@ -342,7 +342,7 @@ SCMITelemetryTarget::SCMITelemetryTarget(std::string const& tlm_id, bool all_des
   }
 }
 
-SCMITelemetryTarget& SCMITelemetryTarget::Instance(std::string const& tlm_id) {
+auto SCMITelemetryTarget::Instance(std::string const& tlm_id) -> SCMITelemetryTarget& {
   auto& instances = Instances();
 
   // find should never fail. if it does, something else went wrong so crash
@@ -350,14 +350,14 @@ SCMITelemetryTarget& SCMITelemetryTarget::Instance(std::string const& tlm_id) {
   return *(it->second);
 }
 
-DataEvent* SCMITelemetryTarget::GetDataEventById(data_event_id_t identifier) {
+auto SCMITelemetryTarget::GetDataEventById(data_event_id_t identifier) -> DataEvent* {
   auto       id_matches = [identifier](const auto& event) { return event->id_ == identifier; };
   const auto it         = std::find_if(data_events_.begin(), data_events_.end(), id_matches);
   return (it != data_events_.end()) ? it->get() : nullptr;
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::string& value) {
+auto HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::string& value) -> ErrorCode {
   // find tlm_id by traversing up file tree until we find a parent named "arm_telemetry"
   const FileSystemNode* tlm_id = node;
   while (tlm_id->GetParent() && tlm_id->GetParent()->GetName() != "arm_telemetry") {
@@ -485,7 +485,7 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-std::string HandleProtocolTelemetryRead(const FileSystemNode* node) {
+auto HandleProtocolTelemetryRead(const FileSystemNode* node) -> std::string {
   const FileSystemNode* tlm_id = node;
   while (tlm_id->GetParent() && tlm_id->GetParent()->GetName() != "arm_telemetry") {
     tlm_id = tlm_id->GetParent();

@@ -129,7 +129,7 @@ class ResidencyMetric : public DeltaMetric {
    * @param sample A single sampled data point containing state counter value.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code ReceiveRawSample(const RawSampledData& raw_sample) override;
+  auto ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code override;
 
   /**
    * @brief Summarize collected residency data for all states.
@@ -139,7 +139,7 @@ class ResidencyMetric : public DeltaMetric {
    *
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code Summarize() override;
+  auto Summarize() -> astl_status_code override;
 
   /**
    * @brief Get the Operations required for this residency metric.
@@ -223,9 +223,8 @@ class ResidencyMetric : public DeltaMetric {
    * @param timestamp Sample timestamp.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code UpdateStateResidencyStatistics(const std::string&        state_name,
-                                                  std::chrono::microseconds time_microseconds, double percentage,
-                                                  SampleTimestamp timestampsamp);
+  auto UpdateStateResidencyStatistics(const std::string& state_name, std::chrono::microseconds time_microseconds,
+                                      double percentage, SampleTimestamp timestampsamp) -> astl_status_code;
 
   /**
    * @brief Calculate and update inferred state residency for a specific sample interval.
@@ -237,8 +236,8 @@ class ResidencyMetric : public DeltaMetric {
    * @param timestamp Timestamp for this sample.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code CalculateInferredStateResidencyForInterval(std::chrono::microseconds sample_interval,
-                                                              SampleTimestamp           timestamp);
+  auto CalculateInferredStateResidencyForInterval(std::chrono::microseconds sample_interval, SampleTimestamp timestamp)
+      -> astl_status_code;
 
  private:
   // non-owned pointer to the configuration for this metric (owned by the MetricHandle)

@@ -58,28 +58,28 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
 
   ~CollectorManager() override = default;
 
-  std::unordered_map<const ITarget*, std::vector<CollectorCapability>> ReportCollectionCapabilities() const override;
+  auto ReportCollectionCapabilities() const
+      -> std::unordered_map<const ITarget*, std::vector<CollectorCapability>> override;
 
   // ICollectorManager implementation
-  astl_status_code RegisterRawSampleSink(IRawSampleSink* sink) override;
-  astl_status_code UnregisterRawSampleSink(IRawSampleSink* sink) override;
+  auto RegisterRawSampleSink(IRawSampleSink* sink) -> astl_status_code override;
+  auto UnregisterRawSampleSink(IRawSampleSink* sink) -> astl_status_code override;
 
-  astl_status_code ConfigureCollectionOnTarget(const ITarget*                      target,
-                                               astl_collection_parameters_t const& collection_params,
-                                               CollectionOperations&&              operations) override;
+  auto ConfigureCollectionOnTarget(const ITarget* target, astl_collection_parameters_t const& collection_params,
+                                   CollectionOperations&& operations) -> astl_status_code override;
 
-  astl_status_code StartOnTarget(const ITarget* target) override;
+  auto StartOnTarget(const ITarget* target) -> astl_status_code override;
 
-  astl_status_code PauseOnTarget(const ITarget* target) override;
+  auto PauseOnTarget(const ITarget* target) -> astl_status_code override;
 
-  astl_status_code ResumeOnTarget(const ITarget* target) override;
+  auto ResumeOnTarget(const ITarget* target) -> astl_status_code override;
 
-  astl_status_code ReadImmediateOnTarget(const ITarget* target) override;
+  auto ReadImmediateOnTarget(const ITarget* target) -> astl_status_code override;
 
-  astl_status_code StopOnTarget(const ITarget* target) override;
+  auto StopOnTarget(const ITarget* target) -> astl_status_code override;
 
   // IRawSampleSink implementation
-  astl_status_code SinkRawSamples(const ITarget* target, std::span<RawSampledData> samples) override;
+  auto SinkRawSamples(const ITarget* target, std::span<RawSampledData> samples) -> astl_status_code override;
 
  private:
   std::unordered_set<IRawSampleSink*> _registered_raw_sample_sinks;
@@ -89,8 +89,8 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
 
   /// given a target and a set of desired capabilities, choose a suitable collector
   /// @todo ASTL-145 It's a bit of an anti-pattern to take a raw pointer to a unique_ptr for ITarget*
-  std::expected<ICollector*, astl_status_code> SelectCollector(const ITarget*             target,
-                                                               CollectorCapability const& requirements);
+  auto SelectCollector(const ITarget* target, CollectorCapability const& requirements)
+      -> std::expected<ICollector*, astl_status_code>;
 };
 
 }  // namespace astl

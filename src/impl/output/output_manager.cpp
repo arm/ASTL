@@ -27,8 +27,8 @@
 
 namespace astl {
 
-astl_status_code OutputManager::CreateBufferOutput(std::span<astl_metric_sample_t> samples_buffer,
-                                                   uint32_t*                       buffer_sample_count) {
+auto OutputManager::CreateBufferOutput(std::span<astl_metric_sample_t> samples_buffer, uint32_t* buffer_sample_count)
+    -> astl_status_code {
   if (samples_buffer.empty() || buffer_sample_count == nullptr) {
     ASTL_LOG_ERROR("CreateBufferOutput: invalid arguments (empty span or null count pointer)");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -42,14 +42,16 @@ astl_status_code OutputManager::CreateBufferOutput(std::span<astl_metric_sample_
   } catch (const std::bad_alloc& e) {
     ASTL_LOG_ERROR("CreateBufferOutput: allocation failed (bad_alloc): {}", e.what());
     return ASTL_STATUS_OUT_OF_MEMORY;
-  } catch (...) {  // NOLINT(bugprone-empty-catch)
+  } catch (...) {
+    // Catch-all: we intentionally map any other exception type to an internal error.
+    // Rationale: OutputManager must not allow exceptions to escape the C boundary; logging preserves context.
     ASTL_LOG_ERROR("CreateBufferOutput: unexpected exception during buffer output creation");
     return ASTL_STATUS_INTERNAL_ERROR;
   }
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code OutputManager::DestroyBufferOutput() {
+auto OutputManager::DestroyBufferOutput() -> astl_status_code {
   if (_buffer_output) {
     ASTL_LOG_INFO("DestroyBufferOutput: releasing buffer output instance");
   }
@@ -57,8 +59,8 @@ astl_status_code OutputManager::DestroyBufferOutput() {
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code OutputManager::OutputProcessedSamplesToBuffer(const ProcessedSamplesMap& processed_samples,
-                                                               const ITarget* target, const IMetric* metric) {
+auto OutputManager::OutputProcessedSamplesToBuffer(const ProcessedSamplesMap& processed_samples, const ITarget* target,
+                                                   const IMetric* metric) -> astl_status_code {
   if (!_buffer_output) {
     ASTL_LOG_ERROR("OutputProcessedSamplesToBuffer: Buffer output not initialized");
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -87,9 +89,8 @@ astl_status_code OutputManager::OutputProcessedSamplesToBuffer(const ProcessedSa
   return _buffer_output->WriteProcessedSamples(samples_span);
 }
 
-astl_status_code OutputManager::OutputProcessedSamples(const ProcessedSamplesMap& processed_samples,
-                                                       OutputType output_type, const ITarget* target,
-                                                       const IMetric* metric) {
+auto OutputManager::OutputProcessedSamples(const ProcessedSamplesMap& processed_samples, OutputType output_type,
+                                           const ITarget* target, const IMetric* metric) -> astl_status_code {
   switch (output_type) {
     case OutputType::BUFFER: {
       // Single-dispatch write; caller manages lifecycle of buffer output.

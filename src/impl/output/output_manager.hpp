@@ -66,9 +66,8 @@ class OutputManager : public IOutputManager {
    * @brief Dispatch processed samples to the selected output type / filter.
    * See `IOutputManager::OutputProcessedSamples` for detailed contract & error codes.
    */
-  [[nodiscard]] astl_status_code OutputProcessedSamples(const ProcessedSamplesMap& processed_samples,
-                                                        OutputType output_type, const ITarget* target,
-                                                        const IMetric* metric) override;
+  [[nodiscard]] auto OutputProcessedSamples(const ProcessedSamplesMap& processed_samples, OutputType output_type,
+                                            const ITarget* target, const IMetric* metric) -> astl_status_code override;
 
   /**
    * @copydoc IOutputManager::CreateBufferOutput
@@ -79,13 +78,13 @@ class OutputManager : public IOutputManager {
    * If a buffer output already exists it is replaced. Future change: consider returning
    * ASTL_STATUS_ALREADY_INITIALIZED to force explicit destruction.
    */
-  [[nodiscard]] astl_status_code CreateBufferOutput(std::span<astl_metric_sample_t> samples_buffer,
-                                                    uint32_t*                       buffer_sample_count) override;
+  [[nodiscard]] auto CreateBufferOutput(std::span<astl_metric_sample_t> samples_buffer, uint32_t* buffer_sample_count)
+      -> astl_status_code override;
 
   /**
    * @copydoc IOutputManager::DestroyBufferOutput
    */
-  astl_status_code DestroyBufferOutput() override;
+  auto DestroyBufferOutput() -> astl_status_code override;
 
  private:
   /**
@@ -102,9 +101,9 @@ class OutputManager : public IOutputManager {
    * @return ASTL_STATUS_SUCCESS on success, `ASTL_STATUS_OUTPUT_NOT_INITIALIZED` if no buffer output
    *         exists, or a status code returned by the buffer output on write failure.
    */
-  [[nodiscard]] astl_status_code OutputProcessedSamplesToBuffer(const ProcessedSamplesMap& processed_samples,
-                                                                const ITarget* target, const IMetric* metric);
-  std::unique_ptr<IOutput>       _buffer_output;  // owned buffer output implementation (if created)
+  [[nodiscard]] auto OutputProcessedSamplesToBuffer(const ProcessedSamplesMap& processed_samples, const ITarget* target,
+                                                    const IMetric* metric) -> astl_status_code;
+  std::unique_ptr<IOutput> _buffer_output;  // owned buffer output implementation (if created)
 };
 
 }  // namespace astl

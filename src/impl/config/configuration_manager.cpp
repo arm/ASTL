@@ -31,8 +31,8 @@ namespace ConfigurationManager {
 
 namespace fs = std::filesystem;
 
-std::expected<AstlConfiguration, astl_status_code> GetConfiguration(
-    astl_initialization_parameters_t const *init_params) {
+auto GetConfiguration(astl_initialization_parameters_t const *init_params)
+    -> std::expected<AstlConfiguration, astl_status_code> {
   if (init_params->_configuration_file_path == nullptr) {
     // nullptr is valid - just use default settings
     ASTL_LOG_DEBUG("No configuration file path given, using default config settings");

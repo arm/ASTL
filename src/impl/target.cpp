@@ -10,7 +10,7 @@ namespace astl {
 Target::Target(std::string name, std::string description, CollectorType collector_type, Target* parent)
     : _name{std::move(name)}, _description{std::move(description)}, _collector_type{collector_type}, _parent{parent} {}
 
-astl_status_code Target::GetProperties(astl_target_properties_t* target) const {
+auto Target::GetProperties(astl_target_properties_t* target) const -> astl_status_code {
   if (!target) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -20,10 +20,10 @@ astl_status_code Target::GetProperties(astl_target_properties_t* target) const {
   return ASTL_STATUS_SUCCESS;
 }
 
-std::string const&                            Target::Name() const { return _name; }
-CollectorType                                 Target::GetCollectorType() const { return _collector_type; }
-const Target*                                 Target::GetParent() const { return _parent; }
-size_t                                        Target::GetCounterCount() const { return _counters.size(); }
-const std::vector<std::unique_ptr<ICounter>>& Target::GetCounters() const { return _counters; }
+auto Target::Name() const -> std::string const& { return _name; }
+auto Target::GetCollectorType() const -> CollectorType { return _collector_type; }
+auto Target::GetParent() const -> const Target* { return _parent; }
+auto Target::GetCounterCount() const -> size_t { return _counters.size(); }
+auto Target::GetCounters() const -> const std::vector<std::unique_ptr<ICounter>>& { return _counters; }
 
 }  // namespace astl

@@ -40,8 +40,8 @@ CollectorManager::CollectorManager(
 // ICollectorManager implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unordered_map<const ITarget*, std::vector<CollectorCapability>> CollectorManager::ReportCollectionCapabilities()
-    const {
+auto CollectorManager::ReportCollectionCapabilities() const
+    -> std::unordered_map<const ITarget*, std::vector<CollectorCapability>> {
   std::unordered_map<const ITarget*, std::vector<CollectorCapability>> capabilities;
   for (const auto& [target, collectors] : _collectors) {
     for (const auto& collector : collectors) {
@@ -51,7 +51,7 @@ std::unordered_map<const ITarget*, std::vector<CollectorCapability>> CollectorMa
   return capabilities;
 }
 
-astl_status_code CollectorManager::RegisterRawSampleSink(IRawSampleSink* sink) {
+auto CollectorManager::RegisterRawSampleSink(IRawSampleSink* sink) -> astl_status_code {
   if (!sink) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -59,7 +59,7 @@ astl_status_code CollectorManager::RegisterRawSampleSink(IRawSampleSink* sink) {
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code CollectorManager::UnregisterRawSampleSink(IRawSampleSink* sink) {
+auto CollectorManager::UnregisterRawSampleSink(IRawSampleSink* sink) -> astl_status_code {
   if (!sink) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -70,9 +70,9 @@ astl_status_code CollectorManager::UnregisterRawSampleSink(IRawSampleSink* sink)
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code CollectorManager::ConfigureCollectionOnTarget(const ITarget*                      target,
-                                                               astl_collection_parameters_t const& collection_params,
-                                                               CollectionOperations&&              operations) {
+auto CollectorManager::ConfigureCollectionOnTarget(const ITarget*                      target,
+                                                   astl_collection_parameters_t const& collection_params,
+                                                   CollectionOperations&&              operations) -> astl_status_code {
   auto collector = SelectCollector(target, operations.requirements);
   if (!collector) {
     return collector.error();
@@ -81,7 +81,7 @@ astl_status_code CollectorManager::ConfigureCollectionOnTarget(const ITarget*   
   return collector.value()->ConfigureCollection(std::move(configuration_instance));
 }
 
-astl_status_code CollectorManager::StartOnTarget(const ITarget* target) {
+auto CollectorManager::StartOnTarget(const ITarget* target) -> astl_status_code {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
     // if we have a collector for this target, start it
     return collector->second.front()->StartCollection();
@@ -89,21 +89,21 @@ astl_status_code CollectorManager::StartOnTarget(const ITarget* target) {
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
 
-astl_status_code CollectorManager::PauseOnTarget(const ITarget* target) {
+auto CollectorManager::PauseOnTarget(const ITarget* target) -> astl_status_code {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
     return collector->second.front()->PauseCollection();
   }
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
 
-astl_status_code CollectorManager::ResumeOnTarget(const ITarget* target) {
+auto CollectorManager::ResumeOnTarget(const ITarget* target) -> astl_status_code {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
     return collector->second.front()->ResumeCollection();
   }
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
 
-astl_status_code CollectorManager::ReadImmediateOnTarget(const ITarget* target) {
+auto CollectorManager::ReadImmediateOnTarget(const ITarget* target) -> astl_status_code {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
     // if we have a collector for this target, sample from it
     return collector->second.front()->ReadImmediate();
@@ -111,7 +111,7 @@ astl_status_code CollectorManager::ReadImmediateOnTarget(const ITarget* target) 
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
 
-astl_status_code CollectorManager::StopOnTarget(const ITarget* target) {
+auto CollectorManager::StopOnTarget(const ITarget* target) -> astl_status_code {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
     // if we have a collector for this target, start it
     return collector->second.front()->StopCollection();
@@ -122,7 +122,8 @@ astl_status_code CollectorManager::StopOnTarget(const ITarget* target) {
 ////////////////////////////////////////////////////////////////////////////////
 // IRawSampleSink implementation
 ////////////////////////////////////////////////////////////////////////////////
-astl_status_code CollectorManager::SinkRawSamples(const ITarget* target, std::span<RawSampledData> raw_samples) {
+auto CollectorManager::SinkRawSamples(const ITarget* target, std::span<RawSampledData> raw_samples)
+    -> astl_status_code {
   astl_status_code result = ASTL_STATUS_SUCCESS;
   for (const auto& sink : _registered_raw_sample_sinks) {
     auto sink_result = sink->SinkRawSamples(target, raw_samples);
@@ -139,8 +140,8 @@ astl_status_code CollectorManager::SinkRawSamples(const ITarget* target, std::sp
 ////////////////////////////////////////////////////////////////////////////////
 
 // given a target and a set of desired capabilities, choose a suitable collector
-std::expected<ICollector*, astl_status_code> CollectorManager::SelectCollector(
-    const ITarget* target, CollectorCapability const& requirements) {
+auto CollectorManager::SelectCollector(const ITarget* target, CollectorCapability const& requirements)
+    -> std::expected<ICollector*, astl_status_code> {
   // find a set of collectors associated with the given target
   const auto& potential_collectors = _collectors.find(target);
   if (potential_collectors == _collectors.end()) {

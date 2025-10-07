@@ -28,12 +28,12 @@ struct ICounter {
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    */
-  virtual astl_status_code GetProperties(astl_counter_properties_t *properties) const = 0;
+  virtual auto GetProperties(astl_counter_properties_t *properties) const -> astl_status_code = 0;
 
   /**
    * @brief Prepare for collection based on the given set of parameters
    */
-  virtual astl_status_code ConfigureCollection(astl_collection_parameters_t const *parameters) = 0;
+  virtual auto ConfigureCollection(astl_collection_parameters_t const *parameters) -> astl_status_code = 0;
 };
 
 /**
@@ -69,7 +69,7 @@ class Counter : public ICounter {
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    */
-  astl_status_code GetProperties(astl_counter_properties_t *properties) const override;
+  auto GetProperties(astl_counter_properties_t *properties) const -> astl_status_code override;
 
  private:
   CounterProperties _properties;

@@ -41,9 +41,9 @@ ResidencyMetric::ResidencyMetric(const ResidencyMetricConfig*                  c
       "Metric, State, Total_Time_Seconds, Average_Percentage, Min_Percentage, Max_Percentage\n");
 }
 
-void ResidencyMetric::Reset() { InitializeResidencyState(); }
+auto ResidencyMetric::Reset() -> void { InitializeResidencyState(); }
 
-void ResidencyMetric::InitializeResidencyState() {
+auto ResidencyMetric::InitializeResidencyState() -> void {
   _previous_samples.clear();
   _residency_data.clear();
   _summary_data = {};
@@ -82,7 +82,7 @@ void ResidencyMetric::InitializeResidencyState() {
 // global id assignment), the contiguity or relative ordering of OperationIds could be broken, leading to
 // non‑deterministic sink ordering. Keep this single‑threaded or introduce stronger ordering guarantees in the
 // OperationId allocator before removing this constraint.
-std::expected<OperationSequence, astl_status_code> ResidencyMetric::GetOperations() {
+auto ResidencyMetric::GetOperations() -> std::expected<OperationSequence, astl_status_code> {
   OperationSequence operations_seq;
 
   // Create an operation for each configured state
@@ -113,7 +113,7 @@ std::expected<OperationSequence, astl_status_code> ResidencyMetric::GetOperation
   return operations_seq;
 }
 
-astl_status_code ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sample) {
+auto ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
   // Find the state configuration for this sample's operation_id using fast map lookup
   auto config_it = _operation_id_to_config.find(raw_sample.operation_id);
   if (config_it == _operation_id_to_config.end()) {
@@ -216,7 +216,7 @@ astl_status_code ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sam
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code ResidencyMetric::Summarize() {
+auto ResidencyMetric::Summarize() -> astl_status_code {
   // Calculate final averages and populate summary data
   for (const auto& [state_name, sample_count] : _state_sample_counts) {
     if (sample_count > 0) {
@@ -248,21 +248,21 @@ astl_status_code ResidencyMetric::Summarize() {
   return ASTL_STATUS_SUCCESS;
 }
 
-const ResidencySummaryData& ResidencyMetric::GetResidencySummaryData() const { return _summary_data; }
+auto ResidencyMetric::GetResidencySummaryData() const -> const ResidencySummaryData& { return _summary_data; }
 
-std::span<const StateResidencyData> ResidencyMetric::GetResidencyData() const {
+auto ResidencyMetric::GetResidencyData() const -> std::span<const StateResidencyData> {
   return std::span<const StateResidencyData>(_residency_data);
 }
 
-std::vector<StateResidencyData> ResidencyMetric::GetStateResidencyData(const std::string& state_name) const {
+auto ResidencyMetric::GetStateResidencyData(const std::string& state_name) const -> std::vector<StateResidencyData> {
   std::vector<StateResidencyData> state_data;
   std::copy_if(_residency_data.begin(), _residency_data.end(), std::back_inserter(state_data),
                [&state_name](const StateResidencyData& data) { return data.state_name == state_name; });
   return state_data;
 }
 
-std::expected<std::chrono::microseconds, astl_status_code> ResidencyMetric::ConvertTicksToMicroseconds(
-    const AstlValue& ticks, const ResidencyMetricConfig::StateInfo& config) {
+auto ResidencyMetric::ConvertTicksToMicroseconds(const AstlValue& ticks, const ResidencyMetricConfig::StateInfo& config)
+    -> std::expected<std::chrono::microseconds, astl_status_code> {
   if (config.tick_frequency <= 0.0) {
     return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
@@ -289,8 +289,9 @@ std::expected<std::chrono::microseconds, astl_status_code> ResidencyMetric::Conv
   return time_microseconds;
 }
 
-std::expected<double, astl_status_code> ResidencyMetric::CalculatePercentage(std::chrono::microseconds time_in_state,
-                                                                             std::chrono::microseconds total_interval) {
+auto ResidencyMetric::CalculatePercentage(std::chrono::microseconds time_in_state,
+                                          std::chrono::microseconds total_interval)
+    -> std::expected<double, astl_status_code> {
   if (total_interval.count() <= 0) {
     return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
@@ -310,9 +311,9 @@ std::expected<double, astl_status_code> ResidencyMetric::CalculatePercentage(std
   return percentage;
 }
 
-astl_status_code ResidencyMetric::UpdateStateResidencyStatistics(const std::string&        state_name,
-                                                                 std::chrono::microseconds time_microseconds,
-                                                                 double percentage, SampleTimestamp timestamp) {
+auto ResidencyMetric::UpdateStateResidencyStatistics(const std::string&        state_name,
+                                                     std::chrono::microseconds time_microseconds, double percentage,
+                                                     SampleTimestamp timestamp) -> astl_status_code {
   // Convert time_microseconds to seconds as std::chrono::duration<double>
   std::chrono::duration<double> time_seconds_chrono = time_microseconds;
 
@@ -337,8 +338,8 @@ astl_status_code ResidencyMetric::UpdateStateResidencyStatistics(const std::stri
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code ResidencyMetric::CalculateInferredStateResidencyForInterval(std::chrono::microseconds sample_interval,
-                                                                             SampleTimestamp           timestamp) {
+auto ResidencyMetric::CalculateInferredStateResidencyForInterval(std::chrono::microseconds sample_interval,
+                                                                 SampleTimestamp timestamp) -> astl_status_code {
   if (sample_interval.count() <= 0) {
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
@@ -385,7 +386,7 @@ astl_status_code ResidencyMetric::CalculateInferredStateResidencyForInterval(std
   return ASTL_STATUS_SUCCESS;
 }
 
-astl_status_code ResidencyMetric::SinkOrderedStateSamples() {
+auto ResidencyMetric::SinkOrderedStateSamples() -> astl_status_code {
   // Assumption: OperationIds are sequential, contiguous, and assigned in configuration order.
   // Therefore, we can sink by iterating from the smallest id for count entries.
   if (!_pending_processed_samples.empty() && _first_operation_id.has_value()) {
@@ -411,7 +412,7 @@ astl_status_code ResidencyMetric::SinkOrderedStateSamples() {
   return ASTL_STATUS_SUCCESS;
 }
 
-std::vector<std::string> ResidencyMetric::GetOrderedStates() const {
+auto ResidencyMetric::GetOrderedStates() const -> std::vector<std::string> {
   std::vector<std::string> order;
   order.reserve(_state_configs.size() + (_residency_configuration->InferredState().has_value() ? 1 : 0));
   std::transform(_state_configs.begin(), _state_configs.end(), std::back_inserter(order),

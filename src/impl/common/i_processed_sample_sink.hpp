@@ -98,8 +98,8 @@ struct IProcessedSampleSink {
    * @param samples Span of processed samples to consume; lifetime extends only for the duration of this call.
    * @return ASTL_STATUS_SUCCESS on success or an error status indicating the sink failed to consume samples.
    */
-  virtual astl_status_code SinkProcessedSamples(const ITarget *target, const IMetric *metric,
-                                                std::span<const ProcessedSampledData> samples) = 0;
+  virtual auto SinkProcessedSamples(const ITarget *target, const IMetric *metric,
+                                    std::span<const ProcessedSampledData> samples) -> astl_status_code = 0;
 };
 
 }  // namespace astl

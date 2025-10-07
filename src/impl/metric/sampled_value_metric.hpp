@@ -72,12 +72,12 @@ class SampledValueMetric : public RawMetric {
    * @param sample A single sampled data point to be processed.
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code ReceiveRawSample(const RawSampledData &raw_sample) override;
+  auto ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code override;
 
   /**
    * @brief Return a view of the samples received by this metric
    */
-  std::span<const ProcessedSampledData> GetProcessedSamples() const override;
+  auto GetProcessedSamples() const -> std::span<const ProcessedSampledData> override;
 
   /**
    * @brief Reset the metric state, dropping all collected samples
@@ -92,7 +92,7 @@ class SampledValueMetric : public RawMetric {
    *
    * @return astl_status_code indicating success or failure.
    */
-  astl_status_code Summarize() override;
+  auto Summarize() -> astl_status_code override;
 
   /**
    * @brief Retrieve the statistical summary of the sampled values.
@@ -102,11 +102,11 @@ class SampledValueMetric : public RawMetric {
    *
    * @return A SampledValueSummaryData struct with summary statistics.
    */
-  MinMaxAvgSummaryData GetSummaryData() const;
+  auto GetSummaryData() const -> MinMaxAvgSummaryData;
 
  private:
   /** @brief private helper to update statistics for summary later */
-  astl_status_code UpdateStatistics(const ProcessedSampledData &processed_sample);
+  auto UpdateStatistics(const ProcessedSampledData &processed_sample) -> astl_status_code;
 
   // private helper to initialize or reset the samples + statistics
   void InitializeSamples();

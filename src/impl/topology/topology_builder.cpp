@@ -31,9 +31,9 @@ namespace astl {
 
 // Helper function which runs a single topology plugin and does some error handling
 // 2nd parameter is a function pointer to the ScanForTargets() member of a given plugin
-void ActivatePlugin(
-    std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration,
-    std::expected<std::vector<std::unique_ptr<ITarget>>, astl_status_code> (*scanFunc)(const AstlConfiguration&)) {
+auto ActivatePlugin(std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration,
+                    std::expected<std::vector<std::unique_ptr<ITarget>>, astl_status_code> (*scanFunc)(
+                        const AstlConfiguration&)) -> void {
   auto targets_detected_from_this_plugin = scanFunc(configuration);
   if (!targets_detected_from_this_plugin) {
     throw targets_detected_from_this_plugin.error();

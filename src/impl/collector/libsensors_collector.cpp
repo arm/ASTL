@@ -44,13 +44,13 @@ LibsensorsCollector::LibsensorsCollector() {}
 /*
  * @brief Get the capabilities of this collector, including the collector type.
  */
-CollectorCapability const& LibsensorsCollector::GetCapabilities() const { return _collector_capability; };
+auto LibsensorsCollector::GetCapabilities() const -> CollectorCapability const& { return _collector_capability; };
 
 /*
  * @brief Set the destination for where sampled data should be sent.
  *       This is typically the CollectorManager, but can be any ISampleSink.
  */
-void LibsensorsCollector::SetRawSampleSink(IRawSampleSink* raw_sample_sink) {
+auto LibsensorsCollector::SetRawSampleSink(IRawSampleSink* raw_sample_sink) -> void {
   std::scoped_lock lock{_collection_mutex};
   _sample_sink = raw_sample_sink;
 };
@@ -61,7 +61,7 @@ void LibsensorsCollector::SetRawSampleSink(IRawSampleSink* raw_sample_sink) {
  * @param configuration The configuration to apply to this collector, including the set of operations to run,
  *        the interval to sample at.
  */
-astl_status_code LibsensorsCollector::ConfigureCollection(CollectionConfiguration&& configuration) {
+auto LibsensorsCollector::ConfigureCollection(CollectionConfiguration&& configuration) -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::STOPPED) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot reconfigure while already started
@@ -74,7 +74,7 @@ astl_status_code LibsensorsCollector::ConfigureCollection(CollectionConfiguratio
 /*
  * @brief Start the collection of data, performing any setup operations, starting sampling async tasks, etc.
  */
-astl_status_code LibsensorsCollector::StartCollection() {
+auto LibsensorsCollector::StartCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (_collection_state == CollectionState::STARTED) {
     return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
@@ -116,7 +116,7 @@ astl_status_code LibsensorsCollector::StartCollection() {
 /*
  * @brief Pause the collection of data, stopping any async tasks, but keeping the configuration intact.
  */
-astl_status_code LibsensorsCollector::PauseCollection() {
+auto LibsensorsCollector::PauseCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (!_periodic_sampler) {
     ASTL_LOG_WARNING("PauseCollection called when no periodic sampler initialized");
@@ -129,7 +129,7 @@ astl_status_code LibsensorsCollector::PauseCollection() {
 /*
  * @brief Resume the collection of data, starting any async tasks
  */
-astl_status_code LibsensorsCollector::ResumeCollection() {
+auto LibsensorsCollector::ResumeCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (!_periodic_sampler) {
     ASTL_LOG_WARNING("ResumeCollection called when no periodic sampler initialized");
@@ -142,7 +142,7 @@ astl_status_code LibsensorsCollector::ResumeCollection() {
 /*
  * @brief Stop the collection of data, performing any cleanup operations, stopping async tasks, etc.
  */
-astl_status_code LibsensorsCollector::StopCollection() {
+auto LibsensorsCollector::StopCollection() -> astl_status_code {
   // before we modify any of the collection configuration state, try to stop any
   // configured interval sampling. taking the _collection_mutex lock here has contention
   // against the sampling thread, so signal the stop _BEFORE_ grabbing _collection_mutex.
@@ -185,7 +185,7 @@ astl_status_code LibsensorsCollector::StopCollection() {
 /*
  * @brief Collect a single sample of all the configured metics.
  */
-astl_status_code LibsensorsCollector::ReadImmediate() {
+auto LibsensorsCollector::ReadImmediate() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (_collection_state != CollectionState::STARTED) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot read while not started
@@ -196,7 +196,7 @@ astl_status_code LibsensorsCollector::ReadImmediate() {
 /*
  * @brief Casts a sequence of abstract operations and executes them.
  */
-astl_status_code LibsensorsCollector::ExecuteCollectionOperations(OperationSequence const& operations) {
+auto LibsensorsCollector::ExecuteCollectionOperations(OperationSequence const& operations) -> astl_status_code {
   std::vector<RawSampledData> collected_samples;
   collected_samples.reserve(operations.size());
 
@@ -229,7 +229,7 @@ astl_status_code LibsensorsCollector::ExecuteCollectionOperations(OperationSeque
 /*
  * @brief Initialize any threads or async tasks needed for interval sampling.
  */
-astl_status_code LibsensorsCollector::StartIntervalSampling() {
+auto LibsensorsCollector::StartIntervalSampling() -> astl_status_code {
   if (_collection_state != CollectionState::STOPPED && _collection_state != CollectionState::PAUSED) {
     ASTL_LOG_ERROR("Interval sampling started when collection state is not stopped or paused");
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -254,7 +254,7 @@ astl_status_code LibsensorsCollector::StartIntervalSampling() {
  * @returns ASTL_STATUS_SUCCESS even if there was no ongoing task. this is because
  *          we must try to signal _stop_sampling_task in a lightweight way with no lock
  */
-void LibsensorsCollector::StopIntervalSampling() {
+auto LibsensorsCollector::StopIntervalSampling() -> void {
   _periodic_sampler = nullptr;  // destroy periodic_sampler and wait for its thread pool to empty
 }
 
