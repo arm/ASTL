@@ -23,7 +23,6 @@
 #include <expected>
 #include <optional>
 #include <span>
-#include <vector>
 
 #include "astl/astl.h"
 #include "astl_logger.hpp"
@@ -99,19 +98,6 @@ class DeltaMetric : public RawMetric {
   auto GetDeltaSummaryData() const -> DeltaSummaryData;
 
   /**
-   * @brief Get a view of the delta data calculated by this metric.
-   *
-   * This method provides access to the internal delta data for testing purposes.
-   *
-   * @note TODO(ASTL-58): When OutputManager is implemented, evaluate whether this method
-   * can be consolidated with GetProcessedSamples() or if DeltaData should be handled through
-   * a unified output interface. Currently exposed primarily for unit testing.
-   *
-   * @return A span containing all calculated delta values with their timestamps.
-   */
-  auto GetProcessedSamples() const -> std::span<const ProcessedSampledData> override;
-
-  /**
    * @brief Reset the metric state, dropping all collected samples
    */
   auto Reset() -> void override;
@@ -142,14 +128,14 @@ class DeltaMetric : public RawMetric {
    * @param timestamp The timestamp when the delta was calculated.
    * @return astl_status_code indicating success or failure.
    */
-  auto UpdateDeltaStatistics(const AstlValue& delta_value, SampleTimestamp timestamp) -> astl_status_code;
+  auto UpdateDeltaStatistics(const AstlValue& delta_value) -> astl_status_code;
 
   // NOLINTBEGIN - Disable clang-tidy checks for protected members - required by RateMetric class inherited from
   // DeltaMetric
-  std::optional<RawSampledData>     _previous_sample;               // Previous sample for delta calculation
-  DeltaSummaryData                  _delta_summary_data;            // Summary data for delta statistics
-  AstlValue                         _sum_delta_value{uint64_t{0}};  // Sum of delta values for average calculation
-  std::vector<ProcessedSampledData> _deltas;                        ///< Vector of all delta values with timestamps
+  std::optional<RawSampledData> _previous_sample;               // Previous sample for delta calculation
+  DeltaSummaryData              _delta_summary_data;            // Summary data for delta statistics
+  AstlValue                     _sum_delta_value{uint64_t{0}};  // Sum of delta values for average calculation
+  uint64_t                      _delta_count{0};                // Number of deltas processed
 
   // NOLINTEND
  private:

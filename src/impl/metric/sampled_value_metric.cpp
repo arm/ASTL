@@ -46,19 +46,10 @@ auto SampledValueMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> a
   // bit shifting, applying formulas or scaling
   ProcessedSampledData processed_sample{raw_sample.value, raw_sample.timestamp};
   (void)UpdateStatistics(processed_sample);  // statistics errors are logged inside helper
-
-  {
-    std::lock_guard<std::mutex> lock(_samples_mutex);
-    _processed_samples.push_back(processed_sample);
-  }
+  _processed_samples.push_back(processed_sample);
   // fan-out to manager / external sinks
   SinkProcessedSample(processed_sample);
   return ASTL_STATUS_SUCCESS;
-}
-
-auto SampledValueMetric::GetProcessedSamples() const -> std::span<const ProcessedSampledData> {
-  std::lock_guard<std::mutex> lock(_samples_mutex);
-  return std::span<const ProcessedSampledData>(_processed_samples);
 }
 
 auto SampledValueMetric::Reset() -> void {

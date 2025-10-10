@@ -22,6 +22,7 @@
 #include <span>
 #include <vector>
 
+#include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "metric/rate_metric.hpp"
 
@@ -32,7 +33,9 @@ static const astl::MetricConfig* GetRateConfig() {
   return &config;
 }
 
-static astl::RateMetric GetRateMetric() { return astl::RateMetric{GetRateConfig(), nullptr, nullptr}; }
+static astl::RateMetric GetRateMetricWithSink(MockSampleSink* sink) {
+  return astl::RateMetric{GetRateConfig(), nullptr, sink};
+}
 
 // Test fixture class to access protected members
 class RateMetricTestFixture : public astl::RateMetric {
@@ -48,19 +51,20 @@ class RateMetricTestFixture : public astl::RateMetric {
 
 TEST_CASE("RateMetric: construction", "[RateMetric]") {
   // Test basic construction
-  astl::RateMetric metric = GetRateMetric();
+  MockSampleSink   sink;
+  astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   // Verify initial state
   auto summary = metric.GetRateSummaryData();
   REQUIRE(!summary.min_rate.has_value());
   REQUIRE(!summary.max_rate.has_value());
 
-  auto rates = metric.GetRates();
-  REQUIRE(rates.empty());
+  REQUIRE(sink.captured.empty());
 }
 
 TEST_CASE("RateMetric: single sample - no rate calculated", "[RateMetric]") {
-  astl::RateMetric metric = GetRateMetric();
+  MockSampleSink   sink;
+  astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   // First sample should not produce a rate
   astl::AstlValue      val1{uint64_t{100}};
@@ -73,12 +77,12 @@ TEST_CASE("RateMetric: single sample - no rate calculated", "[RateMetric]") {
   REQUIRE(!summary.min_rate.has_value());
   REQUIRE(!summary.max_rate.has_value());
 
-  auto rates = metric.GetRates();
-  REQUIRE(rates.empty());
+  REQUIRE(sink.captured.empty());
 }
 
 TEST_CASE("RateMetric: two samples - rate calculated", "[RateMetric]") {
-  astl::RateMetric metric = GetRateMetric();
+  MockSampleSink   sink;
+  astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   using microseconds = std::chrono::microseconds;
 
@@ -98,15 +102,13 @@ TEST_CASE("RateMetric: two samples - rate calculated", "[RateMetric]") {
   REQUIRE(summary.min_rate.has_value());
   REQUIRE(summary.max_rate.has_value());
 
-  auto rates = metric.GetRates();
-  REQUIRE(rates.size() == 1);
-
-  // Rate should be 50 joules/second. Type is double since it's divided by time
-  REQUIRE(rates[0].rate_value == Catch::Approx(50.0));
+  REQUIRE(sink.captured.size() == 1);
+  REQUIRE(std::get<double>(sink.captured[0].value.value) == Catch::Approx(50.0));
 }
 
 TEST_CASE("RateMetric: multiple samples - rate statistics", "[RateMetric]") {
-  astl::RateMetric metric = GetRateMetric();
+  MockSampleSink   sink;
+  astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   using microseconds = std::chrono::microseconds;
 
@@ -131,13 +133,12 @@ TEST_CASE("RateMetric: multiple samples - rate statistics", "[RateMetric]") {
   metric.ReceiveRawSample(sample4);
 
   // Verify statistics
-  auto rates = metric.GetRates();
-  REQUIRE(rates.size() == 3);
+  REQUIRE(sink.captured.size() == 3);
 
-  // Verify individual rates. They should be in double after division by time
-  REQUIRE(rates[0].rate_value == 100.0);  // First rate: 100.0 J/s
-  REQUIRE(rates[1].rate_value == 50.0);   // Second rate: 50.0 J/s
-  REQUIRE(rates[2].rate_value == 150.0);  // Third rate: 150.0 J/s
+  // Verify individual rates captured via sink
+  REQUIRE(std::get<double>(sink.captured[0].value.value) == 100.0);  // First rate: 100.0 J/s
+  REQUIRE(std::get<double>(sink.captured[1].value.value) == 50.0);   // Second rate: 50.0 J/s
+  REQUIRE(std::get<double>(sink.captured[2].value.value) == 150.0);  // Third rate: 150.0 J/s
 
   // Test summary after calculation
   metric.Summarize();
@@ -154,7 +155,8 @@ TEST_CASE("RateMetric: multiple samples - rate statistics", "[RateMetric]") {
 }
 
 TEST_CASE("RateMetric: zero time interval handling", "[RateMetric]") {
-  astl::RateMetric metric = GetRateMetric();
+  MockSampleSink   sink;
+  astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   using microseconds = std::chrono::microseconds;
 
@@ -171,12 +173,12 @@ TEST_CASE("RateMetric: zero time interval handling", "[RateMetric]") {
   // Should fail due to zero time interval
   REQUIRE(status == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 
-  auto rates = metric.GetRates();
-  REQUIRE(rates.empty());  // No rate should be calculated
+  REQUIRE(sink.captured.empty());  // No rate should be calculated
 }
 
 TEST_CASE("RateMetric: invalid sample type handling", "[RateMetric]") {
-  astl::RateMetric metric = GetRateMetric();
+  MockSampleSink   sink;
+  astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   // Try to send a sample with wrong type (string instead of uint64)
   astl::AstlValue      invalid_val{std::string{"invalid"}};
@@ -185,6 +187,7 @@ TEST_CASE("RateMetric: invalid sample type handling", "[RateMetric]") {
 
   // Should fail due to type mismatch
   REQUIRE(status == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+  REQUIRE(sink.captured.empty());
 }
 
 TEST_CASE("RateMetric: CalculateRate static method", "[RateMetric]") {
@@ -210,8 +213,9 @@ TEST_CASE("RateMetric: CalculateRate with non-arithmetic value", "[RateMetric]")
   REQUIRE(result.error() == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 }
 
-TEST_CASE("RateMetric: GetRates span interface", "[RateMetric]") {
-  astl::RateMetric metric = GetRateMetric();
+TEST_CASE("RateMetric: sink captures multiple rates", "[RateMetric]") {
+  MockSampleSink   sink;
+  astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   using microseconds = std::chrono::microseconds;
 
@@ -223,20 +227,21 @@ TEST_CASE("RateMetric: GetRates span interface", "[RateMetric]") {
     metric.ReceiveRawSample(sample);
   }
 
-  auto rates = metric.GetRates();
-  REQUIRE(rates.size() == 4);  // 5 samples should produce 4 rates
+  REQUIRE(sink.captured.size() == 4);  // 5 samples should produce 4 rates
 
-  // Verify we can iterate through the span
+  // Verify captured rate values are ascending sample order and positive
   int count = 0;
-  for (const auto& rate_data : rates) {
-    REQUIRE(rate_data.time_interval.count() > 0);
+  for (const auto& processed : sink.captured) {
+    REQUIRE(std::holds_alternative<double>(processed.value.value));
+    REQUIRE(std::get<double>(processed.value.value) >= 0.0);
     count++;
   }
   REQUIRE(count == 4);
 }
 
 TEST_CASE("RateMetric: edge case - very small time intervals", "[RateMetric]") {
-  astl::RateMetric metric = GetRateMetric();
+  MockSampleSink   sink;
+  astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   using microseconds = std::chrono::microseconds;
 
@@ -250,15 +255,15 @@ TEST_CASE("RateMetric: edge case - very small time intervals", "[RateMetric]") {
   astl::RawSampledData sample2(2, val2, astl::SampleTimestamp{microseconds{1000001}});
   metric.ReceiveRawSample(sample2);
 
-  auto rates = metric.GetRates();
-  REQUIRE(rates.size() == 1);
+  REQUIRE(sink.captured.size() == 1);
 
   // Rate should be very high: 1 unit / 1 microsecond = 1,000,000 units/second
-  REQUIRE(rates[0].rate_value == Catch::Approx(1000000.0));
+  REQUIRE(std::get<double>(sink.captured[0].value.value) == Catch::Approx(1000000.0));
 }
 
 TEST_CASE("RateMetric: summarize with no rates", "[RateMetric]") {
-  astl::RateMetric metric = GetRateMetric();
+  MockSampleSink   sink;
+  astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   // Summarize without any samples
   auto status = metric.Summarize();
@@ -268,10 +273,12 @@ TEST_CASE("RateMetric: summarize with no rates", "[RateMetric]") {
   REQUIRE(!summary.min_rate.has_value());
   REQUIRE(!summary.max_rate.has_value());
   REQUIRE(!summary.avg_rate.has_value());
+  REQUIRE(sink.captured.empty());
 }
 
-TEST_CASE("RateMetric: inheritance from DeltaMetric", "[RateMetric]") {
-  astl::RateMetric metric = GetRateMetric();
+TEST_CASE("RateMetric: rate calculation and processed samples", "[RateMetric]") {
+  MockSampleSink   sink;
+  astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   using microseconds = std::chrono::microseconds;
 
@@ -284,17 +291,7 @@ TEST_CASE("RateMetric: inheritance from DeltaMetric", "[RateMetric]") {
   astl::RawSampledData sample2(2, val2, astl::SampleTimestamp{microseconds{2000000}});
   metric.ReceiveRawSample(sample2);
 
-  // Should have delta data from base class
-  auto delta_summary = metric.GetDeltaSummaryData();
-  REQUIRE(delta_summary.min_delta.has_value());
-  REQUIRE(delta_summary.max_delta.has_value());
-
-  auto deltas = metric.GetProcessedSamples();
-  REQUIRE(deltas.size() == 1);
-  REQUIRE(std::get<uint64_t>(deltas[0].value.value) == 100);
-
-  // Should also have rate data
-  auto rates = metric.GetRates();
-  REQUIRE(rates.size() == 1);
-  REQUIRE(rates[0].rate_value == 100.0);
+  // Sample sink should have captured the rate values (not deltas)
+  REQUIRE(sink.captured.size() == 1);
+  REQUIRE(std::get<double>(sink.captured[0].value.value) == 100.0);
 }

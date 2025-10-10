@@ -17,8 +17,11 @@
  ******************************************************************************/
 
 #include <chrono>
+#include <span>
 #include <thread>
+#include <unordered_map>
 
+#include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "metric/event_metric.hpp"
 
@@ -35,14 +38,14 @@ static auto GetEventMetricConfig() -> const astl::MetricConfig* {
   return &config;
 }
 
-static auto CreateEventMetric() -> astl::EventMetric {
-  return astl::EventMetric(GetEventMetricConfig(), nullptr, nullptr);
+static auto CreateEventMetricWithSink(MockSampleSink* sink) -> astl::EventMetric {
+  return astl::EventMetric(GetEventMetricConfig(), nullptr, sink);
 }
 
 // Test fixture class to access protected members
 class EventMetricTestFixture : public astl::EventMetric {
  public:
-  EventMetricTestFixture() : astl::EventMetric(GetEventMetricConfig(), nullptr, nullptr) {}
+  explicit EventMetricTestFixture(MockSampleSink* sink) : astl::EventMetric(GetEventMetricConfig(), nullptr, sink) {}
 
   // Helper method to inject events for testing
   astl_status_code InjectEvent(const std::string& event_description) {
@@ -56,32 +59,57 @@ class EventMetricTestFixture : public astl::EventMetric {
   }
 };
 
+// Helper function to extract event strings from processed samples
+static std::vector<std::string> ExtractEventStrings(const std::vector<astl::ProcessedSampledData>& samples) {
+  std::vector<std::string> events;
+  for (const auto& sample : samples) {
+    std::string event_str;
+    if (sample.value.ToStringValue(event_str)) {
+      events.push_back(event_str);
+    }
+  }
+  return events;
+}
+
+// Helper function to count event occurrences
+static std::unordered_map<std::string, size_t> CountEvents(const std::vector<astl::ProcessedSampledData>& samples) {
+  std::unordered_map<std::string, size_t> counts;
+  for (const auto& sample : samples) {
+    std::string event_str;
+    if (sample.value.ToStringValue(event_str)) {
+      counts[event_str]++;
+    }
+  }
+  return counts;
+}
+
 TEST_CASE("EventMetric: construction", "[EventMetric]") {
-  astl::EventMetric metric = CreateEventMetric();
+  MockSampleSink    sink;
+  astl::EventMetric metric = CreateEventMetricWithSink(&sink);
 
   // Verify initial state
-  auto events = metric.GetEvents();
-  REQUIRE(events.empty());
 
   auto summary = metric.GetEventSummaryData();
   REQUIRE(summary.counts.empty());
 
-  auto samples = metric.GetProcessedSamples();
-  REQUIRE(samples.empty());
+  REQUIRE(sink.captured.empty());
 }
 
 TEST_CASE("EventMetric: single event capture", "[EventMetric]") {
-  EventMetricTestFixture metric;
+  MockSampleSink         sink;
+  EventMetricTestFixture metric(&sink);
+
   // Test single event injection
   REQUIRE(metric.InjectEvent("INTERRUPT_WAKEUP") == ASTL_STATUS_SUCCESS);
 
-  auto events = metric.GetEvents();
+  auto events = ExtractEventStrings(sink.captured);
   REQUIRE(events.size() == 1);
-  REQUIRE(events[0].description == "INTERRUPT_WAKEUP");
+  REQUIRE(events[0] == "INTERRUPT_WAKEUP");
 }
 
 TEST_CASE("EventMetric: multiple event capture", "[EventMetric]") {
-  EventMetricTestFixture metric;
+  MockSampleSink         sink;
+  EventMetricTestFixture metric(&sink);
 
   // Test multiple event injection
   REQUIRE(metric.InjectEvent("CPU_IDLE_TO_ACTIVE") == ASTL_STATUS_SUCCESS);
@@ -89,20 +117,21 @@ TEST_CASE("EventMetric: multiple event capture", "[EventMetric]") {
   REQUIRE(metric.InjectEvent("CPU_IDLE_TO_ACTIVE") == ASTL_STATUS_SUCCESS);  // Duplicate event
 
   // Check event timeline
-  auto events = metric.GetEvents();
+  auto events = ExtractEventStrings(sink.captured);
   REQUIRE(events.size() == 3);
-  REQUIRE(events[0].description == "CPU_IDLE_TO_ACTIVE");
-  REQUIRE(events[1].description == "DROOP_EVENT");
-  REQUIRE(events[2].description == "CPU_IDLE_TO_ACTIVE");
+  REQUIRE(events[0] == "CPU_IDLE_TO_ACTIVE");
+  REQUIRE(events[1] == "DROOP_EVENT");
+  REQUIRE(events[2] == "CPU_IDLE_TO_ACTIVE");
 
   // Check event counts
-  auto summary = metric.GetEventSummaryData();
-  REQUIRE(summary.counts.at("CPU_IDLE_TO_ACTIVE") == 2);
-  REQUIRE(summary.counts.at("DROOP_EVENT") == 1);
+  auto counts = CountEvents(sink.captured);
+  REQUIRE(counts.at("CPU_IDLE_TO_ACTIVE") == 2);
+  REQUIRE(counts.at("DROOP_EVENT") == 1);
 }
 
 TEST_CASE("EventMetric: numeric sample type conversion", "[EventMetric]") {
-  astl::EventMetric metric = CreateEventMetric();
+  MockSampleSink    sink;
+  astl::EventMetric metric = CreateEventMetricWithSink(&sink);
 
   // Test acceptance and conversion of numeric samples to strings
   auto                 timestamp = EventMetricTestFixture::CreateTimestamp(std::chrono::steady_clock::now());
@@ -116,37 +145,37 @@ TEST_CASE("EventMetric: numeric sample type conversion", "[EventMetric]") {
   REQUIRE(metric.ReceiveRawSample(float_sample) == ASTL_STATUS_SUCCESS);
 
   // Verify events were stored with string representations
-  auto events = metric.GetEvents();
+  auto events = ExtractEventStrings(sink.captured);
   REQUIRE(events.size() == 3);
-  REQUIRE(events[0].description == "42");
-  REQUIRE(events[1].description == "true");
-  REQUIRE(events[2].description == "3.140000");  // float to string representation
+  REQUIRE(events[0] == "42");
+  REQUIRE(events[1] == "true");
+  REQUIRE(events[2] == "3.140000");  // float to string representation
 
-  auto summary = metric.GetEventSummaryData();
-  REQUIRE(summary.counts.at("42") == 1);
-  REQUIRE(summary.counts.at("true") == 1);
-  REQUIRE(summary.counts.at("3.140000") == 1);
+  auto counts = CountEvents(sink.captured);
+  REQUIRE(counts.at("42") == 1);
+  REQUIRE(counts.at("true") == 1);
+  REQUIRE(counts.at("3.140000") == 1);
 }
 
 TEST_CASE("EventMetric: reset functionality", "[EventMetric]") {
-  EventMetricTestFixture metric;
+  MockSampleSink         sink;
+  EventMetricTestFixture metric(&sink);
 
   // Add some events
   REQUIRE(metric.InjectEvent("EVENT1") == ASTL_STATUS_SUCCESS);
   REQUIRE(metric.InjectEvent("EVENT2") == ASTL_STATUS_SUCCESS);
 
   // Verify they exist
-  REQUIRE(metric.GetEvents().size() == 2);
-  REQUIRE(metric.GetEventSummaryData().counts.size() == 2);
+  REQUIRE(sink.captured.size() == 2);
 
   // Reset and verify empty
   metric.Reset();
-  REQUIRE(metric.GetEvents().empty());
   REQUIRE(metric.GetEventSummaryData().counts.empty());
 }
 
 TEST_CASE("EventMetric: summarize functionality", "[EventMetric]") {
-  EventMetricTestFixture metric;
+  MockSampleSink         sink;
+  EventMetricTestFixture metric(&sink);
 
   // Add some events
   REQUIRE(metric.InjectEvent("STATE_TRANSITION") == ASTL_STATUS_SUCCESS);
@@ -156,14 +185,15 @@ TEST_CASE("EventMetric: summarize functionality", "[EventMetric]") {
   // Summarize should succeed and log results
   REQUIRE(metric.Summarize() == ASTL_STATUS_SUCCESS);
 
-  // Verify summary data is still accessible
-  auto summary = metric.GetEventSummaryData();
-  REQUIRE(summary.counts.at("STATE_TRANSITION") == 2);
-  REQUIRE(summary.counts.at("POWER_EVENT") == 1);
+  // Verify captured events are still accessible
+  auto counts = CountEvents(sink.captured);
+  REQUIRE(counts.at("STATE_TRANSITION") == 2);
+  REQUIRE(counts.at("POWER_EVENT") == 1);
 }
 
 TEST_CASE("EventMetric: event timestamp ordering", "[EventMetric]") {
-  astl::EventMetric metric = CreateEventMetric();
+  MockSampleSink    sink;
+  astl::EventMetric metric = CreateEventMetricWithSink(&sink);
 
   auto start_time       = std::chrono::steady_clock::now();
   auto first_timestamp  = EventMetricTestFixture::CreateTimestamp(start_time);
@@ -176,11 +206,11 @@ TEST_CASE("EventMetric: event timestamp ordering", "[EventMetric]") {
   REQUIRE(metric.ReceiveRawSample(first_sample) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric.ReceiveRawSample(second_sample) == ASTL_STATUS_SUCCESS);
 
-  auto events = metric.GetEvents();
+  auto events = ExtractEventStrings(sink.captured);
   REQUIRE(events.size() == 2);
-  REQUIRE(events[0].description == "FIRST_EVENT");
-  REQUIRE(events[1].description == "SECOND_EVENT");
+  REQUIRE(events[0] == "FIRST_EVENT");
+  REQUIRE(events[1] == "SECOND_EVENT");
 
   // Verify timestamp ordering
-  REQUIRE(events[0].timestamp < events[1].timestamp);
+  REQUIRE(sink.captured[0].timestamp < sink.captured[1].timestamp);
 }
