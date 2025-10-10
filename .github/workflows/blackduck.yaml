@@ -47,8 +47,9 @@ jobs:
           ${{ github.workspace }}/detect-arm.sh \
           --blackduck.url='https://arm.app.blackduck.com' \
           --detect.project.name='Arm-Debug:ASTL' \
-          --blackduck.api.token="${{ secrets.BLACKDUCK_TOKEN }}" \
+          --blackduck.api.token="${{ secrets.ITS_BLACKDUCK_KEY }}" \
           --detect.project.version.name="${VERSION}" \
           --detect.tools='SIGNATURE_SCAN,DETECTOR' \
           --detect.source.path="${{ github.workspace }}" \
+          --detect.excluded.detector.types='SETUPTOOLS' \
           --detect.cleanup=false
