@@ -101,14 +101,6 @@ class RawMetric : public IMetric {
   auto SetProcessedSampleSink(IProcessedSampleSink *processed_sample_sink) -> void final;
 
   /**
-   * @brief Return a read-only view over processed samples accumulated by this metric.
-   *
-   * The returned span remains valid until the next mutating operation (e.g. additional ReceiveRawSample,
-   * Reset, Summarize) alters the underlying container.
-   */
-  auto GetProcessedSamples() const -> std::span<const ProcessedSampledData> override = 0;
-
-  /**
    * @brief Reset the metric state discarding all processed samples and internal accumulators.
    */
   auto Reset() -> void override = 0;

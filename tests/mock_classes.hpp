@@ -204,7 +204,6 @@ struct MockMetric : public astl::IMetric {
   MAKE_MOCK1(SinkProcessedSample, auto(astl::ProcessedSampledData const& processed_sample)->astl_status_code, override);
 
   using samples_t = std::span<const astl::ProcessedSampledData>;
-  MAKE_MOCK0(GetProcessedSamples, auto()->samples_t, const override);
   MAKE_MOCK0(Reset, auto()->void, override);
   MAKE_MOCK0(Summarize, auto()->astl_status_code, override);
   MAKE_MOCK1(GetProperties, auto(astl_metric_properties_t* properties)->astl_status_code, const override);
@@ -306,6 +305,16 @@ struct MockOutputManager : public astl::IOutputManager {
              astl_status_code(const astl::ProcessedSamplesMap& processed_samples, astl::OutputType output_type,
                               const astl::ITarget* target, const astl::IMetric* metric),
              override);
+};
+
+// MockSampleSink captures processed samples for test assertions
+struct MockSampleSink : public astl::IProcessedSampleSink {
+  std::vector<astl::ProcessedSampledData> captured;
+  astl_status_code                        SinkProcessedSamples(const astl::ITarget*, const astl::IMetric*,
+                                                               std::span<const astl::ProcessedSampledData> samples) override {
+    captured.insert(captured.end(), samples.begin(), samples.end());
+    return ASTL_STATUS_SUCCESS;
+  }
 };
 
 #endif  // ASTL_MOCK_CLASSES_H_

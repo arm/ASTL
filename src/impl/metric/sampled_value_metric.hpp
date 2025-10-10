@@ -75,11 +75,6 @@ class SampledValueMetric : public RawMetric {
   auto ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code override;
 
   /**
-   * @brief Return a view of the samples received by this metric
-   */
-  auto GetProcessedSamples() const -> std::span<const ProcessedSampledData> override;
-
-  /**
    * @brief Reset the metric state, dropping all collected samples
    */
   void Reset() override;

@@ -101,8 +101,6 @@ struct TestMetric : public IMetric {
 
   void SetProcessedSampleSink(IProcessedSampleSink* processed_sample_sink) override { sink = processed_sample_sink; };
 
-  std::span<const ProcessedSampledData> GetProcessedSamples() const override { return {processed}; }
-
   astl_status_code SinkProcessedSample(const ProcessedSampledData& processed_sample) override {
     if (sink) {
       processed.push_back(processed_sample);

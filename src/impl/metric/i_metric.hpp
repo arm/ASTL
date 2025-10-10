@@ -83,11 +83,6 @@ struct IMetric {
   virtual auto SetProcessedSampleSink(IProcessedSampleSink *processed_sample_sink) -> void = 0;
 
   /**
-   * @brief Return a view of the samples processed by this metric
-   */
-  virtual auto GetProcessedSamples() const -> std::span<const ProcessedSampledData> = 0;
-
-  /**
    * @brief Reset the metric state, dropping all collected samples
    */
   virtual auto Reset() -> void = 0;

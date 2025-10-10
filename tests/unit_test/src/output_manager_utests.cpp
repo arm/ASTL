@@ -134,11 +134,10 @@ struct TinyMetric : public astl::IMetric {
     (void)sample;
     return ASTL_STATUS_SUCCESS;
   }
-  void SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
-  std::span<const astl::ProcessedSampledData> GetProcessedSamples() const override { return {}; }
-  void                                        Reset() override {}
-  astl_status_code                            Summarize() override { return ASTL_STATUS_SUCCESS; }
-  astl_status_code                            GetProperties(astl_metric_properties_t* props) const override {
+  void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
+  void             Reset() override {}
+  astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
+  astl_status_code GetProperties(astl_metric_properties_t* props) const override {
     (void)props;
     return ASTL_STATUS_SUCCESS;
   }

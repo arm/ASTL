@@ -117,29 +117,6 @@ class EventMetric : public RawMetric {
   void Reset() override;
 
   /**
-   * @brief Get raw sample data (not implemented for EventMetric).
-   *
-   * EventMetric does not store raw samples as they are immediately processed
-   * into structured EventData objects. This method currently returns an empty span.
-   *
-   * @note @todo (ASTL-159): Return the EventData samples in GetProcessedSamples API
-   *
-   * @return Empty span since raw samples are not returned.
-   */
-  std::span<const ProcessedSampledData> GetProcessedSamples() const override { return {}; }
-
-  /**
-   * @brief Get a view of all captured events in chronological order.
-   *
-   * Returns a span containing all EventData objects, providing access to
-   * the complete timeline of events with their descriptions and timestamps.
-   * @note @todo (ASTL-159): Remove this API when GetProcessedSamples API returns EventData
-   *
-   * @return Span of EventData objects in the order they were received.
-   */
-  std::span<const EventData> GetEvents() const { return _events; }
-
-  /**
    * @brief Retrieve the event summary data containing occurrence counts.
    *
    * Returns the current event summary data with counts for each unique
@@ -170,8 +147,7 @@ class EventMetric : public RawMetric {
    */
   void Initialize();
 
-  std::vector<EventData> _events;   ///< Flattened event timeline
-  EventSummaryData       _summary;  ///< Aggregated counts
+  EventSummaryData _summary;  ///< Aggregated counts
 
   Logger _event_summary_logger{LogLevel::Info, false, false, "event_summary.log"};    ///< Logger for event counts
   Logger _event_timeline_logger{LogLevel::Info, false, false, "event_timeline.log"};  ///< Logger for event timeline

@@ -109,19 +109,6 @@ class RateMetric : public DeltaMetric {
    */
   auto GetRateSummaryData() const -> RateSummaryData;
 
-  /**
-   * @brief Get a view of the rate data calculated by this metric.
-   *
-   * This method provides access to the internal rate data for testing purposes.
-   *
-   * @note TODO(ASTL-58): When OutputManager is implemented, evaluate whether this method
-   * can be consolidated with GetProcessedSamples() or if RateData should be handled through
-   * a unified output interface. Currently exposed primarily for unit testing.
-   *
-   * @return A span containing all calculated rate values with their timestamps.
-   */
-  auto GetRates() const -> std::span<const RateData>;
-
  protected:
   /**
    * @brief Calculate rate from delta value and time interval.
@@ -141,21 +128,13 @@ class RateMetric : public DeltaMetric {
    * @param time_interval The time interval for this rate calculation.
    * @return astl_status_code indicating success or failure.
    */
-  auto UpdateRateStatistics(const AstlValue &rate_value, SampleTimestamp timestamp,
-                            std::chrono::microseconds time_interval) -> astl_status_code;
-
-  /**
-   * @brief Output time interval packets for each rate calculation.
-   *
-   * @return astl_status_code indicating success or failure.
-   */
-  auto OutputTimeIntervalPackets() -> astl_status_code;
+  auto UpdateRateStatistics(const AstlValue &rate_value) -> astl_status_code;
 
  private:
-  std::vector<RateData> _rates;                ///< Vector of all rate values with timestamps
-  RateSummaryData       _rate_summary_data;    // Summary data for rate statistics
-  double                _sum_rate_value{0.0};  // Sum of rate values for average calculation
-  astl::Logger          _interval_logger;
+  RateSummaryData _rate_summary_data;    // Summary data for rate statistics
+  double          _sum_rate_value{0.0};  // Sum of rate values for average calculation
+  uint64_t        _rate_count{0};        // Count of rates processed
+  astl::Logger    _interval_logger;
 };  // End of RateMetric class
 
 }  // namespace astl

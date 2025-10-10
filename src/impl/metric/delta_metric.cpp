@@ -58,9 +58,12 @@ auto DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_sta
                    astlStatusString(delta_result.error()));
     return delta_result.error();
   }
+  // Forward the delta as a processed sample to the sink
+  ProcessedSampledData processed_sampled_data{delta_result.value(), raw_sample.timestamp};
+  SinkProcessedSample(processed_sampled_data);
 
   // Update delta statistics
-  auto status = UpdateDeltaStatistics(delta_result.value(), raw_sample.timestamp);
+  auto status = UpdateDeltaStatistics(delta_result.value());
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
@@ -86,7 +89,7 @@ auto DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_sta
   return delta_result.value();
 }
 
-auto DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value, SampleTimestamp timestamp) -> astl_status_code {
+auto DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value) -> astl_status_code {
   if (!delta_value.IsArithmetic()) {
     ASTL_LOG_TRACE("DeltaMetric: received delta with non-arithmetic value type for metric: {}", _configuration->Name());
     return ASTL_STATUS_SUCCESS;
@@ -100,12 +103,8 @@ auto DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value, SampleTime
                                       ? std::max(_delta_summary_data.max_delta.value(), delta_value)
                                       : delta_value;
 
-  ProcessedSampledData processed_sampled_data{delta_value, timestamp};
-
-  SinkProcessedSample(processed_sampled_data);
-
-  // Store delta data for later analysis and GetProcessedSamples invocation.
-  _deltas.push_back({delta_value, timestamp});
+  // Increment delta count
+  ++_delta_count;
 
   // Update sum for average calculation
   auto new_sum_for_avg = AstlValue::Add(delta_value, _sum_delta_value);
@@ -123,11 +122,11 @@ auto DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value, SampleTime
 
 auto DeltaMetric::Summarize() -> astl_status_code {
   // Compute min, max, and average delta values
-  if (_deltas.empty()) {
+  if (_delta_count == 0) {
     _delta_summary_logger.LogInfo("No deltas to summarize for metric: {}.", _configuration->Name());
     return ASTL_STATUS_SUCCESS;
   }
-  auto average = AstlValue::Divide(_sum_delta_value, _deltas.size());
+  auto average = AstlValue::Divide(_sum_delta_value, _delta_count);
   if (average.has_value()) {
     _delta_summary_data.avg_delta = average.value();
   } else {
@@ -141,16 +140,12 @@ auto DeltaMetric::Summarize() -> astl_status_code {
       "Type: {} \n",
       _configuration->Name(), _configuration->Description(), _configuration->Units(),
       _delta_summary_data.max_delta.value_or(none), _delta_summary_data.min_delta.value_or(none),
-      _delta_summary_data.avg_delta.value_or(none), _deltas.size(), _configuration->ValueType());
+      _delta_summary_data.avg_delta.value_or(none), _delta_count, _configuration->ValueType());
 
   return ASTL_STATUS_SUCCESS;
 }
 
 auto DeltaMetric::GetDeltaSummaryData() const -> DeltaSummaryData { return _delta_summary_data; }
-
-auto DeltaMetric::GetProcessedSamples() const -> std::span<const ProcessedSampledData> {
-  return std::span<const ProcessedSampledData>(_deltas);
-}
 
 auto DeltaMetric::Reset() -> void { InitializeSamples(); }
 
@@ -158,7 +153,7 @@ auto DeltaMetric::InitializeSamples() -> void {
   // Reset the metric state
   _previous_sample.reset();
   _delta_summary_data = DeltaSummaryData{};
-  _deltas.clear();
+  _delta_count        = 0;
 
   // Initialize sum for delta calculations
   auto from_union_result = AstlValue::FromUnionPromoting(_configuration->ValueType());

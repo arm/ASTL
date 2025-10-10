@@ -25,10 +25,7 @@
 
 namespace astl {
 
-auto EventMetric::Initialize() -> void {
-  _events.clear();
-  _summary.counts.clear();
-}
+auto EventMetric::Initialize() -> void { _summary.counts.clear(); }
 
 auto EventMetric::Reset() -> void { Initialize(); }
 
@@ -45,9 +42,6 @@ auto EventMetric::CheckAndStoreEvent(const RawSampledData& raw_sample) -> astl_s
     ASTL_LOG_ERROR("EventMetric {}: failed to convert sample to string", _configuration->Name());
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
-
-  // Create timeline entry
-  _events.push_back(EventData{.description = event_str, .timestamp = raw_sample.timestamp});
 
   // TODO(fayben01): May need to process the raw sample further depending on requirements
   ProcessedSampledData processed_sampled_data{raw_sample.value, raw_sample.timestamp};

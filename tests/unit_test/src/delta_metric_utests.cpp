@@ -21,6 +21,7 @@
 #include <span>
 #include <vector>
 
+#include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "metric/delta_metric.hpp"
 #include "operation/operation_builder.hpp"
@@ -32,18 +33,19 @@ static astl::MetricConfig* GetDeltaConfig() {
       ASTL_METRIC_DELTA, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
   return &config;
 }
-astl::DeltaMetric GetDeltaMetricUINT64() { return astl::DeltaMetric{GetDeltaConfig(), nullptr, nullptr}; }
-astl::DeltaMetric GetDeltaMetricUINT32() {
+
+static astl::MetricConfig* GetDeltaConfigUINT32() {
   static astl::MetricConfig config{
       "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT32,
       ASTL_METRIC_DELTA, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
-  return astl::DeltaMetric{&config, nullptr, nullptr};
+  return &config;
 }
-astl::DeltaMetric GetDeltaMetricFLOAT64() {
+
+static astl::MetricConfig* GetDeltaConfigFLOAT64() {
   static astl::MetricConfig config{
       "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_FLOAT64,
       ASTL_METRIC_DELTA, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
-  return astl::DeltaMetric{&config, nullptr, nullptr};
+  return &config;
 }
 
 // Test fixture class to access protected members
@@ -56,26 +58,20 @@ class DeltaMetricTestFixture : public astl::DeltaMetric {
                                                                              const astl::AstlValue& previous_sample) {
     return CalculateDelta(current_sample, previous_sample);
   }
-
-  astl_status_code TestUpdateDeltaStatistics(const astl::AstlValue& delta_value, astl::SampleTimestamp timestamp) {
-    return UpdateDeltaStatistics(delta_value, timestamp);
-  }
 };
 
 TEST_CASE("DeltaMetric: construction", "[DeltaMetric]") {
-  // Test basic construction
-  astl::DeltaMetric metric = GetDeltaMetricUINT64();
-  // Verify initial state
-  auto summary = metric.GetDeltaSummaryData();
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
+  auto              summary = metric.GetDeltaSummaryData();
   REQUIRE(!summary.min_delta.has_value());
   REQUIRE(!summary.max_delta.has_value());
-
-  auto deltas = metric.GetProcessedSamples();
-  REQUIRE(deltas.empty());
+  REQUIRE(sink.captured.empty());
 }
 
 TEST_CASE("DeltaMetric: single sample - no delta calculated", "[DeltaMetric]") {
-  astl::DeltaMetric metric = GetDeltaMetricUINT64();
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
   // First sample should not produce a delta
   astl::AstlValue      val1{uint64_t{100}};
   astl::RawSampledData sample1(1, val1);
@@ -87,12 +83,12 @@ TEST_CASE("DeltaMetric: single sample - no delta calculated", "[DeltaMetric]") {
   REQUIRE(!summary.min_delta.has_value());
   REQUIRE(!summary.max_delta.has_value());
 
-  auto deltas = metric.GetProcessedSamples();
-  REQUIRE(deltas.empty());
+  REQUIRE(sink.captured.empty());
 }
 
 TEST_CASE("DeltaMetric: two samples - delta calculated", "[DeltaMetric]") {
-  astl::DeltaMetric metric = GetDeltaMetricUINT64();
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
 
   // First sample
   astl::AstlValue      val1{uint64_t{100}};
@@ -111,15 +107,14 @@ TEST_CASE("DeltaMetric: two samples - delta calculated", "[DeltaMetric]") {
   REQUIRE(summary.min_delta.has_value());
   REQUIRE(summary.max_delta.has_value());
 
-  auto deltas = metric.GetProcessedSamples();
-  REQUIRE(deltas.size() == 1);
-
-  auto delta_value = std::get<uint64_t>(deltas[0].value.value);
+  REQUIRE(sink.captured.size() == 1);
+  auto delta_value = std::get<uint64_t>(sink.captured[0].value.value);
   REQUIRE(delta_value == 50);
 }
 
 TEST_CASE("DeltaMetric: multiple samples - deltas calculated", "[DeltaMetric]") {
-  astl::DeltaMetric metric = GetDeltaMetricUINT64();
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
   // Feed multiple samples with known deltas
   std::vector<uint64_t> values = {100, 150, 170, 180, 200};
   // Expected deltas: 50, 20, 10, 20
@@ -133,19 +128,18 @@ TEST_CASE("DeltaMetric: multiple samples - deltas calculated", "[DeltaMetric]") 
   }
 
   // Verify deltas were calculated correctly
-  auto deltas = metric.GetProcessedSamples();
-  REQUIRE(deltas.size() == 4);
+  REQUIRE(sink.captured.size() == 4);
 
   // Check each delta value
   for (size_t i = 0; i < expected_deltas.size(); ++i) {
-    auto delta_value = std::get<uint64_t>(deltas[i].value.value);
+    auto delta_value = std::get<uint64_t>(sink.captured[i].value.value);
     REQUIRE(delta_value == expected_deltas[i]);
   }
 }
 
 TEST_CASE("DeltaMetric: invalid sample type", "[DeltaMetric]") {
-  // Create metric expecting UINT32 samples
-  astl::DeltaMetric metric = GetDeltaMetricUINT32();
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfigUINT32(), nullptr, &sink};
   // Try to feed a UINT64 sample
   astl::AstlValue      val1{uint64_t{100}};
   astl::RawSampledData sample1(1, val1);
@@ -157,8 +151,7 @@ TEST_CASE("DeltaMetric: invalid sample type", "[DeltaMetric]") {
   REQUIRE(!summary.min_delta.has_value());
   REQUIRE(!summary.max_delta.has_value());
 
-  auto deltas = metric.GetProcessedSamples();
-  REQUIRE(deltas.empty());
+  REQUIRE(sink.captured.empty());
 }
 
 TEST_CASE("DeltaMetric: static CalculateDelta function", "[DeltaMetric]") {
@@ -194,7 +187,8 @@ TEST_CASE("DeltaMetric: static CalculateDelta function", "[DeltaMetric]") {
 
 TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
   SECTION("UINT32 values") {
-    astl::DeltaMetric metric = GetDeltaMetricUINT32();
+    MockSampleSink    sink;
+    astl::DeltaMetric metric{GetDeltaConfigUINT32(), nullptr, &sink};
 
     astl::AstlValue      val1{uint32_t{100}};
     astl::AstlValue      val2{uint32_t{150}};
@@ -207,15 +201,15 @@ TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
     REQUIRE(status1 == ASTL_STATUS_SUCCESS);
     REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
-    auto deltas = metric.GetProcessedSamples();
-    REQUIRE(deltas.size() == 1);
-
-    auto delta_value = std::get<uint32_t>(deltas[0].value.value);
+    // Verify delta was captured in sink
+    REQUIRE(sink.captured.size() == 1);
+    auto delta_value = std::get<uint32_t>(sink.captured[0].value.value);
     REQUIRE(delta_value == 50);
   }
 
   SECTION("Large UINT64 values") {
-    astl::DeltaMetric    metric = GetDeltaMetricUINT64();
+    MockSampleSink       sink;
+    astl::DeltaMetric    metric{GetDeltaConfig(), nullptr, &sink};
     astl::AstlValue      val1{uint64_t{100}};
     astl::AstlValue      val2{uint64_t{150}};
     astl::RawSampledData sample1(1, val1);
@@ -227,15 +221,15 @@ TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
     REQUIRE(status1 == ASTL_STATUS_SUCCESS);
     REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
-    auto deltas = metric.GetProcessedSamples();
-    REQUIRE(deltas.size() == 1);
-
-    auto delta_value = std::get<uint64_t>(deltas[0].value.value);
+    REQUIRE(sink.captured.size() == 1);
+    auto delta_value = std::get<uint64_t>(sink.captured[0].value.value);
     REQUIRE(delta_value == 50);
   }
 
   SECTION("FLOAT64 values") {
-    astl::DeltaMetric    metric = GetDeltaMetricFLOAT64();
+    MockSampleSink sink;
+    // Use the shared FLOAT64 configuration helper
+    astl::DeltaMetric    metric{GetDeltaConfigFLOAT64(), nullptr, &sink};
     astl::AstlValue      val1{100.5};
     astl::AstlValue      val2{150.5};
     astl::RawSampledData sample1(1, val1);
@@ -247,17 +241,16 @@ TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
     REQUIRE(status1 == ASTL_STATUS_SUCCESS);
     REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
-    auto deltas = metric.GetProcessedSamples();
-    REQUIRE(deltas.size() == 1);
-
-    auto delta_value = std::get<double>(deltas[0].value.value);
+    REQUIRE(sink.captured.size() == 1);
+    auto delta_value = std::get<double>(sink.captured[0].value.value);
     REQUIRE(delta_value == 50.0);
   }
 }
 
 TEST_CASE("DeltaMetric: edge cases", "[DeltaMetric]") {
   SECTION("Zero delta") {
-    astl::DeltaMetric metric = GetDeltaMetricUINT64();
+    MockSampleSink    sink;
+    astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
 
     astl::AstlValue      val1{uint64_t{100}};
     astl::AstlValue      val2{uint64_t{100}};
@@ -270,15 +263,14 @@ TEST_CASE("DeltaMetric: edge cases", "[DeltaMetric]") {
     REQUIRE(status1 == ASTL_STATUS_SUCCESS);
     REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
-    auto deltas = metric.GetProcessedSamples();
-    REQUIRE(deltas.size() == 1);
-
-    auto delta_value = std::get<uint64_t>(deltas[0].value.value);
+    REQUIRE(sink.captured.size() == 1);
+    auto delta_value = std::get<uint64_t>(sink.captured[0].value.value);
     REQUIRE(delta_value == 0);
   }
 
   SECTION("Large delta values") {
-    astl::DeltaMetric    metric = GetDeltaMetricUINT64();
+    MockSampleSink       sink;
+    astl::DeltaMetric    metric{GetDeltaConfig(), nullptr, &sink};
     astl::AstlValue      val1{uint64_t{0}};
     astl::AstlValue      val2{std::numeric_limits<uint64_t>::max()};
     astl::RawSampledData sample1(1, val1);
@@ -290,16 +282,15 @@ TEST_CASE("DeltaMetric: edge cases", "[DeltaMetric]") {
     REQUIRE(status1 == ASTL_STATUS_SUCCESS);
     REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
-    auto deltas = metric.GetProcessedSamples();
-    REQUIRE(deltas.size() == 1);
-
-    auto delta_value = std::get<uint64_t>(deltas[0].value.value);
+    REQUIRE(sink.captured.size() == 1);
+    auto delta_value = std::get<uint64_t>(sink.captured[0].value.value);
     REQUIRE(delta_value == std::numeric_limits<uint64_t>::max());
   }
 }
 
 TEST_CASE("DeltaMetric: summarize calculates statistics", "[DeltaMetric]") {
-  astl::DeltaMetric metric = GetDeltaMetricUINT64();
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
 
   // Feed samples with known deltas
   std::vector<uint64_t> values = {100, 110, 120, 130};
@@ -328,7 +319,8 @@ TEST_CASE("DeltaMetric: summarize calculates statistics", "[DeltaMetric]") {
 }
 
 TEST_CASE("DeltaMetric: min/max statistics for datatype : double", "[DeltaMetric]") {
-  astl::DeltaMetric metric = GetDeltaMetricFLOAT64();
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfigFLOAT64(), nullptr, &sink};
 
   // Feed samples with varying deltas
   std::vector<double> values = {100.0, 110.0, 105.0, 125.0, 120.0};
@@ -346,8 +338,7 @@ TEST_CASE("DeltaMetric: min/max statistics for datatype : double", "[DeltaMetric
   REQUIRE(status == ASTL_STATUS_SUCCESS);
 
   auto summary = metric.GetDeltaSummaryData();
-  auto deltas  = metric.GetProcessedSamples();
-  REQUIRE(deltas.size() == 4);
+  REQUIRE(sink.captured.size() == 4);
 
   // With signed arithmetic, we expect min to be -5 and max to be 20
   auto min_delta = std::get<double>(summary.min_delta.value().value);
@@ -358,7 +349,8 @@ TEST_CASE("DeltaMetric: min/max statistics for datatype : double", "[DeltaMetric
 }
 
 TEST_CASE("DeltaMetric: no samples summarize", "[DeltaMetric]") {
-  astl::DeltaMetric metric = GetDeltaMetricUINT64();
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
   // Summarize without any samples
   auto status = metric.Summarize();
   REQUIRE(status == ASTL_STATUS_SUCCESS);
@@ -367,12 +359,12 @@ TEST_CASE("DeltaMetric: no samples summarize", "[DeltaMetric]") {
   REQUIRE(!summary.min_delta.has_value());
   REQUIRE(!summary.max_delta.has_value());
 
-  auto deltas = metric.GetProcessedSamples();
-  REQUIRE(deltas.empty());
+  REQUIRE(sink.captured.empty());
 }
 
 TEST_CASE("DeltaMetric: Reset functionality", "[DeltaMetric]") {
-  astl::DeltaMetric metric = GetDeltaMetricUINT64();
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
   // Feed some samples to create state
   std::vector<uint64_t> values = {100, 150, 200};
   for (size_t i = 0; i < values.size(); ++i) {
@@ -383,22 +375,24 @@ TEST_CASE("DeltaMetric: Reset functionality", "[DeltaMetric]") {
   }
 
   // Verify state exists
-  auto deltas_before = metric.GetProcessedSamples();
-  REQUIRE(deltas_before.size() == 2);
+  REQUIRE(sink.captured.size() == 2);
 
   // Reset the metric
   metric.Reset();
-
-  // Verify state is cleared
-  auto deltas_after = metric.GetProcessedSamples();
-  REQUIRE(deltas_after.empty());
+  // After reset summary statistics should be cleared
+  auto summary_after_reset = metric.GetDeltaSummaryData();
+  REQUIRE(!summary_after_reset.min_delta.has_value());
+  REQUIRE(!summary_after_reset.max_delta.has_value());
+  auto avg = std::get<uint64_t>(summary_after_reset.avg_delta.value().value);
+  REQUIRE(avg == 0);
 }
 
-TEST_CASE("DeltaMetric: GetProcessedSamples returns empty span", "[DeltaMetric]") {
-  astl::DeltaMetric metric = GetDeltaMetricUINT64();
-  // Test GetProcessedSamples when no samples have been received
-  auto samples_empty = metric.GetProcessedSamples();
-  REQUIRE(samples_empty.empty());
+TEST_CASE("DeltaMetric: Delta processing with sink", "[DeltaMetric]") {
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
+
+  // Test when no samples have been received
+  REQUIRE(sink.captured.empty());
 
   // Add some samples
   astl::AstlValue      val1{uint64_t{100}};
@@ -412,7 +406,8 @@ TEST_CASE("DeltaMetric: GetProcessedSamples returns empty span", "[DeltaMetric]"
   REQUIRE(status1 == ASTL_STATUS_SUCCESS);
   REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
-  // DeltaMetric doesn't store original samples, so GetProcessedSamples should still return empty
-  auto samples_after = metric.GetProcessedSamples();
-  REQUIRE(samples_after.size() == 1);  // One delta should be present
+  // DeltaMetric should have processed the delta and sent it to the sink
+  REQUIRE(sink.captured.size() == 1);
+  auto delta_value = std::get<uint64_t>(sink.captured[0].value.value);
+  REQUIRE(delta_value == 50);
 }
