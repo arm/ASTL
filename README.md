@@ -11,18 +11,29 @@ Arm SoC Telemetry Library
 
 # Description
 
-ASTL is a self-contained library for SoC telemetry collection at Arm. It abstracts low level interfaces to telemetry data sources on the system. Using a predefined API, a telemetry collection tool or an AI framework can dynamically discover available supported telemetry on the target platform, configure, start, (pause, resume), stop a collection and process collected data. Collected data can be streamed directly to a user provided buffer or can be written to a specified output file format, such as perfeto json file for data visualization.
+ASTL is a self-contained library for SoC telemetry collection at Arm. It abstracts low level
+interfaces to telemetry data sources on the system. Using a predefined API, a telemetry
+collection tool or an AI framework can dynamically discover available supported telemetry on
+the target platform, configure, start, (pause, resume), stop a collection and process
+collected data. Collected data can be streamed directly to a user provided buffer or can be
+written to a specified output file format, such as a Perfetto JSON file for data visualization.
 
-The initial implementation focuses on the System Control and Management Interface (SCMI) specification through the Linux SCMI sysfs interface. It may eventually be expanded to add support for other interfaces such as: BIOS mailboxes, PCIe configuration spaces, direct register accesses, MMIO, OS provided data or other sources of data.
+The initial implementation focuses on the System Control and Management Interface (SCMI)
+specification through the Linux SCMI sysfs interface. It may eventually be expanded to add
+support for other interfaces such as: BIOS mailboxes, PCIe configuration spaces, direct
+register accesses, MMIO, OS provided data or other sources of data.
 
-The library has a C-interface for the API and a C++ implementation. There is also plan to offer a python wrapper interface (not implemented yet)
+The library has a C-interface for the API and a C++ implementation. A comprehensive experimental
+Python wrapper layer (Cython bindings + high-level utilities) is now available—refer to the
+**[Python User Guide](python/docs/USER_GUIDE.md)**.
 
 # Key Goals and Properties
 
 ## Sharable
 
 - New or other tools at Arm can use it (not used yet)
-- Partners and external 3rd party tool developers can use it to access telemetry on Arm platforms (not used yet)
+- Partners and external 3rd party tool developers can use it to access telemetry on Arm
+  platforms (not used yet)
 
 ## Uniform
 
@@ -42,7 +53,8 @@ The library has a C-interface for the API and a C++ implementation. There is als
 ## Reusable
 
 - Can be deployed on all new platforms: IOT, Automotive, Client, Data center, GPUs, NPUs. (not deployed yet)
-- Can be used by a telemetry collection tool or in an AI framework or directly to instrument a workload (not used yet)
+- Can be used by a telemetry collection tool or in an AI framework or directly to instrument a
+  workload (not used yet)
 
 # High Level Architecture Diagram
 
@@ -78,6 +90,11 @@ The library has a C-interface for the API and a C++ implementation. There is als
 
 See [Build steps for developers](#build-steps-for-developers) for more detailed build instructions.
 
+> Looking for the Python telemetry wrapper? See the
+> **[ASTL Python User Guide](python/docs/USER_GUIDE.md)** for: initialization, streaming (sync &
+> async), diagnostics CLI, derived metrics, DataFrame integration, benchmarking, and
+> exception model.
+
 ## Usage
 
 The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_test.cpp). Below are the minimal snippets you need:
@@ -96,8 +113,9 @@ mount -t stlmfs none /sys/fs/arm_telemetry/
 
 1. Initialize ASTL
 
-First, create or select an astl json configuration file specifying which metrics should be made available at the API to collect.
-You can also optionally override the root path for the Scmi file system, and the definition file for the system metrics
+First, create or select an ASTL JSON configuration file specifying which metrics should be
+made available at the API to collect. You can also optionally override the root path for the
+SCMI file system, and the definition file for the system metrics.
 
 ```json
 {
@@ -118,9 +136,8 @@ You can also optionally override the root path for the Scmi file system, and the
       "unit": "W",
       "metric_type": "rate",
       "collection_protocol": "scmi"
-    },
+    }
   },
-
   "scmi_specification_path": "./samples/sample_topology/example_scmi_specification.json"
 }
 }
@@ -129,12 +146,14 @@ You can also optionally override the root path for the Scmi file system, and the
 Key elements of the configuration file:
 
 1. metrics: a set of objects, each with a name as a key, along with the following fields:
-   1. description: use readable notes to explain the metric
-   1. register: the exact name of the register where ASTL should read this metric's data from. (e.g. a 'layout/member' key in the scmi spec)
-   1. unit: will identify which astl_units_t to associate with this metric.
-   1. metric_type - select the astl_metric_type_t to measure this data
-   1. collection_protocol - select which collectors should try to measure this.
-1. scmi_specification_path: optional override for the .json file specifying the data event ids and targets for each metric on the platform.
+1. description: use readable notes to explain the metric
+   register: the exact name of the register where ASTL should read this metric's data from
+   (e.g. a `layout/member` key in the SCMI spec)
+1. unit: will identify which `astl_units_t` to associate with this metric
+   metric_type - select the `astl_metric_type_t` to measure this data
+   collection_protocol - select which collectors should try to measure this
+   scmi_specification_path: optional override for the JSON file specifying the data event IDs
+   and targets for each metric on the platform.
 
 ```cpp
 ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = "~/.my_astl_config.json");
@@ -193,13 +212,16 @@ status = astlStopCollectionOnTarget(target_properties._handle);
 ASTL_FREE_ARRAY(target_properties_buffer)
 ```
 
-Run `scripts/demo.sh` to run this flow. This sets up the mock driver and performs a sample run. To run manually, start a mock server and execute build/debug/bin/sample_test. Use --help for usage details.
+Run `scripts/demo.sh` to run this flow. This sets up the mock driver and performs a sample run.
+To run manually, start a mock server and execute `build/debug/bin/sample_test`. Use `--help`
+for usage details.
 
 ## Design Diagrams (Mermaid)
 
 The detailed runtime and structural diagrams are authored in Mermaid (`doc/design/*.mmd`) and rendered to SVG via `node scripts/render_mermaid.js --all`.
 
-Because extremely tall single sequence diagrams became unreadable when constrained to a uniform viewport, the original monolithic system sequence was split into phased diagrams:
+Because extremely tall single sequence diagrams became unreadable when constrained to a
+uniform viewport, the original monolithic system sequence was split into phased diagrams:
 
 1. `system_phase_init_discovery.mmd` – Initialization & target/metric discovery
 2. `system_phase_metric_config.mmd` – Metric configuration & operations derivation
@@ -207,7 +229,8 @@ Because extremely tall single sequence diagrams became unreadable when constrain
 4. `system_phase_stop_processing.mmd` – Deferred processing at stop & summarization
 5. `system_phase_retrieval_shutdown.mmd` – Retrieval APIs, shutdown, representative errors
 
-An overview diagram remains in `system_end_to_end_sequence.mmd` that references these phases at a high level.
+An overview diagram remains in `system_end_to_end_sequence.mmd` that references these phases
+at a high level.
 
 Regenerate all diagrams after editing any `.mmd` file:
 
@@ -233,7 +256,7 @@ mkdir -p /tmp/scmi
 ASTL/build/debug/bin/MockSysfs /tmp/scmi
 ```
 
-**Some Optional Flags:**
+### Optional Flags
 
 - Display help message: -h
 - Single-threaded operation: -s
@@ -248,8 +271,9 @@ ASTL/build/debug/bin/MockSysfs /tmp/scmi
 
 ## Compile and test
 
-These commands will generate a workspace under 'build' with auto-detected reasonable default build systems and compilers, build it, and execute tests
-Supported presets are found in [CMakePresets.json](CMakePresets.json)
+These commands will generate a workspace under `build` with auto-detected reasonable default
+build systems and compilers, build it, and execute tests. Supported presets are found in
+[CMakePresets.json](CMakePresets.json).
 
 ```sh
 cmake -S . --preset debug
@@ -259,8 +283,9 @@ ctest --preset debug
 
 ## Compile and test with specific compiler or build type
 
-If you want to choose a specific compiler that's not specified in CMakePresets.json, you can add arguments in the first configure step.
-(Be sure to set EXPORT_COMPILE_COMMANDS so that clang-tidy can find system headers for linting)
+If you want to choose a specific compiler that's not specified in `CMakePresets.json`, you
+can add arguments in the first configure step (be sure to set `EXPORT_COMPILE_COMMANDS` so
+that clang-tidy can find system headers for linting).
 
 ```sh
 cmake -B ./build/debug -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=DEBUG -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -S .
@@ -272,7 +297,8 @@ cd ./build/debug && ctest
 
 ### Formatting
 
-To use `clang-format` to check formatting, use [scripts/check_format.sh](scripts/check_format.sh) or the `cmake` target `check_format`
+To use `clang-format` to check formatting, use
+[scripts/check_format.sh](scripts/check_format.sh) or the `cmake` target `check_format`.
 
 ```sh
 cd build && cmake --build . --target check_format
@@ -280,7 +306,8 @@ cd build && cmake --build . --target check_format
 cd build && make check_format
 ```
 
-To use `clang-format` to format code, use [scripts/format.sh](scripts/format.sh) or use the target `format`
+To use `clang-format` to format code, use [scripts/format.sh](scripts/format.sh) or the target
+`format`.
 
 ```sh
 cd build && cmake --build . --target format
@@ -301,6 +328,66 @@ cd build && make lint
 ### Doxygen
 
 Automatically generate class diagrams, function call graphs,
+
+# Experimental Python API and usage
+
+For Python usage (installation, quick start, streaming, diagnostics, derived metrics,
+benchmarking) jump directly to the **[Python User Guide](python/docs/USER_GUIDE.md)**.
+
+Python examples (including an end-to-end session + streaming + derived rates) are in
+`python/samples/` and documented in the
+**[User Guide](python/docs/USER_GUIDE.md#putting-it-together-end-to-end-example)**.
+
+## Python API Documentation (Sphinx)
+
+The Python layer includes a Sphinx scaffold under `python/docs/`.
+
+### Build HTML Docs
+
+```bash
+# (Optional) create / activate a virtual environment
+python -m pip install --upgrade pip
+python -m pip install sphinx
+
+# From repository root
+sphinx-build -b html python/docs python/docs/_build/html
+
+# Open the generated documentation
+xdg-open python/docs/_build/html/index.html 2>/dev/null \
+  || open python/docs/_build/html/index.html \
+  || echo "Docs at python/docs/_build/html/index.html"
+```
+
+### Incremental Rebuild During Editing
+
+```bash
+sphinx-build -b html -a -E python/docs python/docs/_build/html
+```
+
+### Adding New Modules
+
+Add a new `api/<module>.rst` with:
+
+```rst
+:members:
+:undoc-members:
+:show-inheritance:
+```
+
+Then reference it in `index.rst` under the `.. toctree::`.
+
+For richer themes:
+
+```bash
+python -m pip install sphinx_rtd_theme
+```
+
+Add to `conf.py`:
+
+```python
+html_theme = 'sphinx_rtd_theme'
+```
+
 and other documentation automatically from source.
 You don't need to build or run first, only configure.
 Output will be at: \<ASTL\>/doc/html/index.html
@@ -314,6 +401,30 @@ Note: you need to install both doxygen and dot on your system:
 ```sh
 sudo apt-get -y install doxygen graphviz
 ```
+
+## Python Packaging Notes
+
+When publishing to PyPI or building wheels from an sdist in isolated environments, the Cython
+extension must compile against the ASTL public C headers. Because the top-level `include/` tree
+is not present inside an sdist extraction, a release process must first vendor those headers
+into `python/astl/include/astl`.
+
+Refresh vendored headers (including generated `astl_version.h`) before building a release:
+
+```bash
+python/scripts/vendor_headers.sh
+```
+
+This script:
+
+1. Ensures a build directory exists (configuring CMake if needed) so `astl_version.h` is generated.
+2. Copies public headers (excluding the template `astl_version.h.in`) and the generated
+   `astl_version.h` into the Python package.
+3. Overwrites any existing vendored headers to keep them current.
+
+The `setup.py` logic will first look for the real repo `include/` path and fall back to the
+vendored copy when necessary. This guarantees `pip wheel astl-<version>.tar.gz` succeeds without
+the full repository.
 
 ## Design Diagrams
 

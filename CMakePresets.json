@@ -18,6 +18,13 @@
       "binaryDir": "${sourceDir}/build/${presetName}"
     },
     {
+      "name": "debug-no-valgrind",
+      "inherits": "debug",
+      "cacheVariables": {
+        "ENABLE_VALGRIND": "OFF"
+      }
+    },
+    {
       "name": "release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
