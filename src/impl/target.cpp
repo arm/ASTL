@@ -7,8 +7,13 @@
 
 namespace astl {
 
-Target::Target(std::string name, std::string description, CollectorType collector_type, Target* parent)
-    : _name{std::move(name)}, _description{std::move(description)}, _collector_type{collector_type}, _parent{parent} {}
+Target::Target(std::string name, std::string description, CollectorType collector_type, Target* parent,
+               std::optional<std::string> uuid)
+    : _name{std::move(name)},
+      _description{std::move(description)},
+      _collector_type{collector_type},
+      _parent{parent},
+      _uuid{std::move(uuid)} {}
 
 auto Target::GetProperties(astl_target_properties_t* target) const -> astl_status_code {
   if (!target) {
@@ -17,6 +22,7 @@ auto Target::GetProperties(astl_target_properties_t* target) const -> astl_statu
   target->_handle      = this;
   target->_name        = _name.c_str();
   target->_description = _description.c_str();
+  target->_uuid        = _uuid.has_value() ? _uuid->c_str() : nullptr;
   return ASTL_STATUS_SUCCESS;
 }
 
