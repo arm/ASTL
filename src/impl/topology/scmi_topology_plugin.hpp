@@ -84,10 +84,11 @@ auto DetectTarget(FileInterfaceType const& scmi_sysfs_file_interface, std::strin
         telemetry_subdirectory);
     return std::unexpected(read_status);
   }
-  /// @todo ASTL-166 Create a proper member variable or structure to store the UUID
   ASTL_LOG_INFO("ScmiTopologyPlugin::ScanForTargets: Successfully detected SCMI/SysFS target with UUID {}",
                 read_content);
-  return std::make_unique<Target>(telemetry_subdirectory, "UUID:" + read_content, CollectorType::SCMI);
+  auto target_ptr = std::make_unique<Target>(telemetry_subdirectory, "Target discovered via SCMI", CollectorType::SCMI,
+                                             nullptr, read_content);
+  return target_ptr;
 }
 
 /**

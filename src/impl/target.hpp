@@ -3,6 +3,7 @@
 
 #include <expected>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -37,7 +38,8 @@ struct ITarget {
 class Target : public astl::ITarget {
  public:
   Target() = default;
-  Target(std::string name, std::string description, CollectorType collector_type, Target* parent = nullptr);
+  Target(std::string name, std::string description, CollectorType collector_type, Target* parent = nullptr,
+         std::optional<std::string> uuid = std::nullopt);
   ~Target() override               = default;
   Target(const Target&)            = default;
   Target& operator=(const Target&) = default;
@@ -50,6 +52,7 @@ class Target : public astl::ITarget {
   auto GetParent() const -> const Target*;
   auto GetCounterCount() const -> size_t override;
   auto GetCounters() const -> const std::vector<std::unique_ptr<ICounter>>& override;
+  auto GetUuid() const -> const std::optional<std::string>& { return _uuid; }
 
  private:
   std::string                            _name;
@@ -57,6 +60,7 @@ class Target : public astl::ITarget {
   CollectorType                          _collector_type{CollectorType::UNKNOWN};
   Target*                                _parent{nullptr};
   std::vector<std::unique_ptr<ICounter>> _counters;
+  std::optional<std::string>             _uuid;
 };
 
 }  // namespace astl

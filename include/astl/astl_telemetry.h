@@ -93,6 +93,7 @@ typedef struct _astl_target_properties_t {
                                         //!< resides. Null means top level target
   const char* _name;                    //!< Device name
   const char* _description;             //!< Device Description
+  const char* _uuid;                    //!< Optional null-terminated UUID string (nullptr if not available)
                                         //!< What other fields? Socket number? Node number?
                                         //!< PCIe BDF? Vendor? Model name? Model number?
                                         //!< Serial number? Version? Unique ID?
