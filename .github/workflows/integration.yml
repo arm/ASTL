@@ -13,6 +13,7 @@ on:
   schedule:
     # Runs daily at 09:14 UTC = 03:14 CST
     - cron: "14 9 * * *"
+  workflow_dispatch:
 
 jobs:
   build:
