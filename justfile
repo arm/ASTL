@@ -15,13 +15,7 @@ config preset='debug':
 
 # build library, samples, unit tests
 build preset='debug':
-    #!/usr/bin/env bash
-    set -euo pipefail
-    preset="{{preset}}"
-    case "${preset}" in preset=*) preset="${preset#preset=}";; esac
-    : "${preset:=debug}"
-    echo "[build] Using preset=${preset}"
-    cmake --build . --parallel=8 --preset ${preset}
+    cmake --build --parallel=8 --preset {{preset}}
 
 # format source code (C/C++ & related) using repository script
 format:
