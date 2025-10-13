@@ -17,7 +17,6 @@ The ASTL (Arm SoC Telemetry Library) thermal throttling demo simulates real-worl
    ```
 
 2. **Required Binaries**: The demo requires these executables to be built:
-
    - `MockSysfs`: FUSE-based mock SCMI sysfs generator
    - `sample_test`: ASTL sample application
 
@@ -238,6 +237,7 @@ To view the `sysfs.log` data written by MockSysfs use:
 ```bash
 # Display MockSysfs logs
 tail -f sysfs.log
+```
 
 ## Integration with Other Tools
 
@@ -248,4 +248,3 @@ The thermal throttling demo can be integrated with:
 - **Monitoring dashboards**: Parse the ASTL output for dashboard statistics
 
 For more information about ASTL library usage and API documentation, refer to the main [README.md](README.md).
-```

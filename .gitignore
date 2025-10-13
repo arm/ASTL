@@ -1,3 +1,6 @@
+# Ignore vendored Python headers (generated/copied by vendor_headers.sh)
+python/astl/include/astl/
+
 # Prerequisites
 *.d
 

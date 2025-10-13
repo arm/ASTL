@@ -1,0 +1,161 @@
+name: Python CI
+
+# Minimal default GITHUB_TOKEN permissions (principle of least privilege).
+# Individual jobs inherit this unless they need elevation.
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main] # Production / release branch
+  pull_request:
+  schedule:
+    # Runs daily at 09:14 UTC = 03:14 CST
+    - cron: "14 9 * * *"
+
+jobs:
+  build-native:
+    # Single native C++ build reused by all Python matrix jobs.
+    runs-on: ubuntu-latest
+    # Minimal permissions; only needs read access.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tooling
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y just
+
+      - name: Configure & build (debug preset)
+        run: |
+          # Configure and build once. This produces build/debug/lib/libastl-<MAJOR>d.so
+          just config debug
+          just build debug
+
+      - name: Upload native artifact (library + generated headers)
+        uses: actions/upload-artifact@v4
+        with:
+          name: astl-native-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            build/debug/lib/libastl-*.so
+            build/debug/include/**
+            build/debug/compile_commands.json
+          retention-days: 7
+
+  build-test:
+    needs: build-native
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: astl-native-${{ github.sha }}
+          path: native-artifact
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ matrix.python-version }}-
+      - name: Prepare native artifact layout
+        run: |
+          set -euo pipefail
+          mkdir -p build/debug/lib build/debug/include
+          # Move shared library(s) into expected location (search recursively to handle nested paths)
+          find native-artifact -type f -name 'libastl-*.so' -exec cp {} build/debug/lib/ \; || true
+          # If multiple variants somehow exist, list them
+          echo "[ci] Discovered libastl variants:"; ls -1 build/debug/lib || true
+          # Preserve generated headers (version, etc.)
+          if [ -d native-artifact/build/debug/include ]; then
+            cp -r native-artifact/build/debug/include/* build/debug/include/ || true
+          else
+            # older upload layout: include/** directly under artifact root
+            if [ -d native-artifact/include ]; then
+              cp -r native-artifact/include/* build/debug/include/ || true
+            fi
+          fi
+          echo "[ci] Native artifact contents:"; ls -1 build/debug/lib || true
+      - name: Install deps & run reuse tests
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          sudo apt-get update -y
+          sudo apt-get install -y just
+          ASTL_DISABLE_NATIVE_FALLBACK=1 just python-reuse-tests || (echo "[python-reuse-tests] failed" >&2; exit 1)
+      - name: Tests (pytest + mypy)
+        run: echo "[tests] Already executed within python-reuse-tests recipe"
+
+  package-and-benchmark:
+    # Guard clause: only run on Python 3.12 context (single job instead of many step-level ifs)
+    needs: [build-native, build-test]
+    if: always() && !cancelled() && needs.build-test.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: astl-native-${{ github.sha }}
+          path: .
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          sudo apt-get update -y
+          sudo apt-get install -y just
+      - name: Build sdist & wheel
+        run: |
+          set -euo pipefail
+          just python-package-and-benchmark
+      - name: Collect artifacts (already created by recipe)
+        run: |
+          test -f python/dist/$(ls -1 python/dist/ | head -n1) || { echo "[package] missing dist artifacts" >&2; exit 5; }
+          test -f benchmark_metrics.json || echo '{}' > benchmark_metrics.json
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: astl-dist-${{ github.sha }}
+          path: |
+            python/dist/*.whl
+            python/dist/*.tar.gz
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ github.sha }}
+          path: |
+            benchmark_metrics.json
+            benchmark_output.log
+
+  python-full-cycle:
+    runs-on: ubuntu-latest
+    needs: build-test
+    if: always() && !cancelled() && needs.build-test.result == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install just
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y just
+
+      - name: Run python-full-cycle recipe
+        run: |
+          just python-full-cycle

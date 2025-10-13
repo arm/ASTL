@@ -1,0 +1,23 @@
+include astl/*.pyx
+include astl/*.pxd
+recursive-include astl *.pyx *.pxd
+
+# Include public C/C++ headers required to compile the Cython generated sources
+# when building a wheel from an sdist in isolation (CI, users without full repo).
+# Headers are vendored (copied during release) into astl/include/astl
+
+# In case we vendor headers into the package namespace later (python/astl/include/astl)
+# include them as well (harmless if absent).
+recursive-include astl/include/astl *.h
+
+# Include top-level license file
+include ../LICENSE
+
+# Prune transient / development artifacts so they never leak into the sdist
+prune build
+prune dist
+prune .venv
+prune coverage_*
+global-exclude *.gcda
+global-exclude *.gcno
+global-exclude *.so

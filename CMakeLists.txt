@@ -53,6 +53,25 @@ project(
 
 message("version is set to: ${ASTL_VERSION} major: ${PROJECT_VERSION_MAJOR} minor: ${PROJECT_VERSION_MINOR} micro: ${PROJECT_VERSION_PATCH}")
 
+# Sanitizer option (Address + Undefined Behavior)
+option(ENABLE_ASAN "Enable Address/Undefined Behavior sanitizer instrumentation" OFF)
+option(ASTL_PYTHON_ENABLE_ASAN "Propagate sanitizer flags into Python extension build" OFF)
+if (ENABLE_ASAN)
+  message(STATUS "Building with sanitizers (ASAN/UBSAN)")
+  # IMPORTANT: Pass flags as separate list items so CMake does not quote them together.
+  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+endif()
+
+if (ASTL_PYTHON_ENABLE_ASAN)
+  if (NOT ENABLE_ASAN)
+    message(WARNING "ASTL_PYTHON_ENABLE_ASAN is ON but ENABLE_ASAN is OFF; enabling ENABLE_ASAN as well")
+    set(ENABLE_ASAN ON CACHE BOOL "Enable Address/Undefined Behavior sanitizer instrumentation" FORCE)
+  endif()
+  message(STATUS "Python extension will be built with sanitizer flags (exporting ASTL_PYTHON_ENABLE_ASAN=1)")
+  set(ENV{ASTL_PYTHON_ENABLE_ASAN} 1)
+endif()
+
 if (PROJECT_IS_TOP_LEVEL)
   message(STATUS "This project is a top-level project")
   # Put executables in bin directory
@@ -239,16 +258,18 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 if (ENABLE_VALGRIND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  find_program(VALGRIND_PATH "valgrind")
-  if ("${VALGRIND_PATH}" STREQUAL "VALGRIND_PATH-NOTFOUND")
-    message(FATAL_ERROR "❌ Could not locate valgrind binary.  Either install valgrind or re-run CMake with ENABLE_VALGRIND=OFF")
+  find_program(VALGRIND_PATH valgrind)
+  if (NOT VALGRIND_PATH)
+    message(WARNING "Valgrind requested (ENABLE_VALGRIND=ON) but not found in PATH; disabling memory checking. Install valgrind and re-configure to enable.")
+    set(ENABLE_VALGRIND OFF CACHE BOOL "Enable run-time memory checking on unit tests" FORCE)
+  else()
+    # Configure CTest memory checking integration.
+    set(MEMORYCHECK_TYPE "Valgrind")
+    set(VALGRIND_COMMAND "${VALGRIND_PATH}")
+    set(VALGRIND_COMMAND_OPTIONS "--leak-check=full --show-leak-kinds=all --track-origins=yes")
+    set(MEMORYCHECK_COMMAND "${VALGRIND_PATH}")
+    set(MEMORYCHECK_COMMAND_OPTIONS "--leak-check=full --show-leak-kinds=all --track-origins=yes")
   endif()
-  # These variables MUST be set before include (CTest) or else DartConfiguration.tcl:MemoryCheckCommandOptions will be empty.
-  set(MEMORYCHECK_TYPE "Valgrind")
-  set(VALGRIND_COMMAND "${VALGRIND_PATH}")
-  set(VALGRIND_COMMAND_OPTIONS "--leak-check=full --show-leak-kinds=all --track-origins=yes")
-  set(MEMORYCHECK_COMMAND "${VALGRIND_PATH}")
-  set(MEMORYCHECK_COMMAND_OPTIONS "--leak-check=full --show-leak-kinds=all --track-origins=yes")
 endif()
 
 if (UNIX AND NOT APPLE)
