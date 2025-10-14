@@ -278,9 +278,6 @@ else()
   message(STATUS "Skipping mock_sysfs on this platform")
 endif()
 
-# define a CLI application to use the library
-add_subdirectory(tools/astl-cli)
-
 include(CTest)
 
 # add samples
