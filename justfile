@@ -7,59 +7,52 @@ alias rt := retest
 # generate build files through cmake
 config preset='debug':
     #!/usr/bin/env bash
-    set -euo pipefail
-    # (normalization removed; invoke as: just config <preset>)
-    : "${preset:=debug}"
-    echo "[config] Using preset=${preset}"
-    cmake -S . --preset ${preset}
+    echo "[config] Using preset={{preset}}"
+    cmake -S . --preset {{preset}}
 
 # build library, samples, unit tests
 build preset='debug':
-    cmake --build --parallel=8 --preset {{preset}}
+    #!/usr/bin/env bash
+    echo "[build] Using preset={{preset}}"
+    cmake --build --preset {{preset}} --parallel=$(nproc)
 
 # format source code (C/C++ & related) using repository script
 format:
+    #!/usr/bin/env bash
     ./scripts/format.sh
 
 # run lint/static analysis step; pass build directory and mode (e.g. pull-request)
 # NOTE: assumes scripts/lint.sh usage: lint.sh <build-dir> <mode>
 #       and that the build directory follows build/<preset> naming.
 lint preset='debug':
+    #!/usr/bin/env bash
     ./scripts/lint.sh build/{{preset}} pull-request
 
 # run unit tests
 test preset='debug': build
     #!/usr/bin/env bash
-    set -euo pipefail
-    preset="{{preset}}"
-    case "${preset}" in preset=*) preset="${preset#preset=}";; esac
-    : "${preset:=debug}"
-    echo "[test] Using preset=${preset}"
-    ctest -LE "integration" --preset ${preset}
+    echo "[test] Using preset={{preset}}"
+    ctest -LE "integration" --preset {{preset}}
 
 # test everything, generate html coverage file
 test-cov: build
+    #!/usr/bin/env bash
     ./scripts/run_tests_and_create_html_cov.sh
 
 retest preset='debug':
     #!/usr/bin/env bash
-    set -euo pipefail
-    preset="{{preset}}"
-    case "${preset}" in preset=*) preset="${preset#preset=}";; esac
-    : "${preset:=debug}"
-    echo "[retest] Using preset=${preset}"
-    ctest --rerun-failed --preset ${preset}
+    echo "[retest] Using preset={{preset}}"
+    ctest --rerun-failed --preset {{preset}}
 
 # Full Python cycle: build native lib, install editable package, refresh vendored headers,
 # run tests and sample scripts. Accepts optional python version via PY env var.
 python-full-cycle preset='debug':
     #!/usr/bin/env bash
-    set -euo pipefail
     PYBIN="${PY:-python3}"
     echo "[python-full-cycle] Using Python: $PYBIN"
     echo "[python-full-cycle] Configuring CMake preset={{preset}}"
     cmake -S . --preset {{preset}} -DENABLE_VALGRIND=OFF
-    cmake --build --preset {{preset}} -j 2
+    cmake --build --preset {{preset}} --parallel=$(nproc)
     if [ ! -d .venv ]; then $PYBIN -m venv .venv; fi
     source .venv/bin/activate
     python -m pip install --upgrade pip >/dev/null
@@ -77,22 +70,16 @@ python-full-cycle preset='debug':
 # Vendor Python headers only (useful before building an sdist or running tests outside full cycle)
 vendor-python-headers:
     #!/usr/bin/env bash
-    set -euo pipefail
     bash python/scripts/vendor_headers.sh --quiet
     echo "[vendor-python-headers] Done"
 
 # Run Python tests ensuring build + vendoring + editable install
 python-pytest preset='debug':
     #!/usr/bin/env bash
-    set -euo pipefail
-    # Initialize preset from template and normalize invocation forms like `preset=debug`.
-    preset="{{preset}}"
-    case "${preset}" in preset=*) preset="${preset#preset=}";; esac
-    : "${preset:=debug}"
     PYBIN="${PY:-python3}"
     echo "[python-pytest] Using Python: $PYBIN"
-    cmake -S . --preset ${preset} -DENABLE_VALGRIND=OFF
-    cmake --build --preset ${preset} -j $(nproc)
+    cmake -S . --preset {{preset}} -DENABLE_VALGRIND=OFF
+    cmake --build --preset {{preset}} -j $(nproc)
     if [ ! -d .venv ]; then $PYBIN -m venv .venv; fi
     source .venv/bin/activate
     python -m pip install --upgrade pip >/dev/null
@@ -107,15 +94,10 @@ python-pytest preset='debug':
 # Build a wheel and smoke test import & version in a clean isolated environment
 python-wheel-smoke preset='debug':
     #!/usr/bin/env bash
-    set -euo pipefail
-    # Initialize preset similarly to other recipes
-    preset="{{preset}}"
-    case "${preset}" in preset=*) preset="${preset#preset=}";; esac
-    : "${preset:=debug}"
     PYBIN="${PY:-python3}"
     echo "[python-wheel-smoke] Using Python: $PYBIN"
-    cmake -S . --preset ${preset} -DENABLE_VALGRIND=OFF
-    cmake --build --preset ${preset} -j 2
+    cmake -S . --preset {{preset}} -DENABLE_VALGRIND=OFF
+    cmake --build --preset {{preset}} --parallel=$(nproc)
     echo "[python-wheel-smoke] Vendoring headers"
     bash python/scripts/vendor_headers.sh --quiet || true
     echo "[python-wheel-smoke] Building wheel"
@@ -143,13 +125,9 @@ python-wheel-smoke preset='debug':
 # Interactive development shell: builds selected preset, ensures editable install, activates venv, drops into shell.
 python-dev-shell preset='debug':
     #!/usr/bin/env bash
-    set -euo pipefail
-    preset="{{preset}}"
-    case "${preset}" in preset=*) preset="${preset#preset=}";; esac
-    : "${preset:=debug}"
-    echo "[python-dev-shell] Configure/build preset=${preset}"
-    cmake -S . --preset ${preset}
-    cmake --build --preset ${preset} -j
+    echo "[python-dev-shell] Configure/build preset={{preset}}"
+    cmake -S . --preset {{preset}}
+    cmake --build --preset {{preset}} --parallel=$(nproc)
     PYBIN="${PY:-python3}"
     if [ ! -d .venv ]; then $PYBIN -m venv .venv; fi
     source .venv/bin/activate
@@ -161,18 +139,13 @@ python-dev-shell preset='debug':
 
 full-ci preset='debug':
     #!/usr/bin/env bash
-    set -euo pipefail
-    # Normalize parameter style and default
-    preset="{{preset}}"
-    case "${preset}" in preset=*) preset="${preset#preset=}";; esac
-    : "${preset:=debug}"
     START_TS=$(date +%s)
-    echo "[full-ci] Starting full pipeline with preset=${preset}"
-    rm -rf build/${preset} .venv .wheel-smoke-venv
-    cmake -S . --preset ${preset}
-    cmake --build --preset ${preset} -j 4
+    echo "[full-ci] Starting full pipeline with preset={{preset}}"
+    rm -rf build/{{preset}} .venv .wheel-smoke-venv
+    cmake -S . --preset {{preset}}
+    cmake --build --preset {{preset}} --parallel=$(nproc)
     echo "[full-ci] Running C++ tests"
-    ctest --preset ${preset} -LE integration
+    ctest --preset {{preset}} -LE integration
     echo "[full-ci] Python env setup & tests"
     PYBIN="${PY:-python3}"
     if [ ! -d .venv ]; then $PYBIN -m venv .venv; fi
@@ -203,7 +176,6 @@ full-ci preset='debug':
 # Reuse pre-built native library (downloaded artifact) to run Python tests & mypy without invoking CMake.
 python-reuse-tests:
     #!/usr/bin/env bash
-    set -euo pipefail
     PYBIN="${PY:-python3}"
     echo "[python-reuse-tests] Python: $("$PYBIN" -V)"
     if [ ! -d build/debug/lib ]; then
@@ -223,7 +195,7 @@ python-reuse-tests:
         fi
         echo "[python-reuse-tests][HEAL] Performing minimal local configure/build (fallback enabled)" >&2
         cmake -S . --preset debug -DENABLE_VALGRIND=OFF
-        cmake --build --preset debug -j 2
+        cmake --build --preset debug --parallel=$(nproc)
     fi
 
     if [ ! -d build/debug/lib ]; then
@@ -264,7 +236,6 @@ python-reuse-tests:
 # Build sdist & wheel, run integrity + wheel smoke + diagnostics + short benchmark (reuse existing native lib)
 python-package-and-benchmark:
     #!/usr/bin/env bash
-    set -euo pipefail
     echo "[python-package-and-benchmark] Start"
     PYBIN="${PY:-python3}"
     if [ ! -d build/debug/lib ]; then
@@ -283,7 +254,7 @@ python-package-and-benchmark:
         fi
         echo "[python-package-and-benchmark][HEAL] Performing minimal local configure/build (fallback enabled)" >&2
         cmake -S . --preset debug -DENABLE_VALGRIND=OFF
-        cmake --build --preset debug -j 2
+        cmake --build --preset debug --parallel=$(nproc)
     fi
     if ! ls build/debug/lib/libastl-*.so >/dev/null 2>&1; then
         echo "[python-package-and-benchmark][ERROR] No libastl-*.so under build/debug/lib after heal attempts" >&2
