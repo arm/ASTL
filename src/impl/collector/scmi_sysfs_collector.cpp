@@ -55,7 +55,7 @@ std::expected<SampleTimestamp, astl_status_code> ParseScmiTimeStamp(std::string 
     // for now, assume time base is just in unix seconds since epoch,
     // since that appears to be the case used in examples here:
     // https://confluence.arm.com/display/CESW/Linux+Kernel+SCMI+Telemetry+Support+-+v4.0+ALPHA_0+--+WIP
-    auto time_since_boot = std::chrono::seconds{std::stoull(timestamp_str)};
+    auto time_since_boot = std::chrono::milliseconds{std::stoull(timestamp_str)};
     return SampleTimestamp{time_since_boot};
   } catch (const std::invalid_argument&) {
     return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);  // Conversion failed
