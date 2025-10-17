@@ -1,6 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "dependencies": [
+    "argparse",
     "bshoshany-thread-pool",
     "catch2",
     {
@@ -10,7 +11,15 @@
     "nlohmann-json",
     "trompeloeil",
     "magic-enum",
-    "spdlog"
+    "spdlog",
+    "tabulate",
+    "tomlplusplus"
   ],
-  "builtin-baseline": "dd3097e305afa53f7b4312371f62058d2e665320"
+  "builtin-baseline": "4334d8b4c8916018600212ab4dd4bbdc343065d1",
+  "overrides": [
+    {
+      "name": "libfuse",
+      "version": "3.16.2"
+    }
+  ]
 }
