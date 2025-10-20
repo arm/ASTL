@@ -22,8 +22,10 @@
 
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
+#include "astl_utils.hpp"
 #include "buffer_output.hpp"
 #include "common/astl_defines.hpp"
+#include "perfetto_output.hpp"
 
 namespace astl {
 
@@ -56,6 +58,29 @@ auto OutputManager::DestroyBufferOutput() -> astl_status_code {
     ASTL_LOG_INFO("DestroyBufferOutput: releasing buffer output instance");
   }
   _buffer_output.reset();
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto OutputManager::EnsurePerfettoOutput() -> astl_status_code {
+  if (_perfetto_output && _perfetto_output->Ready()) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  std::string perfetto_path = astl::GetEnvVar("ASTL_OUTPUT_PERFETTO");
+  if (perfetto_path.empty()) {
+    ASTL_LOG_ERROR("Perfetto output requested but ASTL_OUTPUT_PERFETTO is not set or empty");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  try {
+    _perfetto_output = std::make_unique<PerfettoOutput>(std::filesystem::path(perfetto_path));
+  } catch (const std::exception& exception) {
+    ASTL_LOG_ERROR("EnsurePerfettoOutput: exception while creating writer: {}", exception.what());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  if (!_perfetto_output->Ready()) {
+    ASTL_LOG_ERROR("EnsurePerfettoOutput: writer not ready after creation (path='{}')", perfetto_path);
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -95,6 +120,14 @@ auto OutputManager::OutputProcessedSamples(const ProcessedSamplesMap& processed_
     case OutputType::BUFFER: {
       // Single-dispatch write; caller manages lifecycle of buffer output.
       return OutputProcessedSamplesToBuffer(processed_samples, target, metric);
+    }
+    case OutputType::PERFETTO: {
+      auto status_code = EnsurePerfettoOutput();
+      if (status_code != ASTL_STATUS_SUCCESS) {
+        return status_code;
+      }
+      // Ignore target/metric parameters; write all samples.
+      return _perfetto_output->WriteProcessedSamples(processed_samples);
     }
     case OutputType::UNKNOWN:
     default: {

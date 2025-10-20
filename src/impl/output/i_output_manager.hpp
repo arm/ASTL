@@ -42,7 +42,7 @@ namespace astl {
  * Additional output types (files, sockets, etc.) can be appended. Existing values must remain
  * stable for ABI compatibility.
  */
-enum class OutputType { UNKNOWN, BUFFER };
+enum class OutputType { UNKNOWN, BUFFER, PERFETTO };
 
 /**
  * @brief Abstract manager of one or more concrete `IOutput` instances.

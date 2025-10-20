@@ -18,10 +18,14 @@ the target platform, configure, start, (pause, resume), stop a collection and pr
 collected data. Collected data can be streamed directly to a user provided buffer or can be
 written to a specified output file format, such as a Perfetto JSON file for data visualization.
 
+See the dedicated "Output Formats" section near the end of this document for full details on the
+currently supported output mechanisms (in-memory buffer and Perfetto trace).
+
 The initial implementation focuses on the System Control and Management Interface (SCMI)
-specification through the Linux SCMI sysfs interface. It may eventually be expanded to add
-support for other interfaces such as: BIOS mailboxes, PCIe configuration spaces, direct
-register accesses, MMIO, OS provided data or other sources of data.
+specification through the Linux SCMI sysfs interface. It also has experimental support of
+hwmon telemetry through libsensor. It may eventually be expanded to add support for other
+interfaces such as: BIOS mailboxes, PCIe configuration spaces, direct register accesses,
+MMIO, OS provided data or other sources of data.
 
 The library has a C-interface for the API and a C++ implementation. A comprehensive experimental
 Python wrapper layer (Cython bindings + high-level utilities) is now available—refer to the
@@ -105,20 +109,17 @@ The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_
 #include "astl_telemetry.h"     // Function calls
 ```
 
-0. Mount the Sysfs interface:
+1. Mount the Sysfs interface:
 
 mount -t stlmfs none /sys/fs/arm_telemetry/
 
-````
-
-1. Initialize ASTL
+2. Initialize ASTL
 
 First, create or select an ASTL JSON configuration file specifying which metrics should be
 made available at the API to collect. You can also optionally override the root path for the
 SCMI file system, and the definition file for the system metrics.
 
 ```json
-{
 {
   "scmi_sysfs_telemetry_root_path": "/sys/fs/arm_telemetry",
 
@@ -140,20 +141,18 @@ SCMI file system, and the definition file for the system metrics.
   },
   "scmi_specification_path": "./samples/sample_topology/example_scmi_specification.json"
 }
-}
-````
+```
 
 Key elements of the configuration file:
 
 1. metrics: a set of objects, each with a name as a key, along with the following fields:
-1. description: use readable notes to explain the metric
-   register: the exact name of the register where ASTL should read this metric's data from
-   (e.g. a `layout/member` key in the SCMI spec)
-1. unit: will identify which `astl_units_t` to associate with this metric
-   metric_type - select the `astl_metric_type_t` to measure this data
-   collection_protocol - select which collectors should try to measure this
-   scmi_specification_path: optional override for the JSON file specifying the data event IDs
-   and targets for each metric on the platform.
+
+register: the exact name of the register where ASTL should read this metric's data (e.g. a `layout/member` key in the SCMI spec)
+unit: selects which `astl_units_t` the metric is associated with
+metric_type: selects the `astl_metric_type_t` for this data
+collection_protocol: selects which collectors should measure it
+
+- scmi_specification_path: optional override for the JSON file specifying data event IDs and targets
 
 ```cpp
 ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = "~/.my_astl_config.json");
@@ -163,7 +162,7 @@ if (status != ASTL_STATUS_SUCCESS) {
 }
 ```
 
-2. Discover targets
+3. Discover targets
 
 ```cpp
 status = astlGetTargetCount(&target_count);
@@ -175,7 +174,7 @@ status = astlGetTargets(target_properties_buffer, &target_count);
 astl_target_properties_t target_properties = target_properties_buffer[0];
 ```
 
-3. Configure collection
+4. Configure collection
 
 ```cpp
 uint32_t metric_count{};
@@ -192,7 +191,7 @@ status = astlConfigureMetricCollectionOnTarget(target_properties._handle, &colle
                                                 &metric_buffer.front()._handle, metric_count);
 ```
 
-4. Start, read, and stop collection
+5. Start, read, and stop collection
 
 ```cpp
 status = astlStartCollectionOnTarget(target_properties._handle);
@@ -201,12 +200,12 @@ status = astlReadImmediateOnTarget(target_properties._handle);
 status = astlStopCollectionOnTarget(target_properties._handle);
 ```
 
-5. Retrieve metric samples. Logs are written to:
+6. Retrieve metric samples. Logs are written to:
 
-- `sampled_value_raw.log` and `sampled_value_summary.log` - metric data
-- sysfs.log - mock SCMI driver output
+- `raw_samples.log` and `sampled_value_summary.log` - metric data (raw + summarized)
+- `sysfs.log` - mock SCMI driver output
 
-6. Clean up allocated resources
+7. Clean up allocated resources
 
 ```cpp
 ASTL_FREE_ARRAY(target_properties_buffer)
@@ -218,10 +217,11 @@ for usage details.
 
 ## Design Diagrams (Mermaid)
 
-The detailed runtime and structural diagrams are authored in Mermaid (`doc/design/*.mmd`) and rendered to SVG via `node scripts/render_mermaid.js --all`.
+The detailed runtime and structural diagrams are authored in Mermaid (`doc/design/*.mmd`) and rendered to SVG with:
 
-Because extremely tall single sequence diagrams became unreadable when constrained to a
-uniform viewport, the original monolithic system sequence was split into phased diagrams:
+```sh
+node scripts/render_mermaid.js --all
+```
 
 1. `system_phase_init_discovery.mmd` – Initialization & target/metric discovery
 2. `system_phase_metric_config.mmd` – Metric configuration & operations derivation
@@ -229,14 +229,74 @@ uniform viewport, the original monolithic system sequence was split into phased 
 4. `system_phase_stop_processing.mmd` – Deferred processing at stop & summarization
 5. `system_phase_retrieval_shutdown.mmd` – Retrieval APIs, shutdown, representative errors
 
-An overview diagram remains in `system_end_to_end_sequence.mmd` that references these phases
-at a high level.
+`system_end_to_end_sequence.mmd` remains as an overview referencing those phases.
 
-Regenerate all diagrams after editing any `.mmd` file:
+## Output Formats
 
-```sh
-node scripts/render_mermaid.js --all
+ASTL supports multiple output mechanisms for processed telemetry samples:
+
+1. Buffer Output (in-memory)
+   - Samples are written into a caller-provided contiguous buffer via `BufferOutput`.
+   - Use when integrating directly with a higher-level runtime (e.g., Python wrapper) or when you want zero file IO.
+   - Capacity mismatch semantics are reflected through status codes (e.g., `ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL`).
+
+- Suitable for low-latency pipelines or streaming directly into analytics code.
+
+2. Perfetto JSON Trace Output (Visualization)
+
+   - Opt-in: only produced if the environment variable `ASTL_OUTPUT_PERFETTO` is set to a file path.
+   - Deferred emission: The variable is evaluated during `StopCollection` after metrics are summarized. No file is opened during sampling; the complete trace is written once at the end.
+   - Enable with:
+
+     ```bash
+     export ASTL_OUTPUT_PERFETTO=/tmp/astl_trace.json
+     ```
+
+   - Emits a single JSON array; each sample becomes one event object.
+   - Numeric values (integral or floating) → counter events (`ph:"C"`). String values → instant events (`ph:"I"`, thread scope `s:"t"`).
+   - Stable `pid` per target; distinct `tid` per metric under that target for separate tracks.
+
+Category/unit mapping (selected): WATTS → Power, JOULES → Energy, CELSIUS → Temperature, MHERTZ → Frequency,
+VOLTS → Voltage, AMPS → Current, BYTES → Bytes, MBYTESPERSEC → Bandwidth, TICKS → Ticks, SECONDS → Time.
+String sample without quantitative unit → State; fallback → (empty category string).
+Name sanitization (whitespace & quotes → `_`); string values safely JSON-escaped.
+Compatible with Perfetto UI imports (Chrome Trace Event viewer also accepts similar structure; Perfetto is primary target).
+Skips null targets/metrics and empty sample vectors silently.
+Large runs can produce large files; consider compression or slicing or enabling compression post-generation.
+
+```jsonc
+{
+  "ph": "C",
+  "cat": "Power",
+
+  "name": "SoC.Power",
+
+  "ts": 1234567,
+  "pid": 1,
+  "tid": 1,
+  "args": { "target": "SoC", "metric": "Power", "value": 3.14 },
+}
 ```
+
+```jsonc
+{
+  "ph": "I",
+  "cat": "State",
+  "name": "SoC.Power_State",
+  "ts": 1234570,
+  "pid": 1,
+  "tid": 2,
+  "s": "t",
+  "args": {
+    "target": "SoC",
+    "metric": "Power_State",
+    "value": "EnteringIdle",
+  },
+}
+```
+
+- Import via Perfetto UI (<https://ui.perfetto.dev>) using "Open trace file".
+  Choose Buffer Output for programmatic consumption; choose Perfetto for timeline visualization and exploratory analysis.
 
 ## Running the Mock SCMI Sysfs Generator
 
@@ -327,7 +387,7 @@ cd build && make lint
 
 ### Doxygen
 
-Automatically generate class diagrams, function call graphs,
+Automatically generate class diagrams, function call graphs, and API reference docs:
 
 # Experimental Python API and usage
 

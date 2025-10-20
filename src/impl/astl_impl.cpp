@@ -211,14 +211,44 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
+  // Emit Perfetto trace (if requested) after metrics are summarized (processed samples complete)
+  EmitPerfettoTraceIfRequested();
 
-  lock.unlock();  // allow collector periodic samples to proceed
-  status = _collector_manager->StopOnTarget(target);
+  lock.unlock();                                      // allow collector periodic samples to proceed while stopping
+  status = _collector_manager->StopOnTarget(target);  // finalize collector state
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
 
   return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::EmitPerfettoTraceIfRequested() -> void {
+  if (_perfetto_emitted) {  // already emitted for this collection lifecycle
+    return;
+  }
+  std::string perfetto_path = astl::GetEnvVar("ASTL_OUTPUT_PERFETTO");
+  if (perfetto_path.empty()) {
+    return;  // no-op if unset
+  }
+  // Acquire processed samples snapshot under lock to avoid race with late sample insertion.
+  std::lock_guard processed_lock{_processed_samples_mtx};
+  if (_processed_samples.empty()) {
+    ASTL_LOG_INFO("Perfetto trace requested but no processed samples available; emitting empty trace");
+  }
+  if (!_output_manager) {
+    ASTL_LOG_ERROR("EmitPerfettoTraceIfRequested: OutputManager unavailable");
+    return;
+  }
+  // Dispatch all processed samples via OutputManager using PERFETTO type.
+  astl_status_code status =
+      _output_manager->OutputProcessedSamples(_processed_samples, OutputType::PERFETTO, nullptr, nullptr);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("EmitPerfettoTraceIfRequested: failed to emit Perfetto trace (status={})", status);
+    return;
+  }
+  _perfetto_emitted = true;
+  ASTL_LOG_INFO("Perfetto trace emission completed (env path='{}')", perfetto_path);
 }
 
 auto Orchestrator::GetCounterSampleCount(const ITarget *target, const ICounter *counter) const
