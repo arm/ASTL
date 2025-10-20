@@ -5,6 +5,7 @@
 #include <cstdlib>  // getenv
 
 #include "astl_file_interface.hpp"
+#include "astl_utils.hpp"
 
 // Test for astl::FileInterface
 // ScopedTestFile is a RAII helper class to create and delete test files.
@@ -46,10 +47,13 @@ struct ScopedDropRoot {
       // not running as root
       return;
     }
-    if (const auto *sudo_uid = std::getenv("SUDO_UID")) {
-      uid_t unpriv = static_cast<uid_t>(std::stoi(sudo_uid));
-      if (seteuid(unpriv) == 0) {
-        did_drop = true;
+    {
+      const std::string sudo_uid = astl::GetEnvVar("SUDO_UID");
+      if (!sudo_uid.empty()) {
+        const uid_t unpriv = static_cast<uid_t>(std::stoi(sudo_uid));
+        if (seteuid(unpriv) == 0) {
+          did_drop = true;
+        }
       }
     }
   }

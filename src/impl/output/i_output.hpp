@@ -23,6 +23,7 @@
 #ifndef I_OUTPUT_HPP_
 #define I_OUTPUT_HPP_
 
+#include "common/astl_defines.hpp"  // ProcessedSamplesMap alias
 #include "common/i_processed_sample_sink.hpp"
 
 namespace astl {
@@ -46,24 +47,64 @@ struct IOutput {
   IOutput& operator=(IOutput&&)      = default;
 
   /**
-   * @brief Write the provided processed samples to the underlying destination.
+   * @brief Write a contiguous span of processed samples to the underlying destination.
    *
    * Contract:
-   *  - `samples` is an ordered contiguous span representing one logical flush.
-   *  - Implementations must not retain references to elements beyond the call unless explicitly
-   *    documented.
+   *  - The span represents a single logical flush already grouped by upstream code.
+   *  - Implementations MUST NOT retain references or pointers to elements after the call unless
+   *    explicitly documented (i.e. pure pass-through / formatting only).
+   *  - Ordering is preserved as provided.
+   *  - Caller is responsible for ensuring thread-safety if the implementation does not document
+   *    internal synchronization.
    *
-   * Thread-safety: Caller must serialize if implementation not documented as safe.
+   * Error Handling: Implementations should perform best-effort writes; partial writes are only
+   * allowed if explicitly documented by the concrete implementation.
    *
-   * @param samples Contiguous collection of processed samples.
+   * @param samples Span of processed sampled data in chronological order.
    * @retval ASTL_STATUS_SUCCESS Entire span written.
-   * @retval ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED Written successfully with unused downstream capacity (if applicable).
-   * @retval ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL Destination could not hold all samples (no partial writes
-   * unless documented otherwise).
+   * @retval ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED Written successfully with unused downstream capacity (buffer outputs
+   * only).
+   * @retval ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL Destination buffer could not hold all samples (no partial write
+   * unless documented).
    * @retval ASTL_STATUS_INTERNAL_ERROR Implementation-specific failure (e.g. null internal pointer, IO error).
+   * @retval ASTL_STATUS_NOT_IMPLEMENTED Default base implementation (when not overridden).
    */
-  [[nodiscard]] virtual auto WriteProcessedSamples(const std::span<const ProcessedSampledData>& samples) const
-      -> astl_status_code = 0;
+  [[nodiscard]] virtual auto WriteProcessedSamples(const std::span<const ProcessedSampledData>& samples)
+      const  // NOLINT(readability-convert-member-function-to-static)
+      -> astl_status_code {
+    (void)samples;  // unused default implementation
+    return ASTL_STATUS_NOT_IMPLEMENTED;
+  }
+
+  /**
+   * @brief Write all processed samples contained in a nested target/metric map.
+   *
+   * Map Shape:
+   *  outer key: const ITarget* (nullptr entries SHOULD be ignored by implementations)
+   *  inner key: const IMetric* (nullptr entries SHOULD be ignored)
+   *  value:     std::vector<ProcessedSampledData> (may be empty; empty vectors SHOULD be skipped)
+   *
+   * Contract:
+   *  - Lifetime of pointers (ITarget / IMetric) and vector contents is controlled by caller and
+   *    remains valid for the duration of this call only.
+   *  - Implementations MUST NOT modify the map or its contents.
+   *  - Ordering of samples inside each vector is assumed chronological and must be preserved.
+   *  - Implementations may choose to emit no output if every vector is empty or every key invalid.
+   *
+   * Thread-safety: Same as span overload—caller must serialize concurrent invocations unless the
+   * implementation documents internal synchronization.
+   *
+   * @param processed Nested map Target* -> (Metric* -> vector<ProcessedSampledData>).
+   * @retval ASTL_STATUS_SUCCESS All applicable samples written.
+   * @retval ASTL_STATUS_INTERNAL_ERROR Implementation-specific failure (e.g. underlying IO error).
+   * @retval ASTL_STATUS_NOT_IMPLEMENTED Default base implementation (when not overridden).
+   */
+  [[nodiscard]] virtual auto WriteProcessedSamples(
+      const ProcessedSamplesMap& processed) const  // NOLINT(readability-convert-member-function-to-static)
+      -> astl_status_code {
+    (void)processed;  // unused default implementation
+    return ASTL_STATUS_NOT_IMPLEMENTED;
+  }
 };
 
 }  // namespace astl

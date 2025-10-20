@@ -52,7 +52,7 @@ std::expected<SampleTimestamp, astl_status_code> ParseScmiTimeStamp(std::string 
      * "The selection of a time base is beyond the scope of this specification
      * and should be agreed between the agent and the platform by other standard mechanisms."
      */
-    // for now, assume time base is just in unix seconds since epoch,
+    // for now, assume time base is just in unix milliseconds since epoch,
     // since that appears to be the case used in examples here:
     // https://confluence.arm.com/display/CESW/Linux+Kernel+SCMI+Telemetry+Support+-+v4.0+ALPHA_0+--+WIP
     auto time_since_boot = std::chrono::milliseconds{std::stoull(timestamp_str)};

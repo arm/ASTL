@@ -233,6 +233,18 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
                             std::span<const ProcessedSampledData> processed_samples) -> astl_status_code override;
 
  private:
+  /**
+   * @brief Emit a Perfetto trace of all processed samples if requested via environment variable.
+   *
+   * Logic:
+   *  - Checks ASTL_OUTPUT_PERFETTO (empty -> no-op).
+   *  - Ensures one-time emission (subsequent StopCollection calls won't rewrite).
+   *  - Uses OutputManager to dispatch with OutputType::PERFETTO (writer instantiated lazily there).
+   *  - Non-blocking: any failure logged and ignored (overall StopCollection still returns success unless
+   *    earlier steps failed).
+   */
+  auto EmitPerfettoTraceIfRequested() -> void;
+
   static auto                        GetMutex() -> std::mutex &;  // manage thread-safe access   to singleton instance
   std::unique_ptr<ITopologyManager>  _topology_manager;           // manages the set of Targets
   std::unique_ptr<ICollectorManager> _collector_manager;          // manages the collection of raw samples
@@ -241,7 +253,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   RawSamplesMap                      _raw_samples;                // collected raw samples, organized by target
   mutable std::mutex                 _raw_samples_mtx;            // protect the _raw_samples container
   ProcessedSamplesMap                _processed_samples;  // processed metric samples, organized by target and metric
-  mutable std::mutex                 _processed_samples_mtx;  // protect the _processed_samples container
+  mutable std::mutex                 _processed_samples_mtx;    // protect the _processed_samples container
+  bool                               _perfetto_emitted{false};  // ensure single emission per collection lifecycle
 };
 
 }  // namespace astl

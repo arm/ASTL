@@ -37,6 +37,7 @@ target_sources(
         "${CMAKE_CURRENT_SOURCE_DIR}/output/output_builder.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/output/output_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/output/buffer_output.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/output/perfetto_output.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/operation/scmi_operation_builder.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/operation/libsensors_operation_builder.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/counter.cpp"
