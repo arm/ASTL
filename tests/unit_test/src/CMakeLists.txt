@@ -33,6 +33,7 @@ set(UNIT_TEST_SRCS
     buffer_output_utests.cpp
     processed_sampled_data_utests.cpp
     perfetto_output_utests.cpp
+    summary_csv_output_utests.cpp
 )
 
 find_library(SENSORS_LIB sensors)

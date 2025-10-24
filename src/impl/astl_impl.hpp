@@ -234,6 +234,17 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
 
  private:
   /**
+   * @brief Emit a summary CSV file of all processed samples if requested via environment variable.
+   *
+   * Logic:
+   *  - Checks ASTL_OUTPUT_SUMMARY_CSV (empty -> no-op).
+   *  - Uses OutputManager to dispatch with OutputType::SUMMARY_CSV (writer instantiated on-demand).
+   *  - Non-blocking: any failure logged and ignored (overall StopCollection still returns success unless
+   *    earlier steps failed).
+   */
+  auto EmitSummaryCSVIfRequested() -> void;
+
+  /**
    * @brief Emit a Perfetto trace of all processed samples if requested via environment variable.
    *
    * Logic:

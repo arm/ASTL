@@ -18,14 +18,24 @@
 
 #include "output_manager.hpp"
 
+#include <cstdlib>  // std::getenv
+#include <filesystem>
+#include <fstream>
+#include <map>
 #include <new>  // std::bad_alloc
+#include <span>
+#include <tuple>
+#include <variant>
 
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
 #include "astl_utils.hpp"
 #include "buffer_output.hpp"
 #include "common/astl_defines.hpp"
+#include "common/astl_value.hpp"
 #include "perfetto_output.hpp"
+#include "summarizer.hpp"
+#include "summary_csv_output.hpp"
 
 namespace astl {
 
@@ -128,6 +138,22 @@ auto OutputManager::OutputProcessedSamples(const ProcessedSamplesMap& processed_
       }
       // Ignore target/metric parameters; write all samples.
       return _perfetto_output->WriteProcessedSamples(processed_samples);
+    }
+    case OutputType::SUMMARY_CSV: {
+      // For SUMMARY_CSV output, process ALL metrics on ALL targets, grouped by metric name
+      const char* csv_file_path = std::getenv("ASTL_OUTPUT_SUMMARY_CSV");
+      if (!csv_file_path) {
+        ASTL_LOG_ERROR("OutputProcessedSamples: ASTL_CSV_OUTPUT_FILE environment variable not set");
+        return ASTL_STATUS_BAD_ARGUMENT;
+      }
+
+      SummaryCsvOutput summary_csv_output(csv_file_path);
+      if (!summary_csv_output.Ready()) {
+        ASTL_LOG_ERROR("OutputProcessedSamples: Failed to initialize CSV output");
+        return ASTL_STATUS_INTERNAL_ERROR;
+      }
+
+      return summary_csv_output.WriteProcessedSamples(processed_samples);
     }
     case OutputType::UNKNOWN:
     default: {
