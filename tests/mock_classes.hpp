@@ -310,8 +310,10 @@ struct MockOutputManager : public astl::IOutputManager {
 // MockSampleSink captures processed samples for test assertions
 struct MockSampleSink : public astl::IProcessedSampleSink {
   std::vector<astl::ProcessedSampledData> captured;
-  astl_status_code                        SinkProcessedSamples(const astl::ITarget*, const astl::IMetric*,
+  astl_status_code                        SinkProcessedSamples(const astl::ITarget* target, const astl::IMetric* metric,
                                                                std::span<const astl::ProcessedSampledData> samples) override {
+    (void)target;
+    (void)metric;
     captured.insert(captured.end(), samples.begin(), samples.end());
     return ASTL_STATUS_SUCCESS;
   }

@@ -27,7 +27,6 @@
 #define OUTPUT_MANAGER_HPP_
 
 #include <span>
-#include <unordered_map>
 
 #include "astl/astl.h"
 #include "buffer_output.hpp"
@@ -108,6 +107,7 @@ class OutputManager : public IOutputManager {
    */
   [[nodiscard]] auto OutputProcessedSamplesToBuffer(const ProcessedSamplesMap& processed_samples, const ITarget* target,
                                                     const IMetric* metric) -> astl_status_code;
+
   std::unique_ptr<BufferOutput>   _buffer_output;
   std::unique_ptr<PerfettoOutput> _perfetto_output;  // lazy init
 

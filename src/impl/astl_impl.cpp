@@ -1,6 +1,7 @@
 #include "astl_impl.hpp"
 
 #include <algorithm>  // for std::max used in bulk reserve heuristic
+#include <cstdlib>    // for std::getenv
 
 #include "astl/astl_errors.h"
 #include "astl_logger.hpp"
@@ -202,6 +203,8 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
   }
 
   std::unique_lock lock{_raw_samples_mtx};
+  // TODO(https://jira.arm.com/browse/ASTL-209): Move CollectorManager::StopOnTarget before ProcessRawSamples when
+  // implementing Orchestrator State Machine to ensure collection is stopped before processing begins.
   astl_status_code status = _metric_manager->ProcessRawSamples(_raw_samples);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
@@ -214,8 +217,12 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
   // Emit Perfetto trace (if requested) after metrics are summarized (processed samples complete)
   EmitPerfettoTraceIfRequested();
 
-  lock.unlock();                                      // allow collector periodic samples to proceed while stopping
-  status = _collector_manager->StopOnTarget(target);  // finalize collector state
+  // Emit summary CSV (if requested) after metrics are summarized
+  EmitSummaryCSVIfRequested();
+
+  lock.unlock();  // allow collector periodic samples to proceed
+
+  status = _collector_manager->StopOnTarget(target);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
@@ -249,6 +256,30 @@ auto Orchestrator::EmitPerfettoTraceIfRequested() -> void {
   }
   _perfetto_emitted = true;
   ASTL_LOG_INFO("Perfetto trace emission completed (env path='{}')", perfetto_path);
+}
+
+auto Orchestrator::EmitSummaryCSVIfRequested() -> void {
+  std::string csv_path = astl::GetEnvVar("ASTL_OUTPUT_SUMMARY_CSV");
+  if (csv_path.empty()) {
+    return;  // no-op if unset
+  }
+  // Acquire processed samples snapshot under lock to avoid race with late sample insertion.
+  std::lock_guard processed_lock{_processed_samples_mtx};
+  if (_processed_samples.empty()) {
+    ASTL_LOG_INFO("Summary CSV requested but no processed samples available; emitting empty file");
+  }
+  if (!_output_manager) {
+    ASTL_LOG_ERROR("EmitSummaryCSVIfRequested: OutputManager unavailable");
+    return;
+  }
+  // Dispatch all processed samples via OutputManager using SUMMARY_CSV type.
+  astl_status_code status =
+      _output_manager->OutputProcessedSamples(_processed_samples, OutputType::SUMMARY_CSV, nullptr, nullptr);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("EmitSummaryCSVIfRequested: failed to emit summary CSV (status={})", status);
+    return;
+  }
+  ASTL_LOG_INFO("Summary CSV emission completed (env path='{}')", csv_path);
 }
 
 auto Orchestrator::GetCounterSampleCount(const ITarget *target, const ICounter *counter) const
@@ -285,9 +316,9 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
     // We keep the 1.5x + bias heuristic but ensure we always meet the exact required size.
     const auto required_size = target_samples_vec.size() + raw_samples.size();
     if (target_samples_vec.capacity() < required_size) {
-      auto current = target_samples_vec.size();
-      auto heuristic_cap =
-          static_cast<size_t>(current * kRawSampleGrowthNumerator / kRawSampleGrowthDenominator + kRawSampleGrowthBias);
+      auto current       = target_samples_vec.size();
+      auto heuristic_cap = static_cast<size_t>((current * kRawSampleGrowthNumerator / kRawSampleGrowthDenominator) +
+                                               kRawSampleGrowthBias);
       // Guarantee capacity is at least the immediate requirement (heuristic may be smaller when current==0).
       auto new_cap = std::max(required_size, heuristic_cap);
       target_samples_vec.reserve(new_cap);
@@ -344,7 +375,7 @@ auto Orchestrator::SinkProcessedSamples(const ITarget *target, const IMetric *me
     if (vec.capacity() < vec.size() + processed_samples.size()) {
       auto required = vec.size() + processed_samples.size();
       // Same growth heuristic (1.5x + bias) abstracted via named constants.
-      auto new_cap = static_cast<size_t>(required * kProcSampleGrowthNumerator / kProcSampleGrowthDenominator +
+      auto new_cap = static_cast<size_t>((required * kProcSampleGrowthNumerator / kProcSampleGrowthDenominator) +
                                          kProcSampleGrowthBias);
       vec.reserve(new_cap);
     }

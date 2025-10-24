@@ -124,6 +124,18 @@ jq --arg telemetry_root "$TELEMETRY_ROOT" \
 	'.scmi_sysfs_telemetry_root_path = $telemetry_root' \
 	./samples/sample_configuration/astl_configuration.json >$UPDATED_JSON_FILE
 
+# Set CSV output file for summary data
+export ASTL_OUTPUT_SUMMARY_CSV="$LOG_DIR/astl_summary.csv"
+echo "CSV output will be written to: $ASTL_OUTPUT_SUMMARY_CSV"
+
+# Add cleanup for the environment variable
+cleanup_csv() {
+	unset ASTL_OUTPUT_SUMMARY_CSV
+}
+trap cleanup_csv EXIT
+export ASTL_OUTPUT_SUMMARY_CSV="$LOG_DIR/astl_summary.csv"
+echo "CSV output will be written to: $ASTL_OUTPUT_SUMMARY_CSV"
+
 "$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --config="$UPDATED_JSON_FILE" --target="tlm-0"
 ERR=$?
 if [[ $ERR -ne 0 ]]; then
