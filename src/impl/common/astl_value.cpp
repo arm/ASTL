@@ -230,24 +230,33 @@ auto AstlValue::Add(const AstlValue& addend, const AstlValue& augend) -> std::ex
  */
 auto AstlValue::Subtract(const AstlValue& minuend, const AstlValue& subtrahend)
     -> std::expected<AstlValue, astl_status_code> {
-  return std::visit(
-      [](auto&& left, auto&& right) -> std::expected<AstlValue, astl_status_code> {
-        using X = std::decay_t<decltype(left)>;
-        using Y = std::decay_t<decltype(right)>;
+  // Helper performs unsigned underflow check; bool is promoted to uint8_t first to avoid unsafe comparisons.
+  auto underflow_check = [](auto lhs, auto rhs) -> bool {
+    using T = std::decay_t<decltype(lhs)>;
+    if constexpr (std::is_integral_v<T> && std::is_unsigned_v<T>) {
+      if constexpr (std::is_same_v<T, bool>) {
+        return static_cast<uint8_t>(lhs ? 1 : 0) < static_cast<uint8_t>(rhs ? 1 : 0);
+      } else {
+        return lhs < rhs;
+      }
+    }
+    return false;  // no underflow for signed or floating point types
+  };
 
-        if constexpr (std::is_arithmetic_v<X> && std::is_arithmetic_v<Y>) {
-          // Cast both operands to common type
-          using Result      = std::conditional_t<(sizeof(X) >= sizeof(Y)), X, Y>;
+  return std::visit(
+      [&underflow_check](auto&& left, auto&& right) -> std::expected<AstlValue, astl_status_code> {
+        using LX = std::decay_t<decltype(left)>;
+        using RX = std::decay_t<decltype(right)>;
+        if constexpr (std::is_arithmetic_v<LX> && std::is_arithmetic_v<RX>) {
+          using Result      = std::conditional_t<(sizeof(LX) >= sizeof(RX)), LX, RX>;
           Result left_cast  = static_cast<Result>(left);
           Result right_cast = static_cast<Result>(right);
 
-          // Check for underflow (only for unsigned integers)
-          if constexpr (std::is_integral_v<Result> && std::is_unsigned_v<Result>) {
-            if (left_cast < right_cast) [[unlikely]] {
-              return std::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
-            }
+          if (underflow_check(left_cast, right_cast)) [[unlikely]] {
+            return std::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
           }
-          Result difference{static_cast<Result>(left_cast - right_cast)};
+
+          Result difference = static_cast<Result>(left_cast - right_cast);
           return AstlValue{difference};
         } else {
           return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);

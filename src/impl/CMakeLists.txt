@@ -40,6 +40,7 @@ target_sources(
         "${CMAKE_CURRENT_SOURCE_DIR}/output/summarizer.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/output/summary_output.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/output/perfetto_output.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/output/interval_csv_output.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/output/summary_csv_output.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/operation/scmi_operation_builder.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/operation/libsensors_operation_builder.cpp"

@@ -91,7 +91,8 @@ auto GetIntervalArgument(const std::unordered_map<std::string, std::string>& arg
       std::cout << "Interval set to: " << sampling_interval_ms.count() << " milliseconds\n";
       return sampling_interval_ms;
     } catch (const std::exception& e) {
-      std::cerr << "Invalid value for --interval\n";
+      // Include exception details to aid debugging and ensure variable is referenced (avoids unused warning)
+      std::cerr << "Invalid value for --interval (" << e.what() << ")\n";
       return std::unexpected<int>(1);
     }
   }
@@ -243,8 +244,9 @@ auto ConfigureAndRunCollection(const astl_target_properties_t&              targ
   std::transform(metric_buffer.begin(), metric_buffer.end(), std::back_inserter(metric_handles_vec),
                  [](const astl_metric_properties_t& metric_properties) { return metric_properties._handle; });
 
-  const auto metric_count  = static_cast<uint32_t>(metric_handles_vec.size());
-  auto       target_handle = target_properties._handle;
+  const auto metric_count = static_cast<uint32_t>(metric_handles_vec.size());
+  // Lint: readability-qualified-auto -> express pointer constness explicitly
+  const auto* const target_handle = target_properties._handle;
 
   astl_status_code status =
       astlConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles_vec.data(), metric_count);

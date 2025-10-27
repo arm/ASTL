@@ -203,7 +203,7 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
   }
 
   std::unique_lock lock{_raw_samples_mtx};
-  // TODO(https://jira.arm.com/browse/ASTL-209): Move CollectorManager::StopOnTarget before ProcessRawSamples when
+  // TODO(ASTL-209): Move CollectorManager::StopOnTarget before ProcessRawSamples when
   // implementing Orchestrator State Machine to ensure collection is stopped before processing begins.
   astl_status_code status = _metric_manager->ProcessRawSamples(_raw_samples);
   if (status != ASTL_STATUS_SUCCESS) {
@@ -214,15 +214,18 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
+
   // Emit Perfetto trace (if requested) after metrics are summarized (processed samples complete)
   EmitPerfettoTraceIfRequested();
 
-  // Emit summary CSV (if requested) after metrics are summarized
-  EmitSummaryCSVIfRequested();
+  // Emit Interval CSV trace (if requested) after metrics are summarized (processed samples complete)
+  EmitIntervalCsvIfRequested();
 
-  lock.unlock();  // allow collector periodic samples to proceed
+  // Emit Summary CSV (if requested) after metrics are summarized (processed samples complete)
+  EmitSummaryCsvIfRequested();
 
-  status = _collector_manager->StopOnTarget(target);
+  lock.unlock();                                      // allow collector periodic samples to proceed while stopping
+  status = _collector_manager->StopOnTarget(target);  // finalize collector state
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
@@ -258,7 +261,30 @@ auto Orchestrator::EmitPerfettoTraceIfRequested() -> void {
   ASTL_LOG_INFO("Perfetto trace emission completed (env path='{}')", perfetto_path);
 }
 
-auto Orchestrator::EmitSummaryCSVIfRequested() -> void {
+auto Orchestrator::EmitIntervalCsvIfRequested() -> void {
+  if (_intervalcsv_emitted) {
+    return;
+  }
+  std::string csv_path = astl::GetEnvVar("ASTL_OUTPUT_INTERVAL_CSV");
+  if (csv_path.empty()) {
+    return;  // nothing to do
+  }
+  std::lock_guard processed_lock{_processed_samples_mtx};
+  if (!_output_manager) {
+    ASTL_LOG_ERROR("EmitIntervalCsvIfRequested: OutputManager unavailable");
+    return;
+  }
+  astl_status_code status =
+      _output_manager->OutputProcessedSamples(_processed_samples, OutputType::INTERVAL_CSV, nullptr, nullptr);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("EmitIntervalCsvIfRequested: failed to emit interval CSV (status={})", status);
+    return;
+  }
+  _intervalcsv_emitted = true;
+  ASTL_LOG_INFO("Interval CSV emission completed (env path='{}')", csv_path);
+}
+
+auto Orchestrator::EmitSummaryCsvIfRequested() -> void {
   std::string csv_path = astl::GetEnvVar("ASTL_OUTPUT_SUMMARY_CSV");
   if (csv_path.empty()) {
     return;  // no-op if unset
@@ -269,14 +295,14 @@ auto Orchestrator::EmitSummaryCSVIfRequested() -> void {
     ASTL_LOG_INFO("Summary CSV requested but no processed samples available; emitting empty file");
   }
   if (!_output_manager) {
-    ASTL_LOG_ERROR("EmitSummaryCSVIfRequested: OutputManager unavailable");
+    ASTL_LOG_ERROR("EmitSummaryCsvIfRequested: OutputManager unavailable");
     return;
   }
   // Dispatch all processed samples via OutputManager using SUMMARY_CSV type.
   astl_status_code status =
       _output_manager->OutputProcessedSamples(_processed_samples, OutputType::SUMMARY_CSV, nullptr, nullptr);
   if (status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("EmitSummaryCSVIfRequested: failed to emit summary CSV (status={})", status);
+    ASTL_LOG_ERROR("EmitSummaryCsvIfRequested: failed to emit summary CSV (status={})", status);
     return;
   }
   ASTL_LOG_INFO("Summary CSV emission completed (env path='{}')", csv_path);
