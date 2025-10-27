@@ -33,6 +33,7 @@
 #include "buffer_output.hpp"
 #include "common/astl_defines.hpp"
 #include "common/astl_value.hpp"
+#include "interval_csv_output.hpp"
 #include "perfetto_output.hpp"
 #include "summarizer.hpp"
 #include "summary_csv_output.hpp"
@@ -94,6 +95,29 @@ auto OutputManager::EnsurePerfettoOutput() -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
+auto OutputManager::EnsureIntervalCsvOutput() -> astl_status_code {
+  if (_interval_csv_output && _interval_csv_output->Ready()) {
+    return ASTL_STATUS_SUCCESS;
+  }
+  // TODO(ASTL-208): centralize env var keys as constexprs to avoid duplication.
+  std::string csv_path = astl::GetEnvVar("ASTL_OUTPUT_INTERVAL_CSV");
+  if (csv_path.empty()) {
+    ASTL_LOG_ERROR("Interval CSV output requested but ASTL_OUTPUT_INTERVAL_CSV is not set or empty");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  try {
+    _interval_csv_output = std::make_unique<IntervalCsvOutput>(std::filesystem::path(csv_path));
+  } catch (const std::exception& ex) {
+    ASTL_LOG_ERROR("EnsureIntervalCsvOutput: exception while creating writer: {}", ex.what());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  if (!_interval_csv_output->Ready()) {
+    ASTL_LOG_ERROR("EnsureIntervalCsvOutput: writer not ready after creation (path='{}')", csv_path);
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
 auto OutputManager::OutputProcessedSamplesToBuffer(const ProcessedSamplesMap& processed_samples, const ITarget* target,
                                                    const IMetric* metric) -> astl_status_code {
   if (!_buffer_output) {
@@ -139,20 +163,26 @@ auto OutputManager::OutputProcessedSamples(const ProcessedSamplesMap& processed_
       // Ignore target/metric parameters; write all samples.
       return _perfetto_output->WriteProcessedSamples(processed_samples);
     }
+    case OutputType::INTERVAL_CSV: {
+      auto status_code = EnsureIntervalCsvOutput();
+      if (status_code != ASTL_STATUS_SUCCESS) {
+        return status_code;
+      }
+      return _interval_csv_output->WriteProcessedSamples(processed_samples);
+    }
     case OutputType::SUMMARY_CSV: {
-      // For SUMMARY_CSV output, process ALL metrics on ALL targets, grouped by metric name
+      // For SUMMARY_CSV output, process ALL metrics on ALL targets, grouped by metric name.
+      // Emission is opt-in via ASTL_OUTPUT_SUMMARY_CSV.
       const char* csv_file_path = std::getenv("ASTL_OUTPUT_SUMMARY_CSV");
-      if (!csv_file_path) {
-        ASTL_LOG_ERROR("OutputProcessedSamples: ASTL_CSV_OUTPUT_FILE environment variable not set");
+      if (csv_file_path == nullptr || *csv_file_path == '\0') {
+        ASTL_LOG_ERROR("OutputProcessedSamples: ASTL_OUTPUT_SUMMARY_CSV environment variable not set or empty");
         return ASTL_STATUS_BAD_ARGUMENT;
       }
-
       SummaryCsvOutput summary_csv_output(csv_file_path);
       if (!summary_csv_output.Ready()) {
-        ASTL_LOG_ERROR("OutputProcessedSamples: Failed to initialize CSV output");
+        ASTL_LOG_ERROR("OutputProcessedSamples: Failed to initialize summary CSV output (path='{}')", csv_file_path);
         return ASTL_STATUS_INTERNAL_ERROR;
       }
-
       return summary_csv_output.WriteProcessedSamples(processed_samples);
     }
     case OutputType::UNKNOWN:

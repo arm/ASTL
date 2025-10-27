@@ -170,12 +170,23 @@ struct AstlValue {
               return std::unexpected(ASTL_STATUS_DIVIDE_BY_ZERO);
             }
 
-            // If divisor is double or float, return result as the divisor's type
+            auto promote_if_bool = [](auto value) {
+              using T = std::decay_t<decltype(value)>;
+              if constexpr (std::is_same_v<T, bool>) {
+                return static_cast<uint8_t>(value ? 1 : 0);
+              } else {
+                return value;
+              }
+            };
+
             if constexpr (std::is_same_v<DivisorType, double> || std::is_same_v<DivisorType, float>) {
-              return AstlValue{static_cast<DivisorType>(static_cast<DivisorType>(dividend_x) / divisor)};
+              auto lhs    = static_cast<DivisorType>(promote_if_bool(dividend_x));
+              auto result = static_cast<DivisorType>(lhs / static_cast<DivisorType>(divisor));
+              return AstlValue{result};
             } else {
-              return AstlValue{static_cast<DividendType>(static_cast<DividendType>(dividend_x) /
-                                                         static_cast<DividendType>(divisor))};
+              auto lhs    = static_cast<DividendType>(promote_if_bool(dividend_x));
+              auto result = static_cast<DividendType>(lhs / static_cast<DividendType>(divisor));
+              return AstlValue{result};
             }
           } else {
             return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);

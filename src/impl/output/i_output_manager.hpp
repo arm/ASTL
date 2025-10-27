@@ -42,7 +42,13 @@ namespace astl {
  * Additional output types (files, sockets, etc.) can be appended. Existing values must remain
  * stable for ABI compatibility.
  */
-enum class OutputType { UNKNOWN, BUFFER, PERFETTO, SUMMARY_CSV };
+enum class OutputType {
+  UNKNOWN,      // Unspecified / invalid output selection
+  BUFFER,       // In-memory sample buffer writer
+  SUMMARY_CSV,  // Summary CSV writer
+  PERFETTO,     // Perfetto trace event stream writer
+  INTERVAL_CSV  // Interval CSV writer (compact comma-separated export format for tests/tools)
+};
 
 /**
  * @brief Abstract manager of one or more concrete `IOutput` instances.

@@ -19,7 +19,7 @@ collected data. Collected data can be streamed directly to a user provided buffe
 written to a specified output file format, such as a Perfetto JSON file for data visualization.
 
 See the dedicated "Output Formats" section near the end of this document for full details on the
-currently supported output mechanisms (in-memory buffer and Perfetto trace).
+currently supported output mechanisms (in-memory buffer, Perfetto trace, Interval CSV, and Summary CSV).
 
 The initial implementation focuses on the System Control and Management Interface (SCMI)
 specification through the Linux SCMI sysfs interface. It also has experimental support of
@@ -236,33 +236,32 @@ node scripts/render_mermaid.js --all
 ASTL supports multiple output mechanisms for processed telemetry samples:
 
 1. Buffer Output (in-memory)
-   - Samples are written into a caller-provided contiguous buffer via `BufferOutput`.
-   - Use when integrating directly with a higher-level runtime (e.g., Python wrapper) or when you want zero file IO.
-   - Capacity mismatch semantics are reflected through status codes (e.g., `ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL`).
 
+- Samples are written into a caller-provided contiguous buffer via `BufferOutput`.
+- Use when integrating directly with a higher-level runtime (e.g., Python wrapper) or when you want zero file IO.
+- Capacity mismatch semantics are reflected through status codes (e.g., `ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL`).
 - Suitable for low-latency pipelines or streaming directly into analytics code.
 
 2. Perfetto JSON Trace Output (Visualization)
 
-   - Opt-in: only produced if the environment variable `ASTL_OUTPUT_PERFETTO` is set to a file path.
-   - Deferred emission: The variable is evaluated during `StopCollection` after metrics are summarized. No file is opened during sampling; the complete trace is written once at the end.
-   - Enable with:
+- Opt-in: only produced if the environment variable `ASTL_OUTPUT_PERFETTO` is set to a file path.
+- Deferred emission: The variable is evaluated during `StopCollection` after metrics are summarized. No file is opened during sampling; the complete trace is written once at the end.
+- Enable with:
 
-     ```bash
-     export ASTL_OUTPUT_PERFETTO=/tmp/astl_trace.json
-     ```
+  ```bash
+  export ASTL_OUTPUT_PERFETTO=/tmp/astl_trace.json
+  ```
 
-   - Emits a single JSON array; each sample becomes one event object.
-   - Numeric values (integral or floating) → counter events (`ph:"C"`). String values → instant events (`ph:"I"`, thread scope `s:"t"`).
-   - Stable `pid` per target; distinct `tid` per metric under that target for separate tracks.
-
-Category/unit mapping (selected): WATTS → Power, JOULES → Energy, CELSIUS → Temperature, MHERTZ → Frequency,
-VOLTS → Voltage, AMPS → Current, BYTES → Bytes, MBYTESPERSEC → Bandwidth, TICKS → Ticks, SECONDS → Time.
-String sample without quantitative unit → State; fallback → (empty category string).
-Name sanitization (whitespace & quotes → `_`); string values safely JSON-escaped.
-Compatible with Perfetto UI imports (Chrome Trace Event viewer also accepts similar structure; Perfetto is primary target).
-Skips null targets/metrics and empty sample vectors silently.
-Large runs can produce large files; consider compression or slicing or enabling compression post-generation.
+- Emits a single JSON array; each sample becomes one event object.
+- Numeric values (integral or floating) → counter events (`ph:"C"`). String values → instant events (`ph:"I"`, thread scope `s:"t"`).
+- Stable `pid` per target; distinct `tid` per metric under that target for separate tracks.
+- Category/unit mapping (selected): WATTS → Power, JOULES → Energy, CELSIUS → Temperature, MHERTZ → Frequency,
+  VOLTS → Voltage, AMPS → Current, BYTES → Bytes, MBYTESPERSEC → Bandwidth, TICKS → Ticks, SECONDS → Time.
+- String sample without quantitative unit → State; fallback → (empty category string).
+- Name sanitization (whitespace & quotes → `_`); string values safely JSON-escaped.
+- Compatible with Perfetto UI imports (Chrome Trace Event viewer also accepts similar structure; Perfetto is primary target).
+- Skips null targets/metrics and empty sample vectors silently.
+- Large runs can produce large files; consider compression or slicing or enabling compression post-generation.
 
 ```jsonc
 {
@@ -278,25 +277,95 @@ Large runs can produce large files; consider compression or slicing or enabling 
 }
 ```
 
-```jsonc
-{
-  "ph": "I",
-  "cat": "State",
-  "name": "SoC.Power_State",
-  "ts": 1234570,
-  "pid": 1,
-  "tid": 2,
-  "s": "t",
-  "args": {
-    "target": "SoC",
-    "metric": "Power_State",
-    "value": "EnteringIdle",
-  },
-}
-```
-
 - Import via Perfetto UI (<https://ui.perfetto.dev>) using "Open trace file".
   Choose Buffer Output for programmatic consumption; choose Perfetto for timeline visualization and exploratory analysis.
+
+3. Interval CSV Output (Post-Collection Time Series)
+   - Opt-in: produced only if the environment variable `ASTL_OUTPUT_INTERVAL_CSV` is set to a file path
+     before `StopCollection`.
+   - Deferred emission: identical lifecycle to Perfetto; CSV file is written once after metrics are
+     summarized (no incremental writes during sampling).
+   - Enable with:
+
+     ```bash
+     export ASTL_OUTPUT_INTERVAL_CSV=/tmp/astl_intervals.csv
+     ```
+
+   - Hybrid grouped format (per metric name): Metrics are aggregated by name across all targets.
+     For each unique metric name a metric info line is written:
+     `metric_name,metric_description` (description = first non-empty encountered) then a header line
+     `timestamp_us,target,metric,value` followed by all sample rows for that metric across every target, where
+     each sample row repeats the metric name. Metric groups are emitted in stable alphabetical order by metric name.
+     Blank line separates groups.
+   - Samples: `timestamp_us` is raw microseconds (same base as Perfetto). Target is the owning target's name.
+     Value is numeric or quoted string (internal double quotes replaced with single quotes).
+   - Empty collection yields an empty file (no global header).
+   - Rationale: Grouping reduces scanning effort when analyzing one metric across many targets.
+
+Example snippet (two metrics, one sample each):
+
+```csv
+SoC Power,"SoC Power Consumption in Watts"
+timestamp_us,target,metric,value
+1734735123456789,SoC,SoC Power,3.14
+
+SoC Temp,"SoC Temperature in Celsius"
+timestamp_us,target,metric,value
+1734735124456790,SoC,SoC Temp,55.0
+```
+
+Import into Python:
+
+```python
+import pandas as pd
+df = pd.read_csv("/tmp/astl_intervals.csv")
+```
+
+4. Summary CSV Output (Post-Collection Statistical Summaries)
+   - Opt-in: produced only if the environment variable `ASTL_OUTPUT_SUMMARY_CSV` is set to a file path
+     before `StopCollection`.
+   - Deferred emission: same lifecycle as Perfetto and Interval CSV; the file is written once after collection
+     completes (no incremental writes during sampling).
+   - Enable with:
+
+     ```bash
+     export ASTL_OUTPUT_SUMMARY_CSV=/tmp/astl_summary.csv
+     ```
+
+   - Format: One header line then one row per (metric, target) pair summarizing all samples gathered for that
+     pair. Columns:
+     - `MetricName` – metric name (sanitized where necessary)
+     - `Target` – target name
+     - `Min` – minimum numeric sample value (or `N/A` if no numeric samples)
+     - `Max` – maximum numeric sample value (or `N/A` if no numeric samples)
+     - `Average` – arithmetic mean of numeric samples (or `N/A` if no numeric samples)
+     - `SampleCount` – total sample count (numeric + string) collected for the metric/target pair
+   - Header: `MetricName,Target,Min,Max,Average,SampleCount`.
+   - Grouping: Rows are grouped by metric name internally; current implementation does not insert blank lines between groups (compact listing).
+   - Value Handling:
+     - If a metric produced only string samples (no numeric values), Min/Max/Average are `N/A`.
+     - Numeric formatting matches the internal `to_string` representation (no forced scientific notation).
+   - Empty collection yields an empty file (no header).
+   - Rationale: Provides a quick, space-efficient statistical overview of all collected metrics to support
+     rapid triage and selection of metrics for deeper time-series analysis (Interval CSV or Perfetto). Often
+     significantly smaller than full interval dumps for long runs.
+
+Example snippet:
+
+```csv
+MetricName,Target,Min,Max,Average,SampleCount
+SoC Power,SoC,2.91,3.42,3.14,150
+SoC Temp,SoC,44.0,57.0,52.3,150
+Cluster0 Freq,Cluster0,900.0,1500.0,1200.5,150
+GPU State,GPU,N/A,N/A,N/A,12
+```
+
+Import into Python:
+
+```python
+import pandas as pd
+df_summary = pd.read_csv("/tmp/astl_summary.csv")
+```
 
 ## Running the Mock SCMI Sysfs Generator
 
