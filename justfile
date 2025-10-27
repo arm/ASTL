@@ -4,6 +4,17 @@ alias  b := build
 alias  t := test
 alias rt := retest
 
+clean:
+    #!/usr/bin/env bash
+    echo "[clean] Removing build artifacts"
+    rm -rf build coverage_*
+
+# Aggressibly remove cache files and as many artifacts as possible
+deep_clean: clean
+    #!/usr/bin/env bash
+    echo "[purge] Removing additional artifacts"
+    rm -rf external/vcpkg doc/html python/docs/_build/ python/astl/__pycache__/ python/astl/__pycache__/ .mypy_cache .venv python/astl.egg-info/ python/dist/ python/astl/_core.cpp
+
 # generate build files through cmake
 config preset='debug':
     #!/usr/bin/env bash
@@ -11,8 +22,13 @@ config preset='debug':
     cmake -S . --preset {{preset}}
 
 # build library, samples, unit tests
+# just config must be run first as a one-time step
 build preset='debug':
     #!/usr/bin/env bash
+    if [ ! -d build/ ]; then
+        echo "[build] Build directory missing; running config step first" > /dev/stderr
+        exit 1
+    fi
     echo "[build] Using preset={{preset}}"
     cmake --build --preset {{preset}} --parallel=$(nproc)
 
@@ -43,6 +59,19 @@ retest preset='debug':
     #!/usr/bin/env bash
     echo "[retest] Using preset={{preset}}"
     ctest --rerun-failed --preset {{preset}}
+
+# Just config must be run first as a one-time step, but does not require a build
+doc preset='debug':
+    #!/usr/bin/env bash
+    if [ ! -d build/ ]; then
+        echo "[build] Build directory missing; running config step first" > /dev/stderr
+        exit 1
+    fi
+    echo "[doxygen] Generating documentation"
+    cmake --build --preset {{preset}} --target doxygen
+    echo "[doxygen] Documentation generated under doc/html/index.html"
+    sphinx-build -b html python/docs python/docs/_build/html
+    echo "[sphinx] Documentation generated under python/docs/_build/html/index.html"
 
 # Full Python cycle: build native lib, install editable package, refresh vendored headers,
 # run tests and sample scripts. Accepts optional python version via PY env var.

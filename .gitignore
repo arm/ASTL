@@ -1,6 +1,15 @@
 # Ignore vendored Python headers (generated/copied by vendor_headers.sh)
 python/astl/include/astl/
 
+# Python Outputs
+.venv
+python/astl.egg-info/
+python/astl/__pycache__/
+python/tests/__pycache__/
+python/docs/_build/
+python/dist/
+python/astl/_core.cpp
+
 # Prerequisites
 *.d
 
@@ -79,8 +88,8 @@ coverage.xml
 *.log
 
 # Doxygen Rendered Documentation
-html
-latex
+doc/html
+doc/latex
 
 # ASTL demo outputs
 *_rate_intervals.csv
