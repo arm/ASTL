@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string>
 
+#include "../../test_utilities.hpp"  // TempFileGuard
 #include "astl_utils.hpp"
 #include "metric/i_metric.hpp"
 #include "output/interval_csv_output.hpp"
@@ -81,9 +82,9 @@ astl::ProcessedSampledData MakeSample(double value, astl::SampleTimestamp timest
 }  // namespace
 
 TEST_CASE("IntervalCsvOutput basic write", "[intervalcsv]") {  // NOLINT
-  auto            path = std::filesystem::temp_directory_path() / "astl_intervalcsv_basic.csv";
-  std::error_code error_code;
-  std::filesystem::remove(path, error_code);
+  std::filesystem::path path = "astl_intervalcsv_basic.csv";
+  TempFileGuard         tmp_guard{path};
+
   astl::IntervalCsvOutput writer(path);
   REQUIRE(writer.Ready());
   // build processed samples map with one metric and one sample
@@ -104,9 +105,8 @@ TEST_CASE("IntervalCsvOutput basic write", "[intervalcsv]") {  // NOLINT
 }
 
 TEST_CASE("IntervalCsvOutput category inference", "[intervalcsv]") {  // NOLINT
-  auto            path = std::filesystem::temp_directory_path() / "astl_intervalcsv_categories.csv";
-  std::error_code error_code;
-  std::filesystem::remove(path, error_code);
+  std::filesystem::path   path = "astl_intervalcsv_categories.csv";
+  TempFileGuard           tmp_guard{path};
   astl::IntervalCsvOutput writer(path);
   REQUIRE(writer.Ready());
   TestTargetBase              tgt{"Soc"};
@@ -128,9 +128,8 @@ TEST_CASE("IntervalCsvOutput category inference", "[intervalcsv]") {  // NOLINT
 }
 
 TEST_CASE("IntervalCsvOutput empty map emits empty file", "[intervalcsv]") {  // NOLINT
-  auto            path = std::filesystem::temp_directory_path() / "astl_intervalcsv_empty.csv";
-  std::error_code error_code;
-  std::filesystem::remove(path, error_code);
+  std::filesystem::path   path = "astl_intervalcsv_empty.csv";
+  TempFileGuard           tmp_guard{path};
   astl::IntervalCsvOutput writer(path);
   REQUIRE(writer.Ready());
   astl::ProcessedSamplesMap processed;  // empty
@@ -142,9 +141,8 @@ TEST_CASE("IntervalCsvOutput empty map emits empty file", "[intervalcsv]") {  //
 }
 
 TEST_CASE("IntervalCsvOutput aggregates same metric name across targets", "[intervalcsv]") {  // NOLINT
-  auto            path = std::filesystem::temp_directory_path() / "astl_intervalcsv_multi_target.csv";
-  std::error_code error_code;
-  std::filesystem::remove(path, error_code);
+  std::filesystem::path   path = "astl_intervalcsv_multi_target.csv";
+  TempFileGuard           tmp_guard{path};
   astl::IntervalCsvOutput writer(path);
   REQUIRE(writer.Ready());
   TestTargetBase target_a{"SocA"};
@@ -179,9 +177,8 @@ TEST_CASE("IntervalCsvOutput aggregates same metric name across targets", "[inte
 
 // New tests to increase coverage
 TEST_CASE("IntervalCsvOutput quotes description and sanitizes string samples", "[intervalcsv]") {  // NOLINT
-  auto            path = std::filesystem::temp_directory_path() / "astl_intervalcsv_quoting.csv";
-  std::error_code error_code;
-  std::filesystem::remove(path, error_code);
+  std::filesystem::path   path = "astl_intervalcsv_quoting.csv";
+  TempFileGuard           tmp_guard{path};
   astl::IntervalCsvOutput writer(path);
   REQUIRE(writer.Ready());
   // Metric with description containing comma and quotes, and a string sample containing quotes
@@ -218,9 +215,8 @@ TEST_CASE("IntervalCsvOutput quotes description and sanitizes string samples", "
 }
 
 TEST_CASE("IntervalCsvOutput orders metric groups alphabetically", "[intervalcsv]") {  // NOLINT
-  auto            path = std::filesystem::temp_directory_path() / "astl_intervalcsv_order.csv";
-  std::error_code error_code;
-  std::filesystem::remove(path, error_code);
+  std::filesystem::path   path = "astl_intervalcsv_order.csv";
+  TempFileGuard           tmp_guard{path};
   astl::IntervalCsvOutput writer(path);
   REQUIRE(writer.Ready());
   TestTargetBase              tgt{"Soc"};

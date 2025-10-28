@@ -21,7 +21,8 @@
 #include <cstdlib>
 #include <vector>
 
-#include "../../test_includes.hpp"  // must come first before any Catch2 usage
+#include "../../test_includes.hpp"   // must come first before any Catch2 usage
+#include "../../test_utilities.hpp"  // TempFileGuard
 #include "common/i_processed_sample_sink.hpp"
 #include "config/astl_configuration.hpp"
 #include "metric/i_metric.hpp"
@@ -212,20 +213,20 @@ TEST_CASE("OutputManager::EnsurePerfettoOutput and EnsureIntervalCsvOutput env v
 
 TEST_CASE("OutputManager::EnsureIntervalCsvOutput success", "[output_manager][intervalcsv]") {  // NOLINT
   astl::OutputManager mgr;
-  auto                path = std::filesystem::temp_directory_path() / "om_intervalcsv_success.csv";
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", path.string()) == ASTL_STATUS_SUCCESS);
+  TempFileGuard       tmp_guard{"om_intervalcsv_success.csv"};
+  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
   // Empty processed map still results in writer creation success
   astl::ProcessedSamplesMap empty;
   REQUIRE(mgr.OutputProcessedSamples(empty, astl::OutputType::INTERVAL_CSV, nullptr, nullptr) == ASTL_STATUS_SUCCESS);
   // File should exist (may be empty)
-  std::ifstream ifs(path);
+  std::ifstream ifs(tmp_guard.path);
   REQUIRE(ifs.is_open());
 }
 
 TEST_CASE("OutputManager::OutputProcessedSamples PERFETTO success", "[output_manager][perfetto]") {  // NOLINT
   astl::OutputManager mgr;
-  auto                path = std::filesystem::temp_directory_path() / "om_perfetto_success.json";
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", path.string()) == ASTL_STATUS_SUCCESS);
+  TempFileGuard       tmp_guard{"om_perfetto_success.json"};
+  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
   // Build minimal processed samples map with one sample
   TinyTarget                target;
   TinyMetric                metric;
@@ -233,7 +234,7 @@ TEST_CASE("OutputManager::OutputProcessedSamples PERFETTO success", "[output_man
   processed[&target][&metric].push_back(astl::ProcessedSampledData{
       astl::AstlValue{static_cast<uint64_t>(42)}, astl::SampleTimestamp{std::chrono::microseconds{12345}}});
   REQUIRE(mgr.OutputProcessedSamples(processed, astl::OutputType::PERFETTO, nullptr, nullptr) == ASTL_STATUS_SUCCESS);
-  std::ifstream ifs(path);
+  std::ifstream ifs(tmp_guard.path);
   REQUIRE(ifs.is_open());
   std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
   REQUIRE_FALSE(content.empty());
@@ -242,8 +243,8 @@ TEST_CASE("OutputManager::OutputProcessedSamples PERFETTO success", "[output_man
 TEST_CASE("OutputManager::OutputProcessedSamples INTERVAL_CSV success with sample",
           "[output_manager][intervalcsv]") {  // NOLINT
   astl::OutputManager mgr;
-  auto                path = std::filesystem::temp_directory_path() / "om_intervalcsv_sample.csv";
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", path.string()) == ASTL_STATUS_SUCCESS);
+  TempFileGuard       tmp_guard{"om_intervalcsv_sample.csv"};
+  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
   TinyTarget                target;
   TinyMetric                metric;
   astl::ProcessedSamplesMap processed;
@@ -251,7 +252,7 @@ TEST_CASE("OutputManager::OutputProcessedSamples INTERVAL_CSV success with sampl
       astl::AstlValue{static_cast<uint64_t>(7)}, astl::SampleTimestamp{std::chrono::microseconds{98765}}});
   REQUIRE(mgr.OutputProcessedSamples(processed, astl::OutputType::INTERVAL_CSV, nullptr, nullptr) ==
           ASTL_STATUS_SUCCESS);
-  std::ifstream ifs(path);
+  std::ifstream ifs(tmp_guard.path);
   REQUIRE(ifs.is_open());
   std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
   REQUIRE(content.find("timestamp_us,target,metric,value") != std::string::npos);
