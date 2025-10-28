@@ -20,7 +20,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}"/utils.sh
 get_all_source_files
 
-clang-format -i "${SOURCE_FILES[@]}"
+# filter out  Cython generated files (_*.cpp files in python/astl/)
+SOURCE_FILES_TO_FORMAT=()
+for file in "${SOURCE_FILES[@]}"; do
+	if [[ $file == python/astl/_*.cpp ]]; then
+		continue
+	fi
+	SOURCE_FILES_TO_FORMAT+=("$file")
+done
+clang-format -i "${SOURCE_FILES_TO_FORMAT[@]}"
 
 # Format .sh files using qlty cli
 if ! command -v qlty >/dev/null 2>&1; then

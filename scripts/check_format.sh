@@ -20,7 +20,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/utils.sh"
 get_all_source_files
 
-if ! clang-format --dry-run --Werror "${SOURCE_FILES[@]}"; then
+# filter out  Cython generated files (_*.cpp files in python/astl/)
+SOURCE_FILES_TO_CHECK=()
+for file in "${SOURCE_FILES[@]}"; do
+	if [[ $file == python/astl/_*.cpp ]]; then
+		continue
+	fi
+	SOURCE_FILES_TO_CHECK+=("$file")
+done
+
+if ! clang-format --dry-run --Werror "${SOURCE_FILES_TO_CHECK[@]}"; then
 	echo "💥 Code is not properly formatted! Run 'cmake --build . --target format'"
 	exit 1
 fi
