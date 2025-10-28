@@ -8,6 +8,7 @@
 
 #include "../../mock_classes.hpp"     // mocks for orchestrator dependencies
 #include "../../test_includes.hpp"    // include before catch2
+#include "../../test_utilities.hpp"   // TempFileGuard
 #include "astl_impl.hpp"              // Orchestrator
 #include "output/output_manager.hpp"  // concrete OutputManager
 
@@ -98,11 +99,8 @@ class TestMetricBase : public astl::IMetric {  // NOLINT(cppcoreguidelines-speci
 
 TEST_CASE("PerfettoOutput basic write & JSON structure", "[perfetto_output]") {  // NOLINT
   // Arrange
-  auto tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_test.json";
-  // Ensure clean file
-  std::error_code remove_error_code;
-  std::filesystem::remove(tmp_path, remove_error_code);
-  astl::PerfettoOutput writer(tmp_path);
+  auto                 tmp_guard = TempFileGuard{"astl_perfetto_test.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
 
   REQUIRE(writer.Ready());
 
@@ -122,7 +120,7 @@ TEST_CASE("PerfettoOutput basic write & JSON structure", "[perfetto_output]") { 
   // Assert
   REQUIRE(status == ASTL_STATUS_SUCCESS);
   // Read file
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   REQUIRE_FALSE(content.empty());
@@ -142,17 +140,15 @@ TEST_CASE("PerfettoOutput basic write & JSON structure", "[perfetto_output]") { 
 }
 
 TEST_CASE("PerfettoOutput emits process and thread metadata", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_metadata.json";
-  std::error_code remove_error_code;
-  std::filesystem::remove(tmp_path, remove_error_code);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_metadata.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
   TestTargetBase            target{"MetaTarget"};
   TestMetricBase            metric{"MetaMetric"};
   astl::ProcessedSamplesMap processed;
   processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(42), astl::SampleTimestamp{})};
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   // Global displayTimeUnit metadata should be present
@@ -165,17 +161,15 @@ TEST_CASE("PerfettoOutput emits process and thread metadata", "[perfetto_output]
 }
 
 TEST_CASE("PerfettoOutput empty map yields no events but valid JSON", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_empty.json";
-  std::error_code remove_error_code;  // NOLINT(readability-identifier-length) acceptable descriptive length
-  std::filesystem::remove(tmp_path, remove_error_code);
-  astl::PerfettoOutput writer(tmp_path);
+  auto                 tmp_guard = TempFileGuard{"astl_perfetto_empty.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
 
   astl::ProcessedSamplesMap empty;
   auto                      status = writer.WriteProcessedSamples(empty);
   REQUIRE(status == ASTL_STATUS_SUCCESS);
 
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   // With global trace_metadata event now emitted, no counter/instant events should appear but displayTimeUnit may.
@@ -188,10 +182,8 @@ TEST_CASE("PerfettoOutput empty map yields no events but valid JSON", "[perfetto
 
 // Edge case: names containing whitespace and quotes should be sanitized to underscores.
 TEST_CASE("PerfettoOutput sanitizes target and metric names", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_sanitize.json";
-  std::error_code remove_error_code;  // NOLINT
-  std::filesystem::remove(tmp_path, remove_error_code);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_sanitize.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
 
   // Custom dummy types with problematic names
@@ -206,7 +198,7 @@ TEST_CASE("PerfettoOutput sanitizes target and metric names", "[perfetto_output]
   auto status = writer.WriteProcessedSamples(processed);
   REQUIRE(status == ASTL_STATUS_SUCCESS);
 
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   REQUIRE_FALSE(content.empty());
@@ -225,10 +217,8 @@ TEST_CASE("PerfettoOutput sanitizes target and metric names", "[perfetto_output]
 
 // Multiple targets and metrics should generate an event per sample.
 TEST_CASE("PerfettoOutput multiple targets & metrics event count", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_multi.json";
-  std::error_code remove_error_code;
-  std::filesystem::remove(tmp_path, remove_error_code);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_multi.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
 
   astl::ProcessedSamplesMap   processed;
@@ -257,7 +247,7 @@ TEST_CASE("PerfettoOutput multiple targets & metrics event count", "[perfetto_ou
   auto status = writer.WriteProcessedSamples(processed);
   REQUIRE(status == ASTL_STATUS_SUCCESS);
 
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   REQUIRE_FALSE(content.empty());
@@ -274,10 +264,8 @@ TEST_CASE("PerfettoOutput multiple targets & metrics event count", "[perfetto_ou
 }
 
 TEST_CASE("PerfettoOutput instant string event", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_instant.json";
-  std::error_code remove_code;
-  std::filesystem::remove(tmp_path, remove_code);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_instant.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
 
   TestTargetBase                          target{"TStr"};
@@ -289,7 +277,7 @@ TEST_CASE("PerfettoOutput instant string event", "[perfetto_output]") {  // NOLI
   processed[&target][&metric] = samples;
 
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   REQUIRE(content.find("\"ph\":\"I\"") != std::string::npos);
@@ -298,10 +286,8 @@ TEST_CASE("PerfettoOutput instant string event", "[perfetto_output]") {  // NOLI
 }
 
 TEST_CASE("PerfettoOutput per-metric tid differentiation", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_tid.json";
-  std::error_code remove_error_code;
-  std::filesystem::remove(tmp_path, remove_error_code);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_tid.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
 
   TestTargetBase target{"T"};
@@ -316,7 +302,7 @@ TEST_CASE("PerfettoOutput per-metric tid differentiation", "[perfetto_output]") 
       std::vector<astl::ProcessedSampledData>{MakeSample(static_cast<uint64_t>(2), base_ts)};
 
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   auto        extract_tid_for_metric = [&](const std::string& metric_composite) {
@@ -359,10 +345,8 @@ TEST_CASE("PerfettoOutput per-metric tid differentiation", "[perfetto_output]") 
 }
 
 TEST_CASE("PerfettoOutput pid/tid stability across multiple writes", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_stability.json";
-  std::error_code remove_code;
-  std::filesystem::remove(tmp_path, remove_code);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_stability.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
 
   TestTargetBase target{"TStable"};
@@ -383,7 +367,7 @@ TEST_CASE("PerfettoOutput pid/tid stability across multiple writes", "[perfetto_
       MakeSample(static_cast<uint64_t>(12), base_ts + astl::SampleTimestamp::duration{2})};
   REQUIRE(writer.WriteProcessedSamples(processed2) == ASTL_STATUS_SUCCESS);
 
-  std::ifstream stability_stream(tmp_path);
+  std::ifstream stability_stream(tmp_guard.path);
   REQUIRE(stability_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(stability_stream)), std::istreambuf_iterator<char>());
   // Expect two events for MA and one for MB
@@ -432,10 +416,8 @@ TEST_CASE("PerfettoOutput pid/tid stability across multiple writes", "[perfetto_
 }
 
 TEST_CASE("PerfettoOutput JSON escaping for instant event", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_escape.json";
-  std::error_code remove_error_code;
-  std::filesystem::remove(tmp_path, remove_error_code);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_escape.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
   TestTargetBase              target{"TEsc"};
   TestMetricBase              metric{"EscMetric"};
@@ -446,18 +428,16 @@ TEST_CASE("PerfettoOutput JSON escaping for instant event", "[perfetto_output]")
       astl::ProcessedSampledData{astl::AstlValue{raw}, base_ts}
   };
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream escape_stream(tmp_path);
+  std::ifstream escape_stream(tmp_guard.path);
   REQUIRE(escape_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(escape_stream)), std::istreambuf_iterator<char>());
   REQUIRE(content.find("Quote:\\\" Backslash:\\\\ Newline:\\n Tab:\\t") != std::string::npos);
 }
 
 TEST_CASE("PerfettoOutput skips null target and metric", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_nulls.json";
-  std::error_code remove_error_code;
-  std::filesystem::remove(tmp_path, remove_error_code);
+  TempFileGuard tmp_guard{"astl_perfetto_nulls.json"};
   {
-    astl::PerfettoOutput writer(tmp_path);
+    astl::PerfettoOutput writer(tmp_guard.path);
     REQUIRE(writer.Ready());
 
     astl::ProcessedSamplesMap processed;
@@ -469,7 +449,7 @@ TEST_CASE("PerfettoOutput skips null target and metric", "[perfetto_output]") { 
 
     REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   }
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   // No valid target+metric pairs -> result should be an empty array body.
@@ -479,11 +459,9 @@ TEST_CASE("PerfettoOutput skips null target and metric", "[perfetto_output]") { 
 }
 
 TEST_CASE("PerfettoOutput skips empty samples vector", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_empty_samples.json";
-  std::error_code remove_error_code;
-  std::filesystem::remove(tmp_path, remove_error_code);
+  TempFileGuard tmp_guard{"astl_perfetto_empty_samples.json"};
   {
-    astl::PerfettoOutput writer(tmp_path);
+    astl::PerfettoOutput writer(tmp_guard.path);
     REQUIRE(writer.Ready());
     TestTargetBase            target{"TEmpty"};
     TestMetricBase            metric{"MEmpty"};
@@ -491,7 +469,7 @@ TEST_CASE("PerfettoOutput skips empty samples vector", "[perfetto_output]") {  /
     processed[&target][&metric] = {};  // empty vector
     REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   }
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   // Expect process metadata (pid) but no counter events since sample vector empty.
@@ -500,10 +478,8 @@ TEST_CASE("PerfettoOutput skips empty samples vector", "[perfetto_output]") {  /
 }
 
 TEST_CASE("PerfettoOutput category inference - power & temperature (unit-based)", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_category_power_temp.json";
-  std::error_code remove_error_code;
-  std::filesystem::remove(tmp_path, remove_error_code);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_category_power_temp.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
 
   TestTargetBase target{"CatT"};
@@ -552,7 +528,7 @@ TEST_CASE("PerfettoOutput category inference - power & temperature (unit-based)"
   processed[&target][&temp_metric] =
       std::vector<astl::ProcessedSampledData>{MakeSample(static_cast<uint64_t>(2), base_timestamp)};
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   REQUIRE(content.find("\"cat\":\"Power\"") != std::string::npos);
@@ -560,10 +536,8 @@ TEST_CASE("PerfettoOutput category inference - power & temperature (unit-based)"
 }
 
 TEST_CASE("PerfettoOutput category inference - frequency (unit-based)", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_category_frequency.json";
-  std::error_code remove_error;
-  std::filesystem::remove(tmp_path, remove_error);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_category_frequency.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
   TestTargetBase target{"CatT2"};
   class FreqMetric : public astl::IMetric {
@@ -606,17 +580,15 @@ TEST_CASE("PerfettoOutput category inference - frequency (unit-based)", "[perfet
   astl::ProcessedSamplesMap   processed;
   processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(1000), base_timestamp)};
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   REQUIRE(content.find("\"cat\":\"Frequency\"") != std::string::npos);
 }
 
 TEST_CASE("PerfettoOutput category inference - voltage (unit-based)", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_category_voltage.json";
-  std::error_code remove_error;
-  std::filesystem::remove(tmp_path, remove_error);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_category_voltage.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
   TestTargetBase target{"CatT2"};
   class VoltMetric : public astl::IMetric {
@@ -659,17 +631,15 @@ TEST_CASE("PerfettoOutput category inference - voltage (unit-based)", "[perfetto
   astl::ProcessedSamplesMap   processed;
   processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(1200), base_timestamp)};
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   REQUIRE(content.find("\"cat\":\"Voltage\"") != std::string::npos);
 }
 
 TEST_CASE("PerfettoOutput category inference - state (unit-based)", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_category_state.json";
-  std::error_code remove_error;
-  std::filesystem::remove(tmp_path, remove_error);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_category_state.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
   TestTargetBase target{"CatT2"};
   class StateMetric : public astl::IMetric {
@@ -714,17 +684,15 @@ TEST_CASE("PerfettoOutput category inference - state (unit-based)", "[perfetto_o
       astl::ProcessedSampledData{astl::AstlValue{std::string{"EnteringSleep"}}, base_timestamp}
   };
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream input_stream(tmp_path);
+  std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
   REQUIRE(content.find("\"cat\":\"State\"") != std::string::npos);
 }
 
 TEST_CASE("PerfettoOutput category inference fallback (unit-based)", "[perfetto_output]") {  // NOLINT
-  auto            tmp_path = std::filesystem::temp_directory_path() / "astl_perfetto_category_fallback.json";
-  std::error_code remove_code;
-  std::filesystem::remove(tmp_path, remove_code);
-  astl::PerfettoOutput writer(tmp_path);
+  TempFileGuard        tmp_guard{"astl_perfetto_category_fallback.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
   TestTargetBase target{"FTT"};
   class UnitMetricFallback : public astl::IMetric {  // NOLINT(cppcoreguidelines-special-member-functions)
@@ -768,7 +736,7 @@ TEST_CASE("PerfettoOutput category inference fallback (unit-based)", "[perfetto_
   processed[&target][&metric] =
       std::vector<astl::ProcessedSampledData>{MakeSample(static_cast<uint64_t>(5), base_timestamp)};
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream input_stream3(tmp_path);
+  std::ifstream input_stream3(tmp_guard.path);
   REQUIRE(input_stream3.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream3)), std::istreambuf_iterator<char>());
   // Fallback should now be an empty category string ("cat":"")
@@ -778,7 +746,8 @@ TEST_CASE("PerfettoOutput category inference fallback (unit-based)", "[perfetto_
 // New test: validate deferred Perfetto emission occurs only at StopCollection.
 TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[perfetto_output]") {  // NOLINT
   // Arrange: set environment variable to a temp file path and ensure it does not yet exist.
-  auto            perfetto_path = std::filesystem::temp_directory_path() / "astl_perfetto_deferred.json";
+  TempFileGuard   tmp_guard{"astl_perfetto_deferred.json"};
+  const auto&     perfetto_path = tmp_guard.path;
   std::error_code remove_error_code;
   std::filesystem::remove(perfetto_path, remove_error_code);
   // Guarantee clean start.
@@ -847,7 +816,8 @@ TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[
 
 // Negative path: env var set but no processed samples sunk; expect empty trace file body after StopCollection.
 TEST_CASE("PerfettoOutput deferred emission empty map", "[perfetto_output]") {  // NOLINT
-  auto            perfetto_path = std::filesystem::temp_directory_path() / "astl_perfetto_empty_deferred.json";
+  TempFileGuard   tmp_guard{"astl_perfetto_empty_deferred.json"};
+  const auto&     perfetto_path = tmp_guard.path;
   std::error_code remove_error_code;
   std::filesystem::remove(perfetto_path, remove_error_code);
   REQUIRE_FALSE(std::filesystem::exists(perfetto_path));
