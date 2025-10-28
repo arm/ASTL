@@ -37,6 +37,22 @@ if ! command -v qlty >/dev/null 2>&1; then
 	exit 0
 fi
 
+# https://confluence.arm.com/display/ITINFRA/Using+npm+Mirrors
+# set up an artifactory mirror for NPM packages, since direct access to npmjs.org is blocked on ARM network
+
+PUBLIC_NPM="https://registry.npmjs.org/"
+
+probe() { # fast: 1s connect timeout, 2s overall, no output
+	curl --silent --head --fail \
+		--connect-timeout 1 --max-time 2 \
+		--output /dev/null "$1"
+}
+
+# if we can't connect to the public npm register, use the artifactory mirror
+if probe "$PUBLIC_NPM"; then
+	npm config set registry https://artifactory.arm.com/artifactory/api/npm/mirrors.npmjs_org
+fi
+
 qlty fmt ./scripts/
 qlty fmt ./*.md
 qlty fmt ./.github/
