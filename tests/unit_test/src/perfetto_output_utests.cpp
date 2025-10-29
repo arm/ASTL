@@ -9,13 +9,13 @@
 #include "../../mock_classes.hpp"     // mocks for orchestrator dependencies
 #include "../../test_includes.hpp"    // include before catch2
 #include "../../test_utilities.hpp"   // TempFileGuard
-#include "astl_impl.hpp"              // Orchestrator
 #include "output/output_manager.hpp"  // concrete OutputManager
 
 // Bring trompeloeil wildcard into scope for ALLOW_CALL expectations used in deferred emission test.
 using trompeloeil::_;
 #include "common/astl_value.hpp"
 #include "common/i_processed_sample_sink.hpp"
+#include "orchestrator/orchestrator.hpp"  // Added for astl::Orchestrator direct construction
 #include "output/perfetto_output.hpp"
 #include "target.hpp"
 

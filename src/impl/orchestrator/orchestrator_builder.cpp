@@ -28,11 +28,10 @@
 #include "collector/collector_manager.hpp"
 #include "collector/i_collector.hpp"
 #include "common/capabilities.hpp"
-#include "config/configuration_manager.hpp"
+#include "config/astl_configuration.hpp"
 #include "metric/metric_builder.hpp"
 #include "metric/metric_manager.hpp"
 #include "orchestrator/orchestrator.hpp"
-#include "orchestrator/orchestrator_builder.hpp"
 #include "output/output_builder.hpp"
 #include "output/output_manager.hpp"
 #include "target.hpp"
@@ -41,19 +40,31 @@
 
 /** @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
  */
-ASTL_API auto astlInitialize(const astl_initialization_parameters_t* init_params) -> astl_status_code {
-  if (!init_params) {
-    return ASTL_STATUS_BAD_ARGUMENT;
+auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_status_code {
+  auto topology_manager = astl::BuildTopologyManager(configuration);
+  if (!topology_manager) {
+    return topology_manager.error();
   }
 
-  if (init_params->_size != sizeof(astl_initialization_parameters_t)) {
-    return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
+  auto collector_manager = astl::BuildCollectorManager(topology_manager.value()->GetTargets(), configuration);
+  if (!collector_manager) {
+    return collector_manager.error();
   }
 
-  auto configuration = astl::ConfigurationManager::GetConfiguration(init_params);
-  if (!configuration) {
-    return configuration.error();
+  auto metric_manager = astl::BuildMetricManager(topology_manager.value()->GetTargets(), configuration);
+  if (!metric_manager) {
+    return metric_manager.error();
   }
 
-  return BuildOrchestrator(configuration.value());
+  auto output_manager = astl::BuildOutputManager();
+  if (!output_manager) {
+    return output_manager.error();
+  }
+
+  // wire it all up in our new Orchestrator and replace the global instance with it.
+  // Note, Orchestrator destructor should shut down all collection, etc.
+  astl::Orchestrator::InitializeInstance(std::move(topology_manager.value()), std::move(collector_manager.value()),
+                                         std::move(metric_manager.value()), std::move(output_manager.value()));
+  // the orchestrator owns targets
+  return ASTL_STATUS_SUCCESS;
 }

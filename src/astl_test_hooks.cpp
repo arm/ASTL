@@ -1,6 +1,6 @@
 #include "astl/astl_test_hooks.h"
 
-#include "astl_impl.hpp"
+#include "orchestrator/orchestrator.hpp"
 
 // Swaps out the current orchestrator's raw pointer and replaces it with a new raw pointer.
 // For use only in tests, mostly tests covering the C -> C++ wrapper layer
