@@ -14,6 +14,8 @@ if ! command -v clang-format >/dev/null 2>&1; then
 	exit 1
 fi
 
+clang-format --version
+
 # use utils.sh's get_all_source_files to export  SOURCE_FILES
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091

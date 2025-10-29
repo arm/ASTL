@@ -16,24 +16,13 @@
  * under the License.
  ******************************************************************************/
 
-#ifndef TOPOLOGY_BUILDER_HPP_
-#define TOPOLOGY_BUILDER_HPP_
-
-#include <expected>
-#include <memory>
+#ifndef ORCHESTRATOR_BUILDER_HPP_
+#define ORCHESTRATOR_BUILDER_HPP_
 
 #include "astl/astl_errors.h"
-#include "config/configuration_manager.hpp"
-#include "target.hpp"
-#include "topology/i_topology_manager.hpp"
+#include "astl/astl_telemetry.h"
+#include "config/astl_configuration.hpp"
 
-namespace astl {
-/**
- * @brief Initialize a topology manager.  This will run as many topology plugins as possible
- * to discover what is available on the current platform.
- */
-[[nodiscard]] auto BuildTopologyManager(const AstlConfiguration& configuration)
-    -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code>;
-}  // namespace astl
+[[nodiscard]] auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_status_code;
 
-#endif  // TOPOLOGY_BUILDER_
+#endif  // ORCHESTRATOR_BUILDER_HPP_

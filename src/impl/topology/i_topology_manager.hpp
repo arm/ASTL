@@ -24,7 +24,7 @@
 #include <vector>
 
 #include "collector/i_collector_manager.hpp"
-#include "config/configuration_manager.hpp"  /// @todo https://jira.arm.com/browse/ASTL-131 - Try to remove dependencies with config/metric managers
+#include "config/configuration_manager.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "target.hpp"
 
