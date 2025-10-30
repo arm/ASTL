@@ -23,7 +23,7 @@ config preset='debug':
 
 # build library, samples, unit tests
 # just config must be run first as a one-time step
-build preset='debug':
+build preset='debug': config
     #!/usr/bin/env bash
     if [ ! -d build/ ]; then
         echo "[build] Build directory missing; running config step first" > /dev/stderr
