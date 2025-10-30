@@ -66,14 +66,12 @@ default = true
 name = "actionlint"
 
 [[plugin]]
-name = "checkov"
-
-[[plugin]]
 name = "markdownlint"
 mode = "comment"
 
 [[plugin]]
 name = "prettier"
+version = "3.6.2"
 
 [[plugin]]
 name = "ripgrep"
@@ -85,12 +83,15 @@ name = "shellcheck"
 [[plugin]]
 name = "shfmt"
 
+# scan for vulnerabilities in container images and filesystems,
+# as well as github repos for secrets, keys, and sensitive info
 [[plugin]]
 name = "trivy"
 drivers = [
   "config",
 ]
 
+# scan for leaked credentials, keys, etc.
 [[plugin]]
 name = "trufflehog"
 
