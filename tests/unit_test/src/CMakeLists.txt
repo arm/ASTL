@@ -35,6 +35,7 @@ set(UNIT_TEST_SRCS
     perfetto_output_utests.cpp
     interval_csv_utests.cpp
     summary_csv_output_utests.cpp
+    protobuf_serdes_utests.cpp
 )
 
 find_library(SENSORS_LIB sensors)
@@ -46,6 +47,8 @@ endif()
 
 add_executable(unit_test ${UNIT_TEST_SRCS})
 
+target_compile_definitions(unit_test PRIVATE ASTL_BUILD)
+
 if (SENSORS_LIB)
     target_link_libraries(unit_test PRIVATE ${SENSORS_LIB})
 endif()
@@ -54,11 +57,15 @@ endif()
 include(Warnings)
 set_project_warnings(unit_test)
 
+target_include_directories(unit_test
+    PRIVATE
+        "${CMAKE_BINARY_DIR}/src/impl/gen"
+)
+
 # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
 target_link_libraries(unit_test
     # test targets should link astl publicly so that gcovr can measure how much of astl_static is covered
     PUBLIC
-        Astl::astl
         Astl::astl_static
     PRIVATE
         Catch2::Catch2WithMain

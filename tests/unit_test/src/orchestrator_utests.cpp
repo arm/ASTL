@@ -102,6 +102,8 @@ TEST_CASE("Orchestrator-StopCollection", "[Orchestrator]") {
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string name = "mock_target";
+  ALLOW_CALL(*mock_target, Name()).RETURN(name);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
 
@@ -218,6 +220,8 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV only emission", "[Orchestrat
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string name = "mock_target";
+  ALLOW_CALL(*mock_target, Name()).RETURN(name);
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.push_back(std::move(mock_target));
   REQUIRE(topology_manager->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
@@ -254,6 +258,8 @@ TEST_CASE("Orchestrator-StopCollection PERFETTO only emission", "[Orchestrator][
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string name = "mock_target";
+  ALLOW_CALL(*mock_target, Name()).RETURN(name);
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.push_back(std::move(mock_target));
   REQUIRE(topology_manager->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
@@ -298,6 +304,8 @@ TEST_CASE("Orchestrator-StopCollection dual PERFETTO+INTERVAL_CSV ordered emissi
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string name = "mock_target";
+  ALLOW_CALL(*mock_target, Name()).RETURN(name);
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.push_back(std::move(mock_target));
   REQUIRE(topology_manager->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
@@ -338,6 +346,8 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV idempotent emission", "[Orch
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string name = "mock_target";
+  ALLOW_CALL(*mock_target, Name()).RETURN(name);
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.push_back(std::move(mock_target));
   REQUIRE(topology_manager->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);

@@ -14,6 +14,8 @@ endif()
 
 add_executable(wrapper_test wrapper_test.cpp)
 
+target_compile_definitions(wrapper_test PRIVATE ASTL_BUILD)
+
 include(Warnings)
 set_project_warnings(wrapper_test)
 
@@ -21,7 +23,6 @@ set_project_warnings(wrapper_test)
 target_link_libraries(wrapper_test
     # test targets should link astl publicly so that gcovr can measure how much of astl_static is covered
     PUBLIC
-        Astl::astl
         Astl::astl_static
     PRIVATE
         Catch2::Catch2WithMain
