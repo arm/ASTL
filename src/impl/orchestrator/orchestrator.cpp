@@ -2,9 +2,13 @@
 
 #include <algorithm>  // for std::max used in bulk reserve heuristic
 #include <cstdlib>    // for std::getenv
+#include <filesystem>
+#include <fstream>
 
 #include "astl/astl_errors.h"
+#include "astl_defines.hpp"
 #include "astl_logger.hpp"
+#include "serdes/protobuf_serdes.hpp"
 
 namespace astl {
 
@@ -23,7 +27,12 @@ constexpr std::size_t kRawSampleGrowthBias        = 8;  // small constant slack 
 constexpr std::size_t kProcSampleGrowthNumerator   = 3;
 constexpr std::size_t kProcSampleGrowthDenominator = 2;
 constexpr std::size_t kProcSampleGrowthBias        = 8;
+
+// TODO(ASTL-242): Investigate optimal max batch size
+constexpr std::size_t kMaxSamplesPerBatch = 1024;
 }  // namespace
+
+namespace fs = std::filesystem;
 
 Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>  topology_manager,
                            std::unique_ptr<ICollectorManager> collector_manager,
@@ -203,9 +212,51 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
   }
 
   std::unique_lock lock{_raw_samples_mtx};
+
+  // serialize any remaining in-memory samples for this target into the batch file, then clear
+  auto it = _raw_samples.find(target);
+  if (it != _raw_samples.end() && !it->second.empty()) {
+    auto res = astl::ProtobufSerDes::SerializeCurrentBatch(target->Name(), it->second);
+    if (res != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("Failed to serialize remaining samples for {}", target->Name());
+      return res;
+    }
+    it->second.clear();
+  }
+
+  // rebuild raw samples from serialized temporary file
+  std::vector<RawSampledData> rebuilt_samples;
+  const fs::path              dir       = "tmp";
+  const auto                  file_path = dir / (target->Name() + ".astl");
+  std::ifstream               cache_file(file_path, std::ios::binary);
+
+  if (fs::exists(file_path)) {
+    if (!cache_file) {
+      ASTL_LOG_ERROR("Failed to open {} for reading", file_path.string());
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+
+    auto deser = astl::ProtobufSerDes::Deserialize(cache_file);
+    if (!deser.has_value()) {
+      ASTL_LOG_ERROR("Failed to deserialize samples from {}: {}", file_path.string(), astlStatusString(deser.error()));
+      return deser.error();
+    }
+
+    rebuilt_samples.insert(rebuilt_samples.end(), std::make_move_iterator(deser->begin()),
+                           std::make_move_iterator(deser->end()));
+  } else {
+    ASTL_LOG_DEBUG("No temporary sample file for target {}", target->Name());
+  }
+
+  // TODO (ASTL-224): Handle batch raw sample processing instead of loading all into memory at once.
+  RawSamplesMap raw_samples{
+      {target, std::move(rebuilt_samples)}
+  };
+
   // TODO(ASTL-209): Move CollectorManager::StopOnTarget before ProcessRawSamples when
   // implementing Orchestrator State Machine to ensure collection is stopped before processing begins.
-  astl_status_code status = _metric_manager->ProcessRawSamples(_raw_samples);
+  astl_status_code status = _metric_manager->ProcessRawSamples(raw_samples);
+
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
@@ -334,9 +385,17 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
     return result;
   }
   ASTL_LOG_DEBUG("Received {} samples for target {}", raw_samples.size(), properties._name);
+
   if (!raw_samples.empty()) [[likely]] {
-    std::scoped_lock lock{_raw_samples_mtx};
-    auto            &target_samples_vec = _raw_samples[target];
+    std::vector<RawSampledData> batch_samples{};
+    std::scoped_lock            lock{_raw_samples_mtx};
+    auto                       &target_samples_vec = _raw_samples[target];
+
+    if (target_samples_vec.size() >= kMaxSamplesPerBatch) {
+      ASTL_LOG_DEBUG("target_sample_vec size {} exceeded max batch size {}, serializing current batch",
+                     target_samples_vec.size(), kMaxSamplesPerBatch);
+      batch_samples.swap(target_samples_vec);
+    }
 
     // Bulk reserve once based on total required size rather than per-sample growth decisions.
     // We keep the 1.5x + bias heuristic but ensure we always meet the exact required size.
@@ -358,6 +417,13 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
       auto timestamp_ns = sample.timestamp.time_since_epoch().count();
       auto value        = sample.value;
       ASTL_LOG_DEBUG("Sample - timestamp (ns since epoch): {}, value: {}", timestamp_ns, value);
+    }
+
+    if (!batch_samples.empty()) {
+      auto res = astl::ProtobufSerDes::SerializeCurrentBatch(properties._name, batch_samples);
+      if (res != ASTL_STATUS_SUCCESS) {
+        return res;
+      }
     }
   }
 

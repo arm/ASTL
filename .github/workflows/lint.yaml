@@ -70,6 +70,9 @@ jobs:
           -S ${{ github.workspace }}
           --preset ${{ matrix.cmake_preset }}
 
+      - name: ⚙️ CMake - Generate Proto Headers
+        run: cmake --build --preset ${{ matrix.cmake_preset }} --target proto_gen
+
       - name: 🧹 YAML Lint
         if: matrix.os == 'ubuntu-latest'
         run: yamllint ${{ github.workspace }}/.github/workflows/*.yaml

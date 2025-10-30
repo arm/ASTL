@@ -99,11 +99,17 @@ message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
 
 # Need exact match with Clang to avoid matching "AppleClang"
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  # Workaround for std::expected not available in clang 18 and earlier, use gcc's libstdc++
-  add_compile_options(
-    -stdlib=libstdc++ -D__cpp_concepts=202002 -Wno-builtin-macro-redefined
-  )
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+# Workaround for std::expected not available in clang 18 and earlier, use gcc's libstdc++
+  add_compile_options(-stdlib=libstdc++ -D__cpp_concepts=202002 -Wno-builtin-macro-redefined)
+
+  if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 18)
+# add -fclang-abi-compat=17 to fix absl compile errors with clang 18+ (see links below)
+# - https://github.com/abseil/abseil-cpp/issues/1747
+# - https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=280885
+    add_compile_options(-fclang-abi-compat=17)
+  endif()
+
 endif()
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

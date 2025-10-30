@@ -47,6 +47,13 @@ target_sources(
         "${CMAKE_CURRENT_SOURCE_DIR}/operation/libsensors_operation_builder.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/counter.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/target.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/serdes/protobuf_serdes.cpp"
+        # for unit tests
+        "${PROJECT_SOURCE_DIR}/src/astl_errors.cpp"
+        "${PROJECT_SOURCE_DIR}/src/astl_initialize.cpp"
+        "${PROJECT_SOURCE_DIR}/src/astl_telemetry.cpp"
+        "${PROJECT_SOURCE_DIR}/src/astl_test_hooks.cpp"
+        "${PROJECT_SOURCE_DIR}/src/astl_version.cpp"
 )
 
 if (ASTL_INCLUDE_LIBSENSORS)
@@ -92,6 +99,36 @@ if (JSON_DIAGNOSTICS)
     )
 endif()
 
+target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_BUILD)
+
+find_package(Protobuf REQUIRED)
+
+set(PROTO_FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/serdes/raw_samples.proto"
+)
+set(GEN_DIR "${CMAKE_BINARY_DIR}/src/impl/gen")
+file(MAKE_DIRECTORY "${GEN_DIR}")
+
+# Generate .pb.cc and .pb.h
+protobuf_generate(
+  LANGUAGE        cpp
+  OUT_VAR         GEN_FILES
+  PROTOC_OUT_DIR  "${GEN_DIR}"
+  PROTOS          ${PROTO_FILES}
+)
+
+# Separate target to just run protoc
+add_custom_target(proto_gen DEPENDS ${GEN_FILES})
+
+target_sources(${LIBRARY_NAME} PRIVATE ${GEN_FILES})
+
+target_include_directories(${LIBRARY_NAME}
+  PRIVATE
+    "${GEN_DIR}"
+    ${Protobuf_INCLUDE_DIRS}
+)
+
+target_link_libraries(${LIBRARY_NAME} PRIVATE protobuf::libprotobuf)
 
 # find spdlog, include it as a header-only dependency. This is a little slower (+10-12s) to compile ASTL,
 # but necessary because #including spdlog headers in multiple translation units causes linker errors like LNK2005

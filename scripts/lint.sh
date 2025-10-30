@@ -135,6 +135,10 @@ EXTRA_ARGS+=(--extra-arg=-std=c++23)
 EXTRA_ARGS+=(--extra-arg=-D__cpp_concepts=202002L)
 # set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_sysfs/CMakeLists.txt
 EXTRA_ARGS+=(--extra-arg=-DFUSE_USE_VERSION=316)
+# if on x86_64, disable mmx intrinsics for linting to avoid issues with some CI runners
+if [[ "$(uname -m)" == "x86_64" ]]; then
+	EXTRA_ARGS+=(--extra-arg=-mno-mmx --extra-arg=-mno-sse --extra-arg=-mno-sse2)
+fi
 
 ## Check for presense of libsensors, to determine if we should bother linting
 ## the libsensors examples
@@ -144,6 +148,14 @@ int main(void){return 0;}' | gcc -xc - -o /dev/null 2>/dev/null; then
 	EXTRA_ARGS+=(--extra-arg=-DASTL_INCLUDE_LIBSENSORS)
 else
 	echo "libsensors header is unavailable"
+fi
+
+PROTO_GENERATED_DIR="${BUILD_DIR}/src/impl/gen"
+if [[ -d ${PROTO_GENERATED_DIR} ]]; then
+	SYS_INCLUDE_PATHS+=(-isystem "${PROTO_GENERATED_DIR}")
+	echo "Including generated protobuf headers from ${PROTO_GENERATED_DIR}"
+else
+	echo "Warning: Protobuf generated directory not found at ${PROTO_GENERATED_DIR}"
 fi
 
 if [[ ${#SOURCE_FILES_TO_LINT[@]} -gt 0 ]]; then
