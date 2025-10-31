@@ -332,23 +332,28 @@ df = pd.read_csv("/tmp/astl_intervals.csv")
      export ASTL_OUTPUT_SUMMARY_CSV=/tmp/astl_summary.csv
      ```
 
-   - Format: One header line then one row per (metric, target) pair summarizing all samples gathered for that
-     pair. Columns:
-     - `MetricName` – metric name (sanitized where necessary)
-     - `Target` – target name
-     - `Min` – minimum numeric sample value (or `N/A` if no numeric samples)
-     - `Max` – maximum numeric sample value (or `N/A` if no numeric samples)
-     - `Average` – arithmetic mean of numeric samples (or `N/A` if no numeric samples)
-     - `SampleCount` – total sample count (numeric + string) collected for the metric/target pair
+   MinMaxAvg CSV Table
+   - Format: One header line then one row per (metric, target) pair summarizing all samples gathered for that pair.
+
+   - Columns:
+
+   - `MetricName` – metric name (sanitized where necessary)
+   - `Target` – target name
+   - `Min` – minimum numeric sample value (or `N/A` if no numeric samples)
+   - `Max` – maximum numeric sample value (or `N/A` if no numeric samples)
+   - `Average` – arithmetic mean of numeric samples (or `N/A` if no numeric samples)
+   - `SampleCount` – total sample count (numeric + string) collected for the metric/target pair
+
    - Header: `MetricName,Target,Min,Max,Average,SampleCount`.
    - Grouping: Rows are grouped by metric name internally; current implementation does not insert blank lines between groups (compact listing).
    - Value Handling:
+     - MinMaxAvg summary are are only produced when the metric is of type ASTL_METRIC_VALUE, ASTL_METRIC_DELTA or ASTL_METRIC_RATE
      - If a metric produced only string samples (no numeric values), Min/Max/Average are `N/A`.
      - Numeric formatting matches the internal `to_string` representation (no forced scientific notation).
    - Empty collection yields an empty file (no header).
-   - Rationale: Provides a quick, space-efficient statistical overview of all collected metrics to support
-     rapid triage and selection of metrics for deeper time-series analysis (Interval CSV or Perfetto). Often
-     significantly smaller than full interval dumps for long runs.
+     - Rationale: Provides a quick, space-efficient statistical overview of all collected metrics to support
+       rapid triage and selection of metrics for deeper time-series analysis (Interval CSV or Perfetto). Often
+       significantly smaller than full interval dumps for long runs.
 
 Example snippet:
 
@@ -358,6 +363,36 @@ SoC Power,SoC,2.91,3.42,3.14,150
 SoC Temp,SoC,44.0,57.0,52.3,150
 Cluster0 Freq,Cluster0,900.0,1500.0,1200.5,150
 GPU State,GPU,N/A,N/A,N/A,12
+
+```
+
+Histogram CSV Table
+
+- Format: one header line, then one row per bin for each (metric, target) pair.
+
+- Columns:
+  `MetricName` – metric name (sanitized where necessary)
+  `Target` – target name
+  `Type` – `discrete` or `ranged` histogram type.
+  `Value/Range` – numeric range. For `discrete`, the exact value.
+  Count` – number of samples falling in this bin.
+
+- Header: `MetricName,Target,Type,Value/Range, Count`.
+  Grouping: Rows are grouped by metric name internally; current implementation does not insert blank lines between groups (compact listing).
+  Value Handling:
+- Discrete histograms are only produced when the metric is of type ASTL_METRIC_VALUE, ASTL_METRIC_FINITE_SET_VALUE or ASTL_METRIC_EVENT
+- They are appropriate when the samples yield non-rangeable categories (categorical data, small integer ranges, or finite sets).
+- Each unique value becomes a bin.
+
+Example snippet:
+
+```csv
+MetricName,Target,Type,Value,Count
+CPU State,TLM_0,discrete,Idle,200
+CPU State,TLM_0,discrete,Busy,300
+CPU State,TLM_1,discrete,Idle,100
+CPU State,TLM_1,discrete,Busy,400
+
 ```
 
 Import into Python:
