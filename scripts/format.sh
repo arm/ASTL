@@ -17,17 +17,21 @@ fi
 # use utils.sh's get_all_source_files to export SOURCE_FILES array
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
+
+echo 'Running utils.sh'
 source "${SCRIPT_DIR}"/utils.sh
 get_all_source_files
 
 # filter out  Cython generated files (_*.cpp files in python/astl/)
+echo 'Generating list of source files to format'
 SOURCE_FILES_TO_FORMAT=()
 for file in "${SOURCE_FILES[@]}"; do
-	if [[ $file == python/astl/_*.cpp ]]; then
+	if echo "$file" | grep --quiet 'python.*/astl/_.*\.cpp$'; then
 		continue
 	fi
 	SOURCE_FILES_TO_FORMAT+=("$file")
 done
+echo 'Running clang-format'
 clang-format -i "${SOURCE_FILES_TO_FORMAT[@]}"
 
 # Format .sh files using qlty cli
@@ -42,6 +46,7 @@ fi
 
 PUBLIC_NPM="https://registry.npmjs.org/"
 
+echo 'Checking connectivity to public npm registry'
 probe() { # fast: 1s connect timeout, 2s overall, no output
 	curl --silent --head --fail \
 		--connect-timeout 1 --max-time 2 \
@@ -53,6 +58,7 @@ if probe "$PUBLIC_NPM"; then
 	npm config set registry https://artifactory.arm.com/artifactory/api/npm/mirrors.npmjs_org
 fi
 
+echo 'Running qlty'
 qlty fmt ./scripts/
 qlty fmt ./*.md
 qlty fmt ./.github/
