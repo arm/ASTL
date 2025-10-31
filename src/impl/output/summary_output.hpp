@@ -38,9 +38,9 @@
 #include <vector>
 
 #include "astl/astl_errors.h"
-#include "common/astl_defines.hpp"  // ProcessedSamplesMap, ITarget, IMetric
-#include "output/i_output.hpp"      // Base interface
-#include "output/summarizer.hpp"    // MinMaxAvgSummarizer, MinMaxAvgSummary
+#include "common/astl_defines.hpp"
+#include "output/i_output.hpp"
+#include "output/summarizer.hpp"
 
 namespace astl {
 
@@ -54,9 +54,11 @@ namespace astl {
 class SummaryOutput : public IOutput {
  public:
   /**
-   * @brief Default constructor.
+   * @brief Constructor with a list of summarizers.
+   *
+   * @param summarizers Vector of unique_ptr to ISummarizer implementations
    */
-  SummaryOutput() = default;
+  explicit SummaryOutput(std::vector<std::unique_ptr<ISummarizer>> summarizers);
 
   SummaryOutput(const SummaryOutput&)                    = delete;
   auto operator=(const SummaryOutput&) -> SummaryOutput& = delete;
@@ -88,9 +90,8 @@ class SummaryOutput : public IOutput {
    * @param summaries Vector of (target, metric, summary) tuples for all computed summaries
    * @return astl_status_code Success or error from writing operation
    */
-  virtual auto WriteSummaries(
-      const std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>& summaries) const
-      -> astl_status_code = 0;
+  virtual auto WriteSummaries(const std::vector<std::tuple<const ITarget*, const IMetric*, SummaryResult>>& summaries)
+      const -> astl_status_code = 0;
 
  private:
   /**
@@ -100,9 +101,10 @@ class SummaryOutput : public IOutput {
    * @param sample_data The processed samples for this metric
    * @return Optional summary if computation succeeds, nullopt otherwise
    */
-  auto ComputeSummaryForMetric(const ITarget* target, const IMetric* metric,
-                               std::span<const ProcessedSampledData> sample_data) const
-      -> std::optional<MinMaxAvgSummary>;
+  auto ComputeSummariesForMetric(const ITarget* target, const IMetric* metric,
+                                 std::span<const ProcessedSampledData> sample_data) const -> std::vector<SummaryResult>;
+
+  std::vector<std::unique_ptr<ISummarizer>> summarizers_;  ///< List of summarizers to apply to metrics
 };
 
 }  // namespace astl

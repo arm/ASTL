@@ -88,36 +88,37 @@ class SummaryCsvOutput : public SummaryOutput {
    * @param summaries Vector of (target, metric, summary) tuples for all computed summaries
    * @return astl_status_code Success, file error, or internal error
    */
-  auto WriteSummaries(const std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>& summaries) const
+  auto WriteSummaries(const std::vector<std::tuple<const ITarget*, const IMetric*, SummaryResult>>& summaries) const
       -> astl_status_code override;
 
  private:
   std::filesystem::path _path;
 
   /**
-   * @brief Group summaries by metric name for organized CSV output.
-   * @param summaries Vector of (target, metric, summary) tuples
-   * @return Map of metric names to vectors of (target, metric, summary) tuples
+   * @brief Create the default set of summarizers.
+   * @return Vector of default summarizers (MinMaxAvg, DiscreteHistogram, RangeHistogram)
    */
-  static auto GroupSummariesByMetricName(
-      const std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>& summaries)
-      -> std::map<std::string, std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>>;
+  static auto CreateSummarizers() -> std::vector<std::unique_ptr<ISummarizer>>;
 
   /**
-   * @brief Write a single summary entry to the CSV file.
+   * @brief Write a MinMaxAvg summary entry to the CSV file.
    * @param csv_file The output stream to write to
    * @param metric_name The name of the metric
    * @param target The target this summary applies to
-   * @param summary The computed summary statistics
+   * @param summary The computed MinMaxAvg summary statistics
    */
-  static auto WriteSummaryEntry(std::ofstream& csv_file, const std::string& metric_name, const ITarget* target,
-                                const MinMaxAvgSummary& summary) -> void;
+  static auto WriteMinMaxAvgEntry(std::ofstream& csv_file, const std::string& metric_name, const ITarget* target,
+                                  const MinMaxAvgSummary& summary) -> void;
 
   /**
-   * @brief Write the CSV header row.
+   * @brief Write a Histogram summary entry to the CSV file.
    * @param csv_file The output stream to write to
+   * @param metric_name The name of the metric
+   * @param target The target this summary applies to
+   * @param summary The computed Histogram summary statistics
    */
-  static auto WriteHeader(std::ofstream& csv_file) -> void;
+  static auto WriteHistogramEntry(std::ofstream& csv_file, const std::string& metric_name, const ITarget* target,
+                                  const HistogramSummary& summary) -> void;
 };
 
 }  // namespace astl
