@@ -54,7 +54,7 @@ probe() { # fast: 1s connect timeout, 2s overall, no output
 }
 
 # if we can't connect to the public npm register, use the artifactory mirror
-if probe "$PUBLIC_NPM"; then
+if ! probe "$PUBLIC_NPM"; then
 	npm config set registry https://artifactory.arm.com/artifactory/api/npm/mirrors.npmjs_org
 fi
 
