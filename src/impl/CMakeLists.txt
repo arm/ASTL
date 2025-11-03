@@ -128,6 +128,11 @@ target_include_directories(${LIBRARY_NAME}
     ${Protobuf_INCLUDE_DIRS}
 )
 
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set_source_files_properties(${GEN_FILES} PROPERTIES
+    COMPILE_OPTIONS "-Wno-nullability-extension;")
+endif()
+
 target_link_libraries(${LIBRARY_NAME} PRIVATE protobuf::libprotobuf)
 
 # find spdlog, include it as a header-only dependency. This is a little slower (+10-12s) to compile ASTL,
