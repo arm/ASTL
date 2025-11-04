@@ -179,6 +179,18 @@ add_library(${LIBRARY_NAME} SHARED)
 # add alias target for the library for unambiguous FindPackage
 add_library(Astl::${LIBRARY_NAME} ALIAS ${LIBRARY_NAME})
 
+# Create a symlink to the configuration JSON next to the built shared library.
+# We do this after the shared library target is defined so $<TARGET_FILE_DIR:${LIBRARY_NAME}> is valid.
+# Source file lives in samples/sample_configuration/astl_configuration.json; link name should be astl_configuration.json.
+add_custom_command(
+  TARGET ${LIBRARY_NAME}
+  POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E create_symlink
+      ${CMAKE_SOURCE_DIR}/samples/sample_configuration/astl_configuration.json
+      $<TARGET_FILE_DIR:${LIBRARY_NAME}>/astl_configuration.json
+  COMMENT "Creating symlink to astl_configuration.json in shared library output directory"
+  VERBATIM)
+
 include(Warnings)
 set_project_warnings(${LIBRARY_NAME})
 
@@ -201,7 +213,6 @@ target_sources(
     ${LIBRARY_NAME}
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_errors.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_initialize.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_telemetry.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_test_hooks.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_version.cpp"

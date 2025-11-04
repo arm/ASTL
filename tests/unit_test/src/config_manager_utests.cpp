@@ -369,8 +369,29 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
   }
 }
 
-TEST_CASE("Invalid file path", "[ConfigManager]") {
-  ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = "not_a_valid_file.wav");
-  auto config_results = astl::ConfigurationManager::GetConfiguration(&init_params);
-  REQUIRE(config_results.error() == ASTL_STATUS_BAD_CONFIGURATION);
+// Basic path / configuration retrieval tests
+TEST_CASE("ConfigurationManager::GetAstlFilePath returns success", "[ConfigManager][Paths]") {
+  auto result = astl::ConfigurationManager::GetAstlFilePath();
+  if (!result) {
+    std::cerr << "[DEBUG] GetAstlFilePath error code: " << astlStatusString(result.error()) << '\n';
+  }
+  REQUIRE(result);  // ensure success; do not inspect underlying path
+}
+
+TEST_CASE("ConfigurationManager::GetConfigurationFilePath returns success", "[ConfigManager][Paths]") {
+  auto result = astl::ConfigurationManager::GetConfigurationFilePath();
+  if (!result) {
+    std::cerr << "[DEBUG] GetConfigurationFilePath error code: " << astlStatusString(result.error()) << '\n';
+  }
+  REQUIRE(result);  // ensure success; do not inspect underlying path
+}
+
+TEST_CASE("ConfigurationManager::GetConfiguration returns configuration", "[ConfigManager][Paths]") {
+  auto result = astl::ConfigurationManager::GetConfiguration();
+  if (!result) {
+    std::cerr << "[DEBUG] GetConfiguration error code: " << astlStatusString(result.error()) << '\n';
+  }
+  REQUIRE(result);  // ensure config parsed
+  auto config = result.value();
+  (void)config;  // suppress unused variable warning; no further inspection per requirements
 }

@@ -73,7 +73,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *
    * @return a reference to an owning pointer to Orchestrator. Will return nullptr before InitializeInstance is called
    */
-  static auto GetInstance() -> std::unique_ptr<Orchestrator> &;
+  static auto GetInstance() -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code>;
 
   /**
    * @brief Returns a const reference to the set of Targets managed by this orchestrator.
@@ -268,17 +268,18 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    */
   auto EmitIntervalCsvIfRequested() -> void;
 
-  static auto                        GetMutex() -> std::mutex &;  // manage thread-safe access   to singleton instance
-  std::unique_ptr<ITopologyManager>  _topology_manager;           // manages the set of Targets
-  std::unique_ptr<ICollectorManager> _collector_manager;          // manages the collection of raw samples
-  std::unique_ptr<IMetricManager>    _metric_manager;             // manages the processing of raw samples into metrics
-  std::unique_ptr<IOutputManager>    _output_manager;             // manages the output of processed samples
-  RawSamplesMap                      _raw_samples;                // collected raw samples, organized by target
-  mutable std::mutex                 _raw_samples_mtx;            // protect the _raw_samples container
-  ProcessedSamplesMap                _processed_samples;  // processed metric samples, organized by target and metric
-  mutable std::mutex                 _processed_samples_mtx;       // protect the _processed_samples container
-  bool                               _perfetto_emitted{false};     // ensure single emission per collection lifecycle
-  bool                               _intervalcsv_emitted{false};  // ensure single emission per collection lifecycle
+  static auto                          GetMutex() -> std::mutex &;  // manage thread-safe access   to singleton instance
+  static std::unique_ptr<Orchestrator> instance_;                   // singleton instance pointer
+  std::unique_ptr<ITopologyManager>    _topology_manager;           // manages the set of Targets
+  std::unique_ptr<ICollectorManager>   _collector_manager;          // manages the collection of raw samples
+  std::unique_ptr<IMetricManager>      _metric_manager;     // manages the processing of raw samples into metrics
+  std::unique_ptr<IOutputManager>      _output_manager;     // manages the output of processed samples
+  RawSamplesMap                        _raw_samples;        // collected raw samples, organized by target
+  mutable std::mutex                   _raw_samples_mtx;    // protect the _raw_samples container
+  ProcessedSamplesMap                  _processed_samples;  // processed metric samples, organized by target and metric
+  mutable std::mutex                   _processed_samples_mtx;       // protect the _processed_samples container
+  bool                                 _perfetto_emitted{false};     // ensure single emission per collection lifecycle
+  bool                                 _intervalcsv_emitted{false};  // ensure single emission per collection lifecycle
 };
 
 }  // namespace astl

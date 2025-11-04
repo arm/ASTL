@@ -118,13 +118,6 @@ auto GetDurationArgument(const std::unordered_map<std::string, std::string>& arg
   return std::chrono::seconds{};
 }
 
-auto InitializeASTL(const char* config_file_path) -> astl_status_code {
-  ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = config_file_path);
-  astl_status_code status = astlInitialize(&init_params);
-  std::cout << "Initialize status: " << astlStatusString(status) << "\n";
-  return status;
-}
-
 auto GetTargetByName(std::string const& target_name, std::vector<astl_target_properties_t>& target_properties_buffer,
                      astl_target_properties_t& target_properties) -> astl_status_code {
   uint32_t         target_count = 0;
@@ -366,15 +359,9 @@ auto main(int argc, char* argv[]) -> int {
       sampling_interval_ms = *interval_result;
     }
   }
-  const char* config_file_path = args.contains("config") ? args["config"].c_str() : nullptr;
-
-  // Initialize ASTL
-  astl_status_code status = InitializeASTL(config_file_path);
-  if (status != ASTL_STATUS_SUCCESS) {
-    return 2;
-  }
 
   // Get targets
+  astl_status_code                      status{ASTL_STATUS_SUCCESS};
   std::vector<astl_target_properties_t> target_properties_buffer;
   astl_target_properties_t              target_properties;
   if (args.contains("target")) {
