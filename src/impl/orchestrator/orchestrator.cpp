@@ -4,13 +4,19 @@
 #include <cstdlib>    // for std::getenv
 #include <filesystem>
 #include <fstream>
+#include <functional>  // for std::reference_wrapper in expected return types
 
 #include "astl/astl_errors.h"
 #include "astl_defines.hpp"
 #include "astl_logger.hpp"
+#include "config/configuration_manager.hpp"  // for ConfigurationManager::GetConfiguration
+#include "orchestrator/orchestrator_builder.hpp"
 #include "serdes/protobuf_serdes.hpp"
 
 namespace astl {
+
+// Definition of singleton instance pointer declared in orchestrator.hpp
+std::unique_ptr<Orchestrator> Orchestrator::instance_{};
 
 // Internal growth heuristic constants for sample vector reservations.
 // Rationale: We previously used the expression size()*3/2 + 8 inline. Exposing
@@ -63,16 +69,30 @@ auto Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topolog
                                       std::unique_ptr<IMetricManager>    metric_manager,
                                       std::unique_ptr<IOutputManager>    output_manager) -> void {
   std::scoped_lock lock(GetMutex());
-  auto            &inst = GetInstance();
-  if (!inst) {
-    inst = std::make_unique<Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                          std::move(metric_manager), std::move(output_manager));
+  if (!Orchestrator::instance_) {
+    Orchestrator::instance_ = std::make_unique<Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                             std::move(metric_manager), std::move(output_manager));
   }
 }
 
-auto Orchestrator::GetInstance() -> std::unique_ptr<Orchestrator> & {
-  static std::unique_ptr<Orchestrator> instance;
-  return instance;
+auto Orchestrator::GetInstance()
+    -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code> {
+  if (instance_) {
+    return std::reference_wrapper<std::unique_ptr<Orchestrator>>(instance_);
+  }
+  // Lazy construction without taking the mutex (convention: only InitializeInstance guards creation)
+  auto configuration = astl::ConfigurationManager::GetConfiguration();
+  if (!configuration) {
+    return std::unexpected(configuration.error());
+  }
+  astl_status_code status = BuildOrchestrator(configuration.value());
+  if (status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
+  }
+  if (!instance_) {
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+  }
+  return instance_;
 }
 
 auto Orchestrator::GetMutex() -> std::mutex & {

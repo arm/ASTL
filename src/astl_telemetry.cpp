@@ -19,13 +19,14 @@
 
 /** @brief Confirms that the given non-null target_handle matches some known ITarget */
 auto GetTargetFromHandle(astl_target_handle_t target_handle) -> std::expected<const astl::ITarget*, astl_status_code> {
-  auto const& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return std::unexpected(ASTL_STATUS_NOT_INITIALIZED);
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return std::unexpected(orchestrator_or_error.error());
   }
-  auto const& available_targets = orchestrator->GetTargets();
-  const auto* target            = static_cast<const astl::ITarget*>(target_handle);
-  auto        is_handle_match   = [target](auto& target_iter) -> bool { return target_iter.get() == target; };
+  astl::Orchestrator const& orchestrator      = *(orchestrator_or_error.value().get());
+  auto const&               available_targets = orchestrator.GetTargets();
+  const auto*               target            = static_cast<const astl::ITarget*>(target_handle);
+  auto is_handle_match = [target](auto& target_iter) -> bool { return target_iter.get() == target; };
 
   using std::begin, std::end;
   if (std::any_of(begin(available_targets), end(available_targets), is_handle_match)) {
@@ -54,11 +55,12 @@ auto GetCounterFromHandle(astl_counter_handle_t counter_handle, const astl::ITar
 }
 
 auto GetMetricManager() -> std::expected<astl::IMetricManager*, astl_status_code> {
-  auto const& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return std::unexpected(ASTL_STATUS_NOT_INITIALIZED);
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return std::unexpected(orchestrator_or_error.error());
   }
-  const auto& metric_manager = orchestrator->GetMetricManager();
+  const astl::Orchestrator& orchestrator   = *(orchestrator_or_error.value().get());
+  const auto&               metric_manager = orchestrator.GetMetricManager();
   if (!metric_manager) {
     ASTL_LOG_ERROR("No metric manager assigned to orchestrator");
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
@@ -67,11 +69,12 @@ auto GetMetricManager() -> std::expected<astl::IMetricManager*, astl_status_code
 }
 
 auto GetOutputManager() -> std::expected<astl::IOutputManager*, astl_status_code> {
-  auto const& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return std::unexpected(ASTL_STATUS_NOT_INITIALIZED);
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return std::unexpected(orchestrator_or_error.error());
   }
-  const auto& output_manager = orchestrator->GetOutputManager();
+  astl::Orchestrator const& orchestrator   = *(orchestrator_or_error.value().get());
+  const auto&               output_manager = orchestrator.GetOutputManager();
   if (!output_manager) {
     ASTL_LOG_ERROR("No output manager assigned to orchestrator");
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
@@ -81,9 +84,9 @@ auto GetOutputManager() -> std::expected<astl::IOutputManager*, astl_status_code
 
 auto GetMetricFromHandle(astl_metric_handle_t metric_handle, astl_target_handle_t target_handle)
     -> std::expected<const astl::IMetric*, astl_status_code> {
-  auto const& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return std::unexpected(ASTL_STATUS_NOT_INITIALIZED);
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return std::unexpected(orchestrator_or_error.error());
   }
 
   auto get_metric_manager_result = GetMetricManager();
@@ -111,21 +114,23 @@ auto GetMetricFromHandle(astl_metric_handle_t metric_handle, astl_target_handle_
 
 auto GetProcessedMetricSamples(const astl::IMetric* metric, const astl::ITarget* target)
     -> std::expected<std::span<const astl::ProcessedSampledData>, astl_status_code> {
-  auto const& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return std::unexpected(ASTL_STATUS_NOT_INITIALIZED);
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return std::unexpected(orchestrator_or_error.error());
   }
-  auto samples_result = orchestrator->GetProcessedMetricSamples(metric, target);
+  astl::Orchestrator const& orchestrator   = *(orchestrator_or_error.value().get());
+  auto                      samples_result = orchestrator.GetProcessedMetricSamples(metric, target);
 
   return samples_result;
 }
 
 auto GetProcessedSamples() -> std::expected<std::reference_wrapper<astl::ProcessedSamplesMap>, astl_status_code> {
-  auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return std::unexpected(ASTL_STATUS_NOT_INITIALIZED);
+  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return std::unexpected(orchestrator_or_error.error());
   }
-  return orchestrator->GetProcessedSamples();
+  astl::Orchestrator& orchestrator = *(orchestrator_or_error.value().get());
+  return orchestrator.GetProcessedSamples();
 }
 
 constexpr uint32_t kFirstElementIdx{0};
@@ -149,11 +154,12 @@ auto astlGetTargetCount(uint32_t* target_count) -> astl_status_code {
   if (!target_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
+  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
   }
-  auto targets_size = orchestrator->GetTargets().size();
+  astl::Orchestrator& orchestrator = *(orchestrator_or_error.value().get());
+  auto                targets_size = orchestrator.GetTargets().size();
   // error if the number of targets won't fit in a 32-bit integer (unlikely)
   if (targets_size > std::numeric_limits<uint32_t>::max()) {
     return ASTL_STATUS_TARGET_PROPERTIES_BUFFER_TOO_SMALL;
@@ -209,13 +215,14 @@ auto astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) -
   if (*target_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
+  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
   }
 
-  auto const& available_targets       = orchestrator->GetTargets();
-  auto        available_targets_count = available_targets.size();
+  astl::Orchestrator& orchestrator            = *(orchestrator_or_error.value().get());
+  auto const&         available_targets       = orchestrator.GetTargets();
+  auto                available_targets_count = available_targets.size();
   if (available_targets_count == 0) {
     *target_count = 0;
     return ASTL_STATUS_NO_TARGETS_FOUND;
@@ -497,11 +504,12 @@ auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                
     }
     counters.push_back(*get_counter_result);
   }
-  auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
+  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
   }
-  return orchestrator->ConfigureCounterCollection(target, collection_params, counters);
+  astl::Orchestrator& orchestrator = *(orchestrator_or_error.value().get());
+  return orchestrator.ConfigureCounterCollection(target, collection_params, counters);
 }
 
 auto astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,
@@ -562,11 +570,12 @@ auto astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_
   }
   const auto*                     target = *get_target_result;
   std::span<astl_metric_handle_t> metric_handle_span{metric_handles, metric_count};
-  auto&                           orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
+  auto                            orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
   }
-  return orchestrator->ConfigureMetricCollection(target, collection_params, metric_handle_span);
+  astl::Orchestrator& orchestrator = *(orchestrator_or_error.value().get());
+  return orchestrator.ConfigureMetricCollection(target, collection_params, metric_handle_span);
 }
 
 auto astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
@@ -611,22 +620,24 @@ auto astlReadImmediateOnTarget(astl_target_handle_t target_handle) -> astl_statu
   }
   const auto* target = *result;
 
-  auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
+  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
   }
-  return orchestrator->ReadImmediate(target);
+  astl::Orchestrator& orchestrator = *(orchestrator_or_error.value().get());
+  return orchestrator.ReadImmediate(target);
 }
 
 auto astlReadImmediate() -> astl_status_code {
-  auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
+  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
   }
-  const auto& available_targets = orchestrator->GetTargets();
+  astl::Orchestrator& orchestrator      = *(orchestrator_or_error.value().get());
+  const auto&         available_targets = orchestrator.GetTargets();
   for (const auto& target : available_targets) {
     // TODO(https://jira.arm.com/browse/ASTL-54)  -- dispatch read to the metric manager instead of the target
-    auto result = orchestrator->ReadImmediate(target.get());
+    auto result = orchestrator.ReadImmediate(target.get());
     if (result != ASTL_STATUS_SUCCESS) {
       return result;
     }
@@ -644,12 +655,13 @@ auto astlStartCollectionOnTarget(astl_target_handle_t target_handle) -> astl_sta
     return result.error();
   }
 
-  const auto* target       = *result;
-  auto&       orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
+  const auto* target                = *result;
+  auto        orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
   }
-  return orchestrator->StartCollection(target);
+  astl::Orchestrator& orchestrator = *(orchestrator_or_error.value().get());
+  return orchestrator.StartCollection(target);
 }
 
 auto astlStartCollection() -> astl_status_code {
@@ -689,12 +701,13 @@ auto astlStopCollectionOnTarget(astl_target_handle_t target_handle) -> astl_stat
     return result.error();
   }
 
-  const auto* target       = *result;
-  auto&       orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
+  const auto* target                = *result;
+  auto        orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
   }
-  return orchestrator->StopCollection(target);
+  astl::Orchestrator& orchestrator = *(orchestrator_or_error.value().get());
+  return orchestrator.StopCollection(target);
 }
 
 auto astlStopCollection() -> astl_status_code {
@@ -720,11 +733,12 @@ auto astlGetCounterSampleCountOnTarget(astl_target_handle_t target_handle, astl_
   }
   const auto* counter = *get_counter_result;
 
-  auto& orchestrator = astl::Orchestrator::GetInstance();
-  if (!orchestrator) {
-    return ASTL_STATUS_NOT_INITIALIZED;
+  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
   }
-  auto sample_result = orchestrator->GetCounterSampleCount(target, counter);
+  astl::Orchestrator& orchestrator  = *(orchestrator_or_error.value().get());
+  auto                sample_result = orchestrator.GetCounterSampleCount(target, counter);
   if (!sample_result) {
     return sample_result.error();
   }

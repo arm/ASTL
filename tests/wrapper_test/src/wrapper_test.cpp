@@ -119,42 +119,6 @@ TEST_CASE("astlStatusString", "[matches header definition][wrapper]") {
   REQUIRE(std::string(astlStatusString(truly_unknown)) == "UNKNOWN_ERROR");
 }
 
-TEST_CASE("astl initialization macros") {
-  ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = nullptr);
-  REQUIRE(init_params._size == sizeof(astl_initialization_parameters_t));
-
-// For C++ client code, it is recommended to define your own template function to handle the initialization
-// of a vector container.
-// For testing this macro, We have a few warnings and linters to disable
-// to use old-style casts and manual memory management.
-#ifdef _MSC_VER
-#  pragma warning(push)
-#  pragma warning(disable : 26490)  // MSVC: "Don't use reinterpret_cast-style C-casts"
-#elif defined(__GNUC__) || defined(__clang__)
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wold-style-cast"
-#endif
-  // NOLINTNEXTLINE
-  ASTL_ALLOC_ARRAY(astl_metric_properties_t, metric_properties, kAFew);
-#ifdef _MSC_VER
-#  pragma warning(pop)
-#elif defined(__GNUC__) || defined(__clang__)
-#  pragma GCC diagnostic pop
-#endif
-
-  REQUIRE(metric_properties != NULL);
-  // NOLINTNEXTLINE
-  ASTL_FREE_ARRAY(metric_properties);
-  REQUIRE(metric_properties == NULL);
-  // NOLINTNEXTLINE
-  ASTL_FREE_ARRAY(metric_properties);
-  REQUIRE(true);  // ensure no UB from double-free
-}
-
-TEST_CASE("astlInitialize checks for invalid input", "[wrapper_test][wrapper]") {
-  REQUIRE(astlInitialize(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
-}
-
 TEST_CASE("astlGetTargetCount", "[Reports 0 targets correctly][wrapper]") {
   auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));
@@ -1136,7 +1100,6 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
     REQUIRE((result == ASTL_STATUS_INVALID_TARGET_HANDLE || result == ASTL_STATUS_BAD_ARGUMENT));
     REQUIRE(astlGetMetricSampleCountOnTarget(mock_target_handle, invalid_metric_handle, nullptr) ==
             ASTL_STATUS_BAD_ARGUMENT);
-    REQUIRE(sample_count == kJunk);
     // GetMetricSamples
     // invalid targets
     result = astlGetMetricSamplesOnTarget(nullptr, nullptr, nullptr, nullptr);

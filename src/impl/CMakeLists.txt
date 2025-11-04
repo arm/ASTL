@@ -50,7 +50,6 @@ target_sources(
         "${CMAKE_CURRENT_SOURCE_DIR}/serdes/protobuf_serdes.cpp"
         # for unit tests
         "${PROJECT_SOURCE_DIR}/src/astl_errors.cpp"
-        "${PROJECT_SOURCE_DIR}/src/astl_initialize.cpp"
         "${PROJECT_SOURCE_DIR}/src/astl_telemetry.cpp"
         "${PROJECT_SOURCE_DIR}/src/astl_test_hooks.cpp"
         "${PROJECT_SOURCE_DIR}/src/astl_version.cpp"

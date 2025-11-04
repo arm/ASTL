@@ -94,5 +94,6 @@ doc/latex
 # ASTL demo outputs
 *_rate_intervals.csv
 raw_samples.csv
+astl_summary.csv
 
 # Add more exclusions as needed

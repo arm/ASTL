@@ -30,10 +30,42 @@
 namespace astl {
 namespace ConfigurationManager {
 
-auto GetConfiguration(astl_initialization_parameters_t const* init_params)
-    -> std::expected<AstlConfiguration, astl_status_code>;
+/**
+ * @brief Get the path to the .so / .dll file for the ASTL library
+ *
+ * @return If successful, returns the path to the ASTL shared object file.
+ * If unsuccessful, returns an appropriate astl_status_code error.
+ */
+auto GetAstlFilePath() -> std::expected<std::filesystem::path, astl_status_code>;
 
-}  // namespace  ConfigurationManager
+/**
+ * @brief Check for the existence of the ASTL_CONFIG_JSON_PATH environment variable and return its value if set
+ *
+ * @return Checks for the existence of the ASTL_CONFIG_JSON_PATH environment variable. If set and non-empty, returns its
+ * value as a filesystem path.
+ */
+auto GetConfigutationEnvironmentVariable() -> std::optional<std::filesystem::path>;
+
+/**
+ * @brief Generate path the the configuration JSON
+ *
+ * Tries to get the path via @ref GetConfigutationEnvironmentVariable first, and if not set,
+ * assumes the configuration file is in the same directory as the ASTL .so / .dll
+ *
+ * @return The path to the configuration JSON file, choosing the appropriate .so path or environment variable.
+ */
+auto GetConfigurationFilePath() -> std::expected<std::filesystem::path, astl_status_code>;
+
+/**
+ * @brief Determine the path to the configuration JSON file and parse it into an AstlConfiguration object
+ *
+ * @return If successful, returns the path the configuration JSON file.
+ * If unsuccessful, returns an appropriate astl_status_code error.
+ */
+auto GetConfiguration() -> std::expected<AstlConfiguration, astl_status_code>;
+
+}  // namespace ConfigurationManager
+
 }  // namespace astl
 
 #endif  // CONFIGURATION_MANAGER_HPP_

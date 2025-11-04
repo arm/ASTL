@@ -119,10 +119,14 @@ else
 	RUN_ARGS=(--interval="$INTERVAL" --duration="$DURATION")
 fi
 
-UPDATED_JSON_FILE=~/tmp/updated_config.json
+# Note that ASTL_CONFIG_JSON_PATH is an internal-use-only environment variable
+# meant to manually force the path ASTL uses for its configuration file.
+# Instead of auto-detecting it using the .so path.
+export ASTL_CONFIG_JSON_PATH=~/tmp/updated_config.json
+echo "ASTL_CONFIG_JSON_PATH = ${ASTL_CONFIG_JSON_PATH}"
 jq --arg telemetry_root "$TELEMETRY_ROOT" \
 	'.scmi_sysfs_telemetry_root_path = $telemetry_root' \
-	./samples/sample_configuration/astl_configuration.json >$UPDATED_JSON_FILE
+	./samples/sample_configuration/astl_configuration.json >$ASTL_CONFIG_JSON_PATH
 
 # Set CSV output file for summary data
 export ASTL_OUTPUT_SUMMARY_CSV="$LOG_DIR/astl_summary.csv"
@@ -136,7 +140,8 @@ trap cleanup_csv EXIT
 export ASTL_OUTPUT_SUMMARY_CSV="$LOG_DIR/astl_summary.csv"
 echo "CSV output will be written to: $ASTL_OUTPUT_SUMMARY_CSV"
 
-"$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --config="$UPDATED_JSON_FILE" --target="tlm-0"
+echo "🚀 Executing sample_test"
+"$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --target="tlm-0"
 ERR=$?
 if [[ $ERR -ne 0 ]]; then
 	echo "❌ Error: $SAMPLE_TEST_BIN returned a non-zero return code $ERR" >&2
