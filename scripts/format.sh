@@ -14,6 +14,13 @@ if ! command -v clang-format >/dev/null 2>&1; then
 	exit 1
 fi
 
+if ! command -v cmake-lint >/dev/null 2>&1; then
+	echo "❌ cmake-lint is not installed."
+	echo "👉 Please install cmakelang (provides cmake-lint and cmake-format):"
+	echo "   python3 -m pip install --user cmakelang          # any OS with Python"
+	exit 1
+fi
+
 # use utils.sh's get_all_source_files to export SOURCE_FILES array
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -33,6 +40,13 @@ for file in "${SOURCE_FILES[@]}"; do
 done
 echo 'Running clang-format'
 clang-format -i "${SOURCE_FILES_TO_FORMAT[@]}"
+
+echo 'Running cmake-format on CMakeLists.txt files'
+find . \( -path './CMakeLists.txt' \
+	-o -path './src/**/CMakeLists.txt' \
+	-o -path './samples/**/CMakeLists.txt' \
+	-o -path './tools/**/CMakeLists.txt' \
+	-o -path './tests/**/CMakeLists.txt' \) -type f -print0 | xargs -0 cmake-format -i
 
 # Format .sh files using qlty cli
 if ! command -v qlty >/dev/null 2>&1; then

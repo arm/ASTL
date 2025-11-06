@@ -40,6 +40,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang-format-20 cppcheck cmake yamllint libsensors-dev
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-20 200
+          python3 -m pip install --upgrade --user cmakelang
 
       # Restore per-package vcpkg cache
       - name: ⤵️ VCPKG - Restore Cache
@@ -88,3 +89,6 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
           HEAD_REF: ${{ github.head_ref }}
+
+      - name: 🧹 Lint with cmakelang
+        run: ${{ github.workspace }}/scripts/cmakelang.sh
