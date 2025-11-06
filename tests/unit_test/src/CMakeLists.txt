@@ -1,15 +1,9 @@
 # set the default build type to RelWithDebInfo if not specified
 if(NOT CMAKE_BUILD_TYPE)
-    message(
-        STATUS "Default CMAKE_BUILD_TYPE not set. Using Release with Debug Info"
-    )
-    set(CMAKE_BUILD_TYPE
-        "RelWithDebInfo"
-        CACHE
-          STRING
-          "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel"
-          FORCE
-    )
+  message(STATUS "Default CMAKE_BUILD_TYPE not set. Using Release with Debug Info")
+  set(CMAKE_BUILD_TYPE
+      "RelWithDebInfo"
+      CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif()
 
 set(UNIT_TEST_SRCS
@@ -35,60 +29,52 @@ set(UNIT_TEST_SRCS
     perfetto_output_utests.cpp
     interval_csv_utests.cpp
     summary_csv_output_utests.cpp
-    protobuf_serdes_utests.cpp
-)
+    protobuf_serdes_utests.cpp)
 
 find_library(SENSORS_LIB sensors)
-if (SENSORS_LIB)
-    MESSAGE(STATUS "libsensors found, building sensors_collector_utests")
+if(SENSORS_LIB)
+  message(STATUS "libsensors found, building sensors_collector_utests")
 else()
-    message(STATUS "libsensors not found: please install libsensors-dev package. sensors_collector_utests will not be built")
+  message(
+    STATUS "libsensors not found: please install libsensors-dev package. sensors_collector_utests will not be built")
 endif()
 
 add_executable(unit_test ${UNIT_TEST_SRCS})
 
 target_compile_definitions(unit_test PRIVATE ASTL_BUILD)
 
-if (SENSORS_LIB)
-    target_link_libraries(unit_test PRIVATE ${SENSORS_LIB})
+if(SENSORS_LIB)
+  target_link_libraries(unit_test PRIVATE ${SENSORS_LIB})
 endif()
-
 
 include(Warnings)
 set_project_warnings(unit_test)
 
-target_include_directories(unit_test
-    PRIVATE
-        "${CMAKE_BINARY_DIR}/src/impl/gen"
-)
+target_include_directories(unit_test PRIVATE "${CMAKE_BINARY_DIR}/src/impl/gen")
 
 # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
-target_link_libraries(unit_test
-    # test targets should link astl publicly so that gcovr can measure how much of astl_static is covered
-    PUBLIC
-        Astl::astl_static
-    PRIVATE
-        Catch2::Catch2WithMain
+target_link_libraries(
+  unit_test
+  # test targets should link astl publicly so that gcovr can measure how much of astl_static is covered
+  PUBLIC Astl::astl_static
+  PRIVATE Catch2::Catch2WithMain)
+add_custom_target(rununittests
+  COMMAND unit_test
+  COMMENT "Run all unit tests"
 )
-add_custom_target(rununittests unit_test)
 
-# Symlink configuration JSON into unit_test binary directory for runtime configuration discovery
-# This is not ideal, since it means we're not testing
-# that the config .json path is detected correctly when
-# the .so and client binary are in separate locations.
-# https://jira.arm.com/browse/ASTL-235
+# Symlink configuration JSON into unit_test binary directory for runtime configuration discovery This is not ideal,
+# since it means we're not testing that the config .json path is detected correctly when the .so and client binary are
+# in separate locations. https://jira.arm.com/browse/ASTL-235
 add_custom_command(
-    TARGET unit_test
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E create_symlink
-            ${CMAKE_SOURCE_DIR}/samples/sample_configuration/astl_configuration.json
-            $<TARGET_FILE_DIR:unit_test>/astl_configuration.json
-    COMMENT "Creating symlink to astl_configuration.json in unit_test output directory"
-    VERBATIM)
-
+  TARGET unit_test
+  POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_SOURCE_DIR}/samples/sample_configuration/astl_configuration.json
+          $<TARGET_FILE_DIR:unit_test>/astl_configuration.json
+  COMMENT "Creating symlink to astl_configuration.json in unit_test output directory"
+  VERBATIM)
 
 # have catch2's cmake module discover the tests and add them to ctest for us
 include(CTest)
 include(Catch)
-catch_discover_tests(unit_test
-    ADD_TAGS_AS_LABELS)
+catch_discover_tests(unit_test ADD_TAGS_AS_LABELS)
