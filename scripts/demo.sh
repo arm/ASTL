@@ -104,6 +104,10 @@ echo "✅ MockSysfs mounted at $MOUNT_POINT"
 ###############
 # Demo action #
 ###############
+
+### delete tmp/*.astl files if they exist to avoid interference with old samples
+rm -f tmp/*.astl
+
 SAMPLE_TEST_BIN="$ASTL_ROOT/build/debug/bin/sample_test"
 if [[ ! -x $SAMPLE_TEST_BIN ]]; then
 	echo "❌ Error: sample_test binary not found or not executable at $SAMPLE_TEST_BIN" >&2

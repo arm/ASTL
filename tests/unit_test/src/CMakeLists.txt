@@ -58,10 +58,10 @@ target_link_libraries(
   # test targets should link astl publicly so that gcovr can measure how much of astl_static is covered
   PUBLIC Astl::astl_static
   PRIVATE Catch2::Catch2WithMain)
-add_custom_target(rununittests
+add_custom_target(
+  rununittests
   COMMAND unit_test
-  COMMENT "Run all unit tests"
-)
+  COMMENT "Run all unit tests")
 
 # Symlink configuration JSON into unit_test binary directory for runtime configuration discovery This is not ideal,
 # since it means we're not testing that the config .json path is detected correctly when the .so and client binary are

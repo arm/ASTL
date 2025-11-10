@@ -83,6 +83,13 @@ auto DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_sta
   // Calculate delta: current - previous
   auto delta_result = AstlValue::Subtract(current_sample, previous_sample);
   if (!delta_result.has_value()) {
+    std::string current_string;
+    std::string previous_string;
+    current_sample.ToStringValue(current_string);
+    previous_sample.ToStringValue(previous_string);
+    ASTL_LOG_ERROR(
+        "DeltaMetric: error {} when computing delta between current and previous samples. Current: {}, Previous: {}",
+        astlStatusString(delta_result.error()), current_string, previous_string);
     return std::unexpected(delta_result.error());
   }
 
