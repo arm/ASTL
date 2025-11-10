@@ -436,7 +436,7 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
     for (const auto &sample : raw_samples) {
       auto timestamp_ns = sample.timestamp.time_since_epoch().count();
       auto value        = sample.value;
-      ASTL_LOG_DEBUG("Sample - timestamp (ns since epoch): {}, value: {}", timestamp_ns, value);
+      ASTL_LOG_DEBUG("Raw Sample - timestamp (ns since epoch): {}, value: {}", timestamp_ns, value);
     }
 
     if (!batch_samples.empty()) {
@@ -495,7 +495,7 @@ auto Orchestrator::SinkProcessedSamples(const ITarget *target, const IMetric *me
       vec.push_back(sample);
       auto timestamp_ns = sample.timestamp.time_since_epoch().count();
       auto value        = sample.value;
-      ASTL_LOG_DEBUG("Sample - timestamp (ns since epoch): {}, value: {}", timestamp_ns, value);
+      ASTL_LOG_DEBUG("Processed Sample - timestamp (ns since epoch): {}, value: {}", timestamp_ns, value);
     }
   }
 
