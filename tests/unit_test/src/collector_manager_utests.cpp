@@ -69,8 +69,6 @@ TEST_CASE("CollectorManager::RegisterRawSampleSink", "[collector_manager]") {
 }
 
 TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]") {
-  // NOLINTBEGIN(readability-function-cognitive-complexity)
-
   // create a collector manager with an empty map of target-collector
 
   auto mock_target          = std::make_unique<MockTarget>();
@@ -152,13 +150,9 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
     auto                   capabilities_map = collector_manager.ReportCollectionCapabilities();
     REQUIRE(!capabilities_map.contains(empty_target.get()));
   }
-
-  // NOLINTEND(readability-function-cognitive-complexity)
 }
 
 TEST_CASE("CollectorManager::BuildCollectorManager", "[collector_manager]") {
-  // NOLINTBEGIN(readability-function-cognitive-complexity)
-
   // create a collector manager with an empty map of target->collector
   astl::AstlConfiguration                     configuration;
   std::vector<std::unique_ptr<astl::ITarget>> targets;
@@ -166,6 +160,4 @@ TEST_CASE("CollectorManager::BuildCollectorManager", "[collector_manager]") {
   // with no targets, we should get a collector manager with no capabilities
   REQUIRE(collector_manager.has_value());
   REQUIRE(collector_manager.value()->ReportCollectionCapabilities().empty());
-
-  // NOLINTEND(readability-function-cognitive-complexity)
 }

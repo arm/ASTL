@@ -36,12 +36,13 @@ namespace astl {
 
 struct MetricJsonDeclaration {
   MetricJsonDeclaration() = default;
-  std::string description;          //!< Description of the metric
-  std::string register_name;        //!< Register name associated with the metric
-  std::string offset;               //!< Register offset - exact meaning depends on collection_protocol
-  std::string unit;                 //!< Unit of measurement for the metric
-  std::string metric_type;          //!< Type of metric (e.g., value, delta, rate)
-  std::string collection_protocol;  //!< Collector type (e.g., scmi, libsensors)
+  std::string                             description;    //!< Description of the metric
+  std::string                             register_name;  //!< Register name associated with the metric
+  std::string                             offset;  //!< Register offset - exact meaning depends on collection_protocol
+  std::string                             unit;    //!< Unit of measurement for the metric
+  std::string                             metric_type;          //!< Type of metric (e.g., value, delta, rate)
+  std::string                             collection_protocol;  //!< Collector type (e.g., scmi, libsensors)
+  std::optional<std::vector<std::string>> metric_groups;        //!< Groups this metric is associated with
 
   // Residency-specific fields
   std::optional<std::string> inferred_state;                    //!< Name of inferred state (for residency metrics)

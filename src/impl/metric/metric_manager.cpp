@@ -195,6 +195,8 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
     target_specific_metrics[target] = std::move(metric);
   }
 
+  auto* metric_config_ptr = metric_config.get();  // non-owning pointer. grab this before metric_config is moved
+
   _metric_handles.emplace_back(
       std::make_unique<MetricHandle>(std::move(metric_config), /* targets, */ std::move(target_specific_metrics)));
 
@@ -205,7 +207,10 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
   for (const auto* const target : targets) {
     _target_to_metrics_map[target].push_back(metric_handle);
   }
-  return ASTL_STATUS_SUCCESS;
+
+  auto status = AddMetricToGroups(metric_handle, metric_config_ptr, targets);
+
+  return status;
 }
 
 auto MetricManager::GetAvailableMetrics() const
@@ -341,6 +346,48 @@ auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status
   return ASTL_STATUS_SUCCESS;
 }
 
+auto MetricManager::GetMetricGroups() const -> std::span<const astl_metric_group_handle_t> {
+  return std::span<const astl_metric_group_handle_t>(_metric_group_api_handles);
+}
+
+auto MetricManager::GetMetricGroups(const ITarget* target) const
+    -> std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> {
+  if (_target_to_metric_groups_map.empty()) {
+    ASTL_LOG_WARNING("GetMetricGroups: No metric groups registered in manager");
+    return std::span<const astl_metric_group_handle_t>{};
+  }
+  const auto target_iter = _target_to_metric_groups_map.find(target);
+  if (target_iter == _target_to_metric_groups_map.end()) {
+    ASTL_LOG_ERROR("GetMetricGroups: unrecognized target ptr in map of size {}", _target_to_metric_groups_map.size());
+    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
+  std::span<const astl_metric_group_handle_t> handles_span(target_iter->second);
+  return std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code>(std::in_place, handles_span);
+}
+
+auto MetricManager::GetMetricGroupProperties(astl_metric_group_handle_t      group,
+                                             astl_metric_group_properties_t* properties) const -> astl_status_code {
+  const auto* metric_group_details = static_cast<const MetricGroup*>(group);
+  if (!metric_group_details) {
+    ASTL_LOG_ERROR("GetMetricGroupProperties: Invalid metric group handle {}", group);
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  return metric_group_details->ToMetricGroupProperties(properties);
+}
+
+/**
+ * @brief Retrieve the metric handles associated with a given metric group instance
+ */
+auto MetricManager::GetMetricsInGroup(astl_metric_group_handle_t group) const
+    -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> {
+  if (group == nullptr) {
+    ASTL_LOG_ERROR("GetMetricsInGroup: Invalid metric group handle {}", group);
+    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
+  const MetricGroup* metric_group = MetricGroup::FromApiHandle(group);
+  return std::span<const astl_metric_handle_t>{metric_group->metrics};
+}
+
 auto MetricManager::SummarizeMetrics() -> astl_status_code {
   _operation_to_metric_map.clear();  // release the memory tying operation IDs to metrics
   for (const auto& metric_details : _metric_handles) {
@@ -361,6 +408,66 @@ auto MetricManager::IsCollectorTypeSupported(CollectorType required_collector_ty
   const std::vector<CollectorCapability>& collector_caps = _capabilities.GetCollectorCapability();
   return std::any_of(collector_caps.begin(), collector_caps.end(),
                      [&](const CollectorCapability& cap) { return cap.GetCollectorType() == required_collector_type; });
+}
+
+/**
+ * @brief Helper for RegisterMetric to add metric to groups based on its config
+ *        Will need to update a few member variables, including:
+ *        _metric_groups
+ *        _metric_group_api_handles
+ *        _target_to_metric_groups_map
+ * @param metric_handle The metric handle to add to groups
+ * @param metric_config The metric config used to determine group membership
+ * @param targets       The targets associated with this metric
+ */
+auto MetricManager::AddMetricToGroups(astl_metric_handle_t metric_handle, const MetricConfig* metric_config,
+                                      const std::vector<const ITarget*>& targets) -> astl_status_code {
+  ASTL_LOG_TRACE("AddMetricToGroups: Adding metric {} to {} metric groups on {} targets", metric_config->Name(),
+                 metric_config->MetricGroups().size(), targets.size());
+  for (const auto& group_name : metric_config->MetricGroups()) {
+    astl_metric_group_handle_t group_handle{nullptr};
+    // Check if the group already exists
+    auto group_lookup =
+        std::find_if(_metric_groups.begin(), _metric_groups.end(),
+                     [&](const std::unique_ptr<MetricGroup>& group) { return group->name == group_name; });
+    if (group_lookup == _metric_groups.end()) {
+      // Create a new group
+      auto new_group = std::make_unique<MetricGroup>(group_name, "", std::vector<astl_metric_handle_t>{metric_handle});
+      group_handle   = new_group->ToApiHandle();
+      // register the new group
+      _metric_groups.push_back(std::move(new_group));
+      _metric_group_api_handles.push_back(group_handle);
+    } else {
+      group_handle = (*group_lookup)->ToApiHandle();
+      // Group already exists, just add the metric to it
+      (*group_lookup)->metrics.push_back(metric_handle);
+    }
+    // finally, make sure that the metric group is associated with each given target
+    auto status = AddMetricGroupToTargets(group_handle, targets);
+    ASTL_LOG_TRACE("AddMetricToGroups: -- Adding metric {} to {}: status: {}", metric_config->Name(), group_name,
+                   status);
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto MetricManager::AddMetricGroupToTargets(astl_metric_group_handle_t         group_handle,
+                                            const std::vector<const ITarget*>& targets) -> astl_status_code {
+  ASTL_LOG_TRACE("AddMetricGroupToTargets: Adding group handle {} to {} targets", group_handle, targets.size());
+  for (const auto* target : targets) {
+    auto target_and_groups = _target_to_metric_groups_map.find(target);
+    if (target_and_groups == _target_to_metric_groups_map.end()) {
+      _target_to_metric_groups_map[target] = std::vector<astl_metric_group_handle_t>{group_handle};
+    } else {
+      auto& groups_for_target = target_and_groups->second;
+      if (std::find(groups_for_target.begin(), groups_for_target.end(), group_handle) == groups_for_target.end()) {
+        groups_for_target.push_back(group_handle);
+      }
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
 }
 
 auto MetricManager::GetTargetForMetric(const IMetric* metric) const -> std::expected<const ITarget*, astl_status_code> {

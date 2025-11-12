@@ -129,6 +129,7 @@ SCMI file system, and the definition file for the system metrics.
       "register": "CORE_TEMP_0",
       "unit": "C",
       "metric_type": "value",
+      "metric_groups": ["thermal"],
       "collection_protocol": "scmi"
     },
     "SoC Power": {
@@ -180,6 +181,7 @@ astl_target_properties_t target_properties = target_properties_buffer[0];
 uint32_t metric_count{};
 astlGetMetricCount(target_properties._handle, &metric_count);
 std::vector<astl_metric_properties_t> metric_buffer(metric_count);
+metric_buffer[0]._size = sizeof(astl_metric_properties);
 status = astlGetMetrics(target_properties._handle, metric_buffer.data(), &metric_count);
 
 ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params,
@@ -189,6 +191,31 @@ ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params,
 );
 status = astlConfigureMetricCollectionOnTarget(target_properties._handle, &collection_params,
                                                 &metric_buffer.front()._handle, metric_count);
+```
+
+Alternatively, we can configure collection by metric groups
+
+```cpp
+auto     CollectFirstGroup(astl_target_handle_t target) -> void {
+uint32_t metric_group_count{};
+auto     status = astlGetMetricGroupCount(target, &metric_group_count);
+
+std::vector<astl_metric_group_properties_t> metric_groups_properties(metric_group_count);
+metric_groups_properties[0]._size = sizeof(astl_metric_group_properties_t);
+
+// retrieve the metric groups
+status = astlGetMetricGroups(target, metric_groups_properties.data(), &metric_group_count);
+
+// collect on the first group (you could instead look at the properties and filter by name)
+std::vector<astl_metric_group_handle_t> groups{metric_groups_properties[0]._handle};
+const uint32_t groups_count = static_cast<uint32_t>(groups.size());
+ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params,
+                 ._sampling_interval = 100,
+                 ._collection_mode = ASTL_COLLECTION_MODE_IMMEDIATE,
+                 ._optimization = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD);
+
+status = astlConfigureMetricGroupCollectionOnTarget(target, &collection_params, groups.data(), groups_count);
+}
 ```
 
 5. Start, read, and stop collection

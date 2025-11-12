@@ -148,11 +148,10 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget                      
 
   // check for supported metrics
   for (const auto &metric : metrics) {
-    ASTL_LOG_TRACE("ConfigureMetricCollection for metric_handle {} on target {}", metric, target->Name());
     auto metric_index = std::find_if(std::begin(available_metrics.value()), std::end(available_metrics.value()),
                                      [metric](auto const &available_metric) { return available_metric == metric; });
     if (metric_index == std::end(available_metrics.value())) {
-      ASTL_LOG_ERROR("Metric {} is not supported on target {}", metric, target->Name());
+      ASTL_LOG_ERROR("Metric is not supported on target");
       return ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET;
     }
   }

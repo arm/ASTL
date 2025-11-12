@@ -156,8 +156,12 @@ TEST_CASE("MetricManager::RegisterMetric succeeds when collector supported", "[M
                                             astl::NullOperationBuilder{}            // data_event_ids
   );
 
-  astl_status_code status = mgr.RegisterMetric(std::move(cfg), {});
+  MockTarget  target;
+  std::string target_name{"AP0"};
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+  astl_status_code status = mgr.RegisterMetric(std::move(cfg), {&target});
   REQUIRE(status == ASTL_STATUS_SUCCESS);
+  REQUIRE(mgr.GetAvailableMetrics(&target).value().size() == 1);
 }
 
 TEST_CASE("MetricManager::RegisterMetric fails when collector unsupported", "[MetricManager]") {
@@ -525,7 +529,6 @@ TEST_CASE("MetricManager::RegisterMetric succeeds with ResidencyMetricConfig", "
   REQUIRE(metrics.size() == 1);
 }
 
-// NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("MetricManager::GetRequiredOperations with ResidencyMetricConfig creates multiple operations",
           "[MetricManager][Residency]") {
   Capabilities  caps = MakeCaps(CollectorType::SCMI);
@@ -570,7 +573,6 @@ TEST_CASE("MetricManager::GetRequiredOperations with ResidencyMetricConfig creat
 
   REQUIRE(actual_event_ids == expected_event_ids);
 }
-// NOLINTEND(readability-function-cognitive-complexity)
 
 TEST_CASE("MetricManager::RegisterMetric fails with empty state info for ResidencyMetricConfig",
           "[MetricManager][Residency]") {
@@ -663,4 +665,183 @@ TEST_CASE("MetricManager::ResidencyMetricConfig GetStateInfo accessor works corr
 
   // Test InferredState() accessor
   REQUIRE(residency_config->InferredState() == "RUNNING");
+}
+
+TEST_CASE("MetricManager::RegisterMetric with no metrics means no groups!", "[MetricManager][MetricGroup]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+  std::string   target_name{"AP0"};
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+
+  REQUIRE(mgr.GetAvailableMetrics().value().empty());
+  const auto& available_metrics = mgr.GetAvailableMetrics(&target);
+  if (available_metrics) {
+    REQUIRE(available_metrics->empty());
+  } else {
+    REQUIRE(available_metrics.error() == ASTL_STATUS_BAD_ARGUMENT);
+  }
+  REQUIRE(mgr.GetMetricGroups().empty());
+  const auto& available_groups = mgr.GetMetricGroups(&target);
+  if (available_groups) {
+    REQUIRE(available_groups->empty());
+  } else {
+    REQUIRE(available_groups.error() == ASTL_STATUS_BAD_ARGUMENT);
+  }
+}
+
+TEST_CASE("MetricManager::RegisterMetric correctly identifies a metric group with one metric.",
+          "[MetricManager][MetricGroup]") {
+  // 1) Register a single SCMI metric with data_event_id "0x123"
+  // 2) Retrieve available metrics via GetAvailableMetrics()
+  // 3) Get metric groups out of MetricManager and verify we have exactly one group with one metric in it.
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+
+  std::vector<std::string> groups{"thermals"};
+  // 2) Build a MetricConfig whose collector type is SCMI, belonging to group "thermals"
+  auto cfg_a = std::make_unique<MetricConfig>("metricA",                                       // name
+                                              "descr",                                         // description
+                                              astl_units_t::ASTL_UNITS_CELSIUS,                // units
+                                              astl_value_type_t::ASTL_VALUE_UINT64,            // value type
+                                              astl_metric_type_t::ASTL_METRIC_VALUE,           // metric type
+                                              CollectorType::SCMI,                             // collector type
+                                              std::move(groups), astl::NullOperationBuilder{}  // data_event_ids
+  );
+  auto cfg_b = std::make_unique<MetricConfig>("metricB",                              // name
+                                              "descr",                                // description
+                                              astl_units_t::ASTL_UNITS_CELSIUS,       // units
+                                              astl_value_type_t::ASTL_VALUE_UINT64,   // value type
+                                              astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
+                                              CollectorType::SCMI,                    // collector type
+                                              // no groups
+                                              astl::NullOperationBuilder{}  // data_event_ids
+  );
+
+  MockTarget  target;
+  std::string target_name{"AP0"};
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+  astl_status_code status = mgr.RegisterMetric(std::move(cfg_a), {&target});
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  status = mgr.RegisterMetric(std::move(cfg_b), {&target});
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  REQUIRE(mgr.GetAvailableMetrics(&target).value().size() == 2);
+  REQUIRE(mgr.GetMetricGroups().size() == 1);
+  REQUIRE(mgr.GetMetricGroups(&target).value().size() == 1);
+  auto bad_arg_result = mgr.GetMetricGroups(nullptr);
+  REQUIRE(bad_arg_result.error() == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE(
+    "MetricManager::RegisterMetric with 4 metrics, spread into 3 groups across 2 targets"
+    "[MetricManager][MetricGroup]") {
+  // "thermals" group with 'tempA' on target AP0
+  // "throttle" group with 'tempA' and 'throttleA' on target AP0
+  // and metric 'voltageA' with no group  on target AP0
+  // "NIC" group with 'voltageB' on target BMC
+
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+
+  std::vector<std::string> temp_a_groups{"thermals", "throttle"};
+  std::vector<std::string> throttle_a_groups{"throttle"};
+  std::vector<std::string> voltage_b_groups{"NIC"};
+
+  // 2) Build a MetricConfig whose collector type is SCMI
+  auto temp_a = std::make_unique<MetricConfig>("tempA",                                                // name
+                                               "descr",                                                // description
+                                               astl_units_t::ASTL_UNITS_CELSIUS,                       // units
+                                               astl_value_type_t::ASTL_VALUE_UINT64,                   // value type
+                                               astl_metric_type_t::ASTL_METRIC_VALUE,                  // metric type
+                                               CollectorType::SCMI,                                    // collector type
+                                               std::move(temp_a_groups), astl::NullOperationBuilder{}  // data_event_ids
+  );
+
+  auto throttle_cfg =
+      std::make_unique<MetricConfig>("throttleA",                                                // name
+                                     "descr",                                                    // description
+                                     astl_units_t::ASTL_UNITS_CELSIUS,                           // units
+                                     astl_value_type_t::ASTL_VALUE_UINT64,                       // value type
+                                     astl_metric_type_t::ASTL_METRIC_VALUE,                      // metric type
+                                     CollectorType::SCMI,                                        // collector type
+                                     std::move(throttle_a_groups), astl::NullOperationBuilder{}  // data_event_ids
+      );
+
+  auto core_voltage_cfg = std::make_unique<MetricConfig>("voltageA",                             // name
+                                                         "descr",                                // description
+                                                         astl_units_t::ASTL_UNITS_VOLTS,         // units
+                                                         astl_value_type_t::ASTL_VALUE_UINT64,   // value type
+                                                         astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
+                                                         CollectorType::SCMI,                    // collector type
+                                                         // no groups
+                                                         astl::NullOperationBuilder{}  // data_event_ids
+  );
+
+  // and another metric 'voltageB' with its own T2 group
+  auto nic_voltage_cfg =
+      std::make_unique<MetricConfig>("voltageB",                                                // name
+                                     "descr",                                                   // description
+                                     astl_units_t::ASTL_UNITS_VOLTS,                            // units
+                                     astl_value_type_t::ASTL_VALUE_UINT64,                      // value type
+                                     astl_metric_type_t::ASTL_METRIC_VALUE,                     // metric type
+                                     CollectorType::SCMI,                                       // collector type
+                                     std::move(voltage_b_groups), astl::NullOperationBuilder{}  // data_event_ids
+      );
+
+  MockTarget  ap0_target;
+  std::string ap0_target_name{"AP0"};
+  ALLOW_CALL(ap0_target, Name()).RETURN(ap0_target_name);
+  astl_status_code status{ASTL_STATUS_SUCCESS};
+  status = mgr.RegisterMetric(std::move(temp_a), {&ap0_target});
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  status = mgr.RegisterMetric(std::move(throttle_cfg), {&ap0_target});
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  status = mgr.RegisterMetric(std::move(core_voltage_cfg), {&ap0_target});
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+
+  MockTarget  bmc_target;
+  std::string bmc_target_name{"BMC"};
+  ALLOW_CALL(bmc_target, Name()).RETURN(bmc_target_name);
+  status = mgr.RegisterMetric(std::move(nic_voltage_cfg), {&bmc_target});
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+
+  // registration done, now verify lookup
+
+  REQUIRE(mgr.GetAvailableMetrics().value().size() == 4);
+  REQUIRE(mgr.GetAvailableMetrics(&ap0_target).value().size() == 3);
+  REQUIRE(mgr.GetMetricGroups().size() == 3);  // 3 groups across 2 targets
+
+  // check target AP0 for 2 groups
+  auto ap0_groups = mgr.GetMetricGroups(&ap0_target).value();
+  REQUIRE(ap0_groups.size() == 2);  // thermals and throttle groups
+
+  // turn the C-style handles into astl::MetricGroup objects
+  std::vector<const astl::MetricGroup*> expected_groups;
+  expected_groups.reserve(2);
+  std::ranges::transform(ap0_groups, std::back_inserter(expected_groups), [](const astl_metric_group_handle_t group) {
+    return astl::MetricGroup::FromApiHandle(group);
+  });
+
+  // thermals should have only one: tempA
+  auto thermal_group = std::find_if(expected_groups.begin(), expected_groups.end(),
+                                    [](const astl::MetricGroup* group) { return group->name == "thermals"; });
+  REQUIRE(thermal_group != expected_groups.end());
+  REQUIRE((*thermal_group)->metrics.size() == 1);  // tempA only
+
+  // throttle should have tempA and throttleA
+  auto throttle_group = std::find_if(expected_groups.begin(), expected_groups.end(),
+                                     [](const astl::MetricGroup* group) { return group->name == "throttle"; });
+  REQUIRE(throttle_group != expected_groups.end());
+  REQUIRE((*throttle_group)->metrics.size() == 2);  // tempA and throttleA
+
+  // now look at the second target, BMC, which should have one group with one metric
+  auto bmc_groups = mgr.GetMetricGroups(&bmc_target).value();
+  REQUIRE(bmc_groups.size() == 1);  // NIC group only
+  std::vector<const astl::MetricGroup*> bmc_expected_groups;
+  bmc_expected_groups.reserve(1);
+  // turn the C-style handles into astlMetricGroup objects
+  std::ranges::transform(
+      bmc_groups, std::back_inserter(bmc_expected_groups),
+      [](const astl_metric_group_handle_t group) { return astl::MetricGroup::FromApiHandle(group); });
+  REQUIRE(bmc_expected_groups[0]->metrics.size() == 1);  // NIC only
 }
