@@ -6,6 +6,7 @@
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <ranges>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -54,6 +55,18 @@ inline auto UpdateEventByInterval(DataEvent* event, std::chrono::system_clock::t
   }
 }
 
+template <class Selector>
+update_interval_t GetInterval(const std::vector<update_interval_t>& intervals, Selector selector) {
+  auto comp = [](const auto& a, const auto& b) {  // NOLINT (readability-identifier-length)
+    long double aval =
+        ToRaw<std::chrono::seconds>(a.first) * std::pow(10.0L, a.second);  // NOLINT (readability-magic-numbers)
+    long double bval =
+        ToRaw<std::chrono::seconds>(b.first) * std::pow(10.0L, b.second);  // NOLINT (readability-magic-numbers)
+    return aval < bval;
+  };
+  return *selector(intervals, comp);
+}
+
 auto InitProtocolTelemetry(FileSystemNode* g_root) -> std::unique_ptr<FileSystemNode> {
   auto& tlm_to_tgt = Instances();
 
@@ -82,11 +95,15 @@ auto InitProtocolTelemetry(FileSystemNode* g_root) -> std::unique_ptr<FileSystem
     std::filesystem::path data_events_path      = std::filesystem::path(env).parent_path() / raw_data_events_path;
 
     UpdateInterval update_intervals{};
-    for (const auto& interval : target["update_intervals_ms"]) {
-      update_intervals.update_intervals_ms.emplace_back(std::chrono::milliseconds(interval.get<int64_t>()));
+    for (const auto& interval : settings.at("update_intervals")) {
+      auto secs = std::chrono::seconds(interval.at(0).get<int64_t>());
+      auto exp  = interval.at(1).get<int16_t>();
+      update_intervals.update_intervals.emplace_back(secs, exp);
     }
-    update_intervals.active_update_interval_ms =
-        std::chrono::milliseconds(target["active_update_interval_ms"].get<int64_t>());
+
+    auto secs = std::chrono::seconds(settings["active_update_interval"].at(0).get<int64_t>());
+    auto exp  = settings["active_update_interval"].at(1).get<int16_t>();
+    update_intervals.active_update_interval = std::make_pair(secs, exp);
 
     auto tlm = std::make_unique<SCMITelemetryTarget>(tlm_id, all_des_enable, all_des_tstamp_enable, update_intervals,
                                                      tlm_enable, telemetry_version, de_version,
@@ -106,18 +123,25 @@ auto InitProtocolTelemetry(FileSystemNode* g_root) -> std::unique_ptr<FileSystem
 
 auto GetInitialIntervalValue(const SCMITelemetryTarget& tlm) -> std::string {
   std::string initial_value;
+
+  const auto& intervals = tlm.GetAvailableUpdateIntervals();
   if (tlm.GetIntervalsAreDiscreteFlag()) {
-    const auto& intervals = tlm.GetAvailableUpdateIntervalsMs();
-    for (auto interval : intervals) {
-      initial_value += ToRawString(interval) + " ";
+    for (const auto& [secs, exp] : intervals) {
+      initial_value += std::format("{},{} ", ToRaw<std::chrono::seconds>(secs), exp);
     }
     if (!initial_value.empty()) {
       initial_value.pop_back();  // Remove trailing space
     }
   } else {
-    initial_value = ToRawString(tlm.GetLowestInterval()) + " " + ToRawString(tlm.GetHighestInterval()) + " " +
-                    std::to_string(tlm.GetStepSize());
+    const auto& min_interval = GetInterval(intervals, std::ranges::min_element);
+    const auto& max_interval = GetInterval(intervals, std::ranges::max_element);
+    const auto& step         = tlm.GetStepSize();
+
+    initial_value = std::format("{},{} {},{} {},{}", ToRawString<std::chrono::seconds>(min_interval.first),
+                                min_interval.second, ToRawString<std::chrono::seconds>(max_interval.first),
+                                max_interval.second, ToRawString<std::chrono::seconds>(step.first), step.second);
   }
+
   return initial_value;
 }
 
@@ -130,9 +154,11 @@ auto BuildTelemetryTopLevelFiles(SCMITelemetryTarget& tlm, FileSystemNode* telem
                                                  std::to_string(static_cast<int>(tlm.GetAllDesTstampEnableFlag())),
                                                  FileAccess::WRITE_ONLY, telemetry, ProtocolType::SCMI_TELEMETRY));
 
-  telemetry->AddChild(FileSystemNode::CreateFile("current_update_interval_ms",
-                                                 ToRawString(tlm.GetCurrentUpdateIntervalMs()), FileAccess::READ_WRITE,
-                                                 telemetry, ProtocolType::SCMI_TELEMETRY));
+  const auto& active_update_interval = tlm.GetCurrentUpdateInterval();
+  auto formatted_interval = std::format("{},{}\n", ToRawString<std::chrono::seconds>(active_update_interval.first),
+                                        active_update_interval.second);
+  telemetry->AddChild(FileSystemNode::CreateFile("current_update_interval_ms", formatted_interval,
+                                                 FileAccess::READ_WRITE, telemetry, ProtocolType::SCMI_TELEMETRY));
 
   telemetry->AddChild(
       FileSystemNode::CreateFile("des_bulk_read", "", FileAccess::READ_ONLY, telemetry, ProtocolType::SCMI_TELEMETRY));
@@ -225,9 +251,12 @@ auto BuildTelemetryGroupFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetr
     auto composing_des = FileSystemNode::CreateFile("composing_des", "", FileAccess::READ_ONLY, group_n_dir.get(),
                                                     ProtocolType::SCMI_TELEMETRY);
 
-    group_n_dir->AddChild(FileSystemNode::CreateFile(
-        "current_update_interval_ms", ToRawString(group->intervals_.active_update_interval_ms), FileAccess::READ_WRITE,
-        group_n_dir.get(), ProtocolType::SCMI_TELEMETRY));
+    const auto& active_update_interval = group->intervals_.active_update_interval;
+    auto formatted_interval = std::format("{},{}\n", ToRawString<std::chrono::seconds>(active_update_interval.first),
+                                          active_update_interval.second);
+    group_n_dir->AddChild(FileSystemNode::CreateFile("current_update_interval_ms", formatted_interval,
+                                                     FileAccess::READ_WRITE, group_n_dir.get(),
+                                                     ProtocolType::SCMI_TELEMETRY));
 
     group_n_dir->AddChild(FileSystemNode::CreateFile("des_bulk_read", "", FileAccess::READ_ONLY, group_n_dir.get(),
                                                      ProtocolType::SCMI_TELEMETRY));
@@ -268,7 +297,6 @@ auto BuildTelemetryGroupFiles(SCMITelemetryTarget& tlm, FileSystemNode* telemetr
   telemetry->AddChild(std::move(groups_dir));
 };
 
-// TODO(ASTL-13): Dynamically build file tree from schema
 auto BuildProtocolTelemetryFileTree(FileSystemNode* arm_telemetry_root, const std::string& tlm_id)
     -> std::unique_ptr<FileSystemNode> {
   auto& tlm = SCMITelemetryTarget::Instance(tlm_id);
@@ -409,31 +437,43 @@ auto HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::string&
       return ErrorCode::SUCCESS;
 
     case TelemetryFile::CURRENT_UPDATE_INTERVAL_MS: {
-      std::chrono::milliseconds interval{std::stoi(value)};
+      int     sec = 0;
+      int16_t exp = 0;
+
+      std::stringstream string_parser(value);
+      if (!(string_parser >> sec >> exp)) {
+        std::cerr << "Unsupported update interval: " << value << '\n';
+        return ErrorCode::UNSUPPORTED_PROTOCOL;
+      }
+
+      const update_interval_t target_interval{std::chrono::seconds{sec}, exp};
 
       if (is_group) {
         const auto& group               = tlm.GetGroups().at(group_id.value());
-        const auto& available_intervals = group->intervals_.update_intervals_ms;
+        const auto& available_intervals = group->intervals_.update_intervals;
 
-        // TODO(danngu01): implement check for if not discrete intervals
-        if (std::find(available_intervals.begin(), available_intervals.end(), interval) != available_intervals.end()) {
-          group->intervals_.active_update_interval_ms = interval;
-          std::cout << "Set group current_update_interval_ms to " << interval << "\n";
-          return ErrorCode::SUCCESS;
+        if (group->intervals_.discrete && std::find(available_intervals.begin(), available_intervals.end(),
+                                                    target_interval) == available_intervals.end()) {
+          std::cerr << "Unsupported update interval: " << sec << "," << exp << '\n';
+          return ErrorCode::UNSUPPORTED_PROTOCOL;
         }
-      } else {
-        const auto& available_intervals = tlm.GetAvailableUpdateIntervalsMs();
 
-        // TODO(danngu01): implement check for if not discrete intervals
-        if (std::find(available_intervals.begin(), available_intervals.end(), interval) != available_intervals.end()) {
-          tlm.SetCurrentUpdateIntervalMs(interval);
-          std::cout << "Set current_update_interval_ms to " << interval << "\n";
-          return ErrorCode::SUCCESS;
-        }
+        // TODO(danngu01): implement check for if not discrete intervals that it is within range and step size
+        group->intervals_.active_update_interval = target_interval;
+        std::cout << "Set group current_update_interval_ms to " << sec << "," << exp << "\n";
+        return ErrorCode::SUCCESS;
       }
 
-      std::cerr << "Unsupported update interval: " << interval << '\n';
-      return ErrorCode::UNSUPPORTED_PROTOCOL;
+      const auto& available_intervals = tlm.GetAvailableUpdateIntervals();
+      if (tlm.GetIntervalsAreDiscreteFlag() && std::find(available_intervals.begin(), available_intervals.end(),
+                                                         target_interval) == available_intervals.end()) {
+        std::cerr << "Unsupported update interval: " << sec << "," << exp << '\n';
+        return ErrorCode::UNSUPPORTED_PROTOCOL;
+      }
+
+      tlm.SetCurrentUpdateInterval(target_interval);
+      std::cout << "Set current_update_interval_ms to " << sec << "," << exp << "\n";
+      return ErrorCode::SUCCESS;
     }
 
     case TelemetryFile::TLM_ENABLE:
@@ -514,18 +554,26 @@ auto HandleProtocolTelemetryRead(const FileSystemNode* node) -> std::string {
     case TelemetryFile::CURRENT_UPDATE_INTERVAL_MS:
       if (is_group) {
         const auto& group = tlm.GetGroups().at(group_id.value());
-        return ToRawString(group->intervals_.active_update_interval_ms);
+        return std::format("{},{}\n", ToRawString<std::chrono::seconds>(group->intervals_.active_update_interval.first),
+                           group->intervals_.active_update_interval.second);
       }
-      return ToRawString(tlm.GetCurrentUpdateIntervalMs());
+      return std::format("{},{}\n", ToRawString<std::chrono::seconds>(tlm.GetCurrentUpdateInterval().first),
+                         tlm.GetCurrentUpdateInterval().second);
 
     case TelemetryFile::DES_BULK_READ: {
-      auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
+      const auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
 
-      auto interval_ms = is_group ? tlm.GetGroups().at(group_id.value())->intervals_.active_update_interval_ms
-                                  : tlm.GetCurrentUpdateIntervalMs();
+      const auto [base, exp] = is_group ? tlm.GetGroups().at(group_id.value())->intervals_.active_update_interval
+                                        : tlm.GetCurrentUpdateInterval();
+
+      const auto seconds_val =
+          ToRaw<std::chrono::seconds>(base) * std::pow(10.0, exp);  // NOLINT (cppcoreguidelines-narrowing-conversions)
+
+      const auto interval_ms =
+          std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<double>(seconds_val));
 
       std::string result;
-      for (auto& event : tlm.GetDataEvents()) {  // NOLINT
+      for (auto& event : tlm.GetDataEvents()) {  // NOLINT (readability-identifier-length)
         if (!event || !event->enable_ || !tlm.GetTlmEnableFlag()) {
           continue;
         }
@@ -537,7 +585,7 @@ auto HandleProtocolTelemetryRead(const FileSystemNode* node) -> std::string {
         UpdateEventByInterval(event.get(), now_ms, interval_ms);
 
         // Append latest timestamp if enabled, else 0
-        result += event->tstamp_enable_ ? ToRawString(event->last_timestamp_.time_since_epoch()) + " " : "0 ";
+        result += event->tstamp_enable_ ? ToRawString(event->last_timestamp_.time_since_epoch()) + ": " : "0: ";
         result += std::format("0x{:04x} ", static_cast<unsigned int>(event->id_));
 
         // TODO(ASTL-116) - Handle all other _astl_value_type_t
@@ -550,25 +598,33 @@ auto HandleProtocolTelemetryRead(const FileSystemNode* node) -> std::string {
     case TelemetryFile::INTERVALS_DISCRETE: {
       if (is_group) {
         const auto& group     = tlm.GetGroups().at(group_id.value());
-        const auto& intervals = group->intervals_.update_intervals_ms;
+        const auto& intervals = group->intervals_.update_intervals;
 
         if (intervals.empty()) {
           return "";
         }
 
-        auto min_it = std::min_element(intervals.begin(), intervals.end());
-        auto max_it = std::max_element(intervals.begin(), intervals.end());
+        const auto& min_interval = GetInterval(intervals, std::ranges::min_element);
+        const auto& max_interval = GetInterval(intervals, std::ranges::max_element);
+        const auto& step         = group->intervals_.step_size;
 
-        return std::to_string(min_it->count()) + " " + std::to_string(max_it->count()) + " " +
-               std::to_string(group->intervals_.step_size) + "\n";
+        return std::format("{},{} {},{} {},{}", ToRawString<std::chrono::seconds>(min_interval.first),
+                           min_interval.second, ToRawString<std::chrono::seconds>(max_interval.first),
+                           max_interval.second, ToRawString<std::chrono::seconds>(step.first), step.second);
       }
 
       if (tlm.GetIntervalsAreDiscreteFlag()) {
         return "0\n";
       }
 
-      return ToRawString(tlm.GetLowestInterval()) + " " + ToRawString(tlm.GetHighestInterval()) + " " +
-             std::to_string(tlm.GetStepSize()) + "\n";
+      const auto& intervals    = tlm.GetAvailableUpdateIntervals();
+      const auto& min_interval = GetInterval(intervals, std::ranges::min_element);
+      const auto& max_interval = GetInterval(intervals, std::ranges::max_element);
+      const auto& step         = tlm.GetStepSize();
+
+      return std::format("{},{} {},{} {},{}", ToRawString<std::chrono::seconds>(min_interval.first),
+                         min_interval.second, ToRawString<std::chrono::seconds>(max_interval.first),
+                         max_interval.second, ToRawString<std::chrono::seconds>(step.first), step.second);
     }
 
     case TelemetryFile::TLM_ENABLE:
@@ -613,10 +669,17 @@ auto HandleProtocolTelemetryRead(const FileSystemNode* node) -> std::string {
         return "0\n";
       }
 
-      auto now      = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
-      auto interval = tlm.GetCurrentUpdateIntervalMs();  // std::chrono::milliseconds
+      const auto now = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
 
-      UpdateEventByInterval(data_event, now, interval);
+      // Convert update interval from (seconds, exponent) to milliseconds
+      const auto [base, exp] = tlm.GetCurrentUpdateInterval();
+      const auto seconds_val =
+          ToRaw<std::chrono::seconds>(base) * std::pow(10.0, exp);  // NOLINT (cppcoreguidelines-narrowing-conversions)
+
+      const auto interval_ms =
+          std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<double>(seconds_val));
+
+      UpdateEventByInterval(data_event, now, interval_ms);
 
       // TODO(ASTL-116) - Handle all other _astl_value_type_t
       if (data_event->tstamp_enable_) {
@@ -630,7 +693,7 @@ auto HandleProtocolTelemetryRead(const FileSystemNode* node) -> std::string {
 
       std::string result;
 
-      for (auto& event : tlm.GetDataEvents()) {  // NOLINT
+      for (auto& event : tlm.GetDataEvents()) {  // NOLINT (readability-identifier-length)
         if (!event || !event->enable_ || !tlm.GetTlmEnableFlag()) {
           continue;
         }
@@ -642,7 +705,7 @@ auto HandleProtocolTelemetryRead(const FileSystemNode* node) -> std::string {
         event->last_value_ = event->Generate();
 
         // Append latest timestamp if enabled, else 0
-        result += event->tstamp_enable_ ? ToRawString(event->last_timestamp_.time_since_epoch()) + " " : "0 ";
+        result += event->tstamp_enable_ ? ToRawString(event->last_timestamp_.time_since_epoch()) + ": " : "0: ";
         result += std::format("0x{:04x} ", static_cast<unsigned int>(event->id_));
 
         // TODO(ASTL-116) - Handle all other _astl_value_type_t

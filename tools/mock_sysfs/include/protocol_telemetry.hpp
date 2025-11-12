@@ -4,6 +4,7 @@
 #include <sys/types.h>
 
 #include <chrono>
+#include <cmath>
 #include <optional>
 #include <unordered_map>
 
@@ -11,6 +12,8 @@
 #include "fsnode.hpp"
 
 namespace mock_sysfs {
+
+using update_interval_t = std::pair<std::chrono::seconds, int16_t>;
 
 constexpr int kHexRadix = 16;
 
@@ -78,10 +81,10 @@ ErrorCode HandleProtocolTelemetryWrite(const FileSystemNode* node, const std::st
 std::string HandleProtocolTelemetryRead(const FileSystemNode* node);
 
 struct UpdateInterval {
-  bool                                   discrete{false};
-  std::vector<std::chrono::milliseconds> update_intervals_ms;
-  uint32_t                               step_size{1};
-  std::chrono::milliseconds              active_update_interval_ms{};
+  bool                           discrete{false};
+  std::vector<update_interval_t> update_intervals;
+  update_interval_t              step_size{std::chrono::seconds{1}, 0};
+  update_interval_t              active_update_interval{std::chrono::seconds{1}, 0};
 };
 
 struct DesGroup {
@@ -193,9 +196,10 @@ class SCMITelemetryTarget {
 
   /**
    * @brief Gets the current update interval in milliseconds.
-   * @return uint32_t The update interval in milliseconds.
+   * @return update_interval_t : a pair of seconds and int16_t (representing the signed power of 10 to multiply seconds
+   * by).
    */
-  std::chrono::milliseconds GetCurrentUpdateIntervalMs() const { return intervals_.active_update_interval_ms; }
+  auto GetCurrentUpdateInterval() const -> update_interval_t { return intervals_.active_update_interval; }
 
   /**
    * @brief Returns the global telemetry enable flag.
@@ -219,9 +223,7 @@ class SCMITelemetryTarget {
    * @brief Gets the available update intervals in milliseconds.
    * @return Vector of available update intervals.
    */
-  const std::vector<std::chrono::milliseconds>& GetAvailableUpdateIntervalsMs() const {
-    return intervals_.update_intervals_ms;
-  }
+  auto GetAvailableUpdateIntervals() const -> std::vector<update_interval_t> { return intervals_.update_intervals; }
 
   /**
    * @brief Checks if the available update intervals are defined as a discrete set.
@@ -230,32 +232,10 @@ class SCMITelemetryTarget {
   bool GetIntervalsAreDiscreteFlag() const { return intervals_.discrete; }
 
   /**
-   * @brief Returns the vector of discrete update intervals.
-   * @return const std::vector<uint32_t>& Vector of discrete intervals.
-   */
-  const std::vector<std::chrono::milliseconds>& GetDiscreteIntervals() const { return intervals_.update_intervals_ms; }
-
-  /**
-   * @brief Gets the lowest update interval.
-   * @return uint32_t The lowest update interval.
-   */
-  std::chrono::milliseconds GetLowestInterval() const {
-    return *std::min_element(intervals_.update_intervals_ms.begin(), intervals_.update_intervals_ms.end());
-  }
-
-  /**
-   * @brief Gets the highest update interval.
-   * @return uint32_t The highest update interval.
-   */
-  std::chrono::milliseconds GetHighestInterval() const {
-    return *std::max_element(intervals_.update_intervals_ms.begin(), intervals_.update_intervals_ms.end());
-  }
-
-  /**
    * @brief Retrieves the step size between update intervals.
    * @return uint32_t The step size.
    */
-  uint32_t GetStepSize() const { return intervals_.step_size; }
+  auto GetStepSize() const -> update_interval_t { return intervals_.step_size; }
 
   /**
    * @brief Returns the container of telemetry data events.
@@ -279,9 +259,7 @@ class SCMITelemetryTarget {
    * @brief Sets the current update interval in milliseconds.
    * @param interval_ms New update interval in milliseconds.
    */
-  void SetCurrentUpdateIntervalMs(std::chrono::milliseconds interval_ms) {
-    intervals_.active_update_interval_ms = interval_ms;
-  }
+  void SetCurrentUpdateInterval(const update_interval_t& interval) { intervals_.active_update_interval = interval; }
 
   /**
    * @brief Sets the global telemetry enable flag.

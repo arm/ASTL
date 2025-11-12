@@ -187,6 +187,7 @@ static void LowLevelWrite(fuse_req_t req, fuse_ino_t ino, const char* buf, size_
 
   if (HandleProtocolWrite(node, std::string(buf, size)) != ErrorCode::SUCCESS) {
     fuse_reply_err(req, EIO);
+    return;
   }
 
   if (off + size > kMaxContentLen - 1) {
