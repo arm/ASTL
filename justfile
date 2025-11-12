@@ -8,7 +8,7 @@ clean:
     #!/usr/bin/env bash
     set -eu -o pipefail
     echo "[clean] Removing build artifacts"
-    rm -rf build coverage_*
+    rm -rf build coverage_* python/build
 
 # Aggressibly remove cache files and as many artifacts as possible
 deep_clean: clean
