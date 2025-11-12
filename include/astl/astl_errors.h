@@ -112,7 +112,7 @@ typedef enum _astl_status_code {
   ASTL_STATUS_DIVIDE_BY_ZERO             = 57,            //!< Attempted division by zero
   ASTL_STATUS_INVALID_VALUE_TYPE         = 58,            //!< Invalid astl_value_type_t for operation
   ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE   = 59,            //!< A struct parameter's _size property doesn't match
-  ASTL_STATUS_NOT_INITIALIZED            = 60,            //!< astlInitialize must be called before this function
+  ASTL_STATUS_NOT_INITIALIZED            = 60,            //!< Failed to initialize internal state
 
   // Add new status codes here
 

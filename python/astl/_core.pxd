@@ -211,9 +211,6 @@ cdef extern from "astl/astl_telemetry.h":
         astl_collection_optimization_t _optimization
     ctypedef _astl_collection_parameters_t astl_collection_parameters_t
 
-    # initialization
-    int astlInitialize(const astl_initialization_parameters_t* init_params)
-
     # targets
     int astlGetTargetCount(uint32_t* target_count)
     int astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count)

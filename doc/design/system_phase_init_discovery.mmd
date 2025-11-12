@@ -12,7 +12,6 @@ sequenceDiagram
     participant OutputManager as OutputManager
 
     %% Init
-    User->>API: astlInitialize(params)
     API->>ConfigurationManager: GetConfiguration()
     ConfigurationManager-->>API: configuration | error
     API->>TopologyManager: BuildTopologyManager()

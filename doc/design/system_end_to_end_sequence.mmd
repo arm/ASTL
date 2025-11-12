@@ -19,8 +19,6 @@ sequenceDiagram
 
     rect rgb(230,230,255)
     Note over User,Orchestrator: Initialization & Discovery (see phase 1)
-    User->>API: astlInitialize()
-    API->>Orchestrator: InitializeInstance(...)
     Orchestrator-->>API: status
     User->>API: astlGetTargets()
     API->>Orchestrator: GetTargets()

@@ -13,7 +13,7 @@ cdef class ASTLError(Exception):
         cdef const char* s = astlStatusString(<astl_status_code>code)
         msg = s.decode() if s != NULL else f"ASTL error {code}"
         if code == ASTL_STATUS_NOT_INITIALIZED:
-            msg += " (call astl.initialize() before using this function)"
+            msg += " ASTL internals not initialized"
         super().__init__(msg)
 
 cdef inline void _check(int code):
@@ -402,18 +402,6 @@ cdef object _decode_value(int value_type, astl_value_t v):
         return v.str.decode() if v.str != NULL else ""
     else:
         return None
-
-cpdef initialize(config_path: str | None = None):
-    cdef astl_initialization_parameters_t params
-    params._size = sizeof(astl_initialization_parameters_t)
-    cdef bytes cfg_bytes
-    if config_path is not None:
-        cfg_bytes = config_path.encode()
-        params._configuration_file_path = <const char*>cfg_bytes
-    else:
-        params._configuration_file_path = NULL
-    _check(astlInitialize(&params))
-
 
 cpdef list get_targets():
     cdef uint32_t count = 0

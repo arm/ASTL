@@ -20,7 +20,6 @@ def test_diagnostics_keys():
 
 
 def test_session_no_targets():
-    astl.initialize(None)
     targets = astl.get_targets()
     # Always should work even if no targets
     with Session(target=targets[0] if targets else None, counters=[], metrics=[]) as sess:

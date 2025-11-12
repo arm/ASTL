@@ -7,7 +7,6 @@ def test_version_struct():
 
 
 def test_empty_enumerations_do_not_error():
-    astl.initialize(None)
     targets = astl.get_targets()
     assert isinstance(targets, list)
     if targets:

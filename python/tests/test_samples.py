@@ -9,7 +9,6 @@ def test_sample_retrieval_graceful_empty():
     If there are no targets or no counters/metrics, the test is skipped to
     avoid false failures in minimal environments.
     """
-    astl.initialize(None)
     targets = astl.get_targets()
     if not targets:
         pytest.skip("No targets available for sample retrieval test")

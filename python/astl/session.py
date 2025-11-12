@@ -41,7 +41,6 @@ from typing import Sequence, Any, Dict, List, Tuple
 import time
 
 from . import (
-    initialize,
     configure_counters_on_target,
     configure_metrics_on_target,
     start_collection,

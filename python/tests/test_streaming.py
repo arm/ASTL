@@ -9,7 +9,6 @@ import astl
 
 
 def test_streaming_helpers_import_and_graceful():
-    astl.initialize(None)
     # Ensure helpers are accessible
     assert hasattr(astl, 'poll_counter_once')
     assert hasattr(astl, 'stream_counter')

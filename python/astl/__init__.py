@@ -63,7 +63,6 @@ existing names are not removed without a deprecation period.
 """
 
 from ._core import (
-    initialize,
     get_targets,
     get_counters,
     get_metrics,
