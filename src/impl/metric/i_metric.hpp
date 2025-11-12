@@ -129,7 +129,6 @@ struct IMetric {
    *
    * Error Handling:
    *  - Returns `ASTL_STATUS_SUCCESS` on successful forwarding.
-   *  - `ASTL_STATUS_NOT_INITIALIZED` if no sink has been configured.
    *  - `ASTL_STATUS_BAD_ARGUMENT` if the sample is structurally invalid (e.g. missing size
    *    initialization) – implementations may add additional validation criteria.
    *  - Other metric-specific error codes are permitted (e.g. capacity / overflow) and should be

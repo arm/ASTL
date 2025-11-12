@@ -140,9 +140,37 @@ class build_ext_with_copy(build_ext):
             if ext.name == "astl._core":
                 ext_path = self.get_ext_fullpath(ext.name)
                 _copy_into(os.path.dirname(ext_path))
+                # Create symlink to configuration JSON beside extension + bundled shared library
+                _maybe_link_config(os.path.dirname(ext_path))
                 break
         # And into source package dir
         _copy_into(pkg_dir)
+        _maybe_link_config(pkg_dir)
+
+
+def _maybe_link_config(dst_dir: str) -> None:
+    """Create or refresh a symlink to samples/sample_configuration/astl_configuration.json in dst_dir.
+
+    Best effort; silently ignore errors (e.g., on filesystems without symlink support). If a regular
+    file with the intended link name exists, leave it untouched. If a stale symlink exists, replace it.
+    """
+    src = os.path.join(ROOT, 'samples', 'sample_configuration', 'astl_configuration.json')
+    if not os.path.isfile(src):
+        return
+    link_name = os.path.join(dst_dir, 'astl_configuration.json')
+    try:
+        if os.path.islink(link_name):
+            try:
+                os.remove(link_name)
+            except OSError:
+                return
+        if os.path.exists(link_name) and not os.path.islink(link_name):
+            # A real file exists; don't overwrite
+            return
+        os.symlink(src, link_name)
+    except OSError:
+        # Non-fatal; ignore platforms without symlink or permission errors
+        pass
 
 INCLUDE_DIRS = _discover_include_dirs(ROOT)
 LIB_NAME, LIB_DIRS, RPATHS = _find_built_library(ROOT)

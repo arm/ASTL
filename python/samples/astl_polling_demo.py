@@ -12,12 +12,6 @@ Graceful behavior when no targets / counters / metrics exist.
 from __future__ import annotations
 import astl  # Provides both low-level functions and higher-level streaming helpers
 
-
-def _initialize() -> None:
-    """Initialize ASTL using default configuration resolution."""
-    astl.initialize(None)
-
-
 def _select_target():  # -> astl.Target | None (leave annotated loosely for runtime simplicity)
     """Return the first available target or None if none exist."""
     targets = astl.get_targets()
@@ -60,7 +54,6 @@ def _poll(counter, metric, target, iterations: int = 5, interval: float = 0.2) -
 
 
 def main() -> int:
-    _initialize()
     target = _select_target()
     if not target:
         return 0

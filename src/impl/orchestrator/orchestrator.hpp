@@ -68,8 +68,6 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    * @brief Return a reference to the single Orchestrator instance
    *        If one hasn't been constructed yet, a default one with no collectors,
    *        metrics, or targets will be created in a thread-safe way.
-   *        astlInitialize will use this returned reference to assign a new Orchestrator that may
-   *        have more complex internals
    *
    * @return a reference to an owning pointer to Orchestrator. Will return nullptr before InitializeInstance is called
    */

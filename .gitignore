@@ -33,6 +33,7 @@ python/astl/_core.cpp
 *.a
 *.la
 *.lo
+python/astl/astl_configuration.json
 
 # Shared objects (inc. Windows DLLs)
 *.dll

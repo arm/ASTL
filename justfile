@@ -6,18 +6,21 @@ alias rt := retest
 
 clean:
     #!/usr/bin/env bash
+    set -eu -o pipefail
     echo "[clean] Removing build artifacts"
     rm -rf build coverage_*
 
 # Aggressibly remove cache files and as many artifacts as possible
 deep_clean: clean
     #!/usr/bin/env bash
+    set -eu -o pipefail
     echo "[purge] Removing additional artifacts"
     rm -rf external/vcpkg doc/html python/docs/_build/ python/astl/__pycache__/ python/astl/__pycache__/ .mypy_cache .venv python/astl.egg-info/ python/dist/ python/astl/_core.cpp
 
 # generate build files through cmake
 config preset='debug':
     #!/usr/bin/env bash
+    set -eu -o pipefail
     echo "[config] Using preset={{preset}}"
     cmake -S . --preset {{preset}}
 
@@ -25,6 +28,7 @@ config preset='debug':
 # just config must be run first as a one-time step
 build preset='debug': config
     #!/usr/bin/env bash
+    set -eu -o pipefail
     if [ ! -d build/ ]; then
         echo "[build] Build directory missing; running config step first" > /dev/stderr
         exit 1
@@ -35,6 +39,7 @@ build preset='debug': config
 # format source code (C/C++ & related) using repository script
 format:
     #!/usr/bin/env bash
+    set -eu -o pipefail
     ./scripts/format.sh
 
 # run lint/static analysis step; pass build directory and mode (e.g. pull-request)
@@ -42,27 +47,32 @@ format:
 #       and that the build directory follows build/<preset> naming.
 lint preset='debug':
     #!/usr/bin/env bash
+    set -eu -o pipefail
     ./scripts/lint.sh build/{{preset}} pull-request
 
 # run unit tests
 test preset='debug': build
     #!/usr/bin/env bash
+    set -eu -o pipefail
     echo "[test] Using preset={{preset}}"
     ctest -LE "integration" --preset {{preset}}
 
 # test everything, generate html coverage file
 test-cov: build
     #!/usr/bin/env bash
+    set -eu -o pipefail
     ./scripts/run_tests_and_create_html_cov.sh
 
 retest preset='debug':
     #!/usr/bin/env bash
+    set -eu -o pipefail
     echo "[retest] Using preset={{preset}}"
     ctest --rerun-failed --preset {{preset}}
 
 # Just config must be run first as a one-time step, but does not require a build
 doc preset='debug':
     #!/usr/bin/env bash
+    set -eu -o pipefail
     if [ ! -d build/ ]; then
         echo "[build] Build directory missing; running config step first" > /dev/stderr
         exit 1
@@ -77,6 +87,7 @@ doc preset='debug':
 # run tests and sample scripts. Accepts optional python version via PY env var.
 python-full-cycle preset='debug':
     #!/usr/bin/env bash
+    set -eu -o pipefail
     PYBIN="${PY:-python3}"
     echo "[python-full-cycle] Using Python: $PYBIN"
     echo "[python-full-cycle] Configuring CMake preset={{preset}}"
@@ -99,12 +110,14 @@ python-full-cycle preset='debug':
 # Vendor Python headers only (useful before building an sdist or running tests outside full cycle)
 vendor-python-headers:
     #!/usr/bin/env bash
+    set -eu -o pipefail
     bash python/scripts/vendor_headers.sh --quiet
     echo "[vendor-python-headers] Done"
 
 # Run Python tests ensuring build + vendoring + editable install
 python-pytest preset='debug':
     #!/usr/bin/env bash
+    set -eu -o pipefail
     PYBIN="${PY:-python3}"
     echo "[python-pytest] Using Python: $PYBIN"
     cmake -S . --preset {{preset}} -DENABLE_VALGRIND=OFF
@@ -123,6 +136,7 @@ python-pytest preset='debug':
 # Build a wheel and smoke test import & version in a clean isolated environment
 python-wheel-smoke preset='debug':
     #!/usr/bin/env bash
+    set -eu -o pipefail
     PYBIN="${PY:-python3}"
     echo "[python-wheel-smoke] Using Python: $PYBIN"
     cmake -S . --preset {{preset}} -DENABLE_VALGRIND=OFF
@@ -154,6 +168,7 @@ python-wheel-smoke preset='debug':
 # Interactive development shell: builds selected preset, ensures editable install, activates venv, drops into shell.
 python-dev-shell preset='debug':
     #!/usr/bin/env bash
+    set -eu -o pipefail
     echo "[python-dev-shell] Configure/build preset={{preset}}"
     cmake -S . --preset {{preset}}
     cmake --build --preset {{preset}} --parallel=$(nproc)
@@ -168,6 +183,7 @@ python-dev-shell preset='debug':
 
 full-ci preset='debug':
     #!/usr/bin/env bash
+    set -eu -o pipefail
     START_TS=$(date +%s)
     echo "[full-ci] Starting full pipeline with preset={{preset}}"
     rm -rf build/{{preset}} .venv .wheel-smoke-venv
@@ -205,6 +221,7 @@ full-ci preset='debug':
 # Reuse pre-built native library (downloaded artifact) to run Python tests & mypy without invoking CMake.
 python-reuse-tests:
     #!/usr/bin/env bash
+    set -eu -o pipefail
     PYBIN="${PY:-python3}"
     echo "[python-reuse-tests] Python: $("$PYBIN" -V)"
     if [ ! -d build/debug/lib ]; then
@@ -232,7 +249,12 @@ python-reuse-tests:
         find build -maxdepth 4 -type f -name 'libastl*' 2>/dev/null || true
         exit 3
     fi
-    if [ ! -d .venv ]; then "$PYBIN" -m venv .venv; fi
+    if [ ! -f .venv ]; then
+        echo "[python-reuse-tests] Initializing Python venv"
+        "$PYBIN" -m venv .venv;
+    else
+        echo "[python-reuse-tests] Reusing existing Python venv"
+    fi
     source .venv/bin/activate
     python -m pip install --upgrade pip >/dev/null
     # Idempotent install (wheel cache speeds reruns)
@@ -265,6 +287,7 @@ python-reuse-tests:
 # Build sdist & wheel, run integrity + wheel smoke + diagnostics + short benchmark (reuse existing native lib)
 python-package-and-benchmark:
     #!/usr/bin/env bash
+    set -eu -o pipefail
     echo "[python-package-and-benchmark] Start"
     PYBIN="${PY:-python3}"
     if [ ! -d build/debug/lib ]; then

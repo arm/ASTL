@@ -8,10 +8,10 @@
 
 | Area            | Module             | Purpose                                  | Key Objects/Functions                                 |
 | --------------- | ------------------ | ---------------------------------------- | ----------------------------------------------------- |
-| Core Binding    | `astl._core`       | Thin Cython bridge to C API              | `initialize`, `get_targets`, `get_counters`,          |
+| Core Binding    | `astl._core`       | Thin Cython bridge to C API              | `get_targets`, `get_counters`,                        |
 |                 |                    |                                          | `get_metrics`, `get_metric_groups`, `read_immediate`, |
 |                 |                    |                                          | `get_counter_samples`, `get_metric_samples`           |
-| Public Facade   | `astl`             | Re-exports curated API surface           | `initialize`, `start_collection`, `pause_collection`, |
+| Public Facade   | `astl`             | Re-exports curated API surface           | `start_collection`, `pause_collection`,               |
 |                 |                    |                                          | `resume_collection`, `stop_collection`, enums         |
 | Streaming       | `astl.streaming`   | Iterative (sync & async) polling helpers | `poll_counter_once`, `poll_metric_once`,              |
 |                 |                    |                                          | `stream_counter`, `stream_metric`                     |
@@ -56,8 +56,6 @@ If pandas is absent, `to_dataframe()` gracefully returns a list of dictionaries.
 ```python
 import astl
 from astl.streaming import configure_basic_collection, poll_counter_once, stream_counter
-
-astl.initialize(None)  # or supply a configuration path/object per C API contract
 
 # Pick a target and a counter object
 t = astl.get_targets()[0]
@@ -110,12 +108,13 @@ Core principle: keep binding layer minimal; push ergonomics upward.
 
 Call order (typical):
 
-1. `initialize`
-2. (optional) configure collection parameters
-3. `start_collection`
-4. Read / stream / analyze
-5. `pause_collection` / `resume_collection` as needed
-6. `stop_collection`
+1. (optional) configure collection parameters
+2. `start_collection`
+3. Read / stream / analyze
+4. `pause_collection` / `resume_collection` as needed
+5. `stop_collection`
+
+Note that initialization of ASTL's internal state is done automatically
 
 ### Session Helper
 
@@ -139,7 +138,6 @@ reports NOT_IMPLEMENTED on certain lifecycle operations.
 
 ```python
 import astl
-astl.initialize(None)
 t = astl.get_targets()[0]
 print("Targets:", astl.get_targets())
 print("Counters:", astl.get_counters(t))
@@ -167,16 +165,6 @@ res_c = poll_counter_once(t, c)
 res_m = poll_metric_once(t, m)
 print(res_c.samples)
 print(res_m.samples)
-```
-
-Exceptions translate status codes automatically:
-
-```python
-from astl.exceptions import InitializationError
-try:
-    astl.read_immediate(t)
-except InitializationError:
-    astl.initialize(None)
 ```
 
 ---
@@ -311,7 +299,6 @@ Benchmarking helper script (benchmark_polling) has been removed; use streaming o
 
 | C Status         | Python Exception          | Typical Cause                   |
 | ---------------- | ------------------------- | ------------------------------- |
-| NOT_INITIALIZED  | `InitializationError`     | API call before `initialize`    |
 | BAD_ARGUMENT     | `BadArgumentError`        | Invalid parameter / ID          |
 | INVALID_ARGUMENT | `InvalidArgumentError`    | Semantically invalid config     |
 | NOT_IMPLEMENTED  | `NotImplementedErrorASTL` | Feature unsupported on platform |
@@ -330,11 +317,6 @@ status is not specially mapped yet).
 This enables logging / metrics pipelines to tag failures without triggering
 control-flow via exceptions.
 
-### InitializationError Message Augmentation
-
-When raised via `Status.NOT_INITIALIZED`, the exception message includes user
-guidance ("requires initialize()") to reduce ambiguity in logs.
-
 ### Reload Robustness
 
 The exception mapping layer self-heals after module reloads
@@ -344,30 +326,15 @@ setup.
 Hardening tests enforce that `InitializationError` still maps correctly after
 repeated reload cycles.
 
-### Recommended Handling Pattern
-
-```python
-import astl
-try:
-    astl.initialize(None)
-    # telemetry operations
-except astl.InitializationError as e:
-    print("Need to initialize earlier:", e)
-except astl.ASTLError as e:
-    # Fallback for any other mapped error
-    print("ASTL telemetry error:", e)
-```
-
 ---
 
 ## Patterns & Best Practices
 
-1. Initialize Early: Call `initialize(None)` at process start; reuse global state instead of repeated init/shutdown cycles.
-2. Stream Responsibly: Choose `interval` balancing overhead vs. granularity.
-3. Derive Rates Post-Collection: Avoid computing rates inline if jitter sensitivity matters—collect raw then post-process.
-4. Handle Exceptions Narrowly: Catch specific mapped exceptions instead of a broad `Exception` to retain semantic clarity.
-5. Optional Dependencies: Gate analytics that rely on pandas—core telemetry should not require heavy dependencies.
-6. Benchmark in CI Sparingly: Keep iterations low to reduce pipeline time; use scheduled workflows for deeper perf trending.
+1. Stream Responsibly: Choose `interval` balancing overhead vs. granularity.
+2. Derive Rates Post-Collection: Avoid computing rates inline if jitter sensitivity matters—collect raw then post-process.
+3. Handle Exceptions Narrowly: Catch specific mapped exceptions instead of a broad `Exception` to retain semantic clarity.
+4. Optional Dependencies: Gate analytics that rely on pandas—core telemetry should not require heavy dependencies.
+5. Benchmark in CI Sparingly: Keep iterations low to reduce pipeline time; use scheduled workflows for deeper perf trending.
 
 ---
 
@@ -405,7 +372,6 @@ print(frame_or_list)
 
 | Symptom                            | Likely Cause                                      | Resolution                                  |
 | ---------------------------------- | ------------------------------------------------- | ------------------------------------------- |
-| InitializationError on first read  | Forgot `initialize`                               | Call `astl.initialize(None)` earlier        |
 | NotImplementedErrorASTL for metric | Platform lacks support                            | Conditional logic / skip gracefully         |
 | Empty DataFrame results            | No samples collected                              | Verify streaming loop iterations / interval |
 | Rates list shorter than samples    | First sample lacks predecessor / zero-dt filtered | Expected behavior                           |

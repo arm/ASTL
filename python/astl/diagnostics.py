@@ -39,7 +39,7 @@ class Diagnostics:
         return asdict(self)
 
 
-def diagnostics(initialize_if_needed: bool = False) -> Diagnostics:
+def diagnostics() -> Diagnostics:
     """Collect a snapshot of runtime diagnostics.
 
     Parameters
@@ -60,12 +60,6 @@ def diagnostics(initialize_if_needed: bool = False) -> Diagnostics:
             pass
     if get_targets is not None:
         try:
-            if initialize_if_needed:
-                from . import initialize  # local import to avoid cycle
-                try:
-                    initialize(None)
-                except Exception:
-                    pass
             t = get_targets()
             if isinstance(t, list):
                 target_count = len(t)

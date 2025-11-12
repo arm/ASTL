@@ -25,7 +25,6 @@ async def stream_metric_task(target, metric):
 
 async def async_main():
     # Initialize and enumerate
-    astl.initialize(None)
     targets = astl.get_targets()
     if not targets:
         print("No targets detected; exiting.")

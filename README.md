@@ -155,14 +155,6 @@ collection_protocol: selects which collectors should measure it
 
 - scmi_specification_path: optional override for the JSON file specifying data event IDs and targets
 
-```cpp
-ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._configuration_file_path = "~/.my_astl_config.json");
-auto status = astlInitialize(&init_params);
-if (status != ASTL_STATUS_SUCCESS) {
-    // handle error...
-}
-```
-
 3. Discover targets
 
 ```cpp
