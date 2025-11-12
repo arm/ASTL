@@ -19,6 +19,7 @@
 #include "counter.hpp"
 #include "metric/i_metric.hpp"
 #include "metric/i_metric_manager.hpp"
+#include "metric/metric_group.hpp"
 #include "operation/operation.hpp"
 #include "output/i_output.hpp"
 #include "output/i_output_manager.hpp"
@@ -278,6 +279,16 @@ struct MockMetricManager : public astl::IMetricManager {
              auto(const astl::IMetric* metric, std::span<const astl::ProcessedSampledData> processed_samples)
                  ->astl_status_code,
              override);
+
+  MAKE_MOCK0(GetMetricGroups, auto()->std::span<const astl_metric_group_handle_t>, const override);
+  using expected_metric_groups_handles = std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code>;
+  MAKE_MOCK1(GetMetricGroups, auto(const astl::ITarget* target)->expected_metric_groups_handles, const override);
+
+  MAKE_MOCK2(GetMetricGroupProperties,
+             auto(astl_metric_group_handle_t group, astl_metric_group_properties_t* properties)->astl_status_code,
+             const override);
+
+  MAKE_MOCK1(GetMetricsInGroup, auto(astl_metric_group_handle_t group)->expected_metric_interface, const override);
 
   // NOTE: The GetProcessedSamples(metric_handle, target) method was removed from IMetricManager.
   // Tests should obtain processed samples via Orchestrator::GetProcessedMetricSamples after sinking them with

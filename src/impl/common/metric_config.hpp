@@ -77,6 +77,30 @@ class MetricConfig {
         _collector_type(collector_type),
         _operation_builder(std::move(operation_builder)) {}
 
+  /**
+   * @brief Construct a MetricConfig with the given parameters.
+   * @param name           Metric name.
+   * @param description    Human-readable description of the metric.
+   * @param units          Measurement units for the metric (e.g., Watts, Joules).
+   * @param value_type     Data type of the metric value (e.g., uint32, float64).
+   * @param metric_type    Semantic type of the metric defined by ASTL design doc (e.g. value, delta, residency)
+   * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
+   * @param metric_groups  vector of strings representin the names of metric gropus this belongs to
+   * @param operation_builder The operation builder associated with this metric's collector type,
+   *                          including collector-specific parameters like data event id or libsensors chip
+   */
+  explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
+                        astl_value_type_t value_type, astl_metric_type_t metric_type, CollectorType collector_type,
+                        std::vector<std::string> metric_groups, AnyOperationBuilder operation_builder)
+      : _metric_name(name),
+        _description(description),
+        _units(units),
+        _value_type(value_type),
+        _metric_type(metric_type),
+        _collector_type(collector_type),
+        _metric_groups(std::move(metric_groups)),
+        _operation_builder(std::move(operation_builder)) {}
+
   MetricConfig(const MetricConfig &)            = default;
   MetricConfig &operator=(const MetricConfig &) = default;
   MetricConfig(MetricConfig &&)                 = default;
@@ -116,12 +140,11 @@ class MetricConfig {
    * @brief Return the collector type of the metric.
    */
   CollectorType GetCollectorType() const { return _collector_type; }
+
   /**
-   * @brief Set the collector type of the metric.
-   *
-   * @param collector_type The collector type to set.
+   * @brief Return the groups this metric belongs to.
    */
-  void SetCollectorType(CollectorType collector_type) { _collector_type = collector_type; }
+  auto MetricGroups() const -> std::vector<std::string> const & { return _metric_groups; }
 
   /**
    * @brief return the operation builder, for use with operation_builder.hpp's `BuildOperations`
@@ -134,9 +157,10 @@ class MetricConfig {
   astl_units_t      _units;        // Measurement units for the metric (e.g., seconds, bytes)
   astl_value_type_t _value_type;   // Data type of the metric value (e.g., raw, processed)
   // Semantic type of the metric defined by ASTL design doc(e.g., value, delta, residency)
-  astl_metric_type_t  _metric_type;
-  CollectorType       _collector_type;  // Collector type to support this metric
-  AnyOperationBuilder _operation_builder;
+  astl_metric_type_t       _metric_type;
+  CollectorType            _collector_type;  // Collector type to support this metric
+  std::vector<std::string> _metric_groups;   // Groups this metric belongs to
+  AnyOperationBuilder      _operation_builder;
 };
 
 /**

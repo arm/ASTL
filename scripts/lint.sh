@@ -176,7 +176,7 @@ if [[ ${#TEST_FILES_TO_LINT[@]} -gt 0 ]]; then
 		"${TEST_FILES_TO_LINT[@]}" -p "${BUILD_DIR}" \
 		-header-filter="'^(?!.*(include/astl|$BUILD_DIR/include/astl)).*'" \
 		"${EXTRA_ARGS[@]}" \
-		-checks=-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers \
+		-checks=-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers,-readability-function-cognitive-complexity \
 		-- \
 		"${INCLUDE_PATHS[@]}" \
 		"${SYS_INCLUDE_PATHS[@]}"

@@ -156,6 +156,33 @@ struct IMetricManager {
       -> astl_status_code = 0;
 
   /**
+   * @brief Return the metric groups registered in the manager.
+   *
+   * @return A span<astl_metric_group_handle_t> containing all registered metric groups, or an error.
+   */
+  [[nodiscard]] virtual auto GetMetricGroups() const -> std::span<const astl_metric_group_handle_t> = 0;
+
+  /**
+   * @brief Return the metric groups registered in the manager for a specific target.
+   * @param target The target from which to retrieve associated metric groups
+   * @return A span<astl_metric_group_handle_t> containing all registered metric groups, or an error.
+   */
+  [[nodiscard]] virtual auto GetMetricGroups(const ITarget* target) const
+      -> std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> = 0;
+
+  /**
+   * @brief Assign values such as name, description, etc to the given metric groups properties pointer.
+   */
+  auto virtual GetMetricGroupProperties(astl_metric_group_handle_t      group,
+                                        astl_metric_group_properties_t* properties) const -> astl_status_code = 0;
+
+  /**
+   * @brief Retrieve the metric handles associated with a given metric group instance
+   */
+  auto virtual GetMetricsInGroup(astl_metric_group_handle_t group) const
+      -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
+
+  /**
    * @brief Summarize the metrics messages.
    *
    * This method should be called to create a summary for all the metrics.

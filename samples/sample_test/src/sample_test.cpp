@@ -65,6 +65,7 @@ auto PrintHelp() -> void {
             << "Options:\n"
             << "  --help              Show this help message.\n"
             << "  --version           Print version and exit.\n"
+            << "  --group=<name>      Specify metric group to collect.\n"
             << "  --immediate         Trigger immediate sample read.\n"
             << "  --interval=<n>      Trigger interval sample read period in milliseconds.\n"
             << "  --duration=<n>      Collection duration in seconds.\n"
@@ -116,6 +117,15 @@ auto GetDurationArgument(const std::unordered_map<std::string, std::string>& arg
     }
   }
   return std::chrono::seconds{};
+}
+
+auto GetMetricGroupArgument(const std::unordered_map<std::string, std::string>& args) -> std::string {
+  if (args.contains("group")) {
+    std::string metric_group = args.at("group");
+    std::cout << "Metric group set to: " << metric_group << "\n";
+    return metric_group;
+  }
+  return std::string{};
 }
 
 auto GetTargetByName(std::string const& target_name, std::vector<astl_target_properties_t>& target_properties_buffer,
@@ -220,6 +230,54 @@ auto GetMetrics(const astl_target_properties_t& target_properties, std::vector<a
   status = astlGetMetrics(target_properties._handle, metric_buffer.data(), &metric_count);
   std::cout << "astlGetMetrics Status: " << astlStatusString(status) << '\n';
   return status;
+}
+
+auto GetMetricsInGroup(const astl_target_properties_t& target_properties, const std::string& group_name)
+    -> std::expected<std::vector<astl_metric_properties_t>, astl_status_code> {
+  uint32_t metric_group_count{0};
+  auto     status = astlGetMetricGroupCount(target_properties._handle, &metric_group_count);
+  if (status != ASTL_STATUS_SUCCESS) {
+    std::cout << "astlGetMetricGroupCount Status: " << astlStatusString(status) << '\n';
+    return std::unexpected<astl_status_code>(status);
+  }
+  std::cout << "astlGetMetricGroupCount: " << metric_group_count << '\n';
+  if (metric_group_count == 0) {
+    return std::vector<astl_metric_properties_t>{};
+  }
+  std::vector<astl_metric_group_properties_t> metric_groups_properties(metric_group_count);
+  metric_groups_properties[0]._size = sizeof(astl_metric_group_properties_t);
+
+  // retrieve the metric groups
+  status = astlGetMetricGroups(target_properties._handle, metric_groups_properties.data(), &metric_group_count);
+  if (status != ASTL_STATUS_SUCCESS) {
+    std::cout << "astlGetMetricGroups Status: " << astlStatusString(status) << '\n';
+    return std::unexpected<astl_status_code>(status);
+  }
+
+  // find the requested metric group
+  auto metric_group = std::find_if(metric_groups_properties.begin(), metric_groups_properties.end(),
+                                   [&group_name](const astl_metric_group_properties_t& group_props) {
+                                     return group_props._name != nullptr && group_name == group_props._name;
+                                   });
+  if (metric_group == metric_groups_properties.end()) {
+    std::cout << "Metric group '" << group_name << "' not found.\n";
+    return std::vector<astl_metric_properties_t>{};
+  }
+  // allocate buffer for the group's metrics
+  std::vector<astl_metric_properties_t> metrics_properties(metric_group->_metric_count);
+  if (metric_group->_metric_count > 0) {
+    metrics_properties[0]._size = sizeof(astl_metric_properties_t);
+  }
+  // _metrics member of metric_group_properties is a convenience - letting user allocate buffer
+  // for metrics, and associate it with the metric group.
+  metric_group->_metrics = metrics_properties.data();
+
+  status = astlGetMetricGroupMetrics(target_properties._handle, &(*metric_group), metric_group->_metrics);
+  if (status != ASTL_STATUS_SUCCESS) {
+    std::cout << "astlGetMetricGroupMetrics Status: " << astlStatusString(status) << '\n';
+    return std::unexpected(status);
+  }
+  return metrics_properties;
 }
 
 auto ConfigureAndRunCollection(const astl_target_properties_t&              target_properties,
@@ -333,6 +391,8 @@ auto main(int argc, char* argv[]) -> int {
     return 0;
   }
 
+  auto metric_group_name = GetMetricGroupArgument(args);
+
   std::chrono::seconds duration_seconds(10);  // Default duration
   auto                 duration_result = GetDurationArgument(args);
   if (!duration_result) {
@@ -379,17 +439,27 @@ auto main(int argc, char* argv[]) -> int {
 
   // Get metrics
   std::vector<astl_metric_properties_t> metric_buffer;
-  uint32_t                              metric_count{};
-  status = GetMetrics(target_properties, metric_buffer, metric_count);
-  if (status != ASTL_STATUS_SUCCESS) {
-    std::cout << "Masking error code " << status
-              << " from GetMetrics so sample integration tests will pass w/out mock sysfs\n";
-    // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
-    // even without mock sysfs running
-    return 0;
+  if (!metric_group_name.empty()) {
+    auto metrics_or_error = GetMetricsInGroup(target_properties, metric_group_name);
+    if (!metrics_or_error) {
+      std::cout << "Error retrieving metrics for group '" << metric_group_name
+                << "': " << astlStatusString(metrics_or_error.error()) << "\n";
+      return 5;
+    }
+    metric_buffer = *metrics_or_error;
+  } else {
+    uint32_t metric_count{};
+    status = GetMetrics(target_properties, metric_buffer, metric_count);
+    if (status != ASTL_STATUS_SUCCESS) {
+      std::cout << "Masking error code " << status
+                << " from GetMetrics so sample integration tests will pass w/out mock sysfs\n";
+      // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
+      // even without mock sysfs running
+      return 0;
+    }
   }
 
-  if (metric_count == 0) {
+  if (metric_buffer.empty()) {
     std::cout << "no metrics available to collect on target: " << target_properties._name << '\n';
     return 0;
   }

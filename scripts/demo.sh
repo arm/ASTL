@@ -32,6 +32,7 @@ TELEMETRY_ROOT="$MOUNT_POINT/arm_telemetry"
 # Default mode duration and interval
 # Default to interval mode with 10 seconds duration and 500ms interval
 # unless overridden by command-line arguments
+GROUP=""
 MODE="interval"
 DURATION=10
 INTERVAL=500
@@ -39,6 +40,10 @@ INTERVAL=500
 # Parse command-line arguments for mode, interval, and duration (using '=' syntax)
 while [[ $# -gt 0 ]]; do
 	case "$1" in
+	--group=*)
+		GROUP="${1#--group=}"
+		shift
+		;;
 	--immediate)
 		MODE="immediate"
 		shift
@@ -121,6 +126,11 @@ if [[ $MODE == "immediate" ]]; then
 else
 	echo "🚀 Running sample_test with --interval for ${DURATION}s"
 	RUN_ARGS=(--interval="$INTERVAL" --duration="$DURATION")
+fi
+
+if [[ -n $GROUP ]]; then
+	echo "🚀 Using metric group: $GROUP"
+	RUN_ARGS+=(--group="$GROUP")
 fi
 
 # Note that ASTL_CONFIG_JSON_PATH is an internal-use-only environment variable

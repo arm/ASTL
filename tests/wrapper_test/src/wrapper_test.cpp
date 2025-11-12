@@ -528,22 +528,6 @@ TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator][wrapper]") {
   }
 }
 
-TEST_CASE("astlGetMetricGroupCount", "[unimplemented for now][wrapper]") {
-  uint32_t count{};
-  REQUIRE(astlGetMetricGroupCount(nullptr, &count) == ASTL_STATUS_NOT_IMPLEMENTED);
-}
-
-TEST_CASE("astlGetMetricGroups", "[unimplemented for now][wrapper]") {
-  std::array<astl_metric_group_properties_t, 1> properties{};
-  uint32_t                                      count{};
-  REQUIRE(astlGetMetricGroups(nullptr, properties.data(), &count) == ASTL_STATUS_NOT_IMPLEMENTED);
-}
-
-TEST_CASE("astlGetMetricGroupMetrics", "[unimplemented for now][wrapper]") {
-  std::array<astl_metric_properties_t, 1> properties{};
-  REQUIRE(astlGetMetricGroupMetrics(nullptr, nullptr, properties.data()) == ASTL_STATUS_BAD_ARGUMENT);
-}
-
 TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
   // set up target
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
@@ -752,15 +736,6 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[bad parameters][wrapper]") 
 
 TEST_CASE("astlConfigureMetricCollection", "[unimplemented for now][wrapper]") {
   REQUIRE(astlConfigureMetricCollection(nullptr, nullptr, 0) == ASTL_STATUS_NOT_IMPLEMENTED);
-}
-
-/*** CONFIGURE METRIC GROUPS ***/
-TEST_CASE("astlConfigureMetricGroupCollectionOnTarget", "[unimplemented for now][wrapper]") {
-  REQUIRE(astlConfigureMetricGroupCollectionOnTarget(nullptr, nullptr, nullptr, 0) == ASTL_STATUS_NOT_IMPLEMENTED);
-}
-
-TEST_CASE("astlConfigureMetricGroupCollection", "[unimplemented for now][wrapper]") {
-  REQUIRE(astlConfigureMetricGroupCollection(nullptr, nullptr, 0) == ASTL_STATUS_NOT_IMPLEMENTED);
 }
 
 TEST_CASE("astlReadImmediateOnTarget", "[1 works, one doesn't][wrapper]") {

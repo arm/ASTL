@@ -24,7 +24,9 @@
 #ifndef METRIC_MANAGER_HPP_
 #define METRIC_MANAGER_HPP_
 
+#include <memory>
 #include <span>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -35,6 +37,7 @@
 #include "common/capabilities.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "i_metric_manager.hpp"
+#include "metric/metric_group.hpp"
 
 namespace astl {
 
@@ -147,6 +150,35 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   auto ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code override;
 
   /**
+   * @brief Return the metric groups registered in the manager.
+   *
+   * @return A span<astl_metric_group_handle_t> containing all registered metric groups, or an error.
+   */
+  [[nodiscard]] auto GetMetricGroups() const -> std::span<const astl_metric_group_handle_t> override;
+
+  /**
+   * @brief Return the metric groups registered in the manager for a specific target.
+   * @param target The target from which to retrieve associated metric groups
+   * @return A span<astl_metric_group_handle_t> containing all registered metric groups, or an error.
+   */
+  [[nodiscard]] auto GetMetricGroups(const ITarget* target) const
+      -> std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> override;
+
+  /**
+   * @brief Assign values such as name, description, etc to the given metric groups properties pointer.
+   * @param group The metric group API handle
+   * @param properties A non-null pointer to a struct that to be populated with info about the given group
+   */
+  auto GetMetricGroupProperties(astl_metric_group_handle_t group, astl_metric_group_properties_t* properties) const
+      -> astl_status_code override;
+
+  /**
+   * @brief Retrieve the metric handles associated with a given metric group instance
+   */
+  auto GetMetricsInGroup(astl_metric_group_handle_t group) const
+      -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> override;
+
+  /**
    * @brief Finalize and summarize metrics after data processing.
    * @return ASTL_STATUS_SUCCESS or an appropriate error code.
    */
@@ -200,6 +232,23 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    */
   auto IsCollectorTypeSupported(CollectorType required_collector_type) const -> bool;
 
+  /**
+   * @brief Helper for RegisterMetric to add metric to groups based on its config
+   * @param metric_handle The metric handle to add to groups
+   * @param metric_config The metric config used to determine group membership
+   * @param targets       The targets associated with this metric
+   */
+  auto AddMetricToGroups(astl_metric_handle_t metric_handle, const MetricConfig* metric_config,
+                         const std::vector<const ITarget*>& targets) -> astl_status_code;
+
+  /**
+   * @brief Add the given (potentially newly discovered) group to all targets
+   * @param group_handle The metric group handle to add to targets
+   * @param targets      The targets to which the group should be added
+   */
+  auto AddMetricGroupToTargets(astl_metric_group_handle_t group_handle, const std::vector<const ITarget*>& targets)
+      -> astl_status_code;
+
   Capabilities _capabilities;
 
   std::unordered_set<IProcessedSampleSink*> _registered_processed_sample_sinks;
@@ -217,8 +266,19 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   // each Target supports multiple different metrics
   std::unordered_map<const ITarget*, std::vector<astl_metric_handle_t>> _target_to_metrics_map;
 
+  // each Target supports multiple different metric groups
+  std::unordered_map<const ITarget*, std::vector<astl_metric_group_handle_t>> _target_to_metric_groups_map;
+
   // Maps operation IDs to their corresponding metrics
   std::unordered_map<uint32_t, IMetric*> _operation_to_metric_map;
+
+  // The internal representation of metric groups
+  // stored as unique_ptrs so that they're not invalidated when adding new entries,
+  // as the raw pointers are exposed via astl_metric_group_handle_t through _metric_group_api_handles.
+  std::vector<std::unique_ptr<MetricGroup>> _metric_groups;
+
+  // Same data as in `_metric_groups`, but using raw pointers to MetricGroups for exposure.
+  std::vector<astl_metric_group_handle_t> _metric_group_api_handles;
 };
 
 }  // namespace astl

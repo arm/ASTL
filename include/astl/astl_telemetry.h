@@ -389,10 +389,16 @@ typedef struct _astl_metric_group_properties_t {
   astl_metric_group_handle_t _handle;        //!< The handle of this metric group
   const char*                _name;          //!< The name of this metric group
   const char*                _description;   //!< The description of this metric group
-  uint32_t                   _metric_count;  //!< The number of metrics in this metric group
-  astl_metric_properties_t*  _metrics;       //!< Pointer for buffer of metric properties in this
-                                             //!< metric group. User must allocate buffer of
-                                             //!< _metric_count elements and call astlGetMetricGroupMetrics
+  uint32_t                   _metric_count;  //!< The number of metrics in this metric group.
+                                             //!< astlGetMetricGroupMetrics API uses this value to
+                                             //!< determine the size of the metrics buffer that is passed in
+
+  astl_metric_properties_t* _metrics;  //!< Initially null, users can set this to an allocated buffer
+                                       //!< to hold the properties of all metrics in this metric group.
+                                       //!< Before calling astlGetMetricGroupMetrics API, users _must_ allocate this to
+                                       //!< hold `_metric_count` metrics.
+                                       //!< Also, be sure to set the _size field of at least the first element
+                                       //!< in the array to sizeof(astl_metric_properties_t) for ABI versioning
 } astl_metric_group_properties_t;
 
 /**
@@ -439,15 +445,13 @@ ASTL_API astl_status_code astlGetMetricGroups(astl_target_handle_t            ta
  * @param[in] target_handle                The handle of the target of interest. Found in
  * astl_target_properties_t
  *
- * @param[in/out] metric_group             Pointer to a single metric group structure. Cannot be
- *                                         NULL. Returns the structure with _metrics pointer pointing
- *                                         to populated metrics buffer
- *                                         IMPORTANT: _size field must be set to sizeof(astl_target_properties_t)
- *                                         for versioning
+ * @param[in/out] metric_group             Pointer to a single metric group properties structure. Cannot be NULL.
+ *                                         Contains the _metric_count which determines the size of the `metrics` buffer,
+ *                                         and the _handle which identifies the metric group of interest.
  *
  * @param[in/out] metrics                  Array of metric properties structures. Cannot be NULL.
- *                                         It should point to the buffer of
- *                                         sizeof(aslt_metric_properties_t) * (_metric_count)
+ *                                         It should point to the buffer of size
+ *                                         `sizeof(aslt_metric_properties_t) * (metric_group._metric_count)`
  *                                         _metric_count is found in the astl_metric_group_properties_t
  *                                         structure.
  *                                         IMPORTANT: _size field of at least the first element in the array

@@ -49,6 +49,11 @@ inline auto from_json(const json& json_data, MetricJsonDeclaration& metric) -> v
     json_data.at("offset").get_to(metric.offset);
   }
 
+  // Metric groups field is optional
+  if (json_data.contains("metric_groups")) {
+    metric.metric_groups = json_data["metric_groups"].get<std::vector<std::string>>();
+  }
+
   // Handle residency-specific fields
   if (json_data.contains("inferred_state")) {
     metric.inferred_state = json_data["inferred_state"].get<std::string>();
@@ -438,6 +443,11 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
     //                 if we want to support different data event ids per target
     (void)scmi_targets;
     ScmiOperationBuilder operation_builder{de_id};
+    if (metric_declaration.metric_groups.has_value()) {
+      return std::make_unique<MetricConfig>(metric_name, metric_declaration.description, units, value_type, metric_type,
+                                                  collector_type.value(), metric_declaration.metric_groups.value(),
+                                                  std::move(operation_builder));
+    }
     return std::make_unique<MetricConfig>(metric_name, metric_declaration.description, units, value_type, metric_type,
                                                 collector_type.value(), std::move(operation_builder));
   };
