@@ -289,7 +289,7 @@ typedef const void* astl_metric_handle_t;  //!< Abstraction of a metric handle
  */
 typedef struct _astl_metric_sample_t {
   size_t       _size;       //!< Size of this struct for versioning
-  uint64_t     _timestamp;  //!< the timestamp when this value was captured
+  uint64_t     _timestamp;  //!< the timestamp in microseconds when this value was captured
   astl_value_t _value;      //!< The value captured. Should use _value_type in the
                             //!< astl_metric_properties_t structure to properly interpret _value
 } astl_metric_sample_t;

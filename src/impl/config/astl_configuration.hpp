@@ -75,9 +75,7 @@ struct AstlConfiguration {
 [[nodiscard]] auto ParseConfiguration(std::istream& configuration_data)
     -> std::expected<AstlConfiguration, astl_status_code>;
 
-auto ParseUnits(const MetricJsonDeclaration& metric_declaration) -> astl_units_t;
-
-auto ParseMetricType(const MetricJsonDeclaration& metric_declaration) -> astl_metric_type_t;
+auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std::optional<CollectorType>;
 
 /**
  * @brief helper function to create a MetricConfig object from a MetricJsonDeclaration and ScmiSpecification

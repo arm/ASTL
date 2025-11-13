@@ -1,0 +1,37 @@
+# astl-cli configuration
+
+# Default subcommand if none passed on CLI.
+command = "collect"
+
+# Path to ASTL configuration file. (optional)
+astl_config_file = "/home/brelon01/code/ASTL/tools/astl_cli/astl_configuration.json"
+
+# Enable verbose console output.
+verbose = false
+
+[list-metrics]
+
+# List of unit names to include.
+units-include-list = []
+
+# Print only metric names.
+name-only = false
+
+[collect]
+# Collection sampling interval in milliseconds.
+sampling_interval = 100
+
+# Collection duration in seconds.
+duration = 42
+
+# List of metrics (from list-metrics) to collect. 
+metrics = ["CPU Power", "IO Power", "SoC Temperature"]
+
+# Output directory for plots.
+output-dir = "plots/png/"
+
+# Plot output file type [none, terminal, png, or svg].
+plot-type = "svg"
+
+# Workload program and arguments as array.
+workload = ["echo ' 🔥 Starting benchmark with 32 cores 🔥'; ", "~/code/asct/src/extern/asct-cpu-bench/asct-cpu-bench", "--target-cpus", "0-31", "--measure-duration", "7", "--benchmark", "matmul", "; sleep 3; ", "echo ' 🔥🔥 Starting benchmark with 64 cores 🔥🔥'; ", "~/code/asct/src/extern/asct-cpu-bench/asct-cpu-bench", "--target-cpus", "0-63", "--measure-duration", "7", "--benchmark", "matmul", "; sleep 3; ", "echo ' 🔥🔥🔥 Starting benchmark with 128 cores 🔥🔥🔥'; ", "~/code/asct/src/extern/asct-cpu-bench/asct-cpu-bench", "--target-cpus", "0-127", "--measure-duration", "7", "--benchmark", "matmul", "; sleep 3; "]

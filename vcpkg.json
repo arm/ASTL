@@ -9,6 +9,8 @@
       "platform": "linux"
     },
     "nlohmann-json",
+    "tabulate",
+    "tomlplusplus",
     "trompeloeil",
     "magic-enum",
     "protobuf",

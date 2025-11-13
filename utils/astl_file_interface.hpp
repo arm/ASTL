@@ -13,6 +13,30 @@
 namespace astl {
 
 /**
+ * @brief Expand `~` into user home path and return a file path or error message
+ */
+inline auto ExpandFilePath(std::string const &file_path_str) -> std::expected<std::filesystem::path, std::string> {
+  try {
+    if (file_path_str.empty()) {
+      return std::unexpected<std::string>("File path string is empty");
+    }
+    // if starts with ~, expand to home directory
+    std::string expanded_path_str = file_path_str;
+    if (file_path_str[0] == '~') {
+      const auto home_dir = GetEnvVar("HOME");
+      if (home_dir.empty()) {
+        return std::unexpected<std::string>("Cannot expand '~' in file path: HOME environment variable is not set");
+      }
+      expanded_path_str = home_dir + file_path_str.substr(1);
+    }
+    std::filesystem::path path{expanded_path_str};
+    return path;
+  } catch (const std::exception &e) {
+    return std::unexpected<std::string>(std::format("Failed to parse file path '{}': {}", file_path_str, e.what()));
+  }
+}
+
+/**
  * @brief The C++ interface representing a file interface
  */
 

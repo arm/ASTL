@@ -1,0 +1,67 @@
+{
+  "_comment": "ASTL configuration file - view README.md for more details",
+  "scmi_sysfs_telemetry_root_path": "/home/brelon01/tmp/fuse/arm_telemetry",
+
+  "metrics": {
+    "CORE_TEMP": {
+      "description": "SoC Temperature in Celsius",
+      "register": "CORE_TEMP_0",
+      "unit": "C",
+      "metric_type": "value",
+      "collection_protocol": "scmi"
+    },
+    "Throttle Counts": {
+      "description": "Number of thermal throttling events",
+      "register": "THROTTLE_EVENTS",
+      "unit": "",
+      "metric_type": "delta",
+      "collection_protocol": "scmi"
+    },
+    "SoC Power": {
+      "description": "SoC Power Consumption in Watts",
+      "register": "ENERGY_COUNTER",
+      "unit": "W",
+      "metric_type": "rate",
+      "collection_protocol": "scmi"
+    },
+    "P-State": {
+      "description": "Current CPU performance state (P-state)",
+      "register": "P_STATE",
+      "unit": "",
+      "metric_type": "finite_set",
+      "collection_protocol": "scmi",
+      "finite_set_values": [
+        { "P0[2GHz-3GHz] (Turbo)": 0 },
+        { "P1[1GHz-2GHz] (Nominal)": 1 },
+        { "P2[0.5GHz-1GHz] (Throttled)": 2 },
+        { "P3[0GHz] (Idle)": 3 }
+      ]
+    },
+    "SoC Temperature": {
+      "description": "SoC Temperature in Celsius",
+      "register": "apm_xgene-isa-0000",
+      "offset": "temp1",
+      "unit": "C",
+      "metric_type": "value",
+      "collection_protocol": "libsensors"
+    },
+    "CPU Power": {
+      "description": "CPU Power Consumption in Watts",
+      "register": "apm_xgene-isa-0000",
+      "offset": "power1",
+      "unit": "W",
+      "metric_type": "value",
+      "collection_protocol": "libsensors"
+    },
+    "IO Power": {
+      "description": "IO Power Consumption in Watts",
+      "register": "apm_xgene-isa-0000",
+      "offset": "power2",
+      "unit": "W",
+      "metric_type": "value",
+      "collection_protocol": "libsensors"
+    }
+  },
+
+  "scmi_specification_path": "./samples/sample_topology/example_scmi_specification.json"
+}

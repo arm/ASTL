@@ -75,11 +75,8 @@ auto GetAstlFilePath() -> std::expected<fs::path, astl_status_code> {
 }
 
 auto GetConfigurationEnvironmentVariable() -> std::optional<fs::path> {
-  const char* environment_variable_content = std::getenv("ASTL_CONFIG_JSON_PATH");
-  if (environment_variable_content == nullptr) {
-    return std::nullopt;
-  }
-  if (*environment_variable_content == '\0') {
+  const auto environment_variable_content = astl::GetEnvVar("ASTL_CONFIG_JSON_PATH");
+  if (environment_variable_content.empty()) {
     return std::nullopt;
   }
   return fs::path(environment_variable_content);

@@ -67,5 +67,6 @@ cppcheck -U_WIN32 --std=c++23 --inline-suppr --enable=all "${FOLDERS[@]}" "$INCL
 	--suppress=missingInclude \
 	--suppress=missingIncludeSystem \
 	--suppress=normalCheckLevelMaxBranches \
+	--suppress=*:*external/* \
 	--quiet \
 	--error-exitcode=1

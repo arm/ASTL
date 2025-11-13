@@ -228,8 +228,8 @@ auto MetricManager::GetAvailableMetrics(const ITarget* target) const
     for (const auto& target_metrics : _target_to_metrics_map) {
       targets.append(target_metrics.first->Name() + ", ");
     }
-    ASTL_LOG_ERROR("GetAvailableMetrics: Target '{}' not found in '{}'.", target->Name(), targets);
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    ASTL_LOG_WARNING("GetAvailableMetrics: Target '{}' not found in '{}'.", target->Name(), targets);
+    return {};
   }
   std::span<const astl_metric_handle_t> handles_span(target_iter->second);
   return std::expected<std::span<const astl_metric_handle_t>, astl_status_code>(std::in_place, handles_span);
