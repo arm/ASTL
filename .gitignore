@@ -1,8 +1,11 @@
 # Ignore vendored Python headers (generated/copied by vendor_headers.sh)
 python/astl/include/astl/
+python/astl/LICENSE
+python/astl/_core.cpp
 
 # Python Outputs
 .venv
+venv
 python/astl.egg-info/
 python/astl/__pycache__/
 python/tests/__pycache__/
@@ -63,6 +66,9 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Ignore vcpkg directories
+external
 
 # Ignore build directories
 build/

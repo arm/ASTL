@@ -113,7 +113,9 @@ SOURCE_FILES_TO_LINT=()
 TEST_FILES_TO_LINT=()
 C_HEADERS_TO_LINT=()
 for FILE in "${FILES[@]}"; do
-	if [[ $FILE == *.h.in ]]; then
+	if [[ $FILE == *external/* ]]; then
+		continue
+	elif [[ $FILE == *.h.in ]]; then
 		# skip files used to generate C code
 		continue
 	elif [[ $FILE == *tools/mock_sysfs* && "$(uname -s)" != "Linux" ]]; then

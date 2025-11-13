@@ -188,8 +188,12 @@ auto AstlValue::ToAstlUnionValue() const -> std::pair<astl_value_t, astl_value_t
 auto AstlValue::Add(const AstlValue& addend, const AstlValue& augend) -> std::expected<AstlValue, astl_status_code> {
   return std::visit(
       [](auto&& left, auto&& right) -> std::expected<AstlValue, astl_status_code> {
-        using X = std::decay_t<decltype(left)>;
-        using Y = std::decay_t<decltype(right)>;
+        // X is the type of the left, but promote bool to uint8_t to avoid unsafe arithmetic
+        using X = std::conditional_t<std::is_same_v<std::decay_t<decltype(left)>, bool>, uint8_t,
+                                     std::decay_t<decltype(left)>>;
+        // Y is the type of the right, but promote bool to uint8_t to avoid unsafe arithmetic
+        using Y = std::conditional_t<std::is_same_v<std::decay_t<decltype(right)>, bool>, uint8_t,
+                                     std::decay_t<decltype(right)>>;
 
         // disallow adding integral types with floating point types
         if constexpr ((std::is_integral_v<X> && !std::is_integral_v<Y>) ||
@@ -200,7 +204,8 @@ auto AstlValue::Add(const AstlValue& addend, const AstlValue& augend) -> std::ex
 
         if constexpr (std::is_arithmetic_v<X> && std::is_arithmetic_v<Y>) {
           // Cast both operands to common type
-          using Result      = std::conditional_t<(sizeof(X) >= sizeof(Y)), X, Y>;
+          using Result = std::conditional_t<(sizeof(X) >= sizeof(Y)), X, Y>;
+
           Result left_cast  = static_cast<Result>(left);
           Result right_cast = static_cast<Result>(right);
 
@@ -232,13 +237,11 @@ auto AstlValue::Subtract(const AstlValue& minuend, const AstlValue& subtrahend)
     -> std::expected<AstlValue, astl_status_code> {
   // Helper performs unsigned underflow check; bool is promoted to uint8_t first to avoid unsafe comparisons.
   auto underflow_check = [](auto lhs, auto rhs) -> bool {
-    using T = std::decay_t<decltype(lhs)>;
+    // T is the lhs type, but promote bool to uint8_t to avoid unsafe arithmetic
+    using T =
+        std::conditional_t<std::is_same_v<std::decay_t<decltype(lhs)>, bool>, uint8_t, std::decay_t<decltype(lhs)>>;
     if constexpr (std::is_integral_v<T> && std::is_unsigned_v<T>) {
-      if constexpr (std::is_same_v<T, bool>) {
-        return static_cast<uint8_t>(lhs ? 1 : 0) < static_cast<uint8_t>(rhs ? 1 : 0);
-      } else {
-        return lhs < rhs;
-      }
+      return lhs < rhs;
     }
     return false;  // no underflow for signed or floating point types
   };

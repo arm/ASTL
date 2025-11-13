@@ -194,7 +194,9 @@ struct AstlValue {
       -> std::expected<AstlValue, astl_status_code> {
     return std::visit(
         [=](auto&& dividend_x) -> std::expected<AstlValue, astl_status_code> {
-          using DividendType = std::decay_t<decltype(dividend_x)>;
+          // Dividenttype is the simplified type of divident, but promoted from bool to uint8_t if needed
+          using DividendType = std::conditional_t<std::is_same_v<std::decay_t<decltype(dividend_x)>, bool>, uint8_t,
+                                                  std::decay_t<decltype(dividend_x)>>;
           if constexpr (std::is_arithmetic_v<DividendType>) {
             if (divisor == 0) {
               return std::unexpected(ASTL_STATUS_DIVIDE_BY_ZERO);

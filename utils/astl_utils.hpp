@@ -2,9 +2,15 @@
 #define INCLUDE_ASTL_UTILS_HPP_
 
 #include <algorithm>
+#include <expected>
+#include <filesystem>
+#include <format>
+#include <magic_enum/magic_enum.hpp>
 #include <random>
+#include <string>
 
 #include "astl/astl_errors.h"
+#include "astl/astl_telemetry.h"
 
 namespace astl {
 
@@ -88,6 +94,76 @@ inline std::string ToLowerCopy(std::string str) {
   return str;
 }
 
+inline auto ParseUnits(std::string const& units_str) -> astl_units_t {
+  auto unit_str = ToLowerCopy(units_str);
+  if (unit_str == "none" || unit_str.empty()) {
+    return ASTL_UNITS_NONE;
+  }
+  if (unit_str == "ticks") {
+    return ASTL_UNITS_TICKS;
+  }
+  if (unit_str == "s" || unit_str == "sec" || unit_str == "second" || unit_str == "seconds") {
+    return ASTL_UNITS_SECONDS;
+  }
+  if (unit_str == "c" || unit_str == "celcius") {
+    return ASTL_UNITS_CELSIUS;
+  }
+  if (unit_str == "j" || unit_str == "joule" || unit_str == "joules") {
+    return ASTL_UNITS_JOULES;
+  }
+  if (unit_str == "w" || unit_str == "watt" || unit_str == "watts") {
+    return ASTL_UNITS_WATTS;
+  }
+  if (unit_str == "v" || unit_str == "volt" || unit_str == "volts") {
+    return ASTL_UNITS_VOLTS;
+  }
+  if (unit_str == "a" || unit_str == "amp" || unit_str == "amps") {
+    return ASTL_UNITS_AMPS;
+  }
+  if (unit_str == "b" || unit_str == "byte" || unit_str == "bytes") {
+    return ASTL_UNITS_BYTES;
+  }
+  if (unit_str == "mbps" || unit_str == "mb/s") {
+    return ASTL_UNITS_MBYTESPERSEC;
+  }
+  if (unit_str == "mhz") {
+    return ASTL_UNITS_MHERTZ;
+  }
+  return ASTL_UNITS_UNKNOWN;
+}
+
+inline auto ParseMetricType(std::string const& metric_type_str) -> astl_metric_type_t {
+  auto metric_type_lower = ToLowerCopy(metric_type_str);
+  if (metric_type_lower == "val" || metric_type_lower == "value") {
+    return ASTL_METRIC_VALUE;
+  }
+  if (metric_type_lower == "set" || metric_type_lower == "finite" || metric_type_lower == "finite_set") {
+    return ASTL_METRIC_FINITE_SET_VALUE;
+  }
+  if (metric_type_lower == "e" || metric_type_lower == "event") {
+    return ASTL_METRIC_EVENT;
+  }
+  if (metric_type_lower == "d" || metric_type_lower == "delta") {
+    return ASTL_METRIC_DELTA;
+  }
+  if (metric_type_lower == "residency") {
+    return ASTL_METRIC_RESIDENCY;
+  }
+  if (metric_type_lower == "r" || metric_type_lower == "rate") {
+    return ASTL_METRIC_RATE;
+  }
+  return ASTL_METRIC_UNKNOWN;
+}
+
 }  // namespace astl
+
+namespace std {
+inline auto to_string(astl_units_t units) -> std::string {
+  std::string_view name = magic_enum::enum_name(units);
+  // ignore the first part of the name, which is "ASTL_UNITS_";
+  constexpr size_t prefix_length = 11;  // length of "ASTL_UNITS_";
+  return name.empty() ? "UNKNOWN" : name.data() + prefix_length;
+}
+}  // namespace std
 
 #endif /* INCLUDE_ASTL_UTILS_HPP_ */

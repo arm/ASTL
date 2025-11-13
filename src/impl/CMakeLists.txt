@@ -6,6 +6,7 @@ set(LIBRARY_NAME "${PROJECT_NAME}_static")
 add_library(${LIBRARY_NAME} STATIC)
 # add an alias for the library for unambiguous FindPackage
 add_library(Astl::${LIBRARY_NAME} ALIAS ${LIBRARY_NAME})
+target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_BUILD)
 
 include(Warnings)
 set_project_warnings(${LIBRARY_NAME})

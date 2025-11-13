@@ -173,8 +173,8 @@ auto OutputManager::OutputProcessedSamples(const ProcessedSamplesMap& processed_
     case OutputType::SUMMARY_CSV: {
       // For SUMMARY_CSV output, process ALL metrics on ALL targets, grouped by metric name.
       // Emission is opt-in via ASTL_OUTPUT_SUMMARY_CSV.
-      const char* csv_file_path = std::getenv("ASTL_OUTPUT_SUMMARY_CSV");
-      if (csv_file_path == nullptr || *csv_file_path == '\0') {
+      const auto csv_file_path = astl::GetEnvVar("ASTL_OUTPUT_SUMMARY_CSV");
+      if (csv_file_path.empty()) {
         ASTL_LOG_ERROR("OutputProcessedSamples: ASTL_OUTPUT_SUMMARY_CSV environment variable not set or empty");
         return ASTL_STATUS_BAD_ARGUMENT;
       }

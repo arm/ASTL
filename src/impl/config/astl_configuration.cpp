@@ -27,6 +27,7 @@
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl_logger.hpp"
+#include "astl_utils.hpp"
 #include "common/capabilities.hpp"
 #include "common/metric_config.hpp"
 
@@ -104,77 +105,19 @@ auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlC
   return ParseConfiguration(std::string_view(file_content));
 }
 
-auto ParseUnits(const MetricJsonDeclaration& metric_declaration) -> astl_units_t {
-  auto unit_str = astl::ToLowerCopy(metric_declaration.unit);
-  if (unit_str == "none" || unit_str.empty()) {
-    return ASTL_UNITS_NONE;
-  }
-  if (unit_str == "ticks") {
-    return ASTL_UNITS_TICKS;
-  }
-  if (unit_str == "s" || unit_str == "sec" || unit_str == "second" || unit_str == "seconds") {
-    return ASTL_UNITS_SECONDS;
-  }
-  if (unit_str == "c" || unit_str == "celcius") {
-    return ASTL_UNITS_CELSIUS;
-  }
-  if (unit_str == "j" || unit_str == "joule" || unit_str == "joules") {
-    return ASTL_UNITS_JOULES;
-  }
-  if (unit_str == "w" || unit_str == "watt" || unit_str == "watts") {
-    return ASTL_UNITS_WATTS;
-  }
-  if (unit_str == "v" || unit_str == "volt" || unit_str == "volts") {
-    return ASTL_UNITS_VOLTS;
-  }
-  if (unit_str == "a" || unit_str == "amp" || unit_str == "amps") {
-    return ASTL_UNITS_AMPS;
-  }
-  if (unit_str == "b" || unit_str == "byte" || unit_str == "bytes") {
-    return ASTL_UNITS_BYTES;
-  }
-  if (unit_str == "mbps" || unit_str == "mb/s") {
-    return ASTL_UNITS_MBYTESPERSEC;
-  }
-  if (unit_str == "mhz") {
-    return ASTL_UNITS_MHERTZ;
-  }
-  return ASTL_UNITS_UNKNOWN;
-}
-
 auto ParseValueType(const MetricJsonDeclaration& metric_declaration) -> astl_value_type_t {
   // alternatively parse the size field of the scmi spec
   (void)metric_declaration;  // unused in this implementation
   return ASTL_VALUE_UINT64;
 }
 
-auto ParseMetricType(const MetricJsonDeclaration& metric_declaration) -> astl_metric_type_t {
-  auto metric_type_lower = astl::ToLowerCopy(metric_declaration.metric_type);
-  if (metric_type_lower == "val" || metric_type_lower == "value") {
-    return ASTL_METRIC_VALUE;
-  }
-  if (metric_type_lower == "set" || metric_type_lower == "finite" || metric_type_lower == "finite_set") {
-    return ASTL_METRIC_FINITE_SET_VALUE;
-  }
-  if (metric_type_lower == "e" || metric_type_lower == "event") {
-    return ASTL_METRIC_EVENT;
-  }
-  if (metric_type_lower == "d" || metric_type_lower == "delta") {
-    return ASTL_METRIC_DELTA;
-  }
-  if (metric_type_lower == "residency") {
-    return ASTL_METRIC_RESIDENCY;
-  }
-  if (metric_type_lower == "r" || metric_type_lower == "rate") {
-    return ASTL_METRIC_RATE;
-  }
-  return ASTL_METRIC_UNKNOWN;
-}
-
 auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std::optional<CollectorType> {
   auto collector_type_lower = astl::ToLowerCopy(metric_declaration.collection_protocol);
   if (collector_type_lower == "scmi") {
     return CollectorType::SCMI;
+  }
+  if (collector_type_lower == "libsensors") {
+    return CollectorType::LIBSENSORS;
   }
   return std::nullopt;
 }
@@ -342,7 +285,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
 
   std::vector<std::unique_ptr<MetricConfig>> metric_configs;
   metric_configs.reserve(metric_registers.size());
-  const auto units      = ParseUnits(metric_declaration);
+  const auto units      = ParseUnits(metric_declaration.unit);
   const auto value_type = ParseValueType(metric_declaration);
   for (const auto& name_and_de_id : metric_registers) {
     const auto& metric_name = name_and_de_id.first;
@@ -375,7 +318,7 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     return std::unexpected(per_member_state_info.error());
   }
 
-  const auto units          = ParseUnits(metric_declaration);
+  const auto units          = ParseUnits(metric_declaration.unit);
   const auto value_type     = ParseValueType(metric_declaration);
   const auto collector_type = ParseCollectorType(metric_declaration);
   if (!collector_type || collector_type != CollectorType::SCMI) {
@@ -434,7 +377,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
   }
   std::vector<std::unique_ptr<MetricConfig>> metric_configs;
   metric_configs.reserve(metric_registers.size());
-  const auto units                = ParseUnits(metric_declaration);
+  const auto units                = ParseUnits(metric_declaration.unit);
   const auto value_type           = ParseValueType(metric_declaration);
   auto       create_metric_config = [&](const auto& metric_name_and_de_id) {
     const auto& [metric_name, de_id] = metric_name_and_de_id;
@@ -469,7 +412,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
 auto CreateScmiMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
                              scmi::ScmiSpecification const& scmi_spec, std::vector<const ITarget*> const& scmi_targets)
     -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
-  auto metric_type = ParseMetricType(metric_declaration);
+  auto metric_type = ParseMetricType(metric_declaration.metric_type);
   switch (metric_type) {
     case ASTL_METRIC_VALUE:
     case ASTL_METRIC_EVENT:

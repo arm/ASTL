@@ -98,9 +98,9 @@ static auto RegisterSensorsFromChip(const astl::AstlConfiguration& configuration
     const auto& [metric_name, metric_declaration] = *metric_iter;
 
     auto metric_config =
-        std::make_unique<MetricConfig>(metric_name, feature->name, ParseUnits(metric_declaration), ASTL_VALUE_FLOAT64,
-                                       ParseMetricType(metric_declaration), CollectorType::LIBSENSORS,
-                                       LibsensorsOperationBuilder{chip, (*sub)->number});
+        std::make_unique<MetricConfig>(metric_name, feature->name, ParseUnits(metric_declaration.unit),
+                                       ASTL_VALUE_FLOAT64, ParseMetricType(metric_declaration.metric_type),
+                                       CollectorType::LIBSENSORS, LibsensorsOperationBuilder{chip, (*sub)->number});
 
     auto status = metric_manager->RegisterMetric(std::move(metric_config), libsensors_targets);
     if (ASTL_STATUS_SUCCESS != status) {

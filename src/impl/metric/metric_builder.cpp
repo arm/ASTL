@@ -59,6 +59,12 @@ static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfigurati
     // here the 'metric_name' is more descriptive from the config file like 'Soc Power' and the
     // 'metric_declaration.register' holds the register name like 'ENERGY_COUNTER'
     for (const auto& [metric_name, metric_declaration] : configuration.metric_declarations) {
+      auto collector_type = ParseCollectorType(metric_declaration);
+      if (!collector_type || collector_type != CollectorType::SCMI) {
+        ASTL_LOG_TRACE("Scmi metric registrar ignoring collector type '{}' for metric {}",
+                       metric_declaration.collection_protocol, metric_name);
+        continue;
+      }
       auto metric_configs_result =
           CreateScmiMetricConfigs(metric_name, metric_declaration, specification_data, scmi_targets);
       if (metric_configs_result.has_value()) {
@@ -144,11 +150,12 @@ auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, co
 
   std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
 
-  // handle SCMI metrics and targets
+  // handle any SCMI metrics and targets
   auto status = RegisterScmiMetrics(configuration, collector_type_to_targets_map, metric_manager.get());
   if (status != ASTL_STATUS_SUCCESS) {
     return std::unexpected(status);
   }
+  // handle the libsensors  metrics remaining in the configuration
   status = RegisterLibsensorsMetrics(configuration, collector_type_to_targets_map, metric_manager.get());
   if (status != ASTL_STATUS_SUCCESS) {
     return std::unexpected(status);

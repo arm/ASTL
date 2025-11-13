@@ -17,7 +17,7 @@ fi
 if ! command -v cmake-lint >/dev/null 2>&1; then
 	echo "❌ cmake-lint is not installed."
 	echo "👉 Please install cmakelang (provides cmake-lint and cmake-format):"
-	echo "   python3 -m pip install --user cmakelang          # any OS with Python"
+	echo "   python3 -m pip install --user cmakelang[YAML]    # any OS with Python"
 	exit 1
 fi
 

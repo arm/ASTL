@@ -511,17 +511,16 @@ auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarge
   std::scoped_lock lock{_processed_samples_mtx};
   auto             target_it = _processed_samples.find(target);
   if (target_it == _processed_samples.end()) {
-    ASTL_LOG_ERROR("GetProcessedMetricSamples: No samples found for metric {} on target {}", metric->Name(),
-                   target->Name());
-    return std::unexpected{ASTL_STATUS_NO_DATA_COLLECTED};
+    ASTL_LOG_WARNING("GetProcessedMetricSamples: No samples found on target {}", metric->Name(), target->Name());
+    return {};
   }
 
   const auto &metric_map = target_it->second;
   auto        metric_it  = metric_map.find(metric);
   if (metric_it == metric_map.end()) {
-    ASTL_LOG_ERROR("GetProcessedMetricSamples: No samples found for metric {} on target {}", metric->Name(),
-                   target->Name());
-    return std::unexpected{ASTL_STATUS_NO_DATA_COLLECTED};
+    ASTL_LOG_WARNING("GetProcessedMetricSamples: No samples found for metric {} on target {}", metric->Name(),
+                     target->Name());
+    return {};
   }
 
   auto samples = std::span<const astl::ProcessedSampledData>(metric_it->second);

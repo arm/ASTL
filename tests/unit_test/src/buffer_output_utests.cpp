@@ -16,6 +16,8 @@
  * under the License.
  ******************************************************************************/
 
+#include <algorithm>
+
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "config/astl_configuration.hpp"
@@ -24,8 +26,9 @@
 
 using trompeloeil::_;
 
-// Avoid polluting global namespace: explicitly qualify astl symbols below.
+// NOLINTBEGIN(readability-function-cognitive-complexity)  (catch2 tests with SECTIONs look complex to a linter)
 
+// Avoid polluting global namespace: explicitly qualify astl symbols below.
 namespace {
 // Helper to build a ProcessedSampledData with a concrete numeric value and deterministic timestamp
 astl::ProcessedSampledData MakeProcessedSample(uint64_t value, astl::SampleTimestamp timestamp) {
@@ -53,17 +56,21 @@ TEST_CASE("BufferOutput writes exact capacity with success", "[buffer_output]") 
   // Assert
   REQUIRE(status == ASTL_STATUS_SUCCESS);
   REQUIRE(sample_count_capacity == capacity);
-  for (size_t i = 0; i < samples.size(); ++i) {  // NOLINT(modernize-loop-convert)
-    REQUIRE(backing[i]._size ==
-            sizeof(astl_metric_sample_t));  // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
-    // Extract the union value written by BufferOutput and compare with original sample's variant
-    auto original_pair = samples[i].value.ToAstlUnionValue();
-    REQUIRE(backing[i]._value.ui64 == original_pair.first.ui64);  // NOLINT(cppcoreguidelines-pro-type-union-access,
-                                                                  // cppcoreguidelines-pro-bounds-constant-array-index)
-    REQUIRE(
-        backing[i]._timestamp ==
-        samples[i].timestamp.time_since_epoch().count());  // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
-  }
+
+  REQUIRE(backing.size() == samples.size());
+
+  auto require_processed_sample_matches_metric_sample = [](const astl_metric_sample_t&       metric_sample,
+                                                           const astl::ProcessedSampledData& processed_sample) {
+    REQUIRE(metric_sample._size == sizeof(astl_metric_sample_t));
+    REQUIRE(metric_sample._timestamp == processed_sample.timestamp.time_since_epoch().count());
+    auto [sample_value, sample_value_type] = processed_sample.value.ToAstlUnionValue();
+    (void)sample_value_type;
+    REQUIRE(metric_sample._value.ui64 == sample_value.ui64);
+    return metric_sample;
+  };
+
+  std::transform(backing.cbegin(), backing.cend(), samples.cbegin(), backing.begin(),
+                 require_processed_sample_matches_metric_sample);
 }
 
 TEST_CASE("BufferOutput returns BUFFER_LARGER_THAN_NEEDED when slack remains", "[buffer_output]") {
@@ -117,8 +124,8 @@ TEST_CASE("BufferOutput handles null count pointer (internal error)", "[buffer_o
   std::array<astl_metric_sample_t, 2>     backing{};
   astl::BufferOutput                      output(std::span<astl_metric_sample_t>(backing), nullptr);
   std::vector<astl::ProcessedSampledData> samples;
-  const astl::SampleTimestamp             ts{};
-  samples.emplace_back(MakeProcessedSample(5U, ts));
+  const astl::SampleTimestamp             sample_ts{};
+  samples.emplace_back(MakeProcessedSample(5U, sample_ts));
 
   // Act
   auto status = output.WriteProcessedSamples(std::span<const astl::ProcessedSampledData>(samples));
@@ -130,7 +137,7 @@ TEST_CASE("BufferOutput handles null count pointer (internal error)", "[buffer_o
 TEST_CASE("BufferOutput writing zero samples returns BUFFER_LARGER_THAN_NEEDED (slack)", "[buffer_output]") {
   // Arrange
   std::array<astl_metric_sample_t, 4>     backing{};
-  uint32_t                                capacity = backing.size();
+  uint32_t                                capacity = static_cast<uint32_t>(backing.size());
   astl::BufferOutput                      output(std::span<astl_metric_sample_t>(backing), &capacity);
   std::vector<astl::ProcessedSampledData> empty;
 
@@ -142,3 +149,5 @@ TEST_CASE("BufferOutput writing zero samples returns BUFFER_LARGER_THAN_NEEDED (
   REQUIRE(status == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED);
   REQUIRE(capacity == 0);  // implementation resets count to 0 before loop
 }
+
+// NOLINTEND(readability-function-cognitive-complexity)  (catch2 tests with SECTIONs look complex to a linter)
