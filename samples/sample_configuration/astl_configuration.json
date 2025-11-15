@@ -8,22 +8,25 @@
       "register": "CORE_TEMP_0",
       "unit": "C",
       "metric_type": "value",
-      "collection_protocol": "scmi",
-      "metric_groups": ["thermal", "throttling"]
+      "category": "TEMPERATURE",
+      "metric_groups": ["thermal", "throttling"],
+      "collection_protocol": "scmi"
     },
     "Throttle Counts": {
       "description": "Number of thermal throttling events",
       "register": "THROTTLE_EVENTS",
       "unit": "",
       "metric_type": "delta",
-      "collection_protocol": "scmi",
-      "metric_groups": ["throttling"]
+      "category": "COUNT",
+      "metric_groups": ["throttling"],
+      "collection_protocol": "scmi"
     },
     "SoC Power": {
       "description": "SoC Power Consumption in Watts",
       "register": "ENERGY_COUNTER",
       "unit": "W",
       "metric_type": "rate",
+      "category": "POWER",
       "collection_protocol": "scmi"
     },
     "Frequency": {
@@ -31,8 +34,9 @@
       "register": "FREQUENCY",
       "unit": "MHz",
       "metric_type": "value",
-      "collection_protocol": "scmi",
-      "metric_groups": ["throttling"]
+      "category": "FREQUENCY",
+      "metric_groups": ["throttling"],
+      "collection_protocol": "scmi"
     }
   },
 

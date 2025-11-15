@@ -94,39 +94,62 @@ inline std::string ToLowerCopy(std::string str) {
   return str;
 }
 
+inline auto ParseCategory(std::string const& category_str) -> astl_category_t {
+  auto category_str_lower = ToLowerCopy(category_str);
+  if (category_str_lower == "count") {
+    return ASTL_CATEGORY_COUNT;
+  }
+  if (category_str_lower == "temperature") {
+    return ASTL_CATEGORY_TEMPERATURE;
+  }
+  if (category_str_lower == "power") {
+    return ASTL_CATEGORY_POWER;
+  }
+  if (category_str_lower == "frequency") {
+    return ASTL_CATEGORY_FREQUENCY;
+  }
+  if (category_str_lower == "voltage") {
+    return ASTL_CATEGORY_VOLTAGE;
+  }
+  if (category_str_lower == "current") {
+    return ASTL_CATEGORY_CURRENT;
+  }
+  return ASTL_CATEGORY_UNCATEGORIZED;
+}
+
 inline auto ParseUnits(std::string const& units_str) -> astl_units_t {
-  auto unit_str = ToLowerCopy(units_str);
-  if (unit_str == "none" || unit_str.empty()) {
+  auto unit_str_lower = ToLowerCopy(units_str);
+  if (unit_str_lower == "none" || unit_str_lower.empty()) {
     return ASTL_UNITS_NONE;
   }
-  if (unit_str == "ticks") {
+  if (unit_str_lower == "ticks") {
     return ASTL_UNITS_TICKS;
   }
-  if (unit_str == "s" || unit_str == "sec" || unit_str == "second" || unit_str == "seconds") {
+  if (unit_str_lower == "s" || unit_str_lower == "sec" || unit_str_lower == "second" || unit_str_lower == "seconds") {
     return ASTL_UNITS_SECONDS;
   }
-  if (unit_str == "c" || unit_str == "celcius") {
+  if (unit_str_lower == "c" || unit_str_lower == "celcius") {
     return ASTL_UNITS_CELSIUS;
   }
-  if (unit_str == "j" || unit_str == "joule" || unit_str == "joules") {
+  if (unit_str_lower == "j" || unit_str_lower == "joule" || unit_str_lower == "joules") {
     return ASTL_UNITS_JOULES;
   }
-  if (unit_str == "w" || unit_str == "watt" || unit_str == "watts") {
+  if (unit_str_lower == "w" || unit_str_lower == "watt" || unit_str_lower == "watts") {
     return ASTL_UNITS_WATTS;
   }
-  if (unit_str == "v" || unit_str == "volt" || unit_str == "volts") {
+  if (unit_str_lower == "v" || unit_str_lower == "volt" || unit_str_lower == "volts") {
     return ASTL_UNITS_VOLTS;
   }
-  if (unit_str == "a" || unit_str == "amp" || unit_str == "amps") {
+  if (unit_str_lower == "a" || unit_str_lower == "amp" || unit_str_lower == "amps") {
     return ASTL_UNITS_AMPS;
   }
-  if (unit_str == "b" || unit_str == "byte" || unit_str == "bytes") {
+  if (unit_str_lower == "b" || unit_str_lower == "byte" || unit_str_lower == "bytes") {
     return ASTL_UNITS_BYTES;
   }
-  if (unit_str == "mbps" || unit_str == "mb/s") {
+  if (unit_str_lower == "mbps" || unit_str_lower == "mb/s") {
     return ASTL_UNITS_MBYTESPERSEC;
   }
-  if (unit_str == "mhz") {
+  if (unit_str_lower == "mhz") {
     return ASTL_UNITS_MHERTZ;
   }
   return ASTL_UNITS_UNKNOWN;

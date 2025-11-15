@@ -53,7 +53,7 @@ cdef class Counter:
         return f"<Counter name={self.name!r} type={self.counter_type} units={self.units}>"
 
 cdef class Metric:
-    def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, metric_type: int):
+    def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, metric_type: int, category: int):
         self.name = name
         self.description = description
         self._handle_ptr = handle_ptr
@@ -61,8 +61,9 @@ cdef class Metric:
         self.units = units
         self.value_type = value_type
         self.metric_type = metric_type
+        self.category = category
     def __repr__(self):
-        return f"<Metric name={self.name!r} type={self.metric_type} units={self.units}>"
+        return f"<Metric name={self.name!r} type={self.metric_type} units={self.units} category={self.category}>"
 
 cdef class MetricGroup:
     def __init__(self, name: str, description: str, handle_ptr: int, metric_count: int):
@@ -72,6 +73,16 @@ cdef class MetricGroup:
         self.metric_count = metric_count
     def __repr__(self):
         return f"<MetricGroup name={self.name!r} metrics={self.metric_count}>"
+
+class Category:
+    """Namespace of ASTL category codes (mirrors astl_category_t enum)."""
+    COUNT = ASTL_CATEGORY_COUNT
+    TEMPERATURE = ASTL_CATEGORY_TEMPERATURE
+    POWER = ASTL_CATEGORY_POWER
+    FREQUENCY = ASTL_CATEGORY_FREQUENCY
+    VOLTAGE = ASTL_CATEGORY_VOLTAGE
+    CURRENT = ASTL_CATEGORY_CURRENT
+    UNCATEGORIZED = ASTL_CATEGORY_UNCATEGORIZED
 
 class Status:
     """Namespace of ASTL status codes (mirrors astl_status_code enum)."""
@@ -193,7 +204,7 @@ cpdef list get_metrics(Target target):
         for i in range(count):
             name = arr[i]._name.decode() if arr[i]._name != NULL else ""
             desc = arr[i]._description.decode() if arr[i]._description != NULL else ""
-            py_list.append(Metric(name, desc, <size_t>arr[i]._handle, arr[i]._min_sampling_interval, arr[i]._units, arr[i]._value_type, arr[i]._metric_type))
+            py_list.append(Metric(name, desc, <size_t>arr[i]._handle, arr[i]._min_sampling_interval, arr[i]._units, arr[i]._value_type, arr[i]._metric_type, arr[i]._category))
         return py_list
     finally:
         free(arr)

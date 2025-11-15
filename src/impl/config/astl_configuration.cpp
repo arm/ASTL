@@ -39,6 +39,12 @@ inline auto from_json(const json& json_data, MetricJsonDeclaration& metric) -> v
   json_data.at("description").get_to(metric.description);
   json_data.at("unit").get_to(metric.unit);
   json_data.at("metric_type").get_to(metric.metric_type);
+  if (json_data.contains("category")) {
+    json_data.at("category").get_to(metric.category);
+  } else {
+    metric.category = "unknown";  // default if absent
+  }
+
   json_data.at("collection_protocol").get_to(metric.collection_protocol);
 
   // Register field is optional for residency metrics (they have individual state registers)
@@ -287,6 +293,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   metric_configs.reserve(metric_registers.size());
   const auto units      = ParseUnits(metric_declaration.unit);
   const auto value_type = ParseValueType(metric_declaration);
+  const auto category   = ParseCategory(metric_declaration.category);
   for (const auto& name_and_de_id : metric_registers) {
     const auto& metric_name = name_and_de_id.first;
     const auto& de_id       = name_and_de_id.second;
@@ -295,7 +302,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     auto                 finite_set_copy = finite_set;      // copy for this metric instance
     auto                 labels_copy     = value_to_label;  // copy for this metric instance
     metric_configs.push_back(std::make_unique<FiniteSetMetricConfig>(
-        metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE,
+        metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE, category,
         collector_type.value(), std::move(operation_builder), std::move(finite_set_copy), std::move(labels_copy)));
   }
   ASTL_LOG_INFO("Created {} finite set metric config(s) for '{}' with {} valid values", metric_configs.size(),
@@ -320,6 +327,7 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
 
   const auto units          = ParseUnits(metric_declaration.unit);
   const auto value_type     = ParseValueType(metric_declaration);
+  const auto category       = ParseCategory(metric_declaration.category);
   const auto collector_type = ParseCollectorType(metric_declaration);
   if (!collector_type || collector_type != CollectorType::SCMI) {
     ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection_protocol,
@@ -342,7 +350,7 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     // uniquely identify it)
     std::string metric_name{layout_member_name + "_" + std::string(metric_key_name)};
     metric_configs.push_back(std::make_unique<ResidencyMetricConfig>(
-        std::move(metric_name), metric_declaration.description, units, value_type, ASTL_METRIC_RESIDENCY,
+        std::move(metric_name), metric_declaration.description, units, value_type, ASTL_METRIC_RESIDENCY, category,
         collector_type.value(), std::move(per_target_state_info), metric_declaration.inferred_state));
   }
   return metric_configs;
@@ -379,6 +387,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
   metric_configs.reserve(metric_registers.size());
   const auto units                = ParseUnits(metric_declaration.unit);
   const auto value_type           = ParseValueType(metric_declaration);
+  const auto category             = ParseCategory(metric_declaration.category);
   auto       create_metric_config = [&](const auto& metric_name_and_de_id) {
     const auto& [metric_name, de_id] = metric_name_and_de_id;
 
@@ -387,12 +396,12 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
     (void)scmi_targets;
     ScmiOperationBuilder operation_builder{de_id};
     if (metric_declaration.metric_groups.has_value()) {
-      return std::make_unique<MetricConfig>(metric_name, metric_declaration.description, units, value_type, metric_type,
-                                                  collector_type.value(), metric_declaration.metric_groups.value(),
-                                                  std::move(operation_builder));
+      return std::make_unique<MetricConfig>(metric_name, metric_declaration.description, units, value_type, category,
+                                                  metric_type, metric_declaration.metric_groups.value(),
+                                                  collector_type.value(), std::move(operation_builder));
     }
-    return std::make_unique<MetricConfig>(metric_name, metric_declaration.description, units, value_type, metric_type,
-                                                collector_type.value(), std::move(operation_builder));
+    return std::make_unique<MetricConfig>(metric_name, metric_declaration.description, units, value_type, category,
+                                                metric_type, collector_type.value(), std::move(operation_builder));
   };
 
   std::transform(std::begin(metric_registers), std::end(metric_registers), std::back_inserter(metric_configs),

@@ -28,23 +28,38 @@
 
 // some helpers to cut down duplicated code initializing metrics and their configuration
 static astl::MetricConfig* GetDeltaConfig() {
-  static astl::MetricConfig config{
-      "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT64,
-      ASTL_METRIC_DELTA, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  static astl::MetricConfig config{"test_metric",
+                                   "unit-test metric",
+                                   ASTL_UNITS_CELSIUS,
+                                   ASTL_VALUE_UINT64,
+                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_DELTA,
+                                   astl::CollectorType::UNKNOWN,
+                                   astl::NullOperationBuilder{}};
   return &config;
 }
 
 static astl::MetricConfig* GetDeltaConfigUINT32() {
-  static astl::MetricConfig config{
-      "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT32,
-      ASTL_METRIC_DELTA, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  static astl::MetricConfig config{"test_metric",
+                                   "unit-test metric",
+                                   ASTL_UNITS_CELSIUS,
+                                   ASTL_VALUE_UINT32,
+                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_DELTA,
+                                   astl::CollectorType::UNKNOWN,
+                                   astl::NullOperationBuilder{}};
   return &config;
 }
 
 static astl::MetricConfig* GetDeltaConfigFLOAT64() {
-  static astl::MetricConfig config{
-      "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_FLOAT64,
-      ASTL_METRIC_DELTA, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  static astl::MetricConfig config{"test_metric",
+                                   "unit-test metric",
+                                   ASTL_UNITS_CELSIUS,
+                                   ASTL_VALUE_FLOAT64,
+                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_DELTA,
+                                   astl::CollectorType::UNKNOWN,
+                                   astl::NullOperationBuilder{}};
   return &config;
 }
 

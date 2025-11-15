@@ -311,6 +311,17 @@ typedef enum _astl_metric_type_t {
   ASTL_METRIC_UNKNOWN = 0xFFFFFFFF,  //!< Unknown
 } astl_metric_type_t;
 
+/** High-level category of a metric/counter. Derived from configuration JSON "category" string. */
+typedef enum _astl_category_t {
+  ASTL_CATEGORY_COUNT         = 0,          //!< Count-based metrics (monotonic counters, event counts)
+  ASTL_CATEGORY_TEMPERATURE   = 1,          //!< Thermal metrics (temperature sensors)
+  ASTL_CATEGORY_POWER         = 2,          //!< Power metrics (instantaneous or accumulated energy rate)
+  ASTL_CATEGORY_FREQUENCY     = 3,          //!< Frequency metrics (clock rates)
+  ASTL_CATEGORY_VOLTAGE       = 4,          //!< Voltage metrics
+  ASTL_CATEGORY_CURRENT       = 5,          //!< Current metrics (amperage)
+  ASTL_CATEGORY_UNCATEGORIZED = 0xFFFFFFFF  //!< Unknown or unmapped category
+} astl_category_t;
+
 /** A metric properties structure describes a metric
  */
 typedef struct _astl_metric_properties_t {
@@ -327,6 +338,7 @@ typedef struct _astl_metric_properties_t {
                                                 //!< for interpreting the 64bit metric value
   astl_metric_type_t _metric_type;              //!< The metric type. It is used for output formatting and
                                                 //!< visualization
+  astl_category_t _category;                    //!< High-level category such as POWER, TEMPERATURE etc.
 } astl_metric_properties_t;
 
 /**
