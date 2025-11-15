@@ -62,18 +62,24 @@ class MetricConfig {
    * @param units          Measurement units for the metric (e.g., Watts, Joules).
    * @param value_type     Data type of the metric value (e.g., uint32, float64).
    * @param metric_type    Semantic type of the metric defined by ASTL design doc (e.g. value, delta, residency)
+   * @param category       High-level domain category (e.g., Power, Temperature).
    * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
    * @param operation_builder The operation builder associated with this metric's collector type,
    *                          including collector-specific parameters like data event id or libsensors chip
+   *
+   * REFACTOR - Eliminate this function.
+   * We should just have one parameterized constructor with every parameter available.
+   * If we don't want to pass each value every time, we can use default parameters.
    */
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
-                        astl_value_type_t value_type, astl_metric_type_t metric_type, CollectorType collector_type,
-                        AnyOperationBuilder operation_builder)
+                        astl_value_type_t value_type, astl_category_t category, astl_metric_type_t metric_type,
+                        CollectorType collector_type, AnyOperationBuilder operation_builder)
       : _metric_name(name),
         _description(description),
         _units(units),
         _value_type(value_type),
         _metric_type(metric_type),
+        _category(category),
         _collector_type(collector_type),
         _operation_builder(std::move(operation_builder)) {}
 
@@ -84,21 +90,24 @@ class MetricConfig {
    * @param units          Measurement units for the metric (e.g., Watts, Joules).
    * @param value_type     Data type of the metric value (e.g., uint32, float64).
    * @param metric_type    Semantic type of the metric defined by ASTL design doc (e.g. value, delta, residency)
-   * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
+   * @param category       High-level domain category (e.g., Power, Temperature).
    * @param metric_groups  vector of strings representin the names of metric gropus this belongs to
+   * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
    * @param operation_builder The operation builder associated with this metric's collector type,
    *                          including collector-specific parameters like data event id or libsensors chip
    */
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
-                        astl_value_type_t value_type, astl_metric_type_t metric_type, CollectorType collector_type,
-                        std::vector<std::string> metric_groups, AnyOperationBuilder operation_builder)
+                        astl_value_type_t value_type, astl_category_t category, astl_metric_type_t metric_type,
+                        std::vector<std::string> metric_groups, CollectorType collector_type,
+                        AnyOperationBuilder operation_builder)
       : _metric_name(name),
         _description(description),
         _units(units),
         _value_type(value_type),
         _metric_type(metric_type),
-        _collector_type(collector_type),
+        _category(category),
         _metric_groups(std::move(metric_groups)),
+        _collector_type(collector_type),
         _operation_builder(std::move(operation_builder)) {}
 
   MetricConfig(const MetricConfig &)            = default;
@@ -137,6 +146,12 @@ class MetricConfig {
    */
   astl_metric_type_t MetricType() const { return _metric_type; }
   /**
+   * @brief Return the high-level metric category (e.g. Power, Temperature).
+   *
+   * @return astl_category_t The metric category.
+   */
+  astl_category_t Category() const { return _category; }
+  /**
    * @brief Return the collector type of the metric.
    */
   CollectorType GetCollectorType() const { return _collector_type; }
@@ -157,9 +172,10 @@ class MetricConfig {
   astl_units_t      _units;        // Measurement units for the metric (e.g., seconds, bytes)
   astl_value_type_t _value_type;   // Data type of the metric value (e.g., raw, processed)
   // Semantic type of the metric defined by ASTL design doc(e.g., value, delta, residency)
-  astl_metric_type_t       _metric_type;
-  CollectorType            _collector_type;  // Collector type to support this metric
+  astl_metric_type_t       _metric_type;     // Semantic metric type (value, delta, residency, etc.)
+  astl_category_t          _category;        // High-level domain category (power, temperature, count, etc.)
   std::vector<std::string> _metric_groups;   // Groups this metric belongs to
+  CollectorType            _collector_type;  // Collector type to support this metric
   AnyOperationBuilder      _operation_builder;
 };
 
@@ -200,10 +216,11 @@ class ResidencyMetricConfig final : public MetricConfig {
    * @param inferred_state  Optional state name to be inferred from the metric (e.g., "C0").
    */
   explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
-                                 astl_value_type_t value_type, astl_metric_type_t metric_type,
+                                 astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
                                  CollectorType collector_type, TargetToStateToInfoMap state_info,
                                  std::optional<std::string> inferred_state = std::nullopt)
-      : MetricConfig(name, description, units, value_type, metric_type, collector_type, NullOperationBuilder{}),
+      : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
+                     NullOperationBuilder{}),
         _state_info(std::move(state_info)),
         _inferred_state(std::move(inferred_state)) {}
 
@@ -264,10 +281,11 @@ class FiniteSetMetricConfig final : public MetricConfig {
    * @param labels          Mapping from finite set values to human-readable labels.
    */
   explicit FiniteSetMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
-                                 astl_value_type_t value_type, astl_metric_type_t metric_type,
+                                 astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
                                  CollectorType collector_type, AnyOperationBuilder operation_builder,
                                  FiniteSet finite_set, ValueToLabelMap labels)
-      : MetricConfig(name, description, units, value_type, metric_type, collector_type, std::move(operation_builder)),
+      : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
+                     std::move(operation_builder)),
         _finite_set(std::move(finite_set)),
         _labels(std::move(labels)) {}
 

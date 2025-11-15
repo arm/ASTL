@@ -25,6 +25,7 @@ class Metric:
     units: int
     value_type: int
     metric_type: int
+    category: int
 
 class MetricGroup:
     name: str
@@ -40,6 +41,15 @@ class CollectionParameters:
 class CollectionMode:  # minimal enum-like stub
     IMMEDIATE: int
     PERIODIC: int
+
+class Category:
+    COUNT: int
+    TEMPERATURE: int
+    POWER: int
+    FREQUENCY: int
+    VOLTAGE: int
+    CURRENT: int
+    UNCATEGORIZED: int
 
 class Status:
     SUCCESS: int

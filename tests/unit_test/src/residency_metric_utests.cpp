@@ -51,6 +51,7 @@ static const astl::ResidencyMetricConfig* GetResidencyConfig() {
                                             ASTL_UNITS_TICKS,
                                             ASTL_VALUE_UINT64,
                                             ASTL_METRIC_RESIDENCY,
+                                            ASTL_CATEGORY_UNCATEGORIZED,
                                             astl::CollectorType::SCMI,
                                             GetTargetToStatetoInfoMap(),
                                             "Active"};
@@ -187,6 +188,7 @@ TEST_CASE("ResidencyMetric: construction without inferred state", "[ResidencyMet
                                      ASTL_UNITS_TICKS,
                                      ASTL_VALUE_UINT64,
                                      ASTL_METRIC_RESIDENCY,
+                                     ASTL_CATEGORY_UNCATEGORIZED,
                                      astl::CollectorType::SCMI,
                                      GetTargetToStatetoInfoMap()};
   astl::ResidencyMetric       metric{&config, CreateTestStateInfos(), nullptr, nullptr};

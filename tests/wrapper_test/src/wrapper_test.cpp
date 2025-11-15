@@ -988,8 +988,8 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
   data_event_ids["T0"] = {0x1234};
   astl::ScmiMultiTargetOperationBuilder op_builder{data_event_ids};
   auto                                  metric_config =
-      std::make_unique<astl::MetricConfig>("M0", "M0", ASTL_UNITS_AMPS, ASTL_VALUE_UINT64, ASTL_METRIC_UNKNOWN,
-                                           astl::CollectorType::SCMI, std::move(op_builder));
+      std::make_unique<astl::MetricConfig>("M0", "M0", ASTL_UNITS_AMPS, ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                           ASTL_METRIC_UNKNOWN, astl::CollectorType::SCMI, std::move(op_builder));
 
   // set up map from metric api handle + target to mock IMetric
   std::unordered_map<const astl::ITarget*, std::unique_ptr<astl::IMetric>> target_to_metric_map;
@@ -1145,4 +1145,72 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
     REQUIRE(samples_out[0]._timestamp <= samples_out[1]._timestamp);
     REQUIRE(samples_out[1]._timestamp <= samples_out[2]._timestamp);
   }
+}
+
+TEST_CASE("astlGetMetrics verifies category propagation", "[wrapper][Orchestrator][Category]") {
+  // Set up mock target
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  auto                                        mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t                        mock_target_handle = mock_target.get();
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  mock_targets.push_back(std::move(mock_target));
+
+  // Set up metrics with different categories
+  auto                              metric_manager = std::make_unique<MockMetricManager>();
+  auto                              junkval0{kJunk};
+  auto                              junkval1{kJunk};
+  auto                              junkval2{kJunk};
+  astl_metric_handle_t              metric_temp  = static_cast<astl_metric_handle_t>(&junkval0);
+  astl_metric_handle_t              metric_power = static_cast<astl_metric_handle_t>(&junkval1);
+  astl_metric_handle_t              metric_freq  = static_cast<astl_metric_handle_t>(&junkval2);
+  std::vector<astl_metric_handle_t> available_metrics;
+  available_metrics.push_back(metric_temp);
+  available_metrics.push_back(metric_power);
+  available_metrics.push_back(metric_freq);
+
+  ALLOW_CALL(*metric_manager, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
+  ALLOW_CALL(*metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
+
+  // Mock GetProperties to return specific categories for each metric
+  ALLOW_CALL(*metric_manager, GetProperties(metric_temp, _))
+      .SIDE_EFFECT(_2->_value_type = ASTL_VALUE_FLOAT64)
+      .SIDE_EFFECT(_2->_handle = metric_temp)
+      .SIDE_EFFECT(_2->_category = ASTL_CATEGORY_TEMPERATURE)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  ALLOW_CALL(*metric_manager, GetProperties(metric_power, _))
+      .SIDE_EFFECT(_2->_value_type = ASTL_VALUE_FLOAT64)
+      .SIDE_EFFECT(_2->_handle = metric_power)
+      .SIDE_EFFECT(_2->_category = ASTL_CATEGORY_POWER)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  ALLOW_CALL(*metric_manager, GetProperties(metric_freq, _))
+      .SIDE_EFFECT(_2->_value_type = ASTL_VALUE_UINT64)
+      .SIDE_EFFECT(_2->_handle = metric_freq)
+      .SIDE_EFFECT(_2->_category = ASTL_CATEGORY_FREQUENCY)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  auto output_manager = std::make_unique<MockOutputManager>();
+  auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                             std::move(metric_manager), std::move(output_manager));
+  orchestrator->SetTargets(std::move(mock_targets));
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  // Call astlGetMetrics and verify categories
+  uint32_t metric_count{3};
+  auto     metrics = AllocateAstlVector<astl_metric_properties_t>(3);
+  REQUIRE(astlGetMetrics(mock_target_handle, metrics.data(), &metric_count) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric_count == 3);
+
+  // Verify each metric has the correct category
+  REQUIRE(metrics[0]._category == ASTL_CATEGORY_TEMPERATURE);
+  REQUIRE(metrics[1]._category == ASTL_CATEGORY_POWER);
+  REQUIRE(metrics[2]._category == ASTL_CATEGORY_FREQUENCY);
 }

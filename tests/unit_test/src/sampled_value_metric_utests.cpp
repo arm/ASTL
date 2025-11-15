@@ -5,15 +5,25 @@
 #include "operation/operation_builder.hpp"
 
 astl::SampledValueMetric GetSampledValueMetricUINT64() {
-  static astl::MetricConfig config{
-      "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT64,
-      ASTL_METRIC_VALUE, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  static astl::MetricConfig config{"test_metric",
+                                   "unit-test metric",
+                                   ASTL_UNITS_CELSIUS,
+                                   ASTL_VALUE_UINT64,
+                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_VALUE,
+                                   astl::CollectorType::UNKNOWN,
+                                   astl::NullOperationBuilder{}};
   return astl::SampledValueMetric{&config, nullptr, nullptr};
 }
 astl::SampledValueMetric GetSampledValueMetricUINT32() {
-  static astl::MetricConfig config{
-      "test_metric",     "unit-test metric",           ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT32,
-      ASTL_METRIC_VALUE, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  static astl::MetricConfig config{"test_metric",
+                                   "unit-test metric",
+                                   ASTL_UNITS_CELSIUS,
+                                   ASTL_VALUE_UINT32,
+                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_VALUE,
+                                   astl::CollectorType::UNKNOWN,
+                                   astl::NullOperationBuilder{}};
   return astl::SampledValueMetric{&config, nullptr, nullptr};
 }
 

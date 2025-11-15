@@ -12,13 +12,10 @@ using trompeloeil::_;
 
 inline const std::vector<std::string> kDataEventIds = {"0x1234"};
 
-inline const astl::MetricConfig kTemperature{"SoC Temperature",
-                                             "SoC Temperature in Celsius",
-                                             ASTL_UNITS_CELSIUS,
-                                             ASTL_VALUE_UINT64,
-                                             ASTL_METRIC_VALUE,
-                                             astl::CollectorType::SCMI,
-                                             astl::ScmiOperationBuilder{0x1234}};
+inline const astl::MetricConfig kTemperature{"SoC Temperature",           "SoC Temperature in Celsius",
+                                             ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT64,
+                                             ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
+                                             astl::CollectorType::SCMI,   astl::ScmiOperationBuilder{0x1234}};
 
 astl::ScmiDataEventId GetDataEventId(const astl::ResidencyMetricConfig::StateInfo& state_info) {
   if (const auto* scmi_builder = std::get_if<astl::ScmiOperationBuilder>(&state_info.operation_builder)) {
@@ -40,8 +37,8 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
 
   SECTION("Register an invalid metric config") {
     auto invalid_metric_config = std::make_unique<astl::MetricConfig>(
-        "SoC Temperature", "SoC Temperature for abc xyz", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, ASTL_METRIC_VALUE,
-        astl::CollectorType::MMIO, astl::NullOperationBuilder{});
+        "SoC Temperature", "SoC Temperature for abc xyz", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64,
+        ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, astl::CollectorType::MMIO, astl::NullOperationBuilder{});
 
     REQUIRE(mock_metric_manager.RegisterMetric(std::move(invalid_metric_config), {}) == ASTL_STATUS_NOT_IMPLEMENTED);
   }
@@ -394,4 +391,123 @@ TEST_CASE("ConfigurationManager::GetConfiguration returns configuration", "[Conf
   REQUIRE(result);  // ensure config parsed
   auto config = result.value();
   (void)config;  // suppress unused variable warning; no further inspection per requirements
+}
+
+// ===================== Category Parsing Tests =====================
+TEST_CASE("ParseConfiguration missing category defaults to unknown/UNCATEGORIZED", "[ConfigManager][Category]") {
+  constexpr auto     json_config_data = R"json(
+  {
+    "metrics": {
+      "CPU Power": {
+        "description": "CPU power consumption",
+        "register": "CPU_POWER",
+        "unit": "W",
+        "metric_type": "value",
+        "collection_protocol": "scmi"
+      }
+    }
+  }
+  )json";
+  std::istringstream json_data_stream{json_config_data};
+  auto               result = astl::ParseConfiguration(json_data_stream);
+  REQUIRE(result);
+  auto config = result.value();
+  REQUIRE(config.metric_declarations.size() == 1);
+  REQUIRE(config.metric_declarations.at("CPU Power").category == "unknown");  // default string
+
+  // Build a metric config to verify enum mapping
+  astl::scmi::Layout layout;
+  layout.members["AP0"] = {
+      {"CPU_POWER", {.name = "AP0_CPU_POWER", .de_id = 0x0000abcd}}
+  };
+  astl::scmi::ScmiSpecification spec;
+  spec.layout = std::move(layout);
+  std::vector<const astl::ITarget*> targets;
+  astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
+  targets.push_back(&test_target);
+  auto metric_configs_result =
+      astl::CreateScmiMetricConfigs("CPU Power", config.metric_declarations.at("CPU Power"), spec, targets);
+  REQUIRE(metric_configs_result);
+  auto metric_configs = std::move(metric_configs_result.value());
+  REQUIRE_FALSE(metric_configs.empty());
+  REQUIRE(metric_configs.front()->Category() == ASTL_CATEGORY_UNCATEGORIZED);
+}
+
+TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManager][Category]") {
+  constexpr auto     json_config_data = R"json(
+  {
+    "metrics": {
+      "SoC Temperature": {
+        "description": "Temperature in Celsius",
+        "register": "SOC_TEMP",
+        "unit": "C",
+        "metric_type": "value",
+        "category": "TEMPERATURE",
+        "collection_protocol": "scmi"
+      }
+    }
+  }
+  )json";
+  std::istringstream json_data_stream{json_config_data};
+  auto               result = astl::ParseConfiguration(json_data_stream);
+  REQUIRE(result);
+  auto config = result.value();
+  REQUIRE(config.metric_declarations.size() == 1);
+
+  // Build a metric config to verify enum mapping
+  astl::scmi::Layout layout;
+  layout.members["AP0"] = {
+      {"SOC_TEMP", {.name = "AP0_SOC_TEMP", .de_id = 0x0000dcba}}
+  };
+  astl::scmi::ScmiSpecification spec;
+  spec.layout = std::move(layout);
+  std::vector<const astl::ITarget*> targets;
+  astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
+  targets.push_back(&test_target);
+  auto metric_configs_result =
+      astl::CreateScmiMetricConfigs("SoC Temperature", config.metric_declarations.at("SoC Temperature"), spec, targets);
+  REQUIRE(metric_configs_result);
+  auto metric_configs = std::move(metric_configs_result.value());
+  REQUIRE_FALSE(metric_configs.empty());
+  REQUIRE(metric_configs.front()->Category() == ASTL_CATEGORY_TEMPERATURE);
+}
+
+TEST_CASE("ParseConfiguration invalid category string maps to UNCATEGORIZED", "[ConfigManager][Category]") {
+  constexpr auto     json_config_data = R"json(
+  {
+    "metrics": {
+      "GPU Power": {
+        "description": "GPU power consumption",
+        "register": "GPU_POWER",
+        "unit": "W",
+        "metric_type": "value",
+        "category": "THIS_IS_NOT_A_VALID_VALUE",
+        "collection_protocol": "scmi"
+      }
+    }
+  }
+  )json";
+  std::istringstream json_data_stream{json_config_data};
+  auto               result = astl::ParseConfiguration(json_data_stream);
+  REQUIRE(result);
+  auto config = result.value();
+  REQUIRE(config.metric_declarations.size() == 1);
+  REQUIRE(config.metric_declarations.at("GPU Power").category == "THIS_IS_NOT_A_VALID_VALUE");
+
+  // Build a metric config to verify enum mapping
+  astl::scmi::Layout layout;
+  layout.members["AP0"] = {
+      {"GPU_POWER", {.name = "AP0_GPU_POWER", .de_id = 0x00001234}}
+  };
+  astl::scmi::ScmiSpecification spec;
+  spec.layout = std::move(layout);
+  std::vector<const astl::ITarget*> targets;
+  astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
+  targets.push_back(&test_target);
+  auto metric_configs_result =
+      astl::CreateScmiMetricConfigs("GPU Power", config.metric_declarations.at("GPU Power"), spec, targets);
+  REQUIRE(metric_configs_result);
+  auto metric_configs = std::move(metric_configs_result.value());
+  REQUIRE_FALSE(metric_configs.empty());
+  REQUIRE(metric_configs.front()->Category() == ASTL_CATEGORY_UNCATEGORIZED);
 }

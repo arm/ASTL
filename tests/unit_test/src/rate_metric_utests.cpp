@@ -27,9 +27,14 @@
 #include "metric/rate_metric.hpp"
 
 static const astl::MetricConfig* GetRateConfig() {
-  static astl::MetricConfig config{
-      "test_rate",      "unit-test rate metric",      ASTL_UNITS_JOULES,           ASTL_VALUE_UINT64,
-      ASTL_METRIC_RATE, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}};
+  static astl::MetricConfig config{"test_rate",
+                                   "unit-test rate metric",
+                                   ASTL_UNITS_JOULES,
+                                   ASTL_VALUE_UINT64,
+                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_RATE,
+                                   astl::CollectorType::UNKNOWN,
+                                   astl::NullOperationBuilder{}};
   return &config;
 }
 

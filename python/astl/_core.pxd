@@ -169,6 +169,16 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_METRIC_UNKNOWN
     ctypedef int astl_metric_type_t
 
+    cdef enum _astl_category_t:
+        ASTL_CATEGORY_COUNT
+        ASTL_CATEGORY_TEMPERATURE
+        ASTL_CATEGORY_POWER
+        ASTL_CATEGORY_FREQUENCY
+        ASTL_CATEGORY_VOLTAGE
+        ASTL_CATEGORY_CURRENT
+        ASTL_CATEGORY_UNCATEGORIZED
+    ctypedef int astl_category_t
+
     cdef struct _astl_metric_properties_t:
         size_t _size
         const void* _handle
@@ -178,6 +188,7 @@ cdef extern from "astl/astl_telemetry.h":
         astl_units_t _units
         astl_value_type_t _value_type
         astl_metric_type_t _metric_type
+        astl_category_t _category
     ctypedef _astl_metric_properties_t astl_metric_properties_t
 
     # Metric Group
