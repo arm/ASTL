@@ -161,3 +161,123 @@ TEST_CASE("CollectorManager::BuildCollectorManager", "[collector_manager]") {
   REQUIRE(collector_manager.has_value());
   REQUIRE(collector_manager.value()->ReportCollectionCapabilities().empty());
 }
+
+TEST_CASE("CollectorManager with no collectors", "collector_manager") {
+  std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+  astl::CollectorManager collector_manager{std::move(collectors_map)};
+
+  auto mock_target = std::make_unique<MockTarget>();
+
+  SECTION("ConfigureCollectionOnTarget with no collectors") {
+    astl_collection_parameters_t collection_params{};
+    astl::CollectionOperations   operations{.operationsBeforeStart = {},
+                                            .operationsAtStart     = {},
+                                            .operationsOnSample    = {},
+                                            .operationsAtStop      = {},
+                                            .samplingInterval      = std::chrono::milliseconds{100},
+                                            .requirements = {astl::CollectorCapability{astl::CollectorType::SCMI}}};
+    REQUIRE(collector_manager.ConfigureCollectionOnTarget(mock_target.get(), collection_params,
+                                                          std::move(operations)) == ASTL_STATUS_NO_TARGETS_FOUND);
+  }
+
+  SECTION("StartOnTarget with no collectors") {
+    REQUIRE(collector_manager.StartOnTarget(mock_target.get()) == ASTL_STATUS_INVALID_TARGET_HANDLE);
+  }
+
+  SECTION("PauseOnTarget with no collectors") {
+    REQUIRE(collector_manager.PauseOnTarget(mock_target.get()) == ASTL_STATUS_INVALID_TARGET_HANDLE);
+  }
+
+  SECTION("ResumeOnTarget with no collectors") {
+    REQUIRE(collector_manager.ResumeOnTarget(mock_target.get()) == ASTL_STATUS_INVALID_TARGET_HANDLE);
+  }
+
+  SECTION("ReadImmediateOnTarget with no collectors") {
+    REQUIRE(collector_manager.ReadImmediateOnTarget(mock_target.get()) == ASTL_STATUS_INVALID_TARGET_HANDLE);
+  }
+
+  SECTION("StopOnTarget with no collectors") {
+    REQUIRE(collector_manager.StopOnTarget(mock_target.get()) == ASTL_STATUS_INVALID_TARGET_HANDLE);
+  }
+}
+
+TEST_CASE("CollectorManager with no viable collectors", "collector_manager") {
+  std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+
+  auto mock_target    = std::make_unique<MockTarget>();
+  auto mock_collector = std::make_unique<MockCollector>();
+  REQUIRE_CALL(*mock_collector, GetCapabilities()).RETURN(astl::CollectorCapability{astl::CollectorType::MMIO});
+  // we require SCMI, but collector provides only MMIO, that's an error
+  astl::CollectionOperations operations{.operationsBeforeStart = {},
+                                        .operationsAtStart     = {},
+                                        .operationsOnSample    = {},
+                                        .operationsAtStop      = {},
+                                        .samplingInterval      = std::chrono::milliseconds{100},
+                                        .requirements = {astl::CollectorCapability{astl::CollectorType::SCMI}}};
+  ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
+  collectors_map[mock_target.get()].push_back(std::move(mock_collector));
+  astl::CollectorManager collector_manager{std::move(collectors_map)};
+  auto res = collector_manager.ConfigureCollectionOnTarget(mock_target.get(), astl_collection_parameters_t{},
+                                                           std::move(operations));
+  REQUIRE(res == ASTL_STATUS_INVALID_COLLECTION_MODE);
+}
+
+TEST_CASE("CollectorManager with one viable collector", "collector_manager") {
+  std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+
+  auto mock_target    = std::make_unique<MockTarget>();
+  auto mock_collector = std::make_unique<MockCollector>();
+  REQUIRE_CALL(*mock_collector, GetCapabilities()).RETURN(astl::CollectorCapability{astl::CollectorType::SCMI});
+  ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
+  REQUIRE_CALL(*mock_collector, ConfigureCollection(trompeloeil::_)).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*mock_collector, StartCollection()).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*mock_collector, ReadImmediate()).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*mock_collector, PauseCollection()).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*mock_collector, ResumeCollection()).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*mock_collector, StopCollection()).RETURN(ASTL_STATUS_SUCCESS);
+
+  collectors_map[mock_target.get()].push_back(std::move(mock_collector));
+  astl::CollectorManager collector_manager{std::move(collectors_map)};
+
+  // we require SCMI, and the collector provides SCMI, that's good
+  astl::CollectionOperations operations{.operationsBeforeStart = {},
+                                        .operationsAtStart     = {},
+                                        .operationsOnSample    = {},
+                                        .operationsAtStop      = {},
+                                        .samplingInterval      = std::chrono::milliseconds{100},
+                                        .requirements = {astl::CollectorCapability{astl::CollectorType::SCMI}}};
+  auto res = collector_manager.ConfigureCollectionOnTarget(mock_target.get(), astl_collection_parameters_t{},
+                                                           std::move(operations));
+  REQUIRE(res == ASTL_STATUS_SUCCESS);
+
+  REQUIRE(collector_manager.StartOnTarget(mock_target.get()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector_manager.PauseOnTarget(mock_target.get()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector_manager.ReadImmediateOnTarget(mock_target.get()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector_manager.ResumeOnTarget(mock_target.get()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector_manager.StopOnTarget(mock_target.get()) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("CollectorManager::SinkRawSamples - no sinks", "collector_manager") {
+  std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+  astl::CollectorManager collector_manager{std::move(collectors_map)};
+
+  auto                              mock_target = std::make_unique<MockTarget>();
+  std::vector<astl::RawSampledData> samples;
+
+  // with no registered sinks, SinkRawSamples should succeed but do nothing
+  REQUIRE(collector_manager.SinkRawSamples(mock_target.get(), samples) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("CollectorManager::SinkRawSamples - one sink", "collector_manager") {
+  std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+  astl::CollectorManager collector_manager{std::move(collectors_map)};
+  auto                   mock_sample_sink = std::make_unique<MockRawSampleSink>();
+  REQUIRE_CALL(*mock_sample_sink, SinkRawSamples(trompeloeil::_, trompeloeil::_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto                              mock_target = std::make_unique<MockTarget>();
+  std::vector<astl::RawSampledData> samples;
+  REQUIRE(collector_manager.RegisterRawSampleSink(mock_sample_sink.get()) == ASTL_STATUS_SUCCESS);
+
+  // with no registered sinks, SinkRawSamples should succeed but do nothing
+  REQUIRE(collector_manager.SinkRawSamples(mock_target.get(), samples) == ASTL_STATUS_SUCCESS);
+}

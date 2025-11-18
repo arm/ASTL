@@ -44,7 +44,7 @@ LibsensorsCollector::LibsensorsCollector() {}
 /*
  * @brief Get the capabilities of this collector, including the collector type.
  */
-auto LibsensorsCollector::GetCapabilities() const -> CollectorCapability const& { return _collector_capability; };
+auto LibsensorsCollector::GetCapabilities() const -> CollectorCapability { return _collector_capability; };
 
 /*
  * @brief Set the destination for where sampled data should be sent.

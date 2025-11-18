@@ -30,6 +30,7 @@
 #include "common/i_processed_sample_sink.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "common/metric_config.hpp"
+#include "metric/i_counter.hpp"
 #include "operation/operation.hpp"
 
 namespace astl {
@@ -50,9 +51,78 @@ struct IMetricManager {
   IMetricManager& operator=(IMetricManager&&)      = default;
 
   /**
+   * @brief Helper to look up a ICounter handle representing a counter for a specific target from a counter API handle
+   *
+   * @param counter_handle an astl_counter_handle_t representing potentially many identical counters that
+   *        differ only in their target.
+   * @param target the target on which to get the counter instance.
+   * @return the ICounter instance representing the given counter_handle on the given target. (or an error)
+   */
+  [[nodiscard]] virtual auto GetCounterOnTarget(astl_counter_handle_t counter_handle, const ITarget* target) const
+      -> std::expected<IMetric*, astl_status_code> = 0;
+
+  /**
+   * @brief Register the counter.
+   *
+   * This method is called by the orchestrator to register a new counter.
+   */
+  [[nodiscard]] virtual auto RegisterCounter(std::unique_ptr<MetricConfig>      counter_config,
+                                             std::vector<const ITarget*> const& targets) -> astl_status_code = 0;
+
+  /**
+   * @brief Get the number of available counters for the given target.
+   *
+   * This method returns a count of astl_counter_handle_t api handles.
+   *
+   * @param target The target from which to retrieve associated counters
+   *
+   * @return The number of available counters for the given target, or an error.
+   */
+  virtual auto GetNumAvailableCounters(const ITarget* target) const -> size_t = 0;
+
+  /**
+   * @brief Get the available counters.
+   *
+   * This method returns a span of astl_counter_handle_t api handles.
+   * This is used to retrieve all the counters that are available for the given target.
+   *
+   * @param target The target from which to retrieve associated counters
+   *
+   * @return A span<astl_counter_handle_t> containing all registered counters, or an error.
+   */
+  [[nodiscard]] virtual auto GetAvailableCounters(const ITarget* target) const
+      -> std::expected<std::span<const astl_counter_handle_t>, astl_status_code> = 0;
+
+  /**
+   * @brief Assign values such as name, units, etc to the given properties pointer.
+   *
+   * @param counter The counter API handle for potentially many identical counters that differ only in their target
+   * @param properties A non-null pointer to a struct containing properties to fill in, comes from astlGetCounters API
+   *
+   * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
+   */
+  [[nodiscard]] virtual auto GetCounterProperties(astl_counter_handle_t      counter,
+                                                  astl_counter_properties_t* properties) const -> astl_status_code = 0;
+
+  /**
+   * @brief Get the collection of collector operations needed to sample the given counter on the given target
+   *
+   * This method is called by the orchestrator to retrieve operations to send to CollectorManager
+   *
+   * @param counters A collection of counter API handles to collect
+   * @param target A pointer to a target on which to collect samples for the given counters
+   *
+   * @return A CollectionOperations struct with operations for the CollectorManager to execute
+   *         OR a status code indicating the nature of an error
+   */
+  [[nodiscard]] virtual auto GetCounterRequiredOperations(std::span<const astl_counter_handle_t> counters,
+                                                          const ITarget*                         target)
+      -> std::expected<CollectionOperations, astl_status_code> = 0;
+
+  /**
    * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
    */
-  [[nodiscard]] virtual auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target)
+  [[nodiscard]] virtual auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target) const
       -> std::expected<IMetric*, astl_status_code> = 0;
 
   /**
@@ -84,15 +154,15 @@ struct IMetricManager {
                                             std::vector<const ITarget*> const& targets) -> astl_status_code = 0;
 
   /**
-   * @brief Get the available metrics.
+   * @brief Get the number of available metrics for the given target.
    *
-   * This method returns a span of api handles to metrics.
-   * This is used to retrieve all the metrics that are available for all targets.
+   * This method returns a count of astl_metric_handle_t api handles.
    *
-   * @return A span<astl_metric_handle_t> containing all registered metrics, or an error.
+   * @param target The target from which to retrieve associated metrics
+   *
+   * @return The number of available metrics for the given target, or an error.
    */
-  [[nodiscard]] virtual auto GetAvailableMetrics() const
-      -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
+  virtual auto GetNumAvailableMetrics(const ITarget* target) const -> size_t = 0;
 
   /**
    * @brief Get the available metrics.

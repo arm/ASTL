@@ -22,12 +22,11 @@
 #include <astl_logger.hpp>
 #include <atomic>
 #include <chrono>
+#include <expected>
 #include <limits>
 #include <memory>
 #include <stdexcept>
 #include <vector>
-
-#include "target.hpp"
 
 namespace astl {
 
@@ -88,6 +87,8 @@ class Operation {
 };
 
 using OperationSequence = std::vector<std::unique_ptr<Operation>>;
+
+struct ITarget;  // forward declaration so we can get OperationBuilder concept declared
 
 /**
  * @brief OperationBuilder concept - interface for building operations for a given target

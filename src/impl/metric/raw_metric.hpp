@@ -98,7 +98,7 @@ class RawMetric : public IMetric {
    *
    * @param processed_sample_sink Sink implementing IProcessedSampleSink to receive processed samples.
    */
-  auto SetProcessedSampleSink(IProcessedSampleSink *processed_sample_sink) -> void final;
+  auto SetProcessedSampleSink(IProcessedSampleSink *processed_sample_sink) -> void override;
 
   /**
    * @brief Reset the metric state discarding all processed samples and internal accumulators.
@@ -120,7 +120,7 @@ class RawMetric : public IMetric {
    * @param properties Non-null pointer to structure to populate.
    * @return ASTL_STATUS_SUCCESS or ASTL_STATUS_BAD_ARGUMENT.
    */
-  auto GetProperties(astl_metric_properties_t *properties) const -> astl_status_code final;
+  auto GetProperties(astl_metric_properties_t *properties) const -> astl_status_code override;
 
   /**
    * @brief Retrieve the metric's name.
@@ -135,7 +135,7 @@ class RawMetric : public IMetric {
    * @param processed_sample Sample to forward.
    * @return ASTL_STATUS_SUCCESS or a status from the sink dispatch.
    */
-  auto SinkProcessedSample(const ProcessedSampledData &processed_sample) -> astl_status_code final;
+  auto SinkProcessedSample(const ProcessedSampledData &processed_sample) -> astl_status_code override;
 
  protected:
   /**

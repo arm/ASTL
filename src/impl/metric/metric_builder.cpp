@@ -30,6 +30,77 @@
 
 namespace astl {
 
+/** @brief helper struct to hold counter and metric configurations
+ *
+ */
+struct MetricAndCounterConfigurations {
+  std::vector<std::unique_ptr<MetricConfig>> metric_configurations;
+  std::vector<std::unique_ptr<MetricConfig>> counter_configurations;
+};
+
+/**
+ * @brief helper function to create MetricConfig objects for all SCMI metrics defined in the
+ *        given SCMI specification and matching the given metric declaration from the top-level config file.
+ */
+static auto CreateScmiConfigurationsForMetrics(const AstlConfiguration&           configuration,
+                                               const scmi::ScmiSpecification&     scmi_specification,
+                                               std::vector<const ITarget*> const& scmi_targets)
+    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
+  std::vector<std::unique_ptr<MetricConfig>> configurations;
+
+  // convert all of the metric declarations in the top-level config file into usable MetricConfig objects
+  // based on the platform SCMI specification which includes the Data Event IDs.
+  // here the 'metric_name' is more descriptive from the config file like 'Soc Power' and the
+  // 'metric_declaration.register' holds the register name like 'ENERGY_COUNTER'
+  for (const auto& [metric_name, metric_declaration] : configuration.metric_declarations) {
+    auto collector_type = ParseCollectorType(metric_declaration);
+    if (!collector_type || collector_type != CollectorType::SCMI) {
+      ASTL_LOG_TRACE("CreateScmiConfigurationsForMetrics ignoring collector type '{}' for metric {}",
+                     metric_declaration.collection_protocol, metric_name);
+      continue;
+    }
+    auto metric_configs_result =
+        CreateScmiMetricConfigs(metric_name, metric_declaration, scmi_specification, scmi_targets);
+    if (metric_configs_result.has_value()) {
+      // move all the created MetricConfig objects into the output vector
+      std::transform(metric_configs_result.value().begin(), metric_configs_result.value().end(),
+                     std::back_inserter(configurations), [](auto& metric_config) { return std::move(metric_config); });
+    } else {
+      ASTL_LOG_ERROR("Failed to create metric config for '{}': error code {}", metric_name,
+                     static_cast<int>(metric_configs_result.error()));
+      // Continue processing other metrics instead of failing completely
+    }
+  }
+  return configurations;
+}
+
+/**
+ * @brief helper function to create MetricConfig objects for all SCMI counters defined in the
+ *       given SCMI specification and underlying the given metric declaration from the top-level config file.
+ */
+static auto CreateScmiConfigurationsForCounters(const AstlConfiguration&       configuration,
+                                                const scmi::ScmiSpecification& scmi_specification)
+    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
+  std::vector<std::unique_ptr<MetricConfig>> configurations;
+  std::set<std::string> processed_counter_names;  // ensure we don't repeat counters, even if used in multiple metrics
+  for (const auto& [metric_name, metric_declaration] : configuration.metric_declarations) {
+    auto metric_registers = scmi::GetMetricRegisters(metric_declaration.register_name, scmi_specification.layout);
+    for (const auto& [reg_name, de_id] : metric_registers) {
+      std::string counter_name = reg_name + "_" + metric_name;
+      if (processed_counter_names.find(counter_name) != processed_counter_names.end()) {
+        // already processed this counter, skip it
+        continue;
+      }
+      std::string description = "Underlying counter for " + metric_name;
+      configurations.emplace_back(std::make_unique<MetricConfig>(
+          std::move(counter_name), std::move(description), ASTL_UNITS_UNKNOWN, ASTL_VALUE_UNKNOWN,
+          ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI, ScmiOperationBuilder{de_id}));
+    }
+  }
+  // @todo(ASTL-236) add support for counters specified in astl configuration separate from metrics.
+  return configurations;
+}
+
 /** @brief helper function to parse a system scmi specification json file into MetricConfig objects
  *
  * @param configuration The overall ASTL configuration including the path to the SCMI specification file
@@ -38,12 +109,11 @@ namespace astl {
  */
 static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration&           configuration,
                                                            std::vector<const ITarget*> const& scmi_targets)
-    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
-  std::vector<std::unique_ptr<MetricConfig>> configurations;
+    -> std::expected<MetricAndCounterConfigurations, astl_status_code> {
   if (!configuration.scmi_specification_path) {
     ASTL_LOG_INFO("No specification file path provided, so no metrics available from SCMI");
     // @todo ASTL-40 default path for SCMI definition file)
-    return configurations;
+    return {};
   }
   const auto& scmi_specification_path = configuration.scmi_specification_path.value();
   ASTL_LOG_DEBUG("Attmempting to parse {} for metric definitions", scmi_specification_path.string());
@@ -51,32 +121,12 @@ static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfigurati
     std::ifstream json_file(scmi_specification_path);
     json          json_data          = json::parse(json_file);
     auto          specification_data = json_data.get<scmi::ScmiSpecification>();
-
     ASTL_LOG_DEBUG("specification_data.layout.members.size(): {}", specification_data.layout.members.size());
 
-    // convert all of the metric declarations in the top-level config file into usable MetricConfig objects
-    // based on the platform SCMI specification which includes the Data Event IDs.
-    // here the 'metric_name' is more descriptive from the config file like 'Soc Power' and the
-    // 'metric_declaration.register' holds the register name like 'ENERGY_COUNTER'
-    for (const auto& [metric_name, metric_declaration] : configuration.metric_declarations) {
-      auto collector_type = ParseCollectorType(metric_declaration);
-      if (!collector_type || collector_type != CollectorType::SCMI) {
-        ASTL_LOG_TRACE("Scmi metric registrar ignoring collector type '{}' for metric {}",
-                       metric_declaration.collection_protocol, metric_name);
-        continue;
-      }
-      auto metric_configs_result =
-          CreateScmiMetricConfigs(metric_name, metric_declaration, specification_data, scmi_targets);
-      if (metric_configs_result.has_value()) {
-        std::transform(metric_configs_result.value().begin(), metric_configs_result.value().end(),
-                       std::back_inserter(configurations),
-                       [](auto& metric_config) { return std::move(metric_config); });
-      } else {
-        ASTL_LOG_ERROR("Failed to create metric config for '{}': error code {}", metric_name,
-                       static_cast<int>(metric_configs_result.error()));
-        // Continue processing other metrics instead of failing completely
-      }
-    }
+    auto metric_configs_result  = CreateScmiConfigurationsForMetrics(configuration, specification_data, scmi_targets);
+    auto counter_configs_result = CreateScmiConfigurationsForCounters(configuration, specification_data);
+    return MetricAndCounterConfigurations{.metric_configurations  = std::move(metric_configs_result.value()),
+                                          .counter_configurations = std::move(counter_configs_result.value())};
   } catch (nlohmann::json::parse_error const& e) {
     ASTL_LOG_ERROR("Unable to parse SCMI definition file {}: {}", scmi_specification_path.string(), e.what());
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
@@ -88,8 +138,6 @@ static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfigurati
                    e.what());
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
-
-  return configurations;
 }
 
 /**
@@ -115,8 +163,14 @@ static auto RegisterScmiMetrics(
     return scmi_metric_configurations.error();
   }
 
-  for (auto& scmi_metric_config : scmi_metric_configurations.value()) {
+  for (auto& scmi_metric_config : scmi_metric_configurations->metric_configurations) {
     auto status = metric_manager->RegisterMetric(std::move(scmi_metric_config), scmi_targets_iter->second);
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+  }
+  for (auto& scmi_counter_config : scmi_metric_configurations->counter_configurations) {
+    auto status = metric_manager->RegisterCounter(std::move(scmi_counter_config), scmi_targets_iter->second);
     if (status != ASTL_STATUS_SUCCESS) {
       return status;
     }

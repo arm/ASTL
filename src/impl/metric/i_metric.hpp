@@ -27,6 +27,8 @@
 #include "common/capabilities.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "common/i_raw_sample_sink.hpp"
+#include "i_processed_sample_sink.hpp"
+#include "i_raw_sample_sink.hpp"
 #include "operation/operation.hpp"
 
 namespace astl {

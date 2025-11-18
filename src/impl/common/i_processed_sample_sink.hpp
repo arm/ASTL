@@ -25,7 +25,6 @@
 
 #include "astl/astl.h"
 #include "astl_value.hpp"
-#include "counter.hpp"
 #include "metric/i_metric.hpp"
 #include "operation/operation.hpp"
 #include "target.hpp"

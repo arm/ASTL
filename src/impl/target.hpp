@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "astl/astl.h"
-#include "counter.hpp"
+#include "common/capabilities.hpp"
 
 namespace astl {
 
@@ -26,8 +26,6 @@ struct ITarget {
 
   virtual auto GetProperties(astl_target_properties_t* target) const -> astl_status_code = 0;
   virtual auto Name() const -> std::string const&                                        = 0;
-  virtual auto GetCounterCount() const -> size_t                                         = 0;
-  virtual auto GetCounters() const -> const std::vector<std::unique_ptr<ICounter>>&      = 0;
 
   virtual auto GetCollectorType() const -> CollectorType = 0;
 };
@@ -50,17 +48,14 @@ class Target : public astl::ITarget {
   auto Name() const -> std::string const& override;
   auto GetCollectorType() const -> CollectorType override;
   auto GetParent() const -> const Target*;
-  auto GetCounterCount() const -> size_t override;
-  auto GetCounters() const -> const std::vector<std::unique_ptr<ICounter>>& override;
   auto GetUuid() const -> const std::optional<std::string>& { return _uuid; }
 
  private:
-  std::string                            _name;
-  std::string                            _description;
-  CollectorType                          _collector_type{CollectorType::UNKNOWN};
-  Target*                                _parent{nullptr};
-  std::vector<std::unique_ptr<ICounter>> _counters;
-  std::optional<std::string>             _uuid;
+  std::string                _name;
+  std::string                _description;
+  CollectorType              _collector_type{CollectorType::UNKNOWN};
+  Target*                    _parent{nullptr};
+  std::optional<std::string> _uuid;
 };
 
 }  // namespace astl

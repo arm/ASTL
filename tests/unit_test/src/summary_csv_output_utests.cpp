@@ -49,9 +49,6 @@ struct SummaryTestTarget : public astl::ITarget {
     props->_handle = this;
     return ASTL_STATUS_SUCCESS;
   }
-  size_t GetCounterCount() const override { return 0; }
-  auto   GetCounters() const -> std::vector<std::unique_ptr<astl::ICounter>> const& override { return _counters; }
-  std::vector<std::unique_ptr<astl::ICounter>> _counters;
 };
 
 struct SummaryTestMetric : public astl::IMetric {

@@ -63,7 +63,7 @@ class ScmiSysfsCollector : public ICollector {
   /*
    * @brief Get the capabilities of this collector, including the collector type.
    */
-  CollectorCapability const& GetCapabilities() const override;
+  CollectorCapability GetCapabilities() const override;
 
   /*
    * @brief Set the destination for where sampled data should be sent.
@@ -190,7 +190,7 @@ ScmiSysfsCollector<FileInterfaceT>::ScmiSysfsCollector(FileInterfaceT file_inter
  * @brief Get the capabilities of this collector, including the collector type.
  */
 template <typename FileInterfaceT>
-auto ScmiSysfsCollector<FileInterfaceT>::GetCapabilities() const -> CollectorCapability const& {
+auto ScmiSysfsCollector<FileInterfaceT>::GetCapabilities() const -> CollectorCapability {
   return _collector_capability;
 };
 

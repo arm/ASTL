@@ -100,7 +100,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET: one of the given counters is not associated with the target
    */
   auto ConfigureCounterCollection(const ITarget *target, const astl_collection_parameters_t *collection_params,
-                                  std::span<const ICounter *> counters) -> astl_status_code;
+                                  std::span<const IMetric *> counters) -> astl_status_code;
 
   /**
    * @brief For a given target, enable collection on a set of measurable Metrics.
@@ -182,18 +182,6 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - others: according to individual Collector implementations
    */
   auto StopCollection(const ITarget *target) -> astl_status_code;
-
-  /**
-   * @brief Return the number of collected samples for a given counter on the given target
-   * @param target The target on which collection was configured and performed
-   * @param counter The specific data source that was sampled
-   *
-   * @return a std::expected pair with either:
-   *   - a value: the count of samples taken for the given ICounter on the target
-   *   - OR an error status code such as an invalid handle or bad argument
-   */
-  auto GetCounterSampleCount(const ITarget *target, const ICounter *counter) const
-      -> std::expected<uint32_t, astl_status_code>;
 
   // TODO(ASTL-58): when OutputManager is implemented, revisit to see if GetMetricManager is even needed
   /**

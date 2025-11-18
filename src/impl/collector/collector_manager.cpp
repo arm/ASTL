@@ -151,7 +151,10 @@ auto CollectorManager::SelectCollector(const ITarget* target, CollectorCapabilit
   // choose a collector that meets the requirements
   auto first_matching_collector =
       std::ranges::find_if(potential_collectors->second, [&requirements](const auto& collector) {
-        return collector->GetCapabilities().collector_type == requirements.collector_type;
+        const auto capabilities            = collector->GetCapabilities();
+        const auto collector_type          = capabilities.collector_type;
+        const auto required_collector_type = requirements.collector_type;
+        return collector_type == required_collector_type;
       });
 
   if (first_matching_collector == potential_collectors->second.end()) {

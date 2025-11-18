@@ -207,6 +207,41 @@ auto GetTargets(std::vector<astl_target_properties_t>& target_properties_buffer,
   return ASTL_STATUS_INTERNAL_ERROR;
 }
 
+auto GetCounters(const astl_target_properties_t& target_properties)
+    -> std::expected<std::vector<astl_counter_properties_t>, astl_status_code> {
+  uint32_t counter_count{};
+  auto     status = astlGetCounterCount(target_properties._handle, &counter_count);
+  std::cout << "Counter count: " << counter_count << "\n";
+  if (status != ASTL_STATUS_SUCCESS) {
+    std::cout << "astlGetCounterCount Status: " << astlStatusString(status) << '\n';
+    std::cout << "target_handle: " << target_properties._handle << " \n";
+    return std::unexpected{status};
+  }
+  if (counter_count == 0) {
+    std::cout << "No counters found for target.\n";
+    return {};
+  }
+  std::vector<astl_counter_properties_t> counter_buffer;
+  counter_buffer.resize(counter_count);
+  for (auto& counter : counter_buffer) {
+    counter._size = sizeof(astl_counter_properties_t);
+  }
+  status = astlGetCounters(target_properties._handle, counter_buffer.data(), &counter_count);
+  std::cout << "astlGetCounters Status: " << astlStatusString(status) << '\n';
+  if (status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected{status};
+  }
+  return std::expected<std::vector<astl_counter_properties_t>, astl_status_code>(std::move(counter_buffer));
+}
+
+void PrintCounters(std::vector<astl_counter_properties_t> const& counter_buffer) {
+  for (const auto& counter_props : counter_buffer) {
+    std::cout << "Counter info:" << '\n';
+    std::cout << "  Name:        " << (counter_props._name ? counter_props._name : "<null>") << '\n';
+    std::cout << "  Description: " << (counter_props._description ? counter_props._description : "<null>") << '\n';
+  }
+}
+
 auto GetMetrics(const astl_target_properties_t& target_properties, std::vector<astl_metric_properties_t>& metric_buffer,
                 uint32_t& metric_count) -> astl_status_code {
   astl_status_code status = astlGetMetricCount(target_properties._handle, &metric_count);
@@ -435,6 +470,12 @@ auto main(int argc, char* argv[]) -> int {
       return 0;  // treat absence of targets as non-fatal in integration runs
     }
     return 4;
+  }
+
+  // Get and print counters
+  auto counters_result = GetCounters(target_properties);
+  if (counters_result) {
+    PrintCounters(*counters_result);
   }
 
   // Get metrics

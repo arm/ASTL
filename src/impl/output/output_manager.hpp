@@ -31,10 +31,10 @@
 #include "astl/astl.h"
 #include "buffer_output.hpp"
 #include "common/astl_defines.hpp"
-#include "counter.hpp"
 #include "i_output.hpp"
 #include "i_output_manager.hpp"
 #include "interval_csv_output.hpp"
+#include "metric/counter.hpp"
 #include "perfetto_output.hpp"
 #include "target.hpp"
 
