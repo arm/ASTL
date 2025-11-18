@@ -26,7 +26,7 @@
 #include "collection_operations.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
-#include "counter.hpp"
+#include "metric/counter.hpp"
 #include "target.hpp"
 
 namespace astl {

@@ -35,6 +35,208 @@
 
 namespace astl {
 
+/**
+ * @brief Helper to look up an ICounter handle representing a counter for a specific target from a metric API handle
+ */
+auto MetricManager::GetCounterOnTarget(astl_counter_handle_t counter_handle, const ITarget* target) const
+    -> std::expected<IMetric*, astl_status_code> {
+  const auto* counter_details = static_cast<const CounterHandle*>(counter_handle);
+  if (const auto index = std::ranges::find_if(
+          _counter_handles, [counter_handle](const auto& handle) { return handle.get() == counter_handle; });
+      index == _counter_handles.end()) {
+    ASTL_LOG_ERROR("GetCounterOnTarget: Invalid counter handle {}", counter_handle);
+    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
+  auto target_iter = counter_details->target_to_counter_map.find(target);
+  if (target_iter == counter_details->target_to_counter_map.end()) {
+    ASTL_LOG_ERROR("GetCounterOnTarget: Target '{:#010x}' not found for counter handle '{:#010x}'",
+                   reinterpret_cast<intptr_t>(target), reinterpret_cast<intptr_t>(counter_handle));
+    return std::unexpected{ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET};
+  }
+  return target_iter->second.get();
+}
+
+/**
+ * @brief Register the counter.
+ *
+ * This method is called by the orchestrator to register a new counter.
+ */
+auto MetricManager::RegisterCounter(std::unique_ptr<MetricConfig>      counter_config,
+                                    std::vector<const ITarget*> const& targets) -> astl_status_code {
+  if (!counter_config) {
+    ASTL_LOG_ERROR("RegisterCounter: Invalid counter config");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  ASTL_LOG_TRACE("RegisterCounter {} on {} targets", counter_config->Name(), targets.size());
+  CollectorType collector_type = counter_config->GetCollectorType();
+  if (!IsCollectorTypeSupported(collector_type)) {
+    return ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE;
+  }
+
+  // build the target-specific counter instances and associate them with the counter handle.
+  std::unordered_map<const ITarget*, std::unique_ptr<ICounter>> target_specific_counters;
+  for (const auto& target : targets) {
+    // Register the counter based on its type and add it to the _counter_handles vector and
+    // counter config mappings.
+    std::unique_ptr<ICounter> counter = std::make_unique<Counter>(counter_config.get(), target);
+    target_specific_counters[target]  = std::move(counter);
+  }
+  // store the new CounterHandle
+  _counter_handles.emplace_back(
+      std::make_unique<CounterHandle>(std::move(counter_config), std::move(target_specific_counters)));
+
+  // make sure all targets that support it are associated with the new counter handle
+  astl_counter_handle_t counter_handle = static_cast<astl_counter_handle_t>(_counter_handles.back().get());
+  for (const auto* const target : targets) {
+    _target_to_counters_map[target].push_back(counter_handle);
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+/**
+ * @brief Get the number of available counters for the given target.
+ * @param target The target from which to retrieve associated counters
+ * @return The number of available counters for the given target, or an error.
+ */
+auto MetricManager::GetNumAvailableCounters(const ITarget* target) const -> size_t {
+  const auto target_iter = _target_to_counters_map.find(target);
+  if (target_iter == _target_to_counters_map.end()) {
+    ASTL_LOG_ERROR("GetNumAvailableCounters: Target '{}' not found", target->Name());
+    return 0;
+  }
+  return target_iter->second.size();
+}
+
+/**
+ * @brief Get the available counters.
+ *
+ * This method returns a span of astl_counter_handle_t api handles.
+ * This is used to retrieve all the counters that are available for the given target.
+ *
+ * @param target The target from which to retrieve associated counters
+ *
+ * @return A span<astl_counter_handle_t> containing all registered counters, or an error.
+ */
+auto MetricManager::GetAvailableCounters(const ITarget* target) const
+    -> std::expected<std::span<const astl_counter_handle_t>, astl_status_code> {
+  const auto target_iter = _target_to_counters_map.find(target);
+  if (target_iter == _target_to_counters_map.end()) {
+    std::string targets;
+    for (const auto& target_counters : _target_to_counters_map) {
+      targets.append(target_counters.first->Name() + ", ");
+    }
+    ASTL_LOG_ERROR("GetAvailableCounters: Target '{}' not found in '{}'.", target->Name(), targets);
+    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
+  std::span<const astl_counter_handle_t> handles_span(target_iter->second);
+  return std::expected<std::span<const astl_metric_handle_t>, astl_status_code>(std::in_place, handles_span);
+}
+
+/**
+ * @brief Assign values such as name, units, etc to the given properties pointer.
+ *
+ * @param counter The counter API handle for potentially many identical counters that differ only in their target
+ * @param properties A non-null pointer to a struct containing that GetProperties will fill in
+ *
+ * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
+ */
+auto MetricManager::GetCounterProperties(astl_counter_handle_t counter, astl_counter_properties_t* properties) const
+    -> astl_status_code {
+  const auto* counter_details = static_cast<const CounterHandle*>(counter);
+  if (!counter_details) {
+    ASTL_LOG_ERROR("GetCounterProperties: Invalid counter handle {}", counter);
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  auto first_counter_instance = counter_details->target_to_counter_map.begin();
+  if (first_counter_instance == counter_details->target_to_counter_map.end()) {
+    ASTL_LOG_ERROR("GetCounterProperties: No counter config found for handle {}", counter);
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  first_counter_instance->second->GetProperties(properties);
+  // ensure that the properties struct going out the API has a reference to this counter handle
+  properties->_handle = counter;
+  return ASTL_STATUS_SUCCESS;
+}
+
+/**
+ * @brief Get the collection of collector operations needed to sample the given counter on the given target
+ *
+ * This method is called by the orchestrator to retrieve operations to send to CollectorManager
+ *
+ * @param counters A collection of counter API handles to collect
+ * @param target A pointer to a target on which to collect samples for the given counters
+ *
+ * @return A CollectionOperations struct with operations for the CollectorManager to execute
+ *         OR a status code indicating the nature of an error
+ */
+auto MetricManager::GetCounterRequiredOperations(std::span<const astl_counter_handle_t> counters, const ITarget* target)
+    -> std::expected<CollectionOperations, astl_status_code> {
+  /**
+   * This method performs the following steps for each given counter:
+   * - Validates each counter is registered (returns BAD_ARGUMENT if not).
+   * - Ensures each counter uses an known collector (returns UNSUPPORTED_COLLECTOR_TYPE otherwise).
+   * - For each given counter, asks for the sequence of operations needed to provide sample
+   * - Records the operation_id to counter mapping for processing samples later.
+   * - Returns the complete CollectionOperations struct or an appropriate error.
+   * */
+
+  OperationSequence op_sequence;
+
+  std::optional<CollectorType> collector_type;
+
+  for (const auto* counter_api_handle : counters) {
+    const auto* counter_handle = static_cast<const CounterHandle*>(counter_api_handle);
+    const auto& config         = counter_handle->config;
+    if (auto iter = std::ranges::find_if(
+            _counter_handles, [counter_handle](const auto& counter) { return counter.get() == counter_handle; });
+        iter == _counter_handles.end()) {
+      ASTL_LOG_ERROR("GetCounterRequiredOperations: Counter handle {} not registered", config->Name());
+      return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    }
+
+    if (collector_type.has_value() && collector_type != config->GetCollectorType()) {
+      ASTL_LOG_ERROR("GetCounterRequiredOperations: Mixed collector types in requested counters not supported");
+      return std::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
+    }
+    collector_type = config->GetCollectorType();
+
+    if (!IsCollectorTypeSupported(collector_type.value())) {
+      return std::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
+    }
+
+    auto counter_or_error = GetCounterOnTarget(counter_handle, target);
+    if (!counter_or_error.has_value()) {
+      ASTL_LOG_ERROR("GetCounterRequiredOperations: Failed to get counter {} on target {}", config->Name(),
+                     target->Name());
+      return std::unexpected{counter_or_error.error()};
+    }
+    auto* counter = *counter_or_error;
+
+    auto operations_result = counter->GetOperations();
+    if (!operations_result.has_value()) {
+      ASTL_LOG_ERROR("GetCounterRequiredOperations: Failed to get operations for residency counter '{}'",
+                     config->Name());
+      return std::unexpected{operations_result.error()};
+    }
+    auto counter_operations = std::move(operations_result.value());
+    for (auto& operation : counter_operations) {
+      uint32_t operation_id                  = operation->GetId();
+      _operation_to_metric_map[operation_id] = counter;
+      op_sequence.push_back(std::move(operation));
+      ASTL_LOG_INFO("GetRequiredOperations: Added operation from Counter::GetOperations() for counter '{}'",
+                    config->Name());
+    }
+  }
+
+  CollectionOperations operations{.operationsBeforeStart{},
+                                  .operationsAtStart{},
+                                  .operationsOnSample{std::move(op_sequence)},
+                                  .operationsAtStop{},
+                                  .samplingInterval{},
+                                  .requirements{astl::CollectorCapability{collector_type.value()}}};
+  return operations;
+}
+
 auto MetricManager::SinkProcessedSamples(const IMetric* metric, std::span<const ProcessedSampledData> processed_samples)
     -> astl_status_code {
   auto target_or_error = GetTargetForMetric(metric);
@@ -133,7 +335,7 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
 /**
  * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
  */
-auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target)
+auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target) const
     -> std::expected<IMetric*, astl_status_code> {
   const auto* metric_details = static_cast<const MetricHandle*>(metric_handle);
 
@@ -194,15 +396,11 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
     auto metric                     = std::move(metric_or_error.value());
     target_specific_metrics[target] = std::move(metric);
   }
-
   auto* metric_config_ptr = metric_config.get();  // non-owning pointer. grab this before metric_config is moved
-
   _metric_handles.emplace_back(
-      std::make_unique<MetricHandle>(std::move(metric_config), /* targets, */ std::move(target_specific_metrics)));
+      std::make_unique<MetricHandle>(std::move(metric_config), std::move(target_specific_metrics)));
 
   astl_metric_handle_t metric_handle = static_cast<astl_metric_handle_t>(_metric_handles.back().get());
-
-  _metric_api_handles.push_back(metric_handle);
 
   for (const auto* const target : targets) {
     _target_to_metrics_map[target].push_back(metric_handle);
@@ -213,11 +411,13 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
   return status;
 }
 
-auto MetricManager::GetAvailableMetrics() const
-    -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> {
-  // Create a span over the internal metric handle vector
-  std::span<const astl_metric_handle_t> handles_span(_metric_api_handles);
-  return std::expected<std::span<const astl_metric_handle_t>, astl_status_code>(std::in_place, handles_span);
+auto MetricManager::GetNumAvailableMetrics(const ITarget* target) const -> size_t {
+  const auto target_iter = _target_to_metrics_map.find(target);
+  if (target_iter == _target_to_metrics_map.end()) {
+    ASTL_LOG_ERROR("GetNumAvailableMetrics: Target '{}' not found", target->Name());
+    return 0;
+  }
+  return target_iter->second.size();
 }
 
 auto MetricManager::GetAvailableMetrics(const ITarget* target) const
@@ -271,12 +471,15 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
   std::optional<CollectorType> collector_type;
 
   for (const auto* metric_api_handle : metrics) {
-    if (std::ranges::find(_metric_api_handles, metric_api_handle) == _metric_api_handles.end()) {
-      ASTL_LOG_ERROR("GetRequiredOperations: unrecognized astl_metric_handle {}", metric_api_handle);
-      return std::unexpected(ASTL_STATUS_INVALID_METRIC_HANDLE);
-    }
     const auto* metric_handle = static_cast<const MetricHandle*>(metric_api_handle);
     const auto& config        = metric_handle->config;
+
+    if (auto iter = std::ranges::find_if(_metric_handles,
+                                         [metric_handle](const auto& handle) { return handle.get() == metric_handle; });
+        iter == _metric_handles.end()) {
+      ASTL_LOG_ERROR("GetRequiredOperations: Metric '{}' not registered", metric_api_handle);
+      return std::unexpected{ASTL_STATUS_INVALID_METRIC_HANDLE};
+    }
 
     if (collector_type.has_value() && collector_type != config->GetCollectorType()) {
       ASTL_LOG_ERROR("GetRequiredOperations: Mixed collector types in requested metrics not supported");

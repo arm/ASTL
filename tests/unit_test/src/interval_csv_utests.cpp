@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string>
 
+#include "../../mock_classes.hpp"
 #include "../../test_utilities.hpp"  // TempFileGuard
 #include "astl_utils.hpp"
 #include "metric/i_metric.hpp"
@@ -16,64 +17,6 @@
 
 namespace {
 // Reuse slim test doubles similar to those used in perfetto_output_utests.
-class TestTargetBase : public astl::ITarget {  // NOLINT
- public:
-  explicit TestTargetBase(std::string n, astl::CollectorType type = astl::CollectorType::SCMI)
-      : name_(std::move(n)), collector_type_(type) {}
-  auto GetCollectorType() const -> astl::CollectorType override { return collector_type_; }
-  auto Name() const -> std::string const& override { return name_; }
-  auto GetProperties(astl_target_properties_t* props) const -> astl_status_code override {
-    if (!props) {
-      return ASTL_STATUS_BAD_ARGUMENT;
-    }
-    props->_handle = this;
-    return ASTL_STATUS_SUCCESS;
-  }
-  size_t GetCounterCount() const override { return 0; }
-  auto   GetCounters() const -> std::vector<std::unique_ptr<astl::ICounter>> const& override { return counters_; }
-
- private:
-  std::string                                  name_;
-  astl::CollectorType                          collector_type_{astl::CollectorType::SCMI};
-  std::vector<std::unique_ptr<astl::ICounter>> counters_;
-};
-
-class TestMetricBase : public astl::IMetric {  // NOLINT
- public:
-  explicit TestMetricBase(std::string n, astl_units_t units = ASTL_UNITS_NONE) : name_(std::move(n)), units_(units) {}
-  bool CheckCapabilities(const astl::Capabilities& caps) const override {
-    (void)caps;
-    return true;
-  }
-  std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
-    return astl::OperationSequence{};
-  }
-  astl_status_code ReceiveRawSample(const astl::RawSampledData& raw) override {
-    (void)raw;
-    return ASTL_STATUS_SUCCESS;
-  }
-  void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
-  void             Reset() override {}
-  astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-  astl_status_code GetProperties(astl_metric_properties_t* props) const override {
-    if (!props) {
-      return ASTL_STATUS_BAD_ARGUMENT;
-    }
-    props->_handle = this;
-    props->_name   = name_.c_str();
-    props->_units  = units_;
-    return ASTL_STATUS_SUCCESS;
-  }
-  auto             Name() const -> std::string const& override { return name_; }
-  astl_status_code SinkProcessedSample(const astl::ProcessedSampledData& processed) override {
-    (void)processed;
-    return ASTL_STATUS_SUCCESS;
-  }
-
- private:
-  std::string  name_;
-  astl_units_t units_;
-};
 
 // Helper to make a processed sample (numeric) with deterministic timestamp
 astl::ProcessedSampledData MakeSample(double value, astl::SampleTimestamp timestamp) {

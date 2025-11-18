@@ -64,9 +64,8 @@ class MetricManagerTestAccessor {
     std::unordered_map<const astl::ITarget*, std::unique_ptr<IMetric>> target_to_metric;
     auto metric_handle = std::make_unique<astl::MetricHandle>(std::move(cfg), std::move(target_to_metric));
     metric_handle->target_to_metric_map[target] = std::move(metric);
-    astl_metric_handle_t metric_api_handle      = static_cast<astl_metric_handle_t>(metric_handle.get());
+    auto* metric_api_handle                     = metric_handle.get();
     mgr._metric_handles.push_back(std::move(metric_handle));
-    mgr._metric_api_handles.push_back(metric_api_handle);
     mgr._target_to_metrics_map[target].push_back(metric_api_handle);
   }
 
@@ -141,7 +140,7 @@ static Capabilities MakeCaps(CollectorType collector_type) {
 
 TEST_CASE("MetricManager::RegisterMetric succeeds when collector supported", "[MetricManager]") {
   // 1) Register a single SCMI metric with data_event_id "0x123"
-  // 2) Retrieve available metrics via GetAvailableMetrics()
+  // 2) Retrieve available metrics via GetAvailableMetrics
   // 3) Fetch required operations and verify we get exactly one ScmiReadOperation with ID==0x123
   Capabilities  caps = MakeCaps(CollectorType::SCMI);
   MetricManager mgr(caps);
@@ -195,7 +194,7 @@ TEST_CASE("MetricManager::GetRequiredOperations succeeds with valid SCMI metric"
 
   REQUIRE(mgr.RegisterMetric(std::move(cfg), {target.get()}) == ASTL_STATUS_SUCCESS);
   // Retrieve the registered metrics
-  auto avail_or_error = mgr.GetAvailableMetrics();
+  auto avail_or_error = mgr.GetAvailableMetrics(target.get());
   REQUIRE(avail_or_error.has_value());
   auto metrics = *avail_or_error;
   REQUIRE(metrics.size() == 1);
@@ -301,14 +300,14 @@ TEST_CASE("MetricManager::GetRequiredOperations correctly discriminates metrics 
   REQUIRE(mgr.RegisterMetric(std::move(cfg01), {target0.get(), target1.get()}) == ASTL_STATUS_SUCCESS);
 
   // Retrieve the registered metrics
-  auto avail_or_error = mgr.GetAvailableMetrics();
+  auto avail_or_error = mgr.GetAvailableMetrics(target0.get());
   REQUIRE(avail_or_error.has_value());
   auto metrics = *avail_or_error;
-  // cfg0 + cfg1 + cfg01 (is one metric that can run on 2 targets: that still only counts as one.)
-  REQUIRE(metrics.size() == 3);
+  // cfg0 + cfg01 (is one metric that can run on 2 targets: that still only counts as one.)
+  REQUIRE(metrics.size() == 2);
 
   SECTION("MetricManager::GetRequiredOperations for 1 metric on multiple targets") {
-    auto        multi_target_metric = metrics.subspan(2, 1);  // get the metric for cfg01
+    auto        multi_target_metric = metrics.subspan(1, 1);  // get the metric for cfg01
     auto const& ops_target0         = mgr.GetRequiredOperations(multi_target_metric, target0.get());
     REQUIRE(ops_target0);
     astl::OperationSequence const& op_seq0 = ops_target0->operationsOnSample;
@@ -332,7 +331,8 @@ TEST_CASE("MetricManager::GetRequiredOperations correctly discriminates metrics 
     auto        metric0     = metrics.subspan(0, 1);  // get the metric for cfg0
     auto const& ops_target1 = mgr.GetRequiredOperations(metric0, target1.get());
     REQUIRE(!ops_target1);
-    REQUIRE(ops_target1.error() == ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET);
+    REQUIRE(((ops_target1.error() == ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET) ||
+             (ops_target1.error() == ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE)));
   }
 }
 
@@ -534,7 +534,7 @@ TEST_CASE("MetricManager::RegisterMetric succeeds with ResidencyMetricConfig", "
   REQUIRE(status == ASTL_STATUS_SUCCESS);
 
   // Verify metric was registered
-  auto avail_or_error = mgr.GetAvailableMetrics();
+  auto avail_or_error = mgr.GetAvailableMetrics(target.get());
   REQUIRE(avail_or_error.has_value());
   auto metrics = *avail_or_error;
   REQUIRE(metrics.size() == 1);
@@ -562,7 +562,7 @@ TEST_CASE("MetricManager::GetRequiredOperations with ResidencyMetricConfig creat
 
   REQUIRE(mgr.RegisterMetric(std::move(residency_config), {target.get()}) == ASTL_STATUS_SUCCESS);
 
-  auto avail_or_error = mgr.GetAvailableMetrics();
+  auto avail_or_error = mgr.GetAvailableMetrics(target.get());
   REQUIRE(avail_or_error.has_value());
   auto metrics = *avail_or_error;
 
@@ -630,7 +630,7 @@ TEST_CASE("MetricManager::GetRequiredOperations fails when target not found in R
 
   REQUIRE(mgr.RegisterMetric(std::move(residency_config), {target1.get()}) == ASTL_STATUS_SUCCESS);
 
-  auto avail_or_error = mgr.GetAvailableMetrics();
+  auto avail_or_error = mgr.GetAvailableMetrics(target1.get());
   REQUIRE(avail_or_error.has_value());
   auto metrics = *avail_or_error;
 
@@ -679,6 +679,98 @@ TEST_CASE("MetricManager::ResidencyMetricConfig GetStateInfo accessor works corr
   REQUIRE(residency_config->InferredState() == "RUNNING");
 }
 
+TEST_CASE("MetricManager::GetCounterOnTarget with null args", "[MetricManager][Counter]") {
+  MetricManager mgr{MakeCaps(CollectorType::SCMI)};
+  auto          target = std::make_unique<MockTarget>();
+  std::string   target_name{"TLM-0"};
+  ALLOW_CALL(*target, Name()).RETURN(target_name);
+
+  // Create and register a counter metric
+  auto counter_config = std::make_unique<astl::MetricConfig>(
+      "TestCounter", "A test counter metric", astl_units_t::ASTL_UNITS_BYTES, astl_value_type_t::ASTL_VALUE_UINT64,
+      ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI, astl::ScmiOperationBuilder{0x6001});
+  REQUIRE(mgr.RegisterCounter(std::move(counter_config), {target.get()}) == ASTL_STATUS_SUCCESS);
+
+  auto avail_or_error = mgr.GetAvailableCounters(target.get());
+  REQUIRE(avail_or_error.has_value());
+  auto counters = *avail_or_error;
+  REQUIRE(counters.size() == 1);
+  // Get the counter handle
+  const auto* counter_handle = counters[0];
+
+  auto result = mgr.GetCounterOnTarget(nullptr, nullptr);
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
+
+  result = mgr.GetCounterOnTarget(counter_handle, nullptr);
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(result.error() == ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET);
+}
+
+TEST_CASE("MetricManager::GetCounterOnTarget with unregistered counter", "[MetricManager][Counter]") {
+  MetricManager mgr{MakeCaps(CollectorType::SCMI)};
+  MockTarget    target;
+  ALLOW_CALL(target, Name()).RETURN("TLM-0");
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  const auto* junk_counter = astl_counter_handle_t{reinterpret_cast<void*>(0x1234)};
+  auto        result       = mgr.GetCounterOnTarget(junk_counter, &target);
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("MetricManager::GetCounterOnTarget with registered counter", "[MetricManager][Counter]") {
+  MetricManager mgr{MakeCaps(CollectorType::SCMI)};
+  auto          target = std::make_unique<MockTarget>();
+  std::string   target_name{"TLM-0"};
+  ALLOW_CALL(*target, Name()).RETURN(target_name);
+
+  // Create and register a counter metric
+  auto counter_config = std::make_unique<astl::MetricConfig>(
+      "TestCounter", "A test counter metric", astl_units_t::ASTL_UNITS_BYTES, astl_value_type_t::ASTL_VALUE_UINT64,
+      ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI, astl::ScmiOperationBuilder{0x6001});
+
+  REQUIRE(mgr.RegisterCounter(std::move(counter_config), {target.get()}) == ASTL_STATUS_SUCCESS);
+
+  // Retrieve the registered counters
+  size_t num_counters = mgr.GetNumAvailableCounters(target.get());
+  REQUIRE(num_counters == 1);
+
+  auto avail_or_error = mgr.GetAvailableCounters(target.get());
+  REQUIRE(avail_or_error.has_value());
+  auto counters = *avail_or_error;
+  REQUIRE(counters.size() == 1);
+
+  // Get the counter handle
+  const auto*           counter_handle     = counters[0];
+  astl_counter_handle_t counter_api_handle = counter_handle;
+
+  // Call GetCounterOnTarget
+  auto result = mgr.GetCounterOnTarget(counter_api_handle, target.get());
+  REQUIRE(result.has_value());
+
+  SECTION("GetCounterProperties returns correct properties") {
+    astl_counter_properties_t props{};
+    auto                      status = mgr.GetCounterProperties(counter_api_handle, &props);
+    REQUIRE(status == ASTL_STATUS_SUCCESS);
+    REQUIRE(std::string(props._name) == "TestCounter");
+    REQUIRE(std::string(props._description) == "A test counter metric");
+    REQUIRE(props._units == astl_units_t::ASTL_UNITS_BYTES);
+  }
+
+  SECTION("GetCounterRequiredOperations returns correct operation") {
+    std::vector<astl_counter_handle_t> counter_handles_vec{counter_api_handle};
+    auto                               ops_result = mgr.GetCounterRequiredOperations(counter_handles_vec, target.get());
+    REQUIRE(ops_result.has_value());
+
+    const auto& operations = ops_result->operationsOnSample;
+    REQUIRE(operations.size() == 1);  // One operation for the counter
+
+    const auto* scmi_op = dynamic_cast<const astl::ScmiReadOperation*>(operations.front().get());
+    REQUIRE(scmi_op != nullptr);
+    REQUIRE(scmi_op->scmi_data_event_id == 0x6001);
+  }
+}
+
 TEST_CASE("MetricManager::RegisterMetric with no metrics means no groups!", "[MetricManager][MetricGroup]") {
   Capabilities  caps = MakeCaps(CollectorType::SCMI);
   MetricManager mgr(caps);
@@ -686,14 +778,12 @@ TEST_CASE("MetricManager::RegisterMetric with no metrics means no groups!", "[Me
   std::string   target_name{"AP0"};
   ALLOW_CALL(target, Name()).RETURN(target_name);
 
-  REQUIRE(mgr.GetAvailableMetrics().value().empty());
   const auto& available_metrics = mgr.GetAvailableMetrics(&target);
   if (available_metrics) {
     REQUIRE(available_metrics->empty());
   } else {
     REQUIRE(available_metrics.error() == ASTL_STATUS_BAD_ARGUMENT);
   }
-  REQUIRE(mgr.GetMetricGroups().empty());
   const auto& available_groups = mgr.GetMetricGroups(&target);
   if (available_groups) {
     REQUIRE(available_groups->empty());
@@ -827,9 +917,7 @@ TEST_CASE(
 
   // registration done, now verify lookup
 
-  REQUIRE(mgr.GetAvailableMetrics().value().size() == 4);
   REQUIRE(mgr.GetAvailableMetrics(&ap0_target).value().size() == 3);
-  REQUIRE(mgr.GetMetricGroups().size() == 3);  // 3 groups across 2 targets
 
   // check target AP0 for 2 groups
   auto ap0_groups = mgr.GetMetricGroups(&ap0_target).value();

@@ -111,7 +111,7 @@ auto Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets)
 
 auto Orchestrator::ConfigureCounterCollection(const ITarget                      *target,
                                               const astl_collection_parameters_t *collection_params,
-                                              std::span<const ICounter *>         counters) -> astl_status_code {
+                                              std::span<const IMetric *>          counters) -> astl_status_code {
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
@@ -378,19 +378,6 @@ auto Orchestrator::EmitSummaryCsvIfRequested() -> void {
   ASTL_LOG_INFO("Summary CSV emission completed (env path='{}')", csv_path);
 }
 
-auto Orchestrator::GetCounterSampleCount(const ITarget *target, const ICounter *counter) const
-    -> std::expected<uint32_t, astl_status_code> {
-  const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
-  auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
-                                                                      [target](auto const &owned_target) { return owned_target.get() == target; });
-
-  if (index == std::end(targets)) {
-    return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
-  }
-  (void)counter;  // unused since unimplemented for now
-  return std::unexpected(ASTL_STATUS_INVALID_COUNTER_HANDLE);
-}
-
 auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) -> astl_status_code {
   if (!target) {
     ASTL_LOG_ERROR("Orchestrator::SinkSamples called with null target");
@@ -461,22 +448,8 @@ auto Orchestrator::SinkProcessedSamples(const ITarget *target, const IMetric *me
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
-  /* Get the target name - just for logging */
-  astl_target_properties_t target_properties;
-  auto                     result = target->GetProperties(&target_properties);
-  if (result != ASTL_STATUS_SUCCESS) {
-    return result;
-  }
-
-  /* Get the target name - just for logging */
-  astl_metric_properties_t metric_properties;
-  result = metric->GetProperties(&metric_properties);
-  if (result != ASTL_STATUS_SUCCESS) {
-    return result;
-  }
-
-  ASTL_LOG_DEBUG("Received {} samples for metric {} on target {}", processed_samples.size(), metric_properties._name,
-                 target_properties._name);
+  ASTL_LOG_DEBUG("Received {} samples for metric {} on target {}", processed_samples.size(), metric->Name(),
+                 target->Name());
 
   {
     std::scoped_lock lock{_processed_samples_mtx};

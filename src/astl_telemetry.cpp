@@ -7,8 +7,9 @@
 
 #include "astl/astl.h"
 #include "common/astl_defines.hpp"
-#include "counter.hpp"
+#include "metric/counter.hpp"
 #include "metric/i_metric.hpp"
+#include "metric/i_metric_manager.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "output/i_output_manager.hpp"
 #include "target.hpp"
@@ -33,25 +34,6 @@ auto GetTargetFromHandle(astl_target_handle_t target_handle) -> std::expected<co
     return target;
   }
   return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
-}
-
-auto GetCounterFromHandle(astl_counter_handle_t counter_handle, const astl::ITarget* target)
-    -> std::expected<const astl::ICounter*, astl_status_code> {
-  if (!counter_handle) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
-  }
-  if (!target) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
-  }
-  auto const&           available_counters = target->GetCounters();
-  const astl::ICounter* counter            = static_cast<const astl::ICounter*>(counter_handle);
-  auto is_handle_match = [counter](auto& counter_iter) -> bool { return counter_iter.get() == counter; };
-
-  using std::begin, std::end;
-  if (std::any_of(begin(available_counters), end(available_counters), is_handle_match)) {
-    return counter;
-  }
-  return std::unexpected(ASTL_STATUS_INVALID_COUNTER_HANDLE);
 }
 
 auto GetMetricManager() -> std::expected<astl::IMetricManager*, astl_status_code> {
@@ -82,6 +64,26 @@ auto GetOutputManager() -> std::expected<astl::IOutputManager*, astl_status_code
   return output_manager.get();
 }
 
+auto GetCounterFromHandle(astl_counter_handle_t counter_handle, const astl::ITarget* target)
+    -> std::expected<const astl::IMetric*, astl_status_code> {
+  auto const& orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return std::unexpected(ASTL_STATUS_NOT_INITIALIZED);
+  }
+
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return std::unexpected(get_metric_manager_result.error());
+  }
+  auto* metric_manager   = *get_metric_manager_result;
+  auto  counter_or_error = metric_manager->GetCounterOnTarget(counter_handle, target);
+  if (!counter_or_error.has_value()) {
+    return std::unexpected{counter_or_error.error()};
+  }
+  const auto* counter = *counter_or_error;
+  return counter;
+}
+
 auto GetMetricFromHandle(astl_metric_handle_t metric_handle, astl_target_handle_t target_handle)
     -> std::expected<const astl::IMetric*, astl_status_code> {
   auto get_metric_manager_result = GetMetricManager();
@@ -98,8 +100,6 @@ auto GetMetricFromHandle(astl_metric_handle_t metric_handle, astl_target_handle_
 
   auto metric_or_error = metric_manager->GetMetricOnTarget(metric_handle, target);
   if (!metric_or_error.has_value()) {
-    ASTL_LOG_ERROR("GetProcessedSamples: Failed to get metric on target {} for handle {}", target->Name(),
-                   metric_handle);
     return std::unexpected{metric_or_error.error()};
   }
   const astl::IMetric* metric = *metric_or_error;
@@ -262,13 +262,18 @@ auto astlGetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_c
   if (!target_handle || !counter_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager = *get_metric_manager_result;
+
   auto result = GetTargetFromHandle(target_handle);
   if (!result) {
     return result.error();
   }
-  const auto* target = *result;
-
-  const auto num_counters = target->GetCounterCount();
+  const auto* target       = *result;
+  const auto  num_counters = metric_manager->GetNumAvailableCounters(target);
   if (num_counters > std::numeric_limits<uint32_t>::max()) {
     return ASTL_STATUS_COUNTER_PROPERTIES_BUFFER_TOO_SMALL;
   }
@@ -281,8 +286,16 @@ auto astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties
   if (!target_handle || !counters || !counter_count || *counter_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto counters_buffer_size = *counter_count;
-  *counter_count            = 0;  // in case there's an error to return
+  const auto                           counter_buffer_size  = *counter_count;
+  auto                                 counters_buffer_size = *counter_count;
+  std::span<astl_counter_properties_t> output_counters{counters, *counter_count};
+  *counter_count = 0;  // in case there's an error to return
+
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager = *get_metric_manager_result;
 
   auto get_target_result = GetTargetFromHandle(target_handle);
   if (!get_target_result) {
@@ -290,7 +303,12 @@ auto astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties
   }
   const auto* target = *get_target_result;
 
-  const auto& available_counters = target->GetCounters();
+  const auto& available_counters_result = metric_manager->GetAvailableCounters(target);
+  if (!available_counters_result) {
+    return available_counters_result.error();
+  }
+  const auto& available_counters = *available_counters_result;
+
   if (available_counters.size() > counters_buffer_size) {
     *counter_count = 0;
     return ASTL_STATUS_COUNTER_PROPERTIES_BUFFER_TOO_SMALL;
@@ -299,7 +317,7 @@ auto astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties
     *counter_count = 0;
     return ASTL_STATUS_NO_COUNTERS_FOUND;
   }
-  std::span<astl_counter_properties_t> counter_span{counters, counters_buffer_size};
+  std::span<astl_counter_properties_t> counter_span{counters, counter_buffer_size};
   auto                                 counter_struct_size = GetFirstElementSizeField(counter_span);
   if (!counter_struct_size) {
     return counter_struct_size.error();
@@ -315,7 +333,8 @@ auto astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties
     return ASTL_STATUS_NEW_COUNTER_PROPERTIES_STRUCT_VERSION;
   }
   for (size_t i = 0; i < available_counters.size(); ++i) {
-    if (auto result = available_counters[i]->GetProperties(&counter_span[i]); result != ASTL_STATUS_SUCCESS) {
+    auto result = metric_manager->GetCounterProperties(available_counters[i], &output_counters[i]);
+    if (result != ASTL_STATUS_SUCCESS) {
       // indicate how many we successfully filled in (not the failing one)
       *counter_count = static_cast<uint32_t>(i);
       return result;
@@ -344,13 +363,8 @@ auto astlGetMetricCount(astl_target_handle_t target_handle, uint32_t* metric_cou
   if (!get_target_result) {
     return get_target_result.error();
   }
-  const auto* target = *get_target_result;
-
-  const auto available_metrics = metric_manager->GetAvailableMetrics(target);
-  if (!available_metrics) {
-    return available_metrics.error();
-  }
-  const auto num_metrics = available_metrics->size();
+  const auto* target      = *get_target_result;
+  const auto  num_metrics = metric_manager->GetNumAvailableMetrics(target);
   if (num_metrics > std::numeric_limits<uint32_t>::max()) {
     ASTL_LOG_ERROR("metric_manager->GetMetrics reports absurdly large number of metrics: {}", num_metrics);
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -583,9 +597,20 @@ auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                
   if (!result) {
     return result.error();
   }
-  const auto* target = *result;
+  const auto* target                    = *result;
+  auto        get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager = *get_metric_manager_result;
+  // get the number of counters
+  const auto& available_counters = metric_manager->GetAvailableCounters(target);
+  if (!available_counters) {
+    return available_counters.error();
+  }
+  const auto num_counters = available_counters->size();
 
-  if (counter_count > target->GetCounterCount()) {
+  if (counter_count > num_counters) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   if (sizeof(astl_collection_parameters_t) < collection_params->_size) {
@@ -595,14 +620,23 @@ auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                
     return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
   }
   std::span<const astl_counter_handle_t> counter_handle_span{counter_handles, counter_count};
-  std::vector<const astl::ICounter*>     counters;
-  counters.reserve(counter_count);
-  for (const auto& handle : counter_handle_span) {
+  //  transform the counter_handle_span into a vector of ICounter*, verifying each handle
+  astl_status_code status{ASTL_STATUS_SUCCESS};
+  // lambda to convert  a given astl_counter_handle_t to an ICounter*,
+  // (or to null and modify 'status' if unrecognized handle)
+  const auto check_and_convert_to_counter = [&status, target](const auto& handle) {
     auto get_counter_result = GetCounterFromHandle(handle, target);
     if (!get_counter_result) {
-      return get_counter_result.error();
+      status = get_counter_result.error();
+      return static_cast<const astl::IMetric*>(nullptr);
     }
-    counters.push_back(*get_counter_result);
+    return *get_counter_result;
+  };
+  std::vector<const astl::IMetric*> counters;
+  counters.reserve(counter_count);
+  std::ranges::transform(counter_handle_span, std::back_inserter(counters), check_and_convert_to_counter);
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
   }
   auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
@@ -873,33 +907,84 @@ auto astlGetCounterSampleCountOnTarget(astl_target_handle_t target_handle, astl_
   if (!orchestrator_or_error) {
     return orchestrator_or_error.error();
   }
-  const auto& orchestrator  = orchestrator_or_error->get();
-  auto        sample_result = orchestrator->GetCounterSampleCount(target, counter);
+  astl::Orchestrator& orchestrator  = *(orchestrator_or_error.value().get());
+  auto                sample_result = orchestrator.GetProcessedMetricSamples(counter, target);
   if (!sample_result) {
     return sample_result.error();
   }
-  *sample_count = *sample_result;
+  if (sample_result->size() > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("orchestrator.GetProcessedMetricSamples reports absurdly large number of samples: {}",
+                   sample_result->size());
+    return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
+  }
+  *sample_count = static_cast<uint32_t>(sample_result->size());
   return ASTL_STATUS_SUCCESS;
 }
 
 auto astlGetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
                                    astl_counter_sample_t* samples, uint32_t* sample_count) -> astl_status_code {
-  (void)target_handle;
-  (void)counter_handle;
-  if (!samples) {
+  if (!target_handle || !counter_handle || !samples || !sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (!sample_count || *sample_count == 0) {
-    return ASTL_STATUS_BAD_ARGUMENT;
+  auto result = GetTargetFromHandle(target_handle);
+  if (!result) {
+    return result.error();
   }
-  std::span<astl_counter_sample_t> samples_span{samples, *sample_count};
+  const auto* target = *result;
 
-  samples_span[0]._size       = sizeof(astl_counter_sample_t);
-  samples_span[0]._timestamp  = 0U;
-  samples_span[0]._value.ui64 = 0ULL;  // cppcheck-suppress unreadVariable
-  *sample_count               = 0;
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  return result;
+  auto get_counter_result = GetCounterFromHandle(counter_handle, target);
+  if (!get_counter_result) {
+    return get_counter_result.error();
+  }
+  const auto* counter = *get_counter_result;
+  // create this span before modifying input *sample_count
+  std::span<astl_counter_sample_t> samples_span{samples, *sample_count};
+  auto                             callers_sample_struct_size = GetFirstElementSizeField(samples_span);
+  if (!callers_sample_struct_size) {
+    return callers_sample_struct_size.error();
+  }
+  if (*callers_sample_struct_size < sizeof(astl_counter_sample_t)) {
+    ASTL_LOG_ERROR("astl_counter_sample_t struct too small: caller's size {}, expected size {}",
+                   *callers_sample_struct_size, sizeof(astl_counter_sample_t));
+    return ASTL_STATUS_OLD_COUNTER_SAMPLE_STRUCT_VERSION;
+  }
+  if (*callers_sample_struct_size > sizeof(astl_counter_sample_t)) {
+    ASTL_LOG_ERROR("astl_counter_sample_t struct too large: caller's size {}, expected size {}",
+                   *callers_sample_struct_size, sizeof(astl_counter_sample_t));
+    return ASTL_STATUS_NEW_COUNTER_SAMPLE_STRUCT_VERSION;
+  }
+
+  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  astl::Orchestrator& orchestrator  = *(orchestrator_or_error.value().get());
+  auto                sample_result = orchestrator.GetProcessedMetricSamples(counter, target);
+  if (!sample_result) {
+    return sample_result.error();
+  }
+  if (sample_result->size() > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("orchestrator.GetProcessedMetricSamples reports absurdly large number of samples: {}",
+                   sample_result->size());
+    return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
+  }
+  *sample_count = static_cast<uint32_t>(sample_result->size());
+  if (sample_result->size() > samples_span.size()) {
+    *sample_count = 0;
+    return ASTL_STATUS_COUNTER_SAMPLES_BUFFER_TOO_SMALL;
+  }
+
+  // helper lambda to convert a ProcessedSampledData into an astl_counter_sample_t
+  auto convert_to_counter_sample = [](const astl::ProcessedSampledData& processed_sample) {
+    const auto union_value = processed_sample.value.ToAstlUnionValue().first;  // avoid constructing pair twice
+    return astl_counter_sample_t{._size      = sizeof(astl_counter_sample_t),
+                                 ._timestamp = processed_sample.timestamp.time_since_epoch().count(),
+                                 ._value     = union_value};
+  };
+
+  // samples_span is at least large enough to accomodate sample_result because of above check.
+  std::transform(sample_result->begin(), sample_result->end(), samples_span.begin(), convert_to_counter_sample);
+  return ASTL_STATUS_SUCCESS;
 }
 
 /*** COLLECTED METRIC SAMPLES ***/

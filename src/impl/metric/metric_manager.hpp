@@ -37,6 +37,7 @@
 #include "common/capabilities.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "i_metric_manager.hpp"
+#include "metric/counter.hpp"
 #include "metric/metric_group.hpp"
 
 namespace astl {
@@ -70,11 +71,71 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
 
   explicit MetricManager(const Capabilities& capabilities) : _capabilities(capabilities) {}
 
+  /**
+   * @brief Helper to look up a ICounter handle representing a counter for a specific target from a metric API handle
+   */
+  [[nodiscard]] auto GetCounterOnTarget(astl_counter_handle_t counter_handle, const ITarget* target) const
+      -> std::expected<IMetric*, astl_status_code> override;
+
+  /**
+   * @brief Register the counter.
+   *
+   * This method is called by the orchestrator to register a new counter.
+   */
+  [[nodiscard]] auto RegisterCounter(std::unique_ptr<MetricConfig>      counter_config,
+                                     std::vector<const ITarget*> const& targets) -> astl_status_code override;
+
+  /**
+   * @brief Get the number of available counters for the given target.
+   * @param target The target from which to retrieve associated counters
+   * @return The number of available counters for the given target, or an error.
+   */
+  auto GetNumAvailableCounters(const ITarget* target) const -> size_t override;
+
+  /**
+   * @brief Get the available counters.
+   *
+   * This method returns a span of astl_counter_handle_t api handles.
+   * This is used to retrieve all the counters that are available for the given target.
+   *
+   * @param target The target from which to retrieve associated counters
+   *
+   * @return A span<astl_counter_handle_t> containing all registered counters, or an error.
+   */
+  [[nodiscard]] auto GetAvailableCounters(const ITarget* target) const
+      -> std::expected<std::span<const astl_counter_handle_t>, astl_status_code> override;
+
+  /**
+   * @brief Assign values such as name, units, etc to the given properties pointer.
+   *
+   * @param counter The counter API handle for potentially many identical counters that differ only in their target
+   * @param properties A non-null pointer to a struct containing that GetProperties will fill in
+   *
+   * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
+   */
+  [[nodiscard]] auto GetCounterProperties(astl_counter_handle_t counter, astl_counter_properties_t* properties) const
+      -> astl_status_code override;
+
+  /**
+   * @brief Get the collection of collector operations needed to sample the given counter on the given target
+   *
+   * This method is called by the orchestrator to retrieve operations to send to CollectorManager
+   *
+   * @param counters A collection of counter API handles to collect
+   * @param target A pointer to a target on which to collect samples for the given counters
+   *
+   * @return A CollectionOperations struct with operations for the CollectorManager to execute
+   *         OR a status code indicating the nature of an error
+   */
+  [[nodiscard]] auto GetCounterRequiredOperations(std::span<const astl_counter_handle_t> counters,
+                                                  const ITarget*                         target)
+      -> std::expected<CollectionOperations, astl_status_code> override;
+
   // IMetricManager implementation
   /**
    * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
    */
-  auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target)
+  auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target) const
       -> std::expected<IMetric*, astl_status_code> override;
 
   /**
@@ -111,11 +172,11 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
       -> astl_status_code override;
 
   /**
-   * @brief Retrieve all registered metrics.
-   * @return expected containing a span of registered astl_metric_handle_t on success,
-   *         or an error code if retrieval fails.
+   * @brief Get the number of available metrics for the given target.
+   * @param target The target from which to retrieve associated metrics
+   * @return The number of available metrics for the given target, or an error.
    */
-  auto GetAvailableMetrics() const -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> override;
+  auto GetNumAvailableMetrics(const ITarget* target) const -> size_t override;
 
   /**
    * @brief Retrieve all registered metrics.
@@ -253,15 +314,20 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
 
   std::unordered_set<IProcessedSampleSink*> _registered_processed_sample_sinks;
 
+  // Collection of all registered Counters
+  // stored as unique_ptrs so we can safely store pointers to them in _target_to_counters_map
+  // might be worth reworking that: store std::vector<CounterHandle> (same with metric handles) and change how
+  // _target_to*_maps work, how GetAvailableMetrics returns values, etc.
+  std::vector<std::unique_ptr<CounterHandle>> _counter_handles;
+  // each Target supports multiple different counters
+  std::unordered_map<const ITarget*, std::vector<astl_counter_handle_t>> _target_to_counters_map;
+  // note that since counters implement IMetric interface, their operations are mapped in _operation_to_metric_map.
+
   // an API astl_metric_handle_t can represent one metric runnable on multiple targets
   // our internal representation of astl_metric_handle is `MetricHandle*`
+  // note, we store pointers to MetricHandle (not just MetricHandle) to avoid invalidation of handles
+  // when _metric_handles resizes, since these handles are used in _target_to_metrics_map
   std::vector<std::unique_ptr<MetricHandle>> _metric_handles;
-
-  // This is same data as in `_metric_handles`, but using raw pointers to MetricHandles for exposure
-  // to the API through std::span<astl_metric_handle_t>
-  // We can't directly cast a vector<std::unique_ptr<MetricHandle>>
-  // to std::span<astl_metric_handle_t> like we need in GetAvailableMetrics.
-  std::vector<astl_metric_handle_t> _metric_api_handles;
 
   // each Target supports multiple different metrics
   std::unordered_map<const ITarget*, std::vector<astl_metric_handle_t>> _target_to_metrics_map;

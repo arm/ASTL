@@ -42,7 +42,7 @@ struct ICollector {
   /*
    * @brief Get the capabilities of this collector, including the collector type.
    */
-  virtual auto GetCapabilities() const -> CollectorCapability const& = 0;
+  virtual auto GetCapabilities() const -> CollectorCapability = 0;
 
   /*
    * @brief Set the destination for where raw sampled data should be sent.

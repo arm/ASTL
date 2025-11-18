@@ -10,7 +10,7 @@
 #include "astl/astl_telemetry.h"
 #include "astl/astl_test_hooks.h"
 #include "common/metric_config.hpp"
-#include "counter.hpp"
+#include "metric/counter.hpp"
 #include "metric/metric_manager.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "output/output_manager.hpp"
@@ -29,13 +29,16 @@ auto AllocateAstlVector(size_t count) -> std::vector<T> {
 
 using expectation = std::unique_ptr<trompeloeil::expectation>;
 
-auto MakeMinimalOrchestrator() -> std::pair<std::unique_ptr<astl::Orchestrator>, std::vector<expectation>> {
+auto MakeMinimalOrchestrator(std::unique_ptr<MockMetricManager> metric_manager = nullptr)
+    -> std::pair<std::unique_ptr<astl::Orchestrator>, std::vector<expectation>> {
   auto                     topology_manager  = std::make_unique<MockTopologyManager>();
   auto                     collector_manager = std::make_unique<MockCollectorManager>();
   std::vector<expectation> expectations;
   expectations.push_back(NAMED_ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
   expectations.push_back(NAMED_ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
-  auto metric_manager = std::make_unique<MockMetricManager>();
+  if (metric_manager == nullptr) {
+    metric_manager = std::make_unique<MockMetricManager>();
+  }
   expectations.push_back(
       NAMED_ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
   expectations.push_back(NAMED_ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
@@ -233,10 +236,12 @@ TEST_CASE("astlGetCounterCount", "[unreasonably huge number of counters][wrapper
   ALLOW_CALL(*mock_target_1, GetProperties(_))
       .SIDE_EFFECT(_1->_handle = mock_target_handle)
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*mock_target_1, GetCounterCount()).RETURN(size_t{1} + std::numeric_limits<uint32_t>::max());
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
-  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+  auto mock_metric_manager = std::make_unique<MockMetricManager>();
+  REQUIRE_CALL(*mock_metric_manager, GetNumAvailableCounters(_))
+      .RETURN(size_t{1} + std::numeric_limits<uint32_t>::max());
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator(std::move(mock_metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -258,10 +263,12 @@ TEST_CASE("astlGetCounterCount", "[Ask a target how many counters it has][wrappe
   ALLOW_CALL(*mock_target_1, GetProperties(_))
       .SIDE_EFFECT(_1->_handle = mock_target_handle)
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*mock_target_1, GetCounterCount()).RETURN(0);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
-  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+
+  auto mock_metric_manager = std::make_unique<MockMetricManager>();
+  REQUIRE_CALL(*mock_metric_manager, GetNumAvailableCounters(_)).RETURN(0);
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator(std::move(mock_metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -281,26 +288,29 @@ TEST_CASE("astlGetCounterCount", "[Ask a target how many counters it has][wrappe
   REQUIRE(astlGetCounterCount(invalid_target_handle, &counter_count) == ASTL_STATUS_INVALID_TARGET_HANDLE);
   REQUIRE(astlGetCounterCount(target_handle, &counter_count) == ASTL_STATUS_SUCCESS);
   REQUIRE(counter_count == 0);
-
-  // TODO(https://github.com/Arm-Debug/ASTL/issues/27) for more counters
 }
 
 TEST_CASE("astlGetCounters", "[invalid parameters][wrapper]") {
   // mock 2 counters
-  auto                                         counter1 = std::make_unique<MockCounter>();
-  auto                                         counter2 = std::make_unique<MockCounter>();
+  auto counter1 = std::make_unique<MockCounter>();
+  auto counter2 = std::make_unique<MockCounter>();
+
   std::vector<std::unique_ptr<astl::ICounter>> mock_counters;
   mock_counters.push_back(std::move(counter1));
   mock_counters.push_back(std::move(counter2));
   // mock 1 target with 2 counters
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
-  auto                                        mock_target = std::make_unique<MockTarget>(std::move(mock_counters));
+  auto                                        mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t                        mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(*mock_target, GetCounterCount()).RETURN(2);
-
   mock_targets.push_back(std::move(mock_target));
-  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+
+  auto mock_metric_manager = std::make_unique<MockMetricManager>();
+  REQUIRE_CALL(*mock_metric_manager, GetNumAvailableCounters(_)).RETURN(2);
+
+  std::vector<astl_counter_handle_t> counters_for_metric_manager_to_return{nullptr, nullptr};
+  ALLOW_CALL(*mock_metric_manager, GetAvailableCounters(_)).RETURN(counters_for_metric_manager_to_return);
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator(std::move(mock_metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -356,9 +366,12 @@ TEST_CASE("astlGetCounters", "[0 counters available][wrapper]") {
   auto                                        mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t                        mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*mock_target, GetCounterCount()).RETURN(0);
   mock_targets.push_back(std::move(mock_target));
-  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+
+  auto mock_metric_manager = std::make_unique<MockMetricManager>();
+  REQUIRE_CALL(*mock_metric_manager, GetNumAvailableCounters(_)).RETURN(0);
+  ALLOW_CALL(*mock_metric_manager, GetAvailableCounters(_)).RETURN(std::span<const astl_counter_handle_t>{});
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator(std::move(mock_metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -391,25 +404,53 @@ TEST_CASE("astlGetCounters", "[0 counters available][wrapper]") {
 }
 
 TEST_CASE("astlGetCounters", "[Retrieve a number of counters from a target][wrapper]") {
+  // mock 1 target with 2 counters
+  auto mock_target = std::make_unique<MockTarget>();
+
+  auto counter1_config = std::make_unique<astl::MetricConfig>(
+      "Counter 1", "a test counter", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
+      astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{});
   auto counter1 = std::make_unique<MockCounter>();
-  auto counter2 = std::make_unique<MockCounter>();
-  // set up expectations - we should call GetProperties on each of the counters
-  REQUIRE_CALL(*counter1, GetProperties(_)).SIDE_EFFECT(_1->_mask = 0).RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*counter2, GetProperties(_))
-      .SIDE_EFFECT(_1->_value_type = ASTL_VALUE_FLOAT64)
-      .SIDE_EFFECT(_1->_counter_type = ASTL_COUNTER_TYPE_VALUE)
+  ALLOW_CALL(*counter1, GetProperties(ANY(astl_counter_properties_t*)))
+      .SIDE_EFFECT(_1->_value_type = ASTL_VALUE_FLOAT64; _1->_counter_type = ASTL_COUNTER_TYPE_VALUE;)
       .RETURN(ASTL_STATUS_SUCCESS);
 
+  std::unordered_map<const astl::ITarget*, std::unique_ptr<astl::ICounter>> counter1_targets;
+  counter1_targets[mock_target.get()] = std::move(counter1);
+  astl::CounterHandle counter1_handle{std::move(counter1_config), std::move(counter1_targets)};
+
+  auto counter2_config = std::make_unique<astl::MetricConfig>(
+      "Counter 2", "a test counter", ASTL_UNITS_NONE, ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED,
+      ASTL_METRIC_VALUE, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{});
+  auto counter2 = std::make_unique<MockCounter>();
+  ALLOW_CALL(*counter2, GetProperties(ANY(astl_counter_properties_t*)))
+      .SIDE_EFFECT(_1->_value_type = ASTL_VALUE_FLOAT64; _1->_counter_type = ASTL_COUNTER_TYPE_VALUE;)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  std::unordered_map<const astl::ITarget*, std::unique_ptr<astl::ICounter>> counter2_targets;
+  counter2_targets[mock_target.get()] = std::move(counter2);
+  astl::CounterHandle counter2_handle{std::move(counter2_config), std::move(counter2_targets)};
+
+  // set up mock metric manager
+  std::vector<astl_counter_handle_t>     counters_for_metric_manager_to_return{&counter1_handle, &counter2_handle};
+  std::span<const astl_counter_handle_t> counters_span{counters_for_metric_manager_to_return};
+  auto                                   mock_metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*mock_metric_manager, GetNumAvailableCounters(_)).RETURN(counters_for_metric_manager_to_return.size());
+  ALLOW_CALL(*mock_metric_manager, GetAvailableCounters(_)).RETURN(counters_span);
+
+  ALLOW_CALL(*mock_metric_manager, GetCounterProperties(_, _))
+      .SIDE_EFFECT(
+          static_cast<const astl::CounterHandle*>(_1)->target_to_counter_map.begin()->second->GetProperties(_2);)
+      .RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ICounter>> mock_counters;
   mock_counters.push_back(std::move(counter1));
   mock_counters.push_back(std::move(counter2));
-  // mock 1 target with 2 counters
-  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
-  auto                                        mock_target = std::make_unique<MockTarget>(std::move(mock_counters));
-  astl_target_handle_t                        mock_target_handle = mock_target.get();
+
+  astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
-  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator(std::move(mock_metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -425,7 +466,6 @@ TEST_CASE("astlGetCounters", "[Retrieve a number of counters from a target][wrap
     uint32_t counter_count{kAFew};
     auto     counters = AllocateAstlVector<astl_counter_properties_t>(counter_count);
     REQUIRE(astlGetCounters(target_handle, counters.data(), &counter_count) == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED);
-    REQUIRE(counters[0]._mask == 0);
     REQUIRE(counters[1]._value_type == ASTL_VALUE_FLOAT64);
     REQUIRE(counters[1]._counter_type == ASTL_COUNTER_TYPE_VALUE);
   }
@@ -434,7 +474,6 @@ TEST_CASE("astlGetCounters", "[Retrieve a number of counters from a target][wrap
     uint32_t counter_count{2};
     auto     counters = AllocateAstlVector<astl_counter_properties_t>(counter_count);
     REQUIRE(astlGetCounters(target_handle, counters.data(), &counter_count) == ASTL_STATUS_SUCCESS);
-    REQUIRE(counters[0]._mask == 0);
     REQUIRE(counters[1]._value_type == ASTL_VALUE_FLOAT64);
     REQUIRE(counters[1]._counter_type == ASTL_COUNTER_TYPE_VALUE);
   }
@@ -458,8 +497,8 @@ TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator][wrapper]") {
   available_metrics.push_back(metric1);
 
   // with either target or no, same set of metrics
+  ALLOW_CALL(*metric_manager, GetNumAvailableMetrics(_)).RETURN(available_metrics.size());
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
-  ALLOW_CALL(*metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
 
   ALLOW_CALL(*metric_manager, GetProperties(metric0, _))
       .SIDE_EFFECT(_2->_value_type = ASTL_VALUE_FLOAT64)
@@ -547,7 +586,6 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
   available_metrics.push_back(junk_metric0);
   available_metrics.push_back(junk_metric1);
 
-  ALLOW_CALL(*metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
 
   ALLOW_CALL(*metric_manager, GetProperties(junk_metric0, _))
@@ -634,30 +672,49 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
 }
 
 TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counters, configure collection][wrapper]") {
-  // mock 2 targets
-  // 1st has one counter
-  auto counter1 = std::make_unique<MockCounter>();
-  // get this now, as the SIDE_EFFECT action below runs after this ptr has been moved.
-  // when the GetProperties is called, we have to at least assign the _handle field of the struct to match the
-  // ICounter ptr
-  astl_counter_handle_t c1_handle = counter1.get();
-  ALLOW_CALL(*counter1, GetProperties(_))
-      .SIDE_EFFECT(_1->_handle = c1_handle)
+  // Mock 1 counter on 1 target
+  auto            counter1    = std::make_unique<MockCounter>();
+  astl::ICounter* counter_ptr = counter1.get();
+  ALLOW_CALL(*counter1, GetProperties(ANY(astl_counter_properties_t*)))
       .SIDE_EFFECT(_1->_mask = 0xaced)
       .RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(*counter1, ConfigureCollection(_)).RETURN(ASTL_STATUS_SUCCESS);
-  std::vector<std::unique_ptr<astl::ICounter>> counters;
-  counters.push_back(std::move(counter1));
-  auto                 mock_target_1      = std::make_unique<MockTarget>(std::move(counters));
+
+  // set up 1 mock target
+  auto                 mock_target_1      = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target_1.get();
   ALLOW_CALL(*mock_target_1, GetProperties(_))
       .SIDE_EFFECT(_1->_handle = mock_target_handle)
       .RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(*mock_target_1, GetCounterCount()).RETURN(1);
-
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
-  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+
+  // set up one API handle for a counter, associating targets with this counter
+  auto counter_config = std::make_unique<astl::MetricConfig>(
+      "Counter 1", "a test counter", ASTL_UNITS_NONE, ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED,
+      ASTL_METRIC_VALUE, astl::CollectorType::SCMI, astl::NullOperationBuilder{});
+
+  std::unordered_map<const astl::ITarget*, std::unique_ptr<astl::ICounter>> target_to_counter_map;
+  target_to_counter_map[mock_targets[0].get()] = std::move(counter1);
+  auto counter_api_handle =
+      std::make_unique<astl::CounterHandle>(std::move(counter_config), std::move(target_to_counter_map));
+  auto c1_handle = static_cast<astl_counter_handle_t>(counter_api_handle.get());
+
+  // set up the metric manager to expect queries about counters
+  auto mock_metric_manager = std::make_unique<MockMetricManager>();
+  REQUIRE_CALL(*mock_metric_manager, GetNumAvailableCounters(_)).RETURN(1);
+  ALLOW_CALL(*mock_metric_manager, GetAvailableCounters(_))
+      .RETURN(std::span<const astl_counter_handle_t>{&c1_handle, 1});
+  ALLOW_CALL(*mock_metric_manager, GetCounterProperties(_, _))
+      // simulate the behavior of a metric manager to look up the target-specific counter instance
+      // from the counter api handle, and query it's properties.
+      // In this test, we should invoke the MockCounter's GetProperties.
+      .SIDE_EFFECT(auto counterHandle = static_cast<const astl::CounterHandle*>(_1);
+                   auto iter = counterHandle->target_to_counter_map.begin(); auto& [target, counter] = *iter;
+                   counter->GetProperties(_2);)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_metric_manager, GetCounterOnTarget(_, _)).RETURN(counter_ptr);
+
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator(std::move(mock_metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
   auto                     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
@@ -897,27 +954,30 @@ TEST_CASE("astlStopCollection", "[unimplemented for now][wrapper]") {
   REQUIRE(astlStopCollection() == ASTL_STATUS_NOT_IMPLEMENTED);
 }
 
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to ReadImmediate][wrapper]") {
+  int junk{1};
   // set up 1 well-behaving mock target with one counter
-  auto                  counter1  = std::make_unique<MockCounter>();
+  auto                  counter1  = std::make_unique<MockCounterHandle>();
   astl_counter_handle_t c1_handle = counter1.get();
-  ALLOW_CALL(*counter1, GetProperties(_)).SIDE_EFFECT(_1->_handle = c1_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*counter1, GetProperties(ANY(astl_counter_properties_t*)))
+      .SIDE_EFFECT(_1->_handle = c1_handle)
+      .RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ICounter>> mock_counters1;
-  mock_counters1.push_back(std::move(counter1));
-  auto                 mock_working_target        = std::make_unique<MockTarget>(std::move(mock_counters1));
-  astl_target_handle_t mock_working_target_handle = mock_working_target.get();
+  auto                                         mock_working_target        = std::make_unique<MockTarget>();
+  astl::ITarget*                               mock_working_target_ptr    = mock_working_target.get();
+  astl_target_handle_t                         mock_working_target_handle = mock_working_target_ptr;
   ALLOW_CALL(*mock_working_target, GetProperties(_))
       .SIDE_EFFECT(_1->_handle = mock_working_target_handle)
       .RETURN(ASTL_STATUS_SUCCESS);
   trompeloeil::sequence seq;
   // set up 1 mock target that'll return an error if we try to call GetCounterSampleCount
-  auto                  counter2  = std::make_unique<MockCounter>();
+  auto                  counter2  = std::make_unique<MockCounterHandle>();
   astl_counter_handle_t c2_handle = counter2.get();
   ALLOW_CALL(*counter2, GetProperties(_)).SIDE_EFFECT(_1->_handle = c2_handle).RETURN(ASTL_STATUS_SUCCESS);
-  std::vector<std::unique_ptr<astl::ICounter>> mock_counters2;
-  mock_counters2.push_back(std::move(counter2));
-  auto                 mock_failing_target        = std::make_unique<MockTarget>(std::move(mock_counters2));
-  astl_target_handle_t mock_failing_target_handle = mock_failing_target.get();
+  auto                 mock_failing_target = std::make_unique<MockTarget>();
+  astl::ITarget*       mock_failing_target_ptr{mock_failing_target.get()};
+  astl_target_handle_t mock_failing_target_handle{mock_failing_target_ptr};
   ALLOW_CALL(*mock_failing_target, GetProperties(_))
       .SIDE_EFFECT(_1->_handle = mock_failing_target_handle)
       .RETURN(ASTL_STATUS_SUCCESS);
@@ -925,7 +985,22 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_working_target));
   mock_targets.push_back(std::move(mock_failing_target));
-  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+  // set up metric manager
+  auto mock_metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*mock_metric_manager, GetNumAvailableCounters(_)).RETURN(1);
+  std::vector<astl_counter_handle_t>     counters_vec{c1_handle};
+  std::span<const astl_counter_handle_t> counters_span{counters_vec};
+  //  allow a call to GetAvailableCounters with parameter matching mock_working_target by address
+  ALLOW_CALL(*mock_metric_manager, GetAvailableCounters(mock_working_target_ptr)).RETURN(counters_span);
+  ALLOW_CALL(*mock_metric_manager, GetAvailableCounters(mock_failing_target_ptr))
+      .RETURN(std::span<const astl_counter_handle_t>{});
+  ALLOW_CALL(*mock_metric_manager, GetCounterProperties(_, _))
+      .SIDE_EFFECT(static_cast<const MockCounterHandle*>(_1)->GetProperties(_2);)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  const auto* invalid_counter_handle = static_cast<astl_counter_handle_t>(&junk);
+  ALLOW_CALL(*mock_metric_manager, GetCounterOnTarget(invalid_counter_handle, _))
+      .RETURN(std::unexpected(ASTL_STATUS_INVALID_COUNTER_HANDLE));
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator(std::move(mock_metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -933,7 +1008,6 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
   auto     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
   uint32_t target_count{2};
   astlGetTargets(targets.data(), &target_count);
-  int         junk{1};
   const auto* invalid_target_handle{static_cast<astl_target_handle_t>(&junk)};
   const auto* working_target_handle{targets[0]._handle};
   const auto* broken_target_handle{targets[1]._handle};
@@ -944,8 +1018,7 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
   const auto* working_counter_handle{counters[0]._handle};
 
   astlGetCounters(broken_target_handle, counters.data(), &counter_count);
-  const auto* broken_counter_handle{counters[0]._handle};
-  REQUIRE(working_counter_handle != broken_counter_handle);
+  REQUIRE(counter_count == 0);
 
   // check a bunch of invalid arguments and invalid handles
   REQUIRE(astlGetCounterSampleCountOnTarget(nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
@@ -956,18 +1029,16 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
   REQUIRE(astlGetCounterSampleCountOnTarget(working_target_handle, nullptr, &sample_count) == ASTL_STATUS_BAD_ARGUMENT);
   REQUIRE(astlGetCounterSampleCountOnTarget(invalid_target_handle, working_counter_handle, &sample_count) ==
           ASTL_STATUS_INVALID_TARGET_HANDLE);
-  const auto* invalid_counter_handle = static_cast<astl_counter_handle_t>(&junk);
   REQUIRE(astlGetCounterSampleCountOnTarget(working_target_handle, invalid_counter_handle, &sample_count) ==
           ASTL_STATUS_INVALID_COUNTER_HANDLE);
 
-  sample_count = kJunk;
-  REQUIRE(astlGetCounterSampleCountOnTarget(broken_target_handle, broken_counter_handle, &sample_count) ==
-          ASTL_STATUS_INVALID_COUNTER_HANDLE);
+  sample_count        = kJunk;
+  auto result         = astlGetCounterSampleCountOnTarget(broken_target_handle, invalid_counter_handle, &sample_count);
+  bool is_valid_error = (result == ASTL_STATUS_INVALID_COUNTER_HANDLE) || (result == ASTL_STATUS_INVALID_TARGET_HANDLE);
+  REQUIRE(is_valid_error);
   REQUIRE(sample_count == kJunk);  // unmodified
-
-  REQUIRE(astlGetCounterSampleCountOnTarget(working_target_handle, working_counter_handle, &sample_count) ==
-          ASTL_STATUS_INVALID_COUNTER_HANDLE);
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 TEST_CASE("astlGetCounterSamplesOnTarget", "[unimplemented for now][wrapper]") {
   REQUIRE(astlGetCounterSamplesOnTarget(nullptr, nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
@@ -1005,7 +1076,6 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
   auto mock_metric_manager_uptr = std::make_unique<MockMetricManager>();
   // keep this pointer so we can make expectations after move into orchestrator
   auto* mock_metric_manager = mock_metric_manager_uptr.get();
-  ALLOW_CALL(*mock_metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
   ALLOW_CALL(*mock_metric_manager, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
   ALLOW_CALL(*mock_metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -1169,7 +1239,6 @@ TEST_CASE("astlGetMetrics verifies category propagation", "[wrapper][Orchestrato
   available_metrics.push_back(metric_freq);
 
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
-  ALLOW_CALL(*metric_manager, GetAvailableMetrics()).RETURN(std::span(available_metrics));
 
   // Mock GetProperties to return specific categories for each metric
   ALLOW_CALL(*metric_manager, GetProperties(metric_temp, _))

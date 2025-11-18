@@ -1,0 +1,52 @@
+
+#include "metric/counter.hpp"
+
+namespace astl {
+
+Counter::Counter(const MetricConfig *config, const ITarget *target) : RawMetric{config, target, nullptr} {}
+
+/**
+ * @brief Assign values such as name, units, etc to the given properties pointer.
+ */
+auto Counter::GetProperties(astl_counter_properties_t *properties) const -> astl_status_code {
+  // properties->_size  : set by API caller.
+  // properties->_handle : set by caller (MetricManager)
+  properties->_name                  = _configuration->Name().c_str();
+  properties->_description           = _configuration->Description().c_str();
+  properties->_min_sampling_interval = 0;
+  properties->_units                 = _configuration->Units();
+  properties->_mask                  = std::numeric_limits<decltype(properties->_mask)>::max();
+  properties->_formula               = "";
+  properties->_value_type            = _configuration->ValueType();
+  properties->_counter_type          = ASTL_COUNTER_TYPE_COUNT;
+  return ASTL_STATUS_SUCCESS;
+}
+
+/**
+ * @brief Get the Operations required to the metric.
+ * The API determine the collector protocol from the Metric Config and create the Operations.
+ *
+ * @return OperationSequence
+ */
+auto Counter::GetOperations() -> std::expected<OperationSequence, astl_status_code> {
+  return BuildOperations(_configuration->GetOperationBuilder(), _target);
+}
+
+auto Counter::ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code {
+  // Check if the sample's value type matches the metric's expected type
+  auto type_check_result = CheckSampleValueType(raw_sample);
+  if (type_check_result != ASTL_STATUS_SUCCESS) {
+    return type_check_result;
+  }
+
+  // Log the raw sample using the base class method
+  LogRawSample(raw_sample);
+  ProcessedSampledData processed_sample{raw_sample.value, raw_sample.timestamp};
+  // fan-out to manager / external sinks
+  SinkProcessedSample(processed_sample);
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto Counter::Reset() -> void {}
+
+}  // namespace astl

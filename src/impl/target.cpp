@@ -29,7 +29,5 @@ auto Target::GetProperties(astl_target_properties_t* target) const -> astl_statu
 auto Target::Name() const -> std::string const& { return _name; }
 auto Target::GetCollectorType() const -> CollectorType { return _collector_type; }
 auto Target::GetParent() const -> const Target* { return _parent; }
-auto Target::GetCounterCount() const -> size_t { return _counters.size(); }
-auto Target::GetCounters() const -> const std::vector<std::unique_ptr<ICounter>>& { return _counters; }
 
 }  // namespace astl
