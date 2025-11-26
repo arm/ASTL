@@ -10,6 +10,7 @@ set(UNIT_TEST_SRCS
     astl_value_utests.cpp
     collector_manager_utests.cpp
     file_interface_utests.cpp
+    formula_utests.cpp
     logger_utests.cpp
     orchestrator_utests.cpp
     scmi_sysfs_collector_utests.cpp

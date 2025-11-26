@@ -30,10 +30,10 @@
 #include "i_metric.hpp"
 #include "i_processed_sample_sink.hpp"
 #include "i_raw_sample_sink.hpp"
+#include "metric/formula_builder.hpp"
 #include "operation/operation_builder.hpp"
 
 namespace astl {
-
 /**
  * @brief Base class for raw metric types that process sampled data.
  *
@@ -150,6 +150,17 @@ class RawMetric : public IMetric {
    * @param raw_sample Sample to log.
    */
   auto LogRawSample(const RawSampledData &raw_sample) -> void;
+
+  /**
+   * @brief Apply the formula to a raw sample value to produce a processed value.
+   *
+   * This method applies the formula configured for this metric.
+   * It uses the formula from the metric configuration.
+   *
+   * @param raw_value The raw sample value to process
+   * @return Processed AstlValue if formula application succeeds, or an error status code
+   */
+  auto ApplyFormula(const AstlValue &raw_value) const -> std::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Sanitize a metric name for use as a filename.

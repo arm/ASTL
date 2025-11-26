@@ -36,6 +36,7 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/residency_metric.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/finite_set_metric.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/event_metric.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/metric/formula_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/output/output_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/output/output_manager.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/output/buffer_output.cpp"

@@ -42,9 +42,16 @@ auto SampledValueMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> a
 
   // Log the raw sample using the base class method
   LogRawSample(raw_sample);
-  // TODO(fayben01): need to process the sample before updating the statistics. Processing involves potential masking,
-  // bit shifting, applying formulas or scaling
-  ProcessedSampledData processed_sample{raw_sample.value, raw_sample.timestamp};
+
+  // Apply formula if configured (masking, bit shifting, scaling, etc.)
+  auto processed_value = ApplyFormula(raw_sample.value);
+  if (!processed_value) {
+    ASTL_LOG_ERROR("SampledValueMetric: failed to apply formula for metric: {}, error: {}", _configuration->Name(),
+                   astlStatusString(processed_value.error()));
+    return processed_value.error();
+  }
+
+  ProcessedSampledData processed_sample{*processed_value, raw_sample.timestamp};
   (void)UpdateStatistics(processed_sample);  // statistics errors are logged inside helper
   _processed_samples.push_back(processed_sample);
   // fan-out to manager / external sinks
