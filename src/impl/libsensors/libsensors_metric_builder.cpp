@@ -16,7 +16,7 @@
  * under the License.
  ******************************************************************************/
 
-#include "metric/libsensors_metric_builder.hpp"
+#include "libsensors/libsensors_metric_builder.hpp"
 
 #include <unordered_map>
 #include <vector>
@@ -26,14 +26,15 @@
 #include "target.hpp"
 
 #if defined(ASTL_INCLUDE_LIBSENSORS)
-#  include <sensors/sensors.h>
+#  include "libsensors/libsensors_api.hpp"
+#  include "libsensors/libsensors_target.hpp"
 #endif
 
 namespace astl {
 
 #if defined(ASTL_INCLUDE_LIBSENSORS)
 
-auto GetSubfeature(const sensors_chip_name* chip, const sensors_feature* feature)
+auto GetSubfeature(const sensors_chip_name* chip, const sensors_feature* feature, SensorsApi const* sensors_api)
     -> std::expected<const sensors_subfeature*, astl_status_code> {
   if (!chip || !feature) {
     ASTL_LOG_ERROR("GetSubfeature: Invalid chip or feature pointer");
@@ -52,10 +53,10 @@ auto GetSubfeature(const sensors_chip_name* chip, const sensors_feature* feature
       ASTL_LOG_WARNING("GetSubfeature: Unrecognized feature type {}", feature->type);
       return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
   }
-  const sensors_subfeature* sub = sensors_get_subfeature(chip, feature, subtype);
+  const sensors_subfeature* sub = sensors_api->get_subfeature(chip, feature, subtype);
   if (!sub || (sub->flags & SENSORS_MODE_R) == 0) {
     ASTL_LOG_WARNING("GetSubfeature: No valid input subfeature found for {} sensor: {}", feature->name,
-                     sensors_get_label(chip, feature));
+                     sensors_api->get_label(chip, feature));
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return sub;
@@ -66,17 +67,17 @@ auto GetSubfeature(const sensors_chip_name* chip, const sensors_feature* feature
  */
 static auto RegisterSensorsFromChip(const astl::AstlConfiguration& configuration, IMetricManager* metric_manager,
                                     const std::vector<const ITarget*>& libsensors_targets,
-                                    const sensors_chip_name*           chip) -> astl_status_code {
+                                    const sensors_chip_name* chip, SensorsApi const* sensors_api) -> astl_status_code {
   const sensors_feature*            feature              = nullptr;
   int                               sensor_feature_count = 0;
   constexpr size_t                  max_name_length      = 200;
   std::array<char, max_name_length> chip_name{'\0'};
-  sensors_snprintf_chip_name(chip_name.data(), max_name_length, chip);
+  sensors_api->snprintf_chip_name(chip_name.data(), max_name_length, chip);
   ASTL_LOG_INFO("Scanning {} for features", chip_name.data());
-  while ((feature = sensors_get_features(chip, &sensor_feature_count))) {
-    ASTL_LOG_DEBUG("  Found sensor: {} type {} with name {}", sensors_get_label(chip, feature), feature->type,
+  while ((feature = sensors_api->get_features(chip, &sensor_feature_count))) {
+    ASTL_LOG_DEBUG("  Found sensor: {} type {} with name {}", sensors_api->get_label(chip, feature), feature->type,
                    feature->name);
-    const auto sub = GetSubfeature(chip, feature);
+    const auto sub = GetSubfeature(chip, feature, sensors_api);
     if (!sub) {
       if (sub.error() == ASTL_STATUS_NOT_IMPLEMENTED) {
         continue;
@@ -92,7 +93,8 @@ static auto RegisterSensorsFromChip(const astl::AstlConfiguration& configuration
                               (metric_declaration.offset == feature->name);
                      });
     if (metric_iter == configuration.metric_declarations.end()) {
-      ASTL_LOG_INFO("Skipping sensor {} as not configured in ASTL configuration", sensors_get_label(chip, feature));
+      ASTL_LOG_INFO("Skipping sensor {} as not configured in ASTL configuration",
+                    sensors_api->get_label(chip, feature));
       continue;
     }
     const auto& [metric_name, metric_declaration] = *metric_iter;
@@ -132,11 +134,20 @@ auto RegisterLibsensorsMetrics(
     return ASTL_STATUS_SUCCESS;
   }
   const auto& libsensors_targets = libsensors_targets_iter->second;
+  // get the api wrapper for dynamically linked libsensors library.
+  // should have been loaded and put in Targets by the topology plugin.
+  auto sensors_api = libsensors_targets.empty()
+                         ? nullptr
+                         : dynamic_cast<const astl::LibsensorsTarget*>(libsensors_targets.front())->ShareApi();
+  if (!sensors_api) {
+    ASTL_LOG_ERROR("No valid Libsensors API found in targets, cannot register libsensors metrics.");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
 
   const sensors_chip_name* chip       = nullptr;
   int                      chip_index = 0;
-  while ((chip = sensors_get_detected_chips(nullptr, &chip_index))) {
-    auto status = RegisterSensorsFromChip(configuration, metric_manager, libsensors_targets, chip);
+  while ((chip = sensors_api->get_detected_chips(nullptr, &chip_index))) {
+    auto status = RegisterSensorsFromChip(configuration, metric_manager, libsensors_targets, chip, sensors_api.get());
     if (status != ASTL_STATUS_SUCCESS) {
       return status;
     }

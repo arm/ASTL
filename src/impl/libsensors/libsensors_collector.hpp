@@ -36,7 +36,8 @@
 #include "collector/periodic_sampler.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
-#include "operation/libsensors_read_operation.hpp"
+#include "libsensors/libsensors_api.hpp"
+#include "libsensors/libsensors_read_operation.hpp"
 #include "operation/operation.hpp"
 
 namespace astl {
@@ -48,7 +49,7 @@ namespace astl {
  */
 class LibsensorsCollector : public ICollector {
  public:
-  LibsensorsCollector();
+  explicit LibsensorsCollector(std::shared_ptr<SensorsApi> sensors_api);
   ~LibsensorsCollector() override = default;
 
   LibsensorsCollector(const LibsensorsCollector&)            = delete;
@@ -115,6 +116,7 @@ class LibsensorsCollector : public ICollector {
   // prevent the collection configuration from being accessed by two threads at once
   mutable std::mutex               _collection_mutex;
   std::unique_ptr<PeriodicSampler> _periodic_sampler;
+  std::shared_ptr<SensorsApi>      _sensors_api;  //!< The shared libsensors API instance
 
   // private methods
 

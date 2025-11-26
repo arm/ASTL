@@ -16,7 +16,7 @@
  * under the License.
  ******************************************************************************/
 
-#include "collector/libsensors_collector.hpp"
+#include "libsensors/libsensors_collector.hpp"
 
 #include <atomic>
 #include <expected>
@@ -34,12 +34,13 @@
 #include "collector/periodic_sampler.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
-#include "operation/libsensors_read_operation.hpp"
+#include "libsensors/libsensors_read_operation.hpp"
 #include "operation/operation.hpp"
 
 namespace astl {
 
-LibsensorsCollector::LibsensorsCollector() {}
+LibsensorsCollector::LibsensorsCollector(std::shared_ptr<SensorsApi> sensors_api)
+    : _sensors_api(std::move(sensors_api)) {}
 
 /*
  * @brief Get the capabilities of this collector, including the collector type.
@@ -209,7 +210,8 @@ auto LibsensorsCollector::ExecuteCollectionOperations(OperationSequence const& o
     const sensors_chip_name* chip              = sensors_operation->chip;
     const int                subfeature_number = sensors_operation->subfeature_number;
     double                   measured_value{0.0};
-    int                      result = sensors_get_value(chip, sensors_operation->subfeature_number, &measured_value);
+    // read the value from the sensors api
+    int result = _sensors_api->get_value(chip, sensors_operation->subfeature_number, &measured_value);
     if (result != 0) {
       ASTL_LOG_CRITICAL("Error {} executing sensor read operation for subfeature {}", result, subfeature_number);
       return ASTL_STATUS_INTERNAL_ERROR;

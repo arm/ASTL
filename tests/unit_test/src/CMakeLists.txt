@@ -43,10 +43,6 @@ add_executable(unit_test ${UNIT_TEST_SRCS})
 
 target_compile_definitions(unit_test PRIVATE ASTL_BUILD)
 
-if(SENSORS_LIB)
-  target_link_libraries(unit_test PRIVATE ${SENSORS_LIB})
-endif()
-
 include(Warnings)
 set_project_warnings(unit_test)
 

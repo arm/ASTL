@@ -21,9 +21,9 @@
 
 #include "astl/astl_errors.h"
 #include "astl_file_interface.hpp"
+#include "libsensors/libsensors_topology_plugin.hpp"
 #include "target.hpp"
 #include "topology/i_topology_manager.hpp"
-#include "topology/libsensors_topology_plugin.hpp"
 #include "topology/scmi_topology_plugin.hpp"
 #include "topology/topology_manager.hpp"
 

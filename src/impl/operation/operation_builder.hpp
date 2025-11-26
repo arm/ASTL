@@ -23,7 +23,7 @@
 #include "target.hpp"
 
 #if defined(ASTL_INCLUDE_LIBSENSORS)
-#  include "libsensors_operation_builder.hpp"
+#  include "libsensors/libsensors_operation_builder.hpp"
 #endif
 #include "scmi_operation_builder.hpp"
 

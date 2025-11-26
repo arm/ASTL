@@ -23,12 +23,12 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/topology/topology_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/topology/topology_manager.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/common/astl_value.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/libsensors/libsensors_metric_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/counter.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/metric_group.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/metric_manager.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/metric_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/raw_metric.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/metric/libsensors_metric_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/sampled_value_metric.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/delta_metric.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/rate_metric.cpp"
@@ -45,7 +45,6 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/output/interval_csv_output.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/output/summary_csv_output.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/operation/scmi_operation_builder.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/operation/libsensors_operation_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/target.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/protobuf_serdes.cpp"
           # for unit tests
@@ -55,8 +54,13 @@ target_sources(
           "${PROJECT_SOURCE_DIR}/src/astl_version.cpp")
 
 if(ASTL_INCLUDE_LIBSENSORS)
-  target_sources(${LIBRARY_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/collector/libsensors_collector.cpp")
-  target_link_libraries(${LIBRARY_NAME} PRIVATE ${SENSORS_LIB})
+  target_sources(
+    ${LIBRARY_NAME}
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/libsensors/libsensors_api.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/libsensors/libsensors_collector.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/libsensors/libsensors_operation_builder.cpp")
+
+  target_link_libraries(${LIBRARY_NAME} PRIVATE dl)
 endif()
 
 # include directories
