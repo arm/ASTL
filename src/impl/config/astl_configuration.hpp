@@ -31,8 +31,6 @@
 #include "config/scmi_specification_json.hpp"
 #include "target.hpp"
 
-using json = nlohmann::json;
-
 namespace astl {
 
 struct MetricJsonDeclaration {
@@ -46,6 +44,7 @@ struct MetricJsonDeclaration {
   std::string                             category;  //!< Categories include things like Temperature, Power, Count, etc.
   std::optional<std::vector<std::string>> metric_groups;        //!< Groups this metric is associated with
   std::string                             collection_protocol;  //!< Collector type (e.g., scmi, libsensors)
+  std::optional<nlohmann::json>           formula;              //!< Optional formula (JSON array format)
 
   // Residency-specific fields
   std::optional<std::string> inferred_state;                    //!< Name of inferred state (for residency metrics)

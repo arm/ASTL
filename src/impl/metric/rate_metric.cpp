@@ -72,14 +72,23 @@ auto RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_stat
   // Log the raw sample using the base class method
   LogRawSample(raw_sample);
 
+  // Apply formula if configured (masking, scaling, etc.)
+  auto processed_value = ApplyFormula(raw_sample.value);
+  if (!processed_value) {
+    ASTL_LOG_ERROR("RateMetric: failed to apply formula for metric: {}, error: {}", _configuration->Name(),
+                   astlStatusString(processed_value.error()));
+    return processed_value.error();
+  }
+
   // If this is the first sample, store it and return
   if (!_previous_sample.has_value()) {
-    _previous_sample = raw_sample;
+    // Store the processed value for next rate calculation
+    _previous_sample = RawSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
     return ASTL_STATUS_SUCCESS;
   }
 
-  // Calculate delta between current and previous sample
-  auto delta_result = DeltaMetric::CalculateDelta(raw_sample.value, _previous_sample->value);
+  // Calculate delta between current and previous sample (both processed)
+  auto delta_result = DeltaMetric::CalculateDelta(*processed_value, _previous_sample->value);
   if (!delta_result.has_value()) {
     ASTL_LOG_ERROR("RateMetric: failed to calculate delta for metric {}: {}", _configuration->Name(),
                    astlStatusString(delta_result.error()));
@@ -118,8 +127,8 @@ auto RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_stat
     return rate_status;
   }
 
-  // Store current raw sample as previous for next iteration
-  _previous_sample = raw_sample;
+  // Store current processed sample as previous for next iteration
+  _previous_sample = RawSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
 
   return ASTL_STATUS_SUCCESS;
 }

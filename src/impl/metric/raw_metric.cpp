@@ -27,6 +27,7 @@
 
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
+#include "metric/formula_builder.hpp"
 
 namespace astl {
 
@@ -126,6 +127,11 @@ auto RawMetric::LogRawSample(const RawSampledData &raw_sample) -> void {
       std::chrono::duration_cast<std::chrono::microseconds>(raw_sample.timestamp.time_since_epoch()).count();
   _raw_sample_logger.LogInfo("{}, {}, {}, {}, {} \n", _configuration->Name(), _configuration->Description(),
                              _configuration->Units(), raw_sample.value, timestamp);
+}
+
+auto RawMetric::ApplyFormula(const AstlValue &raw_value) const -> std::expected<AstlValue, astl_status_code> {
+  // Use the formula from configuration
+  return astl::ApplyFormula(_configuration->GetFormula(), raw_value);
 }
 
 auto RawMetric::SanitizeMetricNameForFilename(const std::string &name) -> std::string {

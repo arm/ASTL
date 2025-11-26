@@ -32,6 +32,7 @@
 #include "astl/astl.h"
 #include "astl_value.hpp"
 #include "common/capabilities.hpp"
+#include "metric/formula_builder.hpp"
 #include "operation/operation_builder.hpp"
 
 namespace astl {
@@ -66,6 +67,7 @@ class MetricConfig {
    * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
    * @param operation_builder The operation builder associated with this metric's collector type,
    *                          including collector-specific parameters like data event id or libsensors chip
+   * @param formula        Formula for processing raw samples (BitMaskFormula, ScalingFormula, or IdentityFormula)
    *
    * REFACTOR - Eliminate this function.
    * We should just have one parameterized constructor with every parameter available.
@@ -73,7 +75,8 @@ class MetricConfig {
    */
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                         astl_value_type_t value_type, astl_category_t category, astl_metric_type_t metric_type,
-                        CollectorType collector_type, AnyOperationBuilder operation_builder)
+                        CollectorType collector_type, AnyOperationBuilder operation_builder,
+                        AnyFormula formula = IdentityFormula{})
       : _metric_name(name),
         _description(description),
         _units(units),
@@ -81,7 +84,8 @@ class MetricConfig {
         _metric_type(metric_type),
         _category(category),
         _collector_type(collector_type),
-        _operation_builder(std::move(operation_builder)) {}
+        _operation_builder(std::move(operation_builder)),
+        _formula(std::move(formula)) {}
 
   /**
    * @brief Construct a MetricConfig with the given parameters.
@@ -95,11 +99,12 @@ class MetricConfig {
    * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
    * @param operation_builder The operation builder associated with this metric's collector type,
    *                          including collector-specific parameters like data event id or libsensors chip
+   * @param formula        Formula for processing raw samples (BitMaskFormula, ScalingFormula, or IdentityFormula)
    */
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                         astl_value_type_t value_type, astl_category_t category, astl_metric_type_t metric_type,
                         std::vector<std::string> metric_groups, CollectorType collector_type,
-                        AnyOperationBuilder operation_builder)
+                        AnyOperationBuilder operation_builder, AnyFormula formula = IdentityFormula{})
       : _metric_name(name),
         _description(description),
         _units(units),
@@ -108,7 +113,8 @@ class MetricConfig {
         _category(category),
         _metric_groups(std::move(metric_groups)),
         _collector_type(collector_type),
-        _operation_builder(std::move(operation_builder)) {}
+        _operation_builder(std::move(operation_builder)),
+        _formula(std::move(formula)) {}
 
   MetricConfig(const MetricConfig &)            = default;
   MetricConfig &operator=(const MetricConfig &) = default;
@@ -166,6 +172,11 @@ class MetricConfig {
    */
   auto GetOperationBuilder() const -> AnyOperationBuilder const & { return _operation_builder; }
 
+  /**
+   * @brief Return the formula for processing raw samples.
+   */
+  auto GetFormula() const -> const AnyFormula & { return _formula; }
+
  private:
   std::string       _metric_name;  // Metric name as specified in the configuration file
   std::string       _description;  // Human-readable description of the metric
@@ -177,6 +188,7 @@ class MetricConfig {
   std::vector<std::string> _metric_groups;   // Groups this metric belongs to
   CollectorType            _collector_type;  // Collector type to support this metric
   AnyOperationBuilder      _operation_builder;
+  AnyFormula               _formula;  // Formula for processing raw samples (BitMaskFormula, ScalingFormula, etc.)
 };
 
 /**
@@ -214,13 +226,15 @@ class ResidencyMetricConfig final : public MetricConfig {
    * @param collector_type  Collector type responsible for gathering residency counters.
    * @param state_info      Mapping from target -> (state name -> {operation_builder, tick_frequency}).
    * @param inferred_state  Optional state name to be inferred from the metric (e.g., "C0").
+   * @param formula         Formula for processing raw samples (BitMaskFormula, ScalingFormula, or IdentityFormula).
    */
   explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
                                  CollectorType collector_type, TargetToStateToInfoMap state_info,
-                                 std::optional<std::string> inferred_state = std::nullopt)
+                                 std::optional<std::string> inferred_state = std::nullopt,
+                                 AnyFormula                 formula        = IdentityFormula{})
       : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
-                     NullOperationBuilder{}),
+                     NullOperationBuilder{}, std::move(formula)),
         _state_info(std::move(state_info)),
         _inferred_state(std::move(inferred_state)) {}
 
@@ -279,13 +293,14 @@ class FiniteSetMetricConfig final : public MetricConfig {
    * type
    * @param finite_set      Set of valid AstlValue objects that define the finite set.
    * @param labels          Mapping from finite set values to human-readable labels.
+   * @param formula         Formula for processing raw samples (BitMaskFormula, ScalingFormula, or IdentityFormula).
    */
   explicit FiniteSetMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
                                  CollectorType collector_type, AnyOperationBuilder operation_builder,
-                                 FiniteSet finite_set, ValueToLabelMap labels)
+                                 FiniteSet finite_set, ValueToLabelMap labels, AnyFormula formula = IdentityFormula{})
       : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
-                     std::move(operation_builder)),
+                     std::move(operation_builder), std::move(formula)),
         _finite_set(std::move(finite_set)),
         _labels(std::move(labels)) {}
 
