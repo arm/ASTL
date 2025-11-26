@@ -16,9 +16,9 @@
  * under the License.
  ******************************************************************************/
 
-#include "operation/libsensors_operation_builder.hpp"
+#include "libsensors/libsensors_operation_builder.hpp"
 
-#include "operation/libsensors_read_operation.hpp"
+#include "libsensors/libsensors_read_operation.hpp"
 #include "operation/operation.hpp"
 #include "target.hpp"
 

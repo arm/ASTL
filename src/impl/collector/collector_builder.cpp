@@ -24,7 +24,8 @@
 #include "collector/i_collector.hpp"
 #include "collector/scmi_sysfs_collector.hpp"
 #if defined(ASTL_INCLUDE_LIBSENSORS)
-#  include "collector/libsensors_collector.hpp"
+#  include "libsensors/libsensors_collector.hpp"
+#  include "libsensors/libsensors_target.hpp"
 #endif
 #include "common/scmi/scmi_constants.hpp"
 #include "config/astl_configuration.hpp"
@@ -60,9 +61,11 @@ auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
       collectors.emplace(cur_target.get(), std::move(collectors_for_target));
     } else if (cur_target->GetCollectorType() == CollectorType::LIBSENSORS) {
 #if defined(ASTL_INCLUDE_LIBSENSORS)
-      std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
-      collectors_for_target.push_back(std::make_unique<astl::LibsensorsCollector>());
-      collectors.emplace(cur_target.get(), std::move(collectors_for_target));
+      if (const auto* libsensors_target = dynamic_cast<const astl::LibsensorsTarget*>(cur_target.get())) {
+        std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
+        collectors_for_target.push_back(std::make_unique<astl::LibsensorsCollector>(libsensors_target->ShareApi()));
+        collectors.emplace(cur_target.get(), std::move(collectors_for_target));
+      }
 #endif
     } else {
       ASTL_LOG_ERROR("BuildCollectorManager: Unsupported collector type for target {}", cur_target->Name());

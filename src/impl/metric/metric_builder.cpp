@@ -24,7 +24,7 @@
 
 #include "astl_logger.hpp"
 #include "config/astl_configuration.hpp"
-#include "libsensors_metric_builder.hpp"
+#include "libsensors/libsensors_metric_builder.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "metric/metric_manager.hpp"
 

@@ -24,12 +24,13 @@
 #include <vector>
 
 #ifdef ASTL_INCLUDE_LIBSENSORS
-#  include <sensors/sensors.h>
+#  include "libsensors/libsensors_api.hpp"
 #endif
 
 #include "astl/astl_errors.h"
 #include "astl_file_interface.hpp"
 #include "config/astl_configuration.hpp"
+#include "libsensors/libsensors_target.hpp"
 #include "target.hpp"
 
 namespace astl {
@@ -44,26 +45,39 @@ namespace detail {
  *
  * @param configuration The ASTL configuration
  */
-auto ScanForTargetsWithLibsensors(const AstlConfiguration& configuration)
+auto ScanForTargetsWithLibsensors(const AstlConfiguration&    configuration,
+                                  std::shared_ptr<SensorsApi> sensors_api = nullptr)
     -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
   std::vector<std::unique_ptr<ITarget> > targets;
   (void)configuration;  // currently unused
-  // initialize the libsensors library with default system configuration
-  if (sensors_init(nullptr) != 0) {
-    ASTL_LOG_ERROR("LibsensorsTopologyPlugin::ScanForTargets: Failed to initialize libsensors");
+  // dynamically load and initialize the libsensors library with default system configuration
+  if (!sensors_api) {
+    sensors_api = SensorsApi::Create();
+  }
+  if (!sensors_api) {
+    // if we're unable to load libsensors library at all, that's a valid situation. Maybe
+    // we have SCMI Sysfs or some other telemetry available.
+    ASTL_LOG_WARNING(
+        "LibsensorsTopologyPlugin::ScanForTargets: "
+        "Unable to dynamically load libsensors library. Please install libsensors5 runtime library to access sensors");
+    return {};
+  }
+  if (!sensors_api->Ok()) {
+    // If we loaded the sensors library but some of the functions didn't load properly, treat that as an error
+    ASTL_LOG_ERROR("LibsensorsTopologyPlugin::ScanForTargets: Failed to load all requisite functions from libsensors");
     return std::unexpected(ASTL_STATUS_NO_TARGETS_FOUND);
   }
 
   const sensors_chip_name* chip       = nullptr;
   int                      chip_index = 0;
-  while ((chip = sensors_get_detected_chips(nullptr, &chip_index))) {
+  while ((chip = sensors_api->get_detected_chips(nullptr, &chip_index))) {
     const sensors_feature*            feature              = nullptr;
     int                               sensor_feature_count = 0;
     constexpr size_t                  max_name_length      = 200;
     std::array<char, max_name_length> chip_name{'\0'};
-    sensors_snprintf_chip_name(chip_name.data(), max_name_length, chip);
+    sensors_api->snprintf_chip_name(chip_name.data(), max_name_length, chip);
     ASTL_LOG_DEBUG("Scanning {} for features", chip_name.data());
-    while ((feature = sensors_get_features(chip, &sensor_feature_count))) {
+    while ((feature = sensors_api->get_features(chip, &sensor_feature_count))) {
       if (feature->type == SENSORS_FEATURE_TEMP) {
         ASTL_LOG_DEBUG("  Found temperature sensor: {}", feature->name);
       } else if (feature->type == SENSORS_FEATURE_FAN) {
@@ -83,8 +97,8 @@ auto ScanForTargetsWithLibsensors(const AstlConfiguration& configuration)
     // if we find any chips with features, create a target for them.
     // continue scanning for more chips, only so we can log their features for now.
     if (sensor_feature_count > 0 && targets.empty()) {
-      targets.push_back(std::make_unique<Target>("libsensors", "Collection of sensors from libsensors library",
-                                                 CollectorType::LIBSENSORS));
+      targets.push_back(std::make_unique<LibsensorsTarget>(
+          "libsensors", "Collection of sensors from libsensors library", sensors_api));
     }
   }
   return targets;

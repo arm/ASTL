@@ -7,17 +7,20 @@
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl.h"
+#include "libsensors/libsensors_topology_plugin.hpp"
 #include "mock_libsensors.hpp"  // for global mock_libsensors object
-#include "topology/libsensors_topology_plugin.hpp"
 
 using namespace std::chrono_literals;
 
 using trompeloeil::_;
 
 TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") {
+  MockSensorsApiTestHarness harness;
+  auto&                     mock_libsensors = harness.mock_libsensors;
+
   // set up expectations and test harness for libsensors calls
-  ALLOW_CALL(mock_libsensors, sensors_init(_)).RETURN(0);
-  ALLOW_CALL(mock_libsensors, sensors_cleanup());
+  ALLOW_CALL(*mock_libsensors, sensors_init(_)).RETURN(0);
+  ALLOW_CALL(*mock_libsensors, sensors_cleanup());
 
   // chip1 is a mock chip with several features
   std::string       chip1_prefix = "snsr";
@@ -26,7 +29,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
   sensors_chip_name chip1 = {.prefix = chip1_prefix.data(), .bus = chip1_bus, .addr = 0x1, .path = chip1_path.data()};
 
   // allow calls to sensors_snprintf_chip_name to succeed
-  ALLOW_CALL(mock_libsensors, sensors_snprintf_chip_name(_, _, _))
+  ALLOW_CALL(*mock_libsensors, sensors_snprintf_chip_name(_, _, _))
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
       .SIDE_EFFECT(std::snprintf(_1, _2, "%s-%d-%d", chip1.prefix, chip1.bus.type, chip1.bus.nr))
       .RETURN(0);
@@ -34,11 +37,11 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
   // we have one chip with several features
   // in sequence, expect calls to sensors_get_features that return a temperature sensor, fan sensor, and voltage sensor
   trompeloeil::sequence sequence;
-  REQUIRE_CALL(mock_libsensors, sensors_get_detected_chips(nullptr, _))
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 0)  // first call, index=0
       .RETURN(&chip1);
-  REQUIRE_CALL(mock_libsensors, sensors_get_features(_, _))
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 0)  // first call, index=0
       .RETURN([]() -> sensors_feature* {
@@ -48,7 +51,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
             .name = temp1_name, .number = 1, .type = SENSORS_FEATURE_TEMP, .first_subfeature = 0, .padding1 = 0};
         return &feature_temp;
       }());
-  REQUIRE_CALL(mock_libsensors, sensors_get_features(_, _))
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 1)  // second call, index=1
       .RETURN([]() -> sensors_feature* {
@@ -58,7 +61,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
             .name = fan1_name, .number = 2, .type = SENSORS_FEATURE_FAN, .first_subfeature = 0, .padding1 = 0};
         return &feature_fan;
       }());
-  REQUIRE_CALL(mock_libsensors, sensors_get_features(_, _))
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 2)  // third call, index=2, for voltage
       .RETURN([]() -> sensors_feature* {
@@ -68,7 +71,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
             .name = in1_name, .number = 3, .type = SENSORS_FEATURE_IN, .first_subfeature = 0, .padding1 = 0};
         return &feature_in;
       }());
-  REQUIRE_CALL(mock_libsensors, sensors_get_features(_, _))
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 3)  // fourth call, index=3, for power
       .RETURN([]() -> sensors_feature* {
@@ -78,7 +81,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
             .name = power1_name, .number = 4, .type = SENSORS_FEATURE_POWER, .first_subfeature = 0, .padding1 = 0};
         return &feature_power;
       }());
-  REQUIRE_CALL(mock_libsensors, sensors_get_features(_, _))
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 4)  // fifth call, index=4, for humidity
       .RETURN([]() -> sensors_feature* {
@@ -91,7 +94,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
                                                    .padding1         = 0};
         return &feature_humidity;
       }());
-  REQUIRE_CALL(mock_libsensors, sensors_get_features(_, _))
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 5)  // sixth call, index=5, for VID
       .RETURN([]() -> sensors_feature* {
@@ -101,18 +104,18 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
             .name = vid1_name, .number = 6, .type = SENSORS_FEATURE_VID, .first_subfeature = 0, .padding1 = 0};
         return &feature_vid;
       }());
-  REQUIRE_CALL(mock_libsensors, sensors_get_features(_, _))
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 6)  // seventh call, index=6
       .RETURN(nullptr);      // end of features for this chip
-  REQUIRE_CALL(mock_libsensors, sensors_get_detected_chips(nullptr, _))
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 1)  // second call, index=1
       .RETURN(nullptr);      // end of chips
 
   // generate the stimulus: scan for targets, enumerating chips and features
   astl::AstlConfiguration configuration;
-  auto                    result = astl::LibsensorsTopologyPlugin::ScanForTargets(configuration);
+  auto result = astl::LibsensorsTopologyPlugin::detail::ScanForTargetsWithLibsensors(configuration, harness.api);
 
   // make assertions on the results
   REQUIRE(result.has_value());
