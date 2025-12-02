@@ -74,7 +74,7 @@ jobs:
         id: cpu-cores
 
       - name: ⤵️ Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           # fetch all history so we can git diff for clang-tidy relevant files
           fetch-depth: 0
