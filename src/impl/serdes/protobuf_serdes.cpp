@@ -18,6 +18,9 @@
 
 #include "serdes/protobuf_serdes.hpp"
 
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/util/delimited_message_util.h>
+
 #include <chrono>
 #include <fstream>
 #include <istream>
@@ -91,6 +94,8 @@ static inline std::expected<AstlValue, astl_status_code> ToAstlValue(const astl:
 }  // namespace detail
 
 auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_stream) -> astl_status_code {
+  using google::protobuf::util::SerializeDelimitedToOstream;
+
   astl::protobuf::RawSampleBatch batch;
   if (samples.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -104,7 +109,7 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
     std::visit([&](const auto& val) { detail::SetOneOf(*proto_sample, val); }, sample.value.value);
   }
 
-  if (!batch.SerializeToOstream(&output_stream)) {
+  if (!SerializeDelimitedToOstream(batch, &output_stream)) {
     return ASTL_STATUS_INTERNAL_ERROR;
   }
   return ASTL_STATUS_SUCCESS;
@@ -113,32 +118,43 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
 template <>
 auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
     -> std::expected<std::vector<RawSampledData>, astl_status_code> {
+  using google::protobuf::io::IstreamInputStream;
+  using google::protobuf::util::ParseDelimitedFromZeroCopyStream;
+
+  IstreamInputStream zero_copy_input(&input_stream);
+
+  std::vector<RawSampledData>    result;
   astl::protobuf::RawSampleBatch batch;
-  if (!batch.ParseFromIstream(&input_stream)) {
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+
+  bool clean_eof = false;
+  while (ParseDelimitedFromZeroCopyStream(&batch, &zero_copy_input, &clean_eof)) {
+    // Convert one batch
+    result.reserve(result.size() + static_cast<size_t>(batch.samples_size()));
+    for (const auto& proto_sample : batch.samples()) {
+      auto value_or = detail::ToAstlValue(proto_sample);
+      if (!value_or.has_value()) {
+        return std::unexpected(value_or.error());
+      }
+
+      const uint64_t op_id64 = proto_sample.operation_id();
+      if (op_id64 > std::numeric_limits<OperationId>::max()) {
+        return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+      }
+      const OperationId op_id = static_cast<OperationId>(op_id64);
+
+      RawSampledData sample{op_id, std::move(*value_or)};
+      const auto     micros = std::chrono::microseconds{proto_sample.timestamp_us()};
+      sample.timestamp      = SampleTimestamp{std::chrono::duration_cast<SampleTimestamp::duration>(micros)};
+
+      result.emplace_back(std::move(sample));
+    }
+
+    batch.Clear();
   }
 
-  std::vector<RawSampledData> result;
-  result.reserve(static_cast<size_t>(batch.samples_size()));
-
-  for (const auto& proto_sample : batch.samples()) {
-    auto value_or = detail::ToAstlValue(proto_sample);
-    if (!value_or.has_value()) {
-      return std::unexpected(value_or.error());
-    }
-
-    const uint64_t op_id64 = proto_sample.operation_id();
-    if (op_id64 > std::numeric_limits<OperationId>::max()) {
-      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    }
-    const OperationId op_id = static_cast<OperationId>(op_id64);
-
-    RawSampledData sample{op_id, std::move(*value_or)};
-
-    const auto micros = std::chrono::microseconds{proto_sample.timestamp_us()};
-    sample.timestamp  = SampleTimestamp{std::chrono::duration_cast<SampleTimestamp::duration>(micros)};
-
-    result.push_back(std::move(sample));
+  if (!clean_eof) {
+    // Loop exited due to parse failure rather than clean EOF
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
   return result;

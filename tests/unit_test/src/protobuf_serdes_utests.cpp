@@ -1,4 +1,5 @@
 #include <google/protobuf/stubs/common.h>
+#include <google/protobuf/util/delimited_message_util.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
@@ -100,7 +101,7 @@ TEST_CASE("Deserialize errors when VALUE_NOT_SET") {
   sample->set_timestamp_us(999);  // no value set → VALUE_NOT_SET
 
   std::stringstream str_stream(std::ios::in | std::ios::out | std::ios::binary);
-  REQUIRE(batch.SerializeToOstream(&str_stream));
+  REQUIRE(google::protobuf::util::SerializeDelimitedToOstream(batch, &str_stream));
 
   str_stream.seekg(0);
   auto out_or = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(str_stream);
@@ -119,7 +120,7 @@ TEST_CASE("Deserialize errors on operation_id overflow") {
   sample->set_uint32_value(7);  // set some value so VALUE_NOT_SET is not triggered first
 
   std::stringstream str_stream(std::ios::in | std::ios::out | std::ios::binary);
-  REQUIRE(batch.SerializeToOstream(&str_stream));
+  REQUIRE(google::protobuf::util::SerializeDelimitedToOstream(batch, &str_stream));
 
   str_stream.seekg(0);
   auto out_or = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(str_stream);
