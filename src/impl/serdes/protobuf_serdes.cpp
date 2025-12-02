@@ -110,7 +110,9 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
   return ASTL_STATUS_SUCCESS;
 }
 
-auto Deserialize(std::istream& input_stream) -> std::expected<std::vector<RawSampledData>, astl_status_code> {
+template <>
+auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
+    -> std::expected<std::vector<RawSampledData>, astl_status_code> {
   astl::protobuf::RawSampleBatch batch;
   if (!batch.ParseFromIstream(&input_stream)) {
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);

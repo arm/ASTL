@@ -42,6 +42,7 @@ namespace astl {
  * if the underlying `AstlValue` variant alternative is trivially copyable (the typical case).
  */
 struct RawSampledData {
+  static constexpr bool kSerializable{true};
   RawSampledData() = delete;
 
   /**

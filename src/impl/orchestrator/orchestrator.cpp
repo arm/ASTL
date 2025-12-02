@@ -255,7 +255,7 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
       return ASTL_STATUS_INTERNAL_ERROR;
     }
 
-    auto deser = astl::ProtobufSerDes::Deserialize(cache_file);
+    auto deser = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(cache_file);
     if (!deser.has_value()) {
       ASTL_LOG_ERROR("Failed to deserialize samples from {}: {}", file_path.string(), astlStatusString(deser.error()));
       return deser.error();
