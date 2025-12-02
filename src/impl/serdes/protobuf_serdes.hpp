@@ -54,12 +54,35 @@ namespace astl::ProtobufSerDes {
 auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_stream) -> astl_status_code;
 
 /**
- * @brief Deserializes a binary stream into a vector of RawSampledData objects.
+ * @brief Deserializes protobuf-encoded data into a supported type `T`.
  *
- * @param[in] input_stream Input stream containing serialized protobuf data.
- * @return std::expected<std::vector<RawSampledData>, astl_status_code> Deserialized samples or error code.
+ * Converts a protobuf binary stream into a C++ object of type `T`. Supported
+ * types include any `T` that satisfies the `Deserializable` concept, which
+ * requires:
+ *   - `T` defines a `static constexpr bool kSerializable` set to true, or
+ *   - `T` is a `std::vector<U>` where `U` satisfies the above.
+ *
+ * This includes both single payloads (e.g., `RawSampledData`) and collections
+ * (`std::vector<RawSampledData>`). Unsupported types are rejected at compile time.
+ *
+ * @tparam T The output type. Must satisfy `Deserializable`.
+ * @param[in] input_stream Stream containing protobuf-encoded data.
+ * @return std::expected<T, astl_status_code>
+ *         Returns the decoded payload on success, or an error code on failure.
  */
-auto Deserialize(std::istream& input_stream) -> std::expected<std::vector<RawSampledData>, astl_status_code>;
+template <typename T>
+concept StdVector = requires { typename T::value_type; } && std::same_as<T, std::vector<typename T::value_type>>;
+
+template <typename T>
+concept DeserializableBase = requires {
+  { T::kSerializable } -> std::convertible_to<bool>;
+} && static_cast<bool>(T::kSerializable);
+
+template <typename T>
+concept Deserializable = DeserializableBase<T> || (StdVector<T> && DeserializableBase<typename T::value_type>);
+
+template <Deserializable T>
+auto Deserialize(std::istream& input_stream) -> std::expected<T, astl_status_code>;
 
 /**
  * @brief Serializes the current batch of samples to a file on disk.

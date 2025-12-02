@@ -38,7 +38,7 @@ TEST_CASE("Serialize/Deserialize round-trip for all supported scalar types") {
   REQUIRE(astl::ProtobufSerDes::Serialize(input, str_stream) == ASTL_STATUS_SUCCESS);
 
   str_stream.seekg(0);
-  auto out_or = astl::ProtobufSerDes::Deserialize(str_stream);
+  auto out_or = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(str_stream);
   REQUIRE(out_or.has_value());
   const auto& out = *out_or;
 
@@ -80,7 +80,7 @@ TEST_CASE("SerializeCurrentBatch writes one batch that Deserialize can read") {
   std::ifstream ifs(file_path, std::ios::binary);
   REQUIRE(ifs.good());
 
-  auto out_or = astl::ProtobufSerDes::Deserialize(ifs);
+  auto out_or = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(ifs);
   REQUIRE(out_or.has_value());
   REQUIRE(out_or->size() == 1);
   REQUIRE(out_or->at(0).operation_id == 11);
@@ -103,7 +103,7 @@ TEST_CASE("Deserialize errors when VALUE_NOT_SET") {
   REQUIRE(batch.SerializeToOstream(&str_stream));
 
   str_stream.seekg(0);
-  auto out_or = astl::ProtobufSerDes::Deserialize(str_stream);
+  auto out_or = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(str_stream);
   REQUIRE_FALSE(out_or.has_value());
   REQUIRE(out_or.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
 }
@@ -122,7 +122,7 @@ TEST_CASE("Deserialize errors on operation_id overflow") {
   REQUIRE(batch.SerializeToOstream(&str_stream));
 
   str_stream.seekg(0);
-  auto out_or = astl::ProtobufSerDes::Deserialize(str_stream);
+  auto out_or = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(str_stream);
   REQUIRE_FALSE(out_or.has_value());
   REQUIRE(out_or.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
 }
@@ -133,7 +133,7 @@ TEST_CASE("Deserialize fails with corrupt data") {
   str_stream << "not a protobuf";
   str_stream.seekg(0);
 
-  auto out_or = astl::ProtobufSerDes::Deserialize(str_stream);
+  auto out_or = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(str_stream);
   REQUIRE_FALSE(out_or.has_value());
   REQUIRE(out_or.error() == ASTL_STATUS_INTERNAL_ERROR);
 }
