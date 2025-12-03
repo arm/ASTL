@@ -16,8 +16,6 @@
  * under the License.
  ******************************************************************************/
 
-#include "serdes/protobuf_serdes.hpp"
-
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/util/delimited_message_util.h>
 
@@ -27,6 +25,7 @@
 #include <ostream>
 
 #include "astl/astl_errors.h"
+#include "serdes/protobuf_serdes.hpp"
 #include "serdes/raw_samples.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
 
 namespace astl::ProtobufSerDes {
@@ -87,6 +86,7 @@ static inline std::expected<AstlValue, astl_status_code> ToAstlValue(const astl:
 
     case astl::protobuf::RawSample::VALUE_NOT_SET:
     default:
+      ASTL_LOG_ERROR("Unknown or unset value type in protobuf RawSample");
       return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
 }
@@ -98,6 +98,7 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
 
   astl::protobuf::RawSampleBatch batch;
   if (samples.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+    ASTL_LOG_ERROR("Too many samples to serialize: {}", samples.size());
     return ASTL_STATUS_INTERNAL_ERROR;
   }
   batch.mutable_samples()->Reserve(static_cast<int>(samples.size()));
@@ -110,6 +111,7 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
   }
 
   if (!SerializeDelimitedToOstream(batch, &output_stream)) {
+    ASTL_LOG_ERROR("Failed to serialize RawSampleBatch to output stream");
     return ASTL_STATUS_INTERNAL_ERROR;
   }
   return ASTL_STATUS_SUCCESS;
@@ -133,11 +135,13 @@ auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
     for (const auto& proto_sample : batch.samples()) {
       auto value_or = detail::ToAstlValue(proto_sample);
       if (!value_or.has_value()) {
+        ASTL_LOG_ERROR("Failed to convert protobuf RawSample to AstlValue");
         return std::unexpected(value_or.error());
       }
 
       const uint64_t op_id64 = proto_sample.operation_id();
       if (op_id64 > std::numeric_limits<OperationId>::max()) {
+        ASTL_LOG_ERROR("OperationId value out of range: {}", op_id64);
         return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
       }
       const OperationId op_id = static_cast<OperationId>(op_id64);
@@ -154,6 +158,7 @@ auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
 
   if (!clean_eof) {
     // Loop exited due to parse failure rather than clean EOF
+    ASTL_LOG_ERROR("Failed to parse RawSampleBatch from input stream");
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
@@ -163,6 +168,7 @@ auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
 auto SerializeCurrentBatch(const std::string& target_name, const std::vector<RawSampledData>& samples)
     -> astl_status_code {
   if (samples.empty()) {
+    ASTL_LOG_WARNING("No samples to serialize for target {}", target_name);
     return ASTL_STATUS_NO_DATA_COLLECTED;
   }
 

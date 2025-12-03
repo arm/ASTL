@@ -37,6 +37,8 @@ namespace astl {
  * The interface classes are
  */
 struct ITopologyManager {
+  static constexpr bool kSerializable{true};
+
   virtual ~ITopologyManager()                          = default;
   ITopologyManager()                                   = default;
   ITopologyManager(const ITopologyManager&)            = default;

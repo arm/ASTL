@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package astl.protobuf;
+
+enum CollectorType {
+  COLLECTOR_TYPE_UNKNOWN   = 0;
+  COLLECTOR_TYPE_SCMI      = 1;
+  COLLECTOR_TYPE_LIBSENSORS = 2;
+  COLLECTOR_TYPE_MMIO      = 3;
+}
+
+message Target {
+  string name = 1;
+  string description = 2;
+  CollectorType collector_type = 3;
+  optional uint32 parent_id = 4;
+  optional string uuid = 5;
+}
+
+message TargetList {
+  repeated Target targets = 1;
+}
