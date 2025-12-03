@@ -7,8 +7,12 @@
 #include <random>
 
 #include "astl/astl_errors.h"
+#include "capabilities.hpp"
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/raw_samples.pb.h"  // AUTO-GENERATED RawSampleBatch
+#include "serdes/targets.pb.h"      // AUTO-GENERATED Target
+#include "topology/i_topology_manager.hpp"
+#include "topology/topology_manager.hpp"
 
 namespace fs = std::filesystem;
 
@@ -21,6 +25,12 @@ static RawSampledData MakeSample(OperationId operation_id, AstlValue value, int6
   RawSampledData sample{operation_id, std::move(value)};
   sample.timestamp = SampleTimestamp{SampleTimestamp::duration{std::chrono::microseconds{ts_us}}};
   return sample;
+}
+
+static auto MakeTarget(std::string name, std::string description, astl::CollectorType collector_type,
+                       std::optional<std::string> uuid = std::nullopt) -> std::unique_ptr<astl::Target> {
+  return std::make_unique<astl::Target>(std::move(name), std::move(description), collector_type, nullptr,
+                                        std::move(uuid));
 }
 
 // NOLINTBEGIN(readability-magic-numbers,readability-function-cognitive-complexity)
@@ -137,4 +147,55 @@ TEST_CASE("Deserialize fails with corrupt data") {
   auto out_or = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(str_stream);
   REQUIRE_FALSE(out_or.has_value());
   REQUIRE(out_or.error() == ASTL_STATUS_INTERNAL_ERROR);
+}
+
+TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager>> round-trip") {
+  // Build a topology with two targets
+  std::vector<std::unique_ptr<astl::ITarget>> vec;
+  vec.push_back(MakeTarget("tlm-1", "Target discovered via SCMI", astl::CollectorType::SCMI,
+                           std::string{"0xCAFEBABECAFEBABECAFEBABEBEEF0000"}));
+  vec.push_back(MakeTarget("tlm-0", "Target discovered via SCMI", astl::CollectorType::SCMI,
+                           std::string{"0xCAFEBABECAFEBABECAFEBABEBEEF0000"}));
+
+  astl::TopologyManager topology_manager(std::move(vec));
+
+  // Serialize to a stream
+  std::stringstream str_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(astl::ProtobufSerDes::Serialize(topology_manager, str_stream) == ASTL_STATUS_SUCCESS);
+
+  // Deserialize back
+  str_stream.seekg(0);
+  auto topology_manager_or_error =
+      astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::ITopologyManager>>(str_stream);
+  REQUIRE(topology_manager_or_error.has_value());
+  auto rebuilt = std::move(*topology_manager_or_error);
+  REQUIRE(rebuilt);
+
+  // Verify topology contents
+  const auto& targets = rebuilt->GetTargets();
+  REQUIRE(targets.size() == 2);
+
+  // Check first target properties
+  {
+    const auto& target_0 = *targets[0];
+    REQUIRE(target_0.Name() == "tlm-1");
+    REQUIRE(target_0.GetCollectorType() == astl::CollectorType::SCMI);
+
+    astl_target_properties_t props{};
+    REQUIRE(target_0.GetProperties(&props) == ASTL_STATUS_SUCCESS);
+    REQUIRE(std::string{props._description ? props._description : ""} == "Target discovered via SCMI");
+    REQUIRE(std::string{props._uuid ? props._uuid : ""} == "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
+  }
+
+  // Check second target properties
+  {
+    const auto& target_1 = *targets[1];
+    REQUIRE(target_1.Name() == "tlm-0");
+    REQUIRE(target_1.GetCollectorType() == astl::CollectorType::SCMI);
+
+    astl_target_properties_t props{};
+    REQUIRE(target_1.GetProperties(&props) == ASTL_STATUS_SUCCESS);
+    REQUIRE(std::string{props._description ? props._description : ""} == "Target discovered via SCMI");
+    REQUIRE(std::string{props._uuid ? props._uuid : ""} == "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
+  }
 }

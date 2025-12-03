@@ -45,8 +45,7 @@ namespace detail {
 template <typename FileInterfaceType>
 auto DetectTarget(FileInterfaceType const& scmi_sysfs_file_interface, std::string const& telemetry_subdirectory)
     -> std::expected<std::unique_ptr<ITarget>, astl_status_code> {
-  std::unique_ptr<ITarget> target;
-  auto                     de_implementation_version_path =
+  auto de_implementation_version_path =
       scmi_sysfs_file_interface.GetBasePath() / telemetry_subdirectory / "de_implementation_version";
 
   auto is_valid = scmi_sysfs_file_interface.IsValid(de_implementation_version_path);

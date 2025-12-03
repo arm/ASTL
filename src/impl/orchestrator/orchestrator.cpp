@@ -245,8 +245,8 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
 
   // rebuild raw samples from serialized temporary file
   std::vector<RawSampledData> rebuilt_samples;
-  const fs::path              dir       = "tmp";
-  const auto                  file_path = dir / (target->Name() + ".astl");
+  const fs::path              tmp_dir   = "tmp";
+  const auto                  file_path = tmp_dir / (target->Name() + ".astl");
   std::ifstream               cache_file(file_path, std::ios::binary);
 
   if (fs::exists(file_path)) {

@@ -47,7 +47,8 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/output/summary_csv_output.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/operation/scmi_operation_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/target.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/serdes/protobuf_serdes.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_raw_samples.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_topology_manager.cpp"
           # for unit tests
           "${PROJECT_SOURCE_DIR}/src/astl_errors.cpp"
           "${PROJECT_SOURCE_DIR}/src/astl_telemetry.cpp"
@@ -94,7 +95,8 @@ target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_BUILD)
 
 find_package(Protobuf REQUIRED)
 
-set(PROTO_FILES "${CMAKE_CURRENT_SOURCE_DIR}/serdes/raw_samples.proto")
+set(PROTO_FILES "${CMAKE_CURRENT_SOURCE_DIR}/serdes/raw_samples.proto"
+                "${CMAKE_CURRENT_SOURCE_DIR}/serdes/targets.proto")
 set(GEN_DIR "${CMAKE_BINARY_DIR}/src/impl/gen")
 file(MAKE_DIRECTORY "${GEN_DIR}")
 

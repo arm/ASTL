@@ -41,6 +41,7 @@
 /** @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
  */
 auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_status_code {
+  // TODO(ASTL-237): Deserialize from file here once we support loading .astl files.
   auto topology_manager = astl::BuildTopologyManager(configuration);
   if (!topology_manager) {
     return topology_manager.error();
