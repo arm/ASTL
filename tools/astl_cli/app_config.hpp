@@ -87,7 +87,9 @@ struct CollectCfg {
   }
   static constexpr std::string DescMetricsToml() { return "List of metrics (from list-metrics) to collect. "; }
   static constexpr std::string DescOutputDir() { return "Output directory for plots."; }
-  static constexpr std::string DescPlotType() { return "Plot output file type [none, terminal, png, or svg]."; }
+  static constexpr std::string DescPlotType() {
+    return "Plot output file type [none, terminal, png, or svg]. If not 'none', requires gnuplot.";
+  }
   static constexpr std::string DescWorkload() { return "Workload program and arguments as array."; }
 
   void MergeFromToml(const toml::table& table) {

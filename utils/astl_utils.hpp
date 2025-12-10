@@ -125,7 +125,7 @@ inline auto ParseUnits(std::string const& units_str) -> astl_units_t {
   if (unit_str_lower == "s" || unit_str_lower == "sec" || unit_str_lower == "second" || unit_str_lower == "seconds") {
     return ASTL_UNITS_SECONDS;
   }
-  if (unit_str_lower == "c" || unit_str_lower == "celcius") {
+  if (unit_str_lower == "c" || unit_str_lower == "celsius" || unit_str_lower == "celcius") {
     return ASTL_UNITS_CELSIUS;
   }
   if (unit_str_lower == "j" || unit_str_lower == "joule" || unit_str_lower == "joules") {
