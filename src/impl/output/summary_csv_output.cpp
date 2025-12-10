@@ -19,10 +19,8 @@
 #include "summary_csv_output.hpp"
 
 #include <fstream>
-#include <iomanip>
 #include <map>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <type_traits>
 #include <variant>

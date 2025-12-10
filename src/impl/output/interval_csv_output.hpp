@@ -36,7 +36,6 @@
 
 #include <filesystem>
 #include <fstream>
-#include <string>
 
 #include "common/astl_defines.hpp"
 #include "i_output.hpp"

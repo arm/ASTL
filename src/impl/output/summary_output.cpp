@@ -18,7 +18,6 @@
 
 #include "summary_output.hpp"
 
-#include <optional>
 #include <string>
 
 #include "astl_logger.hpp"  // ASTL_LOG_*

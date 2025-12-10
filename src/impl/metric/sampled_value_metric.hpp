@@ -20,7 +20,6 @@
 #define SAMPLED_VALUE_METRIC_HPP_
 
 #include <optional>
-#include <span>
 
 #include "astl/astl.h"
 #include "astl_logger.hpp"

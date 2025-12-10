@@ -18,19 +18,13 @@
 
 #include "libsensors/libsensors_collector.hpp"
 
-#include <atomic>
-#include <expected>
 #include <mutex>
 #include <optional>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "astl_logger.hpp"
 #include "collector/collection_configuration.hpp"
-#include "collector/i_collector.hpp"
 #include "collector/periodic_sampler.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"

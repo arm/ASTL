@@ -19,16 +19,8 @@
 #ifndef SENSORS_COLLECTOR_HPP_
 #define SENSORS_COLLECTOR_HPP_
 
-#include <atomic>
-#include <expected>
-#include <filesystem>
 #include <mutex>
 #include <optional>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <utility>
-#include <vector>
 
 #include "astl_logger.hpp"
 #include "collector/collection_configuration.hpp"
@@ -37,7 +29,6 @@
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "libsensors/libsensors_api.hpp"
-#include "libsensors/libsensors_read_operation.hpp"
 #include "operation/operation.hpp"
 
 namespace astl {

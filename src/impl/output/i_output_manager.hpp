@@ -29,7 +29,6 @@
 #define I_OUTPUT_MANAGER_HPP_
 
 #include <span>
-#include <unordered_map>
 
 #include "astl/astl.h"
 #include "common/astl_defines.hpp"  // ProcessedSamplesMap, IMetric, ITarget

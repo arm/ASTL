@@ -20,8 +20,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <numeric>
-#include <sstream>
 
 #include "../common/i_processed_sample_sink.hpp"
 #include "astl_logger.hpp"

@@ -20,12 +20,8 @@
 #define FINITE_SET_SAMPLED_VALUE_METRIC_HPP_
 
 #include <map>
-#include <optional>
 #include <set>
-#include <span>
 #include <string>
-#include <unordered_map>
-#include <vector>
 
 #include "astl/astl.h"
 #include "astl_logger.hpp"

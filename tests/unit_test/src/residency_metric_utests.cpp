@@ -20,7 +20,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <span>
-#include <thread>
 #include <vector>
 
 #include "metric/residency_metric.hpp"

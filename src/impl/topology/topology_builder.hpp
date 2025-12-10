@@ -24,7 +24,6 @@
 
 #include "astl/astl_errors.h"
 #include "config/configuration_manager.hpp"
-#include "target.hpp"
 #include "topology/i_topology_manager.hpp"
 
 namespace astl {

@@ -16,7 +16,6 @@
  * under the License.
  ******************************************************************************/
 
-#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>

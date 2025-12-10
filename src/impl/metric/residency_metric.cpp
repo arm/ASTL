@@ -20,11 +20,9 @@
 
 #include <algorithm>
 #include <format>
-#include <numeric>
 
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
-#include "operation/scmi_read_operation.hpp"
 
 namespace astl {
 

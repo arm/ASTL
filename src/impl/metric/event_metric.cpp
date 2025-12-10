@@ -19,7 +19,6 @@
 #include "event_metric.hpp"
 
 #include <chrono>
-#include <variant>
 
 #include "astl_logger.hpp"
 

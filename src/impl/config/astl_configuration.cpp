@@ -18,7 +18,6 @@
 
 #include "config/astl_configuration.hpp"
 
-#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>

@@ -17,8 +17,6 @@
  ******************************************************************************/
 
 #include <chrono>
-#include <span>
-#include <thread>
 #include <unordered_map>
 
 #include "../../mock_classes.hpp"

@@ -17,12 +17,8 @@
  ******************************************************************************/
 
 #include <memory>
-#include <vector>
 
-#include "output/buffer_output.hpp"
-#include "output/i_output.hpp"
 #include "output/output_manager.hpp"
-#include "target.hpp"
 
 namespace astl {
 

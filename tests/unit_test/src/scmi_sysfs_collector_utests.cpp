@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cstdint>
-#include <expected>
 #include <filesystem>
 #include <utility>
 #include <vector>

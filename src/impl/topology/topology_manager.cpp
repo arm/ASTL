@@ -18,17 +18,11 @@
 
 #include "topology/topology_manager.hpp"
 
-#include <algorithm>
-#include <iterator>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <vector>
 
 #include "astl/astl_errors.h"
-#include "astl_file_interface.hpp"
-#include "astl_utils.hpp"
-#include "config/scmi_specification_json.hpp"
-#include "metric/metric_manager.hpp"
 
 using json = nlohmann::json;
 

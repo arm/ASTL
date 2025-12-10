@@ -22,7 +22,6 @@
 #include <memory>
 #include <vector>
 
-#include "collector/i_collector.hpp"
 #include "collector/i_collector_manager.hpp"
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
