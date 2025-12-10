@@ -19,9 +19,6 @@
 #ifndef COLLECTION_OPERATIONS_HPP_
 #define COLLECTION_OPERATIONS_HPP_
 
-#include <memory>
-#include <vector>
-
 #include "common/capabilities.hpp"
 #include "operation/operation.hpp"
 

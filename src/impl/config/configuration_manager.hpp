@@ -22,7 +22,6 @@
 #include <expected>
 #include <filesystem>
 #include <optional>
-#include <vector>
 
 #include "astl/astl_telemetry.h"
 #include "config/astl_configuration.hpp"

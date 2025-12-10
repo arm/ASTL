@@ -20,7 +20,6 @@
 #define TOPOLOGY_MANAGER_HPP_
 
 #include <memory>
-#include <utility>
 #include <vector>
 
 #include "target.hpp"

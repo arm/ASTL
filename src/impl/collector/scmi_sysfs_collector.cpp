@@ -22,7 +22,6 @@
 #include <filesystem>
 #include <format>
 #include <unordered_set>
-#include <vector>
 
 #include "astl_logger.hpp"
 #include "collector/scmi_data_event.hpp"

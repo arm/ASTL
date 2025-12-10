@@ -22,7 +22,6 @@
 #include <chrono>
 #include <cmath>
 #include <expected>
-#include <optional>
 #include <string>
 
 #include "astl_logger.hpp"

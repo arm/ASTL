@@ -20,11 +20,9 @@
 #define ASTL_SUMMARIZER_HPP_
 
 #include <expected>
-#include <memory>
 #include <optional>
 #include <span>
 #include <string>
-#include <unordered_map>
 #include <variant>
 #include <vector>
 

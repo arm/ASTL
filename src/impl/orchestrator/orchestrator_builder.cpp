@@ -16,27 +16,15 @@
  * under the License.
  ******************************************************************************/
 
-#include <filesystem>
 #include <memory>
-#include <unordered_map>
-#include <vector>
 
 #include "astl/astl_errors.h"
-#include "astl/astl_telemetry.h"
-#include "astl_file_interface.hpp"
 #include "collector/collector_builder.hpp"
-#include "collector/collector_manager.hpp"
-#include "collector/i_collector.hpp"
-#include "common/capabilities.hpp"
 #include "config/astl_configuration.hpp"
 #include "metric/metric_builder.hpp"
-#include "metric/metric_manager.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "output/output_builder.hpp"
-#include "output/output_manager.hpp"
-#include "target.hpp"
 #include "topology/topology_builder.hpp"
-#include "topology/topology_manager.hpp"
 
 /** @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
  */

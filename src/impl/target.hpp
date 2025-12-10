@@ -1,12 +1,8 @@
 #ifndef ASTL_API_TARGET_H_
 #define ASTL_API_TARGET_H_
 
-#include <expected>
-#include <memory>
 #include <optional>
-#include <span>
 #include <string>
-#include <vector>
 
 #include "astl/astl.h"
 #include "common/capabilities.hpp"

@@ -28,9 +28,7 @@
 #include "collector/collection_operations.hpp"
 #include "common/astl_defines.hpp"
 #include "common/i_processed_sample_sink.hpp"
-#include "common/i_raw_sample_sink.hpp"
 #include "common/metric_config.hpp"
-#include "metric/i_counter.hpp"
 #include "operation/operation.hpp"
 
 namespace astl {

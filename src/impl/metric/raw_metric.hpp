@@ -19,9 +19,7 @@
 #ifndef RAW_METRIC_HPP_
 #define RAW_METRIC_HPP_
 
-#include <algorithm>
 #include <cctype>
-#include <span>
 #include <string>
 
 #include "astl/astl.h"
@@ -30,8 +28,6 @@
 #include "i_metric.hpp"
 #include "i_processed_sample_sink.hpp"
 #include "i_raw_sample_sink.hpp"
-#include "metric/formula_builder.hpp"
-#include "operation/operation_builder.hpp"
 
 namespace astl {
 /**

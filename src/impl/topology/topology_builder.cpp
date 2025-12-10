@@ -20,7 +20,6 @@
 #include <memory>
 
 #include "astl/astl_errors.h"
-#include "astl_file_interface.hpp"
 #include "libsensors/libsensors_topology_plugin.hpp"
 #include "target.hpp"
 #include "topology/i_topology_manager.hpp"

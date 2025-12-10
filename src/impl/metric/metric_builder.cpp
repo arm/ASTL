@@ -19,7 +19,6 @@
 #include <expected>
 #include <fstream>
 #include <memory>
-#include <unordered_set>
 #include <vector>
 
 #include "astl_logger.hpp"

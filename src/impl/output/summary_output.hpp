@@ -32,8 +32,6 @@
 #ifndef SUMMARY_OUTPUT_HPP_
 #define SUMMARY_OUTPUT_HPP_
 
-#include <map>
-#include <string>
 #include <tuple>
 #include <vector>
 

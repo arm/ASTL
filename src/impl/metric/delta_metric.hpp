@@ -19,10 +19,8 @@
 #ifndef DELTA_METRIC_HPP_
 #define DELTA_METRIC_HPP_
 
-#include <chrono>
 #include <expected>
 #include <optional>
-#include <span>
 
 #include "astl/astl.h"
 #include "astl_logger.hpp"

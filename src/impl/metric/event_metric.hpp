@@ -19,10 +19,8 @@
 #ifndef EVENT_METRIC_HPP_
 #define EVENT_METRIC_HPP_
 
-#include <span>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 #include "astl/astl.h"
 #include "astl_value.hpp"

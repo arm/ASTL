@@ -20,12 +20,8 @@
 #define I_TOPOLOGY_MANAGER_HPP_
 
 #include <memory>
-#include <utility>
 #include <vector>
 
-#include "collector/i_collector_manager.hpp"
-#include "config/configuration_manager.hpp"
-#include "metric/i_metric_manager.hpp"
 #include "target.hpp"
 
 namespace astl {

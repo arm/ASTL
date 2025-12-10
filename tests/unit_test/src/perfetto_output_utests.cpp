@@ -2,7 +2,6 @@
 #include <cstdlib>  // setenv, unsetenv
 #include <filesystem>
 #include <fstream>
-#include <set>
 #include <string>
 #include <vector>
 

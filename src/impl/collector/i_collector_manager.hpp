@@ -19,14 +19,12 @@
 #ifndef I_COLLECTOR_MANAGER_HPP_
 #define I_COLLECTOR_MANAGER_HPP_
 
-#include <span>
 #include <unordered_map>
 
 #include "astl/astl.h"
 #include "collection_operations.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
-#include "metric/counter.hpp"
 #include "target.hpp"
 
 namespace astl {

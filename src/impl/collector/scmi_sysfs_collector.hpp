@@ -19,7 +19,6 @@
 #ifndef SCMI_SYSFS_COLLECTOR_HPP_
 #define SCMI_SYSFS_COLLECTOR_HPP_
 
-#include <atomic>
 #include <expected>
 #include <filesystem>
 #include <mutex>

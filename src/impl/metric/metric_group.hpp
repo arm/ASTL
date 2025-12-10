@@ -19,7 +19,6 @@
 #ifndef METRIC_GROUP_HPP_
 #define METRIC_GROUP_HPP_
 
-#include <memory>
 #include <string>
 #include <vector>
 

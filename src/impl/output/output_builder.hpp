@@ -24,12 +24,8 @@
 #define OUTPUT_BUILDER_HPP_
 
 #include <memory>
-#include <vector>
 
-#include "config/astl_configuration.hpp"
-#include "output/i_output.hpp"
 #include "output/i_output_manager.hpp"
-#include "target.hpp"
 
 namespace astl {
 

@@ -27,8 +27,6 @@
 #  include <sensors/sensors.h>
 #endif
 
-#include <utility>
-
 #include "operation/operation.hpp"
 
 namespace astl {

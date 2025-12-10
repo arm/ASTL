@@ -28,7 +28,6 @@
 #endif
 
 #include "astl/astl_errors.h"
-#include "astl_file_interface.hpp"
 #include "config/astl_configuration.hpp"
 #include "libsensors/libsensors_target.hpp"
 #include "target.hpp"

@@ -21,7 +21,6 @@
 
 #include <chrono>
 #include <expected>
-#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -34,7 +33,6 @@
 #include "common/metric_config.hpp"
 #include "delta_metric.hpp"
 #include "operation/operation.hpp"
-#include "operation/scmi_read_operation.hpp"
 
 namespace astl {
 

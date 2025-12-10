@@ -20,19 +20,13 @@
 
 #include <cstdlib>  // std::getenv
 #include <filesystem>
-#include <fstream>
-#include <map>
 #include <new>  // std::bad_alloc
 #include <span>
-#include <tuple>
-#include <variant>
 
-#include "astl/astl.h"
 #include "astl/astl_errors.h"
 #include "astl_utils.hpp"
 #include "buffer_output.hpp"
 #include "common/astl_defines.hpp"
-#include "common/astl_value.hpp"
 #include "interval_csv_output.hpp"
 #include "perfetto_output.hpp"
 #include "summarizer.hpp"

@@ -19,7 +19,6 @@
 #ifndef SCMI_SPECIFICATION_JSON_HPP_
 #define SCMI_SPECIFICATION_JSON_HPP_
 
-#include <iostream>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <optional>
