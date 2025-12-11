@@ -89,25 +89,7 @@ int ListMetrics(const AppConfig& cfg) {
     table.add_row({metric.properties._name, metric.properties._description, UnitsToString(metric.properties._units),
                    MetricTypeToString(metric.properties._metric_type)});
   }
-  // set border style
-  table.format()
-      .corner_top_left("┌")
-      .corner_top_right("┐")
-      .corner_bottom_left("└")
-      .corner_bottom_right("┘")
-      .border_top("─")
-      .border_bottom("─")
-      .border_left("│")
-      .border_right("│");
-
-  // set column header fonts
-  std::for_each(table[0].begin(), table[0].end(), [](tabulate::Cell& cell) {
-    cell.format()
-        .font_align(tabulate::FontAlign::center)
-        .font_style({tabulate::FontStyle::bold})
-        .corner_bottom_left("├");
-  });
-
+  SetTabulateTableStyle(table);
   std::cout << table << std::endl;
 
   return 0;

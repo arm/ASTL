@@ -31,6 +31,8 @@
 #include "toml++/toml.hpp"          // https://github.com/marzer/tomlplusplus
 
 // ---------------- Config model with defaults & descriptions ----------------
+
+/* Configuration for the "list-metrics" command*/
 struct ListMetricsCfg {
   std::vector<astl_units_t> units_include_list;  // e.g. [ASTL_UNITS_WATTS, ASTL_UNITS_CELSIUS]
   bool                      name_only = false;
@@ -52,6 +54,7 @@ struct ListMetricsCfg {
   }
 };
 
+/* Configuration for the "collect" command*/
 struct CollectCfg {
   std::optional<std::chrono::milliseconds> sampling_interval;
   constexpr static std::chrono::duration   kDefaultInterval = std::chrono::milliseconds(100);
@@ -131,8 +134,30 @@ struct CollectCfg {
   }
 };
 
+/* Configuration for the "list-counters" command*/
+struct ListCountersCfg {
+  bool name_only = false;
+
+  static constexpr std::string DescNameOnly() { return "Print only counter names."; }
+
+  void MergeFromToml(const toml::table& table) { name_only = table["name-only"].value_or<bool>(std::move(name_only)); }
+};
+
+/* Configuration for the "read-counter" command */
+struct ReadCounterCfg {
+  std::string counter_name;  // name of the counter to read
+
+  static constexpr std::string DescCounterName() { return "Name of the counter to read."; }
+
+  void MergeFromToml(const toml::table& table) {
+    if (auto val = table["counter-name"].value<std::string>()) {
+      counter_name = *val;
+    }
+  }
+};
+
 struct AppConfig {
-  enum class Command { COLLECT, LIST_METRICS };
+  enum class Command { COLLECT, LIST_METRICS, LIST_COUNTERS, READ_COUNTER };
   // top-level
   std::filesystem::path config_file;                     // path to TOML
   Command               command{Command::LIST_METRICS};  // default command if none given ("collect" | "list-metrics")
@@ -140,8 +165,10 @@ struct AppConfig {
   bool                  verbose{false};    // toggle verbose stdout output
 
   // sections
-  ListMetricsCfg list;
-  CollectCfg     collect;
+  ListMetricsCfg  list;
+  CollectCfg      collect;
+  ListCountersCfg list_counters;
+  ReadCounterCfg  read_counter;
 
   static constexpr Command ParseCommand(std::string_view cmd_str) {
     if (cmd_str == "collect") {
@@ -149,6 +176,12 @@ struct AppConfig {
     }
     if (cmd_str == "list-metrics") {
       return Command::LIST_METRICS;
+    }
+    if (cmd_str == "list-counters") {
+      return Command::LIST_COUNTERS;
+    }
+    if (cmd_str == "read-counter") {
+      return Command::READ_COUNTER;
     }
     return Command::COLLECT;  // default
   }
@@ -167,6 +200,12 @@ struct AppConfig {
     }
     if (const auto* val = table["collect"].as_table()) {
       collect.MergeFromToml(*val);
+    }
+    if (const auto* val = table["list-counters"].as_table()) {
+      list_counters.MergeFromToml(*val);
+    }
+    if (const auto* val = table["read-counter"].as_table()) {
+      read_counter.MergeFromToml(*val);
     }
     // config_file is absent from the config file because you can only specify the config file from the command line
     if (auto val = table["astl_config_file"].value<std::string>()) {
@@ -190,6 +229,10 @@ inline auto to_string(const AppConfig::Command cmd) -> std::string {
       return "collect";
     case AppConfig::Command::LIST_METRICS:
       return "list-metrics";
+    case AppConfig::Command::LIST_COUNTERS:
+      return "list-counters";
+    case AppConfig::Command::READ_COUNTER:
+      return "read-counter";
     default:
       return "unknown";
   }

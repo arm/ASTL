@@ -63,5 +63,5 @@
     }
   },
 
-  "scmi_specification_path": "./samples/sample_topology/example_scmi_specification.json"
+  "scmi_specification_path": "./samples/sample_topology/demo_scmi_specification.json"
 }

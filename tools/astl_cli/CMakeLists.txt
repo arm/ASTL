@@ -19,7 +19,7 @@ if(NOT TARGET Astl::astl)
 endif()
 
 set(TARGET "astl_cli")
-add_executable(${TARGET} astl_cli.cpp collect.cpp list_metrics.cpp run_workload.cpp)
+add_executable(${TARGET} astl_cli.cpp collect.cpp list_metrics.cpp run_workload.cpp list_counters.cpp read_counter.cpp)
 target_include_directories(${TARGET} PRIVATE ${PROJECT_SOURCE_DIR}/include ${TARGET} ${PROJECT_SOURCE_DIR}/utils)
 target_link_libraries(${TARGET} PRIVATE argparse::argparse tabulate::tabulate tomlplusplus::tomlplusplus)
 

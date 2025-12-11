@@ -20,6 +20,7 @@
 #define ASTL_CLI_UTILS_H
 
 #include <string_view>
+#include <tabulate/table.hpp>  // https://github.com/p-ranav/tabulate
 
 #include "astl/astl_telemetry.h"
 
@@ -95,6 +96,41 @@ inline auto AstlValueAsDouble(const astl_value_t& value, astl_value_type_t value
       return 0.0;
   }
   return 0.0;
+}
+
+/**
+ * @brief Apply consistent tabulate table style for CLI output tables
+ *
+ * Makes the table look like:
+ * ┌──────────────────────────────┌────────────────────────────────────────┌─────────┐
+ * │          Column Header       │               Next Column              │  Units  │
+ * ┌──────────────────────────────┌────────────────────────────────────────┌─────────┐
+ * │ Entry one                    │ Underlying counter for P-State         │ Unknown │
+ * ┌──────────────────────────────┌────────────────────────────────────────┌─────────┐
+ * │ This is another entry in col │ Underlying counter for Throttle Counts │ Unknown │
+ * ┌──────────────────────────────┌────────────────────────────────────────┌─────────┐
+ * │ .....                        │ Underlying counter for SoC Power       │ Unknown │
+ * └──────────────────────────────└────────────────────────────────────────└─────────┘
+ */
+inline auto SetTabulateTableStyle(tabulate::Table& table) -> void {
+  // set border style
+  table.format()
+      .corner_top_left("┌")
+      .corner_top_right("┐")
+      .corner_bottom_left("└")
+      .corner_bottom_right("┘")
+      .border_top("─")
+      .border_bottom("─")
+      .border_left("│")
+      .border_right("│");
+
+  // set column header fonts
+  std::for_each(table[0].begin(), table[0].end(), [](tabulate::Cell& cell) {
+    cell.format()
+        .font_align(tabulate::FontAlign::center)
+        .font_style({tabulate::FontStyle::bold})
+        .corner_bottom_left("├");
+  });
 }
 
 #endif  // ASTL_CLI_UTILS_H

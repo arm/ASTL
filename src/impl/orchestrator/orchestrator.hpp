@@ -100,7 +100,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET: one of the given counters is not associated with the target
    */
   auto ConfigureCounterCollection(const ITarget *target, const astl_collection_parameters_t *collection_params,
-                                  std::span<const IMetric *> counters) -> astl_status_code;
+                                  std::span<const astl_counter_handle_t> counters) -> astl_status_code;
 
   /**
    * @brief For a given target, enable collection on a set of measurable Metrics.

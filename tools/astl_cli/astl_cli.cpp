@@ -27,7 +27,9 @@
 #include "argparse/argparse.hpp"  // https://github.com/p-ranav/argparse
 #include "astl_file_interface.hpp"
 #include "collect.hpp"
+#include "list_counters.hpp"
 #include "list_metrics.hpp"
+#include "read_counter.hpp"
 #include "toml++/toml.hpp"  // https://github.com/marzer/tomlplusplus
 
 // --------------- TOML load/save helpers (with comments) --------------------
@@ -114,7 +116,21 @@ static void SaveTomlWithComments(std::ostream& ofs, const CollectCfg& cfg_collec
   for (size_t i = 0; i < workload.size(); ++i) {
     ofs << (i ? ", " : "") << "\"" << workload[i] << "\"";
   }
-  ofs << "]\n";
+  ofs << "]\n\n";
+}
+
+// Save the [list-counters] section to an output stream
+static void SaveTomlWithComments(std::ostream& ofs, const ListCountersCfg& cfg_list_counters) {
+  ofs << "[list-counters]\n";
+  ofs << "\n# " << ListCountersCfg::DescNameOnly() << "\n";
+  ofs << "name-only = " << (cfg_list_counters.name_only ? "true" : "false") << "\n\n";
+}
+
+// Save the [read-counter] section to an output stream
+static void SaveTomlWithComments(std::ostream& ofs, const ReadCounterCfg& cfg_read_counter) {
+  ofs << "[read-counter]\n";
+  ofs << "\n# " << ReadCounterCfg::DescCounterName() << "\n";
+  ofs << "counter-name = \"" << cfg_read_counter.counter_name << "\"\n\n";
 }
 
 // Write full TOML config file with comments describing each field (defaults or effective values)
@@ -142,6 +158,8 @@ static void SaveTomlWithComments(const std::string& path, const AppConfig& cfg) 
   ofs << "verbose = " << (cfg.verbose ? "true" : "false") << "\n\n";
   SaveTomlWithComments(ofs, cfg.list);
   SaveTomlWithComments(ofs, cfg.collect);
+  SaveTomlWithComments(ofs, cfg.list_counters);
+  SaveTomlWithComments(ofs, cfg.read_counter);
 }
 
 static void ApplyTomlConfigOverrides(const argparse::ArgumentParser& program, AppConfig& cfg) {
@@ -160,7 +178,8 @@ static void ApplyTomlConfigOverrides(const argparse::ArgumentParser& program, Ap
 
 /* Build command line argument parser and process given args */
 void ParseCliArgs(int argc, char** argv, argparse::ArgumentParser& program, argparse::ArgumentParser& cmd_list,
-                  argparse::ArgumentParser& cmd_collect) {
+                  argparse::ArgumentParser& cmd_collect, argparse::ArgumentParser& cmd_list_counters,
+                  argparse::ArgumentParser& cmd_read_counter) {
   // Global options
   program.add_argument("-c", "--config-file").help(AppConfig::DescConfigFile()).default_value(std::string{""});
   // @todo(215) make astl app work on windows (HOME env var and path handling need work)
@@ -171,7 +190,7 @@ void ParseCliArgs(int argc, char** argv, argparse::ArgumentParser& program, argp
   program.add_argument("-k", "--astl-config-file")
       .help(AppConfig::DescAstlConfigFile())
       .default_value(home_dir + std::string{".astl_configuration.json"});
-  program.add_argument("-v", "--verbose").help(AppConfig::DescVerbose()).default_value(false).implicit_value(true);
+  program.add_argument("-v", "--verbose").help(AppConfig::DescVerbose()).flag();
 
   // -- save scaffolds
   program.add_argument("--save-config").help("Write configuration (input config file and CLI args) to TOML and exit.");
@@ -180,7 +199,7 @@ void ParseCliArgs(int argc, char** argv, argparse::ArgumentParser& program, argp
 
   // list-metrics options (map to [list-metrics])
   cmd_list.add_argument("--units-include-list").help(ListMetricsCfg::DescUnitsIncludeList()).append();  // repeatable
-  cmd_list.add_argument("--name-only").help(ListMetricsCfg::DescNameOnly()).default_value(false).implicit_value(true);
+  cmd_list.add_argument("--name-only").help(ListMetricsCfg::DescNameOnly()).flag();
 
   // collect options (map to [collect])
   cmd_collect.add_argument("-i", "--sampling-interval").help(CollectCfg::DescSamplingInterval()).scan<'i', int>();
@@ -196,9 +215,17 @@ void ParseCliArgs(int argc, char** argv, argparse::ArgumentParser& program, argp
       .remaining()
       .help(std::string{CollectCfg::DescWorkload()} + " (all remaining arguments after '--' on CLI)");
 
+  // list-counters options
+  cmd_list_counters.add_argument("--name-only").help(ListCountersCfg::DescNameOnly()).flag();
+
+  // read-counter options - counter_name is a positional parameter
+  cmd_read_counter.add_argument("counter-name").help(ReadCounterCfg::DescCounterName()).remaining();
+
   // Register subcommands
   program.add_subparser(cmd_list);
   program.add_subparser(cmd_collect);
+  program.add_subparser(cmd_list_counters);
+  program.add_subparser(cmd_read_counter);
 
   // Parse CLI
   program.parse_args(argc, argv);
@@ -258,11 +285,39 @@ static void ApplyCliOverrides(const argparse::ArgumentParser& program, const arg
 }
 
 /**
+ * @brief Modify the ListCountersCfg settings based on what CLI args are given in 'program'.
+ * This takes precedence over config toml file.
+ */
+static void ApplyCliOverrides(const argparse::ArgumentParser& program,
+                              const argparse::ArgumentParser& cmd_list_counters, ListCountersCfg& cfg_list_counters) {
+  if (!program.is_subcommand_used("list-counters")) {
+    return;
+  }
+  if (cmd_list_counters.is_used("--name-only")) {
+    cfg_list_counters.name_only = cmd_list_counters.get<bool>("--name-only");
+  }
+}
+
+/**
+ * @brief Modify the ReadCounterCfg settings based on what CLI args are given in 'program'.
+ * This takes precedence over config toml file.
+ */
+static void ApplyCliOverrides(const argparse::ArgumentParser& program, const argparse::ArgumentParser& cmd_read_counter,
+                              ReadCounterCfg& cfg_read_counter) {
+  if (!program.is_subcommand_used("read-counter")) {
+    return;
+  }
+  cfg_read_counter.counter_name = cmd_read_counter.get<std::string>("counter-name");
+}
+
+/**
  * @brief Modify the AppConfig settings based on what CLI args are given in 'program'.
  * This takes precedence over config toml file.
  */
 static void ApplyCliOverrides(const argparse::ArgumentParser& program, const argparse::ArgumentParser& cmd_list,
-                              const argparse::ArgumentParser& cmd_collect, AppConfig& cfg) {
+                              const argparse::ArgumentParser& cmd_collect,
+                              const argparse::ArgumentParser& cmd_list_counters,
+                              const argparse::ArgumentParser& cmd_read_counter, AppConfig& cfg) {
   if (program.is_used("--astl-config-file")) {
     auto parse_path_result = astl::ExpandFilePath(program.get<std::string>("--astl-config-file"));
     cfg.astl_config_file   = parse_path_result.value_or(cfg.astl_config_file);
@@ -286,6 +341,41 @@ static void ApplyCliOverrides(const argparse::ArgumentParser& program, const arg
   // capture CLI arguments for subcommands in cfg.list and cfg.collect
   ApplyCliOverrides(program, cmd_list, cfg.list);
   ApplyCliOverrides(program, cmd_collect, cfg.collect);
+  ApplyCliOverrides(program, cmd_list_counters, cfg.list_counters);
+  ApplyCliOverrides(program, cmd_read_counter, cfg.read_counter);
+}
+
+static auto InvokeSubcommand(const argparse::ArgumentParser& program, const AppConfig& cfg) -> int {
+  using SubcommandT = int(const AppConfig&);
+
+  const std::unordered_map<std::string, SubcommandT*> cli_subcommand_map = {
+      {"collect",       &Collect     },
+      {"list-metrics",  &ListMetrics },
+      {"list-counters", &ListCounters},
+      {"read-counter",  &ReadCounter },
+  };
+  const std::unordered_map<AppConfig::Command, SubcommandT*> toml_subcommand_map = {
+      {AppConfig::Command::COLLECT,       &Collect     },
+      {AppConfig::Command::LIST_METRICS,  &ListMetrics },
+      {AppConfig::Command::LIST_COUNTERS, &ListCounters},
+      {AppConfig::Command::READ_COUNTER,  &ReadCounter },
+  };
+
+  // first priority is to check the command line for a subcommand
+  for (const auto& [name, func] : cli_subcommand_map) {
+    if (program.is_subcommand_used(name)) {
+      return func(cfg);
+    }
+  }
+
+  // if no subcommand on CLI, use the command from the cfg file.
+  if (toml_subcommand_map.contains(cfg.command)) {
+    auto func = toml_subcommand_map.at(cfg.command);
+    return func(cfg);
+  }
+  // expected unreachable - the toml default value for command should be list-metrics
+  std::cerr << "No subcommand given. Use --help for usage information.\n";
+  return 1;
 }
 
 // ------------------------------- main --------------------------------------
@@ -294,8 +384,10 @@ int main(int argc, char** argv) {
     argparse::ArgumentParser program{"astl-cli", "1.0"};
     argparse::ArgumentParser cmd_list{"list-metrics"};
     argparse::ArgumentParser cmd_collect{"collect"};
+    argparse::ArgumentParser cmd_list_counters{"list-counters"};
+    argparse::ArgumentParser cmd_read_counter{"read-counter"};
 
-    ParseCliArgs(argc, argv, program, cmd_list, cmd_collect);
+    ParseCliArgs(argc, argv, program, cmd_list, cmd_collect, cmd_list_counters, cmd_read_counter);
 
     AppConfig cfg;  // start with default configuration
 
@@ -303,7 +395,7 @@ int main(int argc, char** argv) {
     ApplyTomlConfigOverrides(program, cfg);
 
     // CLI overrides (highest precedence), some per subcommand
-    ApplyCliOverrides(program, cmd_list, cmd_collect, cfg);
+    ApplyCliOverrides(program, cmd_list, cmd_collect, cmd_list_counters, cmd_read_counter, cfg);
 
     // Save configuration to toml file and exit
     if (program.is_used("--save-config")) {
@@ -313,15 +405,7 @@ int main(int argc, char** argv) {
       return 0;
     }
 
-    // Decide which command to run:
-    // 1) if a subcommand was explicitly used → run that
-    // 2) else fall back to cfg.command from TOML (or default "collect")
-    if (program.is_subcommand_used("list-metrics") || cfg.command == AppConfig::Command::LIST_METRICS) {
-      return ListMetrics(cfg);
-    }
-
-    // default or explicit collect
-    return Collect(cfg);
+    return InvokeSubcommand(program, cfg);
 
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << "\n";

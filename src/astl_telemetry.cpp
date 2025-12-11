@@ -620,31 +620,13 @@ auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                
     return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
   }
   std::span<const astl_counter_handle_t> counter_handle_span{counter_handles, counter_count};
-  //  transform the counter_handle_span into a vector of ICounter*, verifying each handle
-  astl_status_code status{ASTL_STATUS_SUCCESS};
-  // lambda to convert  a given astl_counter_handle_t to an ICounter*,
-  // (or to null and modify 'status' if unrecognized handle)
-  const auto check_and_convert_to_counter = [&status, target](const auto& handle) {
-    auto get_counter_result = GetCounterFromHandle(handle, target);
-    if (!get_counter_result) {
-      status = get_counter_result.error();
-      return static_cast<const astl::IMetric*>(nullptr);
-    }
-    return *get_counter_result;
-  };
-  std::vector<const astl::IMetric*> counters;
-  counters.reserve(counter_count);
-  std::ranges::transform(counter_handle_span, std::back_inserter(counters), check_and_convert_to_counter);
-  if (status != ASTL_STATUS_SUCCESS) {
-    return status;
-  }
-  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  auto const&                            orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
     return orchestrator_or_error.error();
   }
   const auto& orchestrator = orchestrator_or_error->get();
 
-  return orchestrator->ConfigureCounterCollection(target, collection_params, counters);
+  return orchestrator->ConfigureCounterCollection(target, collection_params, counter_handle_span);
 }
 
 auto astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,

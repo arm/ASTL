@@ -697,7 +697,7 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counter
   target_to_counter_map[mock_targets[0].get()] = std::move(counter1);
   auto counter_api_handle =
       std::make_unique<astl::CounterHandle>(std::move(counter_config), std::move(target_to_counter_map));
-  auto c1_handle = static_cast<astl_counter_handle_t>(counter_api_handle.get());
+  const auto* c1_handle = static_cast<astl_counter_handle_t>(counter_api_handle.get());
 
   // set up the metric manager to expect queries about counters
   auto mock_metric_manager = std::make_unique<MockMetricManager>();

@@ -18,7 +18,7 @@ namespace astl {
  *        multiple inheritance w/ the diamond problem, so we explicitly implement some methods to call RawMetric
  *
  */
-class Counter : public RawMetric, public ICounter {
+class Counter : public RawMetric, public virtual ICounter {
  public:
   /**
    * @brief Initialize this counter instance with configuration and target

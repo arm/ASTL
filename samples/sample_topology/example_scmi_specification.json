@@ -2123,7 +2123,7 @@
   "layout": {
     "base_addr": "0x74008000",
     "members": {
-      "AP0": {
+      "tlm-0": {
         "CPU_CYCLES": {
           "instance_id": 0,
           "local_id": 1,

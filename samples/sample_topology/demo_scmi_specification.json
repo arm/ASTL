@@ -1,0 +1,82 @@
+{
+  "definitions": {
+    "_description": "Collections of individual data sources and group data sources. These will be referred by data source specification"
+  },
+  "transformations": {
+    "_description": "Collections of methods to transform raw data sources to produce a value or to classify/bin a value"
+  },
+  "datasources": {},
+  "processes": {},
+  "layout": {
+    "base_addr": "0x74008000",
+    "members": {
+      "tlm-0": {
+        "CORE_0_TEMP": {
+          "instance_id": 0,
+          "local_id": 1,
+          "offset": "0x0000",
+          "name": "TLM0_CORE_0_TEMP",
+          "line_addr": "0x0",
+          "value_addr": "0x0",
+          "de_id": "0x00000000"
+        },
+        "CORE_1_TEMP": {
+          "instance_id": 0,
+          "local_id": 3,
+          "offset": "0x7A9B",
+          "name": "TLM0_CORE_1_TEMP",
+          "line_addr": "0x0",
+          "value_addr": "0x0",
+          "de_id": "0x00007A9B"
+        },
+        "THROTTLE_EVENTS": {
+          "instance_id": 0,
+          "local_id": 4,
+          "offset": "0x8C3D",
+          "name": "TLM0_THROTTLE_EVENTS",
+          "line_addr": "0x740080E0",
+          "value_addr": "0x740080E8",
+          "de_id": "0x00008c3d"
+        },
+        "ENERGY_COUNTER": {
+          "instance_id": 0,
+          "local_id": 55,
+          "offset": "0x00F0",
+          "name": "TLM0_ENERGY_COUNTER",
+          "line_addr": "0x740080F0",
+          "value_addr": "0x740080F8",
+          "de_id": "0x00009e4f"
+        },
+        "FREQUENCY": {
+          "instance_id": 0,
+          "local_id": 56,
+          "offset": "0x0100",
+          "name": "AP0_FREQUENCY",
+          "line_addr": "0x74008100",
+          "value_addr": "0x74008108",
+          "de_id": "0x00001a68"
+        }
+      },
+      "tlm-1": {
+        "P_STATE": {
+          "instance_id": 0,
+          "local_id": 2,
+          "offset": "0x0016",
+          "name": "TLM1_P_STATE",
+          "line_addr": "0x0",
+          "value_addr": "0x0",
+          "de_id": "0x00000016"
+        },
+        "FREQUENCY": {
+          "instance_id": 0,
+          "local_id": 56,
+          "offset": "0x0100",
+          "name": "AP0_FREQUENCY",
+          "line_addr": "0x74008100",
+          "value_addr": "0x74008108",
+          "de_id": "0x00001a68"
+        }
+      }
+    }
+  }
+}
