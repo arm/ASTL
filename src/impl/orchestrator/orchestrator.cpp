@@ -109,19 +109,48 @@ auto Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets)
   return ASTL_STATUS_SUCCESS;
 }
 
-auto Orchestrator::ConfigureCounterCollection(const ITarget                      *target,
-                                              const astl_collection_parameters_t *collection_params,
-                                              std::span<const IMetric *>          counters) -> astl_status_code {
+auto Orchestrator::ConfigureCounterCollection(const ITarget                         *target,
+                                              const astl_collection_parameters_t    *collection_params,
+                                              std::span<const astl_counter_handle_t> counters) -> astl_status_code {
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
   if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
-  // unused, since unimplemented
-  (void)collection_params;
-  (void)counters;
-  return ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET;
+  if (!_metric_manager) {
+    ASTL_LOG_ERROR("Orchestrator::ConfigureCounterCollection called with null MetricManager");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  if (!_collector_manager) {
+    ASTL_LOG_ERROR("Orchestrator::ConfigureCounterCollection called with null CollectorManager");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  // check for supported metrics
+  auto available_counters = _metric_manager->GetAvailableCounters(target);
+  if (!available_counters) {
+    return available_counters.error();
+  }
+  for (const auto &counter : counters) {
+    auto counter_index = std::ranges::find_if(
+        available_counters.value(), [counter](auto const available_counter) { return available_counter == counter; });
+    if (counter_index == std::end(available_counters.value())) {
+      ASTL_LOG_ERROR("Counter is not supported on target");
+      return ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET;
+    }
+  }
+  auto operations = _metric_manager->GetCounterRequiredOperations(counters, target);
+  if (!operations) {
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  astl_status_code status =
+      _collector_manager->ConfigureCollectionOnTarget(target, *collection_params, std::move(operations.value()));
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to configure collection on target: {}", astlStatusString(status));
+    return status;
+  }
+  return status;
 }
 
 auto Orchestrator::ConfigureMetricCollection(const ITarget                        *target,

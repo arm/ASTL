@@ -35,7 +35,10 @@ RawMetric::RawMetric(const MetricConfig *configuration, const ITarget *target,
     : _configuration(configuration), _target(target) {
   SetProcessedSampleSink(processed_sample_sink);
   if (!_processed_sample_sink) {
-    ASTL_LOG_ERROR("No processed sample sink set for metric '{}'. Sample will be dropped.", _configuration->Name());
+    ASTL_LOG_DEBUG(
+        "Null processed_sample_sink for metric '{}' in constructor."
+        " Samples will be dropped until SetProcessedSampleSink is called.",
+        _configuration->Name());
   }
 
   // Initialize logger header
@@ -48,20 +51,26 @@ RawMetric::RawMetric(const MetricConfig *configuration, const ITarget *target,
  *       This is typically the CollectorManager, but can be any IRawSampleSink.
  */
 auto RawMetric::SetProcessedSampleSink(IProcessedSampleSink *processed_sample_sink) -> void {
-  std::scoped_lock lock{_metric_mutex};
+  std::lock_guard lock{_metric_mutex};
   _processed_sample_sink = processed_sample_sink;
 }
 
 auto RawMetric::Name() const -> std::string const & { return _configuration->Name(); }
 
 auto RawMetric::SinkProcessedSample(const ProcessedSampledData &processed_sample) -> astl_status_code {
-  std::lock_guard<std::mutex> lock(_metric_mutex);  // Ensure thread-safe access to the processed sample sink
+  std::lock_guard lock(_metric_mutex);  // Ensure thread-safe access to the processed sample sink
 
   // Forward the processed sample to the sink
   ProcessedSampledData sample = processed_sample;
-  return _processed_sample_sink ? _processed_sample_sink->SinkProcessedSamples(_target, this, {&sample, 1})
-                                : ASTL_STATUS_BAD_CONFIGURATION;
-};
+  if (!_processed_sample_sink) {
+    ASTL_LOG_WARNING(
+        "Metric {}: No processed sample sink set. Dropping processed sample with value {} at timestamp {}.",
+        _configuration->Name(), sample.value,
+        std::chrono::duration_cast<std::chrono::microseconds>(sample.timestamp.time_since_epoch()).count());
+    return ASTL_STATUS_BAD_CONFIGURATION;
+  }
+  return _processed_sample_sink->SinkProcessedSamples(_target, this, {&sample, 1});
+}
 
 auto RawMetric::GetProperties(astl_metric_properties_t *properties) const -> astl_status_code {
   if (properties == nullptr) {

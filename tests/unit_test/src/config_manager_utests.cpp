@@ -215,8 +215,10 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   REQUIRE(metric_configs.size() == 2);
 
   // Verify it's a ResidencyMetricConfig (by attempting to cast)
-  auto* residency_config_ap0 = dynamic_cast<astl::ResidencyMetricConfig*>(metric_configs[0].get());
-  auto* residency_config_ap1 = dynamic_cast<astl::ResidencyMetricConfig*>(metric_configs[1].get());
+  auto  configs_it           = metric_configs.begin();
+  auto* residency_config_ap0 = dynamic_cast<astl::ResidencyMetricConfig*>(configs_it->first.get());
+  configs_it++;
+  auto* residency_config_ap1 = dynamic_cast<astl::ResidencyMetricConfig*>(configs_it->first.get());
   REQUIRE(residency_config_ap0 != nullptr);
   REQUIRE(residency_config_ap1 != nullptr);
   // since these metric_configs aren't in a specific order, let's make sure the first one corresponds to AP0
@@ -311,31 +313,26 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
     auto metric_configs_result =
         astl::CreateScmiMetricConfigs("P-State", finite_decl, mock_scmi_spec, mock_scmi_targets);
     REQUIRE(metric_configs_result);
-    auto metric_configs = std::move(metric_configs_result.value());
-    REQUIRE(metric_configs.size() == 2);
+    auto metric_configs_on_targets = std::move(metric_configs_result.value());
+    REQUIRE(metric_configs_on_targets.size() == 1);
 
     std::unordered_map<std::string, astl::FiniteSetMetricConfig*> by_name;
-    for (auto& cfg_ptr : metric_configs) {
-      auto* fs_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(cfg_ptr.get());
+    for (auto& cfg_ptr : metric_configs_on_targets) {
+      auto* fs_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(cfg_ptr.first.get());
       REQUIRE(fs_cfg != nullptr);
       by_name[fs_cfg->Name()] = fs_cfg;
     }
-    REQUIRE(by_name.contains("AP0_P_STATE"));
-    REQUIRE(by_name.contains("AP1_P_STATE"));
+    REQUIRE(by_name.contains("P_STATE"));
 
-    auto* ap0_cfg = by_name["AP0_P_STATE"];
-    auto* ap1_cfg = by_name["AP1_P_STATE"];
+    auto* ap0_cfg = by_name["P_STATE"];
     REQUIRE(ap0_cfg->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
-    REQUIRE(ap1_cfg->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
 
     // Expect 4 unique values
     REQUIRE(ap0_cfg->FiniteSetSize() == 4);
-    REQUIRE(ap1_cfg->FiniteSetSize() == 4);
 
     std::vector<uint64_t> expected_set{0, 1, 2, 3};
     for (auto const& value : expected_set) {
       REQUIRE(ap0_cfg->GetFiniteSet().contains(astl::AstlValue{value}));
-      REQUIRE(ap1_cfg->GetFiniteSet().contains(astl::AstlValue{value}));
     }
   }
   // NOLINTEND(readability-function-cognitive-complexity)
@@ -430,7 +427,7 @@ TEST_CASE("ParseConfiguration missing category defaults to unknown/UNCATEGORIZED
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
-  REQUIRE(metric_configs.front()->Category() == ASTL_CATEGORY_UNCATEGORIZED);
+  REQUIRE(metric_configs.begin()->first->Category() == ASTL_CATEGORY_UNCATEGORIZED);
 }
 
 TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManager][Category]") {
@@ -469,7 +466,7 @@ TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManag
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
-  REQUIRE(metric_configs.front()->Category() == ASTL_CATEGORY_TEMPERATURE);
+  REQUIRE(metric_configs.begin()->first->Category() == ASTL_CATEGORY_TEMPERATURE);
 }
 
 TEST_CASE("ParseConfiguration invalid category string maps to UNCATEGORIZED", "[ConfigManager][Category]") {
@@ -509,5 +506,5 @@ TEST_CASE("ParseConfiguration invalid category string maps to UNCATEGORIZED", "[
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
-  REQUIRE(metric_configs.front()->Category() == ASTL_CATEGORY_UNCATEGORIZED);
+  REQUIRE(metric_configs.begin()->first->Category() == ASTL_CATEGORY_UNCATEGORIZED);
 }

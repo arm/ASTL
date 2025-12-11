@@ -23,6 +23,8 @@
 #ifndef METRIC_CONFIG_HPP_
 #define METRIC_CONFIG_HPP_
 
+#include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -354,6 +356,10 @@ class FiniteSetMetricConfig final : public MetricConfig {
   FiniteSet       _finite_set;  ///< The set of valid AstlValue objects
   ValueToLabelMap _labels;      ///< Mapping from finite set values to human-readable labels
 };
+
+using MetricConfigOnTargets =
+    std::unordered_map<std::unique_ptr<MetricConfig>,
+                       std::vector<const ITarget *>>;  //< MetricConfig mapped to applicable targets
 
 }  // namespace astl
 

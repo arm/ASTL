@@ -33,10 +33,12 @@ auto Counter::GetOperations() -> std::expected<OperationSequence, astl_status_co
 }
 
 auto Counter::ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code {
-  // Check if the sample's value type matches the metric's expected type
-  auto type_check_result = CheckSampleValueType(raw_sample);
-  if (type_check_result != ASTL_STATUS_SUCCESS) {
-    return type_check_result;
+  // if the counter has an expected value type, check that the sample matches it
+  if (ASTL_VALUE_UNKNOWN != _configuration->ValueType()) {
+    auto type_check_result = CheckSampleValueType(raw_sample);
+    if (type_check_result != ASTL_STATUS_SUCCESS) {
+      return type_check_result;
+    }
   }
 
   // Log the raw sample using the base class method

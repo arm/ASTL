@@ -79,7 +79,8 @@ auto MetricManager::RegisterCounter(std::unique_ptr<MetricConfig>      counter_c
     // Register the counter based on its type and add it to the _counter_handles vector and
     // counter config mappings.
     std::unique_ptr<ICounter> counter = std::make_unique<Counter>(counter_config.get(), target);
-    target_specific_counters[target]  = std::move(counter);
+    counter->SetProcessedSampleSink(this);
+    target_specific_counters[target] = std::move(counter);
   }
   // store the new CounterHandle
   _counter_handles.emplace_back(
@@ -393,7 +394,8 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
     if (!metric_or_error.has_value()) {
       return metric_or_error.error();
     }
-    auto metric                     = std::move(metric_or_error.value());
+    auto metric = std::move(metric_or_error.value());
+    metric->SetProcessedSampleSink(this);
     target_specific_metrics[target] = std::move(metric);
   }
   auto* metric_config_ptr = metric_config.get();  // non-owning pointer. grab this before metric_config is moved

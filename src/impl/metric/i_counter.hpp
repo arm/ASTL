@@ -16,7 +16,7 @@ namespace astl {
  *        All implementors of ICounter are also RawMetric implementors so that MetricManager
  *        can use both interfaces on its counters and still have test mocks for ICounter implementations
  */
-struct ICounter : public IMetric {
+struct ICounter : public virtual IMetric {
   ICounter() = default;
 
   ~ICounter() override = default;

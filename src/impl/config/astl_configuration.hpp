@@ -93,7 +93,7 @@ auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std:
                                            MetricJsonDeclaration const&       metric_declaration,
                                            scmi::ScmiSpecification const&     scmi_spec,
                                            std::vector<const ITarget*> const& scmi_targets)
-    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code>;
+    -> std::expected<MetricConfigOnTargets, astl_status_code>;
 
 }  // namespace astl
 

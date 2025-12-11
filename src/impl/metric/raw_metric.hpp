@@ -37,7 +37,7 @@ namespace astl {
  * Specific metric types like sampled, delta, or residency should inherit from this class
  * and implement sample processing and summarization.
  */
-class RawMetric : public IMetric {
+class RawMetric : public virtual IMetric {
  public:
   ~RawMetric() override = default;
 

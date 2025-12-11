@@ -313,6 +313,16 @@ inline auto GetDataEventIdForLayoutMember(std::string_view register_name, std::s
   return std::nullopt;
 }
 
+/* POD class to hold the relevant parts of a metric declaration and SCMI spec entry */
+struct ScmiMetricDeclaration {
+  std::string              name;
+  ScmiDataEventId          de_id{};
+  std::vector<std::string> applicable_members;  // e.g. tlm-0, tlm-1 etc.
+
+  ScmiMetricDeclaration(std::string name, ScmiDataEventId de_id, std::vector<std::string> applicable_members)
+      : name(std::move(name)), de_id(de_id), applicable_members(std::move(applicable_members)) {}
+};
+
 /**
  * @brief Get the collection of metric names (i.e. AP0_ENERGY_COUNTER) that match the given register name, and their
  * corresponding data event ids.
@@ -321,23 +331,33 @@ inline auto GetDataEventIdForLayoutMember(std::string_view register_name, std::s
  * @return A map of target names to Data Event IDs for the metric
  */
 inline auto GetMetricRegisters(std::string_view register_name, Layout const& layout)
-    -> std::vector<std::pair<std::string, ScmiDataEventId>> {
-  std::vector<std::pair<std::string, ScmiDataEventId>> metric_names_and_de_id;
+    -> std::vector<ScmiMetricDeclaration> {
+  std::vector<ScmiMetricDeclaration> metric_declarations;
 
-  for (const auto& [member_name, metrics] : layout.members) {  // e.g. AP0, AP1
+  for (const auto& [member_name, metrics] : layout.members) {  // e.g. AP0, AP1, tlm-1 etc
     for (const auto& [metric_type_name, metric_entry] : metrics) {
       // note, we're using the key name for the register, e.g. 'CPU_CYCLES',
       // not the .name field of the entry, e.g. 'AP0_CPU_CYCLES', so that one
       // metric can be defined in the library configuration file, and be created
       // for each target that supports it in the spec.
-      if (metric_type_name == register_name) {
-        ASTL_LOG_TRACE("GetMetricRegisters matched '{}' (from {}) with '{}' for member {}", metric_type_name,
-                       metric_entry.name, register_name, member_name);
-        metric_names_and_de_id.emplace_back(metric_entry.name, metric_entry.de_id);
+      if (metric_type_name != register_name) {
+        continue;  // not the metric type we're looking for at the moment
       }
+      auto maybe_existing_declaration = std::ranges::find_if(
+          metric_declarations,
+          [&metric_type_name](const ScmiMetricDeclaration& decl) { return metric_type_name == decl.name; });
+      if (maybe_existing_declaration != metric_declarations.end()) {
+        // already have this register name, just add the member to applicable members
+        maybe_existing_declaration->applicable_members.push_back(std::string(member_name));
+        continue;
+      }
+      // we haven't seen this metric register name on any targets yet in this call, so create a new entry
+      auto                     de_id = metric_entry.de_id;
+      std::vector<std::string> applicable_members{std::string{member_name}};
+      metric_declarations.emplace_back(metric_type_name, de_id, std::move(applicable_members));
     }
   }
-  return metric_names_and_de_id;
+  return metric_declarations;
 }
 
 }  // namespace scmi
