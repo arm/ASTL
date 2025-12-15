@@ -41,9 +41,12 @@
 #include <vector>
 
 #include "i_raw_sample_sink.hpp"
+#include "metric/metric_manager.hpp"
 #include "topology/i_topology_manager.hpp"
 
-namespace astl::ProtobufSerDes {
+namespace astl {
+
+namespace ProtobufSerDes {
 
 /**
  * @brief Serializes a collection of RawSampledData objects into a binary stream.
@@ -84,8 +87,10 @@ concept DeserializableBase = requires {
 } && static_cast<bool>(T::kSerializable);
 
 template <typename T>
-concept Deserializable = DeserializableBase<T> || (StdVector<T> && DeserializableBase<typename T::value_type>) ||
-                         (StdUniquePtr<T> && DeserializableBase<typename T::element_type>);
+concept Deserializable =
+    DeserializableBase<T> || (StdVector<T> && DeserializableBase<typename T::value_type>) ||
+    (StdUniquePtr<T> && DeserializableBase<typename T::element_type>) ||
+    (StdVector<T> && StdUniquePtr<typename T::value_type> && DeserializableBase<typename T::value_type::element_type>);
 
 template <Deserializable T>
 auto Deserialize(std::istream& input_stream) -> std::expected<T, astl_status_code>;
@@ -130,6 +135,27 @@ auto SerializeCurrentBatch(const std::string& target_name, const std::vector<Raw
  */
 auto Serialize(const ITopologyManager& topology_manager, std::ostream& output_stream) -> astl_status_code;
 
-}  // namespace astl::ProtobufSerDes
+/**
+ * @brief Serializes a metric handle the given output stream.
+ *
+ * Converts all metric handles given by the metric manager into their
+ * protobuf representation (`astl::protobuf::RawMetric`), stores them in a
+ * `astl::protobuf::RawMetricVec`, and writes the serialized data to the
+ * specified output stream.
+ *
+ * Each metric’s configurations are copied along with the metric's target id to rebuild.
+ *
+ * @param[in] MetricHandle A single metric handle to serialize.
+ * @param[out] output_stream Output stream that receives the serialized binary data.
+ * @return astl_status_code
+ *         - ASTL_STATUS_SUCCESS on success.
+ *         - ASTL_STATUS_INTERNAL_ERROR if serialization or stream write fails.
+ *         - ASTL_STATUS_INVALID_VALUE_TYPE if invalid fields are encountered.
+ */
+auto Serialize(const MetricHandle& handle, std::ostream& output_stream) -> astl_status_code;
+
+}  // namespace ProtobufSerDes
+
+}  // namespace astl
 
 #endif  // ASTL_PROTOBUF_SERDES_HPP_

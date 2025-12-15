@@ -50,6 +50,8 @@ class MetricManagerTestAccessor;
 struct MetricHandle {
   std::unique_ptr<MetricConfig>                                config;  //< Configuration that generated this metric
   std::unordered_map<const ITarget*, std::unique_ptr<IMetric>> target_to_metric_map;
+
+  static constexpr bool kSerializable{true};
 };
 
 /**

@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package astl.protobuf;
+
+enum AstlUnits {
+  ASTL_UNITS_NONE         = 0;
+  ASTL_UNITS_TICKS        = 1;
+  ASTL_UNITS_SECONDS      = 2;
+  ASTL_UNITS_CELSIUS      = 3;
+  ASTL_UNITS_JOULES       = 4;
+  ASTL_UNITS_WATTS        = 5;
+  ASTL_UNITS_VOLTS        = 6;
+  ASTL_UNITS_AMPS         = 7;
+  ASTL_UNITS_BYTES        = 8;
+  ASTL_UNITS_MBYTESPERSEC = 9;
+  ASTL_UNITS_MHERTZ       = 10;
+  // C unknown = 0xFFFFFFFF - handle that in conversion code.
+  ASTL_UNITS_UNKNOWN_PROTO = 11;
+}
+
+enum AstlValueType {
+  ASTL_VALUE_UINT8   = 0;
+  ASTL_VALUE_UINT16  = 1;
+  ASTL_VALUE_UINT32  = 2;
+  ASTL_VALUE_UINT64  = 3;
+  ASTL_VALUE_FLOAT32 = 6;
+  ASTL_VALUE_FLOAT64 = 7;
+  ASTL_VALUE_BOOL8   = 8;
+  ASTL_VALUE_STRING  = 9;
+  ASTL_VALUE_UNKNOWN_PROTO = 10;
+}
+
+enum AstlMetricType {
+  ASTL_METRIC_VALUE            = 0;
+  ASTL_METRIC_FINITE_SET_VALUE = 1;
+  ASTL_METRIC_EVENT            = 2;
+  ASTL_METRIC_DELTA            = 3;
+  ASTL_METRIC_RESIDENCY        = 4;
+  ASTL_METRIC_RATE             = 5;
+  ASTL_METRIC_UNKNOWN_PROTO    = 6;
+}
+
+enum AstlCategory {
+  ASTL_CATEGORY_COUNT               = 0;
+  ASTL_CATEGORY_TEMPERATURE         = 1;
+  ASTL_CATEGORY_POWER               = 2;
+  ASTL_CATEGORY_FREQUENCY           = 3;
+  ASTL_CATEGORY_VOLTAGE             = 4;
+  ASTL_CATEGORY_CURRENT             = 5;
+  ASTL_CATEGORY_UNCATEGORIZED_PROTO = 6;
+}
+
+enum CollectorType {
+  COLLECTOR_TYPE_UNKNOWN     = 0;
+  COLLECTOR_TYPE_SCMI        = 1;
+  COLLECTOR_TYPE_LIBSENSORS  = 2;
+  COLLECTOR_TYPE_MMIO        = 3;
+}
+
+message AstlValue {
+  oneof value {
+    uint32 uint8_value   = 1;
+    uint32 uint16_value  = 2;
+    uint32 uint32_value  = 3;
+    uint64 uint64_value  = 4;
+    float  float_value   = 5;
+    double double_value  = 6;
+    bool   bool_value    = 7;
+    string string_value  = 8;
+  }
+}
