@@ -35,7 +35,7 @@ jobs:
           just build debug
 
       - name: Upload native artifact (library + generated headers)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: astl-native-${{ github.sha }}
           if-no-files-found: error
@@ -54,7 +54,7 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           name: astl-native-${{ github.sha }}
           path: native-artifact
@@ -62,7 +62,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
@@ -106,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           name: astl-native-${{ github.sha }}
           path: .
@@ -128,14 +128,14 @@ jobs:
           test -f python/dist/$(ls -1 python/dist/ | head -n1) || { echo "[package] missing dist artifacts" >&2; exit 5; }
           test -f benchmark_metrics.json || echo '{}' > benchmark_metrics.json
       - name: Upload distribution artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: astl-dist-${{ github.sha }}
           path: |
             python/dist/*.whl
             python/dist/*.tar.gz
       - name: Upload benchmark artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: benchmark-${{ github.sha }}
           path: |
