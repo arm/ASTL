@@ -6,8 +6,14 @@
 #include <fstream>
 #include <random>
 
+#include "../../mock_classes.hpp"
+#include "../../test_utilities.hpp"
 #include "astl/astl_errors.h"
 #include "capabilities.hpp"
+#include "metric/metric_manager.hpp"
+#include "metric/sampled_value_metric.hpp"
+#include "orchestrator/orchestrator.hpp"
+#include "serdes/metrics.pb.h"
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/raw_samples.pb.h"  // AUTO-GENERATED RawSampleBatch
 #include "serdes/targets.pb.h"      // AUTO-GENERATED Target
@@ -76,6 +82,7 @@ TEST_CASE("SerializeCurrentBatch writes one batch that Deserialize can read") {
   const auto                              rand      = std::to_string(dis(gen));
   const fs::path                          dir       = "tmp";
   const auto                              file_path = dir / ("serdes_on_disk_test_" + rand + ".astl");
+  TempFileGuard                           guard{file_path};
 
   // Clean slate
   std::error_code err_code;
@@ -95,10 +102,6 @@ TEST_CASE("SerializeCurrentBatch writes one batch that Deserialize can read") {
   REQUIRE(out_or.has_value());
   REQUIRE(out_or->size() == 1);
   REQUIRE(out_or->at(0).operation_id == 11);
-
-  // Cleanup
-  ifs.close();
-  fs::remove(file_path, err_code);
 }
 // NOLINTEND(readability-magic-numbers,readability-function-cognitive-complexity)
 
@@ -127,7 +130,8 @@ TEST_CASE("Deserialize errors on operation_id overflow") {
   auto*                          sample = batch.add_samples();
   sample->set_operation_id(std::numeric_limits<uint32_t>::max());  // likely > OperationId max
   sample->set_timestamp_us(1);
-  sample->set_uint32_value(7);  // set some value so VALUE_NOT_SET is not triggered first
+  auto* value = sample->mutable_value();
+  value->set_uint32_value(7);
 
   std::stringstream str_stream(std::ios::in | std::ios::out | std::ios::binary);
   REQUIRE(google::protobuf::util::SerializeDelimitedToOstream(batch, &str_stream));
@@ -198,4 +202,75 @@ TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager
     REQUIRE(std::string{props._description ? props._description : ""} == "Target discovered via SCMI");
     REQUIRE(std::string{props._uuid ? props._uuid : ""} == "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
   }
+}
+
+TEST_CASE("MetricHandle + SampledValueMetric: protobuf round-trip", "[MetricHandle][SampledValueMetric][protobuf]") {
+  auto orch_expected = astl::Orchestrator::GetInstance();
+  REQUIRE(orch_expected.has_value());
+
+  auto* orch = orch_expected->get().get();
+  REQUIRE(orch != nullptr);
+
+  {
+    std::vector<std::unique_ptr<astl::ITarget>> targets;
+    targets.push_back(
+        MakeTarget("tlm-0", "unit-test target", astl::CollectorType::UNKNOWN, "0xCAFEBABECAFEBABECAFEBABEBEEF0000"));
+    REQUIRE(orch->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  }
+
+  const auto& targets = orch->GetTargets();
+  REQUIRE_FALSE(targets.empty());
+
+  const astl::ITarget* tgt = targets[0].get();
+  REQUIRE(tgt != nullptr);
+  REQUIRE(tgt->Name() == "tlm-0");
+
+  astl::MetricHandle handle;
+  handle.config = std::make_unique<astl::MetricConfig>(
+      "test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+      ASTL_METRIC_VALUE, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{});
+
+  REQUIRE(handle.config);
+  REQUIRE(handle.config->MetricType() == ASTL_METRIC_VALUE);
+  REQUIRE(handle.config->ValueType() == ASTL_VALUE_UINT64);
+
+  auto metric = std::make_unique<astl::SampledValueMetric>(handle.config.get(),  // const MetricConfig*
+                                                           tgt,                  // const ITarget*
+                                                           nullptr);             // IProcessedSampleSink*
+
+  handle.target_to_metric_map.emplace(tgt, std::move(metric));
+  REQUIRE(handle.target_to_metric_map.size() == 1);
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(astl::ProtobufSerDes::Serialize(handle, cache_stream) == ASTL_STATUS_SUCCESS);
+
+  cache_stream.seekg(0);
+  auto metric_handles_or_err =
+      astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream);
+  REQUIRE(metric_handles_or_err.has_value());
+
+  auto rebuilt = std::move(*metric_handles_or_err);
+
+  const auto& rebuilt_metric_handle = rebuilt.at(0);
+  REQUIRE(rebuilt_metric_handle->config != nullptr);
+  REQUIRE(rebuilt_metric_handle->config->Name() == "test_metric");
+  REQUIRE(rebuilt_metric_handle->config->Description() == "unit-test metric");
+  REQUIRE(rebuilt_metric_handle->config->MetricType() == ASTL_METRIC_VALUE);
+  REQUIRE(rebuilt_metric_handle->config->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(rebuilt_metric_handle->config->Units() == ASTL_UNITS_CELSIUS);
+
+  REQUIRE(rebuilt_metric_handle->target_to_metric_map.size() == 1);
+
+  auto it = rebuilt_metric_handle->target_to_metric_map.begin();
+  REQUIRE(it != rebuilt_metric_handle->target_to_metric_map.end());
+
+  const astl::ITarget*                  tgt_after   = it->first;
+  const std::unique_ptr<astl::IMetric>& metric_uptr = it->second;
+  auto*                                 sv_after    = dynamic_cast<astl::SampledValueMetric*>(metric_uptr.get());
+
+  REQUIRE(tgt_after != nullptr);
+  REQUIRE(metric_uptr != nullptr);
+  REQUIRE(sv_after != nullptr);
+
+  REQUIRE(sv_after->Summarize() == ASTL_STATUS_SUCCESS);
 }

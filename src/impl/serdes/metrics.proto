@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package astl.protobuf;
+
+import "serdes/serdes_common.proto";
+
+message FiniteSetMetric {
+  repeated AstlValue     finite_set = 1;
+//  map<int32, string> value_to_label_map = 2;
+}
+
+message StateInfo {
+  string state_name = 1;
+  double tick_frequency = 2;
+}
+
+message ResidencyMetric {
+  StateInfo       state_info = 1;
+  optional string inferred_state = 2;
+}
+
+message MetricConfig {
+  string          metric_name   = 1;
+  string          description   = 2;
+  AstlUnits       units         = 3;
+  AstlValueType   value_type    = 4;
+  AstlMetricType  metric_type   = 5;
+  AstlCategory    category      = 6;
+  repeated string metric_groups = 7;
+  CollectorType collector_type  = 8;
+
+  oneof metric {
+    ResidencyMetric residency_metric = 20;
+    FiniteSetMetric finite_set       = 21;
+    // future derived metric messages go here
+  }
+}
+
+message RawMetric {
+  string      metric_id  = 1;
+  MetricConfig config    = 2;
+  repeated string      target_ids  = 3;
+}
+
+message RawMetricVec {
+  repeated RawMetric metrics = 1;
+}

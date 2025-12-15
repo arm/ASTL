@@ -27,71 +27,11 @@
 #include "astl/astl_errors.h"
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/raw_samples.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
+#include "serdes/serdes_util.hpp"
 
 namespace astl::ProtobufSerDes {
 
 namespace fs = std::filesystem;
-
-namespace detail {
-
-template <typename T>
-inline void SetOneOf(astl::protobuf::RawSample& out, const T& value) {
-  using U = std::decay_t<T>;
-  if constexpr (std::is_same_v<U, uint8_t>) {
-    out.set_uint8_value(static_cast<uint32_t>(value));
-  } else if constexpr (std::is_same_v<U, uint16_t>) {
-    out.set_uint16_value(static_cast<uint32_t>(value));
-  } else if constexpr (std::is_same_v<U, uint32_t>) {
-    out.set_uint32_value(value);
-  } else if constexpr (std::is_same_v<U, uint64_t>) {
-    out.set_uint64_value(value);
-  } else if constexpr (std::is_same_v<U, float>) {
-    out.set_float_value(value);
-  } else if constexpr (std::is_same_v<U, double>) {
-    out.set_double_value(value);
-  } else if constexpr (std::is_same_v<U, bool>) {
-    out.set_bool_value(value);
-  } else if constexpr (std::is_same_v<U, std::string>) {
-    out.set_string_value(value);
-  } else {
-    static_assert(false, "Unsupported AstlValue type");
-  }
-}
-
-static inline std::expected<AstlValue, astl_status_code> ToAstlValue(const astl::protobuf::RawSample& msg) {
-  switch (msg.value_case()) {
-    case astl::protobuf::RawSample::kUint8Value: {
-      return AstlValue{static_cast<uint8_t>(msg.uint8_value())};
-    }
-    case astl::protobuf::RawSample::kUint16Value: {
-      return AstlValue{static_cast<uint16_t>(msg.uint16_value())};
-    }
-    case astl::protobuf::RawSample::kUint32Value: {
-      return AstlValue{static_cast<uint32_t>(msg.uint32_value())};
-    }
-    case astl::protobuf::RawSample::kUint64Value: {
-      return AstlValue{msg.uint64_value()};
-    }
-    case astl::protobuf::RawSample::kFloatValue:
-      return AstlValue{msg.float_value()};
-
-    case astl::protobuf::RawSample::kDoubleValue:
-      return AstlValue{msg.double_value()};
-
-    case astl::protobuf::RawSample::kBoolValue:
-      return AstlValue{msg.bool_value()};
-
-    case astl::protobuf::RawSample::kStringValue:
-      return AstlValue{msg.string_value()};
-
-    case astl::protobuf::RawSample::VALUE_NOT_SET:
-    default:
-      ASTL_LOG_ERROR("Unknown or unset value type in protobuf RawSample");
-      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-  }
-}
-
-}  // namespace detail
 
 auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_stream) -> astl_status_code {
   using google::protobuf::util::SerializeDelimitedToOstream;
@@ -107,7 +47,8 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
     auto* proto_sample = batch.add_samples();
     proto_sample->set_operation_id(sample.operation_id);
     proto_sample->set_timestamp_us(sample.timestamp.time_since_epoch().count());
-    std::visit([&](const auto& val) { detail::SetOneOf(*proto_sample, val); }, sample.value.value);
+    astl::protobuf::AstlValue* proto_value = proto_sample->mutable_value();
+    std::visit([&](const auto& val) { detail::SetOneOf(*proto_value, val); }, sample.value.value);
   }
 
   if (!SerializeDelimitedToOstream(batch, &output_stream)) {
@@ -133,9 +74,9 @@ auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
     // Convert one batch
     result.reserve(result.size() + static_cast<size_t>(batch.samples_size()));
     for (const auto& proto_sample : batch.samples()) {
-      auto value_or = detail::ToAstlValue(proto_sample);
+      auto value_or = detail::DeserializeAstlValue(proto_sample.value());
       if (!value_or.has_value()) {
-        ASTL_LOG_ERROR("Failed to convert protobuf RawSample to AstlValue");
+        ASTL_LOG_ERROR("Failed to convert protobuf AstlValue in RawSample");
         return std::unexpected(value_or.error());
       }
 

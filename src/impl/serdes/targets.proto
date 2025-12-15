@@ -2,12 +2,7 @@ syntax = "proto3";
 
 package astl.protobuf;
 
-enum CollectorType {
-  COLLECTOR_TYPE_UNKNOWN   = 0;
-  COLLECTOR_TYPE_SCMI      = 1;
-  COLLECTOR_TYPE_LIBSENSORS = 2;
-  COLLECTOR_TYPE_MMIO      = 3;
-}
+import "serdes/serdes_common.proto";
 
 message Target {
   string name = 1;

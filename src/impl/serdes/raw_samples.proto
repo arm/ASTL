@@ -2,20 +2,12 @@ syntax = "proto3";
 
 package astl.protobuf;
 
+import "serdes/serdes_common.proto";
+
 message RawSample {
   uint32 operation_id = 1;
   uint64 timestamp_us = 2;
-
-  oneof value {
-    uint32 uint8_value   = 3;
-    uint32 uint16_value  = 4;
-    uint32 uint32_value  = 5;
-    uint64 uint64_value  = 6;
-    float  float_value   = 7;
-    double double_value  = 8;
-    bool   bool_value    = 9;
-    string string_value  = 10;
-  }
+  AstlValue value = 3;
 }
 
 message RawSampleBatch {
