@@ -409,20 +409,22 @@ std::expected<std::vector<ScmiDataEvent>, astl_status_code> ScmiSysfsCollector<F
       }
     }
     // check to see if timestamps are enabled for this data event
-    std::string tstamp_enabled_text;
-    result = _scmi_file_interface.Read(data_event_dir_path.value() / kScmiDataEventTstampEnableFileName,
-                                       tstamp_enabled_text);
-    if (result != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("Failed to read timestamp enable file for data event ID: {:04X} with error: {}", data_event_id,
-                     result);
-      return std::unexpected{result};
+    std::optional<bool> timestamp_enabled;  // if 'none', there is no timestamp enable file for this event
+    const auto          tstamp_enable_file_path = data_event_dir_path.value() / kScmiDataEventTstampEnableFileName;
+    if (_scmi_file_interface.IsValid(tstamp_enable_file_path).value_or(false)) {
+      std::string tstamp_enabled_text;
+      result = _scmi_file_interface.Read(tstamp_enable_file_path, tstamp_enabled_text);
+      if (result != ASTL_STATUS_SUCCESS) {
+        ASTL_LOG_ERROR("Failed to read timestamp enable file for data event ID: {:04X} with error: {}", data_event_id,
+                       result);
+        return std::unexpected{result};
+      }
+      timestamp_enabled = (tstamp_enabled_text == kScmiDataEventTstampEnableValue);
+      // enable the timestamp if it's not already enabled, but the enable file exists
+      if (!timestamp_enabled) {
+        result = _scmi_file_interface.Write(tstamp_enable_file_path, kScmiDataEventTstampEnableValue);
+      }
     }
-    const bool timestamp_enabled = (tstamp_enabled_text == kScmiDataEventTstampEnableValue);
-    if (!timestamp_enabled) {
-      result = _scmi_file_interface.Write(data_event_dir_path.value() / kScmiDataEventTstampEnableFileName,
-                                          kScmiDataEventTstampEnableValue);
-    }
-
     enabled_data_events.emplace_back(data_event_id, originally_enabled, timestamp_enabled);
   }
   return enabled_data_events;
@@ -442,8 +444,8 @@ auto ScmiSysfsCollector<FileInterfaceT>::RestoreDataEventEnabledState(std::vecto
       return ASTL_STATUS_FILE_OPEN_FAILED;  // Return the error code from GetDataEventDirPath
     }
     // disable in reverse order: first disable timestamp, then event
-    if (!data_event.timestamp_enabled) {
-      // if the timestamp for this event wasn't enabled originally, disable it again now.
+    if (!data_event.timestamp_enabled.value_or(true)) {
+      // if the timestamp for this event had a enable file and wasn't enabled originally, disable it again now.
       auto result = _scmi_file_interface.Write(data_event_dir_path.value() / kScmiDataEventTstampEnableFileName,
                                                kScmiDataEventTstampDisableValue);
       if (result != ASTL_STATUS_SUCCESS) {
@@ -505,8 +507,8 @@ auto ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(ScmiReadOperat
                       operation.scmi_data_event_id);
     return result;
   }
-  // TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen optimization
-  // flags
+  // TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen
+  // optimization flags
   auto parsed_value = scmi_detail::ParseDataEventValueWithTimestamp(data_read);
   if (!parsed_value) {
     return parsed_value.error();
