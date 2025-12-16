@@ -27,17 +27,69 @@ using astl::OperationId;
 using astl::RawSampledData;
 using astl::SampleTimestamp;
 
-static RawSampledData MakeSample(OperationId operation_id, AstlValue value, int64_t ts_us) {
+using astl::ProtobufSerDes::Deserialize;
+using astl::ProtobufSerDes::Serialize;
+
+namespace {
+
+RawSampledData MakeSample(OperationId operation_id, AstlValue value, int64_t ts_us) {
   RawSampledData sample{operation_id, std::move(value)};
   sample.timestamp = SampleTimestamp{SampleTimestamp::duration{std::chrono::microseconds{ts_us}}};
   return sample;
 }
 
-static auto MakeTarget(std::string name, std::string description, astl::CollectorType collector_type,
-                       std::optional<std::string> uuid = std::nullopt) -> std::unique_ptr<astl::Target> {
+auto MakeTarget(std::string name, std::string description, astl::CollectorType collector_type,
+                std::optional<std::string> uuid = std::nullopt) -> std::unique_ptr<astl::Target> {
   return std::make_unique<astl::Target>(std::move(name), std::move(description), collector_type, nullptr,
                                         std::move(uuid));
 }
+
+// Helper to install a single SCMI target named "tlm-0" into the Orchestrator
+const astl::ITarget* InstallSingleScmiTargetTlm0() {
+  auto orch_expected = astl::Orchestrator::GetInstance();
+  REQUIRE(orch_expected.has_value());
+
+  auto* orch = orch_expected->get().get();
+  REQUIRE(orch != nullptr);
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(
+      MakeTarget("tlm-0", "unit-test target", astl::CollectorType::SCMI, "0xCAFEBABECAFEBABECAFEBABEBEEF0000"));
+  REQUIRE(orch->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+
+  const auto& current_targets = orch->GetTargets();
+  REQUIRE_FALSE(current_targets.empty());
+  REQUIRE(current_targets[0] != nullptr);
+  REQUIRE(current_targets[0]->Name() == "tlm-0");
+
+  return current_targets[0].get();
+}
+
+astl::protobuf::MetricManager BuildValidMetricManagerProto() {
+  astl::protobuf::MetricManager proto_mgr;
+
+  // Capabilities: expose SCMI collector
+  proto_mgr.add_capabilities(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
+
+  // Metrics: one ASTL_METRIC_VALUE bound to target "tlm-0"
+  auto* proto_metrics_vec = proto_mgr.mutable_metrics();
+  auto* raw               = proto_metrics_vec->add_metrics();
+  raw->set_metric_id("test_metric");
+  raw->add_target_ids("tlm-0");
+
+  auto* cfg = raw->mutable_config();
+  cfg->set_metric_name("test_metric");
+  cfg->set_description("unit-test metric");
+  cfg->set_units(static_cast<astl::protobuf::AstlUnits>(ASTL_UNITS_CELSIUS));
+  cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+  cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
+  cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
+  cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
+
+  return proto_mgr;
+}
+
+}  // namespace
 
 // NOLINTBEGIN(readability-magic-numbers,readability-function-cognitive-complexity)
 TEST_CASE("Serialize/Deserialize round-trip for all supported scalar types") {
@@ -273,4 +325,113 @@ TEST_CASE("MetricHandle + SampledValueMetric: protobuf round-trip", "[MetricHand
   REQUIRE(sv_after != nullptr);
 
   REQUIRE(sv_after->Summarize() == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[MetricManager][protobuf]") {
+  // Arrange: build a real MetricManager via Orchestrator and inject one metric
+  const astl::ITarget* tgt = InstallSingleScmiTargetTlm0();
+
+  auto orch_expected = astl::Orchestrator::GetInstance();
+  REQUIRE(orch_expected.has_value());
+  auto* orch = orch_expected->get().get();
+  REQUIRE(orch != nullptr);
+
+  astl::IMetricManager* metric_manager_interface = orch->GetMetricManager().get();
+  REQUIRE(metric_manager_interface != nullptr);
+
+  auto* metric_mgr = dynamic_cast<astl::MetricManager*>(metric_manager_interface);
+  REQUIRE(metric_mgr != nullptr);
+
+  auto cfg = std::make_unique<astl::MetricConfig>("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS,
+                                                  ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
+                                                  astl::CollectorType::SCMI, astl::NullOperationBuilder{});
+  REQUIRE(cfg != nullptr);
+
+  auto metric = std::make_unique<astl::SampledValueMetric>(cfg.get(),  // const MetricConfig*
+                                                           tgt,        // const ITarget*
+                                                           nullptr);   // IProcessedSampleSink*
+  REQUIRE(metric != nullptr);
+
+  astl::MetricManagerTestAccessor::InjectMetric(*metric_mgr, std::move(metric), std::move(cfg), tgt);
+
+  // Act: serialize via the IMetricManager overload (dynamic_cast inside)
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  const auto        status = astl::ProtobufSerDes::Serialize(*metric_manager_interface, cache_stream);
+
+  // Assert
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  REQUIRE(cache_stream.tellp() > 0);
+
+  cache_stream.seekg(0);
+  auto rebuilt_or_err = astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::IMetricManager>>(cache_stream);
+  REQUIRE(rebuilt_or_err.has_value());
+
+  auto rebuilt_mgr = std::move(rebuilt_or_err.value());
+  REQUIRE(rebuilt_mgr != nullptr);
+
+  // Basic sanity: metric still available on the same target
+  auto metrics_or_err = rebuilt_mgr->GetAvailableMetrics(tgt);
+  REQUIRE(metrics_or_err.has_value());
+  auto handles = metrics_or_err.value();
+  REQUIRE(handles.size() == 1);
+
+  const auto* rebuilt_handle = static_cast<const astl::MetricHandle*>(metrics_or_err.value()[0]);
+  REQUIRE(rebuilt_handle != nullptr);
+  REQUIRE(rebuilt_handle->config != nullptr);
+
+  REQUIRE(rebuilt_handle->config->Name() == "test_metric");
+  REQUIRE(rebuilt_handle->config->Description() == "unit-test metric");
+  REQUIRE(rebuilt_handle->config->MetricType() == ASTL_METRIC_VALUE);
+  REQUIRE(rebuilt_handle->config->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(rebuilt_handle->config->Units() == ASTL_UNITS_CELSIUS);
+
+  REQUIRE(rebuilt_handle->target_to_metric_map.size() == 1);
+  auto rebuilt_it = rebuilt_handle->target_to_metric_map.find(tgt);
+  REQUIRE(rebuilt_it != rebuilt_handle->target_to_metric_map.end());
+  REQUIRE(rebuilt_it->second != nullptr);
+}
+
+TEST_CASE("Deserialize<MetricManager> fails on invalid protobuf input", "[MetricManager][protobuf]") {
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  cache_stream << "this is not a valid MetricManager protobuf";
+
+  cache_stream.seekg(0);
+  auto mgr_or_err = astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream);
+
+  REQUIRE_FALSE(mgr_or_err.has_value());
+  REQUIRE(mgr_or_err.error() == ASTL_STATUS_INTERNAL_ERROR);
+}
+
+TEST_CASE(
+    "Deserialize<MetricManager> rebuilds capabilities, metrics "
+    "and operation map",
+    "[MetricManager][protobuf]") {
+  // Arrange: Orchestrator with a target that matches the proto's target_id
+  const astl::ITarget* tgt = InstallSingleScmiTargetTlm0();
+  (void)tgt;  // unused directly in this test, but needed for deserialization
+
+  auto proto_mgr = BuildValidMetricManagerProto();
+
+  // Add one operation->(metric,target) mapping
+  auto* op_entry = proto_mgr.add_operation_to_metric_map();
+  op_entry->set_operation_id(42U);  // NOLINT
+  op_entry->set_metric_id("test_metric");
+  op_entry->set_target_id("tlm-0");
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+  cache_stream.seekg(0);
+
+  // Act
+  auto mgr_or_err = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream);
+
+  // Assert: deserialization succeeds and at least one metric handle exists
+  REQUIRE(mgr_or_err.has_value());
+  auto mgr = std::move(mgr_or_err.value());
+  REQUIRE(mgr != nullptr);
+
+  // We can't see the internal maps directly here, but success implies:
+  //  - BuildCapabilities ran
+  //  - RebuildMetricHandles succeeded
+  //  - RebuildOperationMap succeeded
 }

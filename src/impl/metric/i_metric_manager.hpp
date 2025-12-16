@@ -30,6 +30,7 @@
 #include "common/i_processed_sample_sink.hpp"
 #include "common/metric_config.hpp"
 #include "operation/operation.hpp"
+#include "serdes/protobuf_serdes.hpp"
 
 namespace astl {
 
@@ -40,6 +41,7 @@ namespace astl {
  * It is used to manage metrics in the ASTL framework.
  */
 struct IMetricManager {
+  static constexpr bool kSerializable{true};
   virtual ~IMetricManager() = default;
 
   IMetricManager()                                 = default;
@@ -256,6 +258,9 @@ struct IMetricManager {
    * This method should be called to create a summary for all the metrics.
    */
   [[nodiscard]] virtual auto SummarizeMetrics() -> astl_status_code = 0;
+
+  friend auto ProtobufSerDes::Serialize(const IMetricManager& metric_manager, std::ostream& output_stream)
+      -> astl_status_code;
 };
 
 }  // namespace astl

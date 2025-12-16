@@ -126,6 +126,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set_source_files_properties(${GEN_FILES} PROPERTIES COMPILE_OPTIONS "-Wno-nullability-extension;")
 endif()
 
+# Protobuf generates code that returns container sizes as size_t (usually unsigned long). Some of the generated
+# accessors (e.g., _internal_value_to_label_map_size()) return int but internally call .size(), which triggers a
+# -Wconversion warning: warning: conversion from size_t to int may change value
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp" ${GEN_FILES}
+                              PROPERTIES COMPILE_OPTIONS "-Wno-error=conversion")
+endif()
+
 target_link_libraries(${LIBRARY_NAME} PRIVATE protobuf::libprotobuf)
 
 # find spdlog, include it as a header-only dependency. This is a little slower (+10-12s) to compile ASTL, but necessary

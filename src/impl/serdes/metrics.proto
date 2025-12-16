@@ -45,3 +45,22 @@ message RawMetric {
 message RawMetricVec {
   repeated RawMetric metrics = 1;
 }
+
+message MetricGroup {
+  string group_name = 1;
+  string group_description = 2;
+}
+
+message OperationToMetric {
+  uint32 operation_id = 1;
+  string target_id    = 2;
+  string metric_id    = 3;
+}
+
+message MetricManager {
+  repeated CollectorType capabilities = 1;
+  // counter handles
+  RawMetricVec metrics = 2;
+  repeated OperationToMetric operation_to_metric_map = 3;
+  repeated MetricGroup metric_groups = 4;
+}
