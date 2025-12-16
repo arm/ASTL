@@ -36,20 +36,22 @@ namespace astl {
 struct ScmiDataEvent {
  public:
   ScmiDataEvent() = delete;
-  ScmiDataEvent(ScmiDataEventId event_id, bool originally_enabled, bool timestamp_enabled)
+  ScmiDataEvent(ScmiDataEventId event_id, bool originally_enabled, std::optional<bool> timestamp_enabled)
       : id{event_id}, originally_enabled{originally_enabled}, timestamp_enabled{timestamp_enabled} {}
 
-  ScmiDataEventId id;               //<!< The unique identifier for this data event
-  bool originally_enabled = false;  //!< Whether this data event was originally enabled before collection started
-  bool timestamp_enabled  = false;  //!< Whether this data event has timestamp enabled
+  ScmiDataEventId id;              //<!< The unique identifier for this data event
+  bool originally_enabled{false};  //!< Whether this data event was originally enabled before collection started
+  //!< Whether this data event has timestamp enabled (or nullopt if no file exists)
+  std::optional<bool> timestamp_enabled;
 };
 
 /*
  * @brief convert ScmiDataEvent ID and enable status to a string representation we'd expect to see in scmi sysfs.
  */
-inline std::string to_string(const astl::ScmiDataEvent& data_event) {
+inline std::string to_string(const ScmiDataEvent& data_event) {
   return std::format("0x{:04X}, originally_enabled: {}, timestamp_enabled: {}", data_event.id,
-                     data_event.originally_enabled ? "true" : "false", data_event.timestamp_enabled ? "true" : "false");
+                     data_event.originally_enabled ? "true" : "false",
+                     data_event.timestamp_enabled.value_or(false) ? "true" : "false");
 }
 
 constexpr std::string_view kScmiTlmEnableFileName               = "tlm_enable";
@@ -100,7 +102,7 @@ struct ScmiDataEventValue {
 /*
  * @brief convert ScmiDataEventValue to a string representation we'd expect to see in scmi sysfs.
  */
-inline std::string to_string(const astl::ScmiDataEventValue& data_event_value) {
+inline std::string to_string(const ScmiDataEventValue& data_event_value) {
   return std::format("{:016X}", data_event_value.value);
 }
 
