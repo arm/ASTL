@@ -20,6 +20,7 @@
 #include "metric/i_metric.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "metric/metric_group.hpp"
+#include "metric/metric_manager.hpp"
 #include "operation/operation.hpp"
 #include "output/i_output.hpp"
 #include "output/i_output_manager.hpp"
@@ -424,7 +425,26 @@ class TestMetricBase : public astl::IMetric {
   astl_units_t units_;
 };
 
+namespace astl {
 
+// Test accessor for MetricManager internals
+class MetricManagerTestAccessor {
+ public:
+  static void InjectMetric(astl::MetricManager& mgr, std::unique_ptr<astl::IMetric> metric,
+                           std::unique_ptr<astl::MetricConfig> cfg, const astl::ITarget* target) {
+    std::unordered_map<const astl::ITarget*, std::unique_ptr<IMetric>> target_to_metric;
+    auto metric_handle = std::make_unique<astl::MetricHandle>(std::move(cfg), std::move(target_to_metric));
+    metric_handle->target_to_metric_map[target] = std::move(metric);
+    auto* metric_api_handle                     = metric_handle.get();
+    mgr._metric_handles.push_back(std::move(metric_handle));
+    mgr._target_to_metrics_map[target].push_back(metric_api_handle);
+  }
 
+  static void InjectOperation(astl::MetricManager& mgr, OperationId op_id, IMetric* metric_handle) {
+    // In a real implementation, this would add the operation to the manager's internal state.
+    mgr._operation_to_metric_map[op_id] = metric_handle;
+  }
+};
+}  // namespace astl
 
 #endif  // ASTL_MOCK_CLASSES_H_

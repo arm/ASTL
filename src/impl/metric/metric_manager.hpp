@@ -61,6 +61,9 @@ struct MetricHandle {
 class MetricManager : public IMetricManager, public IProcessedSampleSink {
   friend class MetricManagerTestAccessor;  // for unit test injection of mock metrics
  public:
+  using TargetToMetricsMap   = std::unordered_map<const ITarget*, std::vector<astl_metric_handle_t>>;
+  using OperationToMetricMap = std::unordered_map<uint32_t, IMetric*>;
+
   ~MetricManager() override = default;
 
   // MetricManager cannot be copied
@@ -282,6 +285,12 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    */
   friend class MetricManagerTestAccessor;
 
+  friend auto ProtobufSerDes::Serialize(const MetricManager& metric_manager, std::ostream& output_stream)
+      -> astl_status_code;
+
+  friend auto ProtobufSerDes::Deserialize<std::unique_ptr<MetricManager>>(std::istream&)
+      -> std::expected<std::unique_ptr<MetricManager>, astl_status_code>;
+
  private:
   /**
    * @brief Determine whether a collector type required by a metric configuration is supported.
@@ -331,13 +340,13 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   std::vector<std::unique_ptr<MetricHandle>> _metric_handles;
 
   // each Target supports multiple different metrics
-  std::unordered_map<const ITarget*, std::vector<astl_metric_handle_t>> _target_to_metrics_map;
+  TargetToMetricsMap _target_to_metrics_map;
 
   // each Target supports multiple different metric groups
   std::unordered_map<const ITarget*, std::vector<astl_metric_group_handle_t>> _target_to_metric_groups_map;
 
   // Maps operation IDs to their corresponding metrics
-  std::unordered_map<uint32_t, IMetric*> _operation_to_metric_map;
+  OperationToMetricMap _operation_to_metric_map;
 
   // The internal representation of metric groups
   // stored as unique_ptrs so that they're not invalidated when adding new entries,

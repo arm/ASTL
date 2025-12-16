@@ -514,8 +514,8 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
       uint32_t operation_id                  = operation->GetId();
       _operation_to_metric_map[operation_id] = metric;
       op_sequence.push_back(std::move(operation));
-      ASTL_LOG_INFO("GetRequiredOperations: Added operation from IMetric::GetOperations() for metric '{}'",
-                    config->Name());
+      ASTL_LOG_INFO("GetRequiredOperations: Added operation from IMetric::GetOperations() for metric '{}', op_id = {}",
+                    config->Name(), operation_id);
     }
   }
 

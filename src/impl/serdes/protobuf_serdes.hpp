@@ -41,10 +41,13 @@
 #include <vector>
 
 #include "i_raw_sample_sink.hpp"
-#include "metric/metric_manager.hpp"
 #include "topology/i_topology_manager.hpp"
 
 namespace astl {
+
+struct MetricHandle;
+struct IMetricManager;
+class MetricManager;
 
 namespace ProtobufSerDes {
 
@@ -154,6 +157,8 @@ auto Serialize(const ITopologyManager& topology_manager, std::ostream& output_st
  */
 auto Serialize(const MetricHandle& handle, std::ostream& output_stream) -> astl_status_code;
 
+auto Serialize(const IMetricManager& i_metric_manager, std::ostream& output_stream) -> astl_status_code;
+auto Serialize(const MetricManager& metric_manager, std::ostream& output_stream) -> astl_status_code;
 }  // namespace ProtobufSerDes
 
 }  // namespace astl
