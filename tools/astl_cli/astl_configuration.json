@@ -37,6 +37,13 @@
         { "P3[0GHz] (Idle)": 3 }
       ]
     },
+    "Frequency": {
+      "description": "Current Frequency of the SoC in MHz",
+      "register": "FREQUENCY",
+      "unit": "MHz",
+      "metric_type": "value",
+      "collection_protocol": "scmi"
+    },
     "SoC Temperature": {
       "description": "SoC Temperature in Celsius",
       "register": "apm_xgene-isa-0000",

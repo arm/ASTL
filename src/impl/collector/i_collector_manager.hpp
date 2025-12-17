@@ -70,6 +70,9 @@ struct ICollectorManager {
   [[nodiscard]] virtual auto ReadImmediateOnTarget(const ITarget* target) -> astl_status_code = 0;
 
   [[nodiscard]] virtual auto StopOnTarget(const ITarget* target) -> astl_status_code = 0;
+
+  // Check if any collector is currently started or paused on any target
+  [[nodiscard]] virtual auto IsAnyTargetBeingCollected() const -> bool = 0;
 };
 
 }  // namespace astl

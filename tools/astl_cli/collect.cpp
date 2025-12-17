@@ -163,6 +163,10 @@ static void PlotMetricSamples(const AppConfig& cfg, std::chrono::duration<double
       return;
   }
 
+  if (!samples.empty()) {
+    starting_time_point = std::chrono::duration<double, std::micro>(static_cast<double>(samples[0]._timestamp));
+  }
+
   for (const auto& sample : samples) {
     const auto sample_time_point = std::chrono::duration<double, std::micro>(static_cast<double>(sample._timestamp));
     const auto microseconds_since_start = (sample_time_point - starting_time_point);

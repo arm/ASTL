@@ -334,7 +334,7 @@ inline auto GetMetricRegisters(std::string_view register_name, Layout const& lay
     -> std::vector<ScmiMetricDeclaration> {
   std::vector<ScmiMetricDeclaration> metric_declarations;
 
-  for (const auto& [member_name, metrics] : layout.members) {  // e.g. AP0, AP1, tlm-1 etc
+  for (const auto& [member_name, metrics] : layout.members) {  // e.g. tlm-0, tlm-1 etc
     for (const auto& [metric_type_name, metric_entry] : metrics) {
       // note, we're using the key name for the register, e.g. 'CPU_CYCLES',
       // not the .name field of the entry, e.g. 'AP0_CPU_CYCLES', so that one

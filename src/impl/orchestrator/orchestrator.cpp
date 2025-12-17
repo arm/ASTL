@@ -259,7 +259,12 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
 
-  std::unique_lock lock{_raw_samples_mtx};
+  auto status = _collector_manager->StopOnTarget(target);  // finalize collector state
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+
+  std::lock_guard lock{_raw_samples_mtx};
 
   // serialize any remaining in-memory samples for this target into the batch file, then clear
   auto it = _raw_samples.find(target);
@@ -301,32 +306,26 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
       {target, std::move(rebuilt_samples)}
   };
 
-  // TODO(ASTL-209): Move CollectorManager::StopOnTarget before ProcessRawSamples when
-  // implementing Orchestrator State Machine to ensure collection is stopped before processing begins.
-  astl_status_code status = _metric_manager->ProcessRawSamples(raw_samples);
-
+  status = _metric_manager->ProcessRawSamples(raw_samples);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
 
-  status = _metric_manager->SummarizeMetrics();
-  if (status != ASTL_STATUS_SUCCESS) {
-    return status;
-  }
+  // if we've now stopped collection on all the targets, finalize metric processing and output
+  if (!_collector_manager->IsAnyTargetBeingCollected()) {
+    status = _metric_manager->SummarizeMetrics();
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
 
-  // Emit Perfetto trace (if requested) after metrics are summarized (processed samples complete)
-  EmitPerfettoTraceIfRequested();
+    // Emit Perfetto trace (if requested) after metrics are summarized (processed samples complete)
+    EmitPerfettoTraceIfRequested();
 
-  // Emit Interval CSV trace (if requested) after metrics are summarized (processed samples complete)
-  EmitIntervalCsvIfRequested();
+    // Emit Interval CSV trace (if requested) after metrics are summarized (processed samples complete)
+    EmitIntervalCsvIfRequested();
 
-  // Emit Summary CSV (if requested) after metrics are summarized (processed samples complete)
-  EmitSummaryCsvIfRequested();
-
-  lock.unlock();                                      // allow collector periodic samples to proceed while stopping
-  status = _collector_manager->StopOnTarget(target);  // finalize collector state
-  if (status != ASTL_STATUS_SUCCESS) {
-    return status;
+    // Emit Summary CSV (if requested) after metrics are summarized (processed samples complete)
+    EmitSummaryCsvIfRequested();
   }
 
   return ASTL_STATUS_SUCCESS;

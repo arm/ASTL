@@ -28,7 +28,7 @@ duration = 42
 metrics = ["CPU Power", "IO Power", "SoC Temperature"]
 
 # Output directory for plots.
-output-dir = "plots/png/"
+output-dir = "plots/svg/"
 
 # Plot output file type [none, terminal, png, or svg].
 plot-type = "svg"

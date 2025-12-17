@@ -83,7 +83,8 @@ auto CollectorManager::ConfigureCollectionOnTarget(const ITarget*               
 
 auto CollectorManager::StartOnTarget(const ITarget* target) -> astl_status_code {
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-    // if we have a collector for this target, start it
+    // if we have a collector for this target, start it, and add it to the active collection set
+    _targets_with_active_collection.insert(target);
     return collector->second.front()->StartCollection();
   }
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
@@ -112,12 +113,18 @@ auto CollectorManager::ReadImmediateOnTarget(const ITarget* target) -> astl_stat
 }
 
 auto CollectorManager::StopOnTarget(const ITarget* target) -> astl_status_code {
+  // remove target from active collection set if present
+  _targets_with_active_collection.erase(target);
+
   if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-    // if we have a collector for this target, start it
+    // if we have a collector for this target, stop it
     return collector->second.front()->StopCollection();
   }
+
   return ASTL_STATUS_INVALID_TARGET_HANDLE;
 }
+
+auto CollectorManager::IsAnyTargetBeingCollected() const -> bool { return !_targets_with_active_collection.empty(); }
 
 ////////////////////////////////////////////////////////////////////////////////
 // IRawSampleSink implementation

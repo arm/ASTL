@@ -699,6 +699,7 @@ TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);  // should be checked after StopOnTarget
 
   auto metric_manager = std::make_unique<MockMetricManager>();
   // Metric manager should process & summarize successfully.
@@ -763,6 +764,7 @@ TEST_CASE("PerfettoOutput deferred emission empty map", "[perfetto_output]") {  
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
 
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, ProcessRawSamples(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -812,6 +814,7 @@ TEST_CASE("PerfettoOutput deferred emission env var unset", "[perfetto_output]")
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
 
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, ProcessRawSamples(_)).RETURN(ASTL_STATUS_SUCCESS);

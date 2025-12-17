@@ -80,6 +80,7 @@ build/
 # Ignore tmp directories
 tmp/
 Testing/Temporary/
+plots/
 
 # vim buffer files
 *.swp
