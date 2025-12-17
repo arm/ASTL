@@ -146,6 +146,7 @@ struct MockCollectorManager : public astl::ICollectorManager {
   MAKE_MOCK1(ResumeOnTarget, astl_status_code(const astl::ITarget* target), override);
   MAKE_MOCK1(ReadImmediateOnTarget, astl_status_code(const astl::ITarget* target), override);
   MAKE_MOCK1(StopOnTarget, astl_status_code(const astl::ITarget* target), override);
+  MAKE_MOCK0(IsAnyTargetBeingCollected, bool(), const override);
 
  private:
 };

@@ -3,6 +3,8 @@
 
 #include <functional>  // for std::reference_wrapper in expected return types
 #include <memory>
+#include <mutex>
+#include <vector>
 
 #include "astl/astl.h"
 #include "collector/i_collector_manager.hpp"
