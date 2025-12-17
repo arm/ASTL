@@ -78,8 +78,6 @@ SYSFS_PID=$!
 # `	mount -t stlmfs none /sys/fs/arm_telemetry/ `
 # to mount the real sysfs interface
 
-find "$MOUNT_POINT"
-
 # Always clean up on exit
 cleanup() {
 	echo "🛑 Stopping MockSysfs (PID=$SYSFS_PID)..."
@@ -146,11 +144,6 @@ jq --arg telemetry_root "$TELEMETRY_ROOT" \
 export ASTL_OUTPUT_SUMMARY_CSV="$LOG_DIR/astl_summary.csv"
 echo "CSV output will be written to: $ASTL_OUTPUT_SUMMARY_CSV"
 
-# Add cleanup for the environment variable
-cleanup_csv() {
-	unset ASTL_OUTPUT_SUMMARY_CSV
-}
-trap cleanup_csv EXIT
 export ASTL_OUTPUT_SUMMARY_CSV="$LOG_DIR/astl_summary.csv"
 echo "CSV output will be written to: $ASTL_OUTPUT_SUMMARY_CSV"
 
