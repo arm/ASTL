@@ -126,6 +126,36 @@ struct AstlValue {
   }
 
   /**
+   * @brief Convert the AstlValue to an int64 if it holds an arithmetic type
+   *
+   * @return std::expected containing the int64 value if successful, or ASTL_STATUS_INVALID_VALUE_TYPE if not
+   * arithmetic
+   */
+  auto ToInt64() const -> std::expected<int64_t, astl_status_code> {
+    return std::visit(
+        [](auto&& arg) -> std::expected<int64_t, astl_status_code> {
+          using T = std::decay_t<decltype(arg)>;
+          if constexpr (std::is_same_v<T, uint8_t>) {
+            return static_cast<int64_t>(arg);
+          } else if constexpr (std::is_same_v<T, uint16_t>) {
+            return static_cast<int64_t>(arg);
+          } else if constexpr (std::is_same_v<T, uint32_t>) {
+            return static_cast<int64_t>(arg);
+          } else if constexpr (std::is_same_v<T, uint64_t>) {
+            return static_cast<int64_t>(arg);
+          } else if constexpr (std::is_same_v<T, float>) {
+            return static_cast<int64_t>(arg);
+          } else if constexpr (std::is_same_v<T, double>) {
+            return static_cast<int64_t>(arg);
+          } else {
+            // type - cannot convert to int64
+            return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+          }
+        },
+        value);
+  }
+
+  /**
    * @brief convert a C-style astl_value_t to a AstlValue according to the specified astl_value_type_t
    *
    * @return an AstlValue instance with the same value as val, or a ASTL_STATUS_INVALID_VALUE_TYPE

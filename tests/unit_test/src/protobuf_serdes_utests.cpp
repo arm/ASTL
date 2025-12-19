@@ -10,6 +10,7 @@
 #include "../../test_utilities.hpp"
 #include "astl/astl_errors.h"
 #include "capabilities.hpp"
+#include "metric/finite_set_metric.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/sampled_value_metric.hpp"
 #include "orchestrator/orchestrator.hpp"
@@ -325,6 +326,110 @@ TEST_CASE("MetricHandle + SampledValueMetric: protobuf round-trip", "[MetricHand
   REQUIRE(sv_after != nullptr);
 
   REQUIRE(sv_after->Summarize() == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("MetricHandle + FiniteSetMetric: protobuf round-trip", "[MetricHandle][FiniteSetMetric][protobuf]") {
+  auto orch_expected = astl::Orchestrator::GetInstance();
+  REQUIRE(orch_expected.has_value());
+
+  auto* orch = orch_expected->get().get();
+  REQUIRE(orch != nullptr);
+
+  {
+    std::vector<std::unique_ptr<astl::ITarget>> targets;
+    targets.push_back(
+        MakeTarget("tlm-0", "unit-test target", astl::CollectorType::UNKNOWN, "0xCAFEBABECAFEBABECAFEBABEBEEF0000"));
+    REQUIRE(orch->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  }
+
+  const auto& targets = orch->GetTargets();
+  REQUIRE_FALSE(targets.empty());
+
+  const astl::ITarget* tgt = targets[0].get();
+  REQUIRE(tgt != nullptr);
+  REQUIRE(tgt->Name() == "tlm-0");
+
+  // Build a finite set + labels for a simple UINT64 finite set metric
+  astl::FiniteSetMetric::FiniteSet finite_set = {
+      astl::AstlValue{uint64_t{0}},
+      astl::AstlValue{uint64_t{1}},
+      astl::AstlValue{uint64_t{2}},
+  };
+
+  astl::FiniteSetMetric::ValueToLabel labels = {
+      {astl::AstlValue{uint64_t{0}}, "STATE_ZERO"},
+      {astl::AstlValue{uint64_t{1}}, "STATE_ONE" },
+      {astl::AstlValue{uint64_t{2}}, "STATE_TWO" },
+  };
+
+  astl::MetricHandle handle;
+  handle.config = std::make_unique<astl::FiniteSetMetricConfig>(
+      "finite_test_metric", "finite-set unit-test metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64,
+      ASTL_METRIC_FINITE_SET_VALUE, ASTL_CATEGORY_UNCATEGORIZED, astl::CollectorType::UNKNOWN,
+      astl::NullOperationBuilder{}, finite_set, labels);
+
+  REQUIRE(handle.config);
+  REQUIRE(handle.config->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
+  REQUIRE(handle.config->ValueType() == ASTL_VALUE_UINT64);
+
+  auto* finite_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(handle.config.get());
+  REQUIRE(finite_cfg != nullptr);
+
+  auto metric = std::make_unique<astl::FiniteSetMetric>(finite_cfg,  // FiniteSetMetricConfig*
+                                                        tgt,         // const ITarget*
+                                                        nullptr);    // IProcessedSampleSink*
+
+  handle.target_to_metric_map.emplace(tgt, std::move(metric));
+  REQUIRE(handle.target_to_metric_map.size() == 1);
+
+  // Serialize
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(astl::ProtobufSerDes::Serialize(handle, cache_stream) == ASTL_STATUS_SUCCESS);
+
+  // Deserialize
+  cache_stream.seekg(0);
+  auto metric_handles_or_err =
+      astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream);
+  REQUIRE(metric_handles_or_err.has_value());
+
+  auto rebuilt = std::move(*metric_handles_or_err);
+  REQUIRE(rebuilt.size() == 1);
+
+  const auto& rebuilt_metric_handle = rebuilt.at(0);
+  REQUIRE(rebuilt_metric_handle->config != nullptr);
+
+  // Check config properties
+  REQUIRE(rebuilt_metric_handle->config->Name() == "finite_test_metric");
+  REQUIRE(rebuilt_metric_handle->config->Description() == "finite-set unit-test metric");
+  REQUIRE(rebuilt_metric_handle->config->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
+  REQUIRE(rebuilt_metric_handle->config->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(rebuilt_metric_handle->config->Units() == ASTL_UNITS_NONE);
+
+  auto* rebuilt_finite_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(rebuilt_metric_handle->config.get());
+  REQUIRE(rebuilt_finite_cfg != nullptr);
+
+  REQUIRE(rebuilt_metric_handle->target_to_metric_map.size() == 1);
+
+  auto it = rebuilt_metric_handle->target_to_metric_map.begin();
+  REQUIRE(it != rebuilt_metric_handle->target_to_metric_map.end());
+
+  const astl::ITarget*                  tgt_after   = it->first;
+  const std::unique_ptr<astl::IMetric>& metric_uptr = it->second;
+  auto*                                 fs_after    = dynamic_cast<astl::FiniteSetMetric*>(metric_uptr.get());
+
+  REQUIRE(tgt_after != nullptr);
+  REQUIRE(metric_uptr != nullptr);
+  REQUIRE(fs_after != nullptr);
+
+  // The finite set should match what we configured (size-wise at least)
+  const auto& finite_set_after = fs_after->GetFiniteSet();
+  REQUIRE(finite_set_after.size() == 3);
+  REQUIRE(finite_set_after.contains(astl::AstlValue{uint64_t{0}}));
+  REQUIRE(finite_set_after.contains(astl::AstlValue{uint64_t{1}}));
+  REQUIRE(finite_set_after.contains(astl::AstlValue{uint64_t{2}}));
+
+  // Summarize should still succeed
+  REQUIRE(fs_after->Summarize() == ASTL_STATUS_SUCCESS);
 }
 
 TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[MetricManager][protobuf]") {

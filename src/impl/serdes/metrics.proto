@@ -5,8 +5,7 @@ package astl.protobuf;
 import "serdes/serdes_common.proto";
 
 message FiniteSetMetric {
-  repeated AstlValue     finite_set = 1;
-//  map<int32, string> value_to_label_map = 2;
+  map<int64, string> value_to_label_map = 1;
 }
 
 message StateInfo {

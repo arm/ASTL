@@ -21,6 +21,7 @@
 #include "astl_logger.hpp"
 #include "metric/delta_metric.hpp"
 #include "metric/event_metric.hpp"
+#include "metric/finite_set_metric.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/rate_metric.hpp"
 #include "metric/sampled_value_metric.hpp"
@@ -69,6 +70,30 @@ static auto SerializeBasicMetric(const MetricConfig& metric_config, const ITarge
   return out;
 }
 
+static auto SerializeFiniteSetMetric(const MetricConfig& metric_config, const ITarget& target)
+    -> std::expected<astl::protobuf::RawMetric, astl_status_code> {
+  auto out_or_err = SerializeBasicMetric(metric_config, target);
+  if (!out_or_err) {
+    ASTL_LOG_ERROR("SerializeFiniteSetMetric: failed to serialize basic metric for metric {}", metric_config.Name());
+    return out_or_err;
+  }
+
+  auto& raw_metric = out_or_err.value();
+  auto* config     = raw_metric.mutable_config();
+
+  config->set_metric_type(protobuf::AstlMetricType::ASTL_METRIC_FINITE_SET_VALUE);
+
+  const auto& finite_set_config = dynamic_cast<const FiniteSetMetricConfig&>(metric_config);
+
+  auto* finite_set_msg = config->mutable_finite_set();
+
+  for (const auto& [value, label] : finite_set_config.GetLabels()) {
+    (*finite_set_msg->mutable_value_to_label_map())[*value.ToInt64()] = label;
+  }
+
+  return out_or_err;
+}
+
 static auto SerializeIMetric(const MetricConfig& metric_config, const ITarget& target)
     -> std::expected<astl::protobuf::RawMetric, astl_status_code> {
   switch (metric_config.MetricType()) {
@@ -77,6 +102,9 @@ static auto SerializeIMetric(const MetricConfig& metric_config, const ITarget& t
     case ASTL_METRIC_DELTA:
     case ASTL_METRIC_RATE: {
       return SerializeBasicMetric(metric_config, target);
+    }
+    case ASTL_METRIC_FINITE_SET_VALUE: {
+      return SerializeFiniteSetMetric(metric_config, target);
     }
     default:
       ASTL_LOG_ERROR("Serialize not implemented for metric type {}", static_cast<int>(metric_config.MetricType()));
@@ -104,24 +132,66 @@ static auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& pro
   std::vector<std::string> groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
   auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, category, metric_type, groups,
                                             collector, NullOperationBuilder{});
-
   return cfg;
 }
 
-template <typename MetricT>
-static auto DeserializeBasicMetric(const astl::protobuf::RawMetric& raw, const MetricConfig& metric_config)
-    -> std::expected<std::vector<std::pair<const ITarget*, std::unique_ptr<IMetric>>>, astl_status_code> {
+static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig& proto_cfg)
+    -> std::expected<std::unique_ptr<FiniteSetMetricConfig>, astl_status_code> {
+  if (!proto_cfg.has_finite_set()) {
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  const auto&        finite_set_cfg_proto = proto_cfg.finite_set();
+  const std::string& name                 = proto_cfg.metric_name();
+  const std::string& description          = proto_cfg.description();
+
+  const auto units       = static_cast<astl_units_t>(proto_cfg.units());
+  const auto value_type  = static_cast<astl_value_type_t>(proto_cfg.value_type());
+  const auto category    = static_cast<astl_category_t>(proto_cfg.category());
+  const auto metric_type = static_cast<astl_metric_type_t>(proto_cfg.metric_type());
+  const auto collector   = static_cast<CollectorType>(proto_cfg.collector_type());
+
+  FiniteSetMetricConfig::FiniteSet       finite_set;
+  FiniteSetMetricConfig::ValueToLabelMap labels;
+  for (const auto& entry : finite_set_cfg_proto.value_to_label_map()) {
+    const auto key = static_cast<uint64_t>(entry.first);
+    finite_set.emplace(key);
+    labels.emplace(AstlValue(key), entry.second);
+  }
+
+  if (proto_cfg.metric_groups_size() > 0) {
+    ASTL_LOG_WARNING("DeserializeFiniteSetMetricConfig: Metric groups not implemented for FiniteSetMetricConfig {}",
+                     name);
+  }
+
+  auto cfg =
+      std::make_unique<FiniteSetMetricConfig>(name, description, units, value_type, metric_type, category, collector,
+                                              NullOperationBuilder{}, std::move(finite_set), std::move(labels));
+  return cfg;
+}
+
+struct MetricDeserializationResult {
+  const ITarget*           target;
+  std::unique_ptr<IMetric> metric;
+};
+
+using MetricDeserializationResults = std::vector<MetricDeserializationResult>;
+using MetricConfigAndResults       = std::pair<std::unique_ptr<MetricConfig>, MetricDeserializationResults>;
+
+template <typename MetricT, typename ConfigT>
+static auto DeserializeBasicMetric(const astl::protobuf::RawMetric& raw, ConfigT* metric_config)
+    -> std::expected<MetricDeserializationResults, astl_status_code> {
   const auto& orch       = Orchestrator::GetInstance()->get();
   const auto& targets    = orch->GetTargets();
   const auto& target_ids = raw.target_ids();
 
   if (target_ids.empty()) {
-    ASTL_LOG_ERROR("DeserializeBasicMetric: RawMetric has zero target_ids for metric {}", metric_config.Name());
+    ASTL_LOG_ERROR("DeserializeBasicMetric: RawMetric has zero target_ids for metric {}", metric_config->Name());
     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
 
-  std::vector<std::pair<const ITarget*, std::unique_ptr<IMetric>>> result;
-  result.reserve(static_cast<decltype(result)::size_type>(target_ids.size()));
+  MetricDeserializationResults result;
+  result.reserve(static_cast<MetricDeserializationResults::size_type>(target_ids.size()));
 
   for (const auto& target_id : target_ids) {
     auto target_it = std::find_if(targets.begin(), targets.end(), [&target_id](auto const& owned_target) {
@@ -130,90 +200,116 @@ static auto DeserializeBasicMetric(const astl::protobuf::RawMetric& raw, const M
 
     if (target_it == targets.end()) {
       ASTL_LOG_ERROR("DeserializeBasicMetric: No target found with id '{}' for metric {}", target_id,
-                     metric_config.Name());
+                     metric_config->Name());
       return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
 
     const ITarget* target = target_it->get();
 
-    auto metric = std::make_unique<MetricT>(std::addressof(metric_config), target, nullptr);
+    auto metric = std::make_unique<MetricT>(metric_config, target, nullptr);
 
-    result.emplace_back(target, std::move(metric));
+    result.push_back(MetricDeserializationResult{
+        target,
+        std::move(metric),
+    });
   }
 
   return result;
 }
 
-static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl::protobuf::RawMetric& raw,
-                                     const MetricConfig& config)
-    -> std::expected<std::vector<std::pair<const ITarget*, std::unique_ptr<IMetric>>>, astl_status_code> {
+static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl::protobuf::RawMetric& raw)
+    -> std::expected<MetricConfigAndResults, astl_status_code> {
   switch (metric_type) {
     case ASTL_METRIC_VALUE: {
-      auto metrics_or_err = DeserializeBasicMetric<SampledValueMetric>(raw, config);
+      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config());
+      if (!cfg_or_err) {
+        ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
+        return std::unexpected(cfg_or_err.error());
+      }
 
+      auto& cfg            = cfg_or_err.value();
+      auto  metrics_or_err = DeserializeBasicMetric<SampledValueMetric>(raw, cfg.get());
       if (!metrics_or_err) {
-        ASTL_LOG_ERROR(
-            "DeserializeMetricForType: DeserializeBasicMetric failed "
-            "for metric {}",
-            config.Name());
+        ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
         return std::unexpected(metrics_or_err.error());
       }
 
-      // metric_or_err holds vector<pair<const ITarget*, unique_ptr<IMetric>>>
-      return std::move(*metrics_or_err);
+      return MetricConfigAndResults{std::move(cfg), std::move(metrics_or_err.value())};
     }
+
     case ASTL_METRIC_EVENT: {
-      auto metrics_or_err = DeserializeBasicMetric<EventMetric>(raw, config);
+      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config());
+      if (!cfg_or_err) {
+        ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
+        return std::unexpected(cfg_or_err.error());
+      }
 
+      auto& cfg            = cfg_or_err.value();
+      auto  metrics_or_err = DeserializeBasicMetric<EventMetric>(raw, cfg.get());
       if (!metrics_or_err) {
-        ASTL_LOG_ERROR(
-            "DeserializeMetricForType: DeserializeBasicMetric failed "
-            "for metric {}",
-            config.Name());
+        ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
         return std::unexpected(metrics_or_err.error());
       }
 
-      // metric_or_err holds vector<pair<const ITarget*, unique_ptr<IMetric>>>
-      return std::move(*metrics_or_err);
+      return MetricConfigAndResults{std::move(cfg), std::move(metrics_or_err.value())};
     }
+
     case ASTL_METRIC_DELTA: {
-      auto metrics_or_err = DeserializeBasicMetric<DeltaMetric>(raw, config);
+      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config());
+      if (!cfg_or_err) {
+        ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
+        return std::unexpected(cfg_or_err.error());
+      }
 
+      auto& cfg            = cfg_or_err.value();
+      auto  metrics_or_err = DeserializeBasicMetric<DeltaMetric>(raw, cfg.get());
       if (!metrics_or_err) {
-        ASTL_LOG_ERROR(
-            "DeserializeMetricForType: DeserializeBasicMetric failed "
-            "for metric {}",
-            config.Name());
+        ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
         return std::unexpected(metrics_or_err.error());
       }
 
-      // metric_or_err holds vector<pair<const ITarget*, unique_ptr<IMetric>>>
-      return std::move(*metrics_or_err);
+      return MetricConfigAndResults{std::move(cfg), std::move(metrics_or_err.value())};
     }
+
     case ASTL_METRIC_RATE: {
-      auto metrics_or_err = DeserializeBasicMetric<RateMetric>(raw, config);
+      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config());
+      if (!cfg_or_err) {
+        ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
+        return std::unexpected(cfg_or_err.error());
+      }
 
+      auto& cfg            = cfg_or_err.value();
+      auto  metrics_or_err = DeserializeBasicMetric<RateMetric>(raw, cfg.get());
       if (!metrics_or_err) {
-        ASTL_LOG_ERROR(
-            "DeserializeMetricForType: DeserializeBasicMetric failed "
-            "for metric {}",
-            config.Name());
+        ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
         return std::unexpected(metrics_or_err.error());
       }
 
-      // metric_or_err holds vector<pair<const ITarget*, unique_ptr<IMetric>>>
-      return std::move(*metrics_or_err);
+      return MetricConfigAndResults{std::move(cfg), std::move(metrics_or_err.value())};
     }
 
-    // TODO(ASTL-238) Implement deserialization for other metric types
+    case ASTL_METRIC_FINITE_SET_VALUE: {
+      auto cfg_or_err = DeserializeFiniteSetMetricConfig(raw.config());
+      if (!cfg_or_err) {
+        ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
+        return std::unexpected(cfg_or_err.error());
+      }
+
+      auto& finite_cfg     = cfg_or_err.value();
+      auto  metrics_or_err = DeserializeBasicMetric<FiniteSetMetric, FiniteSetMetricConfig>(raw, finite_cfg.get());
+      if (!metrics_or_err) {
+        ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", finite_cfg->Name());
+        return std::unexpected(metrics_or_err.error());
+      }
+
+      return MetricConfigAndResults{std::move(finite_cfg), std::move(metrics_or_err.value())};
+    }
+
     case ASTL_METRIC_RESIDENCY:
-    case ASTL_METRIC_FINITE_SET_VALUE:
     case ASTL_METRIC_UNKNOWN:
     default:
-      ASTL_LOG_ERROR(
-          "DeserializeMetricForType: Deserialization not implemented for "
-          "metric type {} (metric: {})",
-          static_cast<int>(metric_type), config.Name());
+      ASTL_LOG_ERROR("DeserializeMetricForType: Deserialization not implemented for metric type {}",
+                     static_cast<int>(metric_type));
       return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 }
@@ -364,39 +460,34 @@ static auto DeserializeMetricHandle(const astl::protobuf::RawMetric& raw)
     -> std::expected<MetricHandle, astl_status_code> {
   MetricHandle metric_handle{};
 
-  auto cfg_or_err = DeserializeBasicMetricConfig(raw.config());
-  if (!cfg_or_err) {
-    ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
-    return std::unexpected(cfg_or_err.error());
+  const auto& raw_cfg     = raw.config();
+  const auto& metric_name = raw_cfg.metric_name();
+  const auto  metric_type = static_cast<astl_metric_type_t>(raw_cfg.metric_type());
+
+  auto cfg_and_results_or_err = DeserializeMetricForType(metric_type, raw);
+  if (!cfg_and_results_or_err) {
+    ASTL_LOG_ERROR("DeserializeMetricHandle: DeserializeMetricForType failed for metric {}", raw.metric_id());
+    return std::unexpected(cfg_and_results_or_err.error());
   }
 
-  metric_handle.config            = std::move(*cfg_or_err);
-  const MetricConfig& config      = *metric_handle.config;
-  const auto          metric_type = config.MetricType();
+  // take ownership of config
+  auto& [config_unique_ptr, results] = cfg_and_results_or_err.value();
+  metric_handle.config               = std::move(config_unique_ptr);
 
-  auto target_to_metrics_or_err = DeserializeMetricForType(metric_type, raw, config);
-  if (!target_to_metrics_or_err) {
-    ASTL_LOG_ERROR(
-        "DeserializeMetricHandle: DeserializeMetricForType failed "
-        "for metric {}",
-        config.Name());
-    return std::unexpected(target_to_metrics_or_err.error());
-  }
-
-  // target_to_metrics_or_err holds vector<pair<const ITarget*, unique_ptr<IMetric>>>
-  for (auto& target_to_metric : *target_to_metrics_or_err) {
-    const ITarget* target = target_to_metric.first;
-    auto&          metric = target_to_metric.second;
+  // move metrics into the handle
+  for (auto& res : results) {
+    const ITarget* target = res.target;
+    auto&          metric = res.metric;
 
     if (!target) {
-      ASTL_LOG_ERROR("DeserializeMetricHandle: Deserialized metric has null target for metric {}", config.Name());
+      ASTL_LOG_ERROR("DeserializeMetricHandle: Deserialized metric has null target for metric {}", metric_name);
       return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
 
     auto [it, inserted] = metric_handle.target_to_metric_map.emplace(target, std::move(metric));
     if (!inserted) {
       ASTL_LOG_ERROR("DeserializeMetricHandle: duplicate target '{}' in RawMetric for metric {}", target->Name(),
-                     config.Name());
+                     metric_name);
       return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
   }
