@@ -1,0 +1,25 @@
+{
+   "last_updated": "2025-11-28",
+   "uuid_mapping": {
+      "A323BDD0-47C4-8C0A-8D0D-67C87AA50000": {
+         "last_updated": "2025-11-19",
+         "description": "Phoenix SoC LCP Cluster Platform Telemetry Data Capture Format Specification",
+         "specification_file": "phoenix/lcp_cluster.json"
+      },
+      "7DD87076-9472-8F22-8F80-EB2CF9410000": {
+         "last_updated": "2025-11-19",
+         "description": "Phoenix SoC SCP Platform Telemetry Data Capture Format Specification",
+         "specification_file": "phoenix/scp.json"
+      },
+      "CD8A21FB-3373-8DFC-9B27-7DD0A8970000": {
+         "last_updated": "2025-11-28",
+         "description": "Izanagi 1 SoC Compute Die LCP Cluster Platform Telemetry Data Capture Format Specification",
+         "specification_file": "izi1/cd_lcp_cluster.json"
+      },
+      "133F0CC3-93D4-8B36-886A-D40E767A0000": {
+         "last_updated": "2025-11-28",
+         "description": "Izanagi 1 SoC IO Die LCP Cluster Platform Telemetry Data Capture Format Specification",
+         "specification_file": "izi1/iod_lcp_cluster.json"
+      }
+   }
+}

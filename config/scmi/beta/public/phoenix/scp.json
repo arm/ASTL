@@ -1,0 +1,390 @@
+{
+   "_type": "metrics_specification",
+   "document": {
+      "timestamp": "2025-11-19",
+      "copyright": "Copyright 2025 Arm Ltd.",
+      "confidential": false,
+      "quality": "Release",
+      "license": "Apache-2.0",
+      "description": "Telemetry data capture format layout specification"
+   },
+   "uuid": "7DD87076-9472-8F22-8F80-EB2CF9410000",
+   "description": "Phoenix SoC SCP Platform Telemetry Data Capture Format Specification",
+   "instance_id": "[7:0]",
+   "chiplet_id": "[15:8]",
+   "size": 7016,
+   "layout": [
+      {
+         "count": 1,
+         "start_offset": 0,
+         "block_size": 24,
+         "members": [
+            {
+               "base_de_id": "0x00000000",
+               "name": "UUID",
+               "component": "HEADER",
+               "description": "SCMI TDCF UUID",
+               "unit": "",
+               "unit_exponent": 0,
+               "rel_offset": "0x0000"
+            }
+         ]
+      },
+      {
+         "count": 1,
+         "start_offset": 24,
+         "block_size": 16,
+         "members": [
+            {
+               "base_de_id": "0x00000000",
+               "name": "BLOCK_TIMESTAMP",
+               "component": "HEADER",
+               "description": "SCMI TDCF BLOCK TIMSTAMP",
+               "unit": "",
+               "unit_exponent": 0,
+               "rel_offset": "0x0000"
+            }
+         ]
+      },
+      {
+         "count": 6,
+         "start_offset": 40,
+         "block_size": 48,
+         "members": [
+            {
+               "base_de_id": "0x0000E441",
+               "name": "CURRENT_TEMPERATURE",
+               "component": "PSS",
+               "description": "PSS highest current temperature",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000E442",
+               "name": "MIN_TEMPERATURE",
+               "component": "PSS",
+               "description": "PSS lowest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            },
+            {
+               "base_de_id": "0x0000E443",
+               "name": "MAX_TEMPERATURE",
+               "component": "PSS",
+               "description": "PSS highest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0020"
+            }
+         ]
+      },
+      {
+         "count": 72,
+         "start_offset": 328,
+         "block_size": 32,
+         "members": [
+            {
+               "base_de_id": "0x0000E56D",
+               "name": "CXS_READ_BANDWIDTH",
+               "component": "PSS_BMU",
+               "description": "Accumulative CXS total read bandwidth",
+               "unit": "bits",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000E56E",
+               "name": "CXS_WRITE_BANDWIDTH",
+               "component": "PSS_BMU",
+               "description": "Accumulative total read bandwidth",
+               "unit": "bits",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            }
+         ]
+      },
+      {
+         "count": 12,
+         "start_offset": 2632,
+         "block_size": 32,
+         "members": [
+            {
+               "base_de_id": "0x0000E56D",
+               "name": "CXS_READ_BANDWIDTH",
+               "component": "PSS_BMU",
+               "description": "Accumulative CXS total read bandwidth",
+               "unit": "bits",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000E56E",
+               "name": "CXS_WRITE_BANDWIDTH",
+               "component": "PSS_BMU",
+               "description": "Accumulative total read bandwidth",
+               "unit": "bits",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            }
+         ]
+      },
+      {
+         "count": 12,
+         "start_offset": 3016,
+         "block_size": 48,
+         "members": [
+            {
+               "base_de_id": "0x0000E641",
+               "name": "CURRENT_TEMPERATURE",
+               "component": "DMS",
+               "description": "DMS highest current temperature",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000E642",
+               "name": "MIN_TEMPERATURE",
+               "component": "DMS",
+               "description": "DMS lowest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            },
+            {
+               "base_de_id": "0x0000E643",
+               "name": "MAX_TEMPERATURE",
+               "component": "DMS",
+               "description": "DMS highest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0020"
+            }
+         ]
+      },
+      {
+         "count": 24,
+         "start_offset": 3592,
+         "block_size": 32,
+         "members": [
+            {
+               "base_de_id": "0x0000E763",
+               "name": "CHI_READ_BANDWIDTH",
+               "component": "DMS_BMU",
+               "description": "Accumulative CHI total read bandwidth",
+               "unit": "bits",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000E764",
+               "name": "CHI_TX_BANDWIDTH",
+               "component": "DMS_BMU",
+               "description": "Accumulative CHI total write bandwidth",
+               "unit": "bits",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            }
+         ]
+      },
+      {
+         "count": 16,
+         "start_offset": 4360,
+         "block_size": 48,
+         "members": [
+            {
+               "base_de_id": "0x0000E841",
+               "name": "CURRENT_TEMPERATURE",
+               "component": "DDS",
+               "description": "DDS highest current temperature",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000E842",
+               "name": "MIN_TEMPERATURE",
+               "component": "DDS",
+               "description": "DDS lowest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            },
+            {
+               "base_de_id": "0x0000E843",
+               "name": "MAX_TEMPERATURE",
+               "component": "DDS",
+               "description": "DDS highest current temperature",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0020"
+            }
+         ]
+      },
+      {
+         "count": 16,
+         "start_offset": 5128,
+         "block_size": 32,
+         "members": [
+            {
+               "base_de_id": "0x0000E96D",
+               "name": "CXS_READ_BANDWIDTH",
+               "component": "DDS_BMU",
+               "description": "Accumulative CXS total read bandwidth",
+               "unit": "bits",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000E96E",
+               "name": "CXS_WRITE_BANDWIDTH",
+               "component": "DDS_BMU",
+               "description": "Accumulative total read bandwidth",
+               "unit": "bits",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            }
+         ]
+      },
+      {
+         "count": 2,
+         "start_offset": 5640,
+         "block_size": 48,
+         "members": [
+            {
+               "base_de_id": "0x0000DE41",
+               "name": "CURRENT_TEMPERATURE",
+               "component": "CHIPLET",
+               "description": "Compute Chiplet highest current temperature",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000DE42",
+               "name": "MIN_TEMPERATURE",
+               "component": "CHIPLET",
+               "description": "Compute Chiplet lowest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            },
+            {
+               "base_de_id": "0x0000DE43",
+               "name": "MAX_TEMPERATURE",
+               "component": "CHIPLET",
+               "description": "Compute Chiplet highest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0020"
+            }
+         ]
+      },
+      {
+         "count": 1,
+         "start_offset": 5736,
+         "block_size": 48,
+         "members": [
+            {
+               "base_de_id": "0x0000DF41",
+               "name": "CURRENT_TEMPERATURE",
+               "component": "PACKAGE",
+               "description": "Package highest current temperature",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000DF42",
+               "name": "MIN_TEMPERATURE",
+               "component": "PACKAGE",
+               "description": "Package lowest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            },
+            {
+               "base_de_id": "0x0000DF43",
+               "name": "MAX_TEMPERATURE",
+               "component": "PACKAGE",
+               "description": "Package highest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0020"
+            }
+         ]
+      },
+      {
+         "count": 11,
+         "start_offset": 5784,
+         "block_size": 112,
+         "members": [
+            {
+               "base_de_id": "0x00001601",
+               "name": "RAIL_INPUT_POWER",
+               "component": "PMIC-VR",
+               "description": "Rail input power",
+               "unit": "Watt",
+               "unit_exponent": -2,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x00001602",
+               "name": "RAIL_INPUT_VOLTAGE",
+               "component": "PMIC-VR",
+               "description": "Rail input voltage",
+               "unit": "Volt",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            },
+            {
+               "base_de_id": "0x00001603",
+               "name": "RAIL_INPUT_CURRENT",
+               "component": "PMIC-VR",
+               "description": "Rail input current",
+               "unit": "Ampere",
+               "unit_exponent": -3,
+               "rel_offset": "0x0020"
+            },
+            {
+               "base_de_id": "0x00001604",
+               "name": "RAIL_OUTPUT_VOLTAGE",
+               "component": "PMIC-VR",
+               "description": "Rail output voltage",
+               "unit": "Volt",
+               "unit_exponent": -3,
+               "rel_offset": "0x0030"
+            },
+            {
+               "base_de_id": "0x00001605",
+               "name": "RAIL_OUTPUT_CURRENT",
+               "component": "PMIC-VR",
+               "description": "Rail output current",
+               "unit": "Ampere",
+               "unit_exponent": -3,
+               "rel_offset": "0x0040"
+            },
+            {
+               "base_de_id": "0x00001606",
+               "name": "RAIL_TEMPERATURE",
+               "component": "PMIC-VR",
+               "description": "Rail temperature (maximum of all temperature sensors)",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0050"
+            },
+            {
+               "base_de_id": "0x00001607",
+               "name": "RAIL_OUTPUT_POWER",
+               "component": "PMIC-VR",
+               "description": "Rail output power",
+               "unit": "Watt",
+               "unit_exponent": -2,
+               "rel_offset": "0x0060"
+            }
+         ]
+      }
+   ]
+}

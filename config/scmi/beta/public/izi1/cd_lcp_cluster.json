@@ -1,0 +1,323 @@
+{
+   "_type": "metrics_specification",
+   "document": {
+      "timestamp": "2025-11-28",
+      "copyright": "Copyright 2025 Arm Ltd.",
+      "confidential": false,
+      "quality": "Release",
+      "license": "Apache-2.0",
+      "description": "Telemetry data capture format layout specification"
+   },
+   "uuid": "CD8A21FB-3373-8DFC-9B27-7DD0A8970000",
+   "description": "Izanagi 1 SoC Compute Die LCP Cluster Platform Telemetry Data Capture Format Specification",
+   "instance_id": "[7:0]",
+   "chiplet_id": "[15:8]",
+   "size": 12536,
+   "layout": [
+      {
+         "count": 1,
+         "start_offset": 0,
+         "block_size": 24,
+         "members": [
+            {
+               "base_de_id": "0x00000000",
+               "name": "UUID",
+               "component": "HEADER",
+               "description": "SCMI TDCF UUID",
+               "unit": "",
+               "unit_exponent": 0,
+               "rel_offset": "0x0000"
+            }
+         ]
+      },
+      {
+         "count": 1,
+         "start_offset": 24,
+         "block_size": 16,
+         "members": [
+            {
+               "base_de_id": "0x00000000",
+               "name": "BLOCK_TIMESTAMP",
+               "component": "HEADER",
+               "description": "SCMI TDCF BLOCK TIMSTAMP",
+               "unit": "",
+               "unit_exponent": 0,
+               "rel_offset": "0x0000"
+            }
+         ]
+      },
+      {
+         "count": 22,
+         "start_offset": 40,
+         "block_size": 352,
+         "members": [
+            {
+               "base_de_id": "0x00000111",
+               "name": "CPU_MPID",
+               "component": "CORE",
+               "description": "CPU Multi Processor ID",
+               "unit": "",
+               "unit_exponent": 0,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000011B",
+               "name": "CPU_IDLE",
+               "component": "CORE",
+               "description": "Total CPU Idle time",
+               "unit": "second",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            },
+            {
+               "base_de_id": "0x0000011D",
+               "name": "CPU_FREQUENCY",
+               "component": "CORE",
+               "description": "CPU Average Frequency in the last sampling period",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0020"
+            },
+            {
+               "base_de_id": "0x0000011E",
+               "name": "CPU_FREQUENCY_BIN0",
+               "component": "CORE",
+               "description": "Frequency histogram range 0 (core is not running)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0030"
+            },
+            {
+               "base_de_id": "0x0000011F",
+               "name": "CPU_FREQUENCY_BIN1",
+               "component": "CORE",
+               "description": "Frequency histogram range 1 (0 < f <= 1000 Mhz)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0040"
+            },
+            {
+               "base_de_id": "0x00000120",
+               "name": "CPU_FREQUENCY_BIN2",
+               "component": "CORE",
+               "description": "Frequency histogram range 2 (1 GHz < f <= 2 GHz)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0050"
+            },
+            {
+               "base_de_id": "0x00000121",
+               "name": "CPU_FREQUENCY_BIN3",
+               "component": "CORE",
+               "description": "Frequency histogram range 3 (2 GHz < f <= 3 GHz))",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0060"
+            },
+            {
+               "base_de_id": "0x00000122",
+               "name": "CPU_FREQUENCY_BIN4",
+               "component": "CORE",
+               "description": "Frequency histogram range 4 (3 GHz < f <= 4 GHz)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0070"
+            },
+            {
+               "base_de_id": "0x00000123",
+               "name": "CPU_FREQUENCY_BIN5",
+               "component": "CORE",
+               "description": "Frequency histogram range 5 (4 GHz < f <= 5 GHz)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0080"
+            },
+            {
+               "base_de_id": "0x00000124",
+               "name": "CPU_FREQUENCY_BIN6",
+               "component": "CORE",
+               "description": "Frequency histogram range 6 (> 5 GHz)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0090"
+            },
+            {
+               "base_de_id": "0x00000141",
+               "name": "CURRENT_TEMPERATURE",
+               "component": "CORE",
+               "description": "Core highest current temperature",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x00A0"
+            },
+            {
+               "base_de_id": "0x00000142",
+               "name": "MIN_TEMPERATURE",
+               "component": "CORE",
+               "description": "Core lowest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x00B0"
+            },
+            {
+               "base_de_id": "0x00000143",
+               "name": "MAX_TEMPERATURE",
+               "component": "CORE",
+               "description": "Core highest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x00C0"
+            },
+            {
+               "base_de_id": "0x00000145",
+               "name": "TEMPERATURE_HIST0",
+               "component": "CORE",
+               "description": "Duration of Core temperature < 20C",
+               "unit": "Second",
+               "unit_exponent": -3,
+               "rel_offset": "0x00D0"
+            },
+            {
+               "base_de_id": "0x00000146",
+               "name": "TEMPERATURE_HIST1",
+               "component": "CORE",
+               "description": "Duration of Core temperature between 20C-30C",
+               "unit": "Second",
+               "unit_exponent": -3,
+               "rel_offset": "0x00E0"
+            },
+            {
+               "base_de_id": "0x00000147",
+               "name": "TEMPERATURE_HIST2",
+               "component": "CORE",
+               "description": "Duration of Core temperature between 30C-40C",
+               "unit": "Second",
+               "unit_exponent": -3,
+               "rel_offset": "0x00F0"
+            },
+            {
+               "base_de_id": "0x00000148",
+               "name": "TEMPERATURE_HIST3",
+               "component": "CORE",
+               "description": "Duration of Core temperature between 40C-50C",
+               "unit": "Second",
+               "unit_exponent": -3,
+               "rel_offset": "0x0100"
+            },
+            {
+               "base_de_id": "0x00000149",
+               "name": "TEMPERATURE_HIST4",
+               "component": "CORE",
+               "description": "Duration of Core temperature between 50C-60C",
+               "unit": "Second",
+               "unit_exponent": -3,
+               "rel_offset": "0x0110"
+            },
+            {
+               "base_de_id": "0x0000014A",
+               "name": "TEMPERATURE_HIST5",
+               "component": "CORE",
+               "description": "Duration of Core temperature between 60C-70C",
+               "unit": "Second",
+               "unit_exponent": -3,
+               "rel_offset": "0x0120"
+            },
+            {
+               "base_de_id": "0x0000014B",
+               "name": "TEMPERATURE_HIST6",
+               "component": "CORE",
+               "description": "Duration of Core temperature between 70C-80C",
+               "unit": "Second",
+               "unit_exponent": -3,
+               "rel_offset": "0x0130"
+            },
+            {
+               "base_de_id": "0x0000014C",
+               "name": "TEMPERATURE_HIST7",
+               "component": "CORE",
+               "description": "Duration of Core temperature between 80C-90C",
+               "unit": "Second",
+               "unit_exponent": -3,
+               "rel_offset": "0x0140"
+            },
+            {
+               "base_de_id": "0x0000014D",
+               "name": "TEMPERATURE_HIST8",
+               "component": "CORE",
+               "description": "Duration of Core temperature between >90C",
+               "unit": "Second",
+               "unit_exponent": -3,
+               "rel_offset": "0x0150"
+            }
+         ]
+      },
+      {
+         "count": 11,
+         "start_offset": 7784,
+         "block_size": 48,
+         "members": [
+            {
+               "base_de_id": "0x0000E241",
+               "name": "CURRENT_TEMPERATURE",
+               "component": "MXP",
+               "description": "MXP highest current temperature",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000E242",
+               "name": "MIN_TEMPERATURE",
+               "component": "MXP",
+               "description": "MXP lowest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            },
+            {
+               "base_de_id": "0x0000E243",
+               "name": "MAX_TEMPERATURE",
+               "component": "MXP",
+               "description": "MXP highest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0020"
+            }
+         ]
+      },
+      {
+         "count": 88,
+         "start_offset": 8312,
+         "block_size": 48,
+         "members": [
+            {
+               "base_de_id": "0x0000E141",
+               "name": "CURRENT_TEMPERATURE",
+               "component": "HNS",
+               "description": "HNS highest current temperature",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000E142",
+               "name": "MIN_TEMPERATURE",
+               "component": "HNS",
+               "description": "HNS lowest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            },
+            {
+               "base_de_id": "0x0000E143",
+               "name": "MAX_TEMPERATURE",
+               "component": "HNS",
+               "description": "HNS highest temperature since power on",
+               "unit": "Celcius",
+               "unit_exponent": -3,
+               "rel_offset": "0x0020"
+            }
+         ]
+      }
+   ]
+}

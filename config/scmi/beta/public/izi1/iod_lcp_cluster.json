@@ -1,0 +1,147 @@
+{
+   "_type": "metrics_specification",
+   "document": {
+      "timestamp": "2025-11-28",
+      "copyright": "Copyright 2025 Arm Ltd.",
+      "confidential": false,
+      "quality": "Release",
+      "license": "Apache-2.0",
+      "description": "Telemetry data capture format layout specification"
+   },
+   "uuid": "133F0CC3-93D4-8B36-886A-D40E767A0000",
+   "description": "Izanagi 1 SoC IO Die LCP Cluster Platform Telemetry Data Capture Format Specification",
+   "instance_id": "[7:0]",
+   "chiplet_id": "[15:8]",
+   "size": 1320,
+   "layout": [
+      {
+         "count": 1,
+         "start_offset": 0,
+         "block_size": 24,
+         "members": [
+            {
+               "base_de_id": "0x00000000",
+               "name": "UUID",
+               "component": "HEADER",
+               "description": "SCMI TDCF UUID",
+               "unit": "",
+               "unit_exponent": 0,
+               "rel_offset": "0x0000"
+            }
+         ]
+      },
+      {
+         "count": 1,
+         "start_offset": 24,
+         "block_size": 16,
+         "members": [
+            {
+               "base_de_id": "0x00000000",
+               "name": "BLOCK_TIMESTAMP",
+               "component": "HEADER",
+               "description": "SCMI TDCF BLOCK TIMSTAMP",
+               "unit": "",
+               "unit_exponent": 0,
+               "rel_offset": "0x0000"
+            }
+         ]
+      },
+      {
+         "count": 8,
+         "start_offset": 40,
+         "block_size": 160,
+         "members": [
+            {
+               "base_de_id": "0x00000111",
+               "name": "CPU_MPID",
+               "component": "CORE",
+               "description": "CPU Multi Processor ID",
+               "unit": "",
+               "unit_exponent": 0,
+               "rel_offset": "0x0000"
+            },
+            {
+               "base_de_id": "0x0000011B",
+               "name": "CPU_IDLE",
+               "component": "CORE",
+               "description": "Total CPU Idle time",
+               "unit": "second",
+               "unit_exponent": -3,
+               "rel_offset": "0x0010"
+            },
+            {
+               "base_de_id": "0x0000011D",
+               "name": "CPU_FREQUENCY",
+               "component": "CORE",
+               "description": "CPU Average Frequency in the last sampling period",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0020"
+            },
+            {
+               "base_de_id": "0x0000011E",
+               "name": "CPU_FREQUENCY_BIN0",
+               "component": "CORE",
+               "description": "Frequency histogram range 0 (core is not running)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0030"
+            },
+            {
+               "base_de_id": "0x0000011F",
+               "name": "CPU_FREQUENCY_BIN1",
+               "component": "CORE",
+               "description": "Frequency histogram range 1 (0 < f <= 1000 Mhz)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0040"
+            },
+            {
+               "base_de_id": "0x00000120",
+               "name": "CPU_FREQUENCY_BIN2",
+               "component": "CORE",
+               "description": "Frequency histogram range 2 (1 GHz < f <= 2 GHz)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0050"
+            },
+            {
+               "base_de_id": "0x00000121",
+               "name": "CPU_FREQUENCY_BIN3",
+               "component": "CORE",
+               "description": "Frequency histogram range 3 (2 GHz < f <= 3 GHz))",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0060"
+            },
+            {
+               "base_de_id": "0x00000122",
+               "name": "CPU_FREQUENCY_BIN4",
+               "component": "CORE",
+               "description": "Frequency histogram range 4 (3 GHz < f <= 4 GHz)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0070"
+            },
+            {
+               "base_de_id": "0x00000123",
+               "name": "CPU_FREQUENCY_BIN5",
+               "component": "CORE",
+               "description": "Frequency histogram range 5 (4 GHz < f <= 5 GHz)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0080"
+            },
+            {
+               "base_de_id": "0x00000124",
+               "name": "CPU_FREQUENCY_BIN6",
+               "component": "CORE",
+               "description": "Frequency histogram range 6 (> 5 GHz)",
+               "unit": "Hz",
+               "unit_exponent": 0,
+               "rel_offset": "0x0090"
+            }
+         ]
+      }
+   ]
+}
