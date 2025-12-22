@@ -69,6 +69,8 @@ struct AstlConfiguration {
 
   /** @brief Override path for configuration file containing SCMI metric definitions */
   std::optional<std::filesystem::path> scmi_specification_path;
+
+  std::optional<std::filesystem::path> astl_cache_dir;
 };
 
 [[nodiscard]] auto ParseConfiguration(std::string_view configuration_data)

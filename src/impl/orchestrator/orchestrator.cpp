@@ -80,6 +80,19 @@ auto Orchestrator::GetInstance()
   if (instance_) {
     return std::reference_wrapper<std::unique_ptr<Orchestrator>>(instance_);
   }
+
+  auto cache_dir = GetEnvVar("ASTL_LOAD_CACHE_DIR");
+  if (!cache_dir.empty()) {
+    astl_status_code status = LoadFromFile(cache_dir);
+    if (status != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("Orchestrator::GetInstance failed to load state from cache dir '{}': {}", cache_dir,
+                     astlStatusString(status));
+      return std::unexpected(status);
+    }
+
+    return instance_;
+  }
+
   // Lazy construction without taking the mutex (convention: only InitializeInstance guards creation)
   auto configuration = astl::ConfigurationManager::GetConfiguration();
   if (!configuration) {
@@ -277,43 +290,8 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
     it->second.clear();
   }
 
-  // rebuild raw samples from serialized temporary file
-  std::vector<RawSampledData> rebuilt_samples;
-  const fs::path              tmp_dir   = "tmp";
-  const auto                  file_path = tmp_dir / (target->Name() + ".astl");
-  std::ifstream               cache_file(file_path, std::ios::binary);
-
-  if (fs::exists(file_path)) {
-    if (!cache_file) {
-      ASTL_LOG_ERROR("Failed to open {} for reading", file_path.string());
-      return ASTL_STATUS_INTERNAL_ERROR;
-    }
-
-    auto deser = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(cache_file);
-    if (!deser.has_value()) {
-      ASTL_LOG_ERROR("Failed to deserialize samples from {}: {}", file_path.string(), astlStatusString(deser.error()));
-      return deser.error();
-    }
-
-    rebuilt_samples.insert(rebuilt_samples.end(), std::make_move_iterator(deser->begin()),
-                           std::make_move_iterator(deser->end()));
-  } else {
-    ASTL_LOG_DEBUG("No temporary sample file for target {}", target->Name());
-  }
-
-  // TODO (ASTL-224): Handle batch raw sample processing instead of loading all into memory at once.
-  RawSamplesMap raw_samples{
-      {target, std::move(rebuilt_samples)}
-  };
-
-  status = _metric_manager->ProcessRawSamples(raw_samples);
-  if (status != ASTL_STATUS_SUCCESS) {
-    return status;
-  }
-
   // if we've now stopped collection on all the targets, finalize metric processing and output
   if (!_collector_manager->IsAnyTargetBeingCollected()) {
-    status = _metric_manager->SummarizeMetrics();
     if (status != ASTL_STATUS_SUCCESS) {
       return status;
     }
@@ -326,6 +304,16 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
 
     // Emit Summary CSV (if requested) after metrics are summarized (processed samples complete)
     EmitSummaryCsvIfRequested();
+  }
+
+  auto cache_dir = GetEnvVar("ASTL_SAVE_CACHE_DIR");
+  if (!cache_dir.empty()) {
+    status = SaveToFile(cache_dir);
+    if (status != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("Orchestrator::StopCollection failed to save state to cache dir '{}': {}", cache_dir,
+                     astlStatusString(status));
+      return status;
+    }
   }
 
   return ASTL_STATUS_SUCCESS;
@@ -504,27 +492,144 @@ auto Orchestrator::SinkProcessedSamples(const ITarget *target, const IMetric *me
 
 /**
  * @brief Retrieve the collected samples for the given target and metric,
- *        or an error if the target+metric combination isn't valid
+ *        or an error if the target+metric combination isn't valid.
+ *
+ * If we don't have processed samples in-memory yet, attempt to rebuild them
+ * by deserializing raw samples from a temporary file and re-processing.
  */
 auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarget *target) const
     -> std::expected<std::span<const astl::ProcessedSampledData>, astl_status_code> {
-  // Use find() to avoid modifying the map in this const method (operator[] would insert elements)
-  std::scoped_lock lock{_processed_samples_mtx};
-  auto             target_it = _processed_samples.find(target);
-  if (target_it == _processed_samples.end()) {
-    ASTL_LOG_WARNING("GetProcessedMetricSamples: No samples found on target {}", metric->Name(), target->Name());
+  if (!metric || !target) {
+    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+  }
+  if (!_metric_manager) {
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+  }
+
+  auto lookup = [&]() -> std::optional<std::span<const astl::ProcessedSampledData>> {
+    std::scoped_lock lock{_processed_samples_mtx};
+
+    const auto target_it = _processed_samples.find(target);
+    if (target_it == _processed_samples.end()) {
+      return std::nullopt;
+    }
+
+    const auto &metric_map = target_it->second;
+    const auto  metric_it  = metric_map.find(metric);
+    if (metric_it == metric_map.end()) {
+      return std::nullopt;
+    }
+
+    return std::span<const astl::ProcessedSampledData>(metric_it->second);
+  };
+
+  // 1) Fast path
+  if (auto samples = lookup()) {
+    return *samples;
+  }
+
+  // 2) Rebuild from tmp/<target>.astl (if it exists)
+  // TODO(ASTL-224): Support batch processing. Currently we just hardcode tmp/ as the location.
+  const fs::path file_path = fs::path("tmp") / (target->Name() + kAstlFileExtension);
+
+  if (!fs::exists(fs::path("tmp"))) {
+    ASTL_LOG_DEBUG("No tmp/ directory exists; skipping raw sample deserialization for target {}", target->Name());
     return {};
   }
 
-  const auto &metric_map = target_it->second;
-  auto        metric_it  = metric_map.find(metric);
-  if (metric_it == metric_map.end()) {
-    ASTL_LOG_WARNING("GetProcessedMetricSamples: No samples found for metric {} on target {}", metric->Name(),
-                     target->Name());
+  std::ifstream file_stream(file_path, std::ios::binary);
+  if (!file_stream) {
+    ASTL_LOG_ERROR("Failed to open {} for reading", file_path.string());
     return {};
   }
 
-  auto samples = std::span<const astl::ProcessedSampledData>(metric_it->second);
-  return samples;  // implicit conversion to expected via value ctor
+  auto raw = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(file_stream);
+  if (!raw) {
+    ASTL_LOG_ERROR("Failed to deserialize samples from {}: {}", file_path.string(), astlStatusString(raw.error()));
+    return std::unexpected(raw.error());
+  }
+
+  if (!raw->empty()) {
+    // ProcessRawSamples sinks results back via SinkProcessedSamples() - don't hold the mutex here.
+    RawSamplesMap raw_samples{
+        {target, std::move(*raw)}
+    };
+
+    if (auto status = _metric_manager->ProcessRawSamples(raw_samples); status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(status);
+    }
+
+    if (auto status = _metric_manager->SummarizeMetrics(); status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(status);
+    }
+  }
+
+  // 3) Retry
+  if (auto samples = lookup()) {
+    return *samples;
+  }
+
+  ASTL_LOG_WARNING("GetProcessedMetricSamples: No samples found for metric {} on target {}", metric->Name(),
+                   target->Name());
+  return {};  // not found
 }
+
+// TODO(ASTL-237): Once zipping and unzipping directories is supported, take in single astl
+// file instead of a directory path.
+auto Orchestrator::SaveToFile(std::filesystem::path directory_path) -> astl_status_code {
+  const auto &orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  const auto &orchestrator = orchestrator_or_error->get();
+
+  // create directory if it does not exist
+  if (!fs::exists(directory_path)) {
+    std::error_code err_code;
+    if (!fs::create_directories(directory_path, err_code)) {
+      ASTL_LOG_ERROR("Failed to create directory {}: {}", directory_path.string(), err_code.message());
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+  }
+
+  fs::path      topology_manager_file_path = directory_path / kTopologyManagerFileName;
+  std::ofstream topology_file{topology_manager_file_path, std::ios::binary | std::ios::out};
+  auto          status = ProtobufSerDes::Serialize(*orchestrator->_topology_manager, topology_file);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to serialize topology to {}: {}", topology_manager_file_path.string(),
+                   astlStatusString(status));
+    return status;
+  }
+
+  fs::path      metric_manager_file_path = directory_path / kMetricManagerFileName;
+  std::ofstream metric_manager_file{metric_manager_file_path, std::ios::binary | std::ios::out};
+  status = ProtobufSerDes::Serialize(*orchestrator->_metric_manager, metric_manager_file);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to serialize metric manager to {}: {}", metric_manager_file_path.string(),
+                   astlStatusString(status));
+    return status;
+  }
+
+  return ASTL_STATUS_SUCCESS;
+}
+
+// TODO(ASTL-237): Once zipping and unzipping directories is supported, take in single astl
+// file instead of a directory path.
+auto Orchestrator::LoadFromFile(std::filesystem::path directory_path) -> astl_status_code {
+  if (instance_) {
+    ASTL_LOG_WARNING("Orchestrator instance already initialized - cannot LoadFromFile");
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  auto configuration            = astl::ConfigurationManager::GetConfiguration();
+  configuration->astl_cache_dir = directory_path;
+
+  astl_status_code status = BuildOrchestrator(configuration.value());
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+
+  return ASTL_STATUS_SUCCESS;
+}
+
 }  // namespace astl

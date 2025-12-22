@@ -45,6 +45,10 @@
 
 namespace astl {
 
+constexpr const char* kAstlFileExtension       = ".astl";
+constexpr const char* kTopologyManagerFileName = "topology_manager.astl";
+constexpr const char* kMetricManagerFileName   = "metric_manager.astl";
+
 struct MetricHandle;
 struct IMetricManager;
 class MetricManager;
@@ -98,6 +102,9 @@ concept Deserializable =
 template <Deserializable T>
 auto Deserialize(std::istream& input_stream) -> std::expected<T, astl_status_code>;
 
+template <Deserializable T>
+auto Deserialize(std::istream&, const std::vector<std::unique_ptr<ITarget>>& targets)
+    -> std::expected<T, astl_status_code>;
 /**
  * @brief Serializes the current batch of samples to a file on disk.
  *

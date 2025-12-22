@@ -29,12 +29,12 @@
 /** @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
  */
 auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_status_code {
-  // TODO(ASTL-237): Deserialize from file here once we support loading .astl files.
   auto topology_manager = astl::BuildTopologyManager(configuration);
   if (!topology_manager) {
     return topology_manager.error();
   }
 
+  // TODO(ASTL-279) - Once state machine is in place, we can skip building collector manager if loading from file
   auto collector_manager = astl::BuildCollectorManager(topology_manager.value()->GetTargets(), configuration);
   if (!collector_manager) {
     return collector_manager.error();

@@ -209,8 +209,6 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV only emission", "[Orchestrat
   ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
 
   auto metric_manager = std::make_unique<MockMetricManager>();
-  REQUIRE_CALL(*metric_manager, ProcessRawSamples(_)).RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*metric_manager, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
 
@@ -248,8 +246,6 @@ TEST_CASE("Orchestrator-StopCollection PERFETTO only emission", "[Orchestrator][
   ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);  // should be called after StopOnTarget
 
   auto metric_manager = std::make_unique<MockMetricManager>();
-  REQUIRE_CALL(*metric_manager, ProcessRawSamples(_)).RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*metric_manager, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
 
@@ -291,8 +287,6 @@ TEST_CASE("Orchestrator-StopCollection dual PERFETTO+INTERVAL_CSV ordered emissi
   ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
 
   auto metric_manager = std::make_unique<MockMetricManager>();
-  REQUIRE_CALL(*metric_manager, ProcessRawSamples(_)).RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*metric_manager, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
 
@@ -336,10 +330,6 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV idempotent emission", "[Orch
   ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
 
   auto metric_manager = std::make_unique<MockMetricManager>();
-  REQUIRE_CALL(*metric_manager, ProcessRawSamples(_)).RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*metric_manager, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*metric_manager, ProcessRawSamples(_)).RETURN(ASTL_STATUS_SUCCESS);  // second attempt
-  REQUIRE_CALL(*metric_manager, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);    // second attempt
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
 

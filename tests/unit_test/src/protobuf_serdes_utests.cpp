@@ -299,7 +299,7 @@ TEST_CASE("MetricHandle + SampledValueMetric: protobuf round-trip", "[MetricHand
 
   cache_stream.seekg(0);
   auto metric_handles_or_err =
-      astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream);
+      astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream, targets);
   REQUIRE(metric_handles_or_err.has_value());
 
   auto rebuilt = std::move(*metric_handles_or_err);
@@ -389,7 +389,7 @@ TEST_CASE("MetricHandle + FiniteSetMetric: protobuf round-trip", "[MetricHandle]
   // Deserialize
   cache_stream.seekg(0);
   auto metric_handles_or_err =
-      astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream);
+      astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream, targets);
   REQUIRE(metric_handles_or_err.has_value());
 
   auto rebuilt = std::move(*metric_handles_or_err);
@@ -468,7 +468,8 @@ TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[Metric
   REQUIRE(cache_stream.tellp() > 0);
 
   cache_stream.seekg(0);
-  auto rebuilt_or_err = astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::IMetricManager>>(cache_stream);
+  auto rebuilt_or_err =
+      astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::IMetricManager>>(cache_stream, orch->GetTargets());
   REQUIRE(rebuilt_or_err.has_value());
 
   auto rebuilt_mgr = std::move(rebuilt_or_err.value());
@@ -501,7 +502,7 @@ TEST_CASE("Deserialize<MetricManager> fails on invalid protobuf input", "[Metric
   cache_stream << "this is not a valid MetricManager protobuf";
 
   cache_stream.seekg(0);
-  auto mgr_or_err = astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream);
+  auto mgr_or_err = astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, {});
 
   REQUIRE_FALSE(mgr_or_err.has_value());
   REQUIRE(mgr_or_err.error() == ASTL_STATUS_INTERNAL_ERROR);
@@ -512,8 +513,9 @@ TEST_CASE(
     "and operation map",
     "[MetricManager][protobuf]") {
   // Arrange: Orchestrator with a target that matches the proto's target_id
-  const astl::ITarget* tgt = InstallSingleScmiTargetTlm0();
-  (void)tgt;  // unused directly in this test, but needed for deserialization
+  InstallSingleScmiTargetTlm0();
+  const auto& orch    = astl::Orchestrator::GetInstance()->get();
+  const auto& targets = orch->GetTargets();
 
   auto proto_mgr = BuildValidMetricManagerProto();
 
@@ -528,7 +530,7 @@ TEST_CASE(
   cache_stream.seekg(0);
 
   // Act
-  auto mgr_or_err = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream);
+  auto mgr_or_err = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
 
   // Assert: deserialization succeeds and at least one metric handle exists
   REQUIRE(mgr_or_err.has_value());

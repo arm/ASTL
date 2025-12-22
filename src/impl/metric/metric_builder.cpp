@@ -85,7 +85,7 @@ static auto CreateScmiConfigurationsForCounters(const AstlConfiguration&        
     auto metric_registers = scmi::GetMetricRegisters(metric_declaration.register_name, scmi_specification.layout);
     for (const auto& register_declaration : metric_registers) {
       std::string counter_name = register_declaration.name + "_" + metric_name;
-      if (processed_counter_names.find(counter_name) != processed_counter_names.end()) {
+      if (processed_counter_names.contains(counter_name)) {
         // already processed this counter, skip it
         continue;
       }
@@ -192,6 +192,29 @@ static auto RegisterScmiMetrics(
 
 auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration)
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
+  // Build metric manager from astl file
+  if (configuration.astl_cache_dir.has_value()) {
+    ASTL_LOG_DEBUG("Loading MetricManager from cache at {}", configuration.astl_cache_dir->string());
+    const std::filesystem::path metric_manager_file_path = *configuration.astl_cache_dir / kMetricManagerFileName;
+
+    if (!std::filesystem::is_directory(*configuration.astl_cache_dir)) {
+      ASTL_LOG_ERROR("Invalid ASTL cache directory: {}", configuration.astl_cache_dir->string());
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+
+    std::ifstream metric_file(metric_manager_file_path, std::ios::binary | std::ios::in);
+    if (!metric_file) {
+      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    }
+
+    auto metric_manager = ProtobufSerDes::Deserialize<std::unique_ptr<IMetricManager>>(metric_file, targets);
+
+    if (!metric_manager.has_value()) {
+      return std::unexpected(metric_manager.error());
+    }
+    return metric_manager;
+  }
+
   // arrange the targets by the collector type
   std::unordered_map<CollectorType, std::vector<const ITarget*>> collector_type_to_targets_map;
   for (const auto& target : targets) {

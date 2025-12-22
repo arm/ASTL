@@ -115,7 +115,7 @@ auto SerializeCurrentBatch(const std::string& target_name, const std::vector<Raw
 
   const fs::path tmp_dir = "tmp";
   fs::create_directories(tmp_dir);
-  const fs::path file_path = tmp_dir / (target_name + ".astl");
+  const fs::path file_path = tmp_dir / (target_name + kAstlFileExtension);
 
   std::ofstream ofs(file_path, std::ios::binary | std::ios::app);
   if (!ofs) {

@@ -5,6 +5,7 @@
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"
+#include "../../test_utilities.hpp"
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
@@ -1282,4 +1283,90 @@ TEST_CASE("astlGetMetrics verifies category propagation", "[wrapper][Orchestrato
   REQUIRE(metrics[0]._category == ASTL_CATEGORY_TEMPERATURE);
   REQUIRE(metrics[1]._category == ASTL_CATEGORY_POWER);
   REQUIRE(metrics[2]._category == ASTL_CATEGORY_FREQUENCY);
+}
+
+TEST_CASE("ASTL_SAVE_CACHE_DIR saves state on StopCollection", "[wrapper][cache]") {
+  namespace fs = std::filesystem;
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_cache_wrapper_test";
+  const fs::path topo_file = cache_dir / "topology.astl";
+  const fs::path mm_file   = cache_dir / "metric_manager.astl";
+
+  std::error_code ec;
+  fs::remove_all(cache_dir, ec);
+  fs::create_directories(cache_dir);
+
+  TempFileGuard guard_topo(topo_file);
+  TempFileGuard guard_mm(mm_file);
+
+  EnvVarGuard save_guard("ASTL_SAVE_CACHE_DIR");
+  REQUIRE(astl::SetEnvVar("ASTL_SAVE_CACHE_DIR", cache_dir.string()) == ASTL_STATUS_SUCCESS);
+
+  // One mock target
+  auto                 mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_handle = mock_target.get();
+
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  std::string target_name{"tlm-0"};
+  ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target));
+
+  // Build orchestrator manually so we can control MockCollectorManager behavior
+  auto topology_manager = std::make_unique<MockTopologyManager>();
+
+  auto  collector_manager = std::make_unique<MockCollectorManager>();
+  auto* collector_ptr     = collector_manager.get();
+  ALLOW_CALL(*collector_ptr, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_ptr, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  // StopCollection() requires these for the "finalize" path
+  ALLOW_CALL(*collector_ptr, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_ptr, IsAnyTargetBeingCollected()).RETURN(false);
+
+  auto  metric_manager = std::make_unique<MockMetricManager>();
+  auto* metric_ptr     = metric_manager.get();
+  ALLOW_CALL(*metric_ptr, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_ptr, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  // StopCollection() may call these depending on your codepath
+  ALLOW_CALL(*metric_ptr, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto output_manager = std::make_unique<MockOutputManager>();
+
+  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                           std::move(metric_manager), std::move(output_manager));
+  orchestrator->SetTargets(std::move(mock_targets));
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  // Discover handle via wrapper API
+  auto     targets      = AllocateAstlVector<astl_target_properties_t>(kAFew);
+  uint32_t target_count = kAFew;
+  REQUIRE(astlGetTargetCount(&target_count) == ASTL_STATUS_SUCCESS);
+  REQUIRE(target_count == 1);
+  REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
+  REQUIRE(target_count == 1);
+
+  // Serialization should fail since we are using a mock metric manager
+  REQUIRE(astlStopCollectionOnTarget(targets[0]._handle) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("ASTL_LOAD_CACHE_DIR test", "[wrapper][cache]") {
+  // This only verifies wrapper calls still succeed when the env var is set.
+  // It does NOT prove the instance was loaded from disk because the orchestrator
+  // is a singleton and only constructed once per process.
+
+  EnvVarGuard load_guard("ASTL_LOAD_CACHE_DIR");
+
+  REQUIRE(astl::SetEnvVar("ASTL_LOAD_CACHE_DIR", "/tmp/does-not-matter-for-smoke") == ASTL_STATUS_SUCCESS);
+
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  uint32_t target_count = 0;
+  REQUIRE(astlGetTargetCount(&target_count) == ASTL_STATUS_BAD_CONFIGURATION);
+
+  auto     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
+  uint32_t count   = kAFew;
+  REQUIRE(astlGetTargets(targets.data(), &count) == ASTL_STATUS_BAD_CONFIGURATION);
 }

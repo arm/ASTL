@@ -40,7 +40,8 @@ auto ValueToString(const astl_value_t& value, astl_value_type_t type) -> std::st
 }  // namespace
 
 // NOLINTBEGIN
-auto ParseArgs(int argc, char* argv[]) -> std::unordered_map<std::string, std::string> {
+using AstlArgMap = std::unordered_map<std::string, std::string>;
+auto ParseArgs(int argc, char* argv[]) -> AstlArgMap {
   std::unordered_map<std::string, std::string> args;
 
   for (int i = 1; i < argc; ++i) {
@@ -61,16 +62,18 @@ auto ParseArgs(int argc, char* argv[]) -> std::unordered_map<std::string, std::s
 // NOLINTEND
 
 auto PrintHelp() -> void {
-  std::cout << "Usage: sample_test [options]\n\n"
-            << "Options:\n"
-            << "  --help              Show this help message.\n"
-            << "  --version           Print version and exit.\n"
-            << "  --group=<name>      Specify metric group to collect.\n"
-            << "  --immediate         Trigger immediate sample read.\n"
-            << "  --interval=<n>      Trigger interval sample read period in milliseconds.\n"
-            << "  --duration=<n>      Collection duration in seconds.\n"
-            << "  --config=<path>     Path to  json config file for ASTL.\n"
-            << "  Default: interval mode, 10 seconds duration and 500 milliseconds sampling interval.\n";
+  std::cout
+      << "Usage: sample_test [options]\n\n"
+      << "Options:\n"
+      << "  --help              Show this help message.\n"
+      << "  --version           Print version and exit.\n"
+      << "  --group=<name>      Specify metric group to collect.\n"
+      << "  --immediate         Trigger immediate sample read.\n"
+      << "  --interval=<n>      Trigger interval sample read period in milliseconds.\n"
+      << "  --duration=<n>      Collection duration in seconds.\n"
+      << "  --config=<path>     Path to  json config file for ASTL.\n"
+      << "  --cache-dir         Bool to disable collection when ASTL_LOAD_CACHE_DIR env var is set (experimental!).\n"
+      << "  Default: interval mode, 10 seconds duration and 500 milliseconds sampling interval.\n";
 }
 
 auto PrintVersion() -> void {
@@ -409,6 +412,7 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
  *   --immediate     Trigger an immediate metric sample. This is default behavior.
  *   --interval=<n>  Trigger interval sampling every <n> milliseconds
  *   --config=<path> Path to json config file for ASTL
+ *   --cache-dir Load ASTL state from serialized files (experimental!)
  *
  * A lightweight argument parser interprets these flags and
  * runs the corresponding ASTL actions.
@@ -506,12 +510,14 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   // Configure and run collection
-  status =
-      ConfigureAndRunCollection(target_properties, metric_buffer, do_interval, duration_seconds, sampling_interval_ms);
-  if (status != ASTL_STATUS_SUCCESS) {
-    // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
-    // even without mock sysfs running
-    return 0;
+  if (!args.contains("cache-dir")) {
+    status = ConfigureAndRunCollection(target_properties, metric_buffer, do_interval, duration_seconds,
+                                       sampling_interval_ms);
+    if (status != ASTL_STATUS_SUCCESS) {
+      // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
+      // even without mock sysfs running
+      return 0;
+    }
   }
 
   // Retrieve and display samples
