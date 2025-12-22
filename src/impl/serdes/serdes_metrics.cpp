@@ -25,7 +25,6 @@
 #include "metric/metric_manager.hpp"
 #include "metric/rate_metric.hpp"
 #include "metric/sampled_value_metric.hpp"
-#include "orchestrator/orchestrator.hpp"
 #include "serdes/metrics.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
 #include "serdes/protobuf_serdes.hpp"
 
@@ -179,10 +178,9 @@ using MetricDeserializationResults = std::vector<MetricDeserializationResult>;
 using MetricConfigAndResults       = std::pair<std::unique_ptr<MetricConfig>, MetricDeserializationResults>;
 
 template <typename MetricT, typename ConfigT>
-static auto DeserializeBasicMetric(const astl::protobuf::RawMetric& raw, ConfigT* metric_config)
+static auto DeserializeBasicMetric(const astl::protobuf::RawMetric& raw, ConfigT* metric_config,
+                                   const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<MetricDeserializationResults, astl_status_code> {
-  const auto& orch       = Orchestrator::GetInstance()->get();
-  const auto& targets    = orch->GetTargets();
   const auto& target_ids = raw.target_ids();
 
   if (target_ids.empty()) {
@@ -194,19 +192,18 @@ static auto DeserializeBasicMetric(const astl::protobuf::RawMetric& raw, ConfigT
   result.reserve(static_cast<MetricDeserializationResults::size_type>(target_ids.size()));
 
   for (const auto& target_id : target_ids) {
-    auto target_it = std::find_if(targets.begin(), targets.end(), [&target_id](auto const& owned_target) {
+    auto it = std::find_if(targets.begin(), targets.end(), [&target_id](const std::unique_ptr<ITarget>& owned_target) {
       return owned_target && owned_target->Name() == target_id;
     });
 
-    if (target_it == targets.end()) {
+    if (it == targets.end()) {
       ASTL_LOG_ERROR("DeserializeBasicMetric: No target found with id '{}' for metric {}", target_id,
                      metric_config->Name());
       return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
 
-    const ITarget* target = target_it->get();
-
-    auto metric = std::make_unique<MetricT>(metric_config, target, nullptr);
+    const ITarget* target = it->get();
+    auto           metric = std::make_unique<MetricT>(metric_config, target, nullptr);
 
     result.push_back(MetricDeserializationResult{
         target,
@@ -217,7 +214,8 @@ static auto DeserializeBasicMetric(const astl::protobuf::RawMetric& raw, ConfigT
   return result;
 }
 
-static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl::protobuf::RawMetric& raw)
+static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl::protobuf::RawMetric& raw,
+                                     const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<MetricConfigAndResults, astl_status_code> {
   switch (metric_type) {
     case ASTL_METRIC_VALUE: {
@@ -228,7 +226,7 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
       }
 
       auto& cfg            = cfg_or_err.value();
-      auto  metrics_or_err = DeserializeBasicMetric<SampledValueMetric>(raw, cfg.get());
+      auto  metrics_or_err = DeserializeBasicMetric<SampledValueMetric>(raw, cfg.get(), targets);
       if (!metrics_or_err) {
         ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
         return std::unexpected(metrics_or_err.error());
@@ -245,7 +243,7 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
       }
 
       auto& cfg            = cfg_or_err.value();
-      auto  metrics_or_err = DeserializeBasicMetric<EventMetric>(raw, cfg.get());
+      auto  metrics_or_err = DeserializeBasicMetric<EventMetric>(raw, cfg.get(), targets);
       if (!metrics_or_err) {
         ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
         return std::unexpected(metrics_or_err.error());
@@ -262,7 +260,7 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
       }
 
       auto& cfg            = cfg_or_err.value();
-      auto  metrics_or_err = DeserializeBasicMetric<DeltaMetric>(raw, cfg.get());
+      auto  metrics_or_err = DeserializeBasicMetric<DeltaMetric>(raw, cfg.get(), targets);
       if (!metrics_or_err) {
         ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
         return std::unexpected(metrics_or_err.error());
@@ -279,7 +277,7 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
       }
 
       auto& cfg            = cfg_or_err.value();
-      auto  metrics_or_err = DeserializeBasicMetric<RateMetric>(raw, cfg.get());
+      auto  metrics_or_err = DeserializeBasicMetric<RateMetric>(raw, cfg.get(), targets);
       if (!metrics_or_err) {
         ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
         return std::unexpected(metrics_or_err.error());
@@ -295,8 +293,9 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
         return std::unexpected(cfg_or_err.error());
       }
 
-      auto& finite_cfg     = cfg_or_err.value();
-      auto  metrics_or_err = DeserializeBasicMetric<FiniteSetMetric, FiniteSetMetricConfig>(raw, finite_cfg.get());
+      auto& finite_cfg = cfg_or_err.value();
+      auto  metrics_or_err =
+          DeserializeBasicMetric<FiniteSetMetric, FiniteSetMetricConfig>(raw, finite_cfg.get(), targets);
       if (!metrics_or_err) {
         ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", finite_cfg->Name());
         return std::unexpected(metrics_or_err.error());
@@ -447,6 +446,8 @@ auto SerializeOperationToMetricMap(const MetricManager::OperationToMetricMap& op
 
     const ITarget* target = *target_or;
 
+    ASTL_LOG_DEBUG("Serialize: adding op {} -> metric '{}' on target '{}'", op_id, metric_ptr->Name(), target->Name());
+
     auto* entry = proto_op_map->Add();
     entry->set_operation_id(op_id);
     entry->set_metric_id(metric_ptr->Name());
@@ -456,7 +457,8 @@ auto SerializeOperationToMetricMap(const MetricManager::OperationToMetricMap& op
   return ASTL_STATUS_SUCCESS;
 }
 
-static auto DeserializeMetricHandle(const astl::protobuf::RawMetric& raw)
+static auto DeserializeMetricHandle(const astl::protobuf::RawMetric&             raw,
+                                    const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<MetricHandle, astl_status_code> {
   MetricHandle metric_handle{};
 
@@ -464,7 +466,7 @@ static auto DeserializeMetricHandle(const astl::protobuf::RawMetric& raw)
   const auto& metric_name = raw_cfg.metric_name();
   const auto  metric_type = static_cast<astl_metric_type_t>(raw_cfg.metric_type());
 
-  auto cfg_and_results_or_err = DeserializeMetricForType(metric_type, raw);
+  auto cfg_and_results_or_err = DeserializeMetricForType(metric_type, raw, targets);
   if (!cfg_and_results_or_err) {
     ASTL_LOG_ERROR("DeserializeMetricHandle: DeserializeMetricForType failed for metric {}", raw.metric_id());
     return std::unexpected(cfg_and_results_or_err.error());
@@ -523,7 +525,8 @@ struct RebuiltMetricHandles {
   MetricManager::TargetToMetricsMap          target_to_metrics_map;
 };
 
-static auto RebuildMetricHandles(const astl::protobuf::MetricManager& proto_manager)
+static auto RebuildMetricHandles(const astl::protobuf::MetricManager&         proto_manager,
+                                 const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<RebuiltMetricHandles, astl_status_code> {
   RebuiltMetricHandles rebuilt_metric_handles;
 
@@ -533,8 +536,7 @@ static auto RebuildMetricHandles(const astl::protobuf::MetricManager& proto_mana
   for (int i = 0; i < proto_metrics_vec.metrics_size(); ++i) {
     const auto& raw = proto_metrics_vec.metrics(i);
 
-    auto handle_or_err = detail::DeserializeMetricHandle(raw);
-
+    auto handle_or_err = detail::DeserializeMetricHandle(raw, targets);
     if (!handle_or_err) {
       ASTL_LOG_ERROR("Deserialize<MetricManager>: DeserializeMetricHandle failed for metric_id '{}'", raw.metric_id());
       return std::unexpected(handle_or_err.error());
@@ -638,7 +640,8 @@ auto Serialize(const MetricHandle& handle, std::ostream& output_stream) -> astl_
 }
 
 template <>
-auto Deserialize<std::vector<std::unique_ptr<MetricHandle>>>(std::istream& input)
+auto Deserialize<std::vector<std::unique_ptr<MetricHandle>>>(std::istream&                                input,
+                                                             const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<std::vector<std::unique_ptr<MetricHandle>>, astl_status_code> {
   astl::protobuf::RawMetricVec proto_metrics;
   if (!proto_metrics.ParseFromIstream(&input)) {
@@ -650,7 +653,7 @@ auto Deserialize<std::vector<std::unique_ptr<MetricHandle>>>(std::istream& input
   handles.reserve(static_cast<decltype(handles)::size_type>(proto_metrics.metrics_size()));
 
   for (const auto& raw : proto_metrics.metrics()) {
-    auto handle_or_err = detail::DeserializeMetricHandle(raw);
+    auto handle_or_err = detail::DeserializeMetricHandle(raw, targets);
     if (!handle_or_err) {
       ASTL_LOG_ERROR("Deserialize<vector<MetricHandle>>: Failed to deserialize metric '{}'", raw.metric_id());
       return std::unexpected(handle_or_err.error());
@@ -677,6 +680,7 @@ auto Serialize(const MetricManager& metric_manager, std::ostream& output_stream)
     return group_status;
   }
 
+  ASTL_LOG_DEBUG("serialize: serializing operation to metric map");
   auto op_status = detail::SerializeOperationToMetricMap(metric_manager._operation_to_metric_map,
                                                          metric_manager,  // so helper can call GetTargetForMetric
                                                          proto_mgr);
@@ -713,7 +717,8 @@ auto Serialize(const IMetricManager& i_metric_manager, std::ostream& output_stre
 }
 
 template <>
-auto Deserialize<std::unique_ptr<MetricManager>>(std::istream& input_stream)
+auto Deserialize<std::unique_ptr<MetricManager>>(std::istream&                                input_stream,
+                                                 const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<std::unique_ptr<MetricManager>, astl_status_code> {
   astl::protobuf::MetricManager proto_manager;
   if (!proto_manager.ParseFromIstream(&input_stream)) {
@@ -724,19 +729,17 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream& input_stream)
   auto caps           = detail::BuildCapabilities(proto_manager);
   auto metric_manager = std::make_unique<MetricManager>(std::move(caps));
 
-  const auto& orch = Orchestrator::GetInstance()->get();
-  metric_manager->RegisterProcessedSampleSink(orch.get());
-
   // TODO(ASTL-408) counters: not serialized yet
   metric_manager->_counter_handles.clear();
   metric_manager->_target_to_counters_map.clear();
 
-  auto rebuilt_metrics_or_err = detail::RebuildMetricHandles(proto_manager);
+  auto rebuilt_metrics_or_err = detail::RebuildMetricHandles(proto_manager, targets);
   if (!rebuilt_metrics_or_err) {
     return std::unexpected(rebuilt_metrics_or_err.error());
   }
 
   auto& rebuilt_metrics = *rebuilt_metrics_or_err;
+  ASTL_LOG_DEBUG("Deserialize<MetricManager>: rebuilt {} metric handles", rebuilt_metrics.metric_handles.size());
   metric_manager->_metric_handles.swap(rebuilt_metrics.metric_handles);
   metric_manager->_target_to_metrics_map.swap(rebuilt_metrics.target_to_metrics_map);
 
@@ -749,13 +752,13 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream& input_stream)
       continue;
     }
 
-    std::vector<const ITarget*> targets{};
-    targets.reserve(handle_ptr->target_to_metric_map.size());
+    std::vector<const ITarget*> local_targets{};
+    local_targets.reserve(handle_ptr->target_to_metric_map.size());
     for (auto& [target, metric] : handle_ptr->target_to_metric_map) {
-      targets.push_back(target);
+      local_targets.push_back(target);
     }
 
-    auto status = metric_manager->AddMetricToGroups(handle_ptr.get(), cfg, targets);
+    auto status = metric_manager->AddMetricToGroups(handle_ptr.get(), cfg, local_targets);
     if (status != ASTL_STATUS_SUCCESS) {
       return std::unexpected(status);
     }
@@ -780,9 +783,10 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream& input_stream)
 // Similar to Serialize(IMetricManager), we need to build a concrete MetricManager,
 // but return it as a unique_ptr<IMetricManager>
 template <>
-auto Deserialize<std::unique_ptr<IMetricManager>>(std::istream& input_stream)
+auto Deserialize<std::unique_ptr<IMetricManager>>(std::istream&                                input_stream,
+                                                  const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
-  auto metric_manager = Deserialize<std::unique_ptr<MetricManager>>(input_stream);
+  auto metric_manager = Deserialize<std::unique_ptr<MetricManager>>(input_stream, targets);
 
   if (!metric_manager) {
     return std::unexpected(metric_manager.error());

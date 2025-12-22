@@ -288,7 +288,8 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   friend auto ProtobufSerDes::Serialize(const MetricManager& metric_manager, std::ostream& output_stream)
       -> astl_status_code;
 
-  friend auto ProtobufSerDes::Deserialize<std::unique_ptr<MetricManager>>(std::istream&)
+  friend auto ProtobufSerDes::Deserialize<std::unique_ptr<MetricManager>>(std::istream&,
+                                                                          const std::vector<std::unique_ptr<ITarget>>&)
       -> std::expected<std::unique_ptr<MetricManager>, astl_status_code>;
 
  private:

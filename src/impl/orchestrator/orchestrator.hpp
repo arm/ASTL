@@ -75,6 +75,10 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    */
   static auto GetInstance() -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code>;
 
+  static auto SaveToFile(std::filesystem::path directory_path) -> astl_status_code;
+
+  static auto LoadFromFile(std::filesystem::path directory_path) -> astl_status_code;
+
   /**
    * @brief Returns a const reference to the set of Targets managed by this orchestrator.
    */

@@ -17,10 +17,12 @@
  ******************************************************************************/
 
 #include <expected>
+#include <filesystem>
 #include <memory>
 
 #include "astl/astl_errors.h"
 #include "libsensors/libsensors_topology_plugin.hpp"
+#include "serdes/protobuf_serdes.hpp"
 #include "target.hpp"
 #include "topology/i_topology_manager.hpp"
 #include "topology/scmi_topology_plugin.hpp"
@@ -48,9 +50,34 @@ auto ActivatePlugin(std::vector<std::unique_ptr<ITarget>>& targets, const AstlCo
   }
 }
 
+auto LoadTopologyManagerFromCache(const std::filesystem::path& cache_dir)
+    -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
+  const std::filesystem::path topology_manager_file_path = cache_dir / kTopologyManagerFileName;
+
+  if (!std::filesystem::is_directory(cache_dir)) {
+    ASTL_LOG_ERROR("Invalid ASTL cache directory: {}", cache_dir.string());
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  std::ifstream topology_file(topology_manager_file_path, std::ios::binary | std::ios::in);
+  if (!topology_file) {
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+  }
+
+  auto topology_manager = ProtobufSerDes::Deserialize<std::unique_ptr<ITopologyManager>>(topology_file);
+  if (!topology_manager.has_value()) {
+    return std::unexpected(topology_manager.error());
+  }
+  return topology_manager;
+}
+
 auto BuildTopologyManager(const AstlConfiguration& configuration)
     -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
   std::vector<std::unique_ptr<ITarget>> targets;
+
+  if (configuration.astl_cache_dir.has_value()) {
+    return LoadTopologyManagerFromCache(configuration.astl_cache_dir.value());
+  }
 
   try {
     // Add more topology plugins here by calling ActivatePlugin on each

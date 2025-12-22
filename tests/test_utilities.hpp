@@ -3,6 +3,8 @@
 
 #include <filesystem>
 
+#include "../../utils/astl_utils.hpp"
+
 /**
  * @brief RAII guard to remove a temporary file upon destruction
  */
@@ -14,6 +16,21 @@ struct TempFileGuard {
   }
 
   std::filesystem::path path;
+};
+
+/**
+ * @brief RAII guard to restore an environment variable on scope exit
+ */
+struct EnvVarGuard {
+  explicit EnvVarGuard(std::string name) : name(std::move(name)), old_value(astl::GetEnvVar(this->name)) {}
+
+  ~EnvVarGuard() {
+    // Restore previous value (empty == unset for codepaths that check GetEnvVar().empty()).
+    (void)astl::SetEnvVar(name, old_value);
+  }
+
+  std::string name;
+  std::string old_value;
 };
 
 #endif  // ASTL_TEST_UTILITIES_H_
