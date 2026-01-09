@@ -50,6 +50,7 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_raw_samples.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_topology_manager.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/serdes/archive_utils.cpp"
           # for unit tests
           "${PROJECT_SOURCE_DIR}/src/astl_errors.cpp"
           "${PROJECT_SOURCE_DIR}/src/astl_telemetry.cpp"
@@ -84,6 +85,9 @@ target_include_directories(
 # include nlohmann_json - json parser for importing configuration files
 find_package(nlohmann_json CONFIG REQUIRED)
 target_link_libraries(${LIBRARY_NAME} PRIVATE nlohmann_json::nlohmann_json)
+
+find_package(miniz CONFIG REQUIRED)
+target_link_libraries(${LIBRARY_NAME} PRIVATE miniz::miniz)
 
 # if doing a debug build, include detailed json diagnostics on parse errors This setting has two parts: - the CMake
 # cache variable JSON_DIAGNOSTICS, which is set in the CmakePresets.json file and used here in the conditional below -

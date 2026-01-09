@@ -14,7 +14,8 @@
     "trompeloeil",
     "magic-enum",
     "protobuf",
-    "spdlog"
+    "spdlog",
+    "miniz"
   ],
   "builtin-baseline": "84bab45d415d22042bd0b9081aea57f362da3f35",
   "overrides": [
