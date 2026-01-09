@@ -1295,9 +1295,7 @@ TEST_CASE("ASTL_SAVE_CACHE_DIR saves state on StopCollection", "[wrapper][cache]
   std::error_code ec;
   fs::remove_all(cache_dir, ec);
   fs::create_directories(cache_dir);
-
-  TempFileGuard guard_topo(topo_file);
-  TempFileGuard guard_mm(mm_file);
+  TempFileGuard guard_cache(cache_dir);
 
   EnvVarGuard save_guard("ASTL_SAVE_CACHE_DIR");
   REQUIRE(astl::SetEnvVar("ASTL_SAVE_CACHE_DIR", cache_dir.string()) == ASTL_STATUS_SUCCESS);

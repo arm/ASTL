@@ -19,7 +19,7 @@ struct TempFileGuard {
 
   ~TempFileGuard() {
     std::error_code ec;
-    std::filesystem::remove(path, ec);
+    std::filesystem::remove_all(path, ec);
   }
 
   std::filesystem::path path;
