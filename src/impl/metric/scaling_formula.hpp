@@ -76,7 +76,7 @@ class ScalingFormula {
   [[nodiscard]] auto GetScaleFactor() const -> double { return _scale_factor; }
 
  private:
-  double      _scale_factor;
+  double      _scale_factor{1.0};
   std::string _description;
 };
 
