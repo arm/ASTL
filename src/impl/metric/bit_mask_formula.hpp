@@ -68,7 +68,7 @@ class BitMaskFormula {
   [[nodiscard]] auto GetMask() const -> uint64_t { return _mask; }
 
  private:
-  uint64_t    _mask;
+  uint64_t    _mask{0};
   std::string _description;
 };
 

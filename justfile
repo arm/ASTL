@@ -26,7 +26,7 @@ config preset='debug':
 
 # build library, samples, unit tests
 # just config must be run first as a one-time step
-build preset='debug': config
+build preset='debug': (config preset)
     #!/usr/bin/env bash
     set -eu -o pipefail
     if [ ! -d build/ ]; then

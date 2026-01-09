@@ -163,9 +163,10 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
                      name);
   }
 
-  auto cfg =
-      std::make_unique<FiniteSetMetricConfig>(name, description, units, value_type, metric_type, category, collector,
-                                              NullOperationBuilder{}, std::move(finite_set), std::move(labels));
+  AnyFormula formula = IdentityFormula{};
+  auto       cfg = std::make_unique<FiniteSetMetricConfig>(name, description, units, value_type, metric_type, category,
+                                                           collector, NullOperationBuilder{}, std::move(finite_set),
+                                                           std::move(labels), std::move(formula));
   return cfg;
 }
 
