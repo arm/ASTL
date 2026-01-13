@@ -28,7 +28,7 @@ jobs:
           curl --retry 5 -f -s https://artifactory.arm.com/artifactory/vault.pki/ent-pki/pem/certs/ARM%20Enterprise%20PKI%20Root%20CA.pem -o arm.pem
 
       - name: 🚀 AI Code Review
-        uses: Arm-Debug/ai-code-review@68243930c050521f8b42eb03969cfa2c1a4d35c5
+        uses: Arm-Debug/ai-code-review@42588a6f279119a14451175b07774364887ffff3
         continue-on-error: true
         with:
           OPENAI_API_KEY: ${{ secrets.OPENAI_PROXY_KEY_FOR_SELF_HOSTED_RUNNERS }}
