@@ -40,3 +40,5 @@ CheckOptions:
     value: 1
   - key: readability-identifier-length.IgnoredVariableNames
     value: "it"
+  - key: readability-identifier-length.IgnoredVariableNames
+    value: "ec"
