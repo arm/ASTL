@@ -29,6 +29,8 @@
 
 namespace astl {
 
+namespace fs = std::filesystem;
+
 /** @brief helper struct to hold counter and metric configurations
  *
  */
@@ -190,29 +192,36 @@ static auto RegisterScmiMetrics(
   return ASTL_STATUS_SUCCESS;
 }
 
-auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration)
+static auto BuildMetricManagerFromASTLFile(const std::vector<std::unique_ptr<ITarget>>& targets,
+                                           const fs::path                               cache_dir_path)
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
-  // Build metric manager from astl file
-  if (configuration.astl_cache_dir.has_value()) {
-    ASTL_LOG_DEBUG("Loading MetricManager from cache at {}", configuration.astl_cache_dir->string());
-    const std::filesystem::path metric_manager_file_path = *configuration.astl_cache_dir / kMetricManagerFileName;
+  ASTL_LOG_DEBUG("Loading MetricManager from cache at {}", cache_dir_path.string());
+  const std::filesystem::path metric_manager_file_path = cache_dir_path / kMetricManagerFileName;
 
-    if (!std::filesystem::is_directory(*configuration.astl_cache_dir)) {
-      ASTL_LOG_ERROR("Invalid ASTL cache directory: {}", configuration.astl_cache_dir->string());
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-    }
+  if (!std::filesystem::is_directory(cache_dir_path)) {
+    ASTL_LOG_ERROR("Invalid ASTL cache directory: {}", cache_dir_path.string());
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+  }
 
-    std::ifstream metric_file(metric_manager_file_path, std::ios::binary | std::ios::in);
-    if (!metric_file) {
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
-    }
+  std::ifstream metric_file(metric_manager_file_path, std::ios::binary | std::ios::in);
+  if (!metric_file) {
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+  }
 
-    auto metric_manager = ProtobufSerDes::Deserialize<std::unique_ptr<IMetricManager>>(metric_file, targets);
+  auto metric_manager = ProtobufSerDes::Deserialize<std::unique_ptr<IMetricManager>>(metric_file, targets);
 
-    if (!metric_manager.has_value()) {
-      return std::unexpected(metric_manager.error());
-    }
-    return metric_manager;
+  if (!metric_manager.has_value()) {
+    return std::unexpected(metric_manager.error());
+  }
+
+  return metric_manager;
+}
+
+auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration,
+                        std::optional<std::filesystem::path> cache_dir_path)
+    -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
+  if (configuration.astl_file_path.has_value()) {
+    return BuildMetricManagerFromASTLFile(targets, cache_dir_path.value());
   }
 
   // arrange the targets by the collector type

@@ -38,6 +38,7 @@
 #define ASTL_PROTOBUF_SERDES_HPP_
 
 #include <expected>
+#include <filesystem>
 #include <vector>
 
 #include "i_raw_sample_sink.hpp"
@@ -116,11 +117,9 @@ auto Deserialize(std::istream&, const std::vector<std::unique_ptr<ITarget>>& tar
  * - Writes to tmp/<target_name>.astl.
  * - Appends to the file if it exists.
  * - Logs errors if serialization or file I/O fails.
- *
- * @TODO(ASTL-233) - Replace per-target output with a single session-scoped .astl cache file
  */
-auto SerializeCurrentBatch(const std::string& target_name, const std::vector<RawSampledData>& samples)
-    -> astl_status_code;
+auto SerializeCurrentBatch(const std::string& target_name, const std::vector<RawSampledData>& samples,
+                           std::filesystem::path output_path) -> astl_status_code;
 
 /**
  * @brief Serializes a topology manager and its targets to a file on disk.
@@ -164,7 +163,14 @@ auto Serialize(const ITopologyManager& topology_manager, std::ostream& output_st
  */
 auto Serialize(const MetricHandle& handle, std::ostream& output_stream) -> astl_status_code;
 
+/*
+ * @brief Serializes a metric manager and its metric handles to an output stream.
+ */
 auto Serialize(const IMetricManager& i_metric_manager, std::ostream& output_stream) -> astl_status_code;
+
+/**
+ * @brief Wrapper to serialize the MetricManager object
+ */
 auto Serialize(const MetricManager& metric_manager, std::ostream& output_stream) -> astl_status_code;
 }  // namespace ProtobufSerDes
 

@@ -39,7 +39,7 @@ inline auto MakeMinimalOrchestrator() -> std::pair<std::unique_ptr<astl::Orchest
   auto output_manager = std::make_unique<MockOutputManager>();
 
   return {std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                               std::move(metric_manager), std::move(output_manager)),
+                                               std::move(metric_manager), std::move(output_manager), ""),
           std::move(expectations)};
 }
 

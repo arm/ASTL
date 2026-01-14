@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "astl/astl.h"
+#include "astl_file_interface.hpp"
 #include "collector/i_collector_manager.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "common/i_raw_sample_sink.hpp"
@@ -19,6 +20,8 @@ static_assert(sizeof(astl_value_t) == sizeof(double),
               "astl_value_t union should not change size for ABI compatibility");
 
 namespace astl {
+
+namespace fs = std::filesystem;
 
 class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
  public:
@@ -35,9 +38,12 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *                         then post-process the sampled data
    *
    * @param output_manager - Can turn a set of processed metric samples into desired output formats
+   *
+   * @param cache_dir_path - Path to a directory where temporary files can be stored during ASTL file save/load
    */
   Orchestrator(std::unique_ptr<ITopologyManager> topology_manager, std::unique_ptr<ICollectorManager> collector_manager,
-               std::unique_ptr<IMetricManager> metric_manager, std::unique_ptr<IOutputManager> output_manager);
+               std::unique_ptr<IMetricManager> metric_manager, std::unique_ptr<IOutputManager> output_manager,
+               fs::path cache_dir_path);
 
   ~Orchestrator() override;
 
@@ -64,7 +70,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   static auto InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
                                  std::unique_ptr<ICollectorManager> collector_manager,
                                  std::unique_ptr<IMetricManager>    metric_manager,
-                                 std::unique_ptr<IOutputManager>    output_manager) -> void;
+                                 std::unique_ptr<IOutputManager> output_manager, fs::path cache_dir_path) -> void;
 
   /**
    * @brief Return a reference to the single Orchestrator instance
@@ -75,9 +81,20 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    */
   static auto GetInstance() -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code>;
 
-  static auto SaveToFile(std::filesystem::path directory_path) -> astl_status_code;
+  /**
+   * @brief Save the current orchestrator state to an ASTL file on disk.
+   *
+   * @param file_path The path to the output ASTL file.
+   */
+  static auto SaveToFile(fs::path file_path) -> astl_status_code;
 
-  static auto LoadFromFile(std::filesystem::path directory_path) -> astl_status_code;
+  /**
+   * @brief Load an orchestrator state from an ASTL file on disk.
+   *
+   * @param file_path The path to the input ASTL file.
+   * @param cache_dir_path The path to a directory where temporary files can be stored during loading.
+   */
+  static auto LoadFromFile(fs::path file_path, fs::path cache_dir_path) -> astl_status_code;
 
   /**
    * @brief Returns a const reference to the set of Targets managed by this orchestrator.
@@ -272,6 +289,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   mutable std::mutex                   _processed_samples_mtx;       // protect the _processed_samples container
   bool                                 _perfetto_emitted{false};     // ensure single emission per collection lifecycle
   bool                                 _intervalcsv_emitted{false};  // ensure single emission per collection lifecycle
+  std::filesystem::path                _cache_dir;  // temporary directory to save and load from ASTL file
 };
 
 }  // namespace astl

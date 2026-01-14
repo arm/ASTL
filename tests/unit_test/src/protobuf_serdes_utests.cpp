@@ -123,7 +123,7 @@ TEST_CASE("Serialize/Deserialize round-trip for all supported scalar types") {
 
 TEST_CASE("SerializeCurrentBatch returns NO_DATA_COLLECTED on empty input") {
   std::vector<RawSampledData> empty;
-  REQUIRE(astl::ProtobufSerDes::SerializeCurrentBatch("serdes_empty_test", empty) == ASTL_STATUS_NO_DATA_COLLECTED);
+  REQUIRE(astl::ProtobufSerDes::SerializeCurrentBatch("serdes_empty_test", empty, "") == ASTL_STATUS_NO_DATA_COLLECTED);
 }
 
 // NOLINTBEGIN(readability-magic-numbers,readability-function-cognitive-complexity)
@@ -135,7 +135,7 @@ TEST_CASE("SerializeCurrentBatch writes one batch that Deserialize can read") {
   const auto                              rand      = std::to_string(dis(gen));
   const fs::path                          dir       = "tmp";
   const auto                              file_path = dir / ("serdes_on_disk_test_" + rand + ".astl");
-  TempFileGuard                           guard{file_path};
+  TempFileGuard                           guard{dir};
 
   // Clean slate
   std::error_code err_code;
@@ -145,7 +145,8 @@ TEST_CASE("SerializeCurrentBatch writes one batch that Deserialize can read") {
   std::vector<RawSampledData> batch;
   batch.push_back(MakeSample(11, AstlValue{uint64_t{42}}, 123));
 
-  REQUIRE(astl::ProtobufSerDes::SerializeCurrentBatch("serdes_on_disk_test_" + rand, batch) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::ProtobufSerDes::SerializeCurrentBatch("serdes_on_disk_test_" + rand, batch, dir) ==
+          ASTL_STATUS_SUCCESS);
 
   // Read file and ensure a single RawSampleBatch parses and matches
   std::ifstream ifs(file_path, std::ios::binary);

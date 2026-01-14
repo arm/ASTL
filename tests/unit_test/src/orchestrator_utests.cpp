@@ -23,7 +23,7 @@ TEST_CASE("Orchestrator ctor", "[Orchestrator]") {
   auto topology_manager = std::make_unique<MockTopologyManager>();
 
   SECTION("All nullptrs") {
-    REQUIRE_THROWS_MATCHES(astl::Orchestrator(nullptr, nullptr, nullptr, nullptr), std::invalid_argument,
+    REQUIRE_THROWS_MATCHES(astl::Orchestrator(nullptr, nullptr, nullptr, nullptr, ""), std::invalid_argument,
                            MessageMatches(ContainsSubstring("requires non-null")));
   }
 
@@ -34,25 +34,26 @@ TEST_CASE("Orchestrator ctor", "[Orchestrator]") {
         // even though it looks like that syntactically. cppcheck can't properly expand the `SECTION` macro,
         // so we'll suppress the (moving a moved-from variable) warning here.
         // cppcheck-suppress accessMoved
-        astl::Orchestrator(nullptr, std::move(collector_manager), std::move(metric_manager), std::move(output_manager)),
+        astl::Orchestrator(nullptr, std::move(collector_manager), std::move(metric_manager), std::move(output_manager),
+                           ""),
         std::invalid_argument, MessageMatches(ContainsSubstring("requires non-null")));
   }
   // cppcheck-suppress-begin accessMoved
   SECTION("null collector_manager") {
-    REQUIRE_THROWS_MATCHES(
-        astl::Orchestrator(std::move(topology_manager), nullptr, std::move(metric_manager), std::move(output_manager)),
-        std::invalid_argument, MessageMatches(ContainsSubstring("requires non-null")));
+    REQUIRE_THROWS_MATCHES(astl::Orchestrator(std::move(topology_manager), nullptr, std::move(metric_manager),
+                                              std::move(output_manager), ""),
+                           std::invalid_argument, MessageMatches(ContainsSubstring("requires non-null")));
   }
 
   SECTION("null metric_manager") {
     REQUIRE_THROWS_MATCHES(astl::Orchestrator(std::move(topology_manager), std::move(collector_manager), nullptr,
-                                              std::move(output_manager)),
+                                              std::move(output_manager), ""),
                            std::invalid_argument, MessageMatches(ContainsSubstring("requires non-null")));
   }
 
   SECTION("null output_manager") {
     REQUIRE_THROWS_MATCHES(astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
-                                              std::move(metric_manager), nullptr),
+                                              std::move(metric_manager), nullptr, ""),
                            std::invalid_argument, MessageMatches(ContainsSubstring("requires non-null")));
   }
   // cppcheck-suppress-end accessMoved
@@ -70,7 +71,7 @@ TEST_CASE("Orchestrator-Collection", "[Orchestrator]") {
 
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
-                                           std::move(metric_manager), std::move(output_manager));
+                                           std::move(metric_manager), std::move(output_manager), "");
 
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
@@ -125,7 +126,7 @@ TEST_CASE("Orchestrator-StopCollection", "[Orchestrator]") {
   REQUIRE(topology_manager->GetTargets().size() == 1);
 
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
-                                  std::move(output_manager));
+                                  std::move(output_manager), "");
   const auto&        target_ptr = orchestrator.GetTargets()[0];
   REQUIRE(orchestrator.StopCollection(target_ptr.get()) == ASTL_STATUS_COLLECTION_ALREADY_STOPPED);
 }
@@ -140,7 +141,7 @@ TEST_CASE("Orchestrator-SinkRawSamples empty span no-op", "[Orchestrator]") {
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
-                                           std::move(metric_manager), std::move(output_manager));
+                                           std::move(metric_manager), std::move(output_manager), "");
 
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
@@ -164,7 +165,7 @@ TEST_CASE("Orchestrator-SinkRawSamples bulk growth then skip reserve", "[Orchest
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
-                                           std::move(metric_manager), std::move(output_manager));
+                                           std::move(metric_manager), std::move(output_manager), "");
 
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
@@ -227,7 +228,7 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV only emission", "[Orchestrat
   REQUIRE(topology_manager->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
 
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
-                                  std::move(output_manager));
+                                  std::move(output_manager), "");
   auto*              target = orchestrator.GetTargets()[0].get();
   REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
 }
@@ -264,7 +265,7 @@ TEST_CASE("Orchestrator-StopCollection PERFETTO only emission", "[Orchestrator][
   REQUIRE(topology_manager->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
 
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
-                                  std::move(output_manager));
+                                  std::move(output_manager), "");
   auto*              target = orchestrator.GetTargets()[0].get();
   REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
 }
@@ -309,7 +310,7 @@ TEST_CASE("Orchestrator-StopCollection dual PERFETTO+INTERVAL_CSV ordered emissi
   REQUIRE(topology_manager->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
 
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
-                                  std::move(output_manager));
+                                  std::move(output_manager), "");
   auto*              target = orchestrator.GetTargets()[0].get();
   REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
 }
@@ -348,7 +349,7 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV idempotent emission", "[Orch
   REQUIRE(topology_manager->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
 
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
-                                  std::move(output_manager));
+                                  std::move(output_manager), "");
   auto*              target = orchestrator.GetTargets()[0].get();
   REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
   REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
