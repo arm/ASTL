@@ -31,7 +31,8 @@ namespace astl {
 /** @brief Builds a metric manager from the given set of targets and the configuration
  */
 [[nodiscard]] auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets,
-                                      const AstlConfiguration&                     configuration)
+                                      const AstlConfiguration&                     configuration,
+                                      std::optional<std::filesystem::path>         cache_dir_path)
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code>;
 
 }  // namespace astl

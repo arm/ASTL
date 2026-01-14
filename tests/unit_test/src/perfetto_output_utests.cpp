@@ -712,7 +712,7 @@ TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[
 
   // Construct orchestrator (throws on null managers; all non-null here).
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
-                                  std::move(output_manager));
+                                  std::move(output_manager), "");
 
   // Create a concrete metric and sink a processed sample prior to StopCollection.
   TestMetricBase                          metric{"DeferredMetric", ASTL_UNITS_WATTS};
@@ -774,7 +774,7 @@ TEST_CASE("PerfettoOutput deferred emission empty map", "[perfetto_output]") {  
 
   auto               output_manager = std::make_unique<astl::OutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
-                                  std::move(output_manager));
+                                  std::move(output_manager), "");
 
   // No SinkProcessedSamples calls -> processed map remains empty.
   REQUIRE_FALSE(std::filesystem::exists(perfetto_path));
@@ -824,7 +824,7 @@ TEST_CASE("PerfettoOutput deferred emission env var unset", "[perfetto_output]")
 
   auto               output_manager = std::make_unique<astl::OutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
-                                  std::move(output_manager));
+                                  std::move(output_manager), "");
 
   // Sink one processed sample to show data exists but env var unset prevents emission.
   TestMetricBase                          metric{"UnsetMetric"};

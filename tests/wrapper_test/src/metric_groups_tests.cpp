@@ -67,7 +67,7 @@ TEST_CASE("astlGetMetricGroups", "[wrapper][Orchestrator][MetricGroups]") {
 
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                             std::move(metric_manager), std::move(output_manager));
+                                                             std::move(metric_manager), std::move(output_manager), "");
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -175,7 +175,7 @@ TEST_CASE("astlGetMetricGroupMetrics", "[MetricGroups][wrapper]") {
 
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                             std::move(metric_manager), std::move(output_manager));
+                                                             std::move(metric_manager), std::move(output_manager), "");
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 

@@ -46,7 +46,7 @@ auto MakeMinimalOrchestrator(std::unique_ptr<MockMetricManager> metric_manager =
   auto output_manager = std::make_unique<MockOutputManager>();
 
   return {std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                               std::move(metric_manager), std::move(output_manager)),
+                                               std::move(metric_manager), std::move(output_manager), ""),
           std::move(expectations)};
 }
 
@@ -517,7 +517,7 @@ TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator][wrapper]") {
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                             std::move(metric_manager), std::move(output_manager));
+                                                             std::move(metric_manager), std::move(output_manager), "");
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -612,7 +612,7 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
   auto  topology_manager                        = std::make_unique<MockTopologyManager>();
   auto  output_manager                          = std::make_unique<MockOutputManager>();
   auto  orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                            std::move(metric_manager), std::move(output_manager));
+                                                            std::move(metric_manager), std::move(output_manager), "");
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -858,7 +858,7 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator =
       std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(mock_collector_manager),
-                                           std::move(metric_manager), std::move(output_manager));
+                                           std::move(metric_manager), std::move(output_manager), "");
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -1090,7 +1090,7 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
   auto output_manager = std::make_unique<astl::OutputManager>();
   auto orchestrator_uptr =
       std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                           std::move(mock_metric_manager_uptr), std::move(output_manager));
+                                           std::move(mock_metric_manager_uptr), std::move(output_manager), "");
   orchestrator_uptr->SetTargets(std::move(mock_targets));
   auto*                    orchestrator_raw = orchestrator_uptr.get();
   TestOrchestratorInjector injector(std::move(orchestrator_uptr));
@@ -1269,7 +1269,7 @@ TEST_CASE("astlGetMetrics verifies category propagation", "[wrapper][Orchestrato
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                             std::move(metric_manager), std::move(output_manager));
+                                                             std::move(metric_manager), std::move(output_manager), "");
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -1285,20 +1285,14 @@ TEST_CASE("astlGetMetrics verifies category propagation", "[wrapper][Orchestrato
   REQUIRE(metrics[2]._category == ASTL_CATEGORY_FREQUENCY);
 }
 
-TEST_CASE("ASTL_SAVE_CACHE_DIR saves state on StopCollection", "[wrapper][cache]") {
+TEST_CASE("ASTL_SAVE_FILE_PATH saves state on StopCollection", "[wrapper][cache]") {
   namespace fs = std::filesystem;
 
-  const fs::path cache_dir = fs::temp_directory_path() / "astl_cache_wrapper_test";
-  const fs::path topo_file = cache_dir / "topology.astl";
-  const fs::path mm_file   = cache_dir / "metric_manager.astl";
+  const fs::path save_file = fs::temp_directory_path() / "astl_save_wrapper_test.astl";
+  TempFileGuard  temp_file_guard(save_file);
 
-  std::error_code ec;
-  fs::remove_all(cache_dir, ec);
-  fs::create_directories(cache_dir);
-  TempFileGuard guard_cache(cache_dir);
-
-  EnvVarGuard save_guard("ASTL_SAVE_CACHE_DIR");
-  REQUIRE(astl::SetEnvVar("ASTL_SAVE_CACHE_DIR", cache_dir.string()) == ASTL_STATUS_SUCCESS);
+  EnvVarGuard save_guard("ASTL_SAVE_FILE_PATH");
+  REQUIRE(astl::SetEnvVar("ASTL_SAVE_FILE_PATH", save_file.string()) == ASTL_STATUS_SUCCESS);
 
   // One mock target
   auto                 mock_target        = std::make_unique<MockTarget>();
@@ -1333,7 +1327,7 @@ TEST_CASE("ASTL_SAVE_CACHE_DIR saves state on StopCollection", "[wrapper][cache]
   auto output_manager = std::make_unique<MockOutputManager>();
 
   auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                           std::move(metric_manager), std::move(output_manager));
+                                                           std::move(metric_manager), std::move(output_manager), "");
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -1346,17 +1340,19 @@ TEST_CASE("ASTL_SAVE_CACHE_DIR saves state on StopCollection", "[wrapper][cache]
   REQUIRE(target_count == 1);
 
   // Serialization should fail since we are using a mock metric manager
-  REQUIRE(astlStopCollectionOnTarget(targets[0]._handle) == ASTL_STATUS_BAD_ARGUMENT);
+  // We get an internal error since mock orchestrator does not have a
+  // temp directory to store files.
+  REQUIRE(astlStopCollectionOnTarget(targets[0]._handle) == ASTL_STATUS_INTERNAL_ERROR);
 }
 
-TEST_CASE("ASTL_LOAD_CACHE_DIR test", "[wrapper][cache]") {
+TEST_CASE("ASTL_LOAD_FILE_PATH test", "[wrapper][cache]") {
   // This only verifies wrapper calls still succeed when the env var is set.
   // It does NOT prove the instance was loaded from disk because the orchestrator
   // is a singleton and only constructed once per process.
 
-  EnvVarGuard load_guard("ASTL_LOAD_CACHE_DIR");
+  EnvVarGuard load_guard("ASTL_LOAD_FILE_PATH");
 
-  REQUIRE(astl::SetEnvVar("ASTL_LOAD_CACHE_DIR", "/tmp/does-not-matter-for-smoke") == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar("ASTL_LOAD_FILE_PATH", "/tmp/does-not-matter-for-smoke") == ASTL_STATUS_SUCCESS);
 
   auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));

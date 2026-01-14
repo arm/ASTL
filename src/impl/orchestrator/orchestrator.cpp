@@ -11,6 +11,7 @@
 #include "astl_logger.hpp"
 #include "config/configuration_manager.hpp"  // for ConfigurationManager::GetConfiguration
 #include "orchestrator/orchestrator_builder.hpp"
+#include "serdes/archive_utils.hpp"
 #include "serdes/protobuf_serdes.hpp"
 
 namespace astl {
@@ -43,11 +44,12 @@ namespace fs = std::filesystem;
 Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>  topology_manager,
                            std::unique_ptr<ICollectorManager> collector_manager,
                            std::unique_ptr<IMetricManager>    metric_manager,
-                           std::unique_ptr<IOutputManager>    output_manager)
+                           std::unique_ptr<IOutputManager> output_manager, fs::path cache_dir_path)
     : _topology_manager{std::move(topology_manager)},
       _collector_manager{std::move(collector_manager)},
       _metric_manager{std::move(metric_manager)},
-      _output_manager{std::move(output_manager)} {
+      _output_manager{std::move(output_manager)},
+      _cache_dir{cache_dir_path} {
   if (!_topology_manager || !_collector_manager || !_metric_manager || !_output_manager) {
     throw std::invalid_argument(
         "Orchestrator requires non-null inputs for topology, collector, metric, and output managers.");
@@ -60,6 +62,12 @@ Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>  topology_manager,
 
 Orchestrator::~Orchestrator() {
   // Best-effort cleanup; ignore status in destructor.
+  std::error_code err_code;
+  std::filesystem::remove_all(_cache_dir, err_code);
+  if (err_code) {
+    ASTL_LOG_WARNING("Orchestrator destructor failed to remove cache dir '{}': {}", _cache_dir.string(),
+                     err_code.message());
+  }
   (void)_collector_manager->UnregisterRawSampleSink(this);
   (void)_metric_manager->UnregisterProcessedSampleSink(this);
 }
@@ -67,11 +75,12 @@ Orchestrator::~Orchestrator() {
 auto Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
                                       std::unique_ptr<ICollectorManager> collector_manager,
                                       std::unique_ptr<IMetricManager>    metric_manager,
-                                      std::unique_ptr<IOutputManager>    output_manager) -> void {
+                                      std::unique_ptr<IOutputManager> output_manager, fs::path cache_dir_path) -> void {
   std::scoped_lock lock(GetMutex());
   if (!Orchestrator::instance_) {
-    Orchestrator::instance_ = std::make_unique<Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                             std::move(metric_manager), std::move(output_manager));
+    Orchestrator::instance_ =
+        std::make_unique<Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                       std::move(metric_manager), std::move(output_manager), cache_dir_path);
   }
 }
 
@@ -81,22 +90,14 @@ auto Orchestrator::GetInstance()
     return std::reference_wrapper<std::unique_ptr<Orchestrator>>(instance_);
   }
 
-  auto cache_dir = GetEnvVar("ASTL_LOAD_CACHE_DIR");
-  if (!cache_dir.empty()) {
-    astl_status_code status = LoadFromFile(cache_dir);
-    if (status != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("Orchestrator::GetInstance failed to load state from cache dir '{}': {}", cache_dir,
-                     astlStatusString(status));
-      return std::unexpected(status);
-    }
-
-    return instance_;
-  }
-
   // Lazy construction without taking the mutex (convention: only InitializeInstance guards creation)
   auto configuration = astl::ConfigurationManager::GetConfiguration();
   if (!configuration) {
     return std::unexpected(configuration.error());
+  }
+  auto astl_file_path = astl::GetEnvVar("ASTL_LOAD_FILE_PATH");
+  if (!astl_file_path.empty()) {
+    configuration->astl_file_path = astl_file_path;
   }
   astl_status_code status = BuildOrchestrator(configuration.value());
   if (status != ASTL_STATUS_SUCCESS) {
@@ -280,14 +281,14 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
   std::lock_guard lock{_raw_samples_mtx};
 
   // serialize any remaining in-memory samples for this target into the batch file, then clear
-  auto it = _raw_samples.find(target);
-  if (it != _raw_samples.end() && !it->second.empty()) {
-    auto res = astl::ProtobufSerDes::SerializeCurrentBatch(target->Name(), it->second);
+  auto iter = _raw_samples.find(target);
+  if (iter != _raw_samples.end() && !iter->second.empty()) {
+    auto res = astl::ProtobufSerDes::SerializeCurrentBatch(target->Name(), iter->second, _cache_dir);
     if (res != ASTL_STATUS_SUCCESS) {
       ASTL_LOG_ERROR("Failed to serialize remaining samples for {}", target->Name());
       return res;
     }
-    it->second.clear();
+    iter->second.clear();
   }
 
   // if we've now stopped collection on all the targets, finalize metric processing and output
@@ -306,11 +307,11 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
     EmitSummaryCsvIfRequested();
   }
 
-  auto cache_dir = GetEnvVar("ASTL_SAVE_CACHE_DIR");
-  if (!cache_dir.empty()) {
-    status = SaveToFile(cache_dir);
+  auto save_astl_file_path = GetEnvVar("ASTL_SAVE_FILE_PATH");
+  if (!save_astl_file_path.empty()) {
+    status = SaveToFile(save_astl_file_path);
     if (status != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("Orchestrator::StopCollection failed to save state to cache dir '{}': {}", cache_dir,
+      ASTL_LOG_ERROR("Orchestrator::StopCollection failed to save state to astl file '{}': {}", save_astl_file_path,
                      astlStatusString(status));
       return status;
     }
@@ -442,7 +443,7 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
     }
 
     if (!batch_samples.empty()) {
-      auto res = astl::ProtobufSerDes::SerializeCurrentBatch(properties._name, batch_samples);
+      auto res = astl::ProtobufSerDes::SerializeCurrentBatch(properties._name, batch_samples, _cache_dir);
       if (res != ASTL_STATUS_SUCCESS) {
         return res;
       }
@@ -530,10 +531,10 @@ auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarge
 
   // 2) Rebuild from tmp/<target>.astl (if it exists)
   // TODO(ASTL-224): Support batch processing. Currently we just hardcode tmp/ as the location.
-  const fs::path file_path = fs::path("tmp") / (target->Name() + kAstlFileExtension);
+  const fs::path file_path = _cache_dir / (target->Name() + kAstlFileExtension);
 
-  if (!fs::exists(fs::path("tmp"))) {
-    ASTL_LOG_DEBUG("No tmp/ directory exists; skipping raw sample deserialization for target {}", target->Name());
+  if (!fs::exists(fs::path(_cache_dir))) {
+    ASTL_LOG_DEBUG("No cache directory exists; skipping raw sample deserialization for target {}", target->Name());
     return {};
   }
 
@@ -574,58 +575,59 @@ auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarge
   return {};  // not found
 }
 
-// TODO(ASTL-237): Once zipping and unzipping directories is supported, take in single astl
-// file instead of a directory path.
-auto Orchestrator::SaveToFile(std::filesystem::path directory_path) -> astl_status_code {
+auto Orchestrator::SaveToFile(std::filesystem::path file_path) -> astl_status_code {
   const auto &orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
     return orchestrator_or_error.error();
   }
-  const auto &orchestrator = orchestrator_or_error->get();
+  const auto &orchestrator   = orchestrator_or_error->get();
+  const auto  cache_dir_path = orchestrator->_cache_dir;
 
   // create directory if it does not exist
-  if (!fs::exists(directory_path)) {
+  if (!fs::exists(cache_dir_path)) {
     std::error_code err_code;
-    if (!fs::create_directories(directory_path, err_code)) {
-      ASTL_LOG_ERROR("Failed to create directory {}: {}", directory_path.string(), err_code.message());
+    fs::create_directories(cache_dir_path, err_code);
+    if (err_code) {
+      ASTL_LOG_ERROR("Failed to create directory {}: {}", cache_dir_path.string(), err_code.message());
       return ASTL_STATUS_INTERNAL_ERROR;
     }
   }
 
-  fs::path      topology_manager_file_path = directory_path / kTopologyManagerFileName;
-  std::ofstream topology_file{topology_manager_file_path, std::ios::binary | std::ios::out};
-  auto          status = ProtobufSerDes::Serialize(*orchestrator->_topology_manager, topology_file);
-  if (status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("Failed to serialize topology to {}: {}", topology_manager_file_path.string(),
-                   astlStatusString(status));
-    return status;
+  {
+    fs::path      topology_manager_file_path = cache_dir_path / kTopologyManagerFileName;
+    std::ofstream topology_file{topology_manager_file_path, std::ios::binary | std::ios::out};
+    auto          status = ProtobufSerDes::Serialize(*orchestrator->_topology_manager, topology_file);
+    if (status != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("Failed to serialize topology to {}: {}", topology_manager_file_path.string(),
+                     astlStatusString(status));
+      return status;
+    }
+
+    fs::path      metric_manager_file_path = cache_dir_path / kMetricManagerFileName;
+    std::ofstream metric_manager_file{metric_manager_file_path, std::ios::binary | std::ios::out};
+    status = ProtobufSerDes::Serialize(*orchestrator->_metric_manager, metric_manager_file);
+    if (status != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("Failed to serialize metric manager to {}: {}", metric_manager_file_path.string(),
+                     astlStatusString(status));
+      return status;
+    }
   }
 
-  fs::path      metric_manager_file_path = directory_path / kMetricManagerFileName;
-  std::ofstream metric_manager_file{metric_manager_file_path, std::ios::binary | std::ios::out};
-  status = ProtobufSerDes::Serialize(*orchestrator->_metric_manager, metric_manager_file);
-  if (status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("Failed to serialize metric manager to {}: {}", metric_manager_file_path.string(),
-                   astlStatusString(status));
-    return status;
-  }
+  mz::ZipDirectory(cache_dir_path, file_path);
 
   return ASTL_STATUS_SUCCESS;
 }
 
-// TODO(ASTL-237): Once zipping and unzipping directories is supported, take in single astl
-// file instead of a directory path.
-auto Orchestrator::LoadFromFile(std::filesystem::path directory_path) -> astl_status_code {
+auto Orchestrator::LoadFromFile(fs::path file_path, fs::path cache_dir_path) -> astl_status_code {
   if (instance_) {
     ASTL_LOG_WARNING("Orchestrator instance already initialized - cannot LoadFromFile");
     return ASTL_STATUS_SUCCESS;
   }
 
-  auto configuration            = astl::ConfigurationManager::GetConfiguration();
-  configuration->astl_cache_dir = directory_path;
+  auto status = mz::UnzipDirectory(file_path.string(), cache_dir_path.string());
 
-  astl_status_code status = BuildOrchestrator(configuration.value());
   if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to unzip ASTL file {}: {}", file_path.string(), astlStatusString(status));
     return status;
   }
 

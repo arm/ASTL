@@ -50,13 +50,13 @@ auto ActivatePlugin(std::vector<std::unique_ptr<ITarget>>& targets, const AstlCo
   }
 }
 
-auto LoadTopologyManagerFromCache(const std::filesystem::path& cache_dir)
+auto BuildTopologyManagerFromASTLFile(const std::filesystem::path& cache_dir_path)
     -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
-  const std::filesystem::path topology_manager_file_path = cache_dir / kTopologyManagerFileName;
+  const std::filesystem::path topology_manager_file_path = cache_dir_path / kTopologyManagerFileName;
 
-  if (!std::filesystem::is_directory(cache_dir)) {
-    ASTL_LOG_ERROR("Invalid ASTL cache directory: {}", cache_dir.string());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  if (!std::filesystem::is_directory(cache_dir_path)) {
+    ASTL_LOG_DEBUG("Creating ASTL cache directory: {}", cache_dir_path.string());
+    std::filesystem::create_directories(cache_dir_path);
   }
 
   std::ifstream topology_file(topology_manager_file_path, std::ios::binary | std::ios::in);
@@ -71,12 +71,12 @@ auto LoadTopologyManagerFromCache(const std::filesystem::path& cache_dir)
   return topology_manager;
 }
 
-auto BuildTopologyManager(const AstlConfiguration& configuration)
+auto BuildTopologyManager(const AstlConfiguration& configuration, std::optional<std::filesystem::path> cache_dir_path)
     -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
   std::vector<std::unique_ptr<ITarget>> targets;
 
-  if (configuration.astl_cache_dir.has_value()) {
-    return LoadTopologyManagerFromCache(configuration.astl_cache_dir.value());
+  if (configuration.astl_file_path.has_value()) {
+    return BuildTopologyManagerFromASTLFile(cache_dir_path.value());
   }
 
   try {

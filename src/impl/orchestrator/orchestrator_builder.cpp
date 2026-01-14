@@ -26,10 +26,22 @@
 #include "output/output_builder.hpp"
 #include "topology/topology_builder.hpp"
 
+namespace fs = std::filesystem;
+
 /** @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
  */
 auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_status_code {
-  auto topology_manager = astl::BuildTopologyManager(configuration);
+  fs::path cache_dir_path = fs::temp_directory_path() / ("astl-" + std::to_string(std::time(nullptr)));
+  auto     astl_file_path = astl::GetEnvVar("ASTL_LOAD_FILE_PATH");
+  if (!astl_file_path.empty()) {
+    auto status = astl::Orchestrator::LoadFromFile(astl_file_path, cache_dir_path);
+    if (status != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("Orchestrator::GetInstance failed to load state from ASTL file '{}'", astl_file_path);
+      return status;
+    }
+  }
+
+  auto topology_manager = astl::BuildTopologyManager(configuration, cache_dir_path);
   if (!topology_manager) {
     return topology_manager.error();
   }
@@ -40,7 +52,7 @@ auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_sta
     return collector_manager.error();
   }
 
-  auto metric_manager = astl::BuildMetricManager(topology_manager.value()->GetTargets(), configuration);
+  auto metric_manager = astl::BuildMetricManager(topology_manager.value()->GetTargets(), configuration, cache_dir_path);
   if (!metric_manager) {
     return metric_manager.error();
   }
@@ -53,7 +65,8 @@ auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_sta
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
   astl::Orchestrator::InitializeInstance(std::move(topology_manager.value()), std::move(collector_manager.value()),
-                                         std::move(metric_manager.value()), std::move(output_manager.value()));
+                                         std::move(metric_manager.value()), std::move(output_manager.value()),
+                                         cache_dir_path);
   // the orchestrator owns targets
   return ASTL_STATUS_SUCCESS;
 }

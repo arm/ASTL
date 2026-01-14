@@ -106,16 +106,15 @@ auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
   return result;
 }
 
-auto SerializeCurrentBatch(const std::string& target_name, const std::vector<RawSampledData>& samples)
-    -> astl_status_code {
+auto SerializeCurrentBatch(const std::string& target_name, const std::vector<RawSampledData>& samples,
+                           fs::path output_path) -> astl_status_code {
   if (samples.empty()) {
     ASTL_LOG_WARNING("No samples to serialize for target {}", target_name);
     return ASTL_STATUS_NO_DATA_COLLECTED;
   }
 
-  const fs::path tmp_dir = "tmp";
-  fs::create_directories(tmp_dir);
-  const fs::path file_path = tmp_dir / (target_name + kAstlFileExtension);
+  fs::create_directories(output_path);
+  const fs::path file_path = output_path / (target_name + kAstlFileExtension);
 
   std::ofstream ofs(file_path, std::ios::binary | std::ios::app);
   if (!ofs) {
