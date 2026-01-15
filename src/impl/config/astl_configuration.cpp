@@ -134,28 +134,6 @@ auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std:
 }
 
 /**
- * @brief Build a formula from an optional JSON value (json array format).
- *
- * @param formula_json Optional JSON value containing formula specification
- * @return std::expected<AnyFormula, astl_status_code> containing the parsed formula or error status
- */
-auto BuildFormula(const std::optional<nlohmann::json>& formula_json) -> std::expected<AnyFormula, astl_status_code> {
-  if (!formula_json.has_value()) {
-    return AnyFormula{IdentityFormula{}};
-  }
-
-  auto result = BuildFormula(formula_json.value());
-
-  if (!result.has_value()) {
-    ASTL_LOG_ERROR("Failed to parse formula: {}", astlStatusString(result.error()));
-    return std::unexpected(result.error());
-  }
-
-  ASTL_LOG_DEBUG("Successfully parsed formula: {}", GetFormulaDescription(result.value()));
-  return result.value();
-}
-
-/**
  * @brief Given a residency metric name, scan the metric declarations (from config file) and scmi_spec
  * defining the platform to create a map of layout member (e.g. AP0) to collection of StateInfo (holding state names,
  * data event ids)
@@ -293,9 +271,9 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
                      metric_key_name);
       return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
-    const auto  it    = obj.begin();
-    const auto& label = it.key();
-    const auto& val   = it.value();
+    const auto  iter  = obj.begin();
+    const auto& label = iter.key();
+    const auto& val   = iter.value();
     if (label.empty()) {
       ASTL_LOG_ERROR("Empty label in finite_set_values for metric {}", metric_key_name);
       return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
@@ -328,28 +306,28 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   }
 
   MetricConfigOnTargets metric_configs_on_targets;
-  const auto            units          = ParseUnits(metric_declaration.unit);
-  const auto            value_type     = ParseValueType(metric_declaration);
-  const auto            category       = ParseCategory(metric_declaration.category);
-  auto                  formula_result = BuildFormula(metric_declaration.formula);
-  if (!formula_result.has_value()) {
-    return std::unexpected(formula_result.error());
-  }
-  const auto formula = formula_result.value();
+  const auto            units      = ParseUnits(metric_declaration.unit);
+  const auto            value_type = ParseValueType(metric_declaration);
+  const auto            category   = ParseCategory(metric_declaration.category);
   for (const auto& scmi_metric_declaration : metric_registers) {
     const auto& metric_name = scmi_metric_declaration.name;
     const auto& de_id       = scmi_metric_declaration.de_id;
     // @todo(ASTL-186) - may need to handle different data event ids for different targets
     ScmiOperationBuilder operation_builder{de_id};
-    auto                 finite_set_copy    = finite_set;      // copy for this metric instance
-    auto                 labels_copy        = value_to_label;  // copy for this metric instance
-    auto                 formula_copy       = formula;         // copy for this metric instance
-    auto                 applicable_targets = GetApplicableTargetsForScmiMetric(scmi_metric_declaration, scmi_targets);
+    auto                 finite_set_copy = finite_set;      // copy for this metric instance
+    auto                 labels_copy     = value_to_label;  // copy for this metric instance
+
+    auto formula_result = BuildFormula(metric_declaration.formula);
+    if (!formula_result.has_value()) {
+      return std::unexpected(formula_result.error());
+    }
+
+    auto applicable_targets = GetApplicableTargetsForScmiMetric(scmi_metric_declaration, scmi_targets);
 
     auto new_metric_config = std::make_unique<FiniteSetMetricConfig>(
         metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE, category,
         collector_type.value(), std::move(operation_builder), std::move(finite_set_copy), std::move(labels_copy),
-        std::move(formula_copy));
+        std::move(formula_result.value()));
 
     metric_configs_on_targets.emplace(std::move(new_metric_config), std::move(applicable_targets));
   }
@@ -377,12 +355,6 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   const auto value_type = ParseValueType(metric_declaration);
   const auto category   = ParseCategory(metric_declaration.category);
 
-  auto formula_result = BuildFormula(metric_declaration.formula);
-  if (!formula_result.has_value()) {
-    return std::unexpected(formula_result.error());
-  }
-  const auto formula = formula_result.value();
-
   const auto collector_type = ParseCollectorType(metric_declaration);
   if (!collector_type || collector_type != CollectorType::SCMI) {
     ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection_protocol,
@@ -408,11 +380,16 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     // assemble a name for this metric config - use the layout member name (e.g. 'AP0' with an '_' as a prefix to more
     // uniquely identify it)
     std::string metric_name{layout_member_name + "_" + std::string(metric_key_name)};
-    auto        formula_copy      = formula;  // copy for this metric instance
-    auto        new_metric_config = std::make_unique<ResidencyMetricConfig>(
+
+    auto formula_result = BuildFormula(metric_declaration.formula);
+    if (!formula_result.has_value()) {
+      return std::unexpected(formula_result.error());
+    }
+
+    auto new_metric_config = std::make_unique<ResidencyMetricConfig>(
         std::move(metric_name), metric_declaration.description, units, value_type, ASTL_METRIC_RESIDENCY, category,
         collector_type.value(), std::move(per_target_state_info), metric_declaration.inferred_state,
-        std::move(formula_copy));
+        std::move(formula_result.value()));
     metric_configs_on_targets.emplace(std::move(new_metric_config), std::move(applicable_targets));
   }
   return metric_configs_on_targets;
@@ -446,24 +423,25 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
     ASTL_LOG_INFO("No Data Event IDs found for metric {}", metric_key_name);
   }
   MetricConfigOnTargets metric_configs_on_targets;
-  const auto            units          = ParseUnits(metric_declaration.unit);
-  const auto            value_type     = ParseValueType(metric_declaration);
-  const auto            category       = ParseCategory(metric_declaration.category);
-  auto                  formula_result = BuildFormula(metric_declaration.formula);
-  if (!formula_result.has_value()) {
-    return std::unexpected(formula_result.error());
-  }
-  const auto formula = formula_result.value();
+  const auto            units      = ParseUnits(metric_declaration.unit);
+  const auto            value_type = ParseValueType(metric_declaration);
+  const auto            category   = ParseCategory(metric_declaration.category);
   for (const auto& scmi_metric_declaration : metric_registers) {
     // @todo(ASTL-186) consider ScmiMultiTargetOperationBuilder
     //                 if we want to support different data event ids per target
     auto                 applicable_targets = GetApplicableTargetsForScmiMetric(scmi_metric_declaration, scmi_targets);
     ScmiOperationBuilder operation_builder{scmi_metric_declaration.de_id};
-    auto                 formula_copy      = formula;  // copy for this metric instance
-    auto                 metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
-    auto                 new_metric_config = std::make_unique<MetricConfig>(
-        scmi_metric_declaration.name, metric_declaration.description, units, value_type, category, metric_type,
-        std::move(metric_groups), collector_type.value(), std::move(operation_builder), std::move(formula_copy));
+
+    auto formula_result = BuildFormula(metric_declaration.formula);
+    if (!formula_result.has_value()) {
+      return std::unexpected(formula_result.error());
+    }
+
+    auto metric_groups = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
+    auto new_metric_config =
+        std::make_unique<MetricConfig>(scmi_metric_declaration.name, metric_declaration.description, units, value_type,
+                                       category, metric_type, std::move(metric_groups), collector_type.value(),
+                                       std::move(operation_builder), std::move(formula_result.value()));
     metric_configs_on_targets.emplace(std::move(new_metric_config), std::move(applicable_targets));
   }
   return metric_configs_on_targets;

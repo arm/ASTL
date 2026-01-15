@@ -27,79 +27,50 @@
 
 namespace astl {
 
-// @todo ASTL-255: Support chaining multiple transformations together to form mathematical expressions.
-// Currently, only one transformation  is supported.
+// Formula expressions are powered by tinyexpr++, supporting:
+// - Arithmetic operations: +, -, *, /, %
+// - Shift operators: >> (right shift), << (left shift) - native operators
+// - Bitwise functions: bitand(), bitor(), bitxor(), bitnot(), bitlshift(), bitrshift()
+// - Logical operators: && (and), || (or), & (and), | (or)
+// - Mathematical functions: abs, sin, cos, sqrt, pow, ln, log, exp, etc.
+// - Complex expressions with parentheses for proper precedence
+// - Variable 'value' represents the input metric value
 //
-// Examples of chained transformations:
-//   - Apply bitmask (Register & 0xFFA0) followed by bit shift (>> 8)
-//   - Apply scaling followed by offset adjustment
-//   - Combine multiple operations: (value & mask) >> shift * scale + offset
-// Future enhancement: Allow developers to specify formulas as mathematical expressions directly
-//   - Example: "formula": "(value & 0xFFA0) >> 8 * 0.001"
-//   - Support operators: &, |, ^, <<, >>, +, -, *, /, %, parentheses
-//   - Parse and evaluate expression with proper operator precedence
-//   - Would complement the structured array format with a more intuitive syntax
-// - Support Q notation for fixed-point format as part of transformations.
+// IMPORTANT: & and | are LOGICAL operators, not bitwise! Use bitand(), bitor() for bitwise ops.
+//
+// Examples:
+//   "value * 0.001"                      - Simple scaling
+//   "bitand(value >> 8, 0xFF)"           - Extract byte (bits 8-15): shift is native, bitand is function
+//   "bitand(value >> 4, 0xFF) * 0.5"     - Multi-step transformation
+//
+// @todo ASTL-255: Support Q notation for fixed-point format as part of transformations.
 
-auto BuildFormula(const nlohmann::json& formula_json) -> std::expected<AnyFormula, astl_status_code> {
-  // Handle null or empty cases
-  if (formula_json.is_null()) {
+auto BuildFormula(const std::optional<nlohmann::json>& formula_json) -> std::expected<AnyFormula, astl_status_code> {
+  // No formula specified - use identity (pass-through)
+  if (!formula_json.has_value() || formula_json->is_null()) {
     return AnyFormula{IdentityFormula{}};
   }
 
-  if (!formula_json.is_array()) {
-    ASTL_LOG_ERROR("Formula must be a JSON array with operation objects");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-
-  if (formula_json.empty()) {
-    ASTL_LOG_WARNING("Empty formula array, treating as no formula");
-    return AnyFormula{IdentityFormula{}};
-  }
-
-  if (formula_json.size() > 1) {
-    ASTL_LOG_WARNING("Formula arrays with multiple transformations not yet supported, using first transformation only");
-  }
-
-  // Process first element
-  const auto& first_op = formula_json[0];
-  if (!first_op.is_object()) {
-    ASTL_LOG_ERROR("Formula array element must be an object with 'transformation' and 'value' fields");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-
-  if (!first_op.contains("transformation") || !first_op.contains("value")) {
-    ASTL_LOG_ERROR("Formula object must contain 'transformation' and 'value' fields");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-
-  std::string transformation = first_op["transformation"].get<std::string>();
-
-  // Convert transformation to uppercase for validation
-  std::string op_upper = transformation;
-  std::transform(op_upper.begin(), op_upper.end(), op_upper.begin(), ::toupper);
-
-  // BITMASK operations expect numeric value (e.g., 0xFF or 255)
-  if (op_upper == "BITMASK") {
-    if (!first_op["value"].is_number()) {
-      ASTL_LOG_ERROR("BITMASK formula 'value' must be a number (e.g., 0xFF or 255)");
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  // Support string expressions like "bitand(value >> 8, 0xFF)" or "value * 0.001"
+  if (formula_json->is_string()) {
+    std::string expression = formula_json->get<std::string>();
+    if (expression.empty()) {
+      ASTL_LOG_WARNING("Empty formula string, treating as no formula");
+      return AnyFormula{IdentityFormula{}};
     }
-    uint64_t mask_value = first_op["value"].get<uint64_t>();
-    return AnyFormula{BitMaskFormula{mask_value}};
-  }
 
-  // SCALING operations expect numeric value (e.g., 0.001 or 1.5)
-  if (op_upper == "SCALING") {
-    if (!first_op["value"].is_number()) {
-      ASTL_LOG_ERROR("SCALING formula 'value' must be a number (e.g., 0.001 or 1.5)");
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    ASTL_LOG_DEBUG("Parsing formula expression: '{}'", expression);
+    auto result = ExpressionFormula::Create(std::move(expression));
+    if (!result.has_value()) {
+      ASTL_LOG_ERROR("Failed to create ExpressionFormula: {}", astlStatusString(result.error()));
+      return std::unexpected(result.error());
     }
-    double scale_factor = first_op["value"].get<double>();
-    return AnyFormula{ScalingFormula{scale_factor}};
+    AnyFormula formula{std::move(result.value())};
+    ASTL_LOG_DEBUG("Successfully parsed formula: {}", GetFormulaDescription(formula));
+    return formula;
   }
 
-  ASTL_LOG_ERROR("Unknown formula transformation: '{}'", op_upper);
+  ASTL_LOG_ERROR("Formula must be a string expression (e.g., \"value * 0.001\" or \"bitand(value >> 8, 0xFF)\")");
   return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
 }
 

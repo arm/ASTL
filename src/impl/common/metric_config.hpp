@@ -69,7 +69,7 @@ class MetricConfig {
    * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
    * @param operation_builder The operation builder associated with this metric's collector type,
    *                          including collector-specific parameters like data event id or libsensors chip
-   * @param formula        Formula for processing raw samples (BitMaskFormula, ScalingFormula, or IdentityFormula)
+   * @param formula        Formula for processing raw samples (BitMaskFormula, ExpressionFormula, or IdentityFormula)
    *
    * REFACTOR - Eliminate this function.
    * We should just have one parameterized constructor with every parameter available.
@@ -101,7 +101,7 @@ class MetricConfig {
    * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
    * @param operation_builder The operation builder associated with this metric's collector type,
    *                          including collector-specific parameters like data event id or libsensors chip
-   * @param formula        Formula for processing raw samples (BitMaskFormula, ScalingFormula, or IdentityFormula)
+   * @param formula        Formula for processing raw samples (BitMaskFormula, ExpressionFormula, or IdentityFormula)
    */
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                         astl_value_type_t value_type, astl_category_t category, astl_metric_type_t metric_type,
@@ -118,10 +118,13 @@ class MetricConfig {
         _operation_builder(std::move(operation_builder)),
         _formula(std::move(formula)) {}
 
-  MetricConfig(const MetricConfig &)            = default;
-  MetricConfig &operator=(const MetricConfig &) = default;
-  MetricConfig(MetricConfig &&)                 = default;
-  MetricConfig &operator=(MetricConfig &&)      = default;
+  // Delete copy operations since ExpressionFormula is move-only
+  MetricConfig(const MetricConfig &)            = delete;
+  MetricConfig &operator=(const MetricConfig &) = delete;
+
+  // Allow move operations
+  MetricConfig(MetricConfig &&)            = default;
+  MetricConfig &operator=(MetricConfig &&) = default;
 
   /**
    * @brief Return the name of the metric.
@@ -190,7 +193,7 @@ class MetricConfig {
   std::vector<std::string> _metric_groups;   // Groups this metric belongs to
   CollectorType            _collector_type;  // Collector type to support this metric
   AnyOperationBuilder      _operation_builder;
-  AnyFormula               _formula;  // Formula for processing raw samples (BitMaskFormula, ScalingFormula, etc.)
+  AnyFormula               _formula;  // Formula for processing raw samples (BitMaskFormula, ExpressionFormula, etc.)
 };
 
 /**
@@ -228,7 +231,7 @@ class ResidencyMetricConfig final : public MetricConfig {
    * @param collector_type  Collector type responsible for gathering residency counters.
    * @param state_info      Mapping from target -> (state name -> {operation_builder, tick_frequency}).
    * @param inferred_state  Optional state name to be inferred from the metric (e.g., "C0").
-   * @param formula         Formula for processing raw samples (BitMaskFormula, ScalingFormula, or IdentityFormula).
+   * @param formula         Formula for processing raw samples (BitMaskFormula, ExpressionFormula, or IdentityFormula).
    */
   explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
@@ -240,8 +243,8 @@ class ResidencyMetricConfig final : public MetricConfig {
         _state_info(std::move(state_info)),
         _inferred_state(std::move(inferred_state)) {}
 
-  ResidencyMetricConfig(const ResidencyMetricConfig &)            = default;
-  ResidencyMetricConfig &operator=(const ResidencyMetricConfig &) = default;
+  ResidencyMetricConfig(const ResidencyMetricConfig &)            = delete;
+  ResidencyMetricConfig &operator=(const ResidencyMetricConfig &) = delete;
   ResidencyMetricConfig(ResidencyMetricConfig &&)                 = default;
   ResidencyMetricConfig &operator=(ResidencyMetricConfig &&)      = default;
   ~ResidencyMetricConfig() override                               = default;
@@ -295,7 +298,7 @@ class FiniteSetMetricConfig final : public MetricConfig {
    * type
    * @param finite_set      Set of valid AstlValue objects that define the finite set.
    * @param labels          Mapping from finite set values to human-readable labels.
-   * @param formula         Formula for processing raw samples (BitMaskFormula, ScalingFormula, or IdentityFormula).
+   * @param formula         Formula for processing raw samples (BitMaskFormula, ExpressionFormula, or IdentityFormula).
    */
   explicit FiniteSetMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
@@ -306,8 +309,8 @@ class FiniteSetMetricConfig final : public MetricConfig {
         _finite_set(std::move(finite_set)),
         _labels(std::move(labels)) {}
 
-  FiniteSetMetricConfig(const FiniteSetMetricConfig &)            = default;
-  FiniteSetMetricConfig &operator=(const FiniteSetMetricConfig &) = default;
+  FiniteSetMetricConfig(const FiniteSetMetricConfig &)            = delete;
+  FiniteSetMetricConfig &operator=(const FiniteSetMetricConfig &) = delete;
   FiniteSetMetricConfig(FiniteSetMetricConfig &&)                 = default;
   FiniteSetMetricConfig &operator=(FiniteSetMetricConfig &&)      = default;
   ~FiniteSetMetricConfig() override                               = default;
@@ -347,9 +350,9 @@ class FiniteSetMetricConfig final : public MetricConfig {
    * @param value The AstlValue to get the label for.
    * @return The label string if found, empty string otherwise.
    */
-  std::string GetLabelForValue(const AstlValue &value) const {
-    auto it = _labels.find(value);
-    return (it != _labels.end()) ? it->second : "";
+  [[nodiscard]] std::string GetLabelForValue(const AstlValue &value) const {
+    auto iter = _labels.find(value);
+    return (iter != _labels.end()) ? iter->second : "";
   }
 
  private:

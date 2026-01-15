@@ -31,8 +31,12 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
   // TODO(ASTL-101): Create unit tests for metric manager
 
   SECTION("Register a valid metric config") {
-    REQUIRE(mock_metric_manager.RegisterMetric(std::make_unique<astl::MetricConfig>(kTemperature), {}) ==
-            ASTL_STATUS_NOT_IMPLEMENTED);
+    // Create a new metric config directly (cannot copy since ExpressionFormula is move-only)
+    auto metric_config = std::make_unique<astl::MetricConfig>(
+        "SoC Temperature", "SoC Temperature in Celsius", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64,
+        ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, astl::CollectorType::SCMI, astl::ScmiOperationBuilder{0x1234});
+
+    REQUIRE(mock_metric_manager.RegisterMetric(std::move(metric_config), {}) == ASTL_STATUS_NOT_IMPLEMENTED);
   }
 
   SECTION("Register an invalid metric config") {

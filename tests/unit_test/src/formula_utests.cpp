@@ -22,8 +22,8 @@
 #include "../../test_includes.hpp"  // include before catch2
 #include "common/astl_value.hpp"
 #include "metric/bit_mask_formula.hpp"
+#include "metric/expression_formula.hpp"
 #include "metric/formula_builder.hpp"
-#include "metric/scaling_formula.hpp"
 
 using Catch::Matchers::WithinAbs;
 
@@ -97,82 +97,9 @@ TEST_CASE("BitMaskFormula - Edge Cases", "[BitMaskFormula]") {
 }
 
 // =============================================================================
-// ScalingFormula Tests
+// ScalingFormula Tests - REMOVED: ScalingFormula replaced by ExpressionFormula
+// Use ExpressionFormula with expressions like "value * 2.0" for scaling
 // =============================================================================
-
-TEST_CASE("ScalingFormula - Basic Operations", "[ScalingFormula]") {
-  constexpr double     scale_factor = 2.0;
-  astl::ScalingFormula formula{scale_factor};
-
-  SECTION("Description") {
-    auto desc = formula.Description();
-    REQUIRE(desc.find("SCALING") != std::string::npos);
-    REQUIRE(desc.find("2") != std::string::npos);
-  }
-
-  SECTION("Apply to uint8_t") {
-    astl::AstlValue input{uint8_t{10}};
-    auto            result = formula.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<uint8_t>(result->value));
-    REQUIRE(std::get<uint8_t>(result->value) == 20);
-  }
-
-  SECTION("Apply to uint64_t") {
-    astl::AstlValue input{uint64_t{10000}};
-    auto            result = formula.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<uint64_t>(result->value));
-    REQUIRE(std::get<uint64_t>(result->value) == 20000);
-  }
-
-  SECTION("Apply to double") {
-    astl::AstlValue input{3.5};
-    auto            result = formula.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<double>(result->value));
-    REQUIRE_THAT(std::get<double>(result->value), WithinAbs(7.0, 0.0001));
-  }
-}
-
-TEST_CASE("ScalingFormula - Fractional Scaling", "[ScalingFormula]") {
-  constexpr double     scale_factor = 0.001;
-  astl::ScalingFormula formula{scale_factor};
-
-  SECTION("Scale down uint32_t") {
-    astl::AstlValue input{uint32_t{1000}};
-    auto            result = formula.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<uint32_t>(result->value));
-    REQUIRE(std::get<uint32_t>(result->value) == 1);  // 1000 * 0.001 = 1
-  }
-
-  SECTION("Scale down double") {
-    astl::AstlValue input{1000.0};
-    auto            result = formula.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<double>(result->value));
-    REQUIRE_THAT(std::get<double>(result->value), WithinAbs(1.0, 0.0001));
-  }
-}
-
-TEST_CASE("ScalingFormula - Edge Cases", "[ScalingFormula]") {
-  SECTION("Scale by 1.0 (identity)") {
-    astl::ScalingFormula formula{1.0};
-    astl::AstlValue      input{uint32_t{42}};
-    auto                 result = formula.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::get<uint32_t>(result->value) == 42);
-  }
-
-  SECTION("Scale by 0.0") {
-    astl::ScalingFormula formula{0.0};
-    astl::AstlValue      input{uint32_t{12345}};
-    auto                 result = formula.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::get<uint32_t>(result->value) == 0);
-  }
-}
 
 // =============================================================================
 // IdentityFormula Tests
@@ -204,250 +131,53 @@ TEST_CASE("IdentityFormula - Pass-through", "[IdentityFormula]") {
 // FormulaBuilder Tests
 // =============================================================================
 
-TEST_CASE("FormulaBuilder - BITMASK", "[FormulaBuilder]") {
-  SECTION("Hex format") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "BITMASK"},
-        {"value",          0xFF     }
-    });
-
-    auto result = astl::BuildFormula(json);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<astl::BitMaskFormula>(*result));
-
-    auto&           formula = std::get<astl::BitMaskFormula>(*result);
-    astl::AstlValue input{uint16_t{0x12FF}};
-    auto            applied = formula.Apply(input);
-    REQUIRE(applied.has_value());
-    REQUIRE(std::get<uint16_t>(applied->value) == 0xFF);
-  }
-
-  SECTION("Decimal format") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "BITMASK"},
-        {"value",          255      }
-    });
-
-    auto result = astl::BuildFormula(json);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<astl::BitMaskFormula>(*result));
-
-    auto&           formula = std::get<astl::BitMaskFormula>(*result);
-    astl::AstlValue input{uint8_t{0xFF}};
-    auto            applied = formula.Apply(input);
-    REQUIRE(applied.has_value());
-    REQUIRE(std::get<uint8_t>(applied->value) == 0xFF);
-  }
-
-  SECTION("Large mask value") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "BITMASK"        },
-        {"value",          0xFFFFFFFFFFFFULL}
-    });
-
-    auto result = astl::BuildFormula(json);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<astl::BitMaskFormula>(*result));
-
-    auto&           formula = std::get<astl::BitMaskFormula>(*result);
-    astl::AstlValue input{uint16_t{0x12FF}};
-    auto            applied = formula.Apply(input);
-    REQUIRE(applied.has_value());
-    REQUIRE(std::get<uint16_t>(applied->value) == 0x12FF);
-  }
-
-  SECTION("Reject string value") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "BITMASK"},
-        {"value",          "0xFF"   }
-    });
-
-    auto result = astl::BuildFormula(json);
-    // Value must be a number, returns error
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
-  }
-}
-
-TEST_CASE("FormulaBuilder - SCALING", "[FormulaBuilder]") {
-  SECTION("Integer scale factor") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "SCALING"},
-        {"value",          2        }
-    });
-
-    auto result = astl::BuildFormula(json);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<astl::ScalingFormula>(*result));
-
-    auto&           formula = std::get<astl::ScalingFormula>(*result);
-    astl::AstlValue input{uint32_t{100}};
-    auto            applied = formula.Apply(input);
-    REQUIRE(applied.has_value());
-    REQUIRE(std::get<uint32_t>(applied->value) == 200);
-  }
-
-  SECTION("Floating point scale factor") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "SCALING"},
-        {"value",          0.001    }
-    });
-
-    auto result = astl::BuildFormula(json);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<astl::ScalingFormula>(*result));
-
-    auto&           formula = std::get<astl::ScalingFormula>(*result);
-    astl::AstlValue input{uint32_t{1000}};
-    auto            applied = formula.Apply(input);
-    REQUIRE(applied.has_value());
-    REQUIRE(std::get<uint32_t>(applied->value) == 1);
-  }
-
-  SECTION("Case insensitive transformation name") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "ScAlInG"},
-        {"value",          1.5      }
-    });
-
-    auto result = astl::BuildFormula(json);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<astl::ScalingFormula>(*result));
-  }
-
-  SECTION("Reject string value") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "SCALING"},
-        {"value",          "1.5"    }
-    });
-
-    auto result = astl::BuildFormula(json);
-    // Value must be a number, returns error
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
-  }
-}
-
 TEST_CASE("FormulaBuilder - Null/Empty", "[FormulaBuilder]") {
   SECTION("Null JSON") {
     nlohmann::json json   = nullptr;
-    auto           result = astl::BuildFormula(json);
+    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
     REQUIRE(result.has_value());
     REQUIRE(std::holds_alternative<astl::IdentityFormula>(*result));
   }
 
-  SECTION("Empty array") {
-    nlohmann::json json   = nlohmann::json::array();
-    auto           result = astl::BuildFormula(json);
+  SECTION("Empty string") {
+    nlohmann::json json   = "";
+    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
     REQUIRE(result.has_value());
     REQUIRE(std::holds_alternative<astl::IdentityFormula>(*result));
   }
 }
 
 TEST_CASE("FormulaBuilder - Invalid Input", "[FormulaBuilder]") {
-  SECTION("Not an array") {
+  SECTION("Non-string, non-null type") {
+    nlohmann::json json = nlohmann::json::array();
+    json.push_back("invalid");
+    auto result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Object type") {
     nlohmann::json json = {
         {"transformation", "BITMASK"},
         {"value",          "0xFF"   }
     };
-    auto result = astl::BuildFormula(json);
-    // Must be an array, returns error
+    auto result = astl::BuildFormula(std::optional<nlohmann::json>{json});
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
 
-  SECTION("Array element not an object") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back("invalid");
-    auto result = astl::BuildFormula(json);
-    // Array element must be object, returns error
+  SECTION("Invalid expression syntax") {
+    nlohmann::json json   = "value +* 2";
+    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
 
-  SECTION("Missing transformation field") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"value", "0xFF"}
-    });
-    auto result = astl::BuildFormula(json);
-    // Missing required field, returns error
+  SECTION("Undefined variable") {
+    nlohmann::json json   = "y * 2";  // Should use 'x', not 'y'
+    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
-  }
-
-  SECTION("Missing value field") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "BITMASK"}
-    });
-    auto result = astl::BuildFormula(json);
-    // Missing required field, returns error
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
-  }
-
-  SECTION("Unknown transformation") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "UNKNOWN"},
-        {"value",          "0xFF"   }
-    });
-    auto result = astl::BuildFormula(json);
-    // Unknown transformation, returns error
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
-  }
-
-  SECTION("Reject string value") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "BITMASK"},
-        {"value",          "0xFF"   }
-    });
-    auto result = astl::BuildFormula(json);
-    // Value must be a number, returns error
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
-  }
-
-  SECTION("Reject negative value") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "BITMASK"},
-        {"value",          -1       }
-    });
-    auto result = astl::BuildFormula(json);
-    // Negative values will be cast to large uint64_t, which is valid
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<astl::BitMaskFormula>(*result));
-  }
-}
-
-TEST_CASE("FormulaBuilder - Multiple Transformations Warning", "[FormulaBuilder]") {
-  SECTION("Uses first transformation only") {
-    nlohmann::json json = nlohmann::json::array();
-    json.push_back({
-        {"transformation", "BITMASK"},
-        {"value",          0xFF     }
-    });
-    json.push_back({
-        {"transformation", "SCALING"},
-        {"value",          2.0      }
-    });
-
-    auto result = astl::BuildFormula(json);
-    REQUIRE(result.has_value());
-    // Should use first transformation (BITMASK)
-    REQUIRE(std::holds_alternative<astl::BitMaskFormula>(*result));
   }
 }
 
@@ -462,14 +192,6 @@ TEST_CASE("AnyFormula - ApplyFormula Helper", "[AnyFormula]") {
     auto             result = astl::ApplyFormula(formula, input);
     REQUIRE(result.has_value());
     REQUIRE(std::get<uint16_t>(result->value) == 0xFF);
-  }
-
-  SECTION("Apply ScalingFormula via variant") {
-    astl::AnyFormula formula = astl::ScalingFormula{2.0};
-    astl::AstlValue  input{uint32_t{100}};
-    auto             result = astl::ApplyFormula(formula, input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::get<uint32_t>(result->value) == 200);
   }
 
   SECTION("Apply IdentityFormula via variant") {
@@ -487,15 +209,239 @@ TEST_CASE("AnyFormula - GetFormulaDescription Helper", "[AnyFormula]") {
     REQUIRE(astl::GetFormulaDescription(formula) == "BIT_MASK 0xdeadbeef");
   }
 
-  SECTION("ScalingFormula description") {
-    astl::AnyFormula formula = astl::ScalingFormula{0.001};
-    auto             desc    = astl::GetFormulaDescription(formula);
-    REQUIRE(desc.find("SCALING") != std::string::npos);
-    REQUIRE(desc.find("0.001") != std::string::npos);
-  }
-
   SECTION("IdentityFormula description") {
     astl::AnyFormula formula = astl::IdentityFormula{};
     REQUIRE(astl::GetFormulaDescription(formula) == "NONE");
+  }
+}
+
+// =============================================================================
+// ExpressionFormula Tests
+// =============================================================================
+
+TEST_CASE("ExpressionFormula - Basic Arithmetic", "[ExpressionFormula]") {
+  SECTION("Simple multiplication") {
+    auto formula_result = astl::ExpressionFormula::Create("value * 2");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{10}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 20);
+  }
+
+  SECTION("Simple addition") {
+    auto formula_result = astl::ExpressionFormula::Create("value + 100");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint32_t{50}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint32_t>(result->value) == 150);
+  }
+
+  SECTION("Scaling factor") {
+    auto formula_result = astl::ExpressionFormula::Create("value * 0.001");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{1000.0};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE_THAT(std::get<double>(result->value), WithinAbs(1.0, 0.0001));
+  }
+}
+
+TEST_CASE("ExpressionFormula - Bitwise Operations", "[ExpressionFormula]") {
+  SECTION("Bit shift right using >> (native operator)") {
+    auto formula_result = astl::ExpressionFormula::Create("value >> 8");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x1234}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x12);
+  }
+
+  SECTION("Bit AND using bitand() function") {
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value, 0xFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0xABCD}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0xCD);
+  }
+
+  SECTION("Combined: shift right then mask (native >> + bitand function)") {
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value >> 8, 0xFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) ==
+            0x56);  // bitand(0x12345678 >> 8, 0xFF) = bitand(0x123456, 0xFF) = 0x56
+  }
+
+  SECTION("Bit OR using bitor() function") {
+    auto formula_result = astl::ExpressionFormula::Create("bitor(value, 0xF0)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint8_t{0x0F}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint8_t>(result->value) == 0xFF);
+  }
+
+  SECTION("Bit XOR using bitxor() function") {
+    auto formula_result = astl::ExpressionFormula::Create("bitxor(value, 0xFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint8_t{0xAA}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint8_t>(result->value) == 0x55);  // 0xAA XOR 0xFF = 0x55
+  }
+
+  SECTION("Bit shift left using <<") {
+    auto formula_result = astl::ExpressionFormula::Create("value << 4");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x120);
+  }
+}
+
+TEST_CASE("ExpressionFormula - Complex Expressions", "[ExpressionFormula]") {
+  SECTION("Parentheses and operator precedence") {
+    auto formula_result = astl::ExpressionFormula::Create("(value + 10) * 2");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint32_t{5}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint32_t>(result->value) == 30);  // (5 + 10) * 2 = 30
+  }
+
+  SECTION("Multiple operations combining shift and bitwise") {
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value >> 8, 0xFF) * 0.001");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x64000}};  // 0x640 = 1600 in decimal
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    // bitand(0x64000 >> 8, 0xFF) = bitand(0x640, 0xFF) = 0x40 = 64
+    // 64 * 0.001 = 0.064, rounded to 0 for integer
+    REQUIRE(std::get<uint64_t>(result->value) == 0);
+  }
+
+  SECTION("Complex bitwise expression with parentheses") {
+    auto formula_result = astl::ExpressionFormula::Create("(bitand(value >> 4, 0xFF) - 50) * 0.5");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x640}};  // 0x64 after >>4
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    // bitand(0x640 >> 4, 0xFF) = bitand(0x64, 0xFF) = 0x64 = 100
+    // (100 - 50) * 0.5 = 50 * 0.5 = 25
+    REQUIRE(std::get<uint64_t>(result->value) == 25);
+  }
+}
+
+TEST_CASE("ExpressionFormula - Error Handling", "[ExpressionFormula]") {
+  SECTION("Empty expression") {
+    auto result = astl::ExpressionFormula::Create("");
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Invalid expression syntax") {
+    auto result = astl::ExpressionFormula::Create("value +* 2");
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Undefined variable") {
+    auto result = astl::ExpressionFormula::Create("y * 2");
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Non-arithmetic type") {
+    auto formula_result = astl::ExpressionFormula::Create("value * 2");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{true};  // bool is not supported
+    auto            result = formula.Apply(input);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+}
+
+TEST_CASE("ExpressionFormula - Move Semantics", "[ExpressionFormula]") {
+  SECTION("Move constructor") {
+    auto formula_result = astl::ExpressionFormula::Create("value * 2");
+    REQUIRE(formula_result.has_value());
+    auto formula1 = std::move(formula_result.value());
+    auto formula2 = std::move(formula1);
+
+    astl::AstlValue input{uint32_t{5}};
+    auto            result = formula2.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint32_t>(result->value) == 10);
+  }
+}
+
+TEST_CASE("BuildFormula - String Expression Support", "[BuildFormula]") {
+  SECTION("Parse string expression with native operators and bitwise function") {
+    // Note: >> is native operator, but & is logical AND in tinyexpr++
+    // Use bitand() function for bitwise AND
+    nlohmann::json formula_json = "bitand(value >> 8, 0xFF)";
+    auto           result       = astl::BuildFormula(std::optional<nlohmann::json>{formula_json});
+    REQUIRE(result.has_value());
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            applied = astl::ApplyFormula(result.value(), input);
+    REQUIRE(applied.has_value());
+    REQUIRE(std::get<uint64_t>(applied->value) == 0x56);
+  }
+
+  SECTION("Empty string returns IdentityFormula") {
+    nlohmann::json formula_json = "";
+    auto           result       = astl::BuildFormula(std::optional<nlohmann::json>{formula_json});
+    REQUIRE(result.has_value());
+    REQUIRE(std::holds_alternative<astl::IdentityFormula>(result.value()));
+  }
+
+  SECTION("Invalid string expression") {
+    nlohmann::json formula_json = "invalid syntax !!!";
+    auto           result       = astl::BuildFormula(std::optional<nlohmann::json>{formula_json});
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("String expression in variant") {
+    nlohmann::json formula_json = "value * 0.001";
+    auto           result       = astl::BuildFormula(std::optional<nlohmann::json>{formula_json});
+    REQUIRE(result.has_value());
+    REQUIRE(std::holds_alternative<astl::ExpressionFormula>(result.value()));
+
+    auto desc = astl::GetFormulaDescription(result.value());
+    REQUIRE(desc == "value * 0.001");
   }
 }

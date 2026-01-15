@@ -146,14 +146,65 @@ SCMI file system, and the definition file for the system metrics.
 
 Key elements of the configuration file:
 
-1. metrics: a set of objects, each with a name as a key, along with the following fields:
+1. **metrics**: a set of objects, each with a name as a key, along with the following fields:
+   - **register**: the exact name of the register where ASTL should read this metric's data (e.g. a `layout/member` key in the SCMI spec)
+   - **unit**: selects which `astl_units_t` the metric is associated with
+   - **metric_type**: selects the `astl_metric_type_t` for this data
+   - **collection_protocol**: selects which collectors should measure it
+   - **formula** (optional): mathematical expression or bitmask to transform raw values (see [Formula Support](#formula-support) below)
 
-register: the exact name of the register where ASTL should read this metric's data (e.g. a `layout/member` key in the SCMI spec)
-unit: selects which `astl_units_t` the metric is associated with
-metric_type: selects the `astl_metric_type_t` for this data
-collection_protocol: selects which collectors should measure it
+2. **scmi_specification_path**: optional override for the JSON file specifying data event IDs and targets
 
-- scmi_specification_path: optional override for the JSON file specifying data event IDs and targets
+### Formula Support
+
+ASTL supports flexible data transformation through formulas that can be applied to raw metric values. Formulas allow you to:
+
+- Extract bit fields from raw register values
+- Apply scaling factors and unit conversions
+- Perform complex mathematical transformations
+- Combine bitwise and arithmetic operations
+
+#### Formula Types
+
+**String Expressions** (using [tinyexpr++](https://github.com/Blake-Madden/tinyexpr-plusplus)):
+Express transformations as mathematical expressions using the variable name `value`:
+
+```json
+{
+  "metrics": {
+    "temperature": {
+      "register": "temp_sensor_raw",
+      "unit": "celsius",
+      "formula": "(value - 273.15) * 0.1"
+    },
+    "power_milliwatts": {
+      "register": "power_sensor",
+      "unit": "milliwatts",
+      "formula": "value * 0.001"
+    },
+    "status_bits": {
+      "register": "device_status",
+      "unit": "none",
+      "formula": "bitand(value >> 8, 0xFF)"
+    }
+  }
+}
+```
+
+**Supported Operations:**
+
+- Arithmetic: `+`, `-`, `*`, `/`, `%`
+- Shift operators: `>>` (right shift), `<<` (left shift)
+- Bitwise functions: `bitand()`, `bitor()`, `bitxor()`, `bitnot()`
+- Mathematical functions: `abs()`, `floor()`, `ceil()`, `sqrt()`, `pow()`, `sin()`, `cos()`, `exp()`, `log()`, etc.
+- Logical operators: `&&`, `||`, `!`
+- Comparison: `<`, `>`, `<=`, `>=`, `==`, `!=`
+- Parentheses for grouping
+
+> **Note:** The `&` and `|` symbols perform **logical** (boolean) operations, not bitwise operations. For bitwise operations on integers, use the `bitand()`, `bitor()`, `bitxor()` functions.
+> For detailed expression syntax and all available functions, see the [tinyexpr++ documentation](https://github.com/Blake-Madden/tinyexpr-plusplus#functions).
+
+---
 
 3. Discover targets
 
@@ -451,6 +502,16 @@ ASTL/build/debug/bin/MockSysfs /tmp/scmi
 - Background mode: kill -SIGINT \<PID\>
 
 # Build steps for developers
+
+## Third-Party Components
+
+ASTL incorporates the following third-party libraries:
+
+- **[tinyexpr++](https://github.com/Blake-Madden/tinyexpr-plusplus)** - C++20 mathematical expression parser used for formula evaluation
+  - Supports arithmetic, bitwise, and mathematical operations
+  - Header-only library with minimal dependencies
+  - Licensed under zlib/libpng license
+  - Used for the Formula feature to transform raw metric values
 
 ## Compile and test
 
