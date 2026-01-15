@@ -27,8 +27,8 @@
 #include "astl/astl_errors.h"
 #include "common/astl_value.hpp"
 #include "metric/bit_mask_formula.hpp"
+#include "metric/expression_formula.hpp"
 #include "metric/formula.hpp"
-#include "metric/scaling_formula.hpp"
 
 namespace astl {
 
@@ -51,12 +51,12 @@ static_assert(Formula<IdentityFormula>, "IdentityFormula does not satisfy Formul
 /**
  * @brief Variant type that can hold any supported formula type.
  */
-using AnyFormula = std::variant<IdentityFormula, BitMaskFormula, ScalingFormula>;
+using AnyFormula = std::variant<IdentityFormula, BitMaskFormula, ExpressionFormula>;
 
 /**
  * @brief Apply a formula (from the variant) to a value.
  *
- * @param formula The formula to apply (NullFormula, BitMaskFormula, or ScalingFormula)
+ * @param formula The formula to apply (IdentityFormula, BitMaskFormula, or ExpressionFormula)
  * @param value The value to transform
  * @return std::expected<AstlValue, astl_status_code> The transformed value or an error
  */
@@ -76,20 +76,37 @@ inline auto GetFormulaDescription(const AnyFormula& formula) -> std::string_view
 }
 
 /**
- * @brief Build a formula from JSON array configuration.
+ * @brief Build a formula from JSON configuration.
  *
- * Supports structured JSON array format only:
- * [{"operation": "BITMASK", "value": "0xFF"}]
- * or
- * [{"operation": "SCALING", "value": 0.001}]
+ * Parses the formula configuration and creates the appropriate formula type:
+ * - null or empty string → IdentityFormula (no transformation)
+ * - Any string expression → ExpressionFormula (mathematical expression using tinyexpr++)
  *
- * Currently only the first operation in the array is applied.
- * Future versions may support chaining multiple operations.
+ * String expressions support:
+ * - Arithmetic operators: +, -, *, /, %
+ * - Shift operators: >> (right shift), << (left shift)
+ * - Bitwise functions: bitand(), bitor(), bitxor(), bitnot(), bitlshift(), bitrshift()
+ * - Logical operators: && (and), || (or), & (and), | (or) - NOTE: & and | are LOGICAL, not bitwise!
+ * - Mathematical functions: abs, sin, cos, sqrt, pow, ln, log, exp, etc.
+ * - Constants: pi(), e()
+ * - Parentheses for grouping
+ * - Variable 'value' represents the input value
  *
- * @param formula_json JSON array containing formula operations
- * @return std::expected<AnyFormula, astl_status_code> The constructed formula or an error
+ * **IMPORTANT**: For bitwise AND/OR/XOR, use functions `bitand()`, `bitor()`, `bitxor()`.
+ * The `&` and `|` operators are for LOGICAL operations (boolean), not bitwise!
+ *
+ * Examples:
+ *   "value * 0.001"                        - Simple scaling
+ *   "bitand(value, 0xFF)"                  - Bit masking (bitwise AND)
+ *   "bitand(value >> 8, 0xFF)"             - Extract byte 1 (bits 8-15) - shift is native, bitand is function
+ *   "(value - 273.15) * 0.1"               - Offset and scale
+ *   "bitand(value >> 4, 0xFF) * 0.5"       - Shift, mask, then scale
+ *   "value << 4 | 0x0F"                    - Left shift and logical OR (not bitwise!)
+ *
+ * @param formula_json The JSON value containing the formula configuration (optional)
+ * @return std::expected<AnyFormula, astl_status_code> The formula or an error code
  */
-[[nodiscard]] auto BuildFormula(const nlohmann::json& formula_json) -> std::expected<AnyFormula, astl_status_code>;
+auto BuildFormula(const std::optional<nlohmann::json>& formula_json) -> std::expected<AnyFormula, astl_status_code>;
 
 }  // namespace astl
 

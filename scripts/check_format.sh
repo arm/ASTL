@@ -27,6 +27,12 @@ SOURCE_FILES_TO_CHECK=()
 for file in "${SOURCE_FILES[@]}"; do
 	if [[ $file == python/astl/_*.cpp ]]; then
 		continue
+	elif [[ $file == external/* ]]; then
+		# skip external dependencies
+		continue
+	elif [[ $file == third_party/* ]]; then
+		# skip third-party code maintained within ASTL under third-party license (tinyexpr++)
+		continue
 	fi
 	SOURCE_FILES_TO_CHECK+=("$file")
 done

@@ -35,6 +35,7 @@ INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/utils)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/src/impl)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/src/impl/common)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/tools/mock_sysfs/include)
+INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/third_party/tinyexpr-plusplus)
 
 echo "Running clang-tidy to lint code..."
 # find the system header paths so clang++ can find them
@@ -114,6 +115,9 @@ TEST_FILES_TO_LINT=()
 C_HEADERS_TO_LINT=()
 for FILE in "${FILES[@]}"; do
 	if [[ $FILE == *external/* ]]; then
+		continue
+	elif [[ $FILE == *third_party/* ]]; then
+		# skip third-party vendored dependencies
 		continue
 	elif [[ $FILE == *.h.in ]]; then
 		# skip files used to generate C code

@@ -37,6 +37,7 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/finite_set_metric.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/event_metric.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/formula_builder.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/metric/expression_formula.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/output/output_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/output/output_manager.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/output/buffer_output.cpp"
@@ -50,12 +51,25 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_raw_samples.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_topology_manager.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp"
+          # tinyexpr++ for formulas.
+          "${PROJECT_SOURCE_DIR}/third_party/tinyexpr-plusplus/tinyexpr.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/archive_utils.cpp"
           # for unit tests
           "${PROJECT_SOURCE_DIR}/src/astl_errors.cpp"
           "${PROJECT_SOURCE_DIR}/src/astl_telemetry.cpp"
           "${PROJECT_SOURCE_DIR}/src/astl_test_hooks.cpp"
           "${PROJECT_SOURCE_DIR}/src/astl_version.cpp")
+
+# Disable conversion warnings for third-party tinyexpr++ code
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  set_source_files_properties("${PROJECT_SOURCE_DIR}/third_party/tinyexpr-plusplus/tinyexpr.cpp"
+                              PROPERTIES COMPILE_OPTIONS "-Wno-error=conversion")
+endif()
+
+# Enable long double for tinyexpr++ for maximum integer precision Platform/compiler dependent: long double can preserve
+# the full uint64_t range.
+target_compile_definitions(${LIBRARY_NAME} PRIVATE TE_LONG_DOUBLE)
+message(STATUS "Using TE_LONG_DOUBLE for tinyexpr++ (precision depends on platform)")
 
 if(ASTL_INCLUDE_LIBSENSORS)
   target_sources(
@@ -81,6 +95,10 @@ target_include_directories(
          $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
          # where external projects will look for the library's public headers
          $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+
+# Include third-party tinyexpr++ as SYSTEM to suppress warnings from its headers
+target_include_directories(${LIBRARY_NAME} SYSTEM
+                           PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/tinyexpr-plusplus>)
 
 # include nlohmann_json - json parser for importing configuration files
 find_package(nlohmann_json CONFIG REQUIRED)
