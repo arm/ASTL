@@ -63,7 +63,7 @@ target_sources(
 # Disable conversion warnings for third-party tinyexpr++ code
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   set_source_files_properties("${PROJECT_SOURCE_DIR}/third_party/tinyexpr-plusplus/tinyexpr.cpp"
-                              PROPERTIES COMPILE_OPTIONS "-Wno-error=conversion")
+                              PROPERTIES COMPILE_OPTIONS "-Wno-conversion")
 endif()
 
 # Enable long double for tinyexpr++ for maximum integer precision Platform/compiler dependent: long double can preserve
@@ -154,7 +154,7 @@ endif()
 # for serdes_metrics.cpp which includes protobuf headers.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp" ${GEN_FILES}
-                              PROPERTIES COMPILE_OPTIONS "-Wno-error=conversion;-Wno-nullability-extension")
+                              PROPERTIES COMPILE_OPTIONS "-Wno-conversion;-Wno-nullability-extension")
 endif()
 
 target_link_libraries(${LIBRARY_NAME} PRIVATE protobuf::libprotobuf)
