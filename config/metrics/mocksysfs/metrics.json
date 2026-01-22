@@ -1,0 +1,53 @@
+{
+  "_comment": "Metrics definitions for Mock SCMI sysfs telemetry target",
+
+  "document": {
+    "confidential": true
+  },
+
+  "metrics": {
+    "SoC Temperature": {
+      "description": "SoC Temperature in Celsius",
+      "unit": "C",
+      "metric_type": "value",
+      "category": "TEMPERATURE",
+      "metric_groups": ["thermal", "throttling"],
+      "collection": {
+        "register": "CORE_0_TEMP",
+        "protocol": "scmi"
+      }
+    },
+    "Throttle Counts": {
+      "description": "Number of thermal throttling events",
+      "unit": "",
+      "metric_type": "delta",
+      "category": "COUNT",
+      "metric_groups": ["throttling"],
+      "collection": {
+        "register": "THROTTLE_EVENTS",
+        "protocol": "scmi"
+      }
+    },
+    "SoC Power": {
+      "description": "SoC Power Consumption in Watts",
+      "unit": "W",
+      "metric_type": "rate",
+      "category": "POWER",
+      "collection": {
+        "register": "ENERGY_COUNTER",
+        "protocol": "scmi"
+      }
+    },
+    "Frequency": {
+      "description": "Current Frequency of the SoC in MHz",
+      "unit": "MHz",
+      "metric_type": "value",
+      "category": "FREQUENCY",
+      "metric_groups": ["throttling"],
+      "collection": {
+        "register": "FREQUENCY",
+        "protocol": "scmi"
+      }
+    }
+  }
+}

@@ -34,12 +34,11 @@ static std::vector<astl::ResidencyMetricConfig::StateInfo> CreateTestStateInfos(
   };
 }
 
-static astl::ResidencyMetricConfig::TargetToStateToInfoMap const& GetTargetToStatetoInfoMap() {
-  static astl::ResidencyMetricConfig::TargetToStateToInfoMap state_info = {
-      {"tlm-0",
-       {{"C6", {"C6", 1000000.0, astl::ScmiOperationBuilder{0x67DE}}},
-        {"C1", {"C1", 1000000.0, astl::ScmiOperationBuilder{0x68DE}}},
-        {"C2", {"C2", 1000000.0, astl::ScmiOperationBuilder{0x69DE}}}}}
+static auto GetStatetoInfoMap() -> const astl::ResidencyMetricConfig::StateToInfoMap& {
+  static astl::ResidencyMetricConfig::StateToInfoMap state_info = {
+      {"C6", {"C6", 1000000.0, astl::ScmiOperationBuilder{0x67DE}}},
+      {"C1", {"C1", 1000000.0, astl::ScmiOperationBuilder{0x68DE}}},
+      {"C2", {"C2", 1000000.0, astl::ScmiOperationBuilder{0x69DE}}}
   };
   return state_info;
 }
@@ -52,7 +51,7 @@ static const astl::ResidencyMetricConfig* GetResidencyConfig() {
                                             ASTL_METRIC_RESIDENCY,
                                             ASTL_CATEGORY_UNCATEGORIZED,
                                             astl::CollectorType::SCMI,
-                                            GetTargetToStatetoInfoMap(),
+                                            GetStatetoInfoMap(),
                                             "Active"};
   return &config;
 }
@@ -189,7 +188,7 @@ TEST_CASE("ResidencyMetric: construction without inferred state", "[ResidencyMet
                                      ASTL_METRIC_RESIDENCY,
                                      ASTL_CATEGORY_UNCATEGORIZED,
                                      astl::CollectorType::SCMI,
-                                     GetTargetToStatetoInfoMap()};
+                                     GetStatetoInfoMap()};
   astl::ResidencyMetric       metric{&config, CreateTestStateInfos(), nullptr, nullptr};
 
   // Verify initial state - no inferred state should be calculated

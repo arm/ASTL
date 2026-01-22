@@ -253,6 +253,12 @@ struct IMetricManager {
       -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
 
   /**
+   * @brief Removes all previously registered metrics, due to a reconfiguration event.
+   *        Mostly intended for test harnesses.
+   */
+  auto virtual RemoveAllMetrics() -> void = 0;
+
+  /**
    * @brief Summarize the metrics messages.
    *
    * This method should be called to create a summary for all the metrics.

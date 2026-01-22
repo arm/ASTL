@@ -59,6 +59,7 @@ TEST_CASE("astlGetMetricGroups", "[wrapper][Orchestrator][MetricGroups]") {
       .RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   auto topology_manager = std::make_unique<MockTopologyManager>();
 
   auto collector_manager = std::make_unique<MockCollectorManager>();
@@ -166,6 +167,7 @@ TEST_CASE("astlGetMetricGroupMetrics", "[MetricGroups][wrapper]") {
       .RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   auto topology_manager = std::make_unique<MockTopologyManager>();
 
   auto collector_manager = std::make_unique<MockCollectorManager>();

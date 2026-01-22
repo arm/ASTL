@@ -1,0 +1,18 @@
+{
+  "_comment": "Metric definitions for phoenix lcp_cluster",
+
+  "document": {
+    "confidential": false
+  },
+
+  "metrics": {
+    "Current Temperature": {
+      "description": "Current Temperature in Celsius",
+      "register": "CURRENT_TEMPERATURE",
+      "metric_type": "value",
+      "category": "TEMPERATURE",
+      "metric_groups": ["thermal", "throttling"],
+      "collection_protocol": "scmi"
+    }
+  }
+}

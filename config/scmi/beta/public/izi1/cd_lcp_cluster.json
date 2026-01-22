@@ -3,7 +3,7 @@
    "document": {
       "timestamp": "2025-11-28",
       "copyright": "Copyright 2025 Arm Ltd.",
-      "confidential": false,
+      "confidential": true,
       "quality": "Release",
       "license": "Apache-2.0",
       "description": "Telemetry data capture format layout specification"

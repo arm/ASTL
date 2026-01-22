@@ -499,11 +499,9 @@ TEST_CASE("MetricManager::RegisterMetric succeeds with ResidencyMetricConfig", "
   ALLOW_CALL(*target, Name()).RETURN(target_name);
 
   // Create state info for residency metric
-  astl::ResidencyMetricConfig::TargetToStateToInfoMap state_info;
-  state_info[target_name]["C1"] = {"C1", 100000.0,
-                                   astl::ScmiOperationBuilder{0x1001}};  // C1 state with 100kHz tick frequency
-  state_info[target_name]["C6"] = {"C6", 50000.0,
-                                   astl::ScmiOperationBuilder{0x1002}};  // C6 state with 50kHz tick frequency
+  astl::ResidencyMetricConfig::StateToInfoMap state_info;
+  state_info["C1"] = {"C1", 100000.0, astl::ScmiOperationBuilder{0x1001}};  // C1 state with 100kHz tick frequency
+  state_info["C6"] = {"C6", 50000.0, astl::ScmiOperationBuilder{0x1002}};   // C6 state with 50kHz tick frequency
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "CPU_RESIDENCY", "CPU residency metric", astl_units_t::ASTL_UNITS_SECONDS, astl_value_type_t::ASTL_VALUE_FLOAT64,
@@ -532,10 +530,10 @@ TEST_CASE("MetricManager::GetRequiredOperations with ResidencyMetricConfig creat
   ALLOW_CALL(*target, Name()).RETURN(target_name);
 
   // Create state info for residency metric with multiple states
-  astl::ResidencyMetricConfig::TargetToStateToInfoMap state_info;
-  state_info[target_name]["C1"] = {"C1", 100000.0, astl::ScmiOperationBuilder{0x2001}};
-  state_info[target_name]["C6"] = {"C6", 50000.0, astl::ScmiOperationBuilder{0x2002}};
-  state_info[target_name]["C7"] = {"C7", 25000.0, astl::ScmiOperationBuilder{0x2003}};
+  astl::ResidencyMetricConfig::StateToInfoMap state_info;
+  state_info["C1"] = {"C1", 100000.0, astl::ScmiOperationBuilder{0x2001}};
+  state_info["C6"] = {"C6", 50000.0, astl::ScmiOperationBuilder{0x2002}};
+  state_info["C7"] = {"C7", 25000.0, astl::ScmiOperationBuilder{0x2003}};
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "CPU_RESIDENCY", "CPU residency metric", astl_units_t::ASTL_UNITS_SECONDS, astl_value_type_t::ASTL_VALUE_FLOAT64,
@@ -578,7 +576,7 @@ TEST_CASE("MetricManager::RegisterMetric fails with empty state info for Residen
   ALLOW_CALL(*target, Name()).RETURN(target_name);
 
   // Create residency config with empty state info
-  astl::ResidencyMetricConfig::TargetToStateToInfoMap empty_state_info;
+  astl::ResidencyMetricConfig::StateToInfoMap empty_state_info;
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "EMPTY_RESIDENCY", "Residency metric with no states", astl_units_t::ASTL_UNITS_SECONDS,
@@ -586,40 +584,7 @@ TEST_CASE("MetricManager::RegisterMetric fails with empty state info for Residen
       CollectorType::SCMI, std::move(empty_state_info), "ACTIVE");
 
   astl_status_code status = mgr.RegisterMetric(std::move(residency_config), {target.get()});
-  REQUIRE(status == ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET);
-}
-
-TEST_CASE("MetricManager::GetRequiredOperations fails when target not found in ResidencyMetricConfig",
-          "[MetricManager][Residency]") {
-  Capabilities  caps = MakeCaps(CollectorType::SCMI);
-  MetricManager mgr(caps);
-
-  auto        target1 = std::make_unique<MockTarget>();
-  auto        target2 = std::make_unique<MockTarget>();
-  std::string target1_name{"AP0"};
-  std::string target2_name{"AP1"};
-  ALLOW_CALL(*target1, Name()).RETURN(target1_name);
-  ALLOW_CALL(*target2, Name()).RETURN(target2_name);
-
-  // Create state info only for target1
-  astl::ResidencyMetricConfig::TargetToStateToInfoMap state_info;
-  state_info[target1_name]["C1"] = {"C1", 100000.0, astl::ScmiOperationBuilder{0x3001}};
-
-  auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
-      "SINGLE_TARGET_RESIDENCY", "Residency metric for single target", astl_units_t::ASTL_UNITS_SECONDS,
-      astl_value_type_t::ASTL_VALUE_FLOAT64, astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_CATEGORY_UNCATEGORIZED,
-      CollectorType::SCMI, std::move(state_info), "ACTIVE");
-
-  REQUIRE(mgr.RegisterMetric(std::move(residency_config), {target1.get()}) == ASTL_STATUS_SUCCESS);
-
-  auto avail_or_error = mgr.GetAvailableMetrics(target1.get());
-  REQUIRE(avail_or_error.has_value());
-  auto metrics = *avail_or_error;
-
-  // Try to get operations for target2 (not in state info)
-  auto ops_result = mgr.GetRequiredOperations(metrics, target2.get());
-  REQUIRE_FALSE(ops_result.has_value());
-  REQUIRE(ops_result.error() == ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET);
+  REQUIRE(status == ASTL_STATUS_BAD_CONFIGURATION);
 }
 
 TEST_CASE("MetricManager::ResidencyMetricConfig GetStateInfo accessor works correctly", "[MetricManager][Residency]") {
@@ -628,9 +593,9 @@ TEST_CASE("MetricManager::ResidencyMetricConfig GetStateInfo accessor works corr
   ALLOW_CALL(*target, Name()).RETURN(target_name);
 
   // Create state info
-  astl::ResidencyMetricConfig::TargetToStateToInfoMap state_info;
-  state_info[target_name]["IDLE"]  = {"IDLE", 75000.0, astl::ScmiOperationBuilder{0x5001}};
-  state_info[target_name]["SLEEP"] = {"SLEEP", 25000.0, astl::ScmiOperationBuilder{0x5002}};
+  astl::ResidencyMetricConfig::StateToInfoMap state_info;
+  state_info["IDLE"]  = {"IDLE", 75000.0, astl::ScmiOperationBuilder{0x5001}};
+  state_info["SLEEP"] = {"SLEEP", 25000.0, astl::ScmiOperationBuilder{0x5002}};
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "ACCESSOR_TEST_RESIDENCY", "Test state info accessor", astl_units_t::ASTL_UNITS_SECONDS,
@@ -638,21 +603,19 @@ TEST_CASE("MetricManager::ResidencyMetricConfig GetStateInfo accessor works corr
       CollectorType::SCMI, std::move(state_info), "RUNNING");
 
   // Test GetStateInfo() accessor
-  const auto& retrieved_state_info = residency_config->GetStateInfo();
+  const auto& metric_state_info = residency_config->GetStateInfo();
 
-  REQUIRE(retrieved_state_info.contains(target_name));
-  const auto& target_states = retrieved_state_info.at(target_name);
-  REQUIRE(target_states.size() == 2);
+  REQUIRE(metric_state_info.size() == 2);
 
-  REQUIRE(target_states.contains("IDLE"));
-  REQUIRE(target_states.contains("SLEEP"));
+  REQUIRE(metric_state_info.contains("IDLE"));
+  REQUIRE(metric_state_info.contains("SLEEP"));
 
-  const auto& idle_info = target_states.at("IDLE");
+  const auto& idle_info = metric_state_info.at("IDLE");
   REQUIRE(idle_info.state_name == "IDLE");
   REQUIRE(GetDataEventId(idle_info) == 0x5001);
   REQUIRE(idle_info.tick_frequency == 75000.0);
 
-  const auto& sleep_info = target_states.at("SLEEP");
+  const auto& sleep_info = metric_state_info.at("SLEEP");
   REQUIRE(sleep_info.state_name == "SLEEP");
   REQUIRE(GetDataEventId(sleep_info) == 0x5002);
   REQUIRE(sleep_info.tick_frequency == 25000.0);

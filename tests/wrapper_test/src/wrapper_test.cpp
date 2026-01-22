@@ -43,6 +43,7 @@ auto MakeMinimalOrchestrator(std::unique_ptr<MockMetricManager> metric_manager =
   expectations.push_back(
       NAMED_ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
   expectations.push_back(NAMED_ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
+  expectations.push_back(NAMED_ALLOW_CALL(*metric_manager, RemoveAllMetrics()));
   auto output_manager = std::make_unique<MockOutputManager>();
 
   return {std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
@@ -510,6 +511,7 @@ TEST_CASE("astlGetMetrics", "[wrapper][Orchestrator][wrapper]") {
       .RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
 
   auto topology_manager  = std::make_unique<MockTopologyManager>();
   auto collector_manager = std::make_unique<MockCollectorManager>();
@@ -604,6 +606,7 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
           {}, {}, {}, {}, std::chrono::milliseconds{100}, astl::CollectorCapability{astl::CollectorType::SCMI}});
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
 
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -855,6 +858,7 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
   auto metric_manager   = std::make_unique<MockMetricManager>();
   REQUIRE_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator =
       std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(mock_collector_manager),
@@ -1080,6 +1084,7 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
   ALLOW_CALL(*mock_metric_manager, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
   ALLOW_CALL(*mock_metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_metric_manager, RemoveAllMetrics());
   // New interface path: resolve metric handle + target to metric implementation
   ALLOW_CALL(*mock_metric_manager, GetMetricOnTarget(metric_api_handle, mock_target_raw)).RETURN(mock_metric_raw);
 
@@ -1262,6 +1267,7 @@ TEST_CASE("astlGetMetrics verifies category propagation", "[wrapper][Orchestrato
 
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
 
   auto topology_manager  = std::make_unique<MockTopologyManager>();
   auto collector_manager = std::make_unique<MockCollectorManager>();
@@ -1321,6 +1327,7 @@ TEST_CASE("ASTL_SAVE_FILE_PATH saves state on StopCollection", "[wrapper][cache]
   auto* metric_ptr     = metric_manager.get();
   ALLOW_CALL(*metric_ptr, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_ptr, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_ptr, RemoveAllMetrics());
   // StopCollection() may call these depending on your codepath
   ALLOW_CALL(*metric_ptr, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
 

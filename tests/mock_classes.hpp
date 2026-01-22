@@ -322,6 +322,8 @@ struct MockMetricManager : public astl::IMetricManager {
 
   MAKE_MOCK1(GetMetricsInGroup, auto(astl_metric_group_handle_t group)->expected_metric_interface, const override);
 
+  MAKE_MOCK0(RemoveAllMetrics, auto()->void, override);
+
   // NOTE: The GetProcessedSamples(metric_handle, target) method was removed from IMetricManager.
   // Tests should obtain processed samples via Orchestrator::GetProcessedMetricSamples after sinking them with
   // Orchestrator::SinkProcessedSamples. If legacy expectations are still present they should be updated.

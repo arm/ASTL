@@ -1,0 +1,28 @@
+{
+  "_comment": "Metrics defined for phoenix scp",
+
+  "document": {
+    "confidential": false
+  },
+
+  "metrics": {
+    "CURRENT_TEMPERATURE": {
+      "description": "Current Temperature in Celsius, In this example, PSS.5 has a broken temp sensor",
+      "register": "CURRENT_TEMPERATURE",
+      "metric_type": "value",
+      "category": "TEMPERATURE",
+      "metric_groups": [],
+      "collection_protocol": "scmi",
+      "disabled": true
+    },
+    "RAIL_INPUT_POWER": {
+      "description": "Rail input power",
+      "register": "RAIL_INPUT_POWER",
+      "metric_type": "value",
+      "category": "POWER",
+      "metric_groups": ["power"],
+      "collection_protocol": "scmi",
+      "confidential": true
+    }
+  }
+}

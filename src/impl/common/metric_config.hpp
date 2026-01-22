@@ -214,8 +214,7 @@ class ResidencyMetricConfig final : public MetricConfig {
     AnyOperationBuilder operation_builder;
   };
 
-  using StateToInfoMap         = std::unordered_map<std::string, StateInfo>;       // state name -> state info
-  using TargetToStateToInfoMap = std::unordered_map<std::string, StateToInfoMap>;  // target -> (state -> info)
+  using StateToInfoMap = std::unordered_map<std::string, StateInfo>;  // state name -> state info
 
   /**
    * @brief Construct a ResidencyMetricConfig with state-specific data event IDs and tick frequencies.
@@ -229,13 +228,13 @@ class ResidencyMetricConfig final : public MetricConfig {
    * @param value_type      Value representation.
    * @param metric_type     Expected to be the ASTL "residency" metric type.
    * @param collector_type  Collector type responsible for gathering residency counters.
-   * @param state_info      Mapping from target -> (state name -> {operation_builder, tick_frequency}).
+   * @param state_info      Mapping from state name -> {operation_builder, tick_frequency}.
    * @param inferred_state  Optional state name to be inferred from the metric (e.g., "C0").
    * @param formula         Formula for processing raw samples (BitMaskFormula, ExpressionFormula, or IdentityFormula).
    */
   explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
-                                 CollectorType collector_type, TargetToStateToInfoMap state_info,
+                                 CollectorType collector_type, StateToInfoMap state_info,
                                  std::optional<std::string> inferred_state = std::nullopt,
                                  AnyFormula                 formula        = IdentityFormula{})
       : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
@@ -252,14 +251,9 @@ class ResidencyMetricConfig final : public MetricConfig {
   /**
    * @brief Return the full mapping of residency state counters with tick frequencies.
    *
-   * @return Map: target -> (state name -> {data_event_id, tick_frequency})
+   * @return Map: state name -> {data_event_id, tick_frequency}
    */
-  const TargetToStateToInfoMap &GetStateInfo() const { return _state_info; }
-
-  /**
-   * @brief Get the state-to-info mapping for a specific target. Throws std::out_of_range if not found.
-   */
-  const StateToInfoMap &StatesForTarget(const std::string &target) const { return _state_info.at(target); }
+  auto GetStateInfo() const -> StateToInfoMap const & { return _state_info; }
 
   /**
    * @brief Get the inferred state name if specified.
@@ -269,7 +263,7 @@ class ResidencyMetricConfig final : public MetricConfig {
   const std::optional<std::string> &InferredState() const { return _inferred_state; }
 
  private:
-  TargetToStateToInfoMap     _state_info;      // Mapping of target -> (state name -> {data_event_id, tick_frequency})
+  StateToInfoMap             _state_info;      // Mapping of target -> (state name -> {data_event_id, tick_frequency})
   std::optional<std::string> _inferred_state;  // Optional inferred state name
 };
 

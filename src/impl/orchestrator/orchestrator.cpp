@@ -119,7 +119,12 @@ auto Orchestrator::GetTargets() const -> std::vector<std::unique_ptr<ITarget>> c
 }
 
 auto Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets) -> astl_status_code {
+  // note, this function is really only of use in test harnesses right now.
+  // there are strong dependencies from the metric manager's metric handles to targets managed by the topology manager.
+  // so changing targets at runtime in a production scenario is not currently supported
+  // - must delete all metrics to avoid use-after-free, and assume test code will add necessary new metrics
   _topology_manager->SetTargets(std::move(new_targets));
+  _metric_manager->RemoveAllMetrics();
   return ASTL_STATUS_SUCCESS;
 }
 

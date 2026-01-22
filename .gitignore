@@ -103,5 +103,6 @@ doc/latex
 *_rate_intervals.csv
 raw_samples.csv
 astl_summary.csv
+out/
 
 # Add more exclusions as needed

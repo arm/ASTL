@@ -39,6 +39,4 @@ CheckOptions:
   - key: readability-implicit-bool-conversion.AllowIntegerConditions
     value: 1
   - key: readability-identifier-length.IgnoredVariableNames
-    value: "it"
-  - key: readability-identifier-length.IgnoredVariableNames
-    value: "ec"
+    value: it|ec|fs|id|os|db|ip|ui|vm|fd|tx|rx

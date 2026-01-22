@@ -38,7 +38,7 @@
       "instance_id": 302,
       "generator": {
         "type_id": 1,
-        "params": { "min": 50, "max": 110 }
+        "params": { "min": 0, "max": 3 }
       }
     },
 

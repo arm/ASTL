@@ -25,7 +25,7 @@ sampling_interval = 100
 duration = 42
 
 # List of metrics (from list-metrics) to collect. 
-metrics = ["CPU Power", "IO Power", "SoC Temperature"]
+metrics = ["CPU power", "IO power", "SoC Temperature"]
 
 # Output directory for plots.
 output-dir = "plots/svg/"

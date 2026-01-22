@@ -91,6 +91,12 @@ inline std::string ToLowerCopy(std::string str) {
   return str;
 }
 
+inline std::string ToLowerCopy(std::string_view str) {
+  std::string out_str(str);
+  std::transform(str.begin(), str.end(), out_str.begin(), [](unsigned char letter) { return std::tolower(letter); });
+  return out_str;
+}
+
 inline auto ParseCategory(std::string const& category_str) -> astl_category_t {
   auto category_str_lower = ToLowerCopy(category_str);
   if (category_str_lower == "count") {
@@ -114,7 +120,7 @@ inline auto ParseCategory(std::string const& category_str) -> astl_category_t {
   return ASTL_CATEGORY_UNCATEGORIZED;
 }
 
-inline auto ParseUnits(std::string const& units_str) -> astl_units_t {
+inline auto ParseUnits(std::string_view units_str) -> astl_units_t {
   auto unit_str_lower = ToLowerCopy(units_str);
   if (unit_str_lower == "none" || unit_str_lower.empty()) {
     return ASTL_UNITS_NONE;
