@@ -1,3 +1,5 @@
+# ASTL
+
 [![Integration](https://github.com/Arm-Debug/ASTL/actions/workflows/integration.yml/badge.svg)](https://github.com/Arm-Debug/ASTL/actions/workflows/integration.yml)
 [![Maintainability](https://qlty.sh/badges/6f288530-d295-4eb4-a8d3-9fab05020fcb/maintainability.svg)](https://qlty.sh/gh/Arm-Debug/projects/ASTL)
 [![Code Coverage](https://qlty.sh/badges/6f288530-d295-4eb4-a8d3-9fab05020fcb/coverage.svg)](https://qlty.sh/gh/Arm-Debug/projects/ASTL)
@@ -5,11 +7,9 @@
 <img src="https://github.com/Arm-Debug/ASTL/actions/workflows/blackduck.yaml/badge.svg" alt="Blackduck"/>
 </a>
 
-# ASTL
-
 Arm SoC Telemetry Library
 
-# Description
+## Description
 
 ASTL is a self-contained library for SoC telemetry collection at Arm. It abstracts low level
 interfaces to telemetry data sources on the system. Using a predefined API, a telemetry
@@ -31,52 +31,52 @@ The library has a C-interface for the API and a C++ implementation. A comprehens
 Python wrapper layer (Cython bindings + high-level utilities) is now available—refer to the
 **[Python User Guide](python/docs/USER_GUIDE.md)**.
 
-# Key Goals and Properties
+## Key Goals and Properties
 
-## Sharable
+### Sharable
 
 - New or other tools at Arm can use it (not used yet)
 - Partners and external 3rd party tool developers can use it to access telemetry on Arm
   platforms (not used yet)
 
-## Uniform
+### Uniform
 
 - Telemetry collection through fixed predefined set of API (not defined yet)
 
-## Portable
+### Portable
 
 - Rebuild on Windows or other OS’s with same user API interface (not ported yet)
 - Wrap with python layer (not done yet)
 
-## Extensible
+### Extensible
 
 - Driver to driver context-switch based collection (not implemented yet)
 - SCMI specification extensions (not implemented yet)
 - New/other platform level telemetry access mechanisms (not implemented yet)
 
-## Reusable
+### Reusable
 
 - Can be deployed on all new platforms: IOT, Automotive, Client, Data center, GPUs, NPUs. (not deployed yet)
 - Can be used by a telemetry collection tool or in an AI framework or directly to instrument a
   workload (not used yet)
 
-# High Level Architecture Diagram
+## High Level Architecture Diagram
 
 ![image](https://github.com/user-attachments/assets/0cc5580e-eb22-4219-9118-adb486972032)
 
-# Telemetry Collection Tool Usage Example Diagram
+## Telemetry Collection Tool Usage Example Diagram
 
 ![image](https://github.com/user-attachments/assets/ee543a10-fae6-45a8-8305-7cce78a3521b)
 
-# AI Framework Usage Example Diagram
+## AI Framework Usage Example Diagram
 
 ![image](https://github.com/user-attachments/assets/e514cfb8-7d15-45f6-899e-2b70c2c6c5db)
 
-# High level Internal Design and status
+## High level Internal Design and status
 
 <img width="708" height="436" alt="image" src="https://github.com/user-attachments/assets/16aceb9e-b837-47fc-a2d9-e7fee2a3d236" />
 
-# Testing and Isolation Methodology
+## Testing and Isolation Methodology
 
 ![image](https://github.com/user-attachments/assets/0a2b1e39-cb08-4e04-9f62-bba5329bfe56)
 
@@ -88,9 +88,9 @@ Python wrapper layer (Cython bindings + high-level utilities) is now available�
 - Trompleil and Catch2 unit testing
 - Mock command line collector executable
 
-# Installation and usage
+## Installation and usage
 
-## Installation
+### Installation
 
 See [Build steps for developers](#build-steps-for-developers) for more detailed build instructions.
 
@@ -99,7 +99,7 @@ See [Build steps for developers](#build-steps-for-developers) for more detailed 
 > async), diagnostics CLI, derived metrics, DataFrame integration, benchmarking, and
 > exception model.
 
-## Usage
+### Usage
 
 The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_test.cpp). Below are the minimal snippets you need:
 
@@ -115,45 +115,55 @@ mount -t stlmfs none /sys/fs/arm_telemetry/
 
 2. Initialize ASTL
 
-First, create or select an ASTL JSON configuration file specifying which metrics should be
+First, if needed, create an override config file to redirect the library to use non-default paths for
+scmi sysfs, and resource files defining SCMI endpoints and metrics.
+
+create or select an ASTL JSON configuration file specifying which metrics should be
 made available at the API to collect. You can also optionally override the root path for the
 SCMI file system, and the definition file for the system metrics.
+Assuming astl is installed at /usr/local/astl, the following config would represent the default values:
 
 ```json
 {
   "scmi_sysfs_telemetry_root_path": "/sys/fs/arm_telemetry",
-
-  "metrics": {
-    "SoC Temperature": {
-      "description": "SoC Temperature in Celsius",
-      "register": "CORE_TEMP_0",
-      "unit": "C",
-      "metric_type": "value",
-      "metric_groups": ["thermal"],
-      "collection_protocol": "scmi"
-    },
-    "SoC Power": {
-      "description": "SoC Power Consumption in Watts",
-      "register": "ENERGY_COUNTER",
-      "unit": "W",
-      "metric_type": "rate",
-      "collection_protocol": "scmi"
-    }
-  },
-  "scmi_specification_path": "./samples/sample_topology/example_scmi_specification.json"
+  "astl_metrics_dir": "/usr/local/astl/config/metrics",
+  "scmi_specification_dir": "/usr/local/astl/config/scmi",
+  "astl_file_path": ""
 }
 ```
 
 Key elements of the configuration file:
 
-1. **metrics**: a set of objects, each with a name as a key, along with the following fields:
-   - **register**: the exact name of the register where ASTL should read this metric's data (e.g. a `layout/member` key in the SCMI spec)
-   - **unit**: selects which `astl_units_t` the metric is associated with
-   - **metric_type**: selects the `astl_metric_type_t` for this data
-   - **collection_protocol**: selects which collectors should measure it
-   - **formula** (optional): mathematical expression or bitmask to transform raw values (see [Formula Support](#formula-support) below)
+1. **scmi_sysfs_telemetry_root_path**: optional override for the SCMI sysfs root file path
+2. **astl_metrics_dir**: optional override for the directory with platform-specific metrics declarations
+3. **scmi_specification_dir**: optional override for the JSON file specifying data event IDs and targets
+4. **astl_file_path**: optional path to specify save file where astl should save or load state from
 
-2. **scmi_specification_path**: optional override for the JSON file specifying data event IDs and targets
+Within the astl_metrics_dir path, you can override definitions of metrics, which look like:
+
+```json
+    "Throttle Counts": {
+      "description": "Number of thermal throttling events",
+      "unit": "",
+      "metric_type": "delta",
+      "category": "COUNT",
+      "metric_groups": ["throttling"],
+      "collection": {
+        "register": "THROTTLE_EVENTS",
+        "protocol": "scmi"
+      }
+    }
+
+```
+
+Each metric: has a name as a key, along with the following fields:
+
+register: the exact name of the register where ASTL should read this metric's data (e.g. a `layout/member` key in the SCMI spec)
+unit: selects which `astl_units_t` the metric is associated with
+metric_type: selects the `astl_metric_type_t` for this data
+collection_protocol: selects which collectors should measure it
+
+For more details on metrics declarations and platform-specific scmi spec, see [doc/config_and_specification_files.md](doc/config_and_specification_files.md)
 
 ### Formula Support
 
@@ -501,9 +511,9 @@ ASTL/build/debug/bin/MockSysfs /tmp/scmi
 - Foreground mode: Simply press Ctrl+C to exit.
 - Background mode: kill -SIGINT \<PID\>
 
-# Build steps for developers
+## Build steps for developers
 
-## Third-Party Components
+### Third-Party Components
 
 ASTL incorporates the following third-party libraries:
 
@@ -513,7 +523,7 @@ ASTL incorporates the following third-party libraries:
   - Licensed under zlib/libpng license
   - Used for the Formula feature to transform raw metric values
 
-## Compile and test
+### Compile and test
 
 These commands will generate a workspace under `build` with auto-detected reasonable default
 build systems and compilers, build it, and execute tests. Supported presets are found in
@@ -525,7 +535,7 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-## Compile and test with specific compiler or build type
+### Compile and test with specific compiler or build type
 
 If you want to choose a specific compiler that's not specified in `CMakePresets.json`, you
 can add arguments in the first configure step (be sure to set `EXPORT_COMPILE_COMMANDS` so
@@ -537,9 +547,9 @@ cmake --build ./build/debug --config DEBUG
 cd ./build/debug && ctest
 ```
 
-## Custom targets
+### Custom targets
 
-### Formatting
+#### Formatting
 
 To use `clang-format` to check formatting, use
 [scripts/check_format.sh](scripts/check_format.sh) or the `cmake` target `check_format`.
@@ -559,7 +569,7 @@ cd build && cmake --build . --target format
 cd build && make format
 ```
 
-### Linting
+#### Linting
 
 To use `clang-tidy` to lint code, use [scripts/lint.sh](scripts/lint.sh) or the target `lint`
 
@@ -569,11 +579,11 @@ cd build && cmake --build . --target lint
 cd build && make lint
 ```
 
-### Doxygen
+#### Doxygen
 
 Automatically generate class diagrams, function call graphs, and API reference docs:
 
-# Experimental Python API and usage
+## Experimental Python API and usage
 
 For Python usage (installation, quick start, streaming, diagnostics, derived metrics,
 benchmarking) jump directly to the **[Python User Guide](python/docs/USER_GUIDE.md)**.
@@ -582,11 +592,11 @@ Python examples (including an end-to-end session + streaming + derived rates) ar
 `python/samples/` and documented in the
 **[User Guide](python/docs/USER_GUIDE.md#putting-it-together-end-to-end-example)**.
 
-## Python API Documentation (Sphinx)
+### Python API Documentation (Sphinx)
 
 The Python layer includes a Sphinx scaffold under `python/docs/`.
 
-### Build HTML Docs
+#### Build HTML Docs
 
 ```bash
 # (Optional) create / activate a virtual environment

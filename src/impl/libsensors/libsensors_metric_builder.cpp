@@ -63,11 +63,27 @@ auto GetSubfeature(const sensors_chip_name* chip, const sensors_feature* feature
 }
 
 /**
+ * @brief Parse units from sensor feature type
+ * libsensors provides temperature in degrees Celsius and power in Watts
+ */
+static auto ParseUnitsFromFeatureType(sensors_feature_type feature_type) -> astl_units_t {
+  switch (feature_type) {
+    case SENSORS_FEATURE_TEMP:
+      return ASTL_UNITS_CELSIUS;
+    case SENSORS_FEATURE_POWER:
+      return ASTL_UNITS_WATTS;
+    default:
+      return ASTL_UNITS_UNKNOWN;
+  }
+}
+
+/**
  * @brief Register sensors from a detected chip.
  */
 static auto RegisterSensorsFromChip(const astl::AstlConfiguration& configuration, IMetricManager* metric_manager,
                                     const std::vector<const ITarget*>& libsensors_targets,
                                     const sensors_chip_name* chip, SensorsApi const* sensors_api) -> astl_status_code {
+  (void)configuration;
   const sensors_feature*            feature              = nullptr;
   int                               sensor_feature_count = 0;
   constexpr size_t                  max_name_length      = 200;
@@ -75,8 +91,8 @@ static auto RegisterSensorsFromChip(const astl::AstlConfiguration& configuration
   sensors_api->snprintf_chip_name(chip_name.data(), max_name_length, chip);
   ASTL_LOG_INFO("Scanning {} for features", chip_name.data());
   while ((feature = sensors_api->get_features(chip, &sensor_feature_count))) {
-    ASTL_LOG_DEBUG("  Found sensor: {} type {} with name {}", sensors_api->get_label(chip, feature), feature->type,
-                   feature->name);
+    const char* label = sensors_api->get_label(chip, feature);
+    ASTL_LOG_DEBUG("  Found sensor: `{}` type {} with name {}", label, feature->type, feature->name);
     const auto sub = GetSubfeature(chip, feature, sensors_api);
     if (!sub) {
       if (sub.error() == ASTL_STATUS_NOT_IMPLEMENTED) {
@@ -84,24 +100,19 @@ static auto RegisterSensorsFromChip(const astl::AstlConfiguration& configuration
       }
       return sub.error();
     }
-    const auto& metric_iter =
-        std::find_if(configuration.metric_declarations.begin(), configuration.metric_declarations.end(),
-                     [&](const auto& metric_declaration_iter) {
-                       const auto& metric_declaration = metric_declaration_iter.second;
-                       return (metric_declaration.collection_protocol == "libsensors" &&
-                               metric_declaration.register_name == chip_name.data()) &&
-                              (metric_declaration.offset == feature->name);
-                     });
-    if (metric_iter == configuration.metric_declarations.end()) {
-      ASTL_LOG_INFO("Skipping sensor {} as not configured in ASTL configuration",
-                    sensors_api->get_label(chip, feature));
+
+    // Get units from the sensor feature type (libsensors provides temps in °C, power in W)
+    astl_units_t units = ParseUnitsFromFeatureType(feature->type);
+    if (units == ASTL_UNITS_UNKNOWN) {
+      ASTL_LOG_WARNING("Unrecognized units for sensor feature type {}, skipping this feature.", feature->type);
       continue;
     }
-    const auto& [metric_name, metric_declaration] = *metric_iter;
+
+    std::string description =
+        std::string("Libsensors sensors ") + std::string(chip_name.data()) + " " + std::string(label);
 
     auto metric_config = std::make_unique<MetricConfig>(
-        metric_name, feature->name, ParseUnits(metric_declaration.unit), ASTL_VALUE_FLOAT64,
-        ParseCategory(metric_declaration.category), ParseMetricType(metric_declaration.metric_type),
+        label, description, units, ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
         CollectorType::LIBSENSORS, LibsensorsOperationBuilder{chip, (*sub)->number});
 
     auto status = metric_manager->RegisterMetric(std::move(metric_config), libsensors_targets);
@@ -136,9 +147,12 @@ auto RegisterLibsensorsMetrics(
   const auto& libsensors_targets = libsensors_targets_iter->second;
   // get the api wrapper for dynamically linked libsensors library.
   // should have been loaded and put in Targets by the topology plugin.
-  auto sensors_api = libsensors_targets.empty()
-                         ? nullptr
-                         : dynamic_cast<const astl::LibsensorsTarget*>(libsensors_targets.front())->ShareApi();
+  const auto* first_libsensors_target = dynamic_cast<const astl::LibsensorsTarget*>(libsensors_targets.front());
+  if (!first_libsensors_target) {
+    ASTL_LOG_ERROR("First Libsensors target cannot be cast to LibsensorsTarget type");
+    return ASTL_STATUS_BAD_CONFIGURATION;
+  }
+  auto sensors_api = first_libsensors_target->ShareApi();
   if (!sensors_api) {
     ASTL_LOG_ERROR("No valid Libsensors API found in targets, cannot register libsensors metrics.");
     return ASTL_STATUS_INTERNAL_ERROR;

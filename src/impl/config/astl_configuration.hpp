@@ -28,35 +28,15 @@
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "common/metric_config.hpp"
-#include "config/scmi_specification_json.hpp"
-#include "target.hpp"
+#include "config/scmi_platform_telemetry_spec.hpp"
 
 namespace astl {
 
-struct MetricJsonDeclaration {
-  MetricJsonDeclaration() = default;
-
-  std::string                             description;    //!< Description of the metric
-  std::string                             register_name;  //!< Register name associated with the metric
-  std::string                             offset;  //!< Register offset - exact meaning depends on collection_protocol
-  std::string                             unit;    //!< Unit of measurement for the metric
-  std::string                             metric_type;  //!< Type of metric (e.g., value, delta, rate)
-  std::string                             category;  //!< Categories include things like Temperature, Power, Count, etc.
-  std::optional<std::vector<std::string>> metric_groups;        //!< Groups this metric is associated with
-  std::string                             collection_protocol;  //!< Collector type (e.g., scmi, libsensors)
-  std::optional<nlohmann::json>           formula;              //!< Optional formula (JSON array format)
-
-  // Residency-specific fields
-  std::optional<std::string> inferred_state;                    //!< Name of inferred state (for residency metrics)
-  std::optional<std::map<std::string, nlohmann::json>> states;  //!< State definitions (for residency metrics)
-
-  // Finite set specific fields
-  std::optional<std::vector<nlohmann::json>> finite_set_values;  //!< Valid values for finite set metrics
-};
-
 /** @brief Overall configuration for the ASTL library */
 struct AstlConfiguration {
-  AstlConfiguration() = default;
+  /** @brief Default constructor assigns default values to paths.
+   * These can be overridden with configuration_data in ParseConfiguration */
+  AstlConfiguration();
 
   /** @brief scmi_sysfs_telemetry_root_override is an optional path to replace "/sys/fs/arm_telemetry"
    *         This is a placeholder example of something that _could_ be configured.
@@ -64,11 +44,15 @@ struct AstlConfiguration {
    */
   std::optional<std::filesystem::path> scmi_sysfs_telemetry_root_path;
 
-  /** @brief collection of metric declarations for ASTL to present to user */
-  std::unordered_map<std::string, MetricJsonDeclaration> metric_declarations;  // unordered for faster lookup
+  /** @brief Override path for the directory containing UUID-mapped ASTL metric config json files.
+   *  defaults to ./config/metrics if not set
+   */
+  std::optional<std::filesystem::path> astl_metrics_dir;
 
-  /** @brief Override path for configuration file containing SCMI metric definitions */
-  std::optional<std::filesystem::path> scmi_specification_path;
+  /** @brief Override path for directory containing UUID-mapped SCMI specification json files.
+   *  defaults to ./config/scmi if not set
+   */
+  std::optional<std::filesystem::path> scmi_specification_dir;
 
   std::optional<std::filesystem::path> astl_file_path;
 };
@@ -78,24 +62,6 @@ struct AstlConfiguration {
 
 [[nodiscard]] auto ParseConfiguration(std::istream& configuration_data)
     -> std::expected<AstlConfiguration, astl_status_code>;
-
-auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std::optional<CollectorType>;
-
-/**
- * @brief helper function to create a MetricConfig object from a MetricJsonDeclaration and ScmiSpecification
- * @param metric_key_name    The string key from scmi specification json in the layout.members.<member>. entries list,
- * e.g. 'ENERGY_COUNTER'
- * @param metric_declaration The MetricJsonDeclaration json definition of this type of metric from the astl
- * configuration json. adds info like units on how to interpret the metrics
- * @param scmi_spec          The scmi json spec, especially scmi::Layout for this platform
- * @param targets A vector of ITarget pointers represending the detected SCMI targets on this platform
- *
- */
-[[nodiscard]] auto CreateScmiMetricConfigs(std::string_view                   metric_key_name,
-                                           MetricJsonDeclaration const&       metric_declaration,
-                                           scmi::ScmiSpecification const&     scmi_spec,
-                                           std::vector<const ITarget*> const& scmi_targets)
-    -> std::expected<MetricConfigOnTargets, astl_status_code>;
 
 }  // namespace astl
 

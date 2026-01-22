@@ -53,8 +53,20 @@ auto GetAstlFilePath() -> std::expected<fs::path, astl_status_code> {
     ASTL_LOG_ERROR("Could not determine path of ASTL .so library (Linux / Mac)");
     return std::unexpected<astl_status_code>(ASTL_STATUS_BAD_CONFIGURATION);
   }
-
-  return fs::path(dl_info.dli_fname);
+  fs::path lib_path{dl_info.dli_fname};
+  // If we got an executable (not .so), we're likely statically linked
+  // Try to find the library in a relative path (useful for tests)
+  // @todo(ASTL-274) look up config files from resource / appdata paths rather or in addition to lib path.
+  if (lib_path.extension() != ".so" && !lib_path.filename().string().starts_with("lib")) {
+    ASTL_LOG_DEBUG("Detected statically linked binary: {}", lib_path.string());
+    // Look for lib directory relative to executable
+    auto potential_lib_dir = lib_path.parent_path().parent_path() / "lib";
+    if (fs::exists(potential_lib_dir)) {
+      ASTL_LOG_INFO("Using library path from build tree: {}", potential_lib_dir.string());
+      return potential_lib_dir / "libastl.so";
+    }
+  }
+  return lib_path;
 #elif defined(_WIN32)
   HMODULE h_module = nullptr;
   if (!GetModuleHandleExA(
@@ -116,7 +128,8 @@ auto GetConfigurationFilePath() -> std::expected<fs::path, astl_status_code> {
 auto GetConfiguration() -> std::expected<AstlConfiguration, astl_status_code> {
   auto config_filepath = GetConfigurationFilePath();
   if (!config_filepath) {
-    return std::unexpected(config_filepath.error());
+    ASTL_LOG_DEBUG("No configuration override file path specified in ASTL_CONFIG_JSON_PATH, using defaults.");
+    return AstlConfiguration{};
   }
 
   fs::path      config_filepath_validated = config_filepath.value();

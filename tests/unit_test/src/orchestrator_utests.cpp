@@ -18,6 +18,7 @@ TEST_CASE("Orchestrator ctor", "[Orchestrator]") {
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   ALLOW_CALL(*metric_manager, ProcessRawSamples(_)).RETURN(ASTL_STATUS_COLLECTION_ALREADY_STOPPED);
   auto output_manager   = std::make_unique<MockOutputManager>();
   auto topology_manager = std::make_unique<MockTopologyManager>();
@@ -68,6 +69,7 @@ TEST_CASE("Orchestrator-Collection", "[Orchestrator]") {
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
 
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
@@ -118,6 +120,7 @@ TEST_CASE("Orchestrator-StopCollection", "[Orchestrator]") {
 
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
 
   auto output_manager = std::make_unique<MockOutputManager>();
 
@@ -139,6 +142,8 @@ TEST_CASE("Orchestrator-SinkRawSamples empty span no-op", "[Orchestrator]") {
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
                                            std::move(metric_manager), std::move(output_manager), "");
@@ -163,6 +168,7 @@ TEST_CASE("Orchestrator-SinkRawSamples bulk growth then skip reserve", "[Orchest
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
                                            std::move(metric_manager), std::move(output_manager), "");
@@ -212,6 +218,7 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV only emission", "[Orchestrat
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
 
   auto output_manager = std::make_unique<MockOutputManager>();
   REQUIRE_CALL(*output_manager, OutputProcessedSamples(_, astl::OutputType::INTERVAL_CSV, _, _))
@@ -249,6 +256,7 @@ TEST_CASE("Orchestrator-StopCollection PERFETTO only emission", "[Orchestrator][
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
 
   auto output_manager = std::make_unique<MockOutputManager>();
   REQUIRE_CALL(*output_manager, OutputProcessedSamples(_, astl::OutputType::PERFETTO, _, _))
@@ -290,6 +298,7 @@ TEST_CASE("Orchestrator-StopCollection dual PERFETTO+INTERVAL_CSV ordered emissi
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
 
   auto output_manager = std::make_unique<MockOutputManager>();
   REQUIRE_CALL(*output_manager, OutputProcessedSamples(_, astl::OutputType::PERFETTO, _, _))
@@ -333,6 +342,7 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV idempotent emission", "[Orch
   auto metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
 
   auto output_manager = std::make_unique<MockOutputManager>();
   REQUIRE_CALL(*output_manager, OutputProcessedSamples(_, astl::OutputType::INTERVAL_CSV, _, _))

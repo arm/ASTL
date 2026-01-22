@@ -294,23 +294,20 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
         ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to ResidencyMetricConfig for metric '{}'", metric_name);
         return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
       }
-
+      if (residency_config->GetStateInfo().empty()) {
+        ASTL_LOG_ERROR("CreateMetricFromConfig: No state info found in ResidencyMetricConfig for metric '{}'",
+                       metric_name);
+        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      }
       // Create state configurations from the metric config for the specific target
       std::vector<ResidencyMetricConfig::StateInfo> state_configs;
-      const auto&                                   state_info = residency_config->GetStateInfo();
-
-      // Get states for the specific target
-      if (auto target_iter = state_info.find(target->Name()); (target_iter != state_info.end())) {
-        const auto& target_states = target_iter->second;
-        std::ranges::transform(target_states, std::back_inserter(state_configs), [](const auto& state_pair) {
-          const auto& [state_name, state_data] = state_pair;
-          return ResidencyMetricConfig::StateInfo{state_name, state_data.tick_frequency, state_data.operation_builder};
-        });
-      } else {
-        ASTL_LOG_ERROR("CreateMetricFromConfig: No state configurations found for target '{}' in metric '{}'",
-                       target->Name(), metric_name);
-        return std::unexpected(ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET);
-      }
+      // turn the map of state->info to a vector of StateInfo
+      std::ranges::transform(residency_config->GetStateInfo(), std::back_inserter(state_configs),
+                             [](const auto& state_pair) {
+                               const auto& [state_name, state_data] = state_pair;
+                               return ResidencyMetricConfig::StateInfo{state_name, state_data.tick_frequency,
+                                                                       state_data.operation_builder};
+                             });
       return std::make_unique<ResidencyMetric>(residency_config, state_configs, target, sink);
     }
     case astl_metric_type_t::ASTL_METRIC_FINITE_SET_VALUE: {
@@ -606,6 +603,15 @@ auto MetricManager::SummarizeMetrics() -> astl_status_code {
     }
   }
   return ASTL_STATUS_SUCCESS;
+}
+
+auto MetricManager::RemoveAllMetrics() -> void {
+  _metric_handles.clear();
+  _metric_groups.clear();
+  _metric_group_api_handles.clear();
+  _target_to_metrics_map.clear();
+  _target_to_metric_groups_map.clear();
+  _operation_to_metric_map.clear();
 }
 
 auto MetricManager::IsCollectorTypeSupported(CollectorType required_collector_type) const -> bool {

@@ -244,6 +244,12 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
       -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> override;
 
   /**
+   * @brief Removes all previously registered metrics, due to a reconfiguration event.
+   *        Mostly intended for test harnesses.
+   */
+  auto RemoveAllMetrics() -> void override;
+
+  /**
    * @brief Finalize and summarize metrics after data processing.
    * @return ASTL_STATUS_SUCCESS or an appropriate error code.
    */

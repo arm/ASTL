@@ -21,6 +21,7 @@ set(UNIT_TEST_SRCS
     event_metric_utests.cpp
     finite_set_metric_utests.cpp
     config_manager_utests.cpp
+    metric_builder_utests.cpp
     metric_manager_utests.cpp
     scmi_specification_json_utests.cpp
     topology_manager_utests.cpp

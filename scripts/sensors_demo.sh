@@ -64,7 +64,7 @@ else
 	RUN_ARGS=(--interval="$INTERVAL" --duration="$DURATION")
 fi
 
-"$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --config="$ASTL_ROOT/samples/sample_configuration/astl_configuration_libsensors.json" --target="libsensors"
+"$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" -target="libsensors"
 ERR=$?
 if [[ $ERR -ne 0 ]]; then
 	echo "❌ Error: $SAMPLE_TEST_BIN returned a non-zero return code $ERR" >&2

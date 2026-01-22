@@ -104,6 +104,11 @@ wait_for() {
 wait_for "$SYSFS_LOG" "MockSysfs startup log" "$PATTERN_READY"
 echo "✅ MockSysfs mounted at $MOUNT_POINT"
 
+###############################################################
+# Copy metrics + scmi spec config/ directory to build directory #
+###############################################################
+./scripts/publish_configs.sh -o "$ASTL_ROOT/build/debug/lib/config" --confidential --mocksysfs
+
 ###############
 # Demo action #
 ###############
@@ -136,6 +141,8 @@ fi
 # Instead of auto-detecting it using the .so path.
 export ASTL_CONFIG_JSON_PATH=~/tmp/updated_config.json
 echo "ASTL_CONFIG_JSON_PATH = ${ASTL_CONFIG_JSON_PATH}"
+# Configure Scmi collector to look in the mounted MockSysfs telemetry path
+# rather than the production Scmi sysfs path.
 jq --arg telemetry_root "$TELEMETRY_ROOT" \
 	'.scmi_sysfs_telemetry_root_path = $telemetry_root' \
 	./samples/sample_configuration/astl_configuration.json >$ASTL_CONFIG_JSON_PATH

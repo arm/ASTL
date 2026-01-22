@@ -52,12 +52,15 @@ static auto SerializeBasicMetricConfig(const MetricConfig& config)
   return out;
 }
 
-static auto SerializeBasicMetric(const MetricConfig& metric_config, const ITarget& target)
+static auto SerializeBasicMetric(const MetricConfig& metric_config, const ITarget* target)
     -> std::expected<astl::protobuf::RawMetric, astl_status_code> {
   astl::protobuf::RawMetric out;
-
+  if (!target) {
+    ASTL_LOG_ERROR("SerializeBasicMetric: target is null for metric {}", metric_config.Name());
+    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+  }
   out.set_metric_id(metric_config.Name());
-  out.add_target_ids(target.Name());
+  out.add_target_ids(target->Name());
 
   auto cfg_or_err = SerializeBasicMetricConfig(metric_config);
   if (!cfg_or_err) {
@@ -69,7 +72,7 @@ static auto SerializeBasicMetric(const MetricConfig& metric_config, const ITarge
   return out;
 }
 
-static auto SerializeFiniteSetMetric(const MetricConfig& metric_config, const ITarget& target)
+static auto SerializeFiniteSetMetric(const MetricConfig& metric_config, const ITarget* target)
     -> std::expected<astl::protobuf::RawMetric, astl_status_code> {
   auto out_or_err = SerializeBasicMetric(metric_config, target);
   if (!out_or_err) {
@@ -93,7 +96,7 @@ static auto SerializeFiniteSetMetric(const MetricConfig& metric_config, const IT
   return out_or_err;
 }
 
-static auto SerializeIMetric(const MetricConfig& metric_config, const ITarget& target)
+static auto SerializeIMetric(const MetricConfig& metric_config, const ITarget* target)
     -> std::expected<astl::protobuf::RawMetric, astl_status_code> {
   switch (metric_config.MetricType()) {
     case ASTL_METRIC_VALUE:
@@ -171,7 +174,7 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
 }
 
 struct MetricDeserializationResult {
-  const ITarget*           target;
+  const ITarget*           target{};
   std::unique_ptr<IMetric> metric;
 };
 
@@ -335,7 +338,7 @@ static auto SerializeHandleToRawMetric(const MetricHandle& handle)
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
-  auto proto_or_err = SerializeIMetric(cfg, *first_ptr);
+  auto proto_or_err = SerializeIMetric(cfg, first_ptr);
   if (!proto_or_err) {
     ASTL_LOG_ERROR(
         "SerializeHandleToRawMetric: SerializeIMetric failed for metric '{}' "

@@ -5,6 +5,7 @@
 #include "common/metric_config.hpp"
 #include "config/astl_configuration.hpp"
 #include "config/configuration_manager.hpp"
+#include "config/metric_json_declaration.hpp"
 #include "operation/scmi_operation_builder.hpp"
 #include "operation/scmi_read_operation.hpp"
 
@@ -52,55 +53,44 @@ TEST_CASE("ParseConfiguration", "[ConfigManager]") {
   constexpr auto     json_config_data = R"json(
   {
     "scmi_sysfs_telemetry_root_path": "~/tmp/fuse/arm_telemetry",
-
-    "metrics": {
-      "SoC Type": {
-        "description": "Temperature in Celsius",
-        "register": "SOC_TEMP",
-        "unit": "C",
-        "metric_type": "value",
-        "collection_protocol": "scmi"
-      },
-      "Throttle Counts": {
-        "description": "Number of thermal throttling events",
-        "register": "THROTTLE_EVENTS",
-        "unit": "",
-        "metric_type": "delta",
-        "collection_protocol": "scmi"
-      }
-    },
-
-    "scmi_specification_path": "/etc/arm/astl/scmi_specification.json"
+    "astl_metrics_dir": "/etc/arm/astl/metrics",
+    "scmi_specification_dir": "/etc/arm/astl/scmi"
   }
   )json";
   std::istringstream json_data_stream{json_config_data};
   auto               result = astl::ParseConfiguration(json_data_stream);
   REQUIRE(result);
   auto config = result.value();
-  REQUIRE(config.metric_declarations.size() == 2);
   REQUIRE(config.scmi_sysfs_telemetry_root_path == "~/tmp/fuse/arm_telemetry");
-  REQUIRE(config.scmi_specification_path == "/etc/arm/astl/scmi_specification.json");
+  REQUIRE(config.astl_metrics_dir == "/etc/arm/astl/metrics");
+  REQUIRE(config.scmi_specification_dir == "/etc/arm/astl/scmi");
 }
 
-TEST_CASE("ParseConfiguration with Residency Metric", "[ConfigManager]") {
-  constexpr auto json_config_data = R"json(
+TEST_CASE("ParseConfiguration with Residency Metric from JSON file", "[ConfigManager][Residency]") {
+  // Test with metric declaration JSON that would be in a metrics config file
+  constexpr auto json_metrics_data = R"json(
   {
-    "scmi_sysfs_telemetry_root_path": "~/tmp/fuse/arm_telemetry",
-
+    "_comment": "Test metrics with residency type",
+    "document": {
+      "confidential": false
+    },
     "metrics": {
-      "C-State": {
-        "description": "CPU C-State residency",
-        "unit": "seconds",
+      "CPU C-State": {
+        "description": "CPU C-State residency tracking",
         "metric_type": "residency",
-        "collection_protocol": "scmi",
+        "unit": "seconds",
+        "category": "power",
         "inferred_state": "Active",
+        "collection": {
+          "protocol": "scmi"
+        },
         "states": {
           "C1": {
             "register": "C1_RESIDENCY_COUNTER",
             "tick_frequency": 1000000.0
           },
           "C3": {
-            "register": "C3_RESIDENCY_COUNTER", 
+            "register": "C3_RESIDENCY_COUNTER",
             "tick_frequency": 1000000.0
           },
           "C6": {
@@ -109,83 +99,80 @@ TEST_CASE("ParseConfiguration with Residency Metric", "[ConfigManager]") {
           }
         }
       }
-    },
-
-    "scmi_specification_path": "/etc/arm/astl/scmi_specification.json"
+    }
   }
   )json";
 
-  std::istringstream json_data_stream{json_config_data};
-  auto               result = astl::ParseConfiguration(json_data_stream);
-  REQUIRE(result);
+  // Parse the metrics JSON
+  json json_data = json::parse(json_metrics_data);
+  auto metrics   = json_data.at("metrics");
 
-  auto config = result.value();
-  REQUIRE(config.metric_declarations.size() == 1);
-  REQUIRE(config.scmi_sysfs_telemetry_root_path == "~/tmp/fuse/arm_telemetry");
-  REQUIRE(config.scmi_specification_path == "/etc/arm/astl/scmi_specification.json");
+  astl::metrics::spec::MetricJsonDeclaration cstate_metric =
+      metrics.at("CPU C-State").get<astl::metrics::spec::MetricJsonDeclaration>();
 
-  // Verify residency metric specific fields
-  auto& residency_metric = config.metric_declarations.at("C-State");
-  REQUIRE(residency_metric.description == "CPU C-State residency");
-  REQUIRE(residency_metric.unit == "seconds");
-  REQUIRE(residency_metric.metric_type == "residency");
-  REQUIRE(residency_metric.collection_protocol == "scmi");
-  REQUIRE(residency_metric.register_name.empty());  // No top-level register for residency
+  // Verify parsed values
+  REQUIRE(cstate_metric.description == "CPU C-State residency tracking");
+  REQUIRE(cstate_metric.metric_type == "residency");
+  REQUIRE(cstate_metric.unit == "seconds");
+  REQUIRE(cstate_metric.category == "power");
+  REQUIRE(cstate_metric.inferred_state == "Active");
+  REQUIRE(cstate_metric.collection.protocol == "scmi");
+  REQUIRE(cstate_metric.states->size() == 3);
+  REQUIRE(cstate_metric.states->contains("C1"));
+  REQUIRE(cstate_metric.states->contains("C3"));
+  REQUIRE(cstate_metric.states->contains("C6"));
 
-  // Verify inferred state
-  REQUIRE(residency_metric.inferred_state.has_value());
-  REQUIRE(residency_metric.inferred_state.value() == "Active");
-
-  // Verify states configuration
-  REQUIRE(residency_metric.states.has_value());
-  auto& states = residency_metric.states.value();
-  REQUIRE(states.size() == 3);
-
-  // Verify C1 state
-  REQUIRE(states.contains("C1"));
-  REQUIRE(states.at("C1").contains("register"));
-  REQUIRE(states.at("C1").at("register").get<std::string>() == "C1_RESIDENCY_COUNTER");
-  REQUIRE(states.at("C1").contains("tick_frequency"));
-  REQUIRE(states.at("C1").at("tick_frequency").get<double>() == 1000000.0);
-
-  // Verify C3 state
-  REQUIRE(states.contains("C3"));
-  REQUIRE(states.at("C3").at("register").get<std::string>() == "C3_RESIDENCY_COUNTER");
-  REQUIRE(states.at("C3").at("tick_frequency").get<double>() == 1000000.0);
-
-  // Verify C6 state
-  REQUIRE(states.contains("C6"));
-  REQUIRE(states.at("C6").at("register").get<std::string>() == "C6_RESIDENCY_COUNTER");
-  REQUIRE(states.at("C6").at("tick_frequency").get<double>() == 1000000.0);
+  // Verify state details
+  REQUIRE(cstate_metric.states->at("C1").at("register") == "C1_RESIDENCY_COUNTER");
+  REQUIRE(cstate_metric.states->at("C1").at("tick_frequency") == 1000000.0);
+  REQUIRE(cstate_metric.states->at("C3").at("register") == "C3_RESIDENCY_COUNTER");
+  REQUIRE(cstate_metric.states->at("C3").at("tick_frequency") == 1000000.0);
+  REQUIRE(cstate_metric.states->at("C6").at("register") == "C6_RESIDENCY_COUNTER");
+  REQUIRE(cstate_metric.states->at("C6").at("tick_frequency") == 1000000.0);
 }
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
-  // Create a mock SCMI layout with the residency counter data event IDs
-  astl::scmi::Layout mock_layout;
-  mock_layout.members["AP0"] = {
-      {"C1_RESIDENCY_COUNTER", {.name = "AP0_C1_RESIDENCY_COUNTER", .de_id = 0x00001c71}},
-      {"C3_RESIDENCY_COUNTER", {.name = "AP0_C3_RESIDENCY_COUNTER", .de_id = 0x00001d82}},
-      {"C6_RESIDENCY_COUNTER", {.name = "AP0_C6_RESIDENCY_COUNTER", .de_id = 0x00001e93}}
+  // Create a mock SCMI specification with the residency counter data event IDs
+  astl::scmi::spec::ScmiSpecification mock_scmi_spec;
+  mock_scmi_spec.layout = {
+      // Layout for AP cores with C-state counters
+      {.count        = 2,  // AP0 and AP1
+       .start_offset = 0,
+       .block_size   = 64,
+       .members      = {{.base_de_id    = 0x1c71,
+                         .name          = "C1_RESIDENCY_COUNTER",
+                         .component     = "AP",
+                         .description   = "C1 residency",
+                         .unit          = "ticks",
+                         .unit_exponent = 0,
+                         .rel_offset    = 0x00},
+                        {.base_de_id    = 0x1d82,
+                         .name          = "C3_RESIDENCY_COUNTER",
+                         .component     = "AP",
+                         .description   = "C3 residency",
+                         .unit          = "ticks",
+                         .unit_exponent = 0,
+                         .rel_offset    = 0x10},
+                        {.base_de_id    = 0x1e93,
+                         .name          = "C6_RESIDENCY_COUNTER",
+                         .component     = "AP",
+                         .description   = "C6 residency",
+                         .unit          = "ticks",
+                         .unit_exponent = 0,
+                         .rel_offset    = 0x20}}}
   };
-  mock_layout.members["AP1"] = {
-      {"C1_RESIDENCY_COUNTER", {.name = "AP1_C1_RESIDENCY_COUNTER", .de_id = 0x00011c71}},
-      {"C3_RESIDENCY_COUNTER", {.name = "AP1_C3_RESIDENCY_COUNTER", .de_id = 0x00011d82}},
-      {"C6_RESIDENCY_COUNTER", {.name = "AP1_C6_RESIDENCY_COUNTER", .de_id = 0x00011e93}}
-  };
-  astl::scmi::ScmiSpecification mock_scmi_spec;
-  mock_scmi_spec.layout = std::move(mock_layout);
 
   std::vector<const astl::ITarget*> mock_scmi_targets;
   astl::Target                      mock_target_tlm0("tlm-0", "dummy test target", astl::CollectorType::SCMI, nullptr);
   mock_scmi_targets.push_back(&mock_target_tlm0);
 
   // Create a residency metric declaration
-  astl::MetricJsonDeclaration residency_declaration;
+  astl::metrics::spec::MetricJsonDeclaration residency_declaration;
   residency_declaration.description         = "CPU C-State residency";
   residency_declaration.unit                = "seconds";
   residency_declaration.metric_type         = "residency";
-  residency_declaration.collection_protocol = "scmi";
+  residency_declaration.collection.protocol = "scmi";
   residency_declaration.inferred_state      = "Active";
 
   // Set up states configuration
@@ -211,7 +198,7 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
 
   // Create the metric config
   auto metric_configs_result =
-      astl::CreateScmiMetricConfigs("C-State", residency_declaration, mock_scmi_spec, mock_scmi_targets);
+      astl::metrics::spec::CreateScmiMetricConfigs("C-State", residency_declaration, mock_scmi_spec, mock_scmi_targets);
 
   // Verify the configs were created successfully
   REQUIRE(metric_configs_result.has_value());
@@ -226,12 +213,12 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   REQUIRE(residency_config_ap0 != nullptr);
   REQUIRE(residency_config_ap1 != nullptr);
   // since these metric_configs aren't in a specific order, let's make sure the first one corresponds to AP0
-  if (residency_config_ap0->Name().starts_with("AP1")) {
+  if (residency_config_ap0->Name().ends_with("1")) {
     std::swap(residency_config_ap0, residency_config_ap1);
   }
 
   // Verify basic metric properties
-  REQUIRE(residency_config_ap0->Name() == "AP0_C-State");
+  REQUIRE(residency_config_ap0->Name() == "C-State.0");
   REQUIRE(residency_config_ap0->Description() == "CPU C-State residency");
   REQUIRE(residency_config_ap0->Units() == ASTL_UNITS_SECONDS);
   REQUIRE(residency_config_ap0->ValueType() == ASTL_VALUE_UINT64);
@@ -240,74 +227,56 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
 
   // Verify the state info (data event IDs and tick frequencies) are correctly stored
   const auto& state_info = residency_config_ap0->GetStateInfo();
-  REQUIRE(state_info.size() == 1);  // AP0 and AP1
-
   // Verify AP0 state info (data event IDs and tick frequencies)
-  REQUIRE(state_info.contains(mock_target_tlm0.Name()));
-  const auto& tlm_0_ap0_state_info = state_info.at(mock_target_tlm0.Name());
-  REQUIRE(tlm_0_ap0_state_info.size() == 3);  // C1, C3, C6
-  REQUIRE(tlm_0_ap0_state_info.at("C1").state_name == "C1");
-  REQUIRE(GetDataEventId(tlm_0_ap0_state_info.at("C1")) == 0x00001c71);
-  REQUIRE(tlm_0_ap0_state_info.at("C1").tick_frequency == 1000000.0);
-  REQUIRE(tlm_0_ap0_state_info.at("C3").state_name == "C3");
-  REQUIRE(GetDataEventId(tlm_0_ap0_state_info.at("C3")) == 0x00001d82);
-  REQUIRE(tlm_0_ap0_state_info.at("C3").tick_frequency == 1000000.0);
-  REQUIRE(tlm_0_ap0_state_info.at("C6").state_name == "C6");
-  REQUIRE(GetDataEventId(tlm_0_ap0_state_info.at("C6")) == 0x00001e93);
-  REQUIRE(tlm_0_ap0_state_info.at("C6").tick_frequency == 1000000.0);
+  REQUIRE(state_info.size() == 3);  // C1, C3, C6
+  REQUIRE(state_info.at("C1").state_name == "C1");
+  REQUIRE(GetDataEventId(state_info.at("C1")) == 0x00001c71);
+  REQUIRE(state_info.at("C1").tick_frequency == 1000000.0);
+  REQUIRE(state_info.at("C3").state_name == "C3");
+  REQUIRE(GetDataEventId(state_info.at("C3")) == 0x00001d82);
+  REQUIRE(state_info.at("C3").tick_frequency == 1000000.0);
+  REQUIRE(state_info.at("C6").state_name == "C6");
+  REQUIRE(GetDataEventId(state_info.at("C6")) == 0x00001e93);
+  REQUIRE(state_info.at("C6").tick_frequency == 1000000.0);
 
   // now check the metric configuration for AP1
   REQUIRE(residency_config_ap1 != nullptr);
 
   // Verify basic metric properties
-  REQUIRE(residency_config_ap1->Name() == "AP1_C-State");
+  REQUIRE(residency_config_ap1->Name() == "C-State.1");
   REQUIRE(residency_config_ap1->Description() == "CPU C-State residency");
   REQUIRE(residency_config_ap1->Units() == ASTL_UNITS_SECONDS);
   REQUIRE(residency_config_ap1->ValueType() == ASTL_VALUE_UINT64);
   REQUIRE(residency_config_ap1->MetricType() == ASTL_METRIC_RESIDENCY);
   REQUIRE(residency_config_ap1->GetCollectorType() == astl::CollectorType::SCMI);
-
-  // Verify the state info (data event IDs and tick frequencies) are correctly stored
-  const auto& state_info_ap1 = residency_config_ap1->GetStateInfo();
-  REQUIRE(state_info_ap1.size() == 1);  // AP0 and AP1
-
-  // Verify AP0 state info (data event IDs and tick frequencies)
-  REQUIRE(state_info_ap1.contains(mock_target_tlm0.Name()));
-  const auto& tlm0_state_info_ap1 = state_info_ap1.at(mock_target_tlm0.Name());
-  REQUIRE(tlm0_state_info_ap1.size() == 3);  // C1, C3, C6
-  REQUIRE(tlm0_state_info_ap1.at("C1").state_name == "C1");
-  REQUIRE(GetDataEventId(tlm0_state_info_ap1.at("C1")) == 0x00011c71);
-  REQUIRE(tlm0_state_info_ap1.at("C1").tick_frequency == 1000000.0);
-  REQUIRE(tlm0_state_info_ap1.at("C3").state_name == "C3");
-  REQUIRE(GetDataEventId(tlm0_state_info_ap1.at("C3")) == 0x00011d82);
-  REQUIRE(tlm0_state_info_ap1.at("C3").tick_frequency == 1000000.0);
-  REQUIRE(tlm0_state_info_ap1.at("C6").state_name == "C6");
-  REQUIRE(GetDataEventId(tlm0_state_info_ap1.at("C6")) == 0x00011e93);
-  REQUIRE(tlm0_state_info_ap1.at("C6").tick_frequency == 1000000.0);
 }
 
 TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet]") {
   SECTION("Valid finite set metric configuration") {
-    astl::scmi::Layout mock_layout;
-    mock_layout.members["AP0"] = {
-        {"P_STATE", {.name = "AP0_P_STATE", .de_id = 0x00001a69}}
+    astl::scmi::spec::ScmiSpecification mock_scmi_spec;
+    mock_scmi_spec.layout = {
+        {.count        = 1,
+         .start_offset = 0,
+         .block_size   = 32,
+         .members      = {{.base_de_id    = 0x1a69,
+                           .name          = "P_STATE",
+                           .component     = "AP",
+                           .description   = "P-State",
+                           .unit          = "",
+                           .unit_exponent = 0,
+                           .rel_offset    = 0x00}}}
     };
-    mock_layout.members["AP1"] = {
-        {"P_STATE", {.name = "AP1_P_STATE", .de_id = 0x00011a69}}
-    };
-    astl::scmi::ScmiSpecification mock_scmi_spec;
-    mock_scmi_spec.layout = std::move(mock_layout);
 
     std::vector<const astl::ITarget*> mock_scmi_targets;
     astl::Target mock_target_tlm0("tlm-0", "dummy test target", astl::CollectorType::SCMI, nullptr);
     mock_scmi_targets.push_back(&mock_target_tlm0);
 
-    astl::MetricJsonDeclaration finite_decl;
-    finite_decl.description         = "Current CPU performance state (P-state)";
-    finite_decl.register_name       = "P_STATE";
-    finite_decl.unit                = "";
-    finite_decl.metric_type         = "finite_set";
-    finite_decl.collection_protocol = "scmi";
+    astl::metrics::spec::MetricJsonDeclaration finite_decl;
+    finite_decl.description              = "Current CPU performance state (P-state)";
+    finite_decl.unit                     = "";
+    finite_decl.metric_type              = "finite_set";
+    finite_decl.collection.protocol      = "scmi";
+    finite_decl.collection.register_name = "P_STATE";
 
     // json finite_set_values representation: array of single-key objects
     std::vector<nlohmann::json> finite_json{nlohmann::json{{"P0", 0}}, nlohmann::json{{"P1", 1}},
@@ -315,7 +284,7 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
     finite_decl.finite_set_values = finite_json;
 
     auto metric_configs_result =
-        astl::CreateScmiMetricConfigs("P-State", finite_decl, mock_scmi_spec, mock_scmi_targets);
+        astl::metrics::spec::CreateScmiMetricConfigs("P-State", finite_decl, mock_scmi_spec, mock_scmi_targets);
     REQUIRE(metric_configs_result);
     auto metric_configs_on_targets = std::move(metric_configs_result.value());
     REQUIRE(metric_configs_on_targets.size() == 1);
@@ -326,9 +295,9 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
       REQUIRE(fs_cfg != nullptr);
       by_name[fs_cfg->Name()] = fs_cfg;
     }
-    REQUIRE(by_name.contains("P_STATE"));
+    REQUIRE(by_name.contains("AP.0.P_STATE"));  // fully qualified with component.index.name
 
-    auto* ap0_cfg = by_name["P_STATE"];
+    auto* ap0_cfg = by_name["AP.0.P_STATE"];
     REQUIRE(ap0_cfg->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
 
     // Expect 4 unique values
@@ -342,26 +311,34 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
   // NOLINTEND(readability-function-cognitive-complexity)
 
   SECTION("Invalid finite set metric (empty values)") {
-    astl::scmi::Layout mock_layout;
-    mock_layout.members["AP0"] = {
-        {"P_STATE", {.name = "AP0_P_STATE", .de_id = 0x00001a69}}
+    astl::scmi::spec::ScmiSpecification mock_scmi_spec;
+    mock_scmi_spec.layout = {
+        {.count        = 1,
+         .start_offset = 0,
+         .block_size   = 32,
+         .members      = {{.base_de_id    = 0x1a69,
+                           .name          = "P_STATE",
+                           .component     = "AP",
+                           .description   = "P-State",
+                           .unit          = "",
+                           .unit_exponent = 0,
+                           .rel_offset    = 0x00}}}
     };
-    astl::scmi::ScmiSpecification mock_scmi_spec;
-    mock_scmi_spec.layout = std::move(mock_layout);
 
     std::vector<const astl::ITarget*> mock_scmi_targets;
     astl::Target mock_target_tlm0("tlm-0", "dummy test target", astl::CollectorType::SCMI, nullptr);
     mock_scmi_targets.push_back(&mock_target_tlm0);
 
-    astl::MetricJsonDeclaration bad_decl;
-    bad_decl.description         = "Bad P-State metric";
-    bad_decl.register_name       = "P_STATE";
-    bad_decl.unit                = "";
-    bad_decl.metric_type         = "finite_set";
-    bad_decl.collection_protocol = "scmi";
+    astl::metrics::spec::MetricJsonDeclaration bad_decl;
+    bad_decl.description              = "Bad P-State metric";
+    bad_decl.unit                     = "";
+    bad_decl.metric_type              = "finite_set";
+    bad_decl.collection.protocol      = "scmi";
+    bad_decl.collection.register_name = "P_STATE";
     // finite_set_values left empty (optional disengaged)
 
-    auto bad_result = astl::CreateScmiMetricConfigs("P-State", bad_decl, mock_scmi_spec, mock_scmi_targets);
+    auto bad_result =
+        astl::metrics::spec::CreateScmiMetricConfigs("P-State", bad_decl, mock_scmi_spec, mock_scmi_targets);
     REQUIRE_FALSE(bad_result.has_value());
     REQUIRE(bad_result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
@@ -396,38 +373,53 @@ TEST_CASE("ConfigurationManager::GetConfiguration returns configuration", "[Conf
 
 // ===================== Category Parsing Tests =====================
 TEST_CASE("ParseConfiguration missing category defaults to unknown/UNCATEGORIZED", "[ConfigManager][Category]") {
-  constexpr auto     json_config_data = R"json(
+  // Test with metric declaration JSON that would be in a metrics file
+  constexpr auto json_metrics_data = R"json(
   {
+    "_comment": "Test metrics",
+    "document": {
+      "confidential": false
+    },
     "metrics": {
       "CPU Power": {
         "description": "CPU power consumption",
-        "register": "CPU_POWER",
-        "unit": "W",
         "metric_type": "value",
-        "collection_protocol": "scmi"
+        "collection": {
+          "protocol": "scmi",
+          "register": "CPU_POWER"
+        }
       }
     }
   }
   )json";
-  std::istringstream json_data_stream{json_config_data};
-  auto               result = astl::ParseConfiguration(json_data_stream);
-  REQUIRE(result);
-  auto config = result.value();
-  REQUIRE(config.metric_declarations.size() == 1);
-  REQUIRE(config.metric_declarations.at("CPU Power").category == "unknown");  // default string
+
+  // Parse the metrics JSON
+  json json_data = json::parse(json_metrics_data);
+  auto metrics   = json_data.at("metrics");
+
+  astl::metrics::spec::MetricJsonDeclaration cpu_power_metric =
+      metrics.at("CPU Power").get<astl::metrics::spec::MetricJsonDeclaration>();
+  REQUIRE(cpu_power_metric.category == "unknown");  // default string
 
   // Build a metric config to verify enum mapping
-  astl::scmi::Layout layout;
-  layout.members["AP0"] = {
-      {"CPU_POWER", {.name = "AP0_CPU_POWER", .de_id = 0x0000abcd}}
+  astl::scmi::spec::ScmiSpecification spec;
+  spec.layout = {
+      {.count        = 1,
+       .start_offset = 0,
+       .block_size   = 32,
+       .members      = {{.base_de_id    = 0xabcd,
+                         .name          = "CPU_POWER",
+                         .component     = "AP",
+                         .description   = "CPU Power",
+                         .unit          = "W",
+                         .unit_exponent = 0,
+                         .rel_offset    = 0x00}}}
   };
-  astl::scmi::ScmiSpecification spec;
-  spec.layout = std::move(layout);
   std::vector<const astl::ITarget*> targets;
   astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
   targets.push_back(&test_target);
   auto metric_configs_result =
-      astl::CreateScmiMetricConfigs("CPU Power", config.metric_declarations.at("CPU Power"), spec, targets);
+      astl::metrics::spec::CreateScmiMetricConfigs("CPU Power", cpu_power_metric, spec, targets);
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
@@ -435,38 +427,54 @@ TEST_CASE("ParseConfiguration missing category defaults to unknown/UNCATEGORIZED
 }
 
 TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManager][Category]") {
-  constexpr auto     json_config_data = R"json(
+  // Test with metric declaration JSON that would be in a metrics file
+  constexpr auto json_metrics_data = R"json(
   {
+    "_comment": "Test metrics",
+    "document": {
+      "confidential": false
+    },
     "metrics": {
       "SoC Temperature": {
         "description": "Temperature in Celsius",
-        "register": "SOC_TEMP",
-        "unit": "C",
         "metric_type": "value",
         "category": "TEMPERATURE",
-        "collection_protocol": "scmi"
+        "collection": {
+          "protocol": "scmi",
+          "register": "SOC_TEMP"
+        }
       }
     }
   }
   )json";
-  std::istringstream json_data_stream{json_config_data};
-  auto               result = astl::ParseConfiguration(json_data_stream);
-  REQUIRE(result);
-  auto config = result.value();
-  REQUIRE(config.metric_declarations.size() == 1);
+
+  // Parse the metrics JSON
+  json json_data = json::parse(json_metrics_data);
+  auto metrics   = json_data.at("metrics");
+
+  astl::metrics::spec::MetricJsonDeclaration soc_temp_metric =
+      metrics.at("SoC Temperature").get<astl::metrics::spec::MetricJsonDeclaration>();
+  REQUIRE(soc_temp_metric.category == "TEMPERATURE");
 
   // Build a metric config to verify enum mapping
-  astl::scmi::Layout layout;
-  layout.members["AP0"] = {
-      {"SOC_TEMP", {.name = "AP0_SOC_TEMP", .de_id = 0x0000dcba}}
+  astl::scmi::spec::ScmiSpecification spec;
+  spec.layout = {
+      {.count        = 1,
+       .start_offset = 0,
+       .block_size   = 32,
+       .members      = {{.base_de_id    = 0xdcba,
+                         .name          = "SOC_TEMP",
+                         .component     = "AP",
+                         .description   = "SoC Temp",
+                         .unit          = "C",
+                         .unit_exponent = 0,
+                         .rel_offset    = 0x00}}}
   };
-  astl::scmi::ScmiSpecification spec;
-  spec.layout = std::move(layout);
   std::vector<const astl::ITarget*> targets;
   astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
   targets.push_back(&test_target);
   auto metric_configs_result =
-      astl::CreateScmiMetricConfigs("SoC Temperature", config.metric_declarations.at("SoC Temperature"), spec, targets);
+      astl::metrics::spec::CreateScmiMetricConfigs("SoC Temperature", soc_temp_metric, spec, targets);
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
@@ -474,39 +482,54 @@ TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManag
 }
 
 TEST_CASE("ParseConfiguration invalid category string maps to UNCATEGORIZED", "[ConfigManager][Category]") {
-  constexpr auto     json_config_data = R"json(
+  // Test with metric declaration JSON that would be in a metrics file
+  constexpr auto json_metrics_data = R"json(
   {
+    "_comment": "Test metrics",
+    "document": {
+      "confidential": false
+    },
     "metrics": {
       "GPU Power": {
         "description": "GPU power consumption",
-        "register": "GPU_POWER",
-        "unit": "W",
         "metric_type": "value",
         "category": "THIS_IS_NOT_A_VALID_VALUE",
-        "collection_protocol": "scmi"
+        "collection": {
+          "protocol": "scmi",
+          "register": "GPU_POWER"
+        }
       }
     }
   }
   )json";
-  std::istringstream json_data_stream{json_config_data};
-  auto               result = astl::ParseConfiguration(json_data_stream);
-  REQUIRE(result);
-  auto config = result.value();
-  REQUIRE(config.metric_declarations.size() == 1);
-  REQUIRE(config.metric_declarations.at("GPU Power").category == "THIS_IS_NOT_A_VALID_VALUE");
+
+  // Parse the metrics JSON
+  json json_data = json::parse(json_metrics_data);
+  auto metrics   = json_data.at("metrics");
+
+  astl::metrics::spec::MetricJsonDeclaration gpu_power_metric =
+      metrics.at("GPU Power").get<astl::metrics::spec::MetricJsonDeclaration>();
+  REQUIRE(gpu_power_metric.category == "THIS_IS_NOT_A_VALID_VALUE");
 
   // Build a metric config to verify enum mapping
-  astl::scmi::Layout layout;
-  layout.members["AP0"] = {
-      {"GPU_POWER", {.name = "AP0_GPU_POWER", .de_id = 0x00001234}}
+  astl::scmi::spec::ScmiSpecification spec;
+  spec.layout = {
+      {.count        = 1,
+       .start_offset = 0,
+       .block_size   = 32,
+       .members      = {{.base_de_id    = 0x1234,
+                         .name          = "GPU_POWER",
+                         .component     = "AP",
+                         .description   = "GPU Power",
+                         .unit          = "W",
+                         .unit_exponent = 0,
+                         .rel_offset    = 0x00}}}
   };
-  astl::scmi::ScmiSpecification spec;
-  spec.layout = std::move(layout);
   std::vector<const astl::ITarget*> targets;
   astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
   targets.push_back(&test_target);
   auto metric_configs_result =
-      astl::CreateScmiMetricConfigs("GPU Power", config.metric_declarations.at("GPU Power"), spec, targets);
+      astl::metrics::spec::CreateScmiMetricConfigs("GPU Power", gpu_power_metric, spec, targets);
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
