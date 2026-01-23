@@ -1,0 +1,13 @@
+name: Coverity Scan
+
+on:
+  workflow_dispatch:
+
+jobs:
+  coverity:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Success
+        run: echo "✅ Coverity workflow placeholder - success!"
