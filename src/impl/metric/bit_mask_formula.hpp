@@ -31,6 +31,12 @@
 
 namespace astl {
 
+#pragma GCC diagnostic push
+// false positive on _mask being uninitialized in GCC analysis when this type is used in std::variant.
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 /**
  * @brief Formula that applies a bitwise AND mask to integer values.
  *
@@ -71,6 +77,7 @@ class BitMaskFormula {
   uint64_t    _mask{0};
   std::string _description;
 };
+#pragma GCC diagnostic pop  // -Wmaybe-uninitialized
 
 static_assert(Formula<BitMaskFormula>, "BitMaskFormula does not satisfy Formula concept");
 

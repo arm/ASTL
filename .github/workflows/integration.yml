@@ -2,11 +2,6 @@
 # source for VCPKG goodness: https://github.com/lukka/CppCMakeVcpkgTemplate/blob/v11/.github/workflows/hosted-pure-workflow.yml
 name: Integration
 
-permissions:
-  actions: read
-  contents: read
-  checks: write
-
 on:
   push:
     branches: [main]
@@ -15,6 +10,17 @@ on:
     # Runs daily at 09:14 UTC = 03:14 CST
     - cron: "14 9 * * *"
   workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  checks: write
+
+concurrency:
+  # The concurrency group is created using the workflow name and the PR number
+  # It ensures that only previous runs for the same PR are cancelled
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:

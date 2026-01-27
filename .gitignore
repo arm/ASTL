@@ -92,6 +92,9 @@ coverage.html
 coverage.xml
 *.info
 
+# coverity cached files
+idir/
+
 # log files
 *.log
 
