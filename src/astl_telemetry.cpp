@@ -739,12 +739,20 @@ auto astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          ta
   // for each group, push all its metrics into the metric_handles_vector
   std::span<astl_metric_group_handle_t> metric_group_handle_span{metric_group_handles, metric_group_count};
   std::vector<astl_metric_handle_t>     metric_handles_vector;
+
   for (const auto& group_handle : metric_group_handle_span) {
     auto get_group_result = metric_manager->GetMetricsInGroup(group_handle);
     if (!get_group_result) {
       return get_group_result.error();
     }
-    metric_handles_vector.reserve(metric_handles_vector.size() + get_group_result->size());
+    // ensure we have enough capacity
+    if (metric_handles_vector.capacity() < metric_handles_vector.size() + get_group_result->size()) {
+      // at least geometric growth to avoid O(n^2) copies, but also enough for all the new metrics
+      auto new_size =
+          std::max(metric_handles_vector.capacity() * 2, metric_handles_vector.size() + get_group_result->size());
+      metric_handles_vector.reserve(new_size);
+    }
+
     std::copy(std::begin(*get_group_result), std::end(*get_group_result), std::back_inserter(metric_handles_vector));
   }
   // collect on all the metrics we gathered from the given groups

@@ -72,7 +72,13 @@ auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
   bool clean_eof = false;
   while (ParseDelimitedFromZeroCopyStream(&batch, &zero_copy_input, &clean_eof)) {
     // Convert one batch
-    result.reserve(result.size() + static_cast<size_t>(batch.samples_size()));
+    // ensure sufficient capacity. at least geometric growth to avoid O(n^2) copies,
+    // and also enough for all the new samples
+    const auto num_new_samples = static_cast<size_t>(batch.samples_size());
+    if (result.capacity() < result.size() + num_new_samples) {
+      auto new_size = std::max(result.capacity() * 2, result.size() + num_new_samples);
+      result.reserve(new_size);
+    }
     for (const auto& proto_sample : batch.samples()) {
       auto value_or = detail::DeserializeAstlValue(proto_sample.value());
       if (!value_or.has_value()) {
