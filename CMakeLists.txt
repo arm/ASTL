@@ -298,6 +298,7 @@ if(BUILD_TESTING AND ASTL_BUILD_TESTING)
   add_subdirectory(tests/unit_test)
   add_subdirectory(tests/wrapper_test)
   add_subdirectory(tests/libsensors_collector_test)
+  add_subdirectory(tests/e2e_test)
 endif()
 
 export(
