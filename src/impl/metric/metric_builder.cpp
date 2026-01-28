@@ -132,7 +132,7 @@ static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecificat
                                          ASTL_VALUE_UNKNOWN, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
                                          CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id});
 
-      configurations_on_targets.emplace(std::move(new_counter_config), std::move(applicable_targets));
+      configurations_on_targets.emplace(std::move(new_counter_config), applicable_targets);
     }
   }
   // @todo(ASTL-236) add support for counters specified in astl configuration separate from metrics.

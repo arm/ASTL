@@ -169,7 +169,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
         collector_type.value(), std::move(operation_builder), std::move(finite_set_copy), std::move(labels_copy),
         std::move(formula_result.value()));
 
-    metric_configs_on_targets.emplace(std::move(new_metric_config), std::move(applicable_targets));
+    metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
   }
   ASTL_LOG_INFO("Created {} finite set metric config(s) for '{}' with {} valid values",
                 metric_configs_on_targets.size(), metric_key_name, finite_set.size());
@@ -264,7 +264,7 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
         ASTL_METRIC_RESIDENCY, category, collector_type.value(), std::move(state_to_info_map_result.value()),
         metric_declaration.inferred_state, std::move(formula_result.value()));
 
-    metric_configs_on_targets.emplace(std::move(new_config), std::move(applicable_targets));
+    metric_configs_on_targets.emplace(std::move(new_config), applicable_targets);
   }
   return metric_configs_on_targets;
 }
@@ -314,7 +314,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
         scmi_metric_declaration.GetFullyQualifiedName(), metric_declaration.description, units, value_type, category,
         metric_type, std::move(metric_groups), collector_type.value(), std::move(operation_builder),
         std::move(formula_result.value()));
-    metric_configs_on_targets.emplace(std::move(new_metric_config), std::move(applicable_targets));
+    metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
   }
   return metric_configs_on_targets;
 }
