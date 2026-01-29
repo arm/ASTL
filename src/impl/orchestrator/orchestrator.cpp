@@ -94,9 +94,9 @@ auto Orchestrator::GetInstance()
   if (!configuration) {
     return std::unexpected(configuration.error());
   }
-  auto astl_file_path = astl::GetEnvVar(astl::EnvVar::ASTL_LOAD_FILE_PATH);
-  if (!astl_file_path.empty()) {
-    configuration->astl_file_path = astl_file_path;
+  auto astl_load_file_path = astl::GetEnvVar(astl::EnvVar::ASTL_LOAD_FILE_PATH);
+  if (!astl_load_file_path.empty()) {
+    configuration->load_file_path = astl_load_file_path;
   }
   astl_status_code status = BuildOrchestrator(configuration.value());
   if (status != ASTL_STATUS_SUCCESS) {

@@ -68,8 +68,3 @@ wait_for() {
 
 wait_for "$SYSFS_LOG" "MockSysfs startup log" "$PATTERN_READY"
 echo "✅ MockSysfs mounted at $MOUNT_POINT"
-
-UPDATED_JSON_FILE=~/tmp/updated_config.json
-jq --arg telemetry_root "$TELEMETRY_ROOT" \
-	'.scmi_sysfs_telemetry_root_path = $telemetry_root' \
-	./samples/sample_configuration/astl_configuration.json >$UPDATED_JSON_FILE

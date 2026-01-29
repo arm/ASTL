@@ -18,7 +18,6 @@
 
 #include "config/astl_configuration.hpp"
 
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 
@@ -26,63 +25,72 @@
 #include "astl/astl_telemetry.h"
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
+#include "common/scmi/scmi_constants.hpp"
 #include "config/configuration_manager.hpp"
-
-using json = nlohmann::json;
 
 namespace astl {
 
-AstlConfiguration::AstlConfiguration()
-    : scmi_sysfs_telemetry_root_path(std::nullopt),
-      astl_metrics_dir(std::nullopt),
-      scmi_specification_dir(std::nullopt),
-      astl_file_path(std::nullopt) {
-  // Set default astl_metrics_dir relative to library location
-  if (auto lib_path = ConfigurationManager::GetAstlFilePath()) {
-    astl_metrics_dir       = lib_path.value().parent_path() / "config" / "metrics";
-    scmi_specification_dir = lib_path.value().parent_path() / "config" / "scmi" / "public";
+/** @brief if ASTL_SCMI_SYSFS_TELEMETRY_ROOT is set, use that, else use default path */
+static auto GetScmiSysFsTelemetryRootPath() -> std::filesystem::path {
+  auto env_var_value = astl::GetEnvVar(astl::EnvVar::ASTL_SCMI_SYSFS_TELEMETRY_ROOT);
+  if (!env_var_value.empty()) {
+    return std::filesystem::path{env_var_value};
+  }
+  return std::filesystem::path{kDefaultScmiSysfsTelemetryRootPath};
+}
+
+/** @brief Look for the ASTL config directory in the following locations in priority order:
+ *  1. ASTL_CONFIG_DIR env var
+ *  2. user-specific config directory based on OS
+ *  3. system-level config directory based on OS
+ *  4. relative to library location
+ */
+static auto GetAstlConfigDirPath() -> std::expected<std::filesystem::path, astl_status_code> {
+  // 1. check env var
+  auto env_var_value = astl::GetEnvVar(astl::EnvVar::ASTL_CONFIG_DIR);
+  if (!env_var_value.empty()) {
+    return std::filesystem::path{env_var_value};
+  }
+  // 2. user-specific config directory
+  // @todo(ASTL-274) implement user-specific config directory lookup based on OS
+  // 3. system-level config directory
+  // @todo(ASTL-274) implement system-level config directory lookup based on OS
+  // 4. default to relative path from library location
+  auto lib_path = ConfigurationManager::GetAstlFilePath();
+  if (lib_path) {
+    return lib_path.value().parent_path() / "config";
+  } else {
+    return std::unexpected(lib_path.error());
   }
 }
 
-inline auto from_json(const json& json_data, AstlConfiguration& cfg) -> void {
-  // optional string: j.value(key, default_opt) works nicely
-  //  cfg.scmi_sysfs_telemetry_root_path =
-  if (const auto path = json_data.value("scmi_sysfs_telemetry_root_path", ""); !path.empty()) {
-    cfg.scmi_sysfs_telemetry_root_path = path;
+/** @brief if we're restoring ASTL from a saved file, get that path from ASTL_LOAD_FILE_PATH env variable */
+auto GetLoadFilePath() -> std::optional<std::filesystem::path> {
+  auto env_var_value = astl::GetEnvVar(astl::EnvVar::ASTL_LOAD_FILE_PATH);
+  if (!env_var_value.empty()) {
+    return std::filesystem::path{env_var_value};
   }
-
-  if (const auto path = json_data.value("astl_metrics_dir", ""); !path.empty()) {
-    cfg.astl_metrics_dir = path;
-  }
-
-  // another optional string
-  if (const auto path = json_data.value("scmi_specification_dir", ""); !path.empty()) {
-    cfg.scmi_specification_dir = path;
-  }
-
-  if (const auto path = json_data.value("astl_file_path", ""); !path.empty()) {
-    cfg.astl_file_path = path;
-  }
+  return std::nullopt;
 }
 
-auto ParseConfiguration(std::string_view configuration_data) -> std::expected<AstlConfiguration, astl_status_code> {
-  try {
-    json json_data = json::parse(configuration_data);
-    return json_data.get<AstlConfiguration>();
-  } catch (nlohmann::json::parse_error const& e) {
-    ASTL_LOG_ERROR("Parse error reading ASTL config file: {}", e.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-}
+AstlConfiguration::AstlConfiguration(std::filesystem::path const&                scmi_sysfs_path,
+                                     std::filesystem::path const&                config_dir_path,
+                                     std::optional<std::filesystem::path> const& load_file_path)
+    : scmi_sysfs_telemetry_root_path{scmi_sysfs_path},
+      config_dir_path{config_dir_path},
+      metrics_dir_path{config_dir_path / "metrics"},
+      scmi_specification_dir{config_dir_path / "scmi" / "public"},
+      load_file_path{load_file_path} {}
 
-auto ParseConfiguration(std::istream& configuration_data) -> std::expected<AstlConfiguration, astl_status_code> {
-  if (!configuration_data) {
-    ASTL_LOG_ERROR("Null configuration data given to GetConfiguration");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+/* Create a AstlConfiguration instance, depending on env variables, and file system paths found. */
+[[nodiscard]] auto AstlConfiguration::CreateConfiguration() -> std::expected<AstlConfiguration, astl_status_code> {
+  auto scmi_sysfs_path = GetScmiSysFsTelemetryRootPath();
+  auto config_dir_path = GetAstlConfigDirPath();
+  if (!config_dir_path) {
+    return std::unexpected<astl_status_code>(config_dir_path.error());
   }
-  // Read the entire content of the istream into a string buffer
-  std::string file_content((std::istreambuf_iterator<char>(configuration_data)), std::istreambuf_iterator<char>());
-  return ParseConfiguration(std::string_view(file_content));
+  auto load_file_path = GetLoadFilePath();
+  return AstlConfiguration(scmi_sysfs_path, *config_dir_path, load_file_path);
 }
 
 }  // namespace astl
