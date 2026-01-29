@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -70,81 +70,26 @@ jobs:
           - os: macos-15
             cmake_preset: debug
 
-    env:
-      _VCPKG_: ${{ github.workspace }}/external/vcpkg
-
     steps:
-      # Detect number of available cores for job parallelization
-      - name: 🧠 Detect Core Count
-        uses: SimenB/github-actions-cpu-cores@v2
-        id: cpu-cores
-
+      # Checkout MUST happen before calling local composite action
       - name: ⤵️ Checkout code
         uses: actions/checkout@v6
         with:
-          # fetch all history so we can git diff for clang-tidy relevant files
           fetch-depth: 0
           ref: ${{ github.head_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
 
-      - name: ⤵️ Install apt-get Dependencies (ubuntu-latest)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcovr valgrind parallel jq libsensors-dev
-
-      - name: ⤵️ Install brew Dependencies (macos-15)
-        if: matrix.os == 'macos-15'
-        run: |
-          brew update
-          brew install llvm
-          echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
-
-      # Restore per-package vcpkg cache
-      - name: ⤵️ VCPKG - Restore Cache
-        id: vcpkg-cache
-        uses: TAServers/vcpkg-cache@v3
+      # ===== BUILD STEPS (calls composite action) =====
+      - name: 🏗️ Build ASTL
+        uses: ./.github/actions/build
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          os: ${{ matrix.os }}
+          cmake_preset: ${{ matrix.cmake_preset }}
+          c_compiler: ${{ matrix.c_compiler }}
+          cpp_compiler: ${{ matrix.cpp_compiler }}
 
-      - name: ⤵️ VCPKG - Install Dependencies
-        uses: lukka/run-vcpkg@v11
-        env:
-          VCPKG_FEATURE_FLAGS: binarycaching
-          VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
-        with:
-          vcpkgDirectory: "${{ env._VCPKG_ }}"
-          vcpkgJsonGlob: "**/vcpkg.json"
-
-      - name: ⚙️ CMake - Configure
-        if: matrix.os != 'macos-15'
-        env:
-          VCPKG_FEATURE_FLAGS: binarycaching
-          VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
-        # Configure CMake in a 'build' subdirectory.
-        run: |
-          cmake --version
-          cmake -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} -S ${{ github.workspace }} --preset ${{ matrix.cmake_preset }}
-
-      - name: ⚙️ CMake - Configure (macos-15)
-        if: matrix.os == 'macos-15'
-        env:
-          VCPKG_FEATURE_FLAGS: binarycaching
-          VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
-        # Configure CMake in a 'build' subdirectory.
-        # don't use the matrix strategy compiler
-        # just the runner default detected compiler for cmake works best for c++23 compatibility
-        run: |
-          cmake --version
-          cmake -S ${{ github.workspace }} --preset ${{ matrix.cmake_preset }}
-
-      - name: 🏗️ CMake - Build
-        # Build ASTL library with the given configuration.
-        # Note that --preset is needed because the default Windows generator
-        # is a multi-config generator (Visual Studio generator).
-        run: cmake --build --parallel=${{ steps.cpu-cores.outputs.count }} --preset ${{ matrix.cmake_preset }} --verbose
-
+      # ===== TEST STEPS =====
       - name: 🧪 CMake - Run Unit Tests and Generate Code Coverage (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
         # Execute tests defined by the CMake configuration.

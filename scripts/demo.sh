@@ -155,6 +155,7 @@ export ASTL_OUTPUT_SUMMARY_CSV="$LOG_DIR/astl_summary.csv"
 echo "CSV output will be written to: $ASTL_OUTPUT_SUMMARY_CSV"
 
 echo "🚀 Executing sample_test"
+echo "$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --target="tlm-0"
 "$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --target="tlm-0"
 ERR=$?
 if [[ $ERR -ne 0 ]]; then

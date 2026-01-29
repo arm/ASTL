@@ -1,0 +1,78 @@
+name: 'Build ASTL'
+description: 'Install dependencies, configure CMake, and build ASTL'
+
+inputs:
+  os:
+    description: 'Operating system (ubuntu-latest, windows-latest, macos-15)'
+    required: true
+  cmake_preset:
+    description: 'CMake preset (release, debug)'
+    required: true
+  c_compiler:
+    description: 'C compiler'
+    required: true
+  cpp_compiler:
+    description: 'C++ compiler'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    # Detect number of available cores for job parallelization
+    - name: 🧠 Detect Core Count
+      uses: SimenB/github-actions-cpu-cores@v2
+      id: cpu-cores
+
+    - name: ⤵️ Install apt-get Dependencies (ubuntu-latest)
+      if: inputs.os == 'ubuntu-latest' || inputs.os == 'self-hosted-ubuntu-24.04'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake gcovr valgrind parallel jq libsensors-dev ninja-build pkg-config
+
+    - name: ⤵️ Install brew Dependencies (macos-15)
+      if: inputs.os == 'macos-15'
+      shell: bash
+      run: |
+        brew update
+        brew install llvm
+        echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+
+    - name: ⤵️ VCPKG - Restore Cache
+      id: vcpkg-cache
+      uses: TAServers/vcpkg-cache@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: ⤵️ VCPKG - Install Dependencies
+      uses: lukka/run-vcpkg@v11
+      env:
+        VCPKG_FEATURE_FLAGS: binarycaching
+        VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
+      with:
+        vcpkgDirectory: "${{ github.workspace }}/external/vcpkg"
+        vcpkgJsonGlob: "**/vcpkg.json"
+
+    - name: ⚙️ CMake - Configure
+      if: inputs.os != 'macos-15'
+      shell: bash
+      env:
+        VCPKG_FEATURE_FLAGS: binarycaching
+        VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
+      run: |
+        cmake --version
+        cmake -DCMAKE_CXX_COMPILER=${{ inputs.cpp_compiler }} -DCMAKE_C_COMPILER=${{ inputs.c_compiler }} -S "${{ github.workspace }}" --preset ${{ inputs.cmake_preset }}
+
+    - name: ⚙️ CMake - Configure (macos-15)
+      if: inputs.os == 'macos-15'
+      shell: bash
+      env:
+        VCPKG_FEATURE_FLAGS: binarycaching
+        VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
+      run: |
+        cmake --version
+        cmake -S "${{ github.workspace }}" --preset ${{ inputs.cmake_preset }}
+
+    - name: 🏗️ CMake - Build
+      shell: bash
+      run: cmake --build --parallel=${{ steps.cpu-cores.outputs.count }} --preset ${{ inputs.cmake_preset }} --verbose
