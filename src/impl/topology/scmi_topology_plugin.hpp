@@ -137,7 +137,8 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
  */
 inline auto ScanForTargets(const AstlConfiguration& configuration)
     -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
-  FileInterface scmi_sysfs_file_interface{configuration.scmi_sysfs_telemetry_root_path};
+  FileInterface scmi_sysfs_file_interface{
+      configuration.scmi_sysfs_telemetry_root_path.value_or(kDefaultScmiSysfsTelemetryRootPath)};
   return detail::ScanForTargetsOnFileInterface(configuration, std::move(scmi_sysfs_file_interface));
 }
 

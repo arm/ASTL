@@ -75,7 +75,7 @@ auto BuildTopologyManager(const AstlConfiguration& configuration, std::optional<
     -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
   std::vector<std::unique_ptr<ITarget>> targets;
 
-  if (configuration.load_file_path.has_value()) {
+  if (configuration.astl_file_path.has_value()) {
     return BuildTopologyManagerFromASTLFile(cache_dir_path.value());
   }
 

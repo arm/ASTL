@@ -26,9 +26,8 @@ using trompeloeil::_;
 using trompeloeil::re;
 
 TEST_CASE("Topology::ScmiPlugin", "[TopologyManager]") {
-  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
-  REQUIRE(configuration_result.has_value());
-  auto configuration = configuration_result.value();
+  auto configuration = astl::ParseConfiguration("{\"metrics\": {}}");
+  REQUIRE(configuration.has_value());
 
   MockFileInterface     mock_file_interface;
   std::filesystem::path scmi_sysfs_path{"/tmp/fake/scmi/sysfs"};
@@ -52,8 +51,8 @@ TEST_CASE("Topology::ScmiPlugin", "[TopologyManager]") {
           std::filesystem::directory_entry{scmi_sysfs_path / "tlm-1"},
       });
 
-  auto targets =
-      astl::ScmiTopologyPlugin::detail::ScanForTargetsOnFileInterface(configuration, std::move(mock_file_interface));
+  auto targets = astl::ScmiTopologyPlugin::detail::ScanForTargetsOnFileInterface(configuration.value(),
+                                                                                 std::move(mock_file_interface));
   REQUIRE(targets.has_value());
   REQUIRE(targets->size() == 2);
   REQUIRE((*targets)[0]->Name() == "tlm-0");

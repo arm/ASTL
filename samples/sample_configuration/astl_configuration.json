@@ -1,0 +1,4 @@
+{
+  "_comment": "ASTL configuration file - view README.md for more details",
+  "scmi_sysfs_telemetry_root_path": "/tmp/fuse/arm_telemetry"
+}

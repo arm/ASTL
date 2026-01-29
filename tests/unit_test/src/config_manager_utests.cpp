@@ -49,6 +49,88 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
   }
 }
 
+TEST_CASE("ParseConfiguration", "[ConfigManager]") {
+  constexpr auto     json_config_data = R"json(
+  {
+    "scmi_sysfs_telemetry_root_path": "~/tmp/fuse/arm_telemetry",
+    "astl_metrics_dir": "/etc/arm/astl/metrics",
+    "scmi_specification_dir": "/etc/arm/astl/scmi"
+  }
+  )json";
+  std::istringstream json_data_stream{json_config_data};
+  auto               result = astl::ParseConfiguration(json_data_stream);
+  REQUIRE(result);
+  auto config = result.value();
+  REQUIRE(config.scmi_sysfs_telemetry_root_path == "~/tmp/fuse/arm_telemetry");
+  REQUIRE(config.astl_metrics_dir == "/etc/arm/astl/metrics");
+  REQUIRE(config.scmi_specification_dir == "/etc/arm/astl/scmi");
+}
+
+TEST_CASE("ParseConfiguration with Residency Metric from JSON file", "[ConfigManager][Residency]") {
+  // Test with metric declaration JSON that would be in a metrics config file
+  constexpr auto json_metrics_data = R"json(
+  {
+    "_comment": "Test metrics with residency type",
+    "document": {
+      "confidential": false
+    },
+    "metrics": {
+      "CPU C-State": {
+        "description": "CPU C-State residency tracking",
+        "metric_type": "residency",
+        "unit": "seconds",
+        "category": "power",
+        "inferred_state": "Active",
+        "collection": {
+          "protocol": "scmi"
+        },
+        "states": {
+          "C1": {
+            "register": "C1_RESIDENCY_COUNTER",
+            "tick_frequency": 1000000.0
+          },
+          "C3": {
+            "register": "C3_RESIDENCY_COUNTER",
+            "tick_frequency": 1000000.0
+          },
+          "C6": {
+            "register": "C6_RESIDENCY_COUNTER",
+            "tick_frequency": 1000000.0
+          }
+        }
+      }
+    }
+  }
+  )json";
+
+  // Parse the metrics JSON
+  json json_data = json::parse(json_metrics_data);
+  auto metrics   = json_data.at("metrics");
+
+  astl::metrics::spec::MetricJsonDeclaration cstate_metric =
+      metrics.at("CPU C-State").get<astl::metrics::spec::MetricJsonDeclaration>();
+
+  // Verify parsed values
+  REQUIRE(cstate_metric.description == "CPU C-State residency tracking");
+  REQUIRE(cstate_metric.metric_type == "residency");
+  REQUIRE(cstate_metric.unit == "seconds");
+  REQUIRE(cstate_metric.category == "power");
+  REQUIRE(cstate_metric.inferred_state == "Active");
+  REQUIRE(cstate_metric.collection.protocol == "scmi");
+  REQUIRE(cstate_metric.states->size() == 3);
+  REQUIRE(cstate_metric.states->contains("C1"));
+  REQUIRE(cstate_metric.states->contains("C3"));
+  REQUIRE(cstate_metric.states->contains("C6"));
+
+  // Verify state details
+  REQUIRE(cstate_metric.states->at("C1").at("register") == "C1_RESIDENCY_COUNTER");
+  REQUIRE(cstate_metric.states->at("C1").at("tick_frequency") == 1000000.0);
+  REQUIRE(cstate_metric.states->at("C3").at("register") == "C3_RESIDENCY_COUNTER");
+  REQUIRE(cstate_metric.states->at("C3").at("tick_frequency") == 1000000.0);
+  REQUIRE(cstate_metric.states->at("C6").at("register") == "C6_RESIDENCY_COUNTER");
+  REQUIRE(cstate_metric.states->at("C6").at("tick_frequency") == 1000000.0);
+}
+
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   // Create a mock SCMI specification with the residency counter data event IDs
@@ -267,6 +349,14 @@ TEST_CASE("ConfigurationManager::GetAstlFilePath returns success", "[ConfigManag
   auto result = astl::ConfigurationManager::GetAstlFilePath();
   if (!result) {
     std::cerr << "[DEBUG] GetAstlFilePath error code: " << astlStatusString(result.error()) << '\n';
+  }
+  REQUIRE(result);  // ensure success; do not inspect underlying path
+}
+
+TEST_CASE("ConfigurationManager::GetConfigurationFilePath returns success", "[ConfigManager][Paths]") {
+  auto result = astl::ConfigurationManager::GetConfigurationFilePath();
+  if (!result) {
+    std::cerr << "[DEBUG] GetConfigurationFilePath error code: " << astlStatusString(result.error()) << '\n';
   }
   REQUIRE(result);  // ensure success; do not inspect underlying path
 }

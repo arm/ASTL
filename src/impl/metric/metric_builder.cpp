@@ -145,7 +145,12 @@ static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecificat
 static auto LookUpSpecificationFiles(const AstlConfiguration& configuration, std::vector<const ITarget*> scmi_targets)
     -> std::expected<std::unordered_map<scmi::spec::Uuid, ScmiUuidSpecificationInfo>, astl_status_code> {
   // parse the 'repometa' json file that maps UUIDs to SCMI specification file paths
-  const auto& scmi_specification_dir = configuration.scmi_specification_dir;
+  if (!configuration.scmi_specification_dir) {
+    ASTL_LOG_WARNING(
+        "SCMI Specification directory in AstlConfiguration is empty - should have a default value at least!");
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  const auto& scmi_specification_dir = configuration.scmi_specification_dir.value();
   const auto& repometa_json_path     = scmi_specification_dir / "repometa.json";
   auto        repo_meta              = TryParseJson<scmi::spec::RepoMeta>(repometa_json_path);
   if (!repo_meta.has_value()) {
@@ -153,7 +158,11 @@ static auto LookUpSpecificationFiles(const AstlConfiguration& configuration, std
   }
 
   // parse the 'platform_lookup' json file that maps UUIDs to metric declaration file paths
-  const auto& metrics_declaration_dir   = configuration.metrics_dir_path;
+  if (!configuration.astl_metrics_dir) {
+    ASTL_LOG_WARNING("ASTL metrics declaration directory in AstlConfiguration is empty");
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  const auto& metrics_declaration_dir   = configuration.astl_metrics_dir.value();
   const auto& platform_lookup_json_path = metrics_declaration_dir / "platform_lookup.json";
   auto        platform_lookup           = TryParseJson<metrics::spec::PlatformLookup>(platform_lookup_json_path);
   if (!platform_lookup.has_value()) {
@@ -228,6 +237,10 @@ static auto LookUpSpecificationFiles(const AstlConfiguration& configuration, std
 static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration&           configuration,
                                                            std::vector<const ITarget*> const& scmi_targets)
     -> std::expected<MetricAndCounterConfigurations, astl_status_code> {
+  if (!configuration.scmi_specification_dir) {
+    ASTL_LOG_INFO("No specification file path provided, so no metrics available from SCMI");
+    return {};
+  }
   // arrange the targets by UUID, and look up the relevant file paths for SCMI specification and metrics declarations
   const auto platform_specification_by_uuid = LookUpSpecificationFiles(configuration, scmi_targets);
   if (!platform_specification_by_uuid.has_value()) {
@@ -346,7 +359,7 @@ static auto BuildMetricManagerFromASTLFile(const std::vector<std::unique_ptr<ITa
 auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration,
                         std::optional<std::filesystem::path> cache_dir_path)
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
-  if (configuration.load_file_path.has_value()) {
+  if (configuration.astl_file_path.has_value()) {
     return BuildMetricManagerFromASTLFile(targets, cache_dir_path.value());
   }
 

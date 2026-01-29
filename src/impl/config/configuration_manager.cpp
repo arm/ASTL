@@ -86,8 +86,61 @@ auto GetAstlFilePath() -> std::expected<fs::path, astl_status_code> {
 #endif
 }
 
+auto GetConfigurationEnvironmentVariable() -> std::optional<fs::path> {
+  const auto environment_variable_content = astl::GetEnvVar(astl::EnvVar::ASTL_CONFIG_JSON_PATH);
+  if (environment_variable_content.empty()) {
+    return std::nullopt;
+  }
+  return fs::path(environment_variable_content);
+}
+
+auto GetConfigurationFilePath() -> std::expected<fs::path, astl_status_code> {
+  auto config_file_env_var = GetConfigurationEnvironmentVariable();
+
+  fs::path config_file_path;
+  if (config_file_env_var) {
+    config_file_path = config_file_env_var.value();
+    ASTL_LOG_INFO("Using ASTL configuration file path from environment variable ASTL_CONFIG_JSON_PATH: {}",
+                  config_file_path.string());
+  } else {
+    auto astl_so_path = GetAstlFilePath();
+    if (!astl_so_path) {
+      return std::unexpected<astl_status_code>(astl_so_path.error());
+    }
+
+    fs::path astl_so_path_validated = astl_so_path.value();
+
+    // Since this is packaged as part of the library, it's OK for us to hard-code a default name.
+    const fs::path config_file_name = "astl_configuration.json";
+
+    config_file_path = astl_so_path_validated.parent_path() / config_file_name;
+  }
+
+  if (!fs::exists(config_file_path)) {
+    ASTL_LOG_ERROR("ASTL configuration file not found at expected path: {}", config_file_path.string());
+    return std::unexpected<astl_status_code>(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  ASTL_LOG_INFO("Using Config File at {}", config_file_path.string());
+  return config_file_path;
+}
+
 auto GetConfiguration() -> std::expected<AstlConfiguration, astl_status_code> {
-  return AstlConfiguration::CreateConfiguration();
+  auto config_filepath = GetConfigurationFilePath();
+  if (!config_filepath) {
+    ASTL_LOG_DEBUG("No configuration override file path specified in ASTL_CONFIG_JSON_PATH, using defaults.");
+    return AstlConfiguration{};
+  }
+
+  fs::path      config_filepath_validated = config_filepath.value();
+  std::ifstream config_file_ifstream(config_filepath_validated);
+  if (!config_file_ifstream) {
+    ASTL_LOG_ERROR("Unable to open {} as input configuration file", config_filepath_validated.string());
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  ASTL_LOG_DEBUG("Parsing ASTL configuration from {}", config_filepath_validated.string());
+  return ParseConfiguration(config_file_ifstream);
 };
 
 }  // namespace ConfigurationManager

@@ -154,9 +154,7 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
 
 TEST_CASE("CollectorManager::BuildCollectorManager", "[collector_manager]") {
   // create a collector manager with an empty map of target->collector
-  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
-  REQUIRE(configuration_result.has_value());
-  auto                                        configuration = configuration_result.value();
+  astl::AstlConfiguration                     configuration;
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   auto                                        collector_manager = astl::BuildCollectorManager(targets, configuration);
   // with no targets, we should get a collector manager with no capabilities

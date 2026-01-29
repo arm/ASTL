@@ -151,9 +151,11 @@ export ASTL_CONFIG_DIR="$BUILD_DIR/lib/config"
 export ASTL_VERBOSE=0
 echo "ASTL_CONFIG_DIR: $ASTL_CONFIG_DIR"
 
-# force ASTL to read SCMI telemetry from our mocksysfs mount point
-export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="$TELEMETRY_ROOT"
-echo "ASTL_SCMI_SYSFS_TELEMETRY_ROOT: $ASTL_SCMI_SYSFS_TELEMETRY_ROOT"
+# Note that ASTL_CONFIG_JSON_PATH is an internal-use-only environment variable
+# meant to manually force the path ASTL uses for its configuration file.
+# Instead of auto-detecting it using the .so path.
+export ASTL_CONFIG_JSON_PATH=~/tmp/updated_config.json
+echo "ASTL_CONFIG_JSON_PATH = ${ASTL_CONFIG_JSON_PATH}"
 echo ""
 
 ########################################

@@ -34,35 +34,34 @@ namespace astl {
 
 /** @brief Overall configuration for the ASTL library */
 struct AstlConfiguration {
-  /** @brief Path to SCMI Sysfs. Defaults to /sys/fs/arm_telemetry,
-   * but can be overridden with env var ASTL_SCMI_SYSFS_TELEMETRY_ROOT
+  /** @brief Default constructor assigns default values to paths.
+   * These can be overridden with configuration_data in ParseConfiguration */
+  AstlConfiguration();
+
+  /** @brief scmi_sysfs_telemetry_root_override is an optional path to replace "/sys/fs/arm_telemetry"
+   *         This is a placeholder example of something that _could_ be configured.
+   *         subject to change, not currently modified.
    */
-  std::filesystem::path scmi_sysfs_telemetry_root_path;
+  std::optional<std::filesystem::path> scmi_sysfs_telemetry_root_path;
 
-  /** @brief Path to the directory containing ASTL metric definitions and platform-specific SCMI specifications
-   * initialized from ASTL_CONFIG_DIR
+  /** @brief Override path for the directory containing UUID-mapped ASTL metric config json files.
+   *  defaults to ./config/metrics if not set
    */
-  std::filesystem::path config_dir_path;
+  std::optional<std::filesystem::path> astl_metrics_dir;
 
-  /** @brief Path to the subdirectory containing ASTL metric definitions, derived from config_dir_path
+  /** @brief Override path for directory containing UUID-mapped SCMI specification json files.
+   *  defaults to ./config/scmi if not set
    */
-  std::filesystem::path metrics_dir_path;
+  std::optional<std::filesystem::path> scmi_specification_dir;
 
-  /** @brief Path to the directory containing platform-specific SCMI specifications
-   * derived from config_dir_path
-   */
-  std::filesystem::path scmi_specification_dir;
-
-  /** @brief Path to load ASTL components from saved session. Initialized from ASTL_LOAD_FILE_PATH env var if set. */
-  std::optional<std::filesystem::path> load_file_path;
-
-  [[nodiscard]] static auto CreateConfiguration() -> std::expected<AstlConfiguration, astl_status_code>;
-
- private:
-  // private ctor - use CreateConfiguration factory method instead
-  AstlConfiguration(std::filesystem::path const& scmi_sysfs_path, std::filesystem::path const& config_dir_path,
-                    std::optional<std::filesystem::path> const& load_file_path = std::nullopt);
+  std::optional<std::filesystem::path> astl_file_path;
 };
+
+[[nodiscard]] auto ParseConfiguration(std::string_view configuration_data)
+    -> std::expected<AstlConfiguration, astl_status_code>;
+
+[[nodiscard]] auto ParseConfiguration(std::istream& configuration_data)
+    -> std::expected<AstlConfiguration, astl_status_code>;
 
 }  // namespace astl
 

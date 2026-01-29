@@ -136,8 +136,16 @@ if [[ -n $GROUP ]]; then
 	RUN_ARGS+=(--group="$GROUP")
 fi
 
-# force ASTL to use our mocksysfs mount point for the SCMI sysfs rather than the default /sys/fs/arm_telemetry
-export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="$TELEMETRY_ROOT"
+# Note that ASTL_CONFIG_JSON_PATH is an internal-use-only environment variable
+# meant to manually force the path ASTL uses for its configuration file.
+# Instead of auto-detecting it using the .so path.
+export ASTL_CONFIG_JSON_PATH=~/tmp/updated_config.json
+echo "ASTL_CONFIG_JSON_PATH = ${ASTL_CONFIG_JSON_PATH}"
+# Configure Scmi collector to look in the mounted MockSysfs telemetry path
+# rather than the production Scmi sysfs path.
+jq --arg telemetry_root "$TELEMETRY_ROOT" \
+	'.scmi_sysfs_telemetry_root_path = $telemetry_root' \
+	./samples/sample_configuration/astl_configuration.json >$ASTL_CONFIG_JSON_PATH
 
 # Set CSV output file for summary data
 export ASTL_OUTPUT_SUMMARY_CSV="$LOG_DIR/astl_summary.csv"

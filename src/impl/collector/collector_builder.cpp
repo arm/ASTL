@@ -45,7 +45,8 @@ auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
     -> std::expected<std::unique_ptr<ICollectorManager>, astl_status_code> {
   std::unordered_map<const ITarget*, std::vector<std::unique_ptr<ICollector>>> collectors;
 
-  std::filesystem::path scmi_sysfs_root_path{configuration.scmi_sysfs_telemetry_root_path};
+  std::filesystem::path scmi_sysfs_root_path =
+      configuration.scmi_sysfs_telemetry_root_path.value_or(std::filesystem::path{kDefaultScmiSysfsTelemetryRootPath});
 
   using ScmiCollector = astl::ScmiSysfsCollector<astl::FileInterface>;
 

@@ -19,11 +19,8 @@ namespace astl {
  */
 enum class EnvVar {
 
-  /* optional override for scmi sysfs telemetry root path */
-  ASTL_SCMI_SYSFS_TELEMETRY_ROOT,
-
-  /* optional override for astl config directory */
-  ASTL_CONFIG_DIR,
+  /* file path to json specifying overrides for ASTL configuration values, such as where to find scmi sysfs */
+  ASTL_CONFIG_JSON_PATH,
 
   /* where to load serialized astl library state from */
   ASTL_LOAD_FILE_PATH,
