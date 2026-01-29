@@ -140,7 +140,7 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
   TempFileGuard         tmp_guard(temp_file);
 
   // Set environment variable
-  (void)astl::SetEnvVar("ASTL_OUTPUT_SUMMARY_CSV", temp_file.string());
+  EnvVarGuard csv_env_var_guard(astl::EnvVar::ASTL_OUTPUT_SUMMARY_CSV, temp_file.string());
 
   SECTION("SUMMARY_CSV mode with valid data creates CSV file") {
     auto processed_samples = CreateTestProcessedSamplesMap();
@@ -223,10 +223,6 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
     // With empty data, the file should be empty (no summaries to write)
     REQUIRE_FALSE(std::getline(file, line));
   }
-
-  // Clean up
-  std::filesystem::remove(temp_file);
-  (void)astl::SetEnvVar("ASTL_CSV_OUTPUT_FILE", "");
 }
 
 TEST_CASE("SummaryCsvOutput direct testing", "[csv_summary]") {  // NOLINT
@@ -291,9 +287,6 @@ TEST_CASE("SummaryCsvOutput direct testing", "[csv_summary]") {  // NOLINT
     auto processed_samples = CreateTestProcessedSamplesMap();
     REQUIRE(csv_output.WriteProcessedSamples(processed_samples) == ASTL_STATUS_INTERNAL_ERROR);
   }
-
-  // Clean up
-  std::filesystem::remove(temp_file);
 }
 
 TEST_CASE("MinMaxAvgSummarizer direct testing", "[csv_summary][summarizer]") {  // NOLINT

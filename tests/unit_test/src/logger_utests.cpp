@@ -2,34 +2,11 @@
 #include <fstream>
 #include <memory>
 
-#include "../../test_includes.hpp"  // include before catch2
+#include "../../test_includes.hpp"   // include before catch2
+#include "../../test_utilities.hpp"  // EnvVarGuard
 #include "astl/astl.h"
 #include "astl_logger.hpp"
 #include "orchestrator/orchestrator.hpp"
-
-/* Scoped test RAII helper class for setting and restoring environment variables
- */
-class ModifiedEnvVar {
- public:
-  ModifiedEnvVar(const std::string &var_name, const std::string &value)
-      : var_name{var_name}, old_value{astl::GetEnvVar(var_name)} {
-    astl::SetEnvVar(var_name, value);
-  }
-  ~ModifiedEnvVar() {
-    // restore the environment variable to its original state
-    astl::SetEnvVar(var_name, old_value);
-  }
-
-  ModifiedEnvVar(const ModifiedEnvVar &)                = delete;
-  ModifiedEnvVar &operator=(const ModifiedEnvVar &)     = delete;
-  ModifiedEnvVar(ModifiedEnvVar &&) noexcept            = delete;
-  ModifiedEnvVar &operator=(ModifiedEnvVar &&) noexcept = delete;
-  ModifiedEnvVar()                                      = delete;
-
- private:
-  std::string var_name;
-  std::string old_value;
-};
 
 /* Test environment variable related utility functions
  */
@@ -38,59 +15,59 @@ TEST_CASE("environment variables", "[env_var]") {
 
   // Log file name environment variable
   SECTION("Set logname environment variable") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_NAME", logfile_name);
-    REQUIRE(astl::GetEnvVar("ASTL_LOG_NAME") == logfile_name);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_NAME, logfile_name);
+    REQUIRE(astl::GetEnvVar(astl::EnvVar::ASTL_LOG_NAME) == logfile_name);
   }
 
   // Log level environement variable
   SECTION("Set loglevel environment variable") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_LEVEL", "trace");
-    REQUIRE(astl::GetEnvVar("ASTL_LOG_LEVEL") == "trace");
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_LEVEL, "trace");
+    REQUIRE(astl::GetEnvVar(astl::EnvVar::ASTL_LOG_LEVEL) == "trace");
   }
 
   // Log console environement variable
   SECTION("Set console environement variable to 0") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_CONSOLE", "0");
-    REQUIRE(astl::IsEnvVarSet("ASTL_LOG_CONSOLE") == false);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_CONSOLE, "0");
+    REQUIRE(astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE) == false);
   }
   SECTION("Set console environement variable to no") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_CONSOLE", "no");
-    REQUIRE(astl::IsEnvVarSet("ASTL_LOG_CONSOLE") == false);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_CONSOLE, "no");
+    REQUIRE(astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE) == false);
   }
   SECTION("Set console environement variable to false") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_CONSOLE", "false");
-    REQUIRE(astl::IsEnvVarSet("ASTL_LOG_CONSOLE") == false);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_CONSOLE, "false");
+    REQUIRE(astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE) == false);
   }
 
   SECTION("Set console environement variable to off") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_CONSOLE", "off");
-    REQUIRE(astl::IsEnvVarSet("ASTL_LOG_CONSOLE") == false);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_CONSOLE, "off");
+    REQUIRE(astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE) == false);
   }
   SECTION("Set console environement variable to true") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_CONSOLE", "true");
-    REQUIRE(astl::IsEnvVarSet("ASTL_LOG_CONSOLE") == true);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_CONSOLE, "true");
+    REQUIRE(astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE) == true);
   }
 
   // Source location environment variable
   SECTION("Set source location environment variable to 0") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_SOURCE_LOC", "0");
-    REQUIRE(astl::IsEnvVarSet("ASTL_LOG_SOURCE_LOC") == false);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_SOURCE_LOC, "0");
+    REQUIRE(astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_SOURCE_LOC) == false);
   }
   SECTION("Set source location environment variable to no") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_SOURCE_LOC", "no");
-    REQUIRE(astl::IsEnvVarSet("ASTL_LOG_SOURCE_LOC") == false);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_SOURCE_LOC, "no");
+    REQUIRE(astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_SOURCE_LOC) == false);
   }
   SECTION("Set source location environment variable to false") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_SOURCE_LOC", "false");
-    REQUIRE(astl::IsEnvVarSet("ASTL_LOG_SOURCE_LOC") == false);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_SOURCE_LOC, "false");
+    REQUIRE(astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_SOURCE_LOC) == false);
   }
   SECTION("Set source location environment variable to off") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_SOURCE_LOC", "off");
-    REQUIRE(astl::IsEnvVarSet("ASTL_LOG_SOURCE_LOC") == false);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_SOURCE_LOC, "off");
+    REQUIRE(astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_SOURCE_LOC) == false);
   }
   SECTION("Set source location environment variable to true") {
-    ModifiedEnvVar modified_env_var("ASTL_LOG_SOURCE_LOC", "true");
-    REQUIRE(astl::IsEnvVarSet("ASTL_LOG_SOURCE_LOC") == true);
+    EnvVarGuard modified_env_var(astl::EnvVar::ASTL_LOG_SOURCE_LOC, "true");
+    REQUIRE(astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_SOURCE_LOC) == true);
   }
 }
 
@@ -110,10 +87,10 @@ class LoggerScopedTest {
  public:
   LoggerScopedTest(const std::string &log_name, const std::string &log_level, bool log_console, bool source_loc)
       : logfile_name{log_name},
-        modified_logname_var{"ASTL_LOG_NAME", log_name},
-        modified_loglevel_var{"ASTL_LOG_LEVEL", log_level},
-        modified_logconsole_var{"ASTL_LOG_CONSOLE", std::to_string(static_cast<int>(log_console))},
-        modified_srcloc_var{"ASTL_LOG_SOURCE_LOC", std::to_string(static_cast<int>(source_loc))},
+        modified_logname_var{astl::EnvVar::ASTL_LOG_NAME, log_name},
+        modified_loglevel_var{astl::EnvVar::ASTL_LOG_LEVEL, log_level},
+        modified_logconsole_var{astl::EnvVar::ASTL_LOG_CONSOLE, std::to_string(static_cast<int>(log_console))},
+        modified_srcloc_var{astl::EnvVar::ASTL_LOG_SOURCE_LOC, std::to_string(static_cast<int>(source_loc))},
         logger{std::make_shared<astl::Logger>()} {}
 
   LoggerScopedTest(const LoggerScopedTest &)                = delete;
@@ -160,10 +137,10 @@ class LoggerScopedTest {
   std::ifstream logfile;
   std::string   logfile_name;
 
-  ModifiedEnvVar                modified_logname_var;
-  ModifiedEnvVar                modified_loglevel_var;
-  ModifiedEnvVar                modified_logconsole_var;
-  ModifiedEnvVar                modified_srcloc_var;
+  EnvVarGuard                   modified_logname_var;
+  EnvVarGuard                   modified_loglevel_var;
+  EnvVarGuard                   modified_logconsole_var;
+  EnvVarGuard                   modified_srcloc_var;
   std::shared_ptr<astl::Logger> logger;
 };
 

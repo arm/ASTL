@@ -29,7 +29,13 @@ struct TempFileGuard {
  * @brief RAII guard to restore an environment variable on scope exit
  */
 struct EnvVarGuard {
-  explicit EnvVarGuard(std::string name) : name(std::move(name)), old_value(astl::GetEnvVar(this->name)) {}
+  // restore original value on destruction
+  explicit EnvVarGuard(astl::EnvVar env_var) : env_var(env_var), old_value(astl::GetEnvVar(this->env_var)) {}
+
+  // set new value on construction, and restore original on destruction.
+  EnvVarGuard(astl::EnvVar env_var, const std::string& value) : env_var{env_var}, old_value{astl::GetEnvVar(env_var)} {
+    astl::SetEnvVar(env_var, value);
+  }
 
   // don't double-unset the environment variable. forbid copies/moves for now.
   EnvVarGuard(EnvVarGuard const&)            = delete;
@@ -39,11 +45,11 @@ struct EnvVarGuard {
 
   ~EnvVarGuard() {
     // Restore previous value (empty == unset for codepaths that check GetEnvVar().empty()).
-    (void)astl::SetEnvVar(name, old_value);
+    (void)astl::SetEnvVar(env_var, old_value);
   }
 
-  std::string name;
-  std::string old_value;
+  astl::EnvVar env_var;
+  std::string  old_value;
 };
 
 #endif  // ASTL_TEST_UTILITIES_H_

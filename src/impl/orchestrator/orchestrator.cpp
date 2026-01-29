@@ -1,7 +1,6 @@
 #include "orchestrator/orchestrator.hpp"
 
 #include <algorithm>  // for std::max used in bulk reserve heuristic
-#include <cstdlib>    // for std::getenv
 #include <filesystem>
 #include <fstream>
 #include <functional>  // for std::reference_wrapper in expected return types
@@ -95,7 +94,7 @@ auto Orchestrator::GetInstance()
   if (!configuration) {
     return std::unexpected(configuration.error());
   }
-  auto astl_file_path = astl::GetEnvVar("ASTL_LOAD_FILE_PATH");
+  auto astl_file_path = astl::GetEnvVar(astl::EnvVar::ASTL_LOAD_FILE_PATH);
   if (!astl_file_path.empty()) {
     configuration->astl_file_path = astl_file_path;
   }
@@ -312,7 +311,7 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
     EmitSummaryCsvIfRequested();
   }
 
-  auto save_astl_file_path = GetEnvVar("ASTL_SAVE_FILE_PATH");
+  auto save_astl_file_path = GetEnvVar(astl::EnvVar::ASTL_SAVE_FILE_PATH);
   if (!save_astl_file_path.empty()) {
     status = SaveToFile(save_astl_file_path);
     if (status != ASTL_STATUS_SUCCESS) {
@@ -329,7 +328,7 @@ auto Orchestrator::EmitPerfettoTraceIfRequested() -> void {
   if (_perfetto_emitted) {  // already emitted for this collection lifecycle
     return;
   }
-  std::string perfetto_path = astl::GetEnvVar("ASTL_OUTPUT_PERFETTO");
+  std::string perfetto_path = astl::GetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO);
   if (perfetto_path.empty()) {
     return;  // no-op if unset
   }
@@ -357,7 +356,7 @@ auto Orchestrator::EmitIntervalCsvIfRequested() -> void {
   if (_intervalcsv_emitted) {
     return;
   }
-  std::string csv_path = astl::GetEnvVar("ASTL_OUTPUT_INTERVAL_CSV");
+  std::string csv_path = astl::GetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV);
   if (csv_path.empty()) {
     return;  // nothing to do
   }
@@ -377,7 +376,7 @@ auto Orchestrator::EmitIntervalCsvIfRequested() -> void {
 }
 
 auto Orchestrator::EmitSummaryCsvIfRequested() -> void {
-  std::string csv_path = astl::GetEnvVar("ASTL_OUTPUT_SUMMARY_CSV");
+  std::string csv_path = astl::GetEnvVar(astl::EnvVar::ASTL_OUTPUT_SUMMARY_CSV);
   if (csv_path.empty()) {
     return;  // no-op if unset
   }

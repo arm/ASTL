@@ -21,7 +21,7 @@ inline auto ExpandFilePath(std::string const &file_path_str) -> std::expected<st
     // if starts with ~, expand to home directory
     std::string expanded_path_str = file_path_str;
     if (file_path_str[0] == '~') {
-      const auto home_dir = GetEnvVar("HOME");
+      const auto home_dir = GetEnvVar(astl::EnvVar::HOME);
       if (home_dir.empty()) {
         return std::unexpected<std::string>("Cannot expand '~' in file path: HOME environment variable is not set");
       }

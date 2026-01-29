@@ -199,8 +199,8 @@ TEST_CASE("OutputManager::EnsurePerfettoOutput and EnsureIntervalCsvOutput env v
           "[output_manager]") {  // NOLINT
   astl::OutputManager mgr;
   // Unset env vars (best effort) using ASTL helper (empty value treated as unset in code paths)
-  (void)astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", "");
-  (void)astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", "");
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");
   // Direct ensure calls should fail with BAD_ARGUMENT when vars missing
   REQUIRE(mgr.OutputProcessedSamples(astl::ProcessedSamplesMap{}, astl::OutputType::PERFETTO, nullptr, nullptr) ==
           ASTL_STATUS_BAD_ARGUMENT);
@@ -211,7 +211,7 @@ TEST_CASE("OutputManager::EnsurePerfettoOutput and EnsureIntervalCsvOutput env v
 TEST_CASE("OutputManager::EnsureIntervalCsvOutput success", "[output_manager][intervalcsv]") {  // NOLINT
   astl::OutputManager mgr;
   TempFileGuard       tmp_guard{"om_intervalcsv_success.csv"};
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
   // Empty processed map still results in writer creation success
   astl::ProcessedSamplesMap empty;
   REQUIRE(mgr.OutputProcessedSamples(empty, astl::OutputType::INTERVAL_CSV, nullptr, nullptr) == ASTL_STATUS_SUCCESS);
@@ -223,7 +223,7 @@ TEST_CASE("OutputManager::EnsureIntervalCsvOutput success", "[output_manager][in
 TEST_CASE("OutputManager::OutputProcessedSamples PERFETTO success", "[output_manager][perfetto]") {  // NOLINT
   astl::OutputManager mgr;
   TempFileGuard       tmp_guard{"om_perfetto_success.json"};
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
   // Build minimal processed samples map with one sample
   TinyTarget                target;
   TinyMetric                metric;
@@ -241,7 +241,7 @@ TEST_CASE("OutputManager::OutputProcessedSamples INTERVAL_CSV success with sampl
           "[output_manager][intervalcsv]") {  // NOLINT
   astl::OutputManager mgr;
   TempFileGuard       tmp_guard{"om_intervalcsv_sample.csv"};
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
   TinyTarget                target;
   TinyMetric                metric;
   astl::ProcessedSamplesMap processed;

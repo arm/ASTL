@@ -48,7 +48,7 @@ struct ScopedDropRoot {
       return;
     }
     {
-      const std::string sudo_uid = astl::GetEnvVar("SUDO_UID");
+      const std::string sudo_uid = astl::GetEnvVar(astl::EnvVar::SUDO_UID);
       if (!sudo_uid.empty()) {
         const uid_t unpriv = static_cast<uid_t>(std::stoi(sudo_uid));
         if (seteuid(unpriv) == 0) {

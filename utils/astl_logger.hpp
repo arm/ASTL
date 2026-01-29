@@ -127,28 +127,6 @@ static constexpr const char* kDefaultLogName = "astl.log";
 /* Default spdlog level when the Logger default is set to LogLevel::Default */
 static constexpr spdlog::level::level_enum kDefaultSpdlogLevel = spdlog::level::warn;
 
-/* Environment variable used to override log level
- * Value should be set to string "trace", "debug", "info", "warn", "error", "critical", "default" or "off"
- * upper case and first letter uppercase for each of the expected values are acceptable alternatives
- */
-static constexpr const char* kAstlLogLevelEnvVar = "ASTL_LOG_LEVEL";
-
-/* Environment variable used to override logging to console.
- * It is used to enable logging to the console when the compiled in value is set to off
- * It cannot be used to turn off logging to the console if the code explicitely enables logging to the console
- * Any value would activate the variable other than explicit negative values: 0, no, off or empty
- */
-static constexpr const char* kAstlLogConsoleEnvVar = "ASTL_LOG_CONSOLE";
-
-/* Environment variable used to override the log file name
- */
-static constexpr const char* kAstlLogNameEnvVar = "ASTL_LOG_NAME";
-
-/* Environment variable used to enable adding source location to the formatted log messages
- * Any non negative value would activate the variable
- */
-static constexpr const char* kAstlLogSourceLocEnvVar = "ASTL_LOG_SOURCE_LOC";
-
 /* @brief ASTL Logger class for logging and output file writing
  * When used as a singleton, it is used to log messages to the console, to a file or to both using a predefined format
  * with time, message level and source location when source location is activated.
@@ -194,11 +172,11 @@ class Logger {
 
   /* brief Get the LogLevel from the ASTL_LOG_LEVEL environment variable
    *
-   * @param env_var The environment variable name
+   * @param env_var The environment variable enum value
    *
    * @return the LogLevel corresponding the environment variable value
    */
-  static astl::LogLevel GetEnvVarLogLevel(const std::string& env_var = "ASTL_LOG_LEVEL") {
+  static astl::LogLevel GetEnvVarLogLevel(astl::EnvVar env_var = astl::EnvVar::ASTL_LOG_LEVEL) {
     std::string var = GetEnvVar(env_var);
     std::transform(var.begin(), var.end(), var.begin(),
                    [](unsigned char character) { return std::toupper(character); });
@@ -230,9 +208,9 @@ class Logger {
    * variables.
    */
   Logger() {
-    const std::string& log_name        = GetEnvVar(kAstlLogNameEnvVar);
-    bool               console_enabled = IsEnvVarSet(kAstlLogConsoleEnvVar);
-    astl::LogLevel     log_level       = GetEnvVarLogLevel(kAstlLogLevelEnvVar);
+    const std::string& log_name        = GetEnvVar(astl::EnvVar::ASTL_LOG_NAME);
+    bool               console_enabled = IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE);
+    astl::LogLevel     log_level       = GetEnvVarLogLevel(astl::EnvVar::ASTL_LOG_LEVEL);
     /* Initially, have all formatting cleared. This is useful for using the logger to write to output file instead of
      * logging warnings and errors etc. use SetDefaultFormatting() to set default formatting for instanciated logger
      * objects
@@ -257,9 +235,9 @@ class Logger {
    */
   explicit Logger(astl::LogLevel level, bool console, bool default_formatting,
                   const std::string& log_name = std::string()) {
-    bool               console_enabled = console || IsEnvVarSet(kAstlLogConsoleEnvVar);
-    const std::string& var_file_name   = GetEnvVar(kAstlLogNameEnvVar);
-    astl::LogLevel     var_level       = GetEnvVarLogLevel(kAstlLogLevelEnvVar);
+    bool               console_enabled = console || IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE);
+    const std::string& var_file_name   = GetEnvVar(astl::EnvVar::ASTL_LOG_NAME);
+    astl::LogLevel     var_level       = GetEnvVarLogLevel(astl::EnvVar::ASTL_LOG_LEVEL);
     InitializeLogger(var_level == astl::LogLevel::None ? level : var_level, console_enabled, default_formatting,
                      var_file_name.empty() ? log_name : var_file_name);
   }
@@ -287,7 +265,7 @@ class Logger {
   template <typename... Args>
   void Log(astl::LogLevel log_level, const std::source_location& location, std::format_string<Args...> log_text,
            Args&&... args) {
-    bool               source_loc_enabled = IsEnvVarSet(kAstlLogSourceLocEnvVar);
+    bool               source_loc_enabled = IsEnvVarSet(astl::EnvVar::ASTL_LOG_SOURCE_LOC);
     spdlog::source_loc spdlog_location;
     if (source_loc_enabled) {
       spdlog_location = {location.file_name(), static_cast<int>(location.line()), location.function_name()};
@@ -317,7 +295,7 @@ class Logger {
    * static
    */
   void Log(astl::LogLevel log_level, const std::source_location& location, std::string const& log_text) {
-    bool               source_loc_enabled = IsEnvVarSet(kAstlLogSourceLocEnvVar);
+    bool               source_loc_enabled = IsEnvVarSet(astl::EnvVar::ASTL_LOG_SOURCE_LOC);
     spdlog::source_loc spdlog_location;
     if (source_loc_enabled) {
       spdlog_location = {location.file_name(), static_cast<int>(location.line()), location.function_name()};

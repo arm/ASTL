@@ -204,10 +204,10 @@ TEST_CASE("Orchestrator-SinkRawSamples bulk growth then skip reserve", "[Orchest
 // Refactored: individual test cases for each emission scenario reduce cognitive complexity
 TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV only emission", "[Orchestrator][outputs]") {
   using trompeloeil::_;
-  (void)astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", "");      // clear PERFETTO
-  (void)astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", "");  // ensure clean slate before setting
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");      // clear PERFETTO
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");  // ensure clean slate before setting
   auto path = std::filesystem::temp_directory_path() / "orch_intervalcsv_only.csv";
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", path.string()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, path.string()) == ASTL_STATUS_SUCCESS);
 
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -242,10 +242,10 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV only emission", "[Orchestrat
 
 TEST_CASE("Orchestrator-StopCollection PERFETTO only emission", "[Orchestrator][outputs]") {
   using trompeloeil::_;
-  (void)astl::SetEnvVar("ASTL_OUTPUT_INTERTVAL_CSV", "");  // clear INTERVAL_CSV
-  (void)astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", "");       // ensure clean slate before setting
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");  // clear INTERVAL_CSV
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");      // ensure clean slate before setting
   auto path = std::filesystem::temp_directory_path() / "orch_perfetto_only.json";
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", path.string()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, path.string()) == ASTL_STATUS_SUCCESS);
 
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -280,12 +280,12 @@ TEST_CASE("Orchestrator-StopCollection PERFETTO only emission", "[Orchestrator][
 
 TEST_CASE("Orchestrator-StopCollection dual PERFETTO+INTERVAL_CSV ordered emission", "[Orchestrator][outputs]") {
   using trompeloeil::_;
-  (void)astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", "");
-  (void)astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", "");  // clear both first
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");  // clear both first
   auto perf_path = std::filesystem::temp_directory_path() / "orch_both_perfetto.json";
   auto csv_path  = std::filesystem::temp_directory_path() / "orch_both_intervalcsv.csv";
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", perf_path.string()) == ASTL_STATUS_SUCCESS);
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", csv_path.string()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, perf_path.string()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, csv_path.string()) == ASTL_STATUS_SUCCESS);
 
   trompeloeil::sequence seq;  // enforce ordering
 
@@ -326,11 +326,11 @@ TEST_CASE("Orchestrator-StopCollection dual PERFETTO+INTERVAL_CSV ordered emissi
 
 TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV idempotent emission", "[Orchestrator][outputs]") {
   using trompeloeil::_;
-  (void)astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", "");
-  (void)astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", "");  // clear both first
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");  // clear both first
   auto csv_path = std::filesystem::temp_directory_path() / "orch_intervalcsv_idempotent.csv";
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_INTERVAL_CSV", csv_path.string()) == ASTL_STATUS_SUCCESS);
-  (void)astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", "");  // clear PERFETTO
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, csv_path.string()) == ASTL_STATUS_SUCCESS);
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");  // clear PERFETTO
 
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);

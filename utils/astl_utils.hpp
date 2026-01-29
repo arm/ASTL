@@ -11,18 +11,79 @@
 
 namespace astl {
 
+/**
+ * @brief Enum of all environment variables used by ASTL
+ *
+ * This provides a constrained set of environment variables that can be accessed,
+ * making it clear which variables are used throughout the codebase.
+ */
+enum class EnvVar {
+
+  /* file path to json specifying overrides for ASTL configuration values, such as where to find scmi sysfs */
+  ASTL_CONFIG_JSON_PATH,
+
+  /* where to load serialized astl library state from */
+  ASTL_LOAD_FILE_PATH,
+
+  /* where to save serialized astl library state to */
+  ASTL_SAVE_FILE_PATH,
+
+  /* selects the output file path for Perfetto format output. If not set, no output is created. */
+  ASTL_OUTPUT_PERFETTO,
+
+  /* selects the output path for interval CSV output. If not set, no output is created. */
+  ASTL_OUTPUT_INTERVAL_CSV,
+
+  /* selects the output path for metric summary CSV output. If not set, no output is created. */
+  ASTL_OUTPUT_SUMMARY_CSV,
+
+  /* Environment variable used to override log level
+   * Value should be set to string "trace", "debug", "info", "warn", "error", "critical", "default" or "off"
+   * upper case and first letter uppercase for each of the expected values are acceptable alternatives
+   */
+  ASTL_LOG_LEVEL,
+
+  /* Environment variable used to override the log file name
+   */
+  ASTL_LOG_NAME,
+
+  /* Environment variable used to override logging to console.
+   * It is used to enable logging to the console when the compiled in value is set to off
+   * It cannot be used to turn off logging to the console if the code explicitely enables logging to the console
+   * Any value would activate the variable other than explicit negative values: 0, no, off or empty
+   */
+  ASTL_LOG_CONSOLE,
+
+  /* Environment variable used to enable adding source location to the formatted log messages
+   * Any non negative value would activate the variable
+   */
+  ASTL_LOG_SOURCE_LOC,
+
+  /* used by file interface to expand ~ */
+  HOME,
+
+  /* used by tests to know if running under sudo */
+  SUDO_UID,
+};
+
+/**
+ * @brief Get the string name of an environment variable
+ *
+ * @param env_var The environment variable enum value
+ * @return The string name of the environment variable
+ */
+inline std::string_view GetEnvVarName(EnvVar env_var) { return magic_enum::enum_name(env_var); }
+
 /* @brief Set specified environment variable to the specified value
  *
- * @param var_name  The name of the environment variable to set
+ * @param env_var   The environment variable to set
  * @param var_value The value to set the environment variable to
  *
  * @return astl_status_code
  */
-inline astl_status_code SetEnvVar(const std::string& var_name, const std::string& var_value) {
-  astl_status_code status = ASTL_STATUS_INTERNAL_ERROR;
-  if (var_name.empty()) {
-    return status;
-  }
+inline astl_status_code SetEnvVar(EnvVar env_var, const std::string& var_value) {
+  std::string      var_name = std::string(GetEnvVarName(env_var));
+  astl_status_code status   = ASTL_STATUS_INTERNAL_ERROR;
 #ifndef _WIN32  // Linux
   status = (setenv(var_name.c_str(), var_value.c_str(), 1) != 0) ? status : ASTL_STATUS_SUCCESS;
 #else  // Windows
@@ -34,14 +95,12 @@ inline astl_status_code SetEnvVar(const std::string& var_name, const std::string
 }
 
 /* @brief Get environment variable value
- * @param var_name  The environment variable name
+ * @param env_var  The environment variable enum value
  *
  * @return the value of the environment variable if found or empty std::string()
  */
-inline std::string GetEnvVar(const std::string& var_name) {
-  if (var_name.empty()) {
-    return std::string();
-  }
+inline std::string GetEnvVar(EnvVar env_var) {
+  std::string var_name = std::string(GetEnvVarName(env_var));
 #ifndef _WIN32  // Linux
   const char* var = getenv(var_name.c_str());
   return (var == nullptr) ? std::string() : std::string(var);
@@ -58,14 +117,14 @@ inline std::string GetEnvVar(const std::string& var_name) {
 
 /* @brief Check if an environment variable is set
  *
- * @prarm var_name  The environment variable name
+ * @param env_var  The environment variable enum value
  *
  * @return true if environment variable is set, false otherwise
  * Note: An environment variable is considered set if it is present and it is set to
  * any value other than empty string, 0, off, no, false or their uppercase version
  */
-inline bool IsEnvVarSet(const std::string& var_name) {
-  std::string var = GetEnvVar(var_name);
+inline bool IsEnvVarSet(EnvVar env_var) {
+  std::string var = GetEnvVar(env_var);
   std::transform(var.begin(), var.end(), var.begin(), [](unsigned char character) { return std::toupper(character); });
   bool var_set = true;
   if (var.empty() || var == "0" || var == "OFF" || var == "NO" || var == "FALSE") {

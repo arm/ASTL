@@ -682,7 +682,7 @@ TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[
   // Guarantee clean start.
   REQUIRE_FALSE(std::filesystem::exists(perfetto_path));
   // setenv returns 0 on success.
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", perfetto_path.string()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, perfetto_path.string()) == ASTL_STATUS_SUCCESS);
 
   // Build minimal orchestrator with mocks + real OutputManager (for Perfetto path).
   auto topology_manager = std::make_unique<MockTopologyManager>();
@@ -741,7 +741,7 @@ TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[
   REQUIRE(content.find("\"value\":123") != std::string::npos);
 
   // Cleanup env var for isolation.
-  (void)astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", "");  // clear
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");  // clear
 }
 
 // Negative path: env var set but no processed samples sunk; expect empty trace file body after StopCollection.
@@ -751,7 +751,7 @@ TEST_CASE("PerfettoOutput deferred emission empty map", "[perfetto_output]") {  
   std::error_code remove_error_code;
   std::filesystem::remove(perfetto_path, remove_error_code);
   REQUIRE_FALSE(std::filesystem::exists(perfetto_path));
-  REQUIRE(astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", perfetto_path.string()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, perfetto_path.string()) == ASTL_STATUS_SUCCESS);
 
   auto                                        topology_manager = std::make_unique<MockTopologyManager>();
   auto                                        concrete_target  = std::make_unique<TestTargetBase>("EmptyDeferredT");
@@ -791,7 +791,7 @@ TEST_CASE("PerfettoOutput deferred emission empty map", "[perfetto_output]") {  
       (content.find("\"displayTimeUnit\":\"us\"") != std::string::npos &&
        content.find("\"ph\":\"C\"") == std::string::npos && content.find("\"ph\":\"I\"") == std::string::npos);
   REQUIRE(matches_variant);
-  (void)astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", "");
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
 }
 
 // Env var unset: ensure no file is emitted after StopCollection even if samples exist.
@@ -801,7 +801,7 @@ TEST_CASE("PerfettoOutput deferred emission env var unset", "[perfetto_output]")
   std::filesystem::remove(perfetto_path, remove_error_code);
   REQUIRE_FALSE(std::filesystem::exists(perfetto_path));
   // Explicitly ensure variable not set (ignore errors).
-  (void)astl::SetEnvVar("ASTL_OUTPUT_PERFETTO", "");
+  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
 
   auto                                        topology_manager = std::make_unique<MockTopologyManager>();
   auto                                        concrete_target  = std::make_unique<TestTargetBase>("UnsetEnvT");

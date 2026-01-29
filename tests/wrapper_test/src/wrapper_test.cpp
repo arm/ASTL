@@ -1297,8 +1297,8 @@ TEST_CASE("ASTL_SAVE_FILE_PATH saves state on StopCollection", "[wrapper][cache]
   const fs::path save_file = fs::temp_directory_path() / "astl_save_wrapper_test.astl";
   TempFileGuard  temp_file_guard(save_file);
 
-  EnvVarGuard save_guard("ASTL_SAVE_FILE_PATH");
-  REQUIRE(astl::SetEnvVar("ASTL_SAVE_FILE_PATH", save_file.string()) == ASTL_STATUS_SUCCESS);
+  EnvVarGuard save_guard(astl::EnvVar::ASTL_SAVE_FILE_PATH);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_SAVE_FILE_PATH, save_file.string()) == ASTL_STATUS_SUCCESS);
 
   // One mock target
   auto                 mock_target        = std::make_unique<MockTarget>();
@@ -1357,9 +1357,9 @@ TEST_CASE("ASTL_LOAD_FILE_PATH test", "[wrapper][cache]") {
   // It does NOT prove the instance was loaded from disk because the orchestrator
   // is a singleton and only constructed once per process.
 
-  EnvVarGuard load_guard("ASTL_LOAD_FILE_PATH");
+  EnvVarGuard load_guard(astl::EnvVar::ASTL_LOAD_FILE_PATH);
 
-  REQUIRE(astl::SetEnvVar("ASTL_LOAD_FILE_PATH", "/tmp/does-not-matter-for-smoke") == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_LOAD_FILE_PATH, "/tmp/does-not-matter-for-smoke") == ASTL_STATUS_SUCCESS);
 
   auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));

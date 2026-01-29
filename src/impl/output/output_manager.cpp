@@ -18,7 +18,6 @@
 
 #include "output_manager.hpp"
 
-#include <cstdlib>  // std::getenv
 #include <filesystem>
 #include <new>  // std::bad_alloc
 #include <span>
@@ -71,7 +70,7 @@ auto OutputManager::EnsurePerfettoOutput() -> astl_status_code {
     return ASTL_STATUS_SUCCESS;
   }
 
-  std::string perfetto_path = astl::GetEnvVar("ASTL_OUTPUT_PERFETTO");
+  std::string perfetto_path = astl::GetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO);
   if (perfetto_path.empty()) {
     ASTL_LOG_ERROR("Perfetto output requested but ASTL_OUTPUT_PERFETTO is not set or empty");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -94,7 +93,7 @@ auto OutputManager::EnsureIntervalCsvOutput() -> astl_status_code {
     return ASTL_STATUS_SUCCESS;
   }
   // TODO(ASTL-208): centralize env var keys as constexprs to avoid duplication.
-  std::string csv_path = astl::GetEnvVar("ASTL_OUTPUT_INTERVAL_CSV");
+  std::string csv_path = astl::GetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV);
   if (csv_path.empty()) {
     ASTL_LOG_ERROR("Interval CSV output requested but ASTL_OUTPUT_INTERVAL_CSV is not set or empty");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -167,7 +166,7 @@ auto OutputManager::OutputProcessedSamples(const ProcessedSamplesMap& processed_
     case OutputType::SUMMARY_CSV: {
       // For SUMMARY_CSV output, process ALL metrics on ALL targets, grouped by metric name.
       // Emission is opt-in via ASTL_OUTPUT_SUMMARY_CSV.
-      const auto csv_file_path = astl::GetEnvVar("ASTL_OUTPUT_SUMMARY_CSV");
+      const auto csv_file_path = astl::GetEnvVar(astl::EnvVar::ASTL_OUTPUT_SUMMARY_CSV);
       if (csv_file_path.empty()) {
         ASTL_LOG_ERROR("OutputProcessedSamples: ASTL_OUTPUT_SUMMARY_CSV environment variable not set or empty");
         return ASTL_STATUS_BAD_ARGUMENT;
