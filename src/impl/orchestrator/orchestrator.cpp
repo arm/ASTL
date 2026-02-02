@@ -67,8 +67,12 @@ Orchestrator::~Orchestrator() {
     ASTL_LOG_WARNING("Orchestrator destructor failed to remove cache dir '{}': {}", _cache_dir.string(),
                      err_code.message());
   }
-  (void)_collector_manager->UnregisterRawSampleSink(this);
-  (void)_metric_manager->UnregisterProcessedSampleSink(this);
+  if (_collector_manager) {
+    (void)_collector_manager->UnregisterRawSampleSink(this);
+  }
+  if (_metric_manager) {
+    (void)_metric_manager->UnregisterProcessedSampleSink(this);
+  }
 }
 
 auto Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topology_manager,
