@@ -62,17 +62,6 @@ add_custom_target(
   COMMAND unit_test
   COMMENT "Run all unit tests")
 
-# Symlink configuration JSON into unit_test binary directory for runtime configuration discovery This is not ideal,
-# since it means we're not testing that the config .json path is detected correctly when the .so and client binary are
-# in separate locations. https://jira.arm.com/browse/ASTL-235
-add_custom_command(
-  TARGET unit_test
-  POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_SOURCE_DIR}/samples/sample_configuration/astl_configuration.json
-          $<TARGET_FILE_DIR:unit_test>/astl_configuration.json
-  COMMENT "Creating symlink to astl_configuration.json in unit_test output directory"
-  VERBATIM)
-
 # have catch2's cmake module discover the tests and add them to ctest for us
 include(CTest)
 include(Catch)

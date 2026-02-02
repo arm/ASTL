@@ -111,8 +111,10 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
       .RETURN(nullptr);      // end of chips
 
   // generate the stimulus: scan for targets, enumerating chips and features
-  astl::AstlConfiguration configuration;
-  auto result = astl::LibsensorsTopologyPlugin::detail::ScanForTargetsWithLibsensors(configuration, harness.api);
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto& configuration = configuration_result.value();
+  auto  result = astl::LibsensorsTopologyPlugin::detail::ScanForTargetsWithLibsensors(configuration, harness.api);
 
   // make assertions on the results
   REQUIRE(result.has_value());
