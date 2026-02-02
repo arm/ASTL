@@ -27,7 +27,7 @@ namespace astl {
 SummaryOutput::SummaryOutput(std::vector<std::unique_ptr<ISummarizer>> summarizers)
     : summarizers_(std::move(summarizers)) {}
 
-auto SummaryOutput::WriteProcessedSamples(const ProcessedSamplesMap& samples) const -> astl_status_code {
+auto SummaryOutput::WriteProcessedSamples(const ProcessedSamplesMap& samples) -> astl_status_code {
   std::vector<std::tuple<const ITarget*, const IMetric*, SummaryResult>> summaries;
 
   // Compute summaries for each target-metric combination

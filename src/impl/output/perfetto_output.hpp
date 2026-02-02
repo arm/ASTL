@@ -85,8 +85,7 @@ class PerfettoOutput : public IOutput {
    * @param processed Nested map Target* -> Metric* -> vector<ProcessedSampledData>
    * @return astl_status_code Success or internal error if output not ready.
    */
-  auto WriteProcessedSamples(const ProcessedSamplesMap& samples)
-      -> astl_status_code;  // non-const; mutates internal state
+  auto WriteProcessedSamples(const ProcessedSamplesMap& samples) -> astl_status_code override;
 
  private:
   std::filesystem::path _path;

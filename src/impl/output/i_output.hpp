@@ -69,8 +69,8 @@ struct IOutput {
    * @retval ASTL_STATUS_INTERNAL_ERROR Implementation-specific failure (e.g. null internal pointer, IO error).
    * @retval ASTL_STATUS_NOT_IMPLEMENTED Default base implementation (when not overridden).
    */
-  [[nodiscard]] virtual auto WriteProcessedSamples(const std::span<const ProcessedSampledData>& samples)
-      const  // NOLINT(readability-convert-member-function-to-static)
+  [[nodiscard]] virtual auto WriteProcessedSamples(std::span<const ProcessedSampledData> samples)
+      // NOLINT(readability-convert-member-function-to-static)
       -> astl_status_code {
     (void)samples;  // unused default implementation
     return ASTL_STATUS_NOT_IMPLEMENTED;
@@ -100,7 +100,7 @@ struct IOutput {
    * @retval ASTL_STATUS_NOT_IMPLEMENTED Default base implementation (when not overridden).
    */
   [[nodiscard]] virtual auto WriteProcessedSamples(
-      const ProcessedSamplesMap& processed) const  // NOLINT(readability-convert-member-function-to-static)
+      const ProcessedSamplesMap& processed)  // NOLINT(readability-convert-member-function-to-static)
       -> astl_status_code {
     (void)processed;  // unused default implementation
     return ASTL_STATUS_NOT_IMPLEMENTED;

@@ -25,8 +25,7 @@
 
 namespace astl {
 
-auto BufferOutput::WriteProcessedSamples(const std::span<const ProcessedSampledData>& samples) const
-    -> astl_status_code {
+auto BufferOutput::WriteProcessedSamples(std::span<const ProcessedSampledData> samples) -> astl_status_code {
   if (_buffer_sample_count == nullptr) {
     ASTL_LOG_ERROR("BufferOutput: Buffer sample count pointer is null");
     return ASTL_STATUS_INTERNAL_ERROR;

@@ -70,8 +70,7 @@ class BufferOutput : public IOutput {
    *         ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED when buffer had excess capacity or an appropriate
    *         error if the buffer cannot hold all samples.
    */
-  [[nodiscard]] astl_status_code WriteProcessedSamples(
-      const std::span<const ProcessedSampledData>& samples) const override;
+  [[nodiscard]] astl_status_code WriteProcessedSamples(std::span<const ProcessedSampledData> samples) override;
 
  private:
   // internal classes + enums

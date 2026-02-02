@@ -70,11 +70,11 @@ class IntervalCsvOutput : public IOutput {  // NOLINT(cppcoreguidelines-special-
    *  @param processed Aggregated map: target* -> (metric* -> vector of processed samples).
    *  @return ASTL_STATUS_SUCCESS on success; ASTL_STATUS_INTERNAL_ERROR if stream not ready.
    */
-  [[nodiscard]] auto WriteProcessedSamples(const ProcessedSamplesMap& processed) const -> astl_status_code override;
+  [[nodiscard]] auto WriteProcessedSamples(const ProcessedSamplesMap& processed) -> astl_status_code override;
 
  private:
   std::filesystem::path _path;           //!< Destination path
-  mutable std::ofstream _output_stream;  //!< Output file stream (opened on construction)
+  std::ofstream         _output_stream;  //!< Output file stream (opened on construction)
 };
 
 }  // namespace astl

@@ -75,7 +75,7 @@ class SummaryOutput : public IOutput {
    * @param processed Nested map Target* -> Metric* -> vector<ProcessedSampledData>
    * @return astl_status_code Success, or error from validation/computation/writing
    */
-  auto WriteProcessedSamples(const ProcessedSamplesMap& samples) const -> astl_status_code override;
+  auto WriteProcessedSamples(const ProcessedSamplesMap& samples) -> astl_status_code override;
 
  protected:
   /**

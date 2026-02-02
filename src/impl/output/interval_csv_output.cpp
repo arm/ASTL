@@ -127,7 +127,7 @@ void EmitGroup(std::ostream& output_stream, const std::string& metric_name, cons
 }
 }  // namespace
 
-auto IntervalCsvOutput::WriteProcessedSamples(const ProcessedSamplesMap& processed) const -> astl_status_code {
+auto IntervalCsvOutput::WriteProcessedSamples(const ProcessedSamplesMap& processed) -> astl_status_code {
   if (!Ready()) {
     return ASTL_STATUS_INTERNAL_ERROR;  // stream not open
   }
