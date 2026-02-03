@@ -11,8 +11,7 @@ else:
 
 def pytest_sessionstart(session):  # noqa: ARG001
     faulthandler.enable()
-    if os.environ.get("ASTL_DEBUG_SHUTDOWN"):
-        print("[conftest] ASTL_DEBUG_SHUTDOWN enabled")
+    os.environ["ASTL_CONFIG_DIR"] = "tests/config"
     if SKIP_IMPORT:
         # Make explicit in logs that initialization is bypassed.
         print("[conftest] astl import bypassed (sdist integrity mode)")

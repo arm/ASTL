@@ -65,6 +65,15 @@ enum class EnvVar {
   /* used by file interface to expand ~ */
   HOME,
 
+  /* used to look up windows-specific application data path for config dir */
+  LOCALAPPDATA,
+
+  /* used to look up windows-specific application data path for config dir */
+  PROGRAMDATA,
+
+  /* used to look up user-specific app data path for Linux */
+  XDG_DATA_HOME,
+
   /* used by tests to know if running under sudo */
   SUDO_UID,
 };

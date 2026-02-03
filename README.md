@@ -12,7 +12,7 @@ Arm SoC Telemetry Library
 
 ## Description
 
-ASTL is a self-contained library for SoC telemetry collection at Arm. It abstracts low level
+ASTL is a library for SoC telemetry collection at Arm. It abstracts low level
 interfaces to telemetry data sources on the system. Using a predefined API, a telemetry
 collection tool or an AI framework can dynamically discover available supported telemetry on
 the target platform, configure, start, (pause, resume), stop a collection and process
@@ -93,6 +93,26 @@ Python wrapper layer (Cython bindings + high-level utilities) is now availableâ€
 
 ### Installation
 
+ASTL's `config` directory holds platform-specific metrics specifications
+and should be included in distributions of the binary library.
+ASTL looks for it in the following directories in prefered order:
+
+1. Environment variable override: `ASTL_CONFIG_DIR`
+2. Under a user-specific application data dir, depending on OS
+
+- Linux : `$XDG_DATA_HOME/astl/config` -> defaults to `~/.local/share/astl/config`
+- Mac : `~/Library/Application Support/astl/config`
+- Windows: `%LOCALAPPDATA%\astl\config`
+
+3. System-wide application resource directory, depending on OS
+
+- Linux : `/usr/local/share/astl/config`
+- Mac : `/Library/Application Support/astl/config`
+- Windows: `%PROGRAMDATA%\astl\config`
+
+4. Default to fallback of relative location by path to astl library.
+   For instance, if the library is at `~/Downloads/astl/libastl.so`, ASTL looks in `~/Downloads/astl/config/`
+
 See [Build steps for developers](#build-steps-for-developers) for more detailed build instructions.
 
 > Looking for the Python telemetry wrapper? See the
@@ -116,31 +136,20 @@ mount -t stlmfs none /sys/fs/arm_telemetry/
 
 2. Initialize ASTL
 
-First, if needed, create an override config file to redirect the library to use non-default paths for
-scmi sysfs, and resource files defining SCMI endpoints and metrics.
+First, if needed, use the environment variable ASTL_SCMI_SYSFS_TELEMETRY_ROOT
+to redirect the library to use a non-default path for scmi sysfs.
 
-create or select an ASTL JSON configuration file specifying which metrics should be
-made available at the API to collect. You can also optionally override the root path for the
-SCMI file system, and the definition file for the system metrics.
-Assuming astl is installed at /usr/local/astl, the following config would represent the default values:
+Some developers might have a reason to use modified platform definition and metrics config files.
+You can use ASTL_CONFIG_DIR for this.
 
-```json
-{
-  "scmi_sysfs_telemetry_root_path": "/sys/fs/arm_telemetry",
-  "astl_metrics_dir": "/usr/local/astl/config/metrics",
-  "scmi_specification_dir": "/usr/local/astl/config/scmi",
-  "astl_file_path": ""
-}
+```bash
+# optional - if your SCMI sysfs is not in the expected mount point
+export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="/sys/fs/arm_telemetry"
+# optional - if you're hacking around with metric definitions
+export ASTL_CONFIG_DIR="/path/to/my_astl/config"
 ```
 
-Key elements of the configuration file:
-
-1. **scmi_sysfs_telemetry_root_path**: optional override for the SCMI sysfs root file path
-2. **astl_metrics_dir**: optional override for the directory with platform-specific metrics declarations
-3. **scmi_specification_dir**: optional override for the JSON file specifying data event IDs and targets
-4. **astl_file_path**: optional path to specify save file where astl should save or load state from
-
-Within the astl_metrics_dir path, you can override definitions of metrics, which look like:
+Within the ASTL_CONFIG_DIR path, you can override definitions of metrics, which look like:
 
 ```json
     "Throttle Counts": {

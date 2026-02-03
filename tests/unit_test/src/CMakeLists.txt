@@ -5,7 +5,6 @@ if(NOT CMAKE_BUILD_TYPE)
       "RelWithDebInfo"
       CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif()
-
 set(UNIT_TEST_SRCS
     astl_value_utests.cpp
     collector_manager_utests.cpp
@@ -33,7 +32,6 @@ set(UNIT_TEST_SRCS
     summary_csv_output_utests.cpp
     protobuf_serdes_utests.cpp
     archive_utests.cpp)
-
 find_library(SENSORS_LIB sensors)
 if(SENSORS_LIB)
   message(STATUS "libsensors found, building sensors_collector_utests")
@@ -41,16 +39,11 @@ else()
   message(
     STATUS "libsensors not found: please install libsensors-dev package. sensors_collector_utests will not be built")
 endif()
-
 add_executable(unit_test ${UNIT_TEST_SRCS})
-
 target_compile_definitions(unit_test PRIVATE ASTL_BUILD)
-
 include(Warnings)
 set_project_warnings(unit_test)
-
 target_include_directories(unit_test PRIVATE "${CMAKE_BINARY_DIR}/src/impl/gen")
-
 # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
 target_link_libraries(
   unit_test
@@ -61,8 +54,12 @@ add_custom_target(
   rununittests
   COMMAND unit_test
   COMMENT "Run all unit tests")
-
 # have catch2's cmake module discover the tests and add them to ctest for us
 include(CTest)
 include(Catch)
-catch_discover_tests(unit_test ADD_TAGS_AS_LABELS)
+# unit tests will be run with ASTL_CONFIG_DIR set to the config directory in the build tree
+catch_discover_tests(
+  unit_test
+  ADD_TAGS_AS_LABELS
+  PROPERTIES ENVIRONMENT "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config"
+)
