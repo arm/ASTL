@@ -69,7 +69,7 @@ class MetricConfig {
    * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
    * @param operation_builder The operation builder associated with this metric's collector type,
    *                          including collector-specific parameters like data event id or libsensors chip
-   * @param formula        Formula for processing raw samples (BitMaskFormula, ExpressionFormula, or IdentityFormula)
+   * @param formula        Formula for processing raw samples (ExpressionFormula or IdentityFormula)
    *
    * REFACTOR - Eliminate this function.
    * We should just have one parameterized constructor with every parameter available.
@@ -101,7 +101,7 @@ class MetricConfig {
    * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
    * @param operation_builder The operation builder associated with this metric's collector type,
    *                          including collector-specific parameters like data event id or libsensors chip
-   * @param formula        Formula for processing raw samples (BitMaskFormula, ExpressionFormula, or IdentityFormula)
+   * @param formula        Formula for processing raw samples (ExpressionFormula or IdentityFormula)
    */
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                         astl_value_type_t value_type, astl_category_t category, astl_metric_type_t metric_type,
@@ -193,7 +193,7 @@ class MetricConfig {
   std::vector<std::string> _metric_groups;   // Groups this metric belongs to
   CollectorType            _collector_type;  // Collector type to support this metric
   AnyOperationBuilder      _operation_builder;
-  AnyFormula               _formula;  // Formula for processing raw samples (BitMaskFormula, ExpressionFormula, etc.)
+  AnyFormula               _formula;  // Formula for processing raw samples (ExpressionFormula, IdentityFormula)
 };
 
 /**
@@ -230,7 +230,7 @@ class ResidencyMetricConfig final : public MetricConfig {
    * @param collector_type  Collector type responsible for gathering residency counters.
    * @param state_info      Mapping from state name -> {operation_builder, tick_frequency}.
    * @param inferred_state  Optional state name to be inferred from the metric (e.g., "C0").
-   * @param formula         Formula for processing raw samples (BitMaskFormula, ExpressionFormula, or IdentityFormula).
+   * @param formula         Formula for processing raw samples (ExpressionFormula or IdentityFormula).
    */
   explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
@@ -292,7 +292,7 @@ class FiniteSetMetricConfig final : public MetricConfig {
    * type
    * @param finite_set      Set of valid AstlValue objects that define the finite set.
    * @param labels          Mapping from finite set values to human-readable labels.
-   * @param formula         Formula for processing raw samples (BitMaskFormula, ExpressionFormula, or IdentityFormula).
+   * @param formula         Formula for processing raw samples (ExpressionFormula or IdentityFormula).
    */
   explicit FiniteSetMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,

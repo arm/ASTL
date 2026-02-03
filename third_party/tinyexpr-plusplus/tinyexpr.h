@@ -47,6 +47,10 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
+/** @note This file has been modified for ASTL to support TE_UINT64 mode
+ *  and TE_BITWISE_OPERATORS for integer-based expression evaluation.
+ */
+
 #ifndef __TINYEXPR_PLUS_PLUS_H__
 #define __TINYEXPR_PLUS_PLUS_H__
 
@@ -92,8 +96,9 @@ class te_parser;
 #error TE_RAND_SEED and TE_RAND_SEED_TIME compile options cannot be combined. Only one random number generator seeding method can be specified.
 #endif
 
-#if defined(TE_FLOAT) && defined(TE_LONG_DOUBLE)
-#  error TE_FLOAT and TE_LONG_DOUBLE compile options cannot be combined. Only one data type can be specified.
+#if (defined(TE_FLOAT) && defined(TE_LONG_DOUBLE)) || (defined(TE_FLOAT) && defined(TE_UINT64)) || \
+    (defined(TE_LONG_DOUBLE) && defined(TE_UINT64))
+#  error TE_FLOAT, TE_LONG_DOUBLE, and TE_UINT64 compile options cannot be combined. Only one data type can be specified.
 #endif
 
 /// @brief Define this to use @c float instead of @c double for the parser's data type.
@@ -102,6 +107,15 @@ class te_parser;
 using te_type = float;
 #elif defined(TE_LONG_DOUBLE)
 using te_type = long double;
+#elif defined(TE_UINT64)
+/// @brief The parameter and return type for parser and its functions (integer mode for bitwise operations).
+/// @note When using TE_UINT64 mode:
+///   - Arithmetic operations (+, -, *, /, %, <<, >>) work as integer operations
+///   - Bitwise functions (bitand, bitor, bitxor, bitnot, bitlshift, bitrshift) work correctly
+///   - Logical operations (and, or, not, if, ifs) work correctly
+///   - Floating-point functions (sin, cos, sqrt, pow, exp, log, etc.) are NOT supported and should not be used
+///   - Use hex literals (0x...) and binary operations for bit manipulation
+using te_type = uint64_t;
 #else
 /// @brief The parameter and return type for parser and its functions.
 using te_type = double;
@@ -382,24 +396,42 @@ class te_parser {
   ~te_parser() { te_free(m_compiledExpression); }
 
   /// @brief NaN (not-a-number) constant to indicate an invalid value.
+  /// @note For TE_UINT64 mode, this is set to max uint64_t value as a sentinel
+  ///     since integers don't have NaN.
+#ifdef TE_UINT64
+  constexpr static auto te_nan = std::numeric_limits<te_type>::max();
+#else
   constexpr static auto te_nan = std::numeric_limits<te_type>::quiet_NaN();
+#endif
   /// @brief No position, which is what get_last_error_position() returns
   ///     when there was no parsing error.
   constexpr static int64_t npos = -1;
   /// @private
-  // (2^48)-1
+  // (2^48)-1 for floating point modes, UINT64_MAX for TE_UINT64 mode
+#ifdef TE_UINT64
+  constexpr static uint64_t MAX_BITOPS_VAL{std::numeric_limits<uint64_t>::max()};  // NOLINT
+#else
   constexpr static double MAX_BITOPS_VAL{281474976710655};  // NOLINT
+#endif
 
   /// @returns @c true if the parser's internal type can hold `uint32_t` without truncation.
   [[nodiscard]]
   constexpr static bool supports_32bit() noexcept {
+#ifdef TE_UINT64
+    return true;  // uint64_t can always hold uint32_t
+#else
     return std::numeric_limits<te_type>::digits >= std::numeric_limits<uint32_t>::digits;
+#endif
   }
 
   /// @returns @c true if the parser's internal type can hold `uint64_t` without truncation.
   [[nodiscard]]
   constexpr static bool supports_64bit() noexcept {
+#ifdef TE_UINT64
+    return true;  // te_type is uint64_t
+#else
     return std::numeric_limits<te_type>::digits >= std::numeric_limits<uint64_t>::digits;
+#endif
   }
 
   /// @returns The bits available in the internal data type.\n
@@ -693,14 +725,18 @@ class te_parser {
   }
 
   /// @brief Helper function to convert a number into boolean.
-  /// @details This takes NaN into account, returning @c for NaN.
+  /// @details This takes NaN into account, returning @c false for NaN.
   /// @param val The value to examine.
   /// @returns @c true if the value is non-zero and also valid
   ///     (not NaN or infinite).
   /// @private
   [[nodiscard]]
-  static bool number_to_bool(te_type val) {
+  constexpr static bool number_to_bool(te_type val) noexcept {
+#ifdef TE_UINT64
+    return val != 0 && val != te_nan;
+#else
     return std::isfinite(val) ? static_cast<bool>(val) : false;
+#endif
   }
 
   /// @returns Information about how the parser is configured, its capabilities, etc.

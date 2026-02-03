@@ -34,7 +34,7 @@ auto ExpressionFormula::Create(std::string expression) -> std::expected<Expressi
   }
 
   // Allocate variable storage on heap (needs to persist for compiled expression)
-  auto input_value = std::make_unique<te_type>(0.0);
+  auto input_value = std::make_unique<te_type>(0);
 
   // Create parser and bind the 'value' variable for use in expressions
   auto parser = std::make_unique<te_parser>();
@@ -79,57 +79,6 @@ auto ExpressionFormula::operator=(ExpressionFormula&& other) noexcept -> Express
 
 ExpressionFormula::~ExpressionFormula() = default;
 
-namespace {
-// Helper: Check for integer precision loss warning
-template <typename T>
-void CheckIntegerPrecision(T val, std::string_view expression) {
-  constexpr uint64_t max_safe_integer = (1ULL << 53) - 1;  // 9,007,199,254,740,991
-  uint64_t           abs_val          = 0;
-
-  if constexpr (std::is_signed_v<T>) {
-    abs_val = static_cast<uint64_t>(std::abs(static_cast<int64_t>(val)));
-  } else {
-    abs_val = static_cast<uint64_t>(val);
-  }
-
-  if (abs_val > max_safe_integer) {
-    ASTL_LOG_WARNING(
-        "Value {} exceeds safe integer range for double precision (2^53 = {}). "
-        "Bitwise operations may lose precision. Expression: '{}'",
-        abs_val, max_safe_integer, expression);
-  }
-}
-
-// Helper: Validate expression evaluation result
-auto ValidateResult(te_type result, std::string_view expression, auto input_val) -> std::optional<astl_status_code> {
-  if (std::isnan(result)) {
-    ASTL_LOG_ERROR("Expression '{}' evaluation resulted in NaN for input {}", expression, input_val);
-    return ASTL_STATUS_INVALID_VALUE_TYPE;
-  }
-
-  if (std::isinf(result)) {
-    ASTL_LOG_ERROR("Expression '{}' evaluation resulted in infinity for input {}", expression, input_val);
-    return ASTL_STATUS_INVALID_VALUE_TYPE;
-  }
-
-  return std::nullopt;
-}
-
-// Helper: Convert result to AstlValue
-template <typename T>
-auto ConvertResult(te_type result) -> AstlValue {
-  if constexpr (std::is_integral_v<T>) {
-    // For integer inputs, round result to nearest integer
-    constexpr double k_rounding_offset = 0.5;
-    auto             rounded = static_cast<T>(result + (result >= 0 ? k_rounding_offset : -k_rounding_offset));
-    return AstlValue{rounded};
-  } else {
-    // For floating point inputs, keep as double
-    return AstlValue{static_cast<double>(result)};
-  }
-}
-}  // namespace
-
 auto ExpressionFormula::Apply(const AstlValue& value) const -> std::expected<AstlValue, astl_status_code> {
   return std::visit(
       [this](auto&& val) -> std::expected<AstlValue, astl_status_code> {
@@ -137,22 +86,20 @@ auto ExpressionFormula::Apply(const AstlValue& value) const -> std::expected<Ast
 
         // Only support arithmetic types (not bool or string)
         if constexpr (std::is_arithmetic_v<T> && !std::is_same_v<T, bool>) {
-          // Check for potential precision loss with large integers
-          if constexpr (std::is_integral_v<T>) {
-            CheckIntegerPrecision(val, _expression);
+          // Warn if floating-point input is used with TE_UINT64 mode
+          if constexpr (std::is_floating_point_v<T>) {
+            ASTL_LOG_WARNING(
+                "Floating-point input value {} will be truncated to uint64_t for expression '{}'. "
+                "Consider using integer types for TE_UINT64 mode.",
+                val, _expression);
           }
 
           // Set the variable value and evaluate
           *_input_value  = static_cast<te_type>(val);
           te_type result = _parser->evaluate();
 
-          // Validate result
-          if (auto error = ValidateResult(result, _expression, val)) {
-            return std::unexpected(*error);
-          }
-
-          // Return result in appropriate type
-          return ConvertResult<T>(result);
+          // Return result cast back to input type
+          return AstlValue{static_cast<T>(result)};
         } else {
           ASTL_LOG_ERROR("Expression formula does not support non-arithmetic types");
           return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);

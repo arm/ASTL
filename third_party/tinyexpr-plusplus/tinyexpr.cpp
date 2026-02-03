@@ -47,9 +47,35 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
+/** @note This file has been modified for ASTL to support TE_UINT64 mode
+ *  and TE_BITWISE_OPERATORS for integer-based expression evaluation.
+ */
+
 #include "tinyexpr.h"
 
 // NOLINTBEGIN(readability-redundant-casting,readability-avoid-nested-conditional-operator,hicpp-named-parameter,readability-named-parameter)
+
+//==============================================================================
+// BUILTIN FUNCTIONS ORGANIZATION
+//==============================================================================
+// This file supports three compilation modes via te_type:
+//   - TE_FLOAT: float (single precision)
+//   - TE_LONG_DOUBLE: long double (extended precision)
+//   - TE_UINT64: uint64_t (integer mode for bitwise operations)
+//
+// Function organization:
+//   1. Common functions (work in all modes)
+//   2. Functions with conditional implementations (available in both modes)
+//   3. Floating-point-only functions (#ifndef TE_UINT64)
+//   4. Integer mode alternative implementations (#ifdef TE_UINT64)
+//   5. Shared implementations after conditional blocks
+//
+// When adding new functions:
+//   - If it uses floating-point operations (sin, log, pow, etc.), put it in the
+//     "FLOATING-POINT MATHEMATICAL FUNCTIONS" section
+//   - If it works with integers, put it in "FUNCTIONS AVAILABLE IN ALL MODES"
+//   - If it needs different implementations, use internal #ifdef like te_fac
+//==============================================================================
 
 // builtin functions
 namespace te_builtins {
@@ -63,21 +89,30 @@ constexpr static te_type te_true_value() noexcept {
   return 1;
 }
 
+#ifndef TE_UINT64
 [[nodiscard]]
 constexpr static te_type te_nan_value() noexcept {
   return te_parser::te_nan;
 }
+#endif
 
 [[nodiscard]]
 static te_type te_max_integer() noexcept {
   return te_parser::get_max_integer();
 }
 
+//==============================================================================
+// FLOATING-POINT ONLY FUNCTIONS (not available in TE_UINT64 mode)
+//==============================================================================
+#ifndef TE_UINT64
+
+// NaN/infinity checking
 [[nodiscard]]
 static te_type te_is_nan(te_type val) {
   return (!std::isfinite(val) ? 1 : 0);
 }
 
+// Rounding functions with floating-point logic
 [[nodiscard]]
 static te_type te_even(te_type val) {
   if (!std::isfinite(val)) {
@@ -102,6 +137,37 @@ static te_type te_odd(te_type val) {
   return (val < 0 ? -(static_cast<te_type>(rounded)) : static_cast<te_type>(rounded));
 }
 
+//==============================================================================
+// INTEGER MODE ALTERNATIVE IMPLEMENTATIONS (TE_UINT64 only)
+//==============================================================================
+#else  // TE_UINT64
+
+// Simpler integer-mode versions
+[[nodiscard]]
+static te_type te_even(te_type val) {
+  int64_t rounded = static_cast<int64_t>(val);
+  if ((rounded % 2) != 0) {
+    ++rounded;
+  }
+  return static_cast<te_type>(rounded);
+}
+
+[[nodiscard]]
+static te_type te_odd(te_type val) {
+  int64_t rounded = static_cast<int64_t>(val);
+  if ((rounded % 2) == 0) {
+    ++rounded;
+  }
+  return static_cast<te_type>(rounded);
+}
+
+#endif  // TE_UINT64
+
+//==============================================================================
+// FUNCTIONS AVAILABLE IN ALL MODES
+//==============================================================================
+
+#ifndef TE_UINT64
 [[nodiscard]]
 static te_type te_is_even(te_type val) {
   if (!std::isfinite(val)) {
@@ -119,7 +185,19 @@ static te_type te_is_odd(te_type val) {
   const int64_t floored{static_cast<int64_t>(std::floor(val))};
   return ((floored % 2) != 0 ? te_true_value() : te_false_value());
 }
+#else   // TE_UINT64
+[[nodiscard]]
+constexpr static te_type te_is_even(te_type val) noexcept {
+  return ((val % 2) == 0 ? te_true_value() : te_false_value());
+}
 
+[[nodiscard]]
+constexpr static te_type te_is_odd(te_type val) noexcept {
+  return ((val % 2) != 0 ? te_true_value() : te_false_value());
+}
+#endif  // TE_UINT64
+
+#ifndef TE_UINT64
 [[nodiscard]]
 constexpr static te_type te_equal(te_type val1, te_type val2) noexcept {
   return (!std::isfinite(val1) || !std::isfinite(val2)) ? te_parser::te_nan
@@ -180,6 +258,93 @@ constexpr static te_type te_or(te_type val1, te_type val2) {
 static te_type te_not(te_type val) {
   return std::isfinite(val) ? static_cast<te_type>(!te_parser::number_to_bool(val)) : te_parser::te_nan;
 }
+#else   // TE_UINT64
+[[nodiscard]]
+constexpr static te_type te_equal(te_type val1, te_type val2) noexcept {
+  return static_cast<te_type>((val1 == val2) ? 1 : 0);
+}
+
+[[nodiscard]]
+constexpr static te_type te_not_equal(te_type val1, te_type val2) noexcept {
+  return static_cast<te_type>((val1 != val2) ? 1 : 0);
+}
+
+[[nodiscard]]
+constexpr static te_type te_less_than(te_type val1, te_type val2) noexcept {
+  return static_cast<te_type>((val1 < val2) ? 1 : 0);
+}
+
+[[nodiscard]]
+constexpr static te_type te_less_than_equal_to(te_type val1, te_type val2) noexcept {
+  return static_cast<te_type>((val1 <= val2) ? 1 : 0);
+}
+
+[[nodiscard]]
+constexpr static te_type te_greater_than(te_type val1, te_type val2) noexcept {
+  return static_cast<te_type>((val1 > val2) ? 1 : 0);
+}
+
+[[nodiscard]]
+constexpr static te_type te_greater_than_equal_to(te_type val1, te_type val2) noexcept {
+  return static_cast<te_type>((val1 >= val2) ? 1 : 0);
+}
+
+[[nodiscard]]
+constexpr static te_type te_and(te_type val1, te_type val2) noexcept {
+  return static_cast<te_type>((te_parser::number_to_bool(val1) && te_parser::number_to_bool(val2)) ? 1 : 0);
+}
+
+[[nodiscard]]
+constexpr static te_type te_or(te_type val1, te_type val2) noexcept {
+  return static_cast<te_type>((te_parser::number_to_bool(val1) || te_parser::number_to_bool(val2)) ? 1 : 0);
+}
+
+[[nodiscard]]
+constexpr static te_type te_not(te_type val) noexcept {
+  return static_cast<te_type>(!te_parser::number_to_bool(val));
+}
+#endif  // TE_UINT64
+
+//==============================================================================
+// FUNCTIONS WITH CONDITIONAL IMPLEMENTATIONS (available in both modes)
+//==============================================================================
+
+// Factorial - has different overflow handling for each mode
+[[nodiscard]]
+static te_type te_fac(te_type val) noexcept { /* simplest version of factorial */
+#ifdef TE_UINT64
+  if (val > 20) {  // uint64_t can only hold up to ~20!
+    return std::numeric_limits<te_type>::max();
+  }
+  const auto unsignedVal = static_cast<size_t>(val);
+  uint64_t   result{1};
+  for (uint64_t i = 1; i <= unsignedVal; i++) {
+    result *= i;
+  }
+  return static_cast<te_type>(result);
+#else
+  if (!std::isfinite(val) || val < 0.0) {
+    return te_parser::te_nan;
+  }
+  if (val > (std::numeric_limits<unsigned int>::max)()) {
+    return std::numeric_limits<te_type>::infinity();
+  }
+  const auto unsignedVal = static_cast<size_t>(val);
+  uint32_t   result{1};
+  for (uint32_t i = 1; i <= unsignedVal; i++) {
+    if (i > (std::numeric_limits<uint32_t>::max)() / result) {
+      return std::numeric_limits<te_type>::infinity();
+    }
+    result *= i;
+  }
+  return static_cast<te_type>(result);
+#endif
+}
+
+//==============================================================================
+// FLOATING-POINT MATHEMATICAL FUNCTIONS (not available in TE_UINT64 mode)
+//==============================================================================
+#ifndef TE_UINT64
 
 /// @warning This version of round emulates Excel's behavior of supporting
 ///     negative decimal places (e.g., ROUND(21.5, -1) = 20). Be aware
@@ -285,25 +450,7 @@ constexpr static te_type te_e() noexcept {
   return static_cast<te_type>(2.71828182845904523536);  // NOLINT
 }
 
-[[nodiscard]]
-static te_type te_fac(te_type val) noexcept { /* simplest version of factorial */
-  if (!std::isfinite(val) || val < 0.0) {
-    return te_parser::te_nan;
-  }
-  if (val > (std::numeric_limits<unsigned int>::max)()) {
-    return std::numeric_limits<te_type>::infinity();
-  }
-  const auto unsignedVal = static_cast<size_t>(val);
-  uint32_t   result{1};
-  for (uint32_t i = 1; i <= unsignedVal; i++) {
-    if (i > (std::numeric_limits<uint32_t>::max)() / result) {
-      return std::numeric_limits<te_type>::infinity();
-    }
-    result *= i;
-  }
-  return static_cast<te_type>(result);
-}
-
+// Logarithmic and exponential functions
 [[nodiscard]]
 static te_type te_absolute_value(te_type val) {
   return std::fabs(static_cast<te_type>(val));
@@ -324,6 +471,7 @@ static te_type te_pow(te_type val1, te_type val2) {
   return std::pow(static_cast<te_type>(val1), static_cast<te_type>(val2));
 }
 
+// Trigonometric functions
 [[nodiscard]]
 static te_type te_tan(te_type val) {
   return std::tan(static_cast<te_type>(val));
@@ -332,11 +480,6 @@ static te_type te_tan(te_type val) {
 [[nodiscard]]
 static te_type te_tanh(te_type val) {
   return std::tanh(static_cast<te_type>(val));
-}
-
-[[nodiscard]]
-static te_type te_trunc(te_type val) {
-  return std::trunc(static_cast<te_type>(val));
 }
 
 [[nodiscard]]
@@ -412,17 +555,66 @@ static te_type te_tgamma(te_type val) {
 
 [[nodiscard]]
 static te_type te_random() {
-#ifdef TE_RAND_SEED
+#  ifdef TE_RAND_SEED
   static std::mt19937 gen(static_cast<unsigned int>(TE_RAND_SEED));
-#elif defined(TE_RAND_SEED_TIME)
+#  elif defined(TE_RAND_SEED_TIME)
   static std::mt19937 gen(static_cast<unsigned int>(std::time(nullptr)));
-#else
+#  else
   static std::mt19937 gen(std::random_device{}());
-#endif
+#  endif
 
   static std::uniform_real_distribution<te_type> distribute(0, 1);
   return distribute(gen);
 }
+
+#endif  // #ifndef TE_UINT64
+
+//==============================================================================
+// INTEGER MODE SPECIFIC IMPLEMENTATIONS  (TE_UINT64 only)
+//==============================================================================
+#ifdef TE_UINT64
+
+// Integer power function for uint64 mode (binary exponentiation - O(log n))
+[[nodiscard]]
+static te_type te_pow(te_type base, te_type exp) noexcept {
+  te_type result = 1;
+  while (exp > 0) {
+    if (exp & 1) {  // If exp is odd
+      result *= base;
+    }
+    base *= base;
+    exp >>= 1;
+  }
+  return result;
+}
+
+// Integer-only versions
+[[nodiscard]]
+static te_type te_absolute_value(te_type val) {
+  return val;  // uint64_t is always positive
+}
+
+[[nodiscard]]
+static te_type te_trunc(te_type val) {
+  return val;  // Already an integer
+}
+
+#endif  // #ifdef TE_UINT64
+
+//==============================================================================
+// FUNCTIONS WITH CONDITIONAL IMPLEMENTATIONS (both modes, different logic)
+//==============================================================================
+
+// Factorial has different overflow handling for each mode
+// (implementation is above with internal #ifdef/#else)
+
+// te_trunc: no-op for uint64, truncation for floating-point
+#ifndef TE_UINT64
+[[nodiscard]]
+static te_type te_trunc(te_type val) {
+  return std::trunc(static_cast<te_type>(val));
+}
+#endif
 
 [[nodiscard]]
 constexpr static te_type te_divide(te_type val1, te_type val2) {
@@ -437,7 +629,11 @@ static te_type te_modulus(te_type val1, te_type val2) {
   if (val2 == 0) {
     throw std::runtime_error("Modulus by zero.");
   }
+#ifdef TE_UINT64
+  return val1 % val2;
+#else
   return std::fmod(val1, val2);
+#endif
 }
 
 [[nodiscard]]
@@ -445,6 +641,10 @@ static te_type te_sum(te_type val1, te_type val2, te_type val3, te_type val4, te
                       te_type val8, te_type val9, te_type val10, te_type val11, te_type val12, te_type val13,
                       te_type val14, te_type val15, te_type val16, te_type val17, te_type val18, te_type val19,
                       te_type val20, te_type val21, te_type val22, te_type val23, te_type val24) {
+#ifdef TE_UINT64
+  return val1 + val2 + val3 + val4 + val5 + val6 + val7 + val8 + val9 + val10 + val11 + val12 + val13 + val14 + val15 +
+         val16 + val17 + val18 + val19 + val20 + val21 + val22 + val23 + val24;
+#else
   const auto getSumMaybeNan = [](const auto val) { return (!std::isfinite(val) ? 0 : val); };
 
   return getSumMaybeNan(val1) + getSumMaybeNan(val2) + getSumMaybeNan(val3) + getSumMaybeNan(val4) +
@@ -453,6 +653,7 @@ static te_type te_sum(te_type val1, te_type val2, te_type val3, te_type val4, te
          getSumMaybeNan(val13) + getSumMaybeNan(val14) + getSumMaybeNan(val15) + getSumMaybeNan(val16) +
          getSumMaybeNan(val17) + getSumMaybeNan(val18) + getSumMaybeNan(val19) + getSumMaybeNan(val20) +
          getSumMaybeNan(val21) + getSumMaybeNan(val22) + getSumMaybeNan(val23) + getSumMaybeNan(val24);
+#endif
 }
 
 [[nodiscard]]
@@ -460,6 +661,12 @@ static te_type te_average(te_type val1, te_type val2, te_type val3, te_type val4
                           te_type val7, te_type val8, te_type val9, te_type val10, te_type val11, te_type val12,
                           te_type val13, te_type val14, te_type val15, te_type val16, te_type val17, te_type val18,
                           te_type val19, te_type val20, te_type val21, te_type val22, te_type val23, te_type val24) {
+#ifdef TE_UINT64
+  constexpr te_type validN = 24;
+  const auto total = te_sum(val1, val2, val3, val4, val5, val6, val7, val8, val9, val10, val11, val12, val13, val14,
+                            val15, val16, val17, val18, val19, val20, val21, val22, val23, val24);
+  return te_divide(total, validN);
+#else
   const auto isValidMaybeNan = [](const auto val) { return (!std::isfinite(val) ? 0 : 1); };
 
   const auto validN = isValidMaybeNan(val1) + isValidMaybeNan(val2) + isValidMaybeNan(val3) + isValidMaybeNan(val4) +
@@ -472,17 +679,27 @@ static te_type te_average(te_type val1, te_type val2, te_type val3, te_type val4
   const auto total = te_sum(val1, val2, val3, val4, val5, val6, val7, val8, val9, val10, val11, val12, val13, val14,
                             val15, val16, val17, val18, val19, val20, val21, val22, val23, val24);
   return te_divide(total, static_cast<te_type>(validN));
+#endif
 }
 
 // Combinations (without repetition)
 [[nodiscard]]
 static te_type te_ncr(te_type val1, te_type val2) noexcept {
+#ifdef TE_UINT64
+  if (val1 < val2) {
+    return 0;  // Invalid input for combinations
+  }
+  if (val1 > (std::numeric_limits<unsigned int>::max)() || val2 > (std::numeric_limits<unsigned int>::max)()) {
+    return std::numeric_limits<te_type>::max();
+  }
+#else
   if (!std::isfinite(val1) || !std::isfinite(val2) || val1 < 0.0 || val2 < 0.0 || val1 < val2) {
     return te_parser::te_nan;
   }
   if (val1 > (std::numeric_limits<unsigned int>::max)() || val2 > (std::numeric_limits<unsigned int>::max)()) {
     return std::numeric_limits<te_type>::infinity();
   }
+#endif
   const uint32_t usignN{static_cast<unsigned int>(val1)};
   uint32_t       usignR{static_cast<unsigned int>(val2)};
   uint32_t       result{1};
@@ -491,7 +708,11 @@ static te_type te_ncr(te_type val1, te_type val2) noexcept {
   }
   for (decltype(usignR) i = 1; i <= usignR; i++) {
     if (result > (std::numeric_limits<uint32_t>::max)() / (usignN - usignR + i)) {
+#ifdef TE_UINT64
+      return std::numeric_limits<te_type>::max();
+#else
       return std::numeric_limits<te_type>::infinity();
+#endif
     }
     result *= usignN - usignR + i;
     result /= i;
@@ -525,12 +746,14 @@ constexpr static te_type te_mul(te_type val1, te_type val2) noexcept {
 [[nodiscard]]
 static te_type te_right_rotate8(te_type val1, te_type val2) {
   constexpr int BITNESS{8};
+#  ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise RIGHT ROTATE operation must use integers.");
   }
   if (val1 < 0) {
     throw std::runtime_error("Bitwise RIGHT ROTATE value must be positive.");
   }
+#  endif
   if (val2 > BITNESS) {
     throw std::runtime_error("Rotation operation must be between 0-8.");
   }
@@ -542,12 +765,14 @@ static te_type te_right_rotate8(te_type val1, te_type val2) {
 [[nodiscard]]
 static te_type te_left_rotate8(te_type val1, te_type val2) {
   constexpr int BITNESS{8};
+#  ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise LEFT ROTATE operation must use integers.");
   }
   if (val1 < 0) {
     throw std::runtime_error("Bitwise LEFT ROTATE value must be positive.");
   }
+#  endif
   if (val2 > BITNESS) {
     throw std::runtime_error("Rotation operation must be between 0-8.");
   }
@@ -559,12 +784,14 @@ static te_type te_left_rotate8(te_type val1, te_type val2) {
 [[nodiscard]]
 static te_type te_right_rotate16(te_type val1, te_type val2) {
   constexpr int BITNESS{16};
+#  ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise RIGHT ROTATE operation must use integers.");
   }
   if (val1 < 0) {
     throw std::runtime_error("Bitwise RIGHT ROTATE value must be positive.");
   }
+#  endif
   if (val2 > BITNESS) {
     throw std::runtime_error("Rotation operation must be between 0-16.");
   }
@@ -576,12 +803,14 @@ static te_type te_right_rotate16(te_type val1, te_type val2) {
 [[nodiscard]]
 static te_type te_left_rotate16(te_type val1, te_type val2) {
   constexpr int BITNESS{16};
+#  ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise LEFT ROTATE operation must use integers.");
   }
   if (val1 < 0) {
     throw std::runtime_error("Bitwise LEFT ROTATE value must be positive.");
   }
+#  endif
   if (val2 > BITNESS) {
     throw std::runtime_error("Rotation operation must be between 0-16.");
   }
@@ -596,12 +825,14 @@ static te_type te_right_rotate32(te_type val1, te_type val2) {
   if constexpr (!te_parser::supports_32bit()) {
     throw std::runtime_error("32-bit bitwise operations are not supported.");
   }
+#  ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise RIGHT ROTATE operation must use integers.");
   }
   if (val1 < 0) {
     throw std::runtime_error("Bitwise RIGHT ROTATE value must be positive.");
   }
+#  endif
   if (val2 > BITNESS) {
     throw std::runtime_error("Rotation operation must be between 0-32.");
   }
@@ -616,12 +847,14 @@ static te_type te_left_rotate32(te_type val1, te_type val2) {
   if constexpr (!te_parser::supports_32bit()) {
     throw std::runtime_error("32-bit bitwise operations are not supported.");
   }
+#  ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise LEFT ROTATE operation must use integers.");
   }
   if (val1 < 0) {
     throw std::runtime_error("Bitwise LEFT ROTATE value must be positive.");
   }
+#  endif
   if (val2 > BITNESS) {
     throw std::runtime_error("Rotation operation must be between 0-32.");
   }
@@ -636,12 +869,14 @@ static te_type te_right_rotate64(te_type val1, te_type val2) {
   if constexpr (!te_parser::supports_64bit()) {
     throw std::runtime_error("64-bit bitwise operations are not supported.");
   }
+#  ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise RIGHT ROTATE operation must use integers.");
   }
   if (val1 < 0) {
     throw std::runtime_error("Bitwise RIGHT ROTATE value must be positive.");
   }
+#  endif
   if (val2 > BITNESS) {
     throw std::runtime_error("Rotation operation must be between 0-63");
   }
@@ -656,12 +891,14 @@ static te_type te_left_rotate64(te_type val1, te_type val2) {
   if constexpr (!te_parser::supports_64bit()) {
     throw std::runtime_error("64-bit bitwise operations are not supported.");
   }
+#  ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise LEFT ROTATE operation must use integers.");
   }
   if (val1 < 0) {
     throw std::runtime_error("Bitwise LEFT ROTATE value must be positive.");
   }
+#  endif
   if (val2 > BITNESS) {
     throw std::runtime_error("Rotation operation must be between 0-63");
   }
@@ -697,12 +934,14 @@ static te_type te_left_rotate(te_type val1, te_type val2) {
 //--------------------------------------------------
 [[nodiscard]]
 static te_type te_bitwise_not8(te_type val) {
+#ifndef TE_UINT64
   if (std::floor(val) != val) {
     throw std::runtime_error("Bitwise NOT must use integers.");
   }
   if (val < 0) {
     throw std::runtime_error("Bitwise NOT value must be positive.");
   }
+#endif
   if (val > std::numeric_limits<uint8_t>::max()) {
     throw std::runtime_error("Value is too large for bitwise NOT.");
   }
@@ -716,12 +955,14 @@ static te_type te_bitwise_not8(te_type val) {
 //--------------------------------------------------
 [[nodiscard]]
 static te_type te_bitwise_not16(te_type val) {
+#ifndef TE_UINT64
   if (std::floor(val) != val) {
     throw std::runtime_error("Bitwise NOT must use integers.");
   }
   if (val < 0) {
     throw std::runtime_error("Bitwise NOT value must be positive.");
   }
+#endif
   if (val > std::numeric_limits<uint16_t>::max()) {
     throw std::runtime_error("Value is too large for bitwise NOT.");
   }
@@ -737,12 +978,14 @@ static te_type te_bitwise_not32(te_type val) {
   if constexpr (!te_parser::supports_32bit()) {
     throw std::runtime_error("32-bit bitwise operations are not supported.");
   }
+#ifndef TE_UINT64
   if (std::floor(val) != val) {
     throw std::runtime_error("Bitwise NOT must use integers.");
   }
   if (val < 0) {
     throw std::runtime_error("Bitwise NOT value must be positive.");
   }
+#endif
   if (val > std::numeric_limits<uint32_t>::max()) {
     throw std::runtime_error("Value is too large for bitwise NOT.");
   }
@@ -758,12 +1001,14 @@ static te_type te_bitwise_not64(te_type val) {
   if constexpr (!te_parser::supports_64bit()) {
     throw std::runtime_error("64-bit bitwise operations are not supported.");
   }
+#ifndef TE_UINT64
   if (std::floor(val) != val) {
     throw std::runtime_error("Bitwise NOT must use integers.");
   }
   if (val < 0) {
     throw std::runtime_error("Bitwise NOT value must be positive.");
   }
+#endif
   if (val > static_cast<te_type>(std::numeric_limits<uint64_t>::max())) {
     throw std::runtime_error("Value is too large for bitwise NOT.");
   }
@@ -789,6 +1034,7 @@ static te_type te_bitwise_not(te_type val) {
 //--------------------------------------------------
 [[nodiscard]]
 static te_type te_bitwise_or(te_type val1, te_type val2) {
+#ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise OR operation must use integers.");
   }
@@ -797,6 +1043,7 @@ static te_type te_bitwise_or(te_type val1, te_type val2) {
   if (val1 < 0 || val2 < 0) {
     throw std::runtime_error("Bitwise OR operation must use positive integers.");
   }
+#endif
   if (val1 > te_parser::MAX_BITOPS_VAL || val2 > te_parser::MAX_BITOPS_VAL) {
     throw std::runtime_error("Value is too large for bitwise operation.");
   }
@@ -806,6 +1053,7 @@ static te_type te_bitwise_or(te_type val1, te_type val2) {
 //--------------------------------------------------
 [[nodiscard]]
 static te_type te_bitwise_xor(te_type val1, te_type val2) {
+#ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise XOR operation must use integers.");
   }
@@ -814,6 +1062,7 @@ static te_type te_bitwise_xor(te_type val1, te_type val2) {
   if (val1 < 0 || val2 < 0) {
     throw std::runtime_error("Bitwise XOR operation must use positive integers.");
   }
+#endif
   if (val1 > te_parser::MAX_BITOPS_VAL || val2 > te_parser::MAX_BITOPS_VAL) {
     throw std::runtime_error("Value is too large for bitwise operation.");
   }
@@ -823,6 +1072,7 @@ static te_type te_bitwise_xor(te_type val1, te_type val2) {
 //--------------------------------------------------
 [[nodiscard]]
 static te_type te_bitwise_and(te_type val1, te_type val2) {
+#ifndef TE_UINT64
   if (std::floor(val1) != val1 || std::floor(val2) != val2) {
     throw std::runtime_error("Bitwise AND operation must use integers.");
   }
@@ -831,6 +1081,7 @@ static te_type te_bitwise_and(te_type val1, te_type val2) {
   if (val1 < 0 || val2 < 0) {
     throw std::runtime_error("Bitwise AND operation must use positive integers.");
   }
+#endif
   if (val1 > te_parser::MAX_BITOPS_VAL || val2 > te_parser::MAX_BITOPS_VAL) {
     throw std::runtime_error("Value is too large for bitwise operation.");
   }
@@ -845,6 +1096,7 @@ static te_type te_left_shift(te_type val1, te_type val2) {
   // If we are limited to something like 53 bits, then we can use that (same as Excel)
   constexpr static auto MAX_BITNESS_PARAM =
       (te_parser::supports_64bit() ? te_parser::get_max_integer_bitness() - 1 : te_parser::get_max_integer_bitness());
+#ifndef TE_UINT64
   if (std::floor(val1) != val1) {
     throw std::runtime_error("Left side of left shift (<<) operation must be an integer.");
   }
@@ -854,15 +1106,23 @@ static te_type te_left_shift(te_type val1, te_type val2) {
   if (val1 < 0) {
     throw std::runtime_error("Left side of left shift (<<) operation cannot be negative.");
   }
+#endif
   if (val1 > te_parser::MAX_BITOPS_VAL) {
     throw std::runtime_error("Value is too large for bitwise operation.");
   }
   // bitness is limited to 53-bit or 64-bit, so ensure shift doesn't go beyond that
   // and cause undefined behavior
+#ifdef TE_UINT64
+  if (val2 > MAX_BITNESS_PARAM) {
+    throw std::runtime_error("Additive expression of left shift (<<) operation must be between 0-" +
+                             std::to_string(MAX_BITNESS_PARAM));
+  }
+#else
   if (val2 < 0 || val2 > MAX_BITNESS_PARAM) {
     throw std::runtime_error("Additive expression of left shift (<<) operation must be between 0-" +
                              std::to_string(MAX_BITNESS_PARAM));
   }
+#endif
 
   const auto multiplier    = (static_cast<uint64_t>(1) << static_cast<uint64_t>(val2));
   const auto maxBaseNumber = (std::numeric_limits<uint64_t>::max() / multiplier);
@@ -878,6 +1138,7 @@ static te_type te_right_shift(te_type val1, te_type val2) {
   constexpr static auto MAX_BITNESS_PARAM =
       (te_parser::supports_64bit() ? te_parser::get_max_integer_bitness() - 1 : te_parser::get_max_integer_bitness());
 
+#ifndef TE_UINT64
   if (std::floor(val1) != val1) {
     throw std::runtime_error("Left side of right shift (>>) operation must be an integer.");
   }
@@ -887,13 +1148,21 @@ static te_type te_right_shift(te_type val1, te_type val2) {
   if (val1 < 0) {
     throw std::runtime_error("Left side of right shift (<<) operation cannot be negative.");
   }
+#endif
   if (val1 > te_parser::MAX_BITOPS_VAL) {
     throw std::runtime_error("Value is too large for bitwise operation.");
   }
+#ifdef TE_UINT64
+  if (val2 > MAX_BITNESS_PARAM) {
+    throw std::runtime_error("Additive expression of right shift (>>) operation must be between 0-" +
+                             std::to_string(MAX_BITNESS_PARAM));
+  }
+#else
   if (val2 < 0 || val2 > MAX_BITNESS_PARAM) {
     throw std::runtime_error("Additive expression of right shift (>>) operation must be between 0-" +
                              std::to_string(MAX_BITNESS_PARAM));
   }
+#endif
 
   return static_cast<te_type>(static_cast<uint64_t>(val1) >> static_cast<uint64_t>(val2));
 }
@@ -903,7 +1172,12 @@ static te_type te_right_shift(te_type val1, te_type val2) {
 //--------------------------------------------------
 [[nodiscard]]
 static te_type te_left_shift_or_right(te_type val1, te_type val2) {
+#ifdef TE_UINT64
+  // For uint64, val2 is always non-negative, so just call te_left_shift
+  return te_left_shift(val1, val2);
+#else
   return (val2 >= 0) ? te_left_shift(val1, val2) : te_right_shift(val1, std::abs(val2));
+#endif
 }
 
 /// @warning This emulates Excel, where a negative shift amount acts as a right shift.\n
@@ -911,7 +1185,12 @@ static te_type te_left_shift_or_right(te_type val1, te_type val2) {
 //--------------------------------------------------
 [[nodiscard]]
 static te_type te_right_shift_or_left(te_type val1, te_type val2) {
+#ifdef TE_UINT64
+  // For uint64, val2 is always non-negative, so just call te_right_shift
+  return te_right_shift(val1, val2);
+#else
   return (val2 >= 0) ? te_right_shift(val1, val2) : te_left_shift(val1, std::abs(val2));
+#endif
 }
 
 [[nodiscard]]
@@ -921,7 +1200,12 @@ constexpr static te_type te_sqr(te_type val) noexcept {
 
 [[nodiscard]]
 static te_type te_max_maybe_nan(te_type val1, te_type val2MaybeNan) noexcept {
+#ifdef TE_UINT64
+  // For uint64, check against sentinel value (te_nan = max())
+  return (std::max)(val1, (val2MaybeNan == te_parser::te_nan) ? val1 : val2MaybeNan);
+#else
   return (std::max)(val1, !std::isfinite(val2MaybeNan) ? val1 : val2MaybeNan);
+#endif
 }
 
 [[nodiscard]]
@@ -959,7 +1243,12 @@ static te_type te_max(te_type val1, te_type val2, te_type val3, te_type val4, te
 
 [[nodiscard]]
 static te_type te_min_maybe_nan(te_type val1, te_type val2MaybeNan) noexcept {
+#ifdef TE_UINT64
+  // For uint64, check against sentinel value (te_nan = max())
+  return (std::min)(val1, (val2MaybeNan == te_parser::te_nan) ? val1 : val2MaybeNan);
+#else
   return (std::min)(val1, !std::isfinite(val2MaybeNan) ? val1 : val2MaybeNan);
+#endif
 }
 
 [[nodiscard]]
@@ -997,9 +1286,16 @@ static te_type te_min(te_type val1, te_type val2, te_type val3, te_type val4, te
 
 [[nodiscard]]
 static te_type te_and_maybe_nan(te_type val1, te_type val2MaybeNan) {
+#ifdef TE_UINT64
+  // For uint64, check against sentinel value (te_nan = max())
+  return (val2MaybeNan == te_parser::te_nan)
+             ? static_cast<te_type>(te_parser::number_to_bool(val1))
+             : static_cast<te_type>(te_parser::number_to_bool(val1) && te_parser::number_to_bool(val2MaybeNan));
+#else
   return !std::isfinite(val2MaybeNan)
              ? static_cast<te_type>(te_parser::number_to_bool(val1))
              : static_cast<te_type>(te_parser::number_to_bool(val1) && te_parser::number_to_bool(val2MaybeNan));
+#endif
 }
 
 [[nodiscard]]
@@ -1009,9 +1305,16 @@ static te_type te_and_variadic(te_type val1, te_type val2, te_type val3, te_type
                                te_type val19, te_type val20, te_type val21, te_type val22, te_type val23,
                                te_type val24) {
   // at least val1 must be legit, rest can be NaN
+#ifdef TE_UINT64
+  // For uint64, check against sentinel value (te_nan = max())
+  if (val1 == te_parser::te_nan) {
+    return te_parser::te_nan;
+  }
+#else
   if (!std::isfinite(val1)) {
     return te_parser::te_nan;
   }
+#endif
   // NOLINTBEGIN
   auto andVal = te_and_maybe_nan(val1, val2);
   andVal      = te_and_maybe_nan(andVal, val3);
@@ -1041,9 +1344,16 @@ static te_type te_and_variadic(te_type val1, te_type val2, te_type val3, te_type
 
 [[nodiscard]]
 static te_type te_or_maybe_nan(te_type val1, te_type val2MaybeNan) {
+#ifdef TE_UINT64
+  // For uint64, check against sentinel value (te_nan = max())
+  return (val2MaybeNan == te_parser::te_nan)
+             ? static_cast<te_type>(te_parser::number_to_bool(val1))
+             : static_cast<te_type>(te_parser::number_to_bool(val1) || te_parser::number_to_bool(val2MaybeNan));
+#else
   return !std::isfinite(val2MaybeNan)
              ? static_cast<te_type>(te_parser::number_to_bool(val1))
              : static_cast<te_type>(te_parser::number_to_bool(val1) || te_parser::number_to_bool(val2MaybeNan));
+#endif
 }
 
 [[nodiscard]]
@@ -1053,9 +1363,16 @@ static te_type te_or_variadic(te_type val1, te_type val2, te_type val3, te_type 
                               te_type val19, te_type val20, te_type val21, te_type val22, te_type val23,
                               te_type val24) {
   // at least val1 must be legit, rest can be NaN
+#ifdef TE_UINT64
+  // For uint64, check against sentinel value (te_nan = max())
+  if (val1 == te_parser::te_nan) {
+    return te_parser::te_nan;
+  }
+#else
   if (!std::isfinite(val1)) {
     return te_parser::te_nan;
   }
+#endif
   // NOLINTBEGIN
   auto orVal = te_or_maybe_nan(val1, val2);
   orVal      = te_or_maybe_nan(orVal, val3);
@@ -1118,7 +1435,8 @@ constexpr static te_type te_supports_64bit() noexcept {
   return te_parser::supports_64bit() ? te_true_value() : te_false_value();
 }
 
-// cotangent
+// cotangent (floating-point only)
+#ifndef TE_UINT64
 [[nodiscard]]
 static te_type te_cot(te_type val) noexcept {
   if (val == 0.0) {
@@ -1126,6 +1444,7 @@ static te_type te_cot(te_type val) noexcept {
   }
   return 1 / static_cast<te_type>(std::tan(val));
 }
+#endif
 
 [[nodiscard]]
 constexpr static te_type te_sign(te_type val) noexcept {
@@ -1166,14 +1485,17 @@ void te_parser::te_free_parameters(te_expr* texp) {
 //--------------------------------------------------
 const std::set<te_variable> te_parser::m_functions = {
     // NOLINT
+
+    //==========================================================================
+    // FUNCTIONS AVAILABLE IN ALL MODES (alphabetically within groups)
+    //==========================================================================
+
+    // Basic values and utilities
     {"abs", static_cast<te_fun1>(te_builtins::te_absolute_value), TE_PURE},
-    {"acos", static_cast<te_fun1>(te_builtins::te_acos), TE_PURE},
-    // variadic, accepts 1-24 arguments
     {"and", static_cast<te_fun24>(te_builtins::te_and_variadic), static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
-    {"asin", static_cast<te_fun1>(te_builtins::te_asin), TE_PURE},
-    {"atan", static_cast<te_fun1>(te_builtins::te_atan), TE_PURE},
-    {"atan2", static_cast<te_fun2>(te_builtins::te_atan2), TE_PURE},
     {"average", static_cast<te_fun24>(te_builtins::te_average), static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
+
+// Bitwise operations (not available in TE_FLOAT mode)
 #ifndef TE_FLOAT
     {"bitand", static_cast<te_fun2>(te_builtins::te_bitwise_and), TE_PURE},
     {"bitor", static_cast<te_fun2>(te_builtins::te_bitwise_or), TE_PURE},
@@ -1198,67 +1520,94 @@ const std::set<te_variable> te_parser::m_functions = {
     {"bitrshift", static_cast<te_fun2>(te_builtins::te_right_shift_or_left), TE_PURE},
     {"bitxor", static_cast<te_fun2>(te_builtins::te_bitwise_xor), TE_PURE},
 #endif
-    {"ceil", static_cast<te_fun1>(te_builtins::te_ceil), TE_PURE},
+
+    // Utility functions
     {"clamp",
      static_cast<te_fun3>(
          [](const te_type num, const te_type start, const te_type end)  // NOLINT
          { return (start <= end) ? std::clamp<te_type>(num, start, end) : std::clamp<te_type>(num, end, start); }),
      TE_PURE},
     {"combin", static_cast<te_fun2>(te_builtins::te_ncr), TE_PURE},
-    {"cos", static_cast<te_fun1>(te_builtins::te_cos), TE_PURE},
-    {"cosh", static_cast<te_fun1>(te_builtins::te_cosh), TE_PURE},
-    {"cot", static_cast<te_fun1>(te_builtins::te_cot), TE_PURE},
-    {"db", static_cast<te_fun5>(te_builtins::te_asset_depreciation),
-     static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
-    {"e", static_cast<te_fun0>(te_builtins::te_e), TE_PURE},
-    {"effect", static_cast<te_fun2>(te_builtins::te_effect), TE_PURE},
     {"even", static_cast<te_fun1>(te_builtins::te_even), TE_PURE},
-    {"exp", static_cast<te_fun1>(te_builtins::te_exp), TE_PURE},
     {"fac", static_cast<te_fun1>(te_builtins::te_fac), TE_PURE},
     {"fact", static_cast<te_fun1>(te_builtins::te_fac), TE_PURE},
     {"false", static_cast<te_fun0>(te_builtins::te_false_value), TE_PURE},
-    {"floor", static_cast<te_fun1>(te_builtins::te_floor), TE_PURE},
-    {"iserr", static_cast<te_fun1>(te_builtins::te_is_nan), TE_PURE},
-    {"iserror", static_cast<te_fun1>(te_builtins::te_is_nan), TE_PURE},
-    {"iseven", static_cast<te_fun1>(te_builtins::te_is_even), TE_PURE},
-    {"isna", static_cast<te_fun1>(te_builtins::te_is_nan), TE_PURE},
-    {"isnan", static_cast<te_fun1>(te_builtins::te_is_nan), TE_PURE},
-    {"isodd", static_cast<te_fun1>(te_builtins::te_is_odd), TE_PURE},
     {"if", static_cast<te_fun3>(te_builtins::te_if), TE_PURE},
     {"ifs", static_cast<te_fun24>(te_builtins::te_ifs), static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
-    {"ln", static_cast<te_fun1>(te_builtins::te_log), TE_PURE},
-    {"log10", static_cast<te_fun1>(te_builtins::te_log10), TE_PURE},
+    {"iseven", static_cast<te_fun1>(te_builtins::te_is_even), TE_PURE},
+    {"isodd", static_cast<te_fun1>(te_builtins::te_is_odd), TE_PURE},
     {"max", static_cast<te_fun24>(te_builtins::te_max), static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
     {"maxint", static_cast<te_fun0>(te_builtins::te_max_integer), TE_PURE},
     {"min", static_cast<te_fun24>(te_builtins::te_min), static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
     {"mod", static_cast<te_fun2>(te_builtins::te_modulus), TE_PURE},
-    {"na", static_cast<te_fun0>(te_builtins::te_nan_value), TE_PURE},
-    {"nan", static_cast<te_fun0>(te_builtins::te_nan_value), TE_PURE},
     {"ncr", static_cast<te_fun2>(te_builtins::te_ncr), TE_PURE},
-    {"nominal", static_cast<te_fun2>(te_builtins::te_nominal), TE_PURE},
     {"not", static_cast<te_fun1>(te_builtins::te_not), TE_PURE},
     {"npr", static_cast<te_fun2>(te_builtins::te_npr), TE_PURE},
     {"odd", static_cast<te_fun1>(te_builtins::te_odd), TE_PURE},
     {"or", static_cast<te_fun24>(te_builtins::te_or_variadic), static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
     {"permut", static_cast<te_fun2>(te_builtins::te_npr), TE_PURE},
-    {"pi", static_cast<te_fun0>(te_builtins::te_pi), TE_PURE},
-    {"pow", static_cast<te_fun2>(te_builtins::te_pow), TE_PURE},
-    {"power", /* Excel alias*/ static_cast<te_fun2>(te_builtins::te_pow), TE_PURE},
-    {"rand", static_cast<te_fun0>(te_builtins::te_random), TE_PURE},
-    {"round", static_cast<te_fun2>(te_builtins::te_round), static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
     {"sign", static_cast<te_fun1>(te_builtins::te_sign), TE_PURE},
-    {"sin", static_cast<te_fun1>(te_builtins::te_sin), TE_PURE},
-    {"sinh", static_cast<te_fun1>(te_builtins::te_sinh), TE_PURE},
     {"sqr", static_cast<te_fun1>(te_builtins::te_sqr), TE_PURE},
-    {"sqrt", static_cast<te_fun1>(te_builtins::te_sqrt), TE_PURE},
     {"sum", static_cast<te_fun24>(te_builtins::te_sum), static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
     {"supports32bit", static_cast<te_fun0>(te_builtins::te_supports_32bit), TE_PURE},
     {"supports64bit", static_cast<te_fun0>(te_builtins::te_supports_64bit), TE_PURE},
+    {"true", static_cast<te_fun0>(te_builtins::te_true_value), TE_PURE},
+    {"trunc", static_cast<te_fun1>(te_builtins::te_trunc), TE_PURE},
+
+//==========================================================================
+// FLOATING-POINT ONLY FUNCTIONS (not available in TE_UINT64 mode)
+//==========================================================================
+#ifndef TE_UINT64
+    // Trigonometric functions
+    {"acos", static_cast<te_fun1>(te_builtins::te_acos), TE_PURE},
+    {"asin", static_cast<te_fun1>(te_builtins::te_asin), TE_PURE},
+    {"atan", static_cast<te_fun1>(te_builtins::te_atan), TE_PURE},
+    {"atan2", static_cast<te_fun2>(te_builtins::te_atan2), TE_PURE},
+    {"cos", static_cast<te_fun1>(te_builtins::te_cos), TE_PURE},
+    {"cosh", static_cast<te_fun1>(te_builtins::te_cosh), TE_PURE},
+    {"cot", static_cast<te_fun1>(te_builtins::te_cot), TE_PURE},
+    {"sin", static_cast<te_fun1>(te_builtins::te_sin), TE_PURE},
+    {"sinh", static_cast<te_fun1>(te_builtins::te_sinh), TE_PURE},
     {"tan", static_cast<te_fun1>(te_builtins::te_tan), TE_PURE},
     {"tanh", static_cast<te_fun1>(te_builtins::te_tanh), TE_PURE},
+
+    // Rounding and floor/ceiling
+    {"ceil", static_cast<te_fun1>(te_builtins::te_ceil), TE_PURE},
+    {"floor", static_cast<te_fun1>(te_builtins::te_floor), TE_PURE},
+    {"round", static_cast<te_fun2>(te_builtins::te_round), static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
+
+    // Exponential and logarithmic
+    {"exp", static_cast<te_fun1>(te_builtins::te_exp), TE_PURE},
+    {"ln", static_cast<te_fun1>(te_builtins::te_log), TE_PURE},
+    {"log10", static_cast<te_fun1>(te_builtins::te_log10), TE_PURE},
+    {"pow", static_cast<te_fun2>(te_builtins::te_pow), TE_PURE},
+    {"power", /* Excel alias*/ static_cast<te_fun2>(te_builtins::te_pow), TE_PURE},
+    {"sqrt", static_cast<te_fun1>(te_builtins::te_sqrt), TE_PURE},
+
+    // Advanced mathematical functions
     {"tgamma", static_cast<te_fun1>(te_builtins::te_tgamma), TE_PURE},
-    {"true", static_cast<te_fun0>(te_builtins::te_true_value), TE_PURE},
-    {"trunc", static_cast<te_fun1>(te_builtins::te_trunc), TE_PURE}
+
+    // Constants
+    {"e", static_cast<te_fun0>(te_builtins::te_e), TE_PURE},
+    {"pi", static_cast<te_fun0>(te_builtins::te_pi), TE_PURE},
+
+    // Financial functions
+    {"db", static_cast<te_fun5>(te_builtins::te_asset_depreciation),
+     static_cast<te_variable_flags>(TE_PURE | TE_VARIADIC)},
+    {"effect", static_cast<te_fun2>(te_builtins::te_effect), TE_PURE},
+    {"nominal", static_cast<te_fun2>(te_builtins::te_nominal), TE_PURE},
+
+    // NaN/infinity checking
+    {"iserr", static_cast<te_fun1>(te_builtins::te_is_nan), TE_PURE},
+    {"iserror", static_cast<te_fun1>(te_builtins::te_is_nan), TE_PURE},
+    {"isna", static_cast<te_fun1>(te_builtins::te_is_nan), TE_PURE},
+    {"isnan", static_cast<te_fun1>(te_builtins::te_is_nan), TE_PURE},
+    {"na", static_cast<te_fun0>(te_builtins::te_nan_value), TE_PURE},
+    {"nan", static_cast<te_fun0>(te_builtins::te_nan_value), TE_PURE},
+
+    // Random number generation
+    {"rand", static_cast<te_fun0>(te_builtins::te_random), TE_PURE}
+#endif
 };
 
 //--------------------------------------------------
@@ -1280,7 +1629,9 @@ void te_parser::next_token(state* theState) {
     /* Try reading a number. */
     if (((*theState->m_next >= '0') && (*theState->m_next <= '9')) || (*theState->m_next == get_decimal_separator())) {
       char* nEnd{nullptr};
-#ifdef TE_FLOAT
+#ifdef TE_UINT64
+      theState->m_value = static_cast<te_type>(std::strtoull(theState->m_next, &nEnd, 0));
+#elif defined(TE_FLOAT)
       theState->m_value = static_cast<te_type>(std::strtof(theState->m_next, &nEnd));
 #elif defined(TE_LONG_DOUBLE)
       theState->m_value = static_cast<te_type>(std::strtold(theState->m_next, &nEnd));

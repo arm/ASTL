@@ -31,7 +31,7 @@ namespace astl {
  * @brief Concept for formula types that can be applied to values.
  *
  * Formulas are applied to raw metric samples to transform them before processing.
- * Examples: BitMaskFormula applies a bitwise AND, ExpressionFormula evaluates expressions.
+ * Examples: ExpressionFormula evaluates expressions including bitwise operations.
  *
  * This concept defines the interface that all formula types must satisfy:
  * - Apply(const AstlValue&) -> std::expected<AstlValue, astl_status_code>

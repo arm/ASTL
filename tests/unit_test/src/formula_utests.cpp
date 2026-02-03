@@ -21,83 +21,14 @@
 
 #include "../../test_includes.hpp"  // include before catch2
 #include "common/astl_value.hpp"
-#include "metric/bit_mask_formula.hpp"
 #include "metric/expression_formula.hpp"
 #include "metric/formula_builder.hpp"
 
 using Catch::Matchers::WithinAbs;
 
 // =============================================================================
-// BitMaskFormula Tests
+// BuildFormula Tests
 // =============================================================================
-
-TEST_CASE("BitMaskFormula - Basic Operations", "[BitMaskFormula]") {
-  constexpr uint64_t   mask = 0xFF;
-  astl::BitMaskFormula formula{mask};
-
-  SECTION("Description") { REQUIRE(formula.Description() == "BIT_MASK 0xff"); }
-
-  SECTION("Apply to uint8_t") {
-    astl::AstlValue input{uint8_t{0xAB}};
-    auto            result = formula.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<uint8_t>(result->value));
-    REQUIRE(std::get<uint8_t>(result->value) == 0xAB);
-  }
-
-  SECTION("Apply to uint64_t") {
-    astl::AstlValue input{uint64_t{0xFFFFFFFFFFFFFFFF}};
-    auto            result = formula.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::holds_alternative<uint64_t>(result->value));
-    REQUIRE(std::get<uint64_t>(result->value) == 0xFF);
-  }
-
-  SECTION("Reject non-integer types") {
-    // Should fail for double
-    astl::AstlValue input_double{3.14};
-    auto            result_double = formula.Apply(input_double);
-    REQUIRE_FALSE(result_double.has_value());
-    REQUIRE(result_double.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
-  }
-}
-
-TEST_CASE("BitMaskFormula - Edge Cases", "[BitMaskFormula]") {
-  SECTION("All bits set mask") {
-    astl::BitMaskFormula formula_all_bits{0xFFFFFFFFFFFFFFFF};
-    astl::AstlValue      input{uint64_t{0x123456789ABCDEF0}};
-    auto                 result = formula_all_bits.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::get<uint64_t>(result->value) == 0x123456789ABCDEF0);
-  }
-
-  SECTION("Zero mask") {
-    astl::BitMaskFormula formula_zero{0x0};
-    astl::AstlValue      input{uint32_t{0xFFFFFFFF}};
-    auto                 result = formula_zero.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::get<uint32_t>(result->value) == 0);
-  }
-
-  SECTION("Single bit mask") {
-    astl::BitMaskFormula formula_single{0x1};
-    astl::AstlValue      input{uint8_t{0xFF}};
-    auto                 result = formula_single.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::get<uint8_t>(result->value) == 0x1);
-  }
-
-  SECTION("High bit mask") {
-    astl::BitMaskFormula formula_high{0x8000000000000000};
-    astl::AstlValue      input{uint64_t{0xFFFFFFFFFFFFFFFF}};
-    auto                 result = formula_high.Apply(input);
-    REQUIRE(result.has_value());
-    REQUIRE(std::get<uint64_t>(result->value) == 0x8000000000000000);
-  }
-}
-
-// =============================================================================
-// ScalingFormula Tests - REMOVED: ScalingFormula replaced by ExpressionFormula
 // Use ExpressionFormula with expressions like "value * 2.0" for scaling
 // =============================================================================
 
@@ -186,12 +117,14 @@ TEST_CASE("FormulaBuilder - Invalid Input", "[FormulaBuilder]") {
 // =============================================================================
 
 TEST_CASE("AnyFormula - ApplyFormula Helper", "[AnyFormula]") {
-  SECTION("Apply BitMaskFormula via variant") {
-    astl::AnyFormula formula = astl::BitMaskFormula{0xFF};
-    astl::AstlValue  input{uint16_t{0x12FF}};
+  SECTION("Apply ExpressionFormula via variant") {
+    auto expr_result = astl::ExpressionFormula::Create("bitand(value, 0xFF)");
+    REQUIRE(expr_result.has_value());
+    astl::AnyFormula formula = std::move(expr_result.value());
+    astl::AstlValue  input{uint64_t{0x12FF}};
     auto             result = astl::ApplyFormula(formula, input);
     REQUIRE(result.has_value());
-    REQUIRE(std::get<uint16_t>(result->value) == 0xFF);
+    REQUIRE(std::get<uint64_t>(result->value) == 0xFF);
   }
 
   SECTION("Apply IdentityFormula via variant") {
@@ -204,14 +137,257 @@ TEST_CASE("AnyFormula - ApplyFormula Helper", "[AnyFormula]") {
 }
 
 TEST_CASE("AnyFormula - GetFormulaDescription Helper", "[AnyFormula]") {
-  SECTION("BitMaskFormula description") {
-    astl::AnyFormula formula = astl::BitMaskFormula{0xDEADBEEF};
-    REQUIRE(astl::GetFormulaDescription(formula) == "BIT_MASK 0xdeadbeef");
+  SECTION("ExpressionFormula description") {
+    auto expr_result = astl::ExpressionFormula::Create("bitand(value, 0xDEADBEEF)");
+    REQUIRE(expr_result.has_value());
+    astl::AnyFormula formula = std::move(expr_result.value());
+    REQUIRE(astl::GetFormulaDescription(formula) == "bitand(value, 0xDEADBEEF)");
   }
 
   SECTION("IdentityFormula description") {
     astl::AnyFormula formula = astl::IdentityFormula{};
     REQUIRE(astl::GetFormulaDescription(formula) == "NONE");
+  }
+}
+
+// =============================================================================
+// ExpressionFormula Bit Manipulation Tests
+// =============================================================================
+
+TEST_CASE("ExpressionFormula - Bitwise AND (bitand)", "[ExpressionFormula][BitManipulation]") {
+  SECTION("Simple mask - extract low byte") {
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value, 0xFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x78);
+  }
+
+  SECTION("All bits set mask") {
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value, 0xFFFFFFFFFFFFFFFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x123456789ABCDEF0}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x123456789ABCDEF0);
+  }
+
+  SECTION("Zero mask") {
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value, 0x0)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0xFFFFFFFFFFFFFFFF}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0);
+  }
+
+  SECTION("Single bit mask") {
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value, 0x1)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0xFF}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x1);
+  }
+
+  SECTION("High bit mask") {
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value, 0x8000000000000000)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0xFFFFFFFFFFFFFFFF}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x8000000000000000);
+  }
+}
+
+TEST_CASE("ExpressionFormula - Bitwise OR (bitor)", "[ExpressionFormula][BitManipulation]") {
+  SECTION("Set low bits") {
+    auto formula_result = astl::ExpressionFormula::Create("bitor(value, 0xFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12340000}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x123400FF);
+  }
+
+  SECTION("OR with zero") {
+    auto formula_result = astl::ExpressionFormula::Create("bitor(value, 0x0)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x12345678);
+  }
+}
+
+TEST_CASE("ExpressionFormula - Bitwise XOR (bitxor)", "[ExpressionFormula][BitManipulation]") {
+  SECTION("Toggle bits") {
+    auto formula_result = astl::ExpressionFormula::Create("bitxor(value, 0xFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x00}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0xFF);
+  }
+
+  SECTION("XOR with same value gives zero") {
+    auto formula_result = astl::ExpressionFormula::Create("bitxor(value, 0x12345678)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0);
+  }
+}
+
+TEST_CASE("ExpressionFormula - Bitwise NOT (bitnot)", "[ExpressionFormula][BitManipulation]") {
+  SECTION("Invert all bits") {
+    auto formula_result = astl::ExpressionFormula::Create("bitnot(value)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x0}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0xFFFFFFFFFFFFFFFF);
+  }
+
+  SECTION("Invert with mask") {
+    auto formula_result = astl::ExpressionFormula::Create("bitand(bitnot(value), 0xFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0xF0}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x0F);
+  }
+}
+
+TEST_CASE("ExpressionFormula - Bit Shift Right (>>)", "[ExpressionFormula][BitManipulation]") {
+  SECTION("Shift right by 8") {
+    auto formula_result = astl::ExpressionFormula::Create("value >> 8");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x123456);
+  }
+
+  SECTION("Shift right by 0") {
+    auto formula_result = astl::ExpressionFormula::Create("value >> 0");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x12345678);
+  }
+
+  SECTION("Extract byte 1 (bits 8-15)") {
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value >> 8, 0xFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x56);
+  }
+}
+
+TEST_CASE("ExpressionFormula - Bit Shift Left (<<)", "[ExpressionFormula][BitManipulation]") {
+  SECTION("Shift left by 8") {
+    auto formula_result = astl::ExpressionFormula::Create("value << 8");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x1200);
+  }
+
+  SECTION("Shift left by 0") {
+    auto formula_result = astl::ExpressionFormula::Create("value << 0");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x12345678);
+  }
+}
+
+TEST_CASE("ExpressionFormula - Combined Bit Operations", "[ExpressionFormula][BitManipulation]") {
+  SECTION("Extract and shift nibble") {
+    // Extract bits 4-7 (second nibble)
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value >> 4, 0xF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0xABCD}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0xC);  // 0xABCD >> 4 = 0xABC, & 0xF = 0xC
+  }
+
+  SECTION("Combine shift and OR") {
+    auto formula_result = astl::ExpressionFormula::Create("bitor(value << 4, 0xF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0xA}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0xAF);  // 0xA << 4 = 0xA0, | 0xF = 0xAF
+  }
+
+  SECTION("Complex: extract middle byte") {
+    // Extract byte 2 from 0x12345678 -> should be 0x34
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value >> 16, 0xFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x34);
+  }
+
+  SECTION("Swap nibbles in a byte") {
+    // Swap nibbles: (value << 4) | (value >> 4) masked to byte
+    auto formula_result = astl::ExpressionFormula::Create("bitand(bitor(value << 4, value >> 4), 0xFF)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x21);  // 0x12 -> 0x21
   }
 }
 
@@ -243,14 +419,14 @@ TEST_CASE("ExpressionFormula - Basic Arithmetic", "[ExpressionFormula]") {
   }
 
   SECTION("Scaling factor") {
-    auto formula_result = astl::ExpressionFormula::Create("value * 0.001");
+    auto formula_result = astl::ExpressionFormula::Create("value / 1000");
     REQUIRE(formula_result.has_value());
     auto& formula = formula_result.value();
 
-    astl::AstlValue input{1000.0};
+    astl::AstlValue input{uint64_t{1000}};
     auto            result = formula.Apply(input);
     REQUIRE(result.has_value());
-    REQUIRE_THAT(std::get<double>(result->value), WithinAbs(1.0, 0.0001));
+    REQUIRE(std::get<uint64_t>(result->value) == 1);
   }
 }
 
@@ -336,7 +512,7 @@ TEST_CASE("ExpressionFormula - Complex Expressions", "[ExpressionFormula]") {
   }
 
   SECTION("Multiple operations combining shift and bitwise") {
-    auto formula_result = astl::ExpressionFormula::Create("bitand(value >> 8, 0xFF) * 0.001");
+    auto formula_result = astl::ExpressionFormula::Create("bitand(value >> 8, 0xFF) * 2");
     REQUIRE(formula_result.has_value());
     auto& formula = formula_result.value();
 
@@ -344,12 +520,12 @@ TEST_CASE("ExpressionFormula - Complex Expressions", "[ExpressionFormula]") {
     auto            result = formula.Apply(input);
     REQUIRE(result.has_value());
     // bitand(0x64000 >> 8, 0xFF) = bitand(0x640, 0xFF) = 0x40 = 64
-    // 64 * 0.001 = 0.064, rounded to 0 for integer
-    REQUIRE(std::get<uint64_t>(result->value) == 0);
+    // 64 * 2 = 128
+    REQUIRE(std::get<uint64_t>(result->value) == 128);
   }
 
   SECTION("Complex bitwise expression with parentheses") {
-    auto formula_result = astl::ExpressionFormula::Create("(bitand(value >> 4, 0xFF) - 50) * 0.5");
+    auto formula_result = astl::ExpressionFormula::Create("(bitand(value >> 4, 0xFF) - 50) / 2");
     REQUIRE(formula_result.has_value());
     auto& formula = formula_result.value();
 
@@ -357,7 +533,7 @@ TEST_CASE("ExpressionFormula - Complex Expressions", "[ExpressionFormula]") {
     auto            result = formula.Apply(input);
     REQUIRE(result.has_value());
     // bitand(0x640 >> 4, 0xFF) = bitand(0x64, 0xFF) = 0x64 = 100
-    // (100 - 50) * 0.5 = 50 * 0.5 = 25
+    // (100 - 50) / 2 = 50 / 2 = 25
     REQUIRE(std::get<uint64_t>(result->value) == 25);
   }
 }
@@ -436,12 +612,177 @@ TEST_CASE("BuildFormula - String Expression Support", "[BuildFormula]") {
   }
 
   SECTION("String expression in variant") {
-    nlohmann::json formula_json = "value * 0.001";
+    nlohmann::json formula_json = "value * 1000";
     auto           result       = astl::BuildFormula(std::optional<nlohmann::json>{formula_json});
     REQUIRE(result.has_value());
     REQUIRE(std::holds_alternative<astl::ExpressionFormula>(result.value()));
 
     auto desc = astl::GetFormulaDescription(result.value());
-    REQUIRE(desc == "value * 0.001");
+    REQUIRE(desc == "value * 1000");
+  }
+}
+
+TEST_CASE("ExpressionFormula - Bitwise operators instead of functions", "[ExpressionFormula][BitManipulation]") {
+  SECTION("& operator (bitwise AND)") {
+    auto formula_result = astl::ExpressionFormula::Create("value & 0xFF");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input1{uint64_t{0x1234}};
+    auto            result1 = formula.Apply(input1);
+    REQUIRE(result1.has_value());
+    REQUIRE(std::get<uint64_t>(result1->value) == 0x34);
+
+    astl::AstlValue input2{uint64_t{0xDEADBEEF}};
+    auto            result2 = formula.Apply(input2);
+    REQUIRE(result2.has_value());
+    REQUIRE(std::get<uint64_t>(result2->value) == 0xEF);
+
+    astl::AstlValue input3{uint64_t{0}};
+    auto            result3 = formula.Apply(input3);
+    REQUIRE(result3.has_value());
+    REQUIRE(std::get<uint64_t>(result3->value) == 0);
+  }
+
+  SECTION("| operator (bitwise OR)") {
+    auto formula_result = astl::ExpressionFormula::Create("value | 0xFF");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input1{uint64_t{0x100}};
+    auto            result1 = formula.Apply(input1);
+    REQUIRE(result1.has_value());
+    REQUIRE(std::get<uint64_t>(result1->value) == 0x1FF);
+
+    astl::AstlValue input2{uint64_t{0}};
+    auto            result2 = formula.Apply(input2);
+    REQUIRE(result2.has_value());
+    REQUIRE(std::get<uint64_t>(result2->value) == 0xFF);
+  }
+
+  SECTION("^ operator (bitwise XOR)") {
+    auto formula_result = astl::ExpressionFormula::Create("value ^ 0xFFFF");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input1{uint64_t{0xFFFF}};
+    auto            result1 = formula.Apply(input1);
+    REQUIRE(result1.has_value());
+    REQUIRE(std::get<uint64_t>(result1->value) == 0);
+
+    astl::AstlValue input2{uint64_t{0x1234}};
+    auto            result2 = formula.Apply(input2);
+    REQUIRE(result2.has_value());
+    REQUIRE(std::get<uint64_t>(result2->value) == 0xEDCB);
+  }
+
+  SECTION("Combined operators") {
+    auto formula_result = astl::ExpressionFormula::Create("(value & 0xFF00) | 0x42");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input1{uint64_t{0x1234}};
+    auto            result1 = formula.Apply(input1);
+    REQUIRE(result1.has_value());
+    REQUIRE(std::get<uint64_t>(result1->value) == 0x1242);
+
+    astl::AstlValue input2{uint64_t{0xABCD5678}};
+    auto            result2 = formula.Apply(input2);
+    REQUIRE(result2.has_value());
+    REQUIRE(std::get<uint64_t>(result2->value) == 0x5642);
+  }
+
+  SECTION("Shift and bitwise operators") {
+    auto formula_result = astl::ExpressionFormula::Create("(value >> 8) & 0xFF");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    astl::AstlValue input{uint64_t{0x12345678}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0x56);
+  }
+
+  SECTION("Complex expression with operators") {
+    auto formula_result = astl::ExpressionFormula::Create("((value >> 4) & 0xF) | ((value & 0xF) << 4)");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    // Swap nibbles: 0xAB -> 0xBA
+    astl::AstlValue input{uint64_t{0xAB}};
+    auto            result = formula.Apply(input);
+    REQUIRE(result.has_value());
+    REQUIRE(std::get<uint64_t>(result->value) == 0xBA);
+  }
+
+  SECTION("Mixed bit patterns - alternating bits with mask") {
+    // Test with patterns that include both zeros and ones
+    auto formula_result = astl::ExpressionFormula::Create("value & 0xFF000000000000FF");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    // 0xAAAAAAAAAAAAAAAA = 10101010... (alternating bits)
+    // Mask = 0xFF000000000000FF (first and last byte)
+    // Result = 0xAA000000000000AA
+    astl::AstlValue input1{uint64_t{0xAAAAAAAAAAAAAAAA}};
+    auto            result1 = formula.Apply(input1);
+    REQUIRE(result1.has_value());
+    REQUIRE(std::get<uint64_t>(result1->value) == 0xAA000000000000AA);
+
+    // 0x5555555555555555 = 01010101... (inverse alternating bits)
+    // Result = 0x5500000000000055
+    astl::AstlValue input2{uint64_t{0x5555555555555555}};
+    auto            result2 = formula.Apply(input2);
+    REQUIRE(result2.has_value());
+    REQUIRE(std::get<uint64_t>(result2->value) == 0x5500000000000055);
+
+    // All ones
+    astl::AstlValue input3{uint64_t{0xFFFFFFFFFFFFFFFF}};
+    auto            result3 = formula.Apply(input3);
+    REQUIRE(result3.has_value());
+    REQUIRE(std::get<uint64_t>(result3->value) == 0xFF000000000000FF);
+  }
+
+  SECTION("Mixed bit patterns - OR with alternating pattern") {
+    auto formula_result = astl::ExpressionFormula::Create("value | 0xF0F0F0F0F0F0F0F0");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    // 0x0F0F0F0F0F0F0F0F OR 0xF0F0F0F0F0F0F0F0 = 0xFFFFFFFFFFFFFFFF
+    astl::AstlValue input1{uint64_t{0x0F0F0F0F0F0F0F0F}};
+    auto            result1 = formula.Apply(input1);
+    REQUIRE(result1.has_value());
+    REQUIRE(std::get<uint64_t>(result1->value) == 0xFFFFFFFFFFFFFFFF);
+
+    // 0x1234567890ABCDEF OR 0xF0F0F0F0F0F0F0F0
+    astl::AstlValue input2{uint64_t{0x1234567890ABCDEF}};
+    auto            result2 = formula.Apply(input2);
+    REQUIRE(result2.has_value());
+    REQUIRE(std::get<uint64_t>(result2->value) == 0xF2F4F6F8F0FBFDFF);
+  }
+
+  SECTION("Mixed bit patterns - XOR with pattern") {
+    auto formula_result = astl::ExpressionFormula::Create("value ^ 0xAAAAAAAAAAAAAAAA");
+    REQUIRE(formula_result.has_value());
+    auto& formula = formula_result.value();
+
+    // XOR with alternating pattern flips bits selectively
+    // 0xAAAAAAAAAAAAAAAA XOR 0xAAAAAAAAAAAAAAAA = 0
+    astl::AstlValue input1{uint64_t{0xAAAAAAAAAAAAAAAA}};
+    auto            result1 = formula.Apply(input1);
+    REQUIRE(result1.has_value());
+    REQUIRE(std::get<uint64_t>(result1->value) == 0);
+
+    // 0x5555555555555555 XOR 0xAAAAAAAAAAAAAAAA = 0xFFFFFFFFFFFFFFFF
+    astl::AstlValue input2{uint64_t{0x5555555555555555}};
+    auto            result2 = formula.Apply(input2);
+    REQUIRE(result2.has_value());
+    REQUIRE(std::get<uint64_t>(result2->value) == 0xFFFFFFFFFFFFFFFF);
+
+    // Flips specific bits
+    astl::AstlValue input3{uint64_t{0xFF00FF00FF00FF00}};
+    auto            result3 = formula.Apply(input3);
+    REQUIRE(result3.has_value());
+    REQUIRE(std::get<uint64_t>(result3->value) == 0x55AA55AA55AA55AA);
   }
 }

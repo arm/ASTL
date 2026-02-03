@@ -33,43 +33,39 @@
 namespace astl {
 
 /**
- * @brief Formula that evaluates mathematical expressions using tinyexpr++.
+ * @brief Formula that evaluates mathematical expressions using tinyexpr++ (uint64_t mode).
  *
- * This formula parses and evaluates string expressions like "bitand(value >> 8, 0xFF)" or "(value - 50) * 0.5".
+ * This formula parses and evaluates string expressions like "(value >> 8) & 0xFF" or "value * 2".
  * The expression must use 'value' as the variable name for the input value.
  * - @todo ASTL-287: Support Formula processing involving multiple counters.
  *
- * Supports standard mathematical operations:
+ * **UINT64_T MODE:**
+ * TinyExpr++ is compiled with TE_UINT64 and TE_BITWISE_OPERATORS, providing exact uint64_t arithmetic
+ * without floating-point conversion. All operations preserve full 64-bit precision.
+ *
+ * Supported operations:
  * - Arithmetic: +, -, *, /, %
- * - Shift operators: >> (right shift), << (left shift) - these are native operators
- * - Bitwise functions: bitand(), bitor(), bitxor(), bitnot(), bitlshift(), bitrshift()
- * - Logical operators: && (and), || (or), & (and), | (or) - NOTE: & and | are LOGICAL, not bitwise!
- * - Mathematical functions: abs, sin, cos, sqrt, pow, etc.
+ * - Bitwise: & (AND), | (OR), ^ (XOR), ~ (NOT)
+ * - Shift: >> (right shift), << (left shift)
+ * - Logical: && (and), || (or)
+ * - Comparison: ==, !=, <, <=, >, >=
  * - Parentheses for grouping
  *
- * **IMPORTANT BITWISE vs LOGICAL**:
- * - For bitwise operations on integers, use: bitand(), bitor(), bitxor(), bitnot()
- * - The & and | symbols are for LOGICAL (boolean) operations, not bitwise!
- * - Shift operators >> and << ARE native operators (not functions)
- *
- * **IMPORTANT PRECISION LIMITATION:**
- * Tinyexpr++ uses IEEE 754 double precision internally, which can only represent integers
- * exactly up to 2^53 - 1 (9,007,199,254,740,991). For uint64_t values exceeding this:
- * - Lower bits may be lost during conversion to double
- * - Bitwise operations may produce incorrect results
- * - A warning will be logged when this occurs
- * - @todo ASTL-286: Add uint64_t support for TinyExpr in ASTL.
- *
- * **Recommended Usage:**
- * - For values ≤ 2^53: ✅ Safe for all operations
- * - For values > 2^53: ⚠️ Extract bit fields in C++ code first, then apply formula
- * - For full uint64_t range: Consider pre-processing in integer domain
+ * **NOTE ON FLOATING-POINT:**
+ * Floating-point literals (e.g., 0.001, 0.5) will be truncated to integers, causing precision loss.
+ * This happens because TinyExpr++ operates in uint64_t mode and converts all values to integers.
+ * Use integer operations instead:
+ * - ❌ "value * 0.001" → truncates 0.001 to 0, resulting in "value * 0" = 0
+ * - ✅ "value / 1000" → correct integer division
+ * - ❌ "value * 0.5" → truncates 0.5 to 0, resulting in "value * 0" = 0
+ * - ✅ "value / 2" → correct integer division (equivalent to multiplying by 0.5)
  *
  * Example expressions:
- * - "value * 0.001"                              // Scale by factor
- * - "bitand(value >> 8, 0xFF)"                   // Extract byte at position 8-15 (shift is native, bitand is function)
- * - "(value - 273.15) * 0.1"                     // Offset and scale
- * - "(bitand(value >> 4, 0xFF) - 50) * 0.5"      // Complex transformation: shift, mask, offset, scale
+ * - "value * 2"                                  // Integer multiply
+ * - "value / 1000"                               // Integer divide (instead of * 0.001)
+ * - "(value >> 8) & 0xFF"                        // Extract byte at position 8-15
+ * - "((value >> 4) & 0xF) | ((value & 0xF) << 4)" // Swap nibbles
+ * - "(value & 0xFF00) | 0x42"                    // Mask and set bits
  */
 class ExpressionFormula {
  public:

@@ -171,32 +171,32 @@ For more details on metrics declarations and platform-specific scmi spec, see [d
 ASTL supports flexible data transformation through formulas that can be applied to raw metric values. Formulas allow you to:
 
 - Extract bit fields from raw register values
-- Apply scaling factors and unit conversions
-- Perform complex mathematical transformations
+- Apply integer scaling and transformations
+- Perform complex mathematical operations
 - Combine bitwise and arithmetic operations
 
 #### Formula Types
 
-**String Expressions** (using [tinyexpr++](https://github.com/Blake-Madden/tinyexpr-plusplus)):
+**String Expressions** (using [tinyexpr++](https://github.com/Blake-Madden/tinyexpr-plusplus) in uint64_t mode):
 Express transformations as mathematical expressions using the variable name `value`:
 
 ```json
 {
   "metrics": {
-    "temperature": {
-      "register": "temp_sensor_raw",
-      "unit": "celsius",
-      "formula": "(value - 273.15) * 0.1"
-    },
-    "power_milliwatts": {
-      "register": "power_sensor",
-      "unit": "milliwatts",
-      "formula": "value * 0.001"
-    },
-    "status_bits": {
-      "register": "device_status",
+    "scaled_value": {
+      "register": "sensor_raw",
       "unit": "none",
-      "formula": "bitand(value >> 8, 0xFF)"
+      "formula": "value / 1000"
+    },
+    "power_watts": {
+      "register": "power_sensor",
+      "unit": "watts",
+      "formula": "value / 1000"
+    },
+    "combined_bits": {
+      "register": "control_reg",
+      "unit": "none",
+      "formula": "(value & 0xFF00) | 0x42"
     }
   }
 }
@@ -205,15 +205,21 @@ Express transformations as mathematical expressions using the variable name `val
 **Supported Operations:**
 
 - Arithmetic: `+`, `-`, `*`, `/`, `%`
-- Shift operators: `>>` (right shift), `<<` (left shift)
-- Bitwise functions: `bitand()`, `bitor()`, `bitxor()`, `bitnot()`
-- Mathematical functions: `abs()`, `floor()`, `ceil()`, `sqrt()`, `pow()`, `sin()`, `cos()`, `exp()`, `log()`, etc.
-- Logical operators: `&&`, `||`, `!`
+- Bitwise: `&` (AND), `|` (OR), `^` (XOR), `~` (NOT)
+- Shift: `>>` (right shift), `<<` (left shift)
+- Logical: `&&`, `||`, `!`
 - Comparison: `<`, `>`, `<=`, `>=`, `==`, `!=`
 - Parentheses for grouping
 
-> **Note:** The `&` and `|` symbols perform **logical** (boolean) operations, not bitwise operations. For bitwise operations on integers, use the `bitand()`, `bitor()`, `bitxor()` functions.
-> For detailed expression syntax and all available functions, see the [tinyexpr++ documentation](https://github.com/Blake-Madden/tinyexpr-plusplus#functions).
+**UINT64_T Mode:**
+TinyExpr++ is compiled with `TE_UINT64` and `TE_BITWISE_OPERATORS`, providing exact uint64_t arithmetic without floating-point conversion. All operations preserve full 64-bit precision.
+
+**Important Notes:**
+
+- **Floating-point literals** (e.g., `0.001`, `0.5`) will be truncated to integers, causing precision loss
+- ❌ **Incorrect**: `"value * 0.001"` → truncates `0.001` to `0`, resulting in `value * 0 = 0`
+- ✅ **Correct**: `"value / 1000"` → proper integer division
+- For more details on expression syntax, see the [tinyexpr++ documentation](https://github.com/Blake-Madden/tinyexpr-plusplus#functions)
 
 ---
 

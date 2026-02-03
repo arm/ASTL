@@ -68,10 +68,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
                               PROPERTIES COMPILE_OPTIONS "-Wno-conversion")
 endif()
 
-# Enable long double for tinyexpr++ for maximum integer precision Platform/compiler dependent: long double can preserve
-# the full uint64_t range.
-target_compile_definitions(${LIBRARY_NAME} PRIVATE TE_LONG_DOUBLE)
-message(STATUS "Using TE_LONG_DOUBLE for tinyexpr++ (precision depends on platform)")
+# Enable uint64 mode for tinyexpr++ for exact integer arithmetic Enable bitwise operators so & and | work as bitwise
+# operators instead of logical operators
+target_compile_definitions(${LIBRARY_NAME} PRIVATE TE_UINT64 TE_BITWISE_OPERATORS)
+message(STATUS "Using TE_UINT64 for tinyexpr++ (exact uint64_t arithmetic)")
+message(STATUS "Using TE_BITWISE_OPERATORS for tinyexpr++ (& and | are bitwise)")
 
 if(ASTL_INCLUDE_LIBSENSORS)
   target_sources(

@@ -26,7 +26,6 @@
 
 #include "astl/astl_errors.h"
 #include "common/astl_value.hpp"
-#include "metric/bit_mask_formula.hpp"
 #include "metric/expression_formula.hpp"
 #include "metric/formula.hpp"
 
@@ -51,12 +50,12 @@ static_assert(Formula<IdentityFormula>, "IdentityFormula does not satisfy Formul
 /**
  * @brief Variant type that can hold any supported formula type.
  */
-using AnyFormula = std::variant<IdentityFormula, BitMaskFormula, ExpressionFormula>;
+using AnyFormula = std::variant<IdentityFormula, ExpressionFormula>;
 
 /**
  * @brief Apply a formula (from the variant) to a value.
  *
- * @param formula The formula to apply (IdentityFormula, BitMaskFormula, or ExpressionFormula)
+ * @param formula The formula to apply (IdentityFormula or ExpressionFormula)
  * @param value The value to transform
  * @return std::expected<AstlValue, astl_status_code> The transformed value or an error
  */
