@@ -93,6 +93,37 @@ struct std::formatter<T> : std::formatter<std::string> {
 
 namespace astl {
 
+namespace detail {
+
+/* a concept to ensure that types can be logged with << as a fallback for std::format_error */
+template <typename T>
+concept Streamable = requires(std::ostream& out_stream, T const& val) { out_stream << val; };
+
+/* best effort logger for std::format_error */
+template <typename T>
+void AppendArg(std::ostringstream& oss, T const& arg_val) {
+  if constexpr (Streamable<T>) {
+    oss << arg_val;
+  } else {
+    oss << "<non-streamable>";
+  }
+}
+
+/* best effort logger for std::format_error */
+template <typename... Args>
+std::string DumpArgs(Args const&... args) {
+  std::ostringstream oss;
+  bool               first = true;
+
+  // allow dead code (first is always true for zero,one args specialization)
+  // coverity[DEADCODE]
+  ((oss << (first ? "" : ", "), first = false, AppendArg(oss, args)), ...);
+
+  return oss.str();
+}
+
+}  // namespace detail
+
 /* @brief Predefined log level supported by the astl logger
  * The set is separate from the spdlog levels to abstract the use of spdlog library
  * All verbose modes automatically activate all lesser verbose modes when used
@@ -270,8 +301,16 @@ class Logger {
     if (source_loc_enabled) {
       spdlog_location = {location.file_name(), static_cast<int>(location.line()), location.function_name()};
     }
-    auto formatted_text = std::format(log_text, std::forward<Args>(args)...);
-    _logger->log(spdlog_location, GetSpdLogLevel(log_level), std::move(formatted_text));
+    try {
+      auto formatted_text = std::format(log_text, std::forward<Args>(args)...);
+      _logger->log(spdlog_location, GetSpdLogLevel(log_level), std::move(formatted_text));
+    } catch (const std::format_error& e) {
+      std::ostringstream oss;
+      oss << "LOG FORMAT ERROR: " << e.what() << "\n"
+          << "  Format string: \"" << log_text.get() << "\"\n"
+          << "  Arguments: [" << detail::DumpArgs(std::forward<Args>(args)...) << "]\n";
+      _logger->log(spdlog_location, GetSpdLogLevel(log_level), oss.str());
+    }
   }
 
   /* @brief main logging function that invokes the spdlog logger log function without source location
@@ -281,8 +320,16 @@ class Logger {
    */
   template <typename... Args>
   void Log(astl::LogLevel log_level, std::format_string<Args...> log_text, Args&&... args) {
-    auto formatted_text = std::format(log_text, std::forward<Args>(args)...);
-    _logger->log(GetSpdLogLevel(log_level), std::move(formatted_text));
+    try {
+      auto formatted_text = std::format(log_text, std::forward<Args>(args)...);
+      _logger->log(GetSpdLogLevel(log_level), std::move(formatted_text));
+    } catch (const std::format_error& e) {
+      std::ostringstream oss;
+      oss << "LOG FORMAT ERROR: " << e.what() << "\n"
+          << "  Format string: \"" << log_text.get() << "\"\n"
+          << "  Arguments: [" << detail::DumpArgs(std::forward<Args>(args)...) << "]\n";
+      _logger->log(GetSpdLogLevel(log_level), oss.str());
+    }
   }
 
   /* @brief logging function that takes pre-formatted or runtime text, and performs no formatting
@@ -487,6 +534,8 @@ class Logger {
 
     std::vector<spdlog::sink_ptr> sinks;
 
+    std::vector<std::string> spdlog_initialization_errors;
+
     // If log level is set by user, then either we want to log to the console, to the user specified file or to both
     if (spdlog_level != spdlog::level::off) {
       /* create a console sink if we need to log to the console */
@@ -497,9 +546,14 @@ class Logger {
 
       /* create a file sink to log to the specified file */
       if (!log_name.empty()) {
-        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_name, true);
-        file_sink->set_level(spdlog_level); /* file sink log level */
-        sinks.push_back(file_sink);
+        try {
+          auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_name, true);
+          file_sink->set_level(spdlog_level); /* file sink log level */
+          sinks.push_back(file_sink);
+        } catch (const spdlog::spdlog_ex& ex) {
+          spdlog_initialization_errors.push_back(std::format(
+              "Logger initialization failed: could not create file sink for log file '{}': {}", log_name, ex.what()));
+        }
       }
     } else { /* log level is off, set up the default console sink that is off */
       sinks.push_back(console_sink);
@@ -512,6 +566,13 @@ class Logger {
     _logger->flush_on(spdlog_level);   // Set level for flushing, the higher the level the more expensive flushing gets
     default_formatting ? SetDefaultFormatting() : ClearFormatting();
     spdlog::register_logger(_logger);
+
+    // Log any initialization errors, such as file sink creation failures
+    if (!spdlog_initialization_errors.empty()) {
+      for (const auto& error_msg : spdlog_initialization_errors) {
+        _logger->error(error_msg);
+      }
+    }
   }
 
  public:

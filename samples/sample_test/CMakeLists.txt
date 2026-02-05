@@ -17,10 +17,5 @@ add_test(NAME SampleTest COMMAND ${CMAKE_BINARY_DIR}/bin/sample_test)
 add_test(NAME SampleTest_Immediate COMMAND ${CMAKE_BINARY_DIR}/bin/sample_test --immediate)
 add_test(NAME SampleTest_Interval COMMAND ${CMAKE_BINARY_DIR}/bin/sample_test --interval=50)
 set_tests_properties(
-  SampleTest
-  SampleTest_Immediate
-  SampleTest_Interval
-  PROPERTIES
-    LABELS "integration;sample"
-    ENVIRONMENT "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config"
-)
+  SampleTest SampleTest_Immediate SampleTest_Interval PROPERTIES LABELS "integration;sample" ENVIRONMENT
+                                                                 "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")

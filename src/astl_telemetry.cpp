@@ -236,22 +236,29 @@ auto astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) -
   if (!target_span) {
     return target_span.error();
   }
-  return std::visit(
-      [&available_targets, target_count](auto&& target_properties) {
-        // we have some span of some version of targets here - so dispatch to the overloaded GetProperties
-        // that supports that version
-        for (size_t i = 0; i < std::min(available_targets.size(), target_properties.size()); ++i) {
-          auto result = available_targets[i]->GetProperties(&target_properties[i]);
-          if (result != ASTL_STATUS_SUCCESS) {
-            *target_count = static_cast<uint32_t>(i);
-            return result;
-          }
-        }
-        *target_count = static_cast<uint32_t>(available_targets.size());
-        return available_targets.size() == target_properties.size() ? ASTL_STATUS_SUCCESS
-                                                                    : ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED;
-      },
-      *target_span);
+
+  // lambda for std::visit to run on the span of variant-versioned targets
+  const auto get_props_fn = [&available_targets, target_count](auto&& target_properties) {
+    // we have some span of some version of targets here - so dispatch to the overloaded GetProperties
+    // that supports that version
+    for (size_t i = 0; i < std::min(available_targets.size(), target_properties.size()); ++i) {
+      auto result = available_targets[i]->GetProperties(&target_properties[i]);
+      if (result != ASTL_STATUS_SUCCESS) {
+        *target_count = static_cast<uint32_t>(i);
+        return result;
+      }
+    }
+    *target_count = static_cast<uint32_t>(available_targets.size());
+    return available_targets.size() == target_properties.size() ? ASTL_STATUS_SUCCESS
+                                                                : ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED;
+  };
+
+  try {
+    return std::visit(get_props_fn, *target_span);
+  } catch (const std::bad_variant_access& e) {
+    ASTL_LOG_ERROR("astlGetTargets: bad_variant_access exception: {}", e.what());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
 }
 
 /***********************************************************************************
