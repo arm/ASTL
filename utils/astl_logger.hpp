@@ -565,13 +565,16 @@ class Logger {
     _logger->set_level(spdlog_level);  // Set the logger log level
     _logger->flush_on(spdlog_level);   // Set level for flushing, the higher the level the more expensive flushing gets
     default_formatting ? SetDefaultFormatting() : ClearFormatting();
-    spdlog::register_logger(_logger);
+    try {
+      spdlog::register_logger(_logger);
+    } catch (const spdlog::spdlog_ex& ex) {
+      spdlog_initialization_errors.push_back(
+          std::format("Logger initialization failed: could not register logger with spdlog: {}", ex.what()));
+    }
 
     // Log any initialization errors, such as file sink creation failures
-    if (!spdlog_initialization_errors.empty()) {
-      for (const auto& error_msg : spdlog_initialization_errors) {
-        _logger->error(error_msg);
-      }
+    for (const auto& error_msg : spdlog_initialization_errors) {
+      std::cerr << "SPDLOG registration error: " << error_msg << "\n";
     }
   }
 

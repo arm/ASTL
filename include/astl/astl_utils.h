@@ -28,4 +28,12 @@
 #  endif
 #endif
 
+#ifdef __cplusplus
+// if we're creating the C++ implementation of the API, declare API functions as noexcept
+// (mainly so static analyzers will warn if the implementation has uncaught exceptions)
+#  define ASTL_API_NOEXCEPT noexcept
+#else
+#  define ASTL_API_NOEXCEPT
+#endif
+
 #endif  // ASTL_UTILS_H_

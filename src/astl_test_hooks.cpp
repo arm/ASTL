@@ -5,7 +5,7 @@
 // Swaps out the current orchestrator's raw pointer and replaces it with a new raw pointer.
 // For use only in tests, mostly tests covering the C -> C++ wrapper layer
 ASTL_API auto astlInjectTestOrchestrator(astl_test_orchestrator_t  new_orchestrator,
-                                         astl_test_orchestrator_t* original_orchestrator) -> astl_status_code {
+                                         astl_test_orchestrator_t* original_orchestrator) noexcept -> astl_status_code {
   if (original_orchestrator == nullptr) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }

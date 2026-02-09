@@ -38,14 +38,14 @@ typedef struct _astl_version_t {
  *
  * @return c-string with compiled version of Arm SoC Telemetry Library
  */
-ASTL_API const char* astlVersionString();
+ASTL_API const char* astlVersionString() ASTL_API_NOEXCEPT;
 
 /**
  * @brief Returns the compiled version of Arm SoC Telemetry Library
  *
  * @return astl_version struct with compiled version of Arm SoC Telemetry Library
  */
-ASTL_API astl_version_t astlVersion();
+ASTL_API astl_version_t astlVersion() ASTL_API_NOEXCEPT;
 
 #if defined(__cplusplus)
 }

@@ -95,7 +95,7 @@ typedef struct _astl_target_properties_t {
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlGetTargetCount(uint32_t* target_count);
+ASTL_API astl_status_code astlGetTargetCount(uint32_t* target_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Get properties of all targets on the system on which collection can be done
@@ -112,7 +112,7 @@ ASTL_API astl_status_code astlGetTargetCount(uint32_t* target_count);
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count);
+ASTL_API astl_status_code astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************               DATA TYPES               *********************
@@ -245,7 +245,8 @@ typedef struct _astl_counter_properties_t {
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlGetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_count);
+ASTL_API astl_status_code astlGetCounterCount(astl_target_handle_t target_handle,
+                                              uint32_t*            counter_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Get properties of all counters that can be collected on the specified target
@@ -266,7 +267,8 @@ ASTL_API astl_status_code astlGetCounterCount(astl_target_handle_t target_handle
  * @return astl_status_code
  */
 ASTL_API astl_status_code astlGetCounters(astl_target_handle_t       target_handle_handle,
-                                          astl_counter_properties_t* counters, uint32_t* counter_count);
+                                          astl_counter_properties_t* counters,
+                                          uint32_t*                  counter_count) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************              METRIC                    *********************
@@ -355,7 +357,8 @@ typedef struct _astl_metric_properties_t {
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlGetMetricCount(astl_target_handle_t target_handle_handle, uint32_t* metric_count);
+ASTL_API astl_status_code astlGetMetricCount(astl_target_handle_t target_handle_handle,
+                                             uint32_t*            metric_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Get properties of all metrics that can be collected on the specified target
@@ -376,7 +379,7 @@ ASTL_API astl_status_code astlGetMetricCount(astl_target_handle_t target_handle_
  * @return astl_status_code
  */
 ASTL_API astl_status_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t* metric_buffer,
-                                         uint32_t* metric_count);
+                                         uint32_t* metric_count) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************              METRIC GROUPS             *********************
@@ -427,7 +430,8 @@ typedef struct _astl_metric_group_properties_t {
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlGetMetricGroupCount(astl_target_handle_t target_handle, uint32_t* metric_group_count);
+ASTL_API astl_status_code astlGetMetricGroupCount(astl_target_handle_t target_handle,
+                                                  uint32_t*            metric_group_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Get properties of all metric groups defined for the specified target
@@ -448,7 +452,7 @@ ASTL_API astl_status_code astlGetMetricGroupCount(astl_target_handle_t target_ha
  */
 ASTL_API astl_status_code astlGetMetricGroups(astl_target_handle_t            target_handle,
                                               astl_metric_group_properties_t* metric_groups,
-                                              uint32_t*                       metric_group_count);
+                                              uint32_t*                       metric_group_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Get properties of all metrics that can be collected on the specified target that are part
@@ -473,7 +477,7 @@ ASTL_API astl_status_code astlGetMetricGroups(astl_target_handle_t            ta
  */
 ASTL_API astl_status_code astlGetMetricGroupMetrics(astl_target_handle_t                  target_handle,
                                                     const astl_metric_group_properties_t* metric_group,
-                                                    astl_metric_properties_t*             metrics);
+                                                    astl_metric_properties_t*             metrics) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************              COLLECTION                *********************
@@ -542,7 +546,7 @@ typedef struct _astl_collection_parameters_t {
 ASTL_API astl_status_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t                target_handle,
                                                                  const astl_collection_parameters_t* collection_params,
                                                                  const astl_counter_handle_t*        counter_handles,
-                                                                 uint32_t                            counter_count);
+                                                                 uint32_t counter_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Configure a counter collection for all targets on which the specified counters can be
@@ -563,7 +567,7 @@ ASTL_API astl_status_code astlConfigureCounterCollectionOnTarget(astl_target_han
  */
 ASTL_API astl_status_code astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,
                                                          const astl_counter_handle_t*        counter_handles,
-                                                         uint32_t                            counter_count);
+                                                         uint32_t counter_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Configure a metric collection for a specific target
@@ -587,7 +591,7 @@ ASTL_API astl_status_code astlConfigureCounterCollection(const astl_collection_p
 astl_status_code ASTL_API astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
                                                                 astl_collection_parameters_t* collection_params,
                                                                 astl_metric_handle_t*         metric_handles,
-                                                                uint32_t                      metric_count);
+                                                                uint32_t metric_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Configure a metric collection for all targets on which the specified metrics can be
@@ -607,7 +611,8 @@ astl_status_code ASTL_API astlConfigureMetricCollectionOnTarget(astl_target_hand
  * @return astl_status_code
  */
 ASTL_API astl_status_code astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
-                                                        astl_metric_handle_t* metric_handles, uint32_t metric_count);
+                                                        astl_metric_handle_t*         metric_handles,
+                                                        uint32_t                      metric_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Configure a metric group collection for a specific target
@@ -631,7 +636,7 @@ ASTL_API astl_status_code astlConfigureMetricCollection(astl_collection_paramete
 ASTL_API astl_status_code astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          target_handle,
                                                                      astl_collection_parameters_t* collection_params,
                                                                      astl_metric_group_handle_t*   metric_group_handles,
-                                                                     uint32_t                      metric_group_count);
+                                                                     uint32_t metric_group_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Configure a metric group collection for all targets on which the specified metrics can be
@@ -652,7 +657,7 @@ ASTL_API astl_status_code astlConfigureMetricGroupCollectionOnTarget(astl_target
  */
 ASTL_API astl_status_code astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
                                                              astl_metric_group_handle_t*   metric_group_handles,
-                                                             uint32_t                      metric_group_count);
+                                                             uint32_t metric_group_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Do an immediate sample capture of configured counters or metrics on a specific target
@@ -662,14 +667,14 @@ ASTL_API astl_status_code astlConfigureMetricGroupCollection(astl_collection_par
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlReadImmediateOnTarget(astl_target_handle_t target_handle);
+ASTL_API astl_status_code astlReadImmediateOnTarget(astl_target_handle_t target_handle) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Do an immediate sample capture of configured counters or metrics on all configured targets
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlReadImmediate();
+ASTL_API astl_status_code astlReadImmediate() ASTL_API_NOEXCEPT;
 
 /**
  * @brief Start telemetry collection on a specific target
@@ -679,14 +684,14 @@ ASTL_API astl_status_code astlReadImmediate();
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlStartCollectionOnTarget(astl_target_handle_t target_handle);
+ASTL_API astl_status_code astlStartCollectionOnTarget(astl_target_handle_t target_handle) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Start telemetry collection on all targets
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlStartCollection();
+ASTL_API astl_status_code astlStartCollection() ASTL_API_NOEXCEPT;
 
 /**
  * @brief Pause telemetry collection on a specific target
@@ -696,14 +701,14 @@ ASTL_API astl_status_code astlStartCollection();
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlPauseCollectionOnTarget(astl_target_handle_t target_handle);
+ASTL_API astl_status_code astlPauseCollectionOnTarget(astl_target_handle_t target_handle) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Pause telemetry collection on all targets
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlPauseCollection();
+ASTL_API astl_status_code astlPauseCollection() ASTL_API_NOEXCEPT;
 
 /**
  * @brief Resume telemetry collection on a specific target
@@ -713,14 +718,14 @@ ASTL_API astl_status_code astlPauseCollection();
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlResumeCollectionOnTarget(astl_target_handle_t target_handle);
+ASTL_API astl_status_code astlResumeCollectionOnTarget(astl_target_handle_t target_handle) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Resume telemetry collection on all targets
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlResumeCollection();
+ASTL_API astl_status_code astlResumeCollection() ASTL_API_NOEXCEPT;
 
 /**
  * @brief Stop telemetry collection on a specific target
@@ -730,14 +735,14 @@ ASTL_API astl_status_code astlResumeCollection();
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlStopCollectionOnTarget(astl_target_handle_t target_handle);
+ASTL_API astl_status_code astlStopCollectionOnTarget(astl_target_handle_t target_handle) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Stop telemetry collection on all targets
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlStopCollection();
+ASTL_API astl_status_code astlStopCollection() ASTL_API_NOEXCEPT;
 
 /*** COLLECTED COUNTER SAMPLES ***/
 /**
@@ -755,7 +760,7 @@ ASTL_API astl_status_code astlStopCollection();
  */
 ASTL_API astl_status_code astlGetCounterSampleCountOnTarget(astl_target_handle_t  target_handle,
                                                             astl_counter_handle_t counter_handle,
-                                                            uint32_t*             sample_count);
+                                                            uint32_t*             sample_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Get the samples collected for specific counter on a specific target
@@ -779,7 +784,8 @@ ASTL_API astl_status_code astlGetCounterSampleCountOnTarget(astl_target_handle_t
  */
 ASTL_API astl_status_code astlGetCounterSamplesOnTarget(astl_target_handle_t   target_handle,
                                                         astl_counter_handle_t  counter_handle,
-                                                        astl_counter_sample_t* samples, uint32_t* sample_count);
+                                                        astl_counter_sample_t* samples,
+                                                        uint32_t*              sample_count) ASTL_API_NOEXCEPT;
 
 /*** COLLECTED METRIC SAMPLES ***/
 /**
@@ -796,7 +802,8 @@ ASTL_API astl_status_code astlGetCounterSamplesOnTarget(astl_target_handle_t   t
  * @return astl_status_code
  */
 ASTL_API astl_status_code astlGetMetricSampleCountOnTarget(astl_target_handle_t target_handle,
-                                                           astl_metric_handle_t metric_handle, uint32_t* sample_count);
+                                                           astl_metric_handle_t metric_handle,
+                                                           uint32_t*            sample_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Get the samples collected for specific metric on a specific target
@@ -820,7 +827,8 @@ ASTL_API astl_status_code astlGetMetricSampleCountOnTarget(astl_target_handle_t 
  */
 ASTL_API astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t  target_handle,
                                                        astl_metric_handle_t  metric_handle,
-                                                       astl_metric_sample_t* samples, uint32_t* sample_count);
+                                                       astl_metric_sample_t* samples,
+                                                       uint32_t*             sample_count) ASTL_API_NOEXCEPT;
 
 #if defined(__cplusplus)
 }

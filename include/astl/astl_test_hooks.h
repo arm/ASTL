@@ -35,6 +35,6 @@ typedef void* astl_test_orchestrator_t;
  * @return ASTL_STATUS_SUCCESS on success or an error status code on failure.
  */
 ASTL_API astl_status_code astlInjectTestOrchestrator(astl_test_orchestrator_t  new_orchestrator,
-                                                     astl_test_orchestrator_t* original_orchestrator);
+                                                     astl_test_orchestrator_t* original_orchestrator) ASTL_API_NOEXCEPT;
 
 #endif  // INCLUDE_ASTL_TEST_HOOKS_H_

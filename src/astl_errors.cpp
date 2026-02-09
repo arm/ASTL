@@ -3,7 +3,7 @@
 
 #include "astl/astl.h"
 
-auto astlStatusString(astl_status_code status) -> const char* {
+auto astlStatusString(astl_status_code status) noexcept -> const char* {
   std::string_view name = magic_enum::enum_name(status);
   // ignore the first part of the name, which is "ASTL_STATUS_";
   constexpr size_t prefix_length = 12;  // length of "ASTL_STATUS_";

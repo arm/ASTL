@@ -127,7 +127,7 @@ typedef enum _astl_status_code {
  *
  * @return c-string of astl status code
  */
-ASTL_API const char* astlStatusString(astl_status_code status);
+ASTL_API const char* astlStatusString(astl_status_code status) ASTL_API_NOEXCEPT;
 
 #if defined(__cplusplus)
 }

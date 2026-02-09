@@ -48,7 +48,12 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
     proto_sample->set_operation_id(sample.operation_id);
     proto_sample->set_timestamp_us(sample.timestamp.time_since_epoch().count());
     astl::protobuf::AstlValue* proto_value = proto_sample->mutable_value();
-    std::visit([&](const auto& val) { detail::SetOneOf(*proto_value, val); }, sample.value.value);
+    try {
+      std::visit([&](const auto& val) { detail::SetOneOf(*proto_value, val); }, sample.value.value);
+    } catch (const std::bad_variant_access& ex) {
+      ASTL_LOG_ERROR("Failed to serialize AstlValue in RawSample: {}", ex.what());
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
   }
 
   if (!SerializeDelimitedToOstream(batch, &output_stream)) {
