@@ -58,27 +58,27 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
       {.count        = 2,  // AP0 and AP1
        .start_offset = 0,
        .block_size   = 64,
-       .members      = {{.base_de_id    = 0x1c71,
-                         .name          = "C1_RESIDENCY_COUNTER",
-                         .component     = "AP",
-                         .description   = "C1 residency",
-                         .unit          = "ticks",
-                         .unit_exponent = 0,
-                         .rel_offset    = 0x00},
-                        {.base_de_id    = 0x1d82,
-                         .name          = "C3_RESIDENCY_COUNTER",
-                         .component     = "AP",
-                         .description   = "C3 residency",
-                         .unit          = "ticks",
-                         .unit_exponent = 0,
-                         .rel_offset    = 0x10},
-                        {.base_de_id    = 0x1e93,
-                         .name          = "C6_RESIDENCY_COUNTER",
-                         .component     = "AP",
-                         .description   = "C6 residency",
-                         .unit          = "ticks",
-                         .unit_exponent = 0,
-                         .rel_offset    = 0x20}}}
+       .members      = {{.base_de_id           = 0x1c71,
+                         .name                 = "C1_RESIDENCY_COUNTER",
+                         .component            = "AP",
+                         .description          = "C1 residency",
+                         .unit                 = "ticks",
+                         .base10_unit_modifier = 0,
+                         .rel_offset           = 0x00},
+                        {.base_de_id           = 0x1d82,
+                         .name                 = "C3_RESIDENCY_COUNTER",
+                         .component            = "AP",
+                         .description          = "C3 residency",
+                         .unit                 = "ticks",
+                         .base10_unit_modifier = 0,
+                         .rel_offset           = 0x10},
+                        {.base_de_id           = 0x1e93,
+                         .name                 = "C6_RESIDENCY_COUNTER",
+                         .component            = "AP",
+                         .description          = "C6 residency",
+                         .unit                 = "ticks",
+                         .base10_unit_modifier = 0,
+                         .rel_offset           = 0x20}}}
   };
 
   std::vector<const astl::ITarget*> mock_scmi_targets;
@@ -176,13 +176,13 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
         {.count        = 1,
          .start_offset = 0,
          .block_size   = 32,
-         .members      = {{.base_de_id    = 0x1a69,
-                           .name          = "P_STATE",
-                           .component     = "AP",
-                           .description   = "P-State",
-                           .unit          = "",
-                           .unit_exponent = 0,
-                           .rel_offset    = 0x00}}}
+         .members      = {{.base_de_id           = 0x1a69,
+                           .name                 = "P_STATE",
+                           .component            = "AP",
+                           .description          = "P-State",
+                           .unit                 = "",
+                           .base10_unit_modifier = 0,
+                           .rel_offset           = 0x00}}}
     };
 
     std::vector<const astl::ITarget*> mock_scmi_targets;
@@ -234,13 +234,13 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
         {.count        = 1,
          .start_offset = 0,
          .block_size   = 32,
-         .members      = {{.base_de_id    = 0x1a69,
-                           .name          = "P_STATE",
-                           .component     = "AP",
-                           .description   = "P-State",
-                           .unit          = "",
-                           .unit_exponent = 0,
-                           .rel_offset    = 0x00}}}
+         .members      = {{.base_de_id           = 0x1a69,
+                           .name                 = "P_STATE",
+                           .component            = "AP",
+                           .description          = "P-State",
+                           .unit                 = "",
+                           .base10_unit_modifier = 0,
+                           .rel_offset           = 0x00}}}
     };
 
     std::vector<const astl::ITarget*> mock_scmi_targets;
@@ -317,13 +317,13 @@ TEST_CASE("ParseConfiguration missing category defaults to unknown/UNCATEGORIZED
       {.count        = 1,
        .start_offset = 0,
        .block_size   = 32,
-       .members      = {{.base_de_id    = 0xabcd,
-                         .name          = "CPU_POWER",
-                         .component     = "AP",
-                         .description   = "CPU Power",
-                         .unit          = "W",
-                         .unit_exponent = 0,
-                         .rel_offset    = 0x00}}}
+       .members      = {{.base_de_id           = 0xabcd,
+                         .name                 = "CPU_POWER",
+                         .component            = "AP",
+                         .description          = "CPU Power",
+                         .unit                 = "W",
+                         .base10_unit_modifier = 0,
+                         .rel_offset           = 0x00}}}
   };
   std::vector<const astl::ITarget*> targets;
   astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
@@ -372,13 +372,13 @@ TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManag
       {.count        = 1,
        .start_offset = 0,
        .block_size   = 32,
-       .members      = {{.base_de_id    = 0xdcba,
-                         .name          = "SOC_TEMP",
-                         .component     = "AP",
-                         .description   = "SoC Temp",
-                         .unit          = "C",
-                         .unit_exponent = 0,
-                         .rel_offset    = 0x00}}}
+       .members      = {{.base_de_id           = 0xdcba,
+                         .name                 = "SOC_TEMP",
+                         .component            = "AP",
+                         .description          = "SoC Temp",
+                         .unit                 = "C",
+                         .base10_unit_modifier = 0,
+                         .rel_offset           = 0x00}}}
   };
   std::vector<const astl::ITarget*> targets;
   astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
@@ -427,13 +427,13 @@ TEST_CASE("ParseConfiguration invalid category string maps to UNCATEGORIZED", "[
       {.count        = 1,
        .start_offset = 0,
        .block_size   = 32,
-       .members      = {{.base_de_id    = 0x1234,
-                         .name          = "GPU_POWER",
-                         .component     = "AP",
-                         .description   = "GPU Power",
-                         .unit          = "W",
-                         .unit_exponent = 0,
-                         .rel_offset    = 0x00}}}
+       .members      = {{.base_de_id           = 0x1234,
+                         .name                 = "GPU_POWER",
+                         .component            = "AP",
+                         .description          = "GPU Power",
+                         .unit                 = "W",
+                         .base10_unit_modifier = 0,
+                         .rel_offset           = 0x00}}}
   };
   std::vector<const astl::ITarget*> targets;
   astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);

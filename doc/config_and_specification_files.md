@@ -58,7 +58,7 @@ These files enumerate the in-band telemetry sensors accessible through SCMI.
    "component": "CORE",
    "description": "Mock sysfs cpu frequency",
    "unit": "MHz",
-   "unit_exponent": 0,
+   "base10_unit_modifier": 0,
    "rel_offset": "0x0000"
 },
 ```
@@ -100,7 +100,7 @@ The instance id (counting from 0 up to 'count') becomes the high 16 bits of the 
       "component": "SOC",
       "description": "SoC Power Consumption in Watts",
       "unit": "Watts",
-      "unit_exponent": 0,
+      "base10_unit_modifier": 0,
       "rel_offset": "0x0000"
     }
   ]
@@ -116,7 +116,7 @@ The instance id (counting from 0 up to 'count') becomes the high 16 bits of the 
       "component": "CORE",
       "description": "Current Frequency of the Core in MHz",
       "unit": "MHz",
-      "unit_exponent": 0,
+      "base10_unit_modifier": 0,
       "rel_offset": "0x0000"
     },
     {
@@ -125,7 +125,7 @@ The instance id (counting from 0 up to 'count') becomes the high 16 bits of the 
       "component": "CORE",
       "description": "Number of thermal throttling events",
       "unit": "MHz",
-      "unit_exponent": 0,
+      "base10_unit_modifier": 0,
       "rel_offset": "0x0000"
     }
   ]

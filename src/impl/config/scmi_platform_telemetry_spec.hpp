@@ -90,20 +90,69 @@ inline void from_json(const json& json_data, TelemetrySpecFile& spec_file) {
   json_data.at("specification_file").get_to(spec_file.specification_file);
 }
 
+/** @brief A single entry in the repometa.json uuid_mapping table
+ *
+ * Will look something like:
+ * "7AC0CA75-D07E-EA75-8F80-EB2CF9410000/14": {
+ *   "last_updated": "2026-01-28",
+ *   "description": "Example snippet",
+ *   "specification_file": "mock/metrics.json"
+ * }
+ *
+ * resulting in uuid (normalized): 7ac0ca75d07eea758f80eb2cf9410000
+ * and num_significant_bytes: 14
+ *
+ */
+struct RepoMetaEntry {
+  scmi::spec::Uuid  uuid;
+  TelemetrySpecFile spec_file;
+
+  RepoMetaEntry(scmi::spec::Uuid uuid, TelemetrySpecFile spec_file)
+      : uuid(std::move(uuid)), spec_file(std::move(spec_file)) {}
+};
+
 /**
  * @brief represents the repometa.json file structure, mainly the uuid mapping to spec files
  */
 struct RepoMeta {
-  std::string                                             last_updated;
-  std::unordered_map<scmi::spec::Uuid, TelemetrySpecFile> uuid_mapping;
+  std::string                last_updated;
+  std::vector<RepoMetaEntry> spec_files_by_uuid;
 };
 
 inline void from_json(const json& json_data, RepoMeta& repo_meta) {
   json_data.at("last_updated").get_to(repo_meta.last_updated);
-  for (const auto& [key, value] : json_data.at("uuid_mapping").items()) {
-    auto uuid                               = GetNormalizedUuid(key);
-    repo_meta.uuid_mapping[std::move(uuid)] = value.get<TelemetrySpecFile>();
+  const auto& uuid_mapping = json_data.at("uuid_mapping");
+  repo_meta.spec_files_by_uuid.reserve(uuid_mapping.size());
+
+  for (const auto& [key, value] : uuid_mapping.items()) {
+    auto uuid = GetNormalizedUuid(key);
+    if (!uuid.has_value()) {
+      continue;  // skip invalid uuid entries
+    }
+    repo_meta.spec_files_by_uuid.emplace_back(std::move(uuid.value()), value.get<TelemetrySpecFile>());
   }
+}
+
+/**
+ * @brief Find the specification file for a given normalized UUID from the repometa entries.
+ * Match only the top-most N bytes of the UUID as specified in the repometa entry.
+ * If multiple entries match, the match with the longest significant byte match (i.e. most specific) will be returned.
+ */
+inline auto FindSpecFileByUuid(const RepoMeta& repo_meta, const scmi::spec::Uuid& uuid)
+    -> std::optional<TelemetrySpecFile> {
+  const RepoMetaEntry* best_match = nullptr;
+  for (const auto& entry : repo_meta.spec_files_by_uuid) {
+    if (entry.uuid != uuid) {
+      continue;
+    }
+    if (best_match == nullptr || entry.uuid.num_significant_bytes > best_match->uuid.num_significant_bytes) {
+      best_match = &entry;
+    }
+  }
+  if (best_match) {
+    return best_match->spec_file;
+  }
+  return std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -119,7 +168,7 @@ struct DataEvent {
   std::string component;
   std::string description;
   std::string unit;
-  int32_t     unit_exponent{};
+  int32_t     base10_unit_modifier{};
   uint16_t    rel_offset{};
 };
 
@@ -129,10 +178,10 @@ inline void from_json(const json& json_data, DataEvent& entry) {
   json_data.at("component").get_to(entry.component);
   json_data.at("description").get_to(entry.description);
   json_data.at("unit").get_to(entry.unit);
-  if (json_data.contains("unit_exponent")) {
-    json_data.at("unit_exponent").get_to(entry.unit_exponent);
+  if (json_data.contains("base10_unit_modifier")) {
+    json_data.at("base10_unit_modifier").get_to(entry.base10_unit_modifier);
   } else {
-    entry.unit_exponent = 0;
+    entry.base10_unit_modifier = 0;
   }
   entry.rel_offset = ParseToUint16(json_data, "rel_offset");
 }
@@ -152,7 +201,7 @@ inline void from_json(const json& json_data, DataEvent& entry) {
  *             "component": "PSS_BMU",
  *             "description": "Accumulative CXS total read bandwidth",
  *             "unit": "bits",
- *             "unit_exponent": -3,
+ *             "base10_unit_modifier": -3,
  *             "rel_offset": "0x0000"
  *          },
  *          {
@@ -161,7 +210,7 @@ inline void from_json(const json& json_data, DataEvent& entry) {
  *             "component": "PSS_BMU",
  *             "description": "Accumulative total read bandwidth",
  *             "unit": "bits",
- *             "unit_exponent": -3,
+ *             "base10_unit_modifier": -3,
  *             "rel_offset": "0x0010"
  *          }
  *       ]
@@ -238,14 +287,16 @@ struct ScmiMetricDeclaration {
   std::string     component;
   std::string     instance;
   astl_units_t    units;
+  int32_t         base10_unit_modifier{};
   ScmiDataEventId de_id{};
 
   ScmiMetricDeclaration(std::string name, std::string component, std::string instance, astl_units_t units,
-                        ScmiDataEventId de_id)
+                        int32_t base10_unit_modifier, ScmiDataEventId de_id)
       : name(std::move(name)),
         component(std::move(component)),
         instance(std::move(instance)),
         units(units),
+        base10_unit_modifier(base10_unit_modifier),
         de_id{de_id} {}
 
   std::string GetFullyQualifiedName() const {

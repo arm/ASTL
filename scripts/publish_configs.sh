@@ -4,17 +4,15 @@ set -eu -o pipefail
 
 # Script to publish ASTL config directory with filtering
 # This script copies the config/ directory with the following modifications:
-# 1. Selects appropriate SCMI spec version (alpha or beta)
-# 2. Filters out confidential content based on --confidential flag
-# 3. Excludes JSON files with document.confidential == true
-# 4. Removes JSON elements within files that have "confidential": true
+# 1. Filters out confidential content based on --confidential flag
+# 2. Excludes JSON files with document.confidential == true
+# 3. Removes JSON elements within files that have "confidential": true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Default values
 OUTPUT_DIR=""
-SCMI_SPEC_VERSION="beta"
 INCLUDE_CONFIDENTIAL=false
 INCLUDE_MOCKSYSFS=false
 
@@ -29,17 +27,16 @@ Required arguments:
   -o OUTPUT_DIR             Output directory to copy config/ to (with modifications)
 
 Optional arguments:
-  --scmi-spec-version VER   SCMI spec version to use: 'alpha' or 'beta' (default: beta)
   --confidential            Include confidential content (default: exclude confidential content)
   --mocksysfs               Include mock scmi sysfs metrics and scmi spec for testing
   -h, --help                Show this help message
 
 Examples:
-  # Publish beta spec for non-confidential/public use
-  $0 -o /path/to/output --scmi-spec-version beta
+  # Publish spec for non-confidential/public use
+  $0 -o /path/to/output
 
-  # Publish alpha spec including confidential content
-  $0 -o /path/to/output --scmi-spec-version alpha --confidential
+  # Publish spec including confidential content and mocksysfs targets
+  $0 -o /path/to/output --confidential --mocksysfs
 
 EOF
 	exit 1
@@ -50,14 +47,6 @@ while [[ $# -gt 0 ]]; do
 	case $1 in
 	-o)
 		OUTPUT_DIR="$2"
-		shift 2
-		;;
-	--scmi-spec-version)
-		SCMI_SPEC_VERSION="$2"
-		if [[ $SCMI_SPEC_VERSION != "alpha" && $SCMI_SPEC_VERSION != "beta" ]]; then
-			echo "Error: --scmi-spec-version must be 'alpha' or 'beta'" >&2
-			exit 1
-		fi
 		shift 2
 		;;
 	--confidential)
@@ -197,8 +186,8 @@ fi
 
 # Set up SCMI directory structure
 echo ""
-echo "Setting up SCMI directory structure (using $SCMI_SPEC_VERSION spec)..."
-SCMI_SOURCE="$CONFIG_DIR/scmi/$SCMI_SPEC_VERSION/public"
+echo "Setting up SCMI directory structure"
+SCMI_SOURCE="$CONFIG_DIR/scmi/public"
 SCMI_OUTPUT="$OUTPUT_DIR/scmi/public"
 
 if [[ ! -d $SCMI_SOURCE ]]; then
@@ -243,5 +232,4 @@ fi
 echo ""
 echo "Publishing complete!"
 echo "Output directory: $OUTPUT_DIR"
-echo "SCMI spec version: $SCMI_SPEC_VERSION"
 echo "Confidential content: $([ "$INCLUDE_CONFIDENTIAL" == true ] && echo "included" || echo "excluded")"

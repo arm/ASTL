@@ -140,10 +140,34 @@ static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecificat
 }
 
 /**
+ * @brief best-effort helper to get the normalized SCMI UUID from a target, returning nullopt if any step fails
+ */
+static auto GetUuidFromTarget(const ITarget* target) -> std::optional<scmi::spec::Uuid> {
+  const auto* concrete_target = dynamic_cast<const Target*>(target);
+  if (!concrete_target) {
+    ASTL_LOG_WARNING("Target cannot be cast to concrete Target type");
+    return std::nullopt;
+  }
+  auto uuid_opt = concrete_target->GetUuid();
+  if (!uuid_opt.has_value() || uuid_opt->empty()) {
+    ASTL_LOG_WARNING("Target {} has no UUID", target->Name());
+    return std::nullopt;
+  }
+  const auto uuid_res = astl::scmi::spec::GetNormalizedUuid(uuid_opt.value());
+  if (!uuid_res) {
+    ASTL_LOG_WARNING("Target {} has invalid SCMI UUID {}: error code {}", target->Name(), uuid_opt.value(),
+                     astlStatusString(uuid_res.error()));
+    return std::nullopt;
+  }
+  const auto uuid = *uuid_res;
+  return uuid;
+}
+
+/**
  * @brief Arrange the given targets by their UUIDs, and look up the relevant specification and metric declaration files.
  */
 static auto LookUpSpecificationFiles(const AstlConfiguration& configuration, std::vector<const ITarget*> scmi_targets)
-    -> std::expected<std::unordered_map<scmi::spec::Uuid, ScmiUuidSpecificationInfo>, astl_status_code> {
+    -> std::expected<std::vector<ScmiUuidSpecificationInfo>, astl_status_code> {
   // parse the 'repometa' json file that maps UUIDs to SCMI specification file paths
   const auto& scmi_specification_dir = configuration.scmi_specification_dir;
   const auto& repometa_json_path     = scmi_specification_dir / "repometa.json";
@@ -160,63 +184,50 @@ static auto LookUpSpecificationFiles(const AstlConfiguration& configuration, std
     return std::unexpected(platform_lookup.error());
   }
 
-  std::unordered_map<scmi::spec::Uuid, ScmiUuidSpecificationInfo> platform_specification_by_uuid;
+  std::vector<ScmiUuidSpecificationInfo> platform_specifications;
+  platform_specifications.reserve(scmi_targets.size());
 
   // for each target, get its UUID, and add it to the platform_specification_by_uuid map,
   // either as a new entry, or by adding to the existing entry's applicable_targets list.
   // also look up the spec and metric declaration files for each UUID.
-  std::transform(scmi_targets.begin(), scmi_targets.end(),
-                 std::inserter(platform_specification_by_uuid, platform_specification_by_uuid.end()),
-                 [&](const ITarget* target) -> std::pair<scmi::spec::Uuid, ScmiUuidSpecificationInfo> {
-                   const auto* concrete_target = dynamic_cast<const Target*>(target);
-                   if (!concrete_target) {
-                     ASTL_LOG_WARNING("Target cannot be cast to concrete Target type");
-                     return {"", ScmiUuidSpecificationInfo{}};
-                   }
+  std::for_each(scmi_targets.begin(), scmi_targets.end(), [&](const ITarget* target) -> void {
+    auto uuid_result = GetUuidFromTarget(target);
+    if (!uuid_result.has_value()) {
+      return;  // skip targets with no valid Scmi UUID
+    }
+    const auto uuid = *uuid_result;
 
-                   auto uuid_opt = concrete_target->GetUuid();
-                   if (!uuid_opt.has_value() || uuid_opt->empty()) {
-                     ASTL_LOG_WARNING("Target {} has no UUID", target->Name());
-                     return {"", ScmiUuidSpecificationInfo{}};
-                   }
+    // Check if we already have an entry for this UUID
+    // Note  that '==' for UUIDs only compares the most significant bytes as specified in the repometa
+    auto existing_entry = std::find_if(platform_specifications.begin(), platform_specifications.end(),
+                                       [&](const ScmiUuidSpecificationInfo& info) { return info.uuid == uuid; });
+    if (existing_entry != platform_specifications.end()) {
+      // UUID already exists, just add this target to the list
+      existing_entry->applicable_targets.push_back(target);
+      return;
+    }
 
-                   const scmi::spec::Uuid& uuid = uuid_opt.value();
+    // Look up specification file in repo_meta
+    auto spec_file = FindSpecFileByUuid(*repo_meta, uuid);
+    if (!spec_file) {
+      ASTL_LOG_WARNING("No SCMI specification found for UUID {}", uuid.normalized_value);
+      return;
+    }
 
-                   // Check if we already have an entry for this UUID
-                   auto existing_entry = platform_specification_by_uuid.find(uuid);
-                   if (existing_entry != platform_specification_by_uuid.end()) {
-                     // UUID already exists, just add this target to the list
-                     existing_entry->second.applicable_targets.push_back(concrete_target);
-                     return {uuid, existing_entry->second};
-                   }
+    // Look up metrics declaration file in platform_lookup
+    auto metric_file_element = FindMetricsFileElementByUuid(*platform_lookup, uuid);
+    if (!metric_file_element) {
+      ASTL_LOG_WARNING("No metrics declaration found for UUID {}", uuid.normalized_value);
+      return;
+    }
+    platform_specifications.emplace_back(ScmiUuidSpecificationInfo{
+        .uuid                    = uuid,
+        .specification_file      = scmi_specification_dir / spec_file->specification_file,
+        .metric_declaration_file = metrics_declaration_dir / metric_file_element->metrics_file,
+        .applicable_targets      = {target}});
+  });
 
-                   // Look up specification file in repo_meta
-                   auto repo_iter = repo_meta->uuid_mapping.find(uuid);
-                   if (repo_iter == repo_meta->uuid_mapping.end()) {
-                     ASTL_LOG_WARNING("No SCMI specification found for UUID {}", uuid);
-                     return {"", ScmiUuidSpecificationInfo{}};
-                   }
-
-                   // Look up metrics declaration file in platform_lookup
-                   auto metrics_iter = platform_lookup->scmi_uuid_mapping.find(uuid);
-                   if (metrics_iter == platform_lookup->scmi_uuid_mapping.end()) {
-                     ASTL_LOG_WARNING("No metrics declaration found for UUID {}", uuid);
-                     return {"", ScmiUuidSpecificationInfo{}};
-                   }
-
-                   ScmiUuidSpecificationInfo info{
-                       .uuid                    = uuid,
-                       .specification_file      = scmi_specification_dir / repo_iter->second.specification_file,
-                       .metric_declaration_file = metrics_declaration_dir / metrics_iter->second.metrics_file,
-                       .applicable_targets      = {concrete_target}};
-
-                   return {uuid, info};
-                 });
-
-  // Remove any empty entries (from failed casts or missing UUIDs)
-  platform_specification_by_uuid.erase("");
-
-  return platform_specification_by_uuid;
+  return platform_specifications;
 }
 
 /** @brief helper function to parse target-specific scmi specification json files into MetricConfig objects
@@ -229,21 +240,23 @@ static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfigurati
                                                            std::vector<const ITarget*> const& scmi_targets)
     -> std::expected<MetricAndCounterConfigurations, astl_status_code> {
   // arrange the targets by UUID, and look up the relevant file paths for SCMI specification and metrics declarations
-  const auto platform_specification_by_uuid = LookUpSpecificationFiles(configuration, scmi_targets);
-  if (!platform_specification_by_uuid.has_value()) {
-    return std::unexpected(platform_specification_by_uuid.error());
+  const auto platform_specifications = LookUpSpecificationFiles(configuration, scmi_targets);
+  if (!platform_specifications.has_value()) {
+    return std::unexpected(platform_specifications.error());
   }
 
   MetricAndCounterConfigurations metric_and_counter_configurations;
 
-  for (const auto& [uuid, spec_info] : platform_specification_by_uuid.value()) {
-    ASTL_LOG_DEBUG("Processing SCMI specification for UUID {}", uuid);
+  for (const auto& spec_info : platform_specifications.value()) {
+    const std::string_view uuid_sv = spec_info.uuid.normalized_value;
+    ASTL_LOG_DEBUG("Processing SCMI specification for UUID {}", uuid_sv);
 
     // parse the SCMI specification file for this UUID
     auto scmi_specification_result = TryParseJson<scmi::spec::ScmiSpecification>(spec_info.specification_file);
     if (!scmi_specification_result.has_value()) {
       ASTL_LOG_ERROR("Failed to parse SCMI specification file {} for UUID {}: error code {}",
-                     spec_info.specification_file.string(), uuid, astlStatusString(scmi_specification_result.error()));
+                     spec_info.specification_file.string(), uuid_sv,
+                     astlStatusString(scmi_specification_result.error()));
       return std::unexpected(scmi_specification_result.error());
     }
     const auto& scmi_specification = scmi_specification_result.value();
@@ -252,7 +265,7 @@ static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfigurati
     auto metric_declaration_result = TryParseJson<metrics::spec::MetricsDeclaration>(spec_info.metric_declaration_file);
     if (!metric_declaration_result.has_value()) {
       ASTL_LOG_ERROR("Failed to parse metric declaration file {} for UUID {}: error code {}",
-                     spec_info.metric_declaration_file.string(), uuid,
+                     spec_info.metric_declaration_file.string(), uuid_sv,
                      astlStatusString(metric_declaration_result.error()));
       return std::unexpected(metric_declaration_result.error());
     }

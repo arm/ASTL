@@ -7,19 +7,108 @@ using json = nlohmann::json;
 
 TEST_CASE("ScmiSpecification::NormalizeUUID", "[ConfigManager]") {
   SECTION("Typical lowercase uuid") {
-    std::string raw_uuid  = "550e8400-e29b-41d4-a716-446655440000";
-    std::string norm_uuid = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
-    REQUIRE(norm_uuid == "550e8400e29b41d4a716446655440000");
+    std::string raw_uuid = "550e8400-e29b-41d4-a716-446655440000";
+    auto        uuid     = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    REQUIRE(uuid.normalized_value == "550e8400e29b41d4a716446655440000");
+    REQUIRE(uuid.num_significant_bytes == 16);
   }
   SECTION("Typical uppercase uuid") {
-    std::string raw_uuid  = "CAFEBABE-41D4-A716-446655440000";
-    std::string norm_uuid = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
-    REQUIRE(norm_uuid == "cafebabe41d4a716446655440000");
+    std::string raw_uuid = "CAFEBABE-41D4-12A716-446655440000/14";
+    auto        uuid     = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    REQUIRE(uuid.normalized_value == "cafebabe41d412a716446655440000");
+    REQUIRE(uuid.num_significant_bytes == 14);
   }
   SECTION("Strip 0x prefix uuid") {
-    std::string raw_uuid  = "0xCAFEBABE-41D4-A716-446655440000";
-    std::string norm_uuid = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
-    REQUIRE(norm_uuid == "cafebabe41d4a716446655440000");
+    std::string raw_uuid = "0xCAFEBABE-41D4-12A716-446655440000/14";
+    auto        uuid     = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    REQUIRE(uuid.normalized_value == "cafebabe41d412a716446655440000");
+  }
+  SECTION("Compare full UUIDs") {
+    std::string raw_uuid = "550e8400-e29b-41d4-a716-446655441234";
+    auto        uuid_a   = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    auto        uuid_b   = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    REQUIRE(uuid_a == uuid_b);
+  }
+  SECTION("Compare one short UUID") {
+    std::string raw_uuid        = "CAFEBABE-41D4-12AC-A716-446655440000/14";
+    std::string raw_target_uuid = "CAFEBABE-41D4-12AC-A716-446655441234";
+    auto        uuid_matcher    = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    auto        target_uuid     = astl::scmi::spec::GetNormalizedUuid(raw_target_uuid).value();
+    REQUIRE(uuid_matcher == target_uuid);
+  }
+  SECTION("Not quite a match, lower bytes") {
+    std::string raw_uuid        = "CAFEBABE-41D4-12A716-446655441200/15";
+    std::string raw_target_uuid = "DAFEBABE-41D4-12A716-446655441300";
+    auto        uuid_matcher    = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    auto        target_uuid     = astl::scmi::spec::GetNormalizedUuid(raw_target_uuid).value();
+    REQUIRE(uuid_matcher != target_uuid);
+  }
+  SECTION("Not quite a match, upper bytes") {
+    std::string raw_uuid        = "CAFEBABE-41D4-12A716-446655440000/14";
+    std::string raw_target_uuid = "DAFEBABE-41D4-12A716-446655440000";
+    auto        uuid_matcher    = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    auto        target_uuid     = astl::scmi::spec::GetNormalizedUuid(raw_target_uuid).value();
+    REQUIRE(uuid_matcher != target_uuid);
+  }
+  SECTION("Empty string should fail") {
+    std::string raw_uuid = "";
+    auto        result   = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
+    REQUIRE(!result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
+  }
+  SECTION("Whitespace-only string should fail") {
+    std::string raw_uuid = "   \t\n  ";
+    auto        result   = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
+    REQUIRE(!result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
+  }
+  SECTION("Zero significant bytes should fail") {
+    std::string raw_uuid = "550e8400-e29b-41d4-a716-446655440000/0";
+    auto        result   = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
+    REQUIRE(!result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
+  }
+  SECTION("UUID shorter than significant bytes should fail") {
+    std::string raw_uuid = "CAFEBABE/10";  // Only 4 bytes but requests 10
+    auto        result   = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
+    REQUIRE(!result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
+  }
+  SECTION("Valid UUID with /N notation - 8 bytes") {
+    std::string raw_uuid = "550e8400-e29b-41d4-a716-446655440000/8";
+    auto        uuid     = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    REQUIRE(uuid.normalized_value == "550e8400e29b41d4a716446655440000");
+    REQUIRE(uuid.num_significant_bytes == 8);
+  }
+  SECTION("Valid UUID with /N notation - 1 byte") {
+    std::string raw_uuid = "12-34-56-78-9A-BC-DE-F0-11-22-33-44-55-66-77-88/1";
+    auto        uuid     = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    REQUIRE(uuid.normalized_value == "123456789abcdef01122334455667788");
+    REQUIRE(uuid.num_significant_bytes == 1);
+  }
+  SECTION("Valid UUID with /N notation - exactly matches length") {
+    std::string raw_uuid = "CAFEBABE/4";
+    auto        uuid     = astl::scmi::spec::GetNormalizedUuid(raw_uuid).value();
+    REQUIRE(uuid.normalized_value == "cafebabe");
+    REQUIRE(uuid.num_significant_bytes == 4);
+  }
+  SECTION("Malformed / postfix - empty after slash") {
+    std::string raw_uuid = "550e8400-e29b-41d4-a716-446655440000/";
+    auto        result   = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
+    REQUIRE(!result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
+  }
+  SECTION("Malformed / postfix - non-numeric") {
+    std::string raw_uuid = "550e8400-e29b-41d4-a716-446655440000/abc";
+    auto        result   = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
+    REQUIRE(!result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
+  }
+  SECTION("Malformed / postfix - whitespace") {
+    std::string raw_uuid = "550e8400-e29b-41d4-a716-446655440000/  ";
+    auto        result   = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
+    REQUIRE(!result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
   }
 }
 
@@ -52,7 +141,7 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
           "component": "HEADER",
           "description": "SCMI TDCF UUID",
           "unit": "",
-          "unit_exponent": 0,
+          "base10_unit_modifier": 0,
           "rel_offset": "0x0000"
         }
       ]
@@ -67,8 +156,8 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
           "name": "CURRENT_TEMPERATURE",
           "component": "PSS",
           "description": "PSS highest current temperature",
-          "unit": "Celcius",
-          "unit_exponent": -3,
+          "unit": "celsius",
+          "base10_unit_modifier": -3,
           "rel_offset": "0x0000"
         },
         {
@@ -76,8 +165,8 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
           "name": "MIN_TEMPERATURE",
           "component": "PSS",
           "description": "PSS lowest temperature since power on",
-          "unit": "Celcius",
-          "unit_exponent": -3,
+          "unit": "celsius",
+          "base10_unit_modifier": -3,
           "rel_offset": "0x0010"
         },
         {
@@ -85,8 +174,8 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
           "name": "MAX_TEMPERATURE",
           "component": "PSS",
           "description": "PSS highest temperature since power on",
-          "unit": "Celcius",
-          "unit_exponent": -3,
+          "unit": "celsius",
+          "base10_unit_modifier": -3,
           "rel_offset": "0x0020"
         }
       ]

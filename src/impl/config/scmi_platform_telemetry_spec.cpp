@@ -18,6 +18,7 @@
 
 #include "config/scmi_platform_telemetry_spec.hpp"
 
+#include <expected>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -102,7 +103,8 @@ static auto AddMetricInstancesIfScmiElementMatches(metrics::spec::MetricJsonDecl
     ScmiDataEventId de_id = GetDataEventId(scmi_spec_layout_member.base_de_id, instance_index);
     // create the full metric type name, e.g. 'PSS_BMU.0.ENERGY_COUNTER'
     metric_declarations.emplace_back(scmi_spec_layout_member.name, scmi_spec_layout_member.component,
-                                     std::to_string(instance_index), units.value(), de_id);
+                                     std::to_string(instance_index), units.value(),
+                                     scmi_spec_layout_member.base10_unit_modifier, de_id);
   }
 }
 

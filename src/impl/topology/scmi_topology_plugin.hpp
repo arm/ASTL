@@ -83,11 +83,15 @@ auto DetectTarget(FileInterfaceType const& scmi_sysfs_file_interface, std::strin
         telemetry_subdirectory);
     return std::unexpected(read_status);
   }
-  auto normalized_uuid = scmi::spec::GetNormalizedUuid(read_content);
+  const auto uuid_result = scmi::spec::GetNormalizedUuid(read_content);
+  if (!uuid_result) {
+    return std::unexpected(uuid_result.error());
+  }
+  const auto uuid = uuid_result.value();
   ASTL_LOG_INFO("ScmiTopologyPlugin::ScanForTargets: Successfully detected SCMI/SysFS target with UUID {}",
-                normalized_uuid);
+                uuid.normalized_value);
   auto target_ptr = std::make_unique<Target>(telemetry_subdirectory, "Target discovered via SCMI", CollectorType::SCMI,
-                                             nullptr, normalized_uuid);
+                                             nullptr, uuid.normalized_value);
   return target_ptr;
 }
 

@@ -151,9 +151,11 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   const auto            category   = ParseCategory(metric_declaration.category);
 
   for (const auto& scmi_metric_declaration : metric_registers) {
-    const auto& metric_name = scmi_metric_declaration.GetFullyQualifiedName();
-    const auto  units       = scmi_metric_declaration.units;
-    const auto& de_id       = scmi_metric_declaration.de_id;
+    const auto& metric_name          = scmi_metric_declaration.GetFullyQualifiedName();
+    const auto  units                = scmi_metric_declaration.units;
+    const auto  base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
+    (void)base10_unit_modifier;  // @todo(ASTL-303) currently unused in this implementation
+    const auto& de_id = scmi_metric_declaration.de_id;
     // @todo(ASTL-186) - may need to handle different data event ids for different targets
     ScmiOperationBuilder operation_builder{de_id};
     auto                 finite_set_copy = finite_set;      // copy for this metric instance
@@ -165,6 +167,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     }
 
     auto new_metric_config = std::make_unique<FiniteSetMetricConfig>(
+        // @todo(ASTL-303) - consider how best to use the base10_unit_modifier in the MetricConfig and collector
         metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE, category,
         collector_type.value(), std::move(operation_builder), std::move(finite_set_copy), std::move(labels_copy),
         std::move(formula_result.value()));
@@ -301,7 +304,9 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
   const auto            category   = ParseCategory(metric_declaration.category);
 
   for (const auto& scmi_metric_declaration : metric_registers) {
-    const auto           units = scmi_metric_declaration.units;
+    const auto units                = scmi_metric_declaration.units;
+    const auto base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
+    (void)base10_unit_modifier;  // @todo(ASTL-303) currently unused in this implementation
     ScmiOperationBuilder operation_builder{scmi_metric_declaration.de_id};
 
     auto formula_result = BuildFormula(metric_declaration.formula);
@@ -311,6 +316,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
 
     auto metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
     auto new_metric_config = std::make_unique<MetricConfig>(
+        // @todo(ASTL-303) - consider how best to use the base10_unit_modifier in the MetricConfig and collector
         scmi_metric_declaration.GetFullyQualifiedName(), metric_declaration.description, units, value_type, category,
         metric_type, std::move(metric_groups), collector_type.value(), std::move(operation_builder),
         std::move(formula_result.value()));
