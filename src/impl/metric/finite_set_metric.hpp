@@ -57,8 +57,7 @@ struct FiniteSetSummaryData {
  */
 class FiniteSetMetric : public SampledValueMetric {
  public:
-  using FiniteSet    = std::set<AstlValue>;
-  using ValueToLabel = std::map<AstlValue, std::string>;
+  using FiniteSet = std::set<AstlValue>;
 
   FiniteSetMetric() = delete;
 
@@ -124,6 +123,13 @@ class FiniteSetMetric : public SampledValueMetric {
    * @return The complete set of valid AstlValue objects.
    */
   const std::set<AstlValue> &GetFiniteSet() const { return _finite_set_configuration->GetFiniteSet(); }
+
+  /**
+   * @brief Get the finite set metric configuration.
+   *
+   * @return Pointer to the FiniteSetMetricConfig.
+   */
+  const FiniteSetMetricConfig *GetFiniteSetConfiguration() const { return _finite_set_configuration; }
 
  private:
   /** @brief Update finite set statistics for the received sample */

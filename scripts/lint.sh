@@ -44,6 +44,10 @@ GCC_INCLUDE_PATHS=$(echo | g++ -E -x c++ - -v 2>&1 |
 	sed -E 's/^\s+//')
 SYS_INCLUDE_PATHS=()
 while IFS= read -r SYSTEM_INCLUDE; do
+	# On aarch64, skip GCC's system include directories (e.g., NEON headers) to avoid incompatibility with clang-tidy
+	if [[ "$(uname -m)" == "aarch64" && $SYSTEM_INCLUDE == *"/gcc/"*"/include" ]]; then
+		continue
+	fi
 	SYS_INCLUDE_PATHS+=(-isystem)
 	SYS_INCLUDE_PATHS+=("${SYSTEM_INCLUDE}")
 done <<<"$GCC_INCLUDE_PATHS"

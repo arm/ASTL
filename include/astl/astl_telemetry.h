@@ -378,8 +378,94 @@ ASTL_API astl_status_code astlGetMetricCount(astl_target_handle_t target_handle_
  *
  * @return astl_status_code
  */
-ASTL_API astl_status_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t* metric_buffer,
+ASTL_API astl_status_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t* metrics,
                                          uint32_t* metric_count) ASTL_API_NOEXCEPT;
+
+/***********************************************************************************
+ **********************      METRIC VALUE/STATE DISCOVERY      *********************
+ **********************************************************************************/
+
+/** A state name structure describes a state or value for metrics with discrete states.
+ * Used by both finite set metrics (ASTL_METRIC_FINITE_SET_VALUE) and residency metrics
+ * (ASTL_METRIC_RESIDENCY).
+ *
+ * For finite set metrics: _value contains the possible value, _name provides a human-readable label.
+ * For residency metrics: _name contains the state name (e.g., "C6", "C1", "Active"), _value is unused.
+ *
+ * The order of states returned defines the sequence in which processed samples are reported.
+ */
+typedef struct _astl_state_properties_t {
+  size_t       _size;         //!< Size of this struct for versioning
+  const char*  _name;         //!< State/label name (always set)
+  const char*  _description;  //!< Optional description of the state (may be NULL)
+  astl_value_t _value;        //!< The value (only used for finite set metrics)
+} astl_state_properties_t;
+
+/**
+ * @brief Get the number of state names for a metric.
+ *
+ * This function is applicable to metrics of type ASTL_METRIC_FINITE_SET_VALUE
+ * or ASTL_METRIC_RESIDENCY. It returns the count of possible states/values.
+ *
+ * For finite set metrics: Returns the count of possible enumerated values.
+ * For residency metrics: Returns the count of tracked states (including any inferred state).
+ *
+ * @param[in] target_handle           The handle of the target of interest. Found in
+ *                                    astl_target_properties_t
+ *
+ * @param[in] metric_handle           The handle of the metric of interest. Found in
+ *                                    astl_metric_properties_t. Must be a finite set or residency metric.
+ *
+ * @param[in/out] state_count    Number of state names.
+ *                                    Cannot be NULL. Will contain the number of state names
+ *                                    that should be used to allocate a buffer for
+ *                                    astl_state_properties_t structures.
+ *
+ * @return astl_status_code            ASTL_STATUS_SUCCESS on success.
+ *                                    ASTL_STATUS_NOT_SUPPORTED if metric is neither
+ *                                    finite set nor residency type.
+ */
+ASTL_API astl_status_code astlGetMetricStateCount(astl_target_handle_t target_handle,
+                                                  astl_metric_handle_t metric_handle,
+                                                  uint32_t*            state_count) ASTL_API_NOEXCEPT;
+
+/**
+ * @brief Get the state names for a metric.
+ *
+ * This function retrieves the states for finite set or residency metrics.
+ *
+ * For finite set metrics (ASTL_METRIC_FINITE_SET_VALUE):
+ *   - Returns all possible enumerated values with their labels
+ *   - Each element has both _value and _name populated
+ *   - _value contains the possible value, _name contains the human-readable label
+ *
+ * For residency metrics (ASTL_METRIC_RESIDENCY):
+ *   - Returns state names in the order samples are reported
+ *   - Each element has _name populated with the state name (e.g., "C6", "C1")
+ *   - _value field is unused for residency metrics
+ *   - If an inferred state exists, it appears as the last element
+ *
+ * @param[in] target_handle           The handle of the target of interest. Found in
+ *                                    astl_target_properties_t
+ *
+ * @param[in] metric_handle           The handle of the metric of interest. Found in
+ *                                    astl_metric_properties_t. Must be a finite set or residency metric.
+ *
+ * @param[in/out] states         Array of state name structures. Cannot be NULL.
+ *                                    It should point to an allocated buffer of
+ *                                    sizeof(astl_state_properties_t) * (state_count)
+ *                                    IMPORTANT: _size field of at least the first element in the array
+ *                                    must be set to sizeof(astl_state_properties_t) for versioning
+ *
+ * @param[in/out] state_count    The number of elements the states buffer was allocated
+ *                                    for. Returns the number of elements written to the buffer.
+ *
+ * @return astl_status_code            ASTL_STATUS_SUCCESS on success.
+ *                                    ASTL_STATUS_NOT_SUPPORTED if metric is neither
+ *                                    finite set nor residency type.
+ */
+ASTL_API astl_status_code astlGetMetricStates(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
+                                              astl_state_properties_t* states, uint32_t* state_count) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************              METRIC GROUPS             *********************

@@ -150,8 +150,18 @@ TEST_CASE("ResidencyMetric: deterministic processed sample sink order", "[Reside
   // After processing all three, inferred state (Active) also added => total samples sunk should be 4.
   REQUIRE(recording_sink.values_in_order.size() == 4);
 
-  // Retrieve configured deterministic order
-  auto configured_order = metric.GetOrderedStates();
+  // Build expected order from state configs + inferred state
+  const auto& state_configs      = metric.GetStateConfigs();
+  const auto* residency_config   = metric.GetResidencyConfiguration();
+  const auto& inferred_state_opt = residency_config->InferredState();
+
+  std::vector<std::string> configured_order;
+  std::transform(state_configs.begin(), state_configs.end(), std::back_inserter(configured_order),
+                 [](const auto& config) { return config.state_name; });
+  if (inferred_state_opt.has_value()) {
+    configured_order.push_back(inferred_state_opt.value());
+  }
+
   // configured_order should have 4 entries: C6, C1, C2, Active
   REQUIRE(configured_order.size() == 4);
   REQUIRE(configured_order[0] == "C6");

@@ -6,7 +6,7 @@ if(NOT CMAKE_BUILD_TYPE)
       CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif()
 
-add_executable(wrapper_test wrapper_test.cpp metric_groups_tests.cpp)
+add_executable(wrapper_test wrapper_test.cpp metric_groups_tests.cpp metric_state_discovery_tests.cpp)
 
 target_compile_definitions(wrapper_test PRIVATE ASTL_BUILD)
 

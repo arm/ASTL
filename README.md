@@ -311,6 +311,37 @@ Run `scripts/demo.sh` to run this flow. This sets up the mock driver and perform
 To run manually, start a mock server and execute `build/debug/bin/sample_test`. Use `--help`
 for usage details.
 
+## String Pointer Lifetimes and Ownership
+
+**Important:** The `astlGetMetricStates` API returns `const char*` pointers to state name strings (`astl_state_properties_t._name`). These pointers refer to internal storage owned by ASTL's metric and configuration objects.
+
+### Lifetime Guarantees
+
+State name pointers are valid only for the current collection session:
+
+1. **During a collection session**: All state name pointers returned by `astlGetMetricStates` remain valid throughout the current collection session (across start/stop/pause/resume cycles).
+
+2. **After reconfiguration**: State name pointers become **invalid** immediately when ASTL is reconfigured for a subsequent collection. Accessing these pointers after reconfiguration results in undefined behavior.
+
+### Usage Recommendations
+
+- **Within a session**: If you only need state name values during a single collection session, use the pointers directly without copying.
+
+- **Across sessions**: If you need to retain state name values across multiple collection sessions or after reconfiguration, **copy the strings** into your own storage:
+
+  ```cpp
+  // Safe: Copy the string for long-term storage across sessions
+  std::string state_name = states[i]._name;
+
+  // Safe: Use within the same collection session
+  printf("State: %s\n", states[i]._name);
+
+  // UNSAFE: Storing pointer for use after reconfiguration
+  const char* saved_ptr = states[i]._name;  // ❌ Dangling pointer after reconfiguration
+  // ... reconfigure ASTL for next collection ...
+  printf("State: %s\n", saved_ptr);  // ❌ Undefined behavior
+  ```
+
 ## Design Diagrams (Mermaid)
 
 The detailed runtime and structural diagrams are authored in Mermaid (`doc/design/*.mmd`) and rendered to SVG with:

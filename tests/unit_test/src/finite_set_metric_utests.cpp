@@ -39,7 +39,7 @@ struct FiniteSetTestHarness {
   astl::FiniteSetMetric                    metric;
 
   // create the target, mock  sink, metric config, and FiniteSetMetric instances based on the given labels
-  explicit FiniteSetTestHarness(astl::FiniteSetMetric::ValueToLabel const& labels)
+  explicit FiniteSetTestHarness(astl::FiniteSetMetricConfig::ValueToLabelMap const& labels)
       : mock_target(std::make_unique<MockTarget>()),
         mock_sink(std::make_unique<MockProcessedSampleSink>()),
         config{
@@ -59,7 +59,7 @@ struct FiniteSetTestHarness {
 TEST_CASE("FiniteSetMetric: construction & basic functionality", "[FiniteSetMetric]") {
   // Construct a metric for 64-bit unsigned samples
   // Provide labels for readability
-  astl::FiniteSetMetric::ValueToLabel labels = {
+  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
       {astl::AstlValue{uint64_t{0}}, "STATE_ZERO"},
       {astl::AstlValue{uint64_t{1}}, "STATE_ONE" },
       {astl::AstlValue{uint64_t{2}}, "STATE_TWO" },
@@ -72,7 +72,7 @@ TEST_CASE("FiniteSetMetric: construction & basic functionality", "[FiniteSetMetr
 }
 
 TEST_CASE("FiniteSetMetric: finite set checking", "[FiniteSetMetric]") {
-  astl::FiniteSetMetric::ValueToLabel labels = {
+  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
       {astl::AstlValue{uint64_t{0}}, "ZERO"},
       {astl::AstlValue{uint64_t{1}}, "ONE" },
       {astl::AstlValue{uint64_t{2}}, "TWO" },
@@ -89,7 +89,7 @@ TEST_CASE("FiniteSetMetric: finite set checking", "[FiniteSetMetric]") {
 }
 
 TEST_CASE("FiniteSetMetric: get finite set values", "[FiniteSetMetric]") {
-  astl::FiniteSetMetric::ValueToLabel labels = {
+  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
       {astl::AstlValue{uint64_t{0}}, "VAL0"},
       {astl::AstlValue{uint64_t{1}}, "VAL1"},
       {astl::AstlValue{uint64_t{2}}, "VAL2"},
@@ -105,7 +105,7 @@ TEST_CASE("FiniteSetMetric: get finite set values", "[FiniteSetMetric]") {
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("FiniteSetMetric: ReceiveSample with valid values", "[FiniteSetMetric]") {
-  astl::FiniteSetMetric::ValueToLabel labels = {
+  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
       {astl::AstlValue{uint64_t{0}}, "S0"},
       {astl::AstlValue{uint64_t{1}}, "S1"},
       {astl::AstlValue{uint64_t{2}}, "S2"},
@@ -137,7 +137,7 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with valid values", "[FiniteSetMetric]
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("FiniteSetMetric: ReceiveSample with unknown values", "[FiniteSetMetric]") {
-  astl::FiniteSetMetric::ValueToLabel labels = {
+  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
       {astl::AstlValue{uint64_t{0}}, "A"},
       {astl::AstlValue{uint64_t{1}}, "B"},
       {astl::AstlValue{uint64_t{2}}, "C"},
@@ -170,7 +170,7 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with unknown values", "[FiniteSetMetri
 // NOLINTEND(readability-function-cognitive-complexity)
 
 TEST_CASE("FiniteSetMetric: Reset functionality", "[FiniteSetMetric]") {
-  astl::FiniteSetMetric::ValueToLabel labels = {
+  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
       {astl::AstlValue{uint64_t{0}}, "RESET0"},
       {astl::AstlValue{uint64_t{1}}, "RESET1"},
       {astl::AstlValue{uint64_t{2}}, "RESET2"},
@@ -199,7 +199,7 @@ TEST_CASE("FiniteSetMetric: Reset functionality", "[FiniteSetMetric]") {
 }
 
 TEST_CASE("FiniteSetMetric: Summarize operation", "[FiniteSetMetric]") {
-  astl::FiniteSetMetric::ValueToLabel labels = {
+  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
       {astl::AstlValue{uint64_t{0}}, "SUM0"},
       {astl::AstlValue{uint64_t{1}}, "SUM1"},
       {astl::AstlValue{uint64_t{2}}, "SUM2"},
@@ -226,7 +226,7 @@ TEST_CASE("FiniteSetMetric: Summarize operation", "[FiniteSetMetric]") {
 
 TEST_CASE("FiniteSetMetric: ReceiveSample with unsupported type", "[FiniteSetMetric]") {
   // Create a metric expecting UINT64 values
-  astl::FiniteSetMetric::ValueToLabel labels = {
+  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
       {astl::AstlValue{uint64_t{0}}, "U64_0"},
       {astl::AstlValue{uint64_t{1}}, "U64_1"},
       {astl::AstlValue{uint64_t{2}}, "U64_2"},
@@ -247,7 +247,7 @@ TEST_CASE("FiniteSetMetric: String values handling", "[FiniteSetMetric]") {
                                                  astl::AstlValue{std::string{"MEDIUM"}},
                                                  astl::AstlValue{std::string{"HIGH"}}};
 
-  astl::FiniteSetMetric::ValueToLabel labels = {
+  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
       {astl::AstlValue{std::string{"LOW"}},    "LOW_L" },
       {astl::AstlValue{std::string{"MEDIUM"}}, "MED_L" },
       {astl::AstlValue{std::string{"HIGH"}},   "HIGH_L"},

@@ -410,15 +410,4 @@ auto ResidencyMetric::SinkOrderedStateSamples() -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
-auto ResidencyMetric::GetOrderedStates() const -> std::vector<std::string> {
-  std::vector<std::string> order;
-  order.reserve(_state_configs.size() + (_residency_configuration->InferredState().has_value() ? 1 : 0));
-  std::transform(_state_configs.begin(), _state_configs.end(), std::back_inserter(order),
-                 [](const auto& cfg) { return cfg.state_name; });
-  if (_residency_configuration->InferredState().has_value()) {
-    order.push_back(_residency_configuration->InferredState().value());
-  }
-  return order;
-}
-
 }  // namespace astl

@@ -357,7 +357,7 @@ TEST_CASE("MetricHandle + FiniteSetMetric: protobuf round-trip", "[MetricHandle]
       astl::AstlValue{uint64_t{2}},
   };
 
-  astl::FiniteSetMetric::ValueToLabel labels = {
+  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
       {astl::AstlValue{uint64_t{0}}, "STATE_ZERO"},
       {astl::AstlValue{uint64_t{1}}, "STATE_ONE" },
       {astl::AstlValue{uint64_t{2}}, "STATE_TWO" },

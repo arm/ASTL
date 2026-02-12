@@ -7,9 +7,12 @@
 
 #include "astl/astl.h"
 #include "common/astl_defines.hpp"
+#include "common/metric_config.hpp"
 #include "metric/counter.hpp"
+#include "metric/finite_set_metric.hpp"
 #include "metric/i_metric.hpp"
 #include "metric/i_metric_manager.hpp"
+#include "metric/residency_metric.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "output/i_output_manager.hpp"
 #include "target.hpp"
@@ -441,6 +444,241 @@ auto astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t
       output_metrics.size() > available_metrics.size() ? ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED : ASTL_STATUS_SUCCESS;
   *metric_count = static_cast<uint32_t>(available_metrics.size());
   return result;
+}
+
+/***********************************************************************************
+ **********************      METRIC STATE DISCOVERY      *********************
+ **********************************************************************************/
+
+auto astlGetMetricStateCount(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
+                             uint32_t* state_count) noexcept -> astl_status_code {
+  if (!target_handle || !metric_handle || !state_count) {
+    ASTL_LOG_ERROR("astlGetMetricStateCount: Invalid argument(s)");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  *state_count = 0;
+
+  auto get_target_result = GetTargetFromHandle(target_handle);
+  if (!get_target_result) {
+    return get_target_result.error();
+  }
+  const auto* target = *get_target_result;
+
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager = *get_metric_manager_result;
+
+  auto metric_or_error = metric_manager->GetMetricOnTarget(metric_handle, target);
+  if (!metric_or_error.has_value()) {
+    ASTL_LOG_ERROR("astlGetMetricStateCount: Failed to get metric on target {}", target->Name());
+    return metric_or_error.error();
+  }
+  const auto* metric = *metric_or_error;
+
+  // Get metric properties to determine the metric type
+  astl_metric_properties_t properties{};
+  properties._size = sizeof(astl_metric_properties_t);
+  auto status      = metric->GetProperties(&properties);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("astlGetMetricStateCount: Failed to get metric properties");
+    return status;
+  }
+
+  size_t count = 0;
+
+  // Handle finite set metrics
+  if (properties._metric_type == ASTL_METRIC_FINITE_SET_VALUE) {
+    const auto* finite_set_metric = dynamic_cast<const astl::FiniteSetMetric*>(metric);
+    if (!finite_set_metric) {
+      ASTL_LOG_ERROR("astlGetMetricStateCount: Failed to cast to FiniteSetMetric");
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+    const auto* finite_set_config = finite_set_metric->GetFiniteSetConfiguration();
+    if (!finite_set_config) {
+      ASTL_LOG_ERROR("astlGetMetricStateCount: Failed to get FiniteSetMetricConfig");
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+    count = finite_set_config->GetLabels().size();
+  }
+  // Handle residency metrics
+  else if (properties._metric_type == ASTL_METRIC_RESIDENCY) {
+    const auto* residency_metric = dynamic_cast<const astl::ResidencyMetric*>(metric);
+    if (!residency_metric) {
+      ASTL_LOG_ERROR("astlGetMetricStateCount: Failed to cast to ResidencyMetric");
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+    const auto* residency_config = residency_metric->GetResidencyConfiguration();
+    if (!residency_config) {
+      ASTL_LOG_ERROR("astlGetMetricStateCount: Failed to get ResidencyMetricConfig");
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+    count = residency_metric->GetStateConfigs().size() + (residency_config->InferredState().has_value() ? 1 : 0);
+  } else {
+    ASTL_LOG_ERROR("astlGetMetricStateCount: Metric {} is neither a finite set nor residency metric", properties._name);
+    return ASTL_STATUS_NOT_SUPPORTED;
+  }
+
+  if (count > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("astlGetMetricStateCount: State count exceeds uint32_t maximum");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  *state_count = static_cast<uint32_t>(count);
+  return ASTL_STATUS_SUCCESS;
+}
+
+namespace {
+
+auto PopulateFiniteSetStateNames(const astl::IMetric* metric, std::span<astl_state_properties_t> output_states,
+                                 uint32_t* state_count) noexcept -> astl_status_code {
+  const auto* finite_set_metric = dynamic_cast<const astl::FiniteSetMetric*>(metric);
+  if (!finite_set_metric) {
+    ASTL_LOG_ERROR("astlGetMetricStates: Failed to cast to FiniteSetMetric");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto* finite_set_config = finite_set_metric->GetFiniteSetConfiguration();
+  if (!finite_set_config) {
+    ASTL_LOG_ERROR("astlGetMetricStates: Failed to get FiniteSetMetricConfig");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto& labels = finite_set_config->GetLabels();
+
+  if (labels.size() > output_states.size()) {
+    *state_count = 0;
+    return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
+  }
+
+  size_t index = 0;
+  for (const auto& [astl_value, label] : labels) {
+    if (index >= output_states.size()) {
+      break;
+    }
+
+    output_states[index]._size        = sizeof(astl_state_properties_t);
+    output_states[index]._value       = astl_value.ToAstlUnionValue().first;
+    output_states[index]._name        = label.c_str();
+    output_states[index]._description = nullptr;  // No descriptions available in current configuration
+    ++index;
+  }
+
+  *state_count = static_cast<uint32_t>(index);
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto PopulateResidencyStateNames(const astl::IMetric* metric, std::span<astl_state_properties_t> output_states,
+                                 uint32_t* state_count) noexcept -> astl_status_code {
+  const auto* residency_metric = dynamic_cast<const astl::ResidencyMetric*>(metric);
+  if (!residency_metric) {
+    ASTL_LOG_ERROR("astlGetMetricStates: Failed to cast to ResidencyMetric");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto* residency_config = residency_metric->GetResidencyConfiguration();
+  if (!residency_config) {
+    ASTL_LOG_ERROR("astlGetMetricStates: Failed to get ResidencyMetricConfig");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto& state_configs  = residency_metric->GetStateConfigs();
+  const auto& inferred_state = residency_config->InferredState();
+
+  size_t total_state_count = state_configs.size() + (inferred_state.has_value() ? 1 : 0);
+  if (total_state_count > output_states.size()) {
+    *state_count = 0;
+    return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
+  }
+
+  size_t index = 0;
+  for (const auto& state_config : state_configs) {
+    if (index >= output_states.size()) {
+      break;
+    }
+    output_states[index]._size        = sizeof(astl_state_properties_t);
+    output_states[index]._name        = state_config.state_name.c_str();
+    output_states[index]._description = nullptr;  // No descriptions available in current configuration
+    // cppcheck-suppress unreadVariable
+    output_states[index]._value = {};  // Zero-initialize unused field for residency metrics
+    ++index;
+  }
+
+  if (inferred_state.has_value() && index < output_states.size()) {
+    output_states[index]._size = sizeof(astl_state_properties_t);
+    // cppcheck-suppress unreadVariable
+    output_states[index]._name        = inferred_state->c_str();
+    output_states[index]._description = nullptr;  // No descriptions available in current configuration
+    // cppcheck-suppress unreadVariable
+    output_states[index]._value = {};  // Zero-initialize unused field for residency metrics
+    ++index;
+  }
+
+  *state_count = static_cast<uint32_t>(index);
+  return ASTL_STATUS_SUCCESS;
+}
+
+}  // namespace
+
+auto astlGetMetricStates(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
+                         astl_state_properties_t* states, uint32_t* state_count) noexcept -> astl_status_code {
+  if (!target_handle || !metric_handle || !states || !state_count || *state_count == 0) {
+    ASTL_LOG_ERROR("astlGetMetricStates: Invalid argument(s)");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  auto get_target_result = GetTargetFromHandle(target_handle);
+  if (!get_target_result) {
+    return get_target_result.error();
+  }
+  const auto* target = *get_target_result;
+
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager = *get_metric_manager_result;
+
+  auto metric_or_error = metric_manager->GetMetricOnTarget(metric_handle, target);
+  if (!metric_or_error.has_value()) {
+    ASTL_LOG_ERROR("astlGetMetricStates: Failed to get metric on target {}", target->Name());
+    return metric_or_error.error();
+  }
+  const auto* metric = *metric_or_error;
+
+  // Get metric properties to determine the metric type
+  astl_metric_properties_t properties{};
+  properties._size = sizeof(astl_metric_properties_t);
+  auto prop_status = metric->GetProperties(&properties);
+  if (prop_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("astlGetMetricStates: Failed to get metric properties");
+    return prop_status;
+  }
+
+  std::span<astl_state_properties_t> output_states{states, *state_count};
+
+  // Check struct size for versioning
+  auto state_struct_size = GetFirstElementSizeField(output_states);
+  if (!state_struct_size) {
+    return state_struct_size.error();
+  }
+  if (*state_struct_size != sizeof(astl_state_properties_t)) {
+    return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
+  }
+
+  // Delegate to appropriate handler based on metric type
+  if (properties._metric_type == ASTL_METRIC_FINITE_SET_VALUE) {
+    return PopulateFiniteSetStateNames(metric, output_states, state_count);
+  }
+
+  if (properties._metric_type == ASTL_METRIC_RESIDENCY) {
+    return PopulateResidencyStateNames(metric, output_states, state_count);
+  }
+
+  ASTL_LOG_ERROR("astlGetMetricStates: Metric {} is neither a finite set nor residency metric", properties._name);
+  return ASTL_STATUS_NOT_SUPPORTED;
 }
 
 /***********************************************************************************

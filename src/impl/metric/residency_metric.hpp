@@ -179,9 +179,16 @@ class ResidencyMetric : public DeltaMetric {
   std::vector<StateResidencyData> GetStateResidencyData(const std::string& state_name) const;
 
   /**
-   * @brief Return the deterministic configured sink order (states in configuration order, then inferred state if any).
+   * @brief Get the state configurations.
+   * @return Const reference to the vector of state configurations.
    */
-  std::vector<std::string> GetOrderedStates() const;
+  const std::vector<ResidencyMetricConfig::StateInfo>& GetStateConfigs() const { return _state_configs; }
+
+  /**
+   * @brief Get the residency metric configuration.
+   * @return Pointer to the ResidencyMetricConfig.
+   */
+  const ResidencyMetricConfig* GetResidencyConfiguration() const { return _residency_configuration; }
 
  protected:
   /**
