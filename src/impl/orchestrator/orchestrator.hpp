@@ -79,7 +79,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *
    * @return a reference to an owning pointer to Orchestrator. Will return nullptr before InitializeInstance is called
    */
-  static auto GetInstance() -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code>;
+  static auto GetInstance() noexcept
+      -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code>;
 
   /**
    * @brief Save the current orchestrator state to an ASTL file on disk.

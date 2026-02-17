@@ -278,7 +278,7 @@ class Logger {
    *
    * @return static Logger instance
    */
-  static Logger& GetInstance() {
+  static Logger& GetInstance() noexcept {
     static Logger logger_instance = Logger(kDefaultLogLevel, kDefaultLogConsole, kDefaultFormatting, kDefaultLogName);
     return logger_instance;
   }
@@ -522,7 +522,7 @@ class Logger {
    * even if console argument is set to false.
    */
   void InitializeLogger(astl::LogLevel level = astl::LogLevel::Off, bool console = false,
-                        bool default_formatting = false, const std::string& log_name = std::string()) {
+                        bool default_formatting = false, const std::string& log_name = std::string()) noexcept {
     // If level is not off, console is false and log_name is not specified, then turn on console
     bool log_console = console || (level != astl::LogLevel::Off && log_name.empty());
 
@@ -551,8 +551,9 @@ class Logger {
           file_sink->set_level(spdlog_level); /* file sink log level */
           sinks.push_back(file_sink);
         } catch (const spdlog::spdlog_ex& ex) {
-          spdlog_initialization_errors.push_back(std::format(
-              "Logger initialization failed: could not create file sink for log file '{}': {}", log_name, ex.what()));
+          std::string msg =
+              "Logger initialization failed: could not create file sink for log file '" + log_name + "':" + ex.what();
+          spdlog_initialization_errors.push_back(std::move(msg));
         }
       }
     } else { /* log level is off, set up the default console sink that is off */

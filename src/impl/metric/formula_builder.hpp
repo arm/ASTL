@@ -105,7 +105,8 @@ inline auto GetFormulaDescription(const AnyFormula& formula) -> std::string_view
  * @param formula_json The JSON value containing the formula configuration (optional)
  * @return std::expected<AnyFormula, astl_status_code> The formula or an error code
  */
-auto BuildFormula(const std::optional<nlohmann::json>& formula_json) -> std::expected<AnyFormula, astl_status_code>;
+auto BuildFormula(const std::optional<nlohmann::json>& formula_json) noexcept
+    -> std::expected<AnyFormula, astl_status_code>;
 
 }  // namespace astl
 

@@ -87,7 +87,7 @@ auto Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topolog
   }
 }
 
-auto Orchestrator::GetInstance()
+auto Orchestrator::GetInstance() noexcept
     -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code> {
   if (instance_) {
     return std::reference_wrapper<std::unique_ptr<Orchestrator>>(instance_);
@@ -102,9 +102,14 @@ auto Orchestrator::GetInstance()
   if (!astl_load_file_path.empty()) {
     configuration->load_file_path = astl_load_file_path;
   }
-  astl_status_code status = BuildOrchestrator(configuration.value());
-  if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+  try {
+    astl_status_code status = BuildOrchestrator(configuration.value());
+    if (status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(status);
+    }
+  } catch (const std::bad_expected_access<astl_status_code> &ex) {
+    ASTL_LOG_ERROR("Exception during Orchestrator initialization: {}", ex.what());
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   if (!instance_) {
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);

@@ -45,7 +45,8 @@ namespace astl {
 //
 // @todo ASTL-255: Support Q notation for fixed-point format as part of transformations.
 
-auto BuildFormula(const std::optional<nlohmann::json>& formula_json) -> std::expected<AnyFormula, astl_status_code> {
+static auto BuildFormulaHelper(const std::optional<nlohmann::json>& formula_json)
+    -> std::expected<AnyFormula, astl_status_code> {
   // No formula specified - use identity (pass-through)
   if (!formula_json.has_value() || formula_json->is_null()) {
     return AnyFormula{IdentityFormula{}};
@@ -72,6 +73,16 @@ auto BuildFormula(const std::optional<nlohmann::json>& formula_json) -> std::exp
 
   ASTL_LOG_ERROR("Formula must be a string expression (e.g., \"value * 0.001\" or \"bitand(value >> 8, 0xFF)\")");
   return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+}
+
+auto BuildFormula(const std::optional<nlohmann::json>& formula_json) noexcept
+    -> std::expected<AnyFormula, astl_status_code> {
+  try {
+    return BuildFormulaHelper(formula_json);
+  } catch (const std::exception& ex) {
+    ASTL_LOG_ERROR("Exception while building formula: {}", ex.what());
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+  }
 }
 
 }  // namespace astl
