@@ -24,7 +24,7 @@ runs:
       id: cpu-cores
 
     - name: ⤵️ Install apt-get Dependencies (ubuntu-latest)
-      if: inputs.os == 'ubuntu-latest' || inputs.os == 'self-hosted-ubuntu-24.04'
+      if: contains(matrix.os, 'ubuntu')
       shell: bash
       run: |
         sudo apt-get update
