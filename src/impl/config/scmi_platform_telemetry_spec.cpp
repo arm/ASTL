@@ -67,11 +67,13 @@ inline auto GetUnitsIfCompatible(std::string_view metric_unit, std::string_view 
 static auto AddMetricInstancesIfScmiElementMatches(metrics::spec::MetricJsonDeclaration const& metric_declaration,
                                                    scmi::spec::DataEvent const&                scmi_spec_layout_member,
                                                    uint32_t scmi_spec_layout_member_instance_count,
+                                                   std::unordered_map<std::string, std::string> const& aliases,
                                                    std::vector<ScmiMetricDeclaration>& metric_declarations) -> void {
   if (!metric_declaration.collection.register_name.empty() &&
       scmi_spec_layout_member.name != metric_declaration.collection.register_name) {
     return;  // metric's specified register name doesn't match this scmi register, move along.
   }
+
   // the 'component' field, if given must match, so we can specify which unit (e.g. 'PSS') to look for
   if (metric_declaration.collection.scmi_component_filter.has_value() &&
       scmi_spec_layout_member.component != metric_declaration.collection.scmi_component_filter.value()) {
@@ -101,9 +103,21 @@ static auto AddMetricInstancesIfScmiElementMatches(metrics::spec::MetricJsonDecl
     }
     // compute the data event id for this instance
     ScmiDataEventId de_id = GetDataEventId(scmi_spec_layout_member.base_de_id, instance_index);
+    // check to see if there is a more descriptive name for this component+instance in the aliases map,
+    // and use that if so. e.g. "VOLTAGE_RAIL.0" -> "VCPU_C0"
+    std::string component_string = scmi_spec_layout_member.component;
+    std::string instance_string  = std::to_string(instance_index);
+    std::string alias_key        = std::format("{}.{}", component_string, instance_string);
+    if (auto iter = aliases.find(alias_key); iter != aliases.end()) {
+      component_string = iter->second;
+      // if we have a more descriptive alias that includes the instance, we can clear the instance string to avoid
+      // redundancy. e.g. "VOLTAGE_RAIL.0" -> "VCPU_C0", no need to have instance string "0" in this case.
+      instance_string = "";
+    }
+
+    // const auto [descriptive_name, descriptive_instance] = aliases.
     // create the full metric type name, e.g. 'PSS_BMU.0.ENERGY_COUNTER'
-    metric_declarations.emplace_back(scmi_spec_layout_member.name, scmi_spec_layout_member.component,
-                                     std::to_string(instance_index), units.value(),
+    metric_declarations.emplace_back(scmi_spec_layout_member.name, component_string, instance_string, units.value(),
                                      scmi_spec_layout_member.base10_unit_modifier, de_id);
   }
 }
@@ -120,11 +134,11 @@ auto GetMetricRegistersScmiData(metrics::spec::MetricJsonDeclaration const& metr
                                 ScmiSpecification const& scmi_specification) -> std::vector<ScmiMetricDeclaration> {
   std::vector<ScmiMetricDeclaration> metric_declarations;
 
-  // each layout member consists of a count, which indicates how many times to repeat the members in the 'members' list
-  for (const auto& layout_member : scmi_specification.layout) {
-    for (const auto& block_member : layout_member.members) {
-      AddMetricInstancesIfScmiElementMatches(metric_declaration, block_member, layout_member.count,
-                                             metric_declarations);
+  // each member consists of a count, which indicates how many times to repeat the metrics in the 'metrics' list
+  for (const auto& layout_member : scmi_specification.members) {
+    for (const auto& block_member : layout_member.metrics) {
+      AddMetricInstancesIfScmiElementMatches(metric_declaration, block_member.second, layout_member.count,
+                                             scmi_specification.aliases, metric_declarations);
     }
   }
   return metric_declarations;
@@ -142,8 +156,8 @@ auto FindMatchingScmiRegistersForResidency(astl::metrics::spec::MetricJsonDeclar
 
   // if the component is specified, we must match it
   // if we know the count yet, we must match it
-  for (const auto& layout_member : scmi_spec.layout) {
-    for (const auto& block_member : layout_member.members) {
+  for (const auto& layout_member : scmi_spec.members) {
+    for (const auto& [member_name, block_member] : layout_member.metrics) {
       // if any metric state's register matches this register, then consider it.
       auto matching_state_name = find_if(metric_declaration.states->begin(), metric_declaration.states->end(),
                                          [&block_member](const auto& state_entry) {

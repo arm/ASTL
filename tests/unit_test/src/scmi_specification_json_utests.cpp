@@ -1,6 +1,7 @@
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl_errors.h"
 #include "common/scmi/uuid.hpp"
+#include "config/metric_json_declaration.hpp"
 #include "config/scmi_platform_telemetry_spec.hpp"
 
 using json = nlohmann::json;
@@ -126,16 +127,16 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
   },
   "uuid": "1234",
   "description": "Test Platform Telemetry Data Capture Format Specification",
-  "instance_id": "[7:0]",
+  "tdcf_instance_id": "[7:0]",
   "chiplet_id": "[15:8]",
   "size": 7016,
-  "layout": [
+  "members": [
     {
       "count": 1,
       "start_offset": 0,
       "block_size": 24,
-      "members": [
-        {
+      "metrics": {
+        "UUID": {
           "base_de_id": "0x00000000",
           "name": "UUID",
           "component": "HEADER",
@@ -144,14 +145,14 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
           "base10_unit_modifier": 0,
           "rel_offset": "0x0000"
         }
-      ]
+      }
     },
     {
       "count": 6,
       "start_offset": 40,
       "block_size": 48,
-      "members": [
-        {
+      "metrics": {
+         "CURRENT_TEMPERATURE": {
           "base_de_id": "0x0000E441",
           "name": "CURRENT_TEMPERATURE",
           "component": "PSS",
@@ -160,7 +161,7 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
           "base10_unit_modifier": -3,
           "rel_offset": "0x0000"
         },
-        {
+        "MIN_TEMPERATURE": {
           "base_de_id": "0x0000E442",
           "name": "MIN_TEMPERATURE",
           "component": "PSS",
@@ -169,7 +170,7 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
           "base10_unit_modifier": -3,
           "rel_offset": "0x0010"
         },
-        {
+        "MAX_TEMPERATURE": {
           "base_de_id": "0x0000E443",
           "name": "MAX_TEMPERATURE",
           "component": "PSS",
@@ -178,7 +179,7 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
           "base10_unit_modifier": -3,
           "rel_offset": "0x0020"
         }
-      ]
+      }
     }
   ]
 }
@@ -191,11 +192,94 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
     REQUIRE(uuid == "1234");
   }
 
-  SECTION("Scmi spec parse layout") {
-    std::vector<astl::scmi::spec::Layout> layouts = json_data.at("layout").get<std::vector<astl::scmi::spec::Layout>>();
-    REQUIRE(layouts.size() == 2);
-    REQUIRE(layouts[0].count == 1);
-    REQUIRE(layouts[0].start_offset == 0);
-    REQUIRE(layouts[0].block_size == 24);
+  SECTION("Scmi spec parse members") {
+    const auto members = json_data.at("members").get<std::vector<astl::scmi::spec::Member>>();
+    REQUIRE(members.size() == 2);
+    REQUIRE(members[0].count == 1);
+    REQUIRE(members[0].start_offset == 0);
+    REQUIRE(members[0].block_size == 24);
   }
+}
+
+TEST_CASE("GetMetricRegistersScmiData", "[ConfigManager]") {
+  // define an SCMI specification with 4 instances of a VOLTAGE_RAIL component,
+  // each with TEMP_PRESENT and TEMP_MINIMUM_1M registers, and aliases for each instance.
+  std::string raw_scmi_spec      = R"json(
+  {
+    "uuid": "1200/2",
+    "description": "Test Platform Telemetry Data Capture Format Specification",
+    "tdcf_instance_id": "[7:0]",
+    "chiplet_id": "[15:8]",
+    "size": 7016,
+    "members": [
+      {
+        "count": 4,
+        "start_offset": 0,
+        "block_size": 24,
+        "metrics": {
+          "TEMP_PRESENT": {
+            "base_de_id": "0x00004441",
+            "name": "TEMP_PRESENT",
+            "component": "VOLTAGE_RAIL",
+            "description": "Temperature at the present moment",
+            "unit": "celsius",
+            "base10_unit_modifier": -3,
+            "rel_offset": "0x0000"
+          },
+          "TEMP_MINIMUM_1M": {
+            "base_de_id": "0x00004442",
+            "name": "TEMP_MINIMUM_1M",
+            "component": "VOLTAGE_RAIL",
+            "description": "Minimum temperature over 1 minute",
+            "unit": "celsius",
+            "base10_unit_modifier": -3,
+            "rel_offset": "0x0038"
+          }
+        }
+      }
+    ],
+    "aliases": {
+      "VOLTAGE_RAIL.0": "VCPU_C0",
+      "VOLTAGE_RAIL.1": "VCPU_C1",
+      "VOLTAGE_RAIL.2": "VGPU",
+      "VOLTAGE_RAIL.3": "VDDR"
+    }
+  }
+  )json";
+  json        json_data          = json::parse(raw_scmi_spec);
+  auto        scmi_specification = json_data.get<astl::scmi::spec::ScmiSpecification>();
+
+  // now define metrics to read the TEMP_PRESENT register, which should match all 4 instances, and TEMP_MINIMUM_1M which
+  // should also match all 4 instances.
+  std::string metrics_definition_json         = R"json(
+  {
+    "metrics": {
+      "CURRENT_TEMPERATURE": {
+        "description": "Current Temperature in Celsius, In this example, PSS.5 has a broken temp sensor",
+        "metric_type": "value",
+        "category": "TEMPERATURE",
+        "metric_groups": [],
+        "collection": {
+          "register": "TEMP_PRESENT",
+          "protocol": "scmi"
+        },
+        "disabled": true
+      }
+    }
+  }
+  )json";
+  json        metrics_json                    = json::parse(metrics_definition_json);
+  auto        metrics_declaration             = metrics_json.get<astl::metrics::spec::MetricsDeclaration>();
+  auto        current_temp_metric_declaration = metrics_declaration.metrics.at("CURRENT_TEMPERATURE");
+
+  auto scmi_metrics_definitions = GetMetricRegistersScmiData(current_temp_metric_declaration, scmi_specification);
+  REQUIRE(scmi_metrics_definitions.size() == 4);
+  REQUIRE(scmi_metrics_definitions[0].GetFullyQualifiedName() == "VCPU_C0.TEMP_PRESENT");
+  REQUIRE(scmi_metrics_definitions[0].de_id == 0x00004441);
+  REQUIRE(scmi_metrics_definitions[1].GetFullyQualifiedName() == "VCPU_C1.TEMP_PRESENT");
+  REQUIRE(scmi_metrics_definitions[1].de_id == 0x00014441);
+  REQUIRE(scmi_metrics_definitions[2].GetFullyQualifiedName() == "VGPU.TEMP_PRESENT");
+  REQUIRE(scmi_metrics_definitions[2].de_id == 0x00024441);
+  REQUIRE(scmi_metrics_definitions[3].GetFullyQualifiedName() == "VDDR.TEMP_PRESENT");
+  REQUIRE(scmi_metrics_definitions[3].de_id == 0x00034441);
 }

@@ -160,7 +160,7 @@ inline auto FindSpecFileByUuid(const RepoMeta& repo_meta, const scmi::spec::Uuid
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
- * @brief A single member of []layout[n].members[]
+ * @brief A single member of []members[n].metrics[]
  */
 struct DataEvent {
   uint32_t    base_de_id{};
@@ -187,55 +187,63 @@ inline void from_json(const json& json_data, DataEvent& entry) {
 }
 
 /**
- * @brief A single member of []layout[]
+ * @brief A single member of the json metrics definitions file for scmi
  *
  * @example
- *       {
- *       "count": 72,
- *       "start_offset": 304,
- *       "block_size": 32,
- *       "members": [
- *          {
- *             "base_de_id": "0x0000E56D",
- *             "name": "CXS_READ_BANDWIDTH",
- *             "component": "PSS_BMU",
- *             "description": "Accumulative CXS total read bandwidth",
- *             "unit": "bits",
+ * "members": [
+ *    {
+ *       "count": 6,
+ *       "component_type": "0x94",
+ *       "component_name": "PSS",
+ *       "start_offset": 40,
+ *       "block_size": 48,
+ *       "metrics": {
+ *          "TEMP_PRESENT": {
+ *             "description": "Temperature Present",
+ *             "type": "Gauge",
+ *             "unit": "celsius",
  *             "base10_unit_modifier": -3,
- *             "rel_offset": "0x0000"
+ *             "name": "TEMP_PRESENT",
+ *             "component": "PSS",
+ *             "base_de_id": "0x00009441",
+ *             "line_size": 16,
+ *             "rel_offset": "0x0028"
  *          },
- *          {
- *             "base_de_id": "0x0000E56E",
- *             "name": "CXS_WRITE_BANDWIDTH",
- *             "component": "PSS_BMU",
- *             "description": "Accumulative total read bandwidth",
- *             "unit": "bits",
+ *          "TEMP_MINIMUM_1M": {
+ *             "description": "Temperature Minimum 1 Minute",
+ *             "type": "Gauge",
+ *             "unit": "celsius",
  *             "base10_unit_modifier": -3,
- *             "rel_offset": "0x0010"
- *          }
- *       ]
- *    },
- * represents 144 data events, including
- * - PSS_BMU.0.CXS_READ_BANDWIDTH   at data event 0x0000_E56D
- * - PSS_BMU.0.CXS_WRITE_BANDWIDTH  at data event 0x0000_E56E
- * - PSS_BMU.1.CXS_READ_BANDWIDTH   at data event 0x0001_E56D
- * - PSS_BMU.1.CXS_WRITE_BANDWIDTH  at data event 0x0001_E56E
+ *             "name": "TEMP_MINIMUM_1M",
+ *             "component": "PSS",
+ *             "base_de_id": "0x00009442",
+ *             "line_size": 16,
+ *             "rel_offset": "0x0038"
+ *          },
+ *       }
+ *    }
+ *
+ * represents 12 data events, including
+ * - PSS.0.TEMP_PRESENT      at data event 0x0000_9441
+ * - PSS.0.TEMP_MINIMUM_1M   at data event 0x0000_9442
+ * - PSS.1.TEMP_PRESENT      at data event 0x0001_9441
+ * - PSS.1.TEMP_MINIMUM_1M   at data event 0x0001_9442
  * - ...
- * - PSS_BMU.71.CXS_READ_BANDWIDTH  at data event 0x0047_E56D
- * - PSS_BMU.71.CXS_WRITE_BANDWIDTH at data event 0x0047_E56E
+ * - PSS.5.TEMP_PRESENT      at data event 0x0005_9441
+ * - PSS.5.TEMP_MINIMUM_1M   at data event 0x0005_9442
  */
-struct Layout {
-  uint32_t               count{};
-  uint64_t               start_offset{};
-  uint64_t               block_size{};
-  std::vector<DataEvent> members;
+struct Member {
+  uint32_t                         count{};
+  uint64_t                         start_offset{};
+  uint64_t                         block_size{};
+  std::map<std::string, DataEvent> metrics;
 };
 
-inline void from_json(const json& json_data, Layout& layout) {
-  json_data.at("count").get_to(layout.count);
-  json_data.at("start_offset").get_to(layout.start_offset);
-  json_data.at("block_size").get_to(layout.block_size);
-  json_data.at("members").get_to(layout.members);
+inline void from_json(const json& json_data, Member& member) {
+  json_data.at("count").get_to(member.count);
+  json_data.at("start_offset").get_to(member.start_offset);
+  json_data.at("block_size").get_to(member.block_size);
+  json_data.at("metrics").get_to(member.metrics);
 }
 
 /** @brief An element of the metrics_specification json files with file metadata */
@@ -262,21 +270,40 @@ struct ScmiSpecification {
   SpecificationDocument specification_document;
   std::string           uuid;
   std::string           description;
-  std::string           instance_id;
+  std::string           tdcf_instance_id;
   std::string           chiplet_id;
   uint32_t              size{};
-  std::vector<Layout>   layout;
+  std::vector<Member>   members;
+  // map of component instance name to alias name, e.g. "VOLTAGE_RAIL.0" -> "VCPU_C0"
+  std::unordered_map<std::string, std::string> aliases;
 };
 
 inline void from_json(const json& json_data, ScmiSpecification& spec) {
-  json_data.at("_type").get_to(spec._type);
-  json_data.at("document").get_to(spec.specification_document);
+  if (json_data.contains("_type")) {
+    json_data.at("_type").get_to(spec._type);
+  } else {
+    spec._type = "";
+  }
+  if (json_data.contains("document")) {
+    json_data.at("document").get_to(spec.specification_document);
+  }
   json_data.at("uuid").get_to(spec.uuid);
   json_data.at("description").get_to(spec.description);
-  json_data.at("instance_id").get_to(spec.instance_id);
-  json_data.at("chiplet_id").get_to(spec.chiplet_id);
+  if (json_data.contains("tdcf_instance_id")) {
+    json_data.at("tdcf_instance_id").get_to(spec.tdcf_instance_id);
+  } else {
+    spec.tdcf_instance_id = "";
+  }
+  if (json_data.contains("chiplet_id")) {
+    json_data.at("chiplet_id").get_to(spec.chiplet_id);
+  } else {
+    spec.chiplet_id = "";
+  }
   json_data.at("size").get_to(spec.size);
-  json_data.at("layout").get_to(spec.layout);
+  json_data.at("members").get_to(spec.members);
+  if (json_data.contains("aliases")) {
+    json_data.at("aliases").get_to(spec.aliases);
+  }
 }
 
 /**
