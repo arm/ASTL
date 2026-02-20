@@ -41,6 +41,11 @@ Lifecycle (tolerates NOT_IMPLEMENTED by ignoring it):
   `stop_collection(...)`
 - `read_immediate(target=None)`
 
+Session save/load:
+
+- `save_collection(output_file_path: Optional[str] = None)`
+- `load_collection(input_file_path: str, chunk_size_bytes: int = 0)`
+
 Samples:
 
 - `get_counter_samples(target, counter) -> list[(timestamp, value)]`
@@ -85,6 +90,7 @@ polling loops:
 
 See samples (now under the installed package tree for convenience):
 
+- `python/samples/astl_demo.py` (core walkthrough + save/load `.astl` round-trip)
 - `python/samples/astl_polling_demo.py`
 - `python/samples/astl_async_demo.py`
 
@@ -108,6 +114,18 @@ if targets:
  ) as sess:
   snap = sess.poll_once()
   print("Snapshot counters:", {k: v[-1:] for k, v in snap['counters'].items()})
+```
+
+## Save / Load Session Archive
+
+```python
+import astl
+
+# Save current in-memory session state to a .astl archive
+astl.save_collection("/tmp/session.astl")
+
+# Load a previously saved archive for post-processing
+astl.load_collection("/tmp/session.astl")
 ```
 
 ## Diagnostics
@@ -181,8 +199,8 @@ print(deltas(samples))  # successive differences
 print(rates(samples, time_scale=1000))  # per 'second' if timestamps were ms
 ```
 
-See `samples/python/astl_demo.py` (added by this binding effort) for a minimal
-flow.
+See `python/samples/astl_demo.py` for a minimal end-to-end flow, including
+`save_collection(...)` and `load_collection(...)` usage.
 
 ```python
 import astl

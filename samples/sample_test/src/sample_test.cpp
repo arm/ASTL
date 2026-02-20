@@ -62,18 +62,18 @@ auto ParseArgs(int argc, char* argv[]) -> AstlArgMap {
 // NOLINTEND
 
 auto PrintHelp() -> void {
-  std::cout
-      << "Usage: sample_test [options]\n\n"
-      << "Options:\n"
-      << "  --help              Show this help message.\n"
-      << "  --version           Print version and exit.\n"
-      << "  --group=<name>      Specify metric group to collect.\n"
-      << "  --immediate         Trigger immediate sample read.\n"
-      << "  --interval=<n>      Trigger interval sample read period in milliseconds.\n"
-      << "  --duration=<n>      Collection duration in seconds.\n"
-      << "  --config=<path>     Path to  json config file for ASTL.\n"
-      << "  --cache-dir         Bool to disable collection when ASTL_LOAD_CACHE_DIR env var is set (experimental!).\n"
-      << "  Default: interval mode, 10 seconds duration and 500 milliseconds sampling interval.\n";
+  std::cout << "Usage: sample_test [options]\n\n"
+            << "Options:\n"
+            << "  --help              Show this help message.\n"
+            << "  --version           Print version and exit.\n"
+            << "  --group=<name>      Specify metric group to collect.\n"
+            << "  --load=<path>       Load a saved session (.astl) before querying targets/metrics.\n"
+            << "  --save=<path>       Save a session (.astl) after collection.\n"
+            << "  --immediate         Trigger immediate sample read.\n"
+            << "  --interval=<n>      Trigger interval sample read period in milliseconds.\n"
+            << "  --duration=<n>      Collection duration in seconds.\n"
+            << "  --config=<path>     Path to  json config file for ASTL.\n"
+            << "  Default: interval mode, 10 seconds duration and 500 milliseconds sampling interval.\n";
 }
 
 auto PrintVersion() -> void {
@@ -412,7 +412,8 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
  *   --immediate     Trigger an immediate metric sample. This is default behavior.
  *   --interval=<n>  Trigger interval sampling every <n> milliseconds
  *   --config=<path> Path to json config file for ASTL
- *   --cache-dir Load ASTL state from serialized files (experimental!)
+ *   --load=<path>   Load ASTL state from a saved session (.astl)
+ *   --save=<path>   Save ASTL state to a session file (.astl)
  *
  * A lightweight argument parser interprets these flags and
  * runs the corresponding ASTL actions.
@@ -428,6 +429,25 @@ auto main(int argc, char* argv[]) -> int {
   if (args.contains("version")) {
     PrintVersion();
     return 0;
+  }
+
+  astl_status_code status{ASTL_STATUS_SUCCESS};
+
+  const bool do_load_session = args.contains("load");
+  if (do_load_session) {
+    const std::string& input_file_path = args.at("load");
+    if (input_file_path == "true") {
+      std::cerr << "--load requires a value (use --load=<path>)\n";
+      return 2;
+    }
+
+    ASTL_INIT_STRUCT(astl_load_params_t, load_params, .input_file_path = input_file_path.c_str(), .chunk_size_bytes = 0,
+                     .flags = 0);
+    status = astlLoadCollection(&load_params);
+    std::cout << "astlLoadCollection Status: " << astlStatusString(status) << '\n';
+    if (status != ASTL_STATUS_SUCCESS) {
+      return 6;
+    }
   }
 
   auto metric_group_name = GetMetricGroupArgument(args);
@@ -460,7 +480,6 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   // Get targets
-  astl_status_code                      status{ASTL_STATUS_SUCCESS};
   std::vector<astl_target_properties_t> target_properties_buffer;
   astl_target_properties_t              target_properties;
   if (args.contains("target")) {
@@ -510,13 +529,28 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   // Configure and run collection
-  if (!args.contains("cache-dir")) {
+  if (!do_load_session) {
     status = ConfigureAndRunCollection(target_properties, metric_buffer, do_interval, duration_seconds,
                                        sampling_interval_ms);
     if (status != ASTL_STATUS_SUCCESS) {
       // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
       // even without mock sysfs running
       return 0;
+    }
+  }
+
+  if (args.contains("save")) {
+    const std::string& output_file_path = args.at("save");
+    if (output_file_path == "true") {
+      std::cerr << "--save requires a value (use --save=<path>)\n";
+      return 2;
+    }
+
+    ASTL_INIT_STRUCT(astl_save_params_t, save_params, .output_file_path = output_file_path.c_str(), .flags = 0);
+    status = astlSaveCollection(&save_params);
+    std::cout << "astlSaveCollection Status: " << astlStatusString(status) << '\n';
+    if (status != ASTL_STATUS_SUCCESS) {
+      return 7;
     }
   }
 

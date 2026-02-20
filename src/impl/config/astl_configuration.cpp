@@ -169,15 +169,6 @@ static auto GetAstlConfigDirPath() -> std::expected<std::filesystem::path, astl_
   return std::unexpected(lib_path.error());
 }
 
-/** @brief if we're restoring ASTL from a saved file, get that path from ASTL_LOAD_FILE_PATH env variable */
-auto GetLoadFilePath() -> std::optional<std::filesystem::path> {
-  auto env_var_value = astl::GetEnvVar(astl::EnvVar::ASTL_LOAD_FILE_PATH);
-  if (!env_var_value.empty()) {
-    return std::filesystem::path{env_var_value};
-  }
-  return std::nullopt;
-}
-
 AstlConfiguration::AstlConfiguration(std::filesystem::path const&                scmi_sysfs_path,
                                      std::filesystem::path const&                config_dir_path,
                                      std::optional<std::filesystem::path> const& load_file_path)
@@ -194,8 +185,7 @@ AstlConfiguration::AstlConfiguration(std::filesystem::path const&               
   if (!config_dir_path) {
     return std::unexpected<astl_status_code>(config_dir_path.error());
   }
-  auto load_file_path = GetLoadFilePath();
-  return AstlConfiguration(scmi_sysfs_path, *config_dir_path, load_file_path);
+  return AstlConfiguration(scmi_sysfs_path, *config_dir_path, std::nullopt);
 }
 
 }  // namespace astl

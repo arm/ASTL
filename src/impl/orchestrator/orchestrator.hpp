@@ -83,6 +83,21 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
       -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code>;
 
   /**
+   * @brief Destroy the current singleton instance, if any.
+   *
+   * This is primarily intended for tests and explicit reload workflows.
+   */
+  static auto ResetInstance() -> void;
+
+  /**
+   * @brief Serialize the current orchestrator state into its cache directory.
+   *
+   * This writes the topology + metric manager protobuf files into the cache dir.
+   * It does not create a final .astl archive.
+   */
+  static auto SaveStateToCacheDir() -> astl_status_code;
+
+  /**
    * @brief Save the current orchestrator state to an ASTL file on disk.
    *
    * @param file_path The path to the output ASTL file.

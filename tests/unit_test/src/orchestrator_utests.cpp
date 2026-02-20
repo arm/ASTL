@@ -2,10 +2,18 @@
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
+#include "../../test_utilities.hpp"
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
+#include "astl/astl_test_hooks.h"
+#include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
+#include "metric/metric_manager.hpp"
 #include "orchestrator/orchestrator.hpp"
+#include "serdes/archive_utils.hpp"
+#include "serdes/protobuf_serdes.hpp"
+#include "target.hpp"
+#include "topology/topology_manager.hpp"
 
 using Catch::Matchers::ContainsSubstring;
 using trompeloeil::_;
@@ -363,4 +371,156 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV idempotent emission", "[Orch
   auto*              target = orchestrator.GetTargets()[0].get();
   REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
   REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
+}
+
+/******************************************************************************
+ *  SaveToFile / SaveStateToCacheDir / LoadFromFile tests                     *
+ ******************************************************************************/
+
+auto MakeMinimalOrchestratorForSave(std::filesystem::path cache_dir)
+    -> std::pair<std::unique_ptr<astl::Orchestrator>, std::vector<std::unique_ptr<trompeloeil::expectation>>> {
+  auto                                                   topology_manager  = std::make_unique<MockTopologyManager>();
+  auto                                                   collector_manager = std::make_unique<MockCollectorManager>();
+  std::vector<std::unique_ptr<trompeloeil::expectation>> expectations;
+  expectations.push_back(NAMED_ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
+  expectations.push_back(NAMED_ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  expectations.push_back(
+      NAMED_ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
+  expectations.push_back(NAMED_ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
+  expectations.push_back(NAMED_ALLOW_CALL(*metric_manager, RemoveAllMetrics()));
+  auto output_manager = std::make_unique<MockOutputManager>();
+  return {std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                               std::move(metric_manager), std::move(output_manager), cache_dir),
+          std::move(expectations)};
+}
+
+TEST_CASE("Orchestrator::SaveToFile round-trip", "[Orchestrator][cache]") {
+  namespace fs = std::filesystem;
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_orch_save_to_file_test";
+  const fs::path save_file = fs::temp_directory_path() / "astl_orch_save_to_file_test.astl";
+  TempFileGuard  cache_guard(cache_dir);
+  TempFileGuard  save_guard(save_file);
+
+  // Build a concrete orchestrator with a real TopologyManager so serialization succeeds.
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  auto output_manager = std::make_unique<MockOutputManager>();
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  auto topology_manager = std::make_unique<astl::TopologyManager>(std::move(targets));
+
+  auto orchestrator =
+      std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                           std::move(metric_manager), std::move(output_manager), cache_dir);
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  // SaveToFile exercises SaveStateToCacheDir (L607+) then ZipDirectory (L604)
+  // MockMetricManager makes Serialize fail with BAD_ARGUMENT on the metric manager path,
+  // but topology serialization succeeds (concrete TopologyManager). The overall status
+  // from SaveStateToCacheDir returns that failure.
+  auto status = astl::Orchestrator::SaveToFile(save_file);
+  // With a mock metric manager serialization will fail.
+  REQUIRE(status == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("Orchestrator::SaveStateToCacheDir serialises topology + metric manager", "[Orchestrator][cache]") {
+  namespace fs = std::filesystem;
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_save_state_cache_test";
+  TempFileGuard  cache_guard(cache_dir);
+
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  // Use a concrete MetricManager so serialization actually succeeds end-to-end.
+  std::vector<astl::CollectorCapability> collector_caps;
+  collector_caps.emplace_back(astl::CollectorType::SCMI);
+  std::vector<astl::SystemCapability> system_caps;
+  system_caps.emplace_back();
+  astl::Capabilities caps{std::move(collector_caps), std::move(system_caps)};
+  auto               concrete_metric_manager = std::make_unique<astl::MetricManager>(caps);
+
+  auto output_manager = std::make_unique<MockOutputManager>();
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  auto topology_manager = std::make_unique<astl::TopologyManager>(std::move(targets));
+
+  auto orchestrator =
+      std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                           std::move(concrete_metric_manager), std::move(output_manager), cache_dir);
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  REQUIRE(astl::Orchestrator::SaveStateToCacheDir() == ASTL_STATUS_SUCCESS);
+
+  // Verify topology and metric manager files were created in the cache dir.
+  REQUIRE(fs::exists(cache_dir / astl::kTopologyManagerFileName));
+  REQUIRE(fs::exists(cache_dir / astl::kMetricManagerFileName));
+}
+
+TEST_CASE("Orchestrator::LoadFromFile fails for non-existent file", "[Orchestrator][cache]") {
+  namespace fs = std::filesystem;
+
+  const fs::path bad_file  = "/tmp/astl_nonexistent_load_test_12345.astl";
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_load_fail_cache";
+  TempFileGuard  cache_guard(cache_dir);
+
+  // Ensure singleton is clear so we don't short-circuit with the "already initialized" path.
+  astl::Orchestrator::ResetInstance();
+  auto status = astl::Orchestrator::LoadFromFile(bad_file, cache_dir);
+  REQUIRE(status != ASTL_STATUS_SUCCESS);
+
+  // Restore a minimal orchestrator to leave the singleton in a valid state.
+  auto [orchestrator, expectations] = MakeMinimalOrchestratorForSave("");
+  TestOrchestratorInjector injector(std::move(orchestrator));
+}
+
+TEST_CASE("Orchestrator::SaveToFile creates a valid .astl archive", "[Orchestrator][cache]") {
+  namespace fs = std::filesystem;
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_save_file_roundtrip_cache";
+  const fs::path save_file = fs::temp_directory_path() / "astl_save_file_roundtrip.astl";
+  const fs::path load_dir  = fs::temp_directory_path() / "astl_save_file_roundtrip_load";
+  TempFileGuard  cache_guard(cache_dir);
+  TempFileGuard  save_guard(save_file);
+  TempFileGuard  load_guard(load_dir);
+
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  std::vector<astl::CollectorCapability> collector_caps;
+  collector_caps.emplace_back(astl::CollectorType::SCMI);
+  std::vector<astl::SystemCapability> system_caps;
+  system_caps.emplace_back();
+  astl::Capabilities caps{std::move(collector_caps), std::move(system_caps)};
+  auto               concrete_metric_manager = std::make_unique<astl::MetricManager>(caps);
+
+  auto output_manager = std::make_unique<MockOutputManager>();
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  auto topology_manager = std::make_unique<astl::TopologyManager>(std::move(targets));
+
+  auto orchestrator =
+      std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                           std::move(concrete_metric_manager), std::move(output_manager), cache_dir);
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  REQUIRE(astl::Orchestrator::SaveToFile(save_file) == ASTL_STATUS_SUCCESS);
+
+  // Verify the archive is a valid zip containing the expected files.
+  REQUIRE(fs::exists(save_file));
+  REQUIRE(astl::mz::UnzipDirectory(save_file, load_dir) == ASTL_STATUS_SUCCESS);
+  REQUIRE(fs::exists(load_dir / astl::kTopologyManagerFileName));
+  REQUIRE(fs::exists(load_dir / astl::kMetricManagerFileName));
 }

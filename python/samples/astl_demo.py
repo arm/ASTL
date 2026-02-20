@@ -19,6 +19,7 @@ sets an rpath ($ORIGIN) so you should NOT need to set LD_LIBRARY_PATH.
 from __future__ import annotations
 import os
 import sys
+import tempfile
 from typing import Sequence
 
 try:
@@ -98,6 +99,19 @@ def _configure_and_collect(target, counters, metrics):
         print(f"Metric {m.name} samples: {samples_m[:5]}")
 
 
+def _save_load_roundtrip():
+    """Demonstrate Python save/load wrappers for ASTL session archives."""
+    _print_header("Save / Load Session (.astl)")
+    session_path = os.path.join(tempfile.gettempdir(), "astl_python_demo_session.astl")
+    print(f"Saving session to: {session_path}")
+    astl.save_collection(session_path)
+    print("Save complete")
+
+    print(f"Loading session from: {session_path}")
+    astl.load_collection(session_path)
+    print("Load complete")
+
+
 def main():
     config = os.environ.get("ASTL_CONFIG")
     astl.initialize(config)
@@ -115,6 +129,11 @@ def main():
     target = targets[0]
     counters, metrics, _ = _enumerate_entities(target)
     _configure_and_collect(target, counters, metrics)
+    try:
+        _save_load_roundtrip()
+    except astl.ASTLError as e:
+        # Keep this sample resilient across environments where save/load may not be available.
+        print(f"Save/load demo skipped due to ASTL error: {e}")
     return 0
 
 

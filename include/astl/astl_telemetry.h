@@ -674,7 +674,7 @@ ASTL_API astl_status_code astlConfigureCounterCollection(const astl_collection_p
  *
  * @return astl_error_code
  */
-astl_status_code ASTL_API astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
+ASTL_API astl_status_code astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
                                                                 astl_collection_parameters_t* collection_params,
                                                                 astl_metric_handle_t*         metric_handles,
                                                                 uint32_t metric_count) ASTL_API_NOEXCEPT;
@@ -829,6 +829,52 @@ ASTL_API astl_status_code astlStopCollectionOnTarget(astl_target_handle_t target
  * @return astl_status_code
  */
 ASTL_API astl_status_code astlStopCollection() ASTL_API_NOEXCEPT;
+
+/*** Save/Load collection session to/from .astl file ***/
+/**
+ * @brief Parameters for saving a completed collection to temporary files and optionally
+ *        emitting a final .astl file.
+ *
+ * Semantics:
+ *  - The final .astl file is generated only if output_file_path is provided explicitly.
+ *  - Intended to be called post-collection (after StopCollection).
+ */
+typedef struct astl_save_params_t {
+  size_t      _size;             //!< Size of this struct for versioning
+  const char* output_file_path;  //!< Absolute path to the final .astl file to generate. If nullptr or empty, only temp
+                                 //!< files are produced and no .astl is emitted
+  uint32_t flags;                //!< Reserved for future flags (must be 0 for now)
+} astl_save_params_t;
+
+/**
+ * @brief Save collected samples to temp files and optionally finalize a .astl file.
+ * @param params Save parameters (see astl_save_params_t).
+ * @return ASTL_STATUS_SUCCESS on success; error code otherwise.
+ */
+ASTL_API astl_status_code astlSaveCollection(const astl_save_params_t* params) ASTL_API_NOEXCEPT;
+
+/**
+ * @brief Parameters for loading a previously saved .astl file.
+ *
+ * Semantics:
+ *  - After a successful load of a .astl file, Start/Pause/Resume/Stop are disabled; only post-processing is possible.
+ *  - If user calls any Configure* API after load, ASTL is cleaned up and ready for new collection.
+ */
+typedef struct astl_load_params_t {
+  size_t      _size;             //!< Size of this struct for versioning
+  const char* input_file_path;   //!< Required: absolute path to the .astl file to load
+  size_t      chunk_size_bytes;  //!< Chunk size in bytes for reading segments; 0 uses default
+  uint32_t    flags;             //!< Reserved for future flags (must be 0 for now)
+} astl_load_params_t;
+
+/**
+ * @brief Load a previously saved .astl file for post-processing only.
+ *        After loading, collection control APIs (Start/Pause/Resume/Stop) are disabled
+ *        until the user calls a Configure* API, which resets ASTL to allow new collection.
+ * @param params Load parameters (see astl_load_params_t).
+ * @return ASTL_STATUS_SUCCESS on success; error code otherwise.
+ */
+ASTL_API astl_status_code astlLoadCollection(const astl_load_params_t* params) ASTL_API_NOEXCEPT;
 
 /*** COLLECTED COUNTER SAMPLES ***/
 /**

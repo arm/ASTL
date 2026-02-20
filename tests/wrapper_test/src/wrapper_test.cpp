@@ -15,7 +15,10 @@
 #include "metric/metric_manager.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "output/output_manager.hpp"
+#include "serdes/archive_utils.hpp"
+#include "serdes/protobuf_serdes.hpp"
 #include "target.hpp"
+#include "topology/topology_manager.hpp"
 
 using trompeloeil::_;
 
@@ -50,50 +53,6 @@ auto MakeMinimalOrchestrator(std::unique_ptr<MockMetricManager> metric_manager =
                                                std::move(metric_manager), std::move(output_manager), ""),
           std::move(expectations)};
 }
-
-/**
- * @brief A test harness construct to replace the ASTL's Orchestrator instance with one for testing
- *
- * This is an RAII-style manager; on construction it will swap out the existing orchestrator
- * with the given `test_orchestrator`. On destruction (usually at the end of a test), it'll swap
- * the original orchestrator back in.
- */
-class TestOrchestratorInjector {
- public:
-  TestOrchestratorInjector() = delete;  // we must provide an orchestrator to inject
-
-  /**
-   * @brief Replace the existing `orchestrator` with the given test_orchestrator.
-   *
-   * When this TestOrchestratorInjector is destroyed, it'll put the original orchestrator back
-   */
-  explicit TestOrchestratorInjector(std::unique_ptr<astl::Orchestrator> test_orchestrator) {
-    astlInjectTestOrchestrator(test_orchestrator.release(), &_original_orchestrator);
-  }
-
-  /**
-   * @brief swap the original orchestrator back into the library to resume use as normal
-   */
-  ~TestOrchestratorInjector() {
-    // swap back the original orchestrator, and retrieve the test orchestrator for clean up.
-    astl_test_orchestrator_t test_orchestrator_handle{nullptr};
-    astlInjectTestOrchestrator(_original_orchestrator, &test_orchestrator_handle);
-    // now clean up the `test_orchestrator` we received in this class's constructor
-    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
-    delete static_cast<astl::Orchestrator*>(test_orchestrator_handle);
-  }
-
-  // since we're managing a resource (an original orchestrator and test orchestrator),
-  // disallow coppying and moving
-  TestOrchestratorInjector(TestOrchestratorInjector const&)            = delete;
-  TestOrchestratorInjector(TestOrchestratorInjector&&)                 = delete;
-  TestOrchestratorInjector& operator=(TestOrchestratorInjector const&) = delete;
-  TestOrchestratorInjector& operator=(TestOrchestratorInjector&&)      = delete;
-
- private:
-  // hold the original orchestrator as a raw handle, since that's how the C interface provides it
-  astl_test_orchestrator_t _original_orchestrator{nullptr};
-};
 
 // imprecise constants for testing
 constexpr uint32_t kJunk = 13;
@@ -1291,14 +1250,15 @@ TEST_CASE("astlGetMetrics verifies category propagation", "[wrapper][Orchestrato
   REQUIRE(metrics[2]._category == ASTL_CATEGORY_FREQUENCY);
 }
 
-TEST_CASE("ASTL_SAVE_FILE_PATH saves state on StopCollection", "[wrapper][cache]") {
+TEST_CASE("astlSaveCollection smoke test", "[wrapper][cache]") {
   namespace fs = std::filesystem;
 
   const fs::path save_file = fs::temp_directory_path() / "astl_save_wrapper_test.astl";
   TempFileGuard  temp_file_guard(save_file);
+  const auto     save_file_str = save_file.string();
 
-  EnvVarGuard save_guard(astl::EnvVar::ASTL_SAVE_FILE_PATH);
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_SAVE_FILE_PATH, save_file.string()) == ASTL_STATUS_SUCCESS);
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_save_wrapper_test_cache";
+  TempFileGuard  cache_dir_guard(cache_dir);
 
   // One mock target
   auto                 mock_target        = std::make_unique<MockTarget>();
@@ -1319,7 +1279,7 @@ TEST_CASE("ASTL_SAVE_FILE_PATH saves state on StopCollection", "[wrapper][cache]
   auto* collector_ptr     = collector_manager.get();
   ALLOW_CALL(*collector_ptr, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_ptr, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
-  // StopCollection() requires these for the "finalize" path
+  // StopCollection() requires these for the "finalize" path, even if we don't trigger it here.
   ALLOW_CALL(*collector_ptr, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_ptr, IsAnyTargetBeingCollected()).RETURN(false);
 
@@ -1328,13 +1288,13 @@ TEST_CASE("ASTL_SAVE_FILE_PATH saves state on StopCollection", "[wrapper][cache]
   ALLOW_CALL(*metric_ptr, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_ptr, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_ptr, RemoveAllMetrics());
-  // StopCollection() may call these depending on your codepath
   ALLOW_CALL(*metric_ptr, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
 
-  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
-                                                           std::move(metric_manager), std::move(output_manager), "");
+  auto orchestrator =
+      std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                           std::move(metric_manager), std::move(output_manager), cache_dir);
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
@@ -1346,28 +1306,209 @@ TEST_CASE("ASTL_SAVE_FILE_PATH saves state on StopCollection", "[wrapper][cache]
   REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
   REQUIRE(target_count == 1);
 
-  // Serialization should fail since we are using a mock metric manager
-  // We get an internal error since mock orchestrator does not have a
-  // temp directory to store files.
-  REQUIRE(astlStopCollectionOnTarget(targets[0]._handle) == ASTL_STATUS_INTERNAL_ERROR);
+  // Serialization should fail since we are using a mock metric manager (not a concrete MetricManager).
+  ASTL_INIT_STRUCT(astl_save_params_t, params, .output_file_path = nullptr, .flags = 0);
+  params.output_file_path = save_file_str.c_str();
+  REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
-TEST_CASE("ASTL_LOAD_FILE_PATH test", "[wrapper][cache]") {
-  // This only verifies wrapper calls still succeed when the env var is set.
-  // It does NOT prove the instance was loaded from disk because the orchestrator
-  // is a singleton and only constructed once per process.
+TEST_CASE("astlLoadCollection smoke test", "[wrapper][cache]") {
+  namespace fs = std::filesystem;
 
-  EnvVarGuard load_guard(astl::EnvVar::ASTL_LOAD_FILE_PATH);
+  const fs::path src_dir  = fs::temp_directory_path() / "astl_load_wrapper_test_src";
+  const fs::path astl_zip = fs::temp_directory_path() / "astl_load_wrapper_test.astl";
+  TempFileGuard  src_guard(src_dir);
+  TempFileGuard  zip_guard(astl_zip);
 
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_LOAD_FILE_PATH, "/tmp/does-not-matter-for-smoke") == ASTL_STATUS_SUCCESS);
+  std::error_code ec;
+  fs::create_directories(src_dir, ec);
+  REQUIRE(!ec);
 
+  // Write the minimum required files that the loader expects inside the archive.
+  {
+    std::vector<std::unique_ptr<astl::ITarget>> targets;
+    targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+    astl::TopologyManager topology_mgr{std::move(targets)};
+
+    std::ofstream topology_file{src_dir / astl::kTopologyManagerFileName, std::ios::binary | std::ios::out};
+    REQUIRE(topology_file.good());
+    REQUIRE(astl::ProtobufSerDes::Serialize(topology_mgr, topology_file) == ASTL_STATUS_SUCCESS);
+  }
+  {
+    std::vector<astl::CollectorCapability> collector_caps;
+    collector_caps.emplace_back(astl::CollectorType::SCMI);
+    std::vector<astl::SystemCapability> system_caps;
+    system_caps.emplace_back();
+    astl::Capabilities  caps{std::move(collector_caps), std::move(system_caps)};
+    astl::MetricManager metric_mgr{caps};
+
+    std::ofstream metric_file{src_dir / astl::kMetricManagerFileName, std::ios::binary | std::ios::out};
+    REQUIRE(metric_file.good());
+    REQUIRE(astl::ProtobufSerDes::Serialize(metric_mgr, metric_file) == ASTL_STATUS_SUCCESS);
+  }
+
+  REQUIRE(astl::mz::ZipDirectory(src_dir, astl_zip) == ASTL_STATUS_SUCCESS);
+
+  // Wrap in an injector so the original orchestrator is restored after the load resets/rebuilds the singleton.
   auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  uint32_t target_count = 0;
-  REQUIRE(astlGetTargetCount(&target_count) == ASTL_STATUS_BAD_CONFIGURATION);
+  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = nullptr, .chunk_size_bytes = 0, .flags = 0);
+  const auto astl_zip_str = astl_zip.string();
+  params.input_file_path  = astl_zip_str.c_str();
 
-  auto     targets = AllocateAstlVector<astl_target_properties_t>(kAFew);
-  uint32_t count   = kAFew;
-  REQUIRE(astlGetTargets(targets.data(), &count) == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_SUCCESS);
+}
+
+/******************************************************************************
+ *  astlSaveCollection – parameter validation tests                          *
+ ******************************************************************************/
+
+TEST_CASE("astlSaveCollection rejects null params", "[wrapper][cache][bad parameters]") {
+  REQUIRE(astlSaveCollection(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("astlSaveCollection rejects wrong _size", "[wrapper][cache][bad parameters]") {
+  astl_save_params_t params{};
+  params._size            = 1;  // deliberately wrong
+  params.output_file_path = nullptr;
+  params.flags            = 0;
+  REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("astlSaveCollection rejects non-zero flags", "[wrapper][cache][bad parameters]") {
+  ASTL_INIT_STRUCT(astl_save_params_t, params, .output_file_path = nullptr, .flags = 0);
+  params.flags = 1;  // reserved, must be 0
+  REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("astlSaveCollection falls back to cache dir when output_file_path is null", "[wrapper][cache]") {
+  namespace fs = std::filesystem;
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_save_cache_fallback_test";
+  TempFileGuard  cache_dir_guard(cache_dir);
+
+  // One mock target
+  auto                 mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_handle = mock_target.get();
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  std::string target_name{"tlm-0"};
+  ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target));
+
+  auto topology_manager = std::make_unique<MockTopologyManager>();
+
+  auto  collector_manager = std::make_unique<MockCollectorManager>();
+  auto* collector_ptr     = collector_manager.get();
+  ALLOW_CALL(*collector_ptr, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_ptr, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_ptr, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_ptr, IsAnyTargetBeingCollected()).RETURN(false);
+
+  auto  metric_manager = std::make_unique<MockMetricManager>();
+  auto* metric_ptr     = metric_manager.get();
+  ALLOW_CALL(*metric_ptr, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_ptr, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_ptr, RemoveAllMetrics());
+  ALLOW_CALL(*metric_ptr, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto output_manager = std::make_unique<MockOutputManager>();
+
+  auto orchestrator =
+      std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                           std::move(metric_manager), std::move(output_manager), cache_dir);
+  orchestrator->SetTargets(std::move(mock_targets));
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  // null output_file_path → SaveStateToCacheDir path
+  // Uses a mock MetricManager so serialization will fail, but the null-path branch is exercised.
+  ASTL_INIT_STRUCT(astl_save_params_t, params, .output_file_path = nullptr, .flags = 0);
+  REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("astlSaveCollection falls back to cache dir when output_file_path is empty string", "[wrapper][cache]") {
+  namespace fs = std::filesystem;
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_save_empty_path_test";
+  TempFileGuard  cache_dir_guard(cache_dir);
+
+  auto mock_target = std::make_unique<MockTarget>();
+  ALLOW_CALL(*mock_target, GetProperties(_)).RETURN(ASTL_STATUS_SUCCESS);
+  std::string target_name{"tlm-0"};
+  ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target));
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
+
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto output_manager = std::make_unique<MockOutputManager>();
+
+  auto orchestrator =
+      std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                           std::move(metric_manager), std::move(output_manager), cache_dir);
+  orchestrator->SetTargets(std::move(mock_targets));
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  // empty string → still treated as "no output", falls back to SaveStateToCacheDir
+  ASTL_INIT_STRUCT(astl_save_params_t, params, .output_file_path = "", .flags = 0);
+  REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+/******************************************************************************
+ *  astlLoadCollection – parameter validation tests                          *
+ ******************************************************************************/
+
+TEST_CASE("astlLoadCollection rejects null params", "[wrapper][cache][bad parameters]") {
+  REQUIRE(astlLoadCollection(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("astlLoadCollection rejects wrong _size", "[wrapper][cache][bad parameters]") {
+  astl_load_params_t params{};
+  params._size            = 1;  // deliberately wrong
+  params.input_file_path  = "dummy.astl";
+  params.chunk_size_bytes = 0;
+  params.flags            = 0;
+  REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("astlLoadCollection rejects non-zero flags", "[wrapper][cache][bad parameters]") {
+  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = "dummy.astl", .chunk_size_bytes = 0, .flags = 0);
+  params.flags = 1;  // reserved, must be 0
+  REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("astlLoadCollection rejects null input_file_path", "[wrapper][cache][bad parameters]") {
+  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = nullptr, .chunk_size_bytes = 0, .flags = 0);
+  REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("astlLoadCollection rejects empty input_file_path", "[wrapper][cache][bad parameters]") {
+  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = "", .chunk_size_bytes = 0, .flags = 0);
+  REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("astlLoadCollection fails for non-existent file", "[wrapper][cache]") {
+  // Wrap in an injector so the singleton is restored after the test.
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = "/tmp/astl_nonexistent_12345.astl",
+                   .chunk_size_bytes = 0, .flags = 0);
+  REQUIRE(astlLoadCollection(&params) != ASTL_STATUS_SUCCESS);
 }

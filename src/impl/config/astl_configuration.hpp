@@ -53,7 +53,7 @@ struct AstlConfiguration {
    */
   std::filesystem::path scmi_specification_dir;
 
-  /** @brief Path to load ASTL components from saved session. Initialized from ASTL_LOAD_FILE_PATH env var if set. */
+  /** @brief Path to load ASTL components from a saved session (.astl file). */
   std::optional<std::filesystem::path> load_file_path;
 
   [[nodiscard]] static auto CreateConfiguration() -> std::expected<AstlConfiguration, astl_status_code>;

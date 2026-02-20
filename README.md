@@ -296,12 +296,49 @@ status = astlReadImmediateOnTarget(target_properties._handle);
 status = astlStopCollectionOnTarget(target_properties._handle);
 ```
 
-6. Retrieve metric samples. Logs are written to:
+6. Save or load a session (.astl)
+
+ASTL can serialize a completed collection session into a single `.astl` file (and later reload it) for
+post-processing/output generation.
+
+Key rules:
+
+- Always set the struct `_size` field to `sizeof(struct)`.
+- `flags` must be `0` (reserved for future use).
+- Call `astlSaveCollection()` after stopping collection.
+- After `astlLoadCollection()`, collection control APIs are disabled; only post-processing/output generation is possible.
+
+#### Save
+
+```c
+#include "astl/astl_telemetry.h"
+
+ASTL_INIT_STRUCT(astl_save_params_t, params,
+                 .output_file_path = "/tmp/session.astl",  // nullptr/empty => temp files only
+                 .flags = 0);
+
+astl_status_code rc = astlSaveCollection(&params);
+```
+
+#### Load / import
+
+```c
+#include "astl/astl_telemetry.h"
+
+ASTL_INIT_STRUCT(astl_load_params_t, params,
+                 .input_file_path = "/tmp/session.astl",
+                 .chunk_size_bytes = 0,  // reserved; 0 uses default
+                 .flags = 0);
+
+astl_status_code rc = astlLoadCollection(&params);
+```
+
+7. Retrieve metric samples. Logs are written to:
 
 - `raw_samples.log` and `sampled_value_summary.log` - metric data (raw + summarized)
 - `sysfs.log` - mock SCMI driver output
 
-7. Clean up allocated resources
+8. Clean up allocated resources
 
 ```cpp
 ASTL_FREE_ARRAY(target_properties_buffer)

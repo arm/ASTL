@@ -8,6 +8,7 @@
 #include "astl/astl.h"
 #include "common/astl_defines.hpp"
 #include "common/metric_config.hpp"
+#include "config/configuration_manager.hpp"
 #include "metric/counter.hpp"
 #include "metric/finite_set_metric.hpp"
 #include "metric/i_metric.hpp"
@@ -1123,6 +1124,77 @@ auto astlStopCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> 
 auto astlStopCollection() noexcept -> astl_status_code {
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
+}
+
+/*** Save collection session to .astl file ***/
+auto astlSaveCollection(const astl_save_params_t* params) noexcept -> astl_status_code {
+  if (!params) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (params->_size != sizeof(astl_save_params_t)) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (params->flags != 0) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  // Ensure orchestrator is initialized.
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+
+  const bool has_output =
+      (params->output_file_path != nullptr) && (!std::string_view{params->output_file_path}.empty());
+  if (!has_output) {
+    return astl::Orchestrator::SaveStateToCacheDir();
+  }
+
+  auto expanded_path = astl::ExpandFilePath(params->output_file_path);
+  if (!expanded_path) {
+    ASTL_LOG_ERROR("astlSaveCollection: invalid output_file_path '{}': {}",
+                   (params->output_file_path ? params->output_file_path : "<null>"), expanded_path.error());
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  return astl::Orchestrator::SaveToFile(*expanded_path);
+}
+
+/*** Load collection session from .astl file ***/
+auto astlLoadCollection(const astl_load_params_t* params) noexcept -> astl_status_code {
+  if (!params) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (params->_size != sizeof(astl_load_params_t)) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (params->flags != 0) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if ((params->input_file_path == nullptr) || std::string_view{params->input_file_path}.empty()) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  auto expanded_path = astl::ExpandFilePath(params->input_file_path);
+  if (!expanded_path) {
+    ASTL_LOG_ERROR("astlLoadCollection: invalid input_file_path '{}': {}",
+                   (params->input_file_path ? params->input_file_path : "<null>"), expanded_path.error());
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  // Reset the singleton so subsequent API calls rebuild the orchestrator from the provided file.
+  astl::Orchestrator::ResetInstance();
+
+  astl::ConfigurationManager::SetLoadFilePathOverride(std::optional<std::filesystem::path>{*expanded_path});
+
+  // Force construction to validate the file can be loaded and extracted.
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+
+  (void)params->chunk_size_bytes;  // reserved for future streaming loader
+  return ASTL_STATUS_SUCCESS;
 }
 
 /*** COLLECTED COUNTER SAMPLES ***/

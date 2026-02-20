@@ -36,6 +36,8 @@ GROUP=""
 MODE="interval"
 DURATION=10
 INTERVAL=500
+SAVE_PATH=""
+LOAD_PATH=""
 
 # Parse command-line arguments for mode, interval, and duration (using '=' syntax)
 while [[ $# -gt 0 ]]; do
@@ -55,6 +57,14 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--duration=*)
 		DURATION="${1#--duration=}"
+		shift
+		;;
+	--save=*)
+		SAVE_PATH="${1#--save=}"
+		shift
+		;;
+	--load=*)
+		LOAD_PATH="${1#--load=}"
 		shift
 		;;
 	*)
@@ -136,6 +146,11 @@ if [[ -n $GROUP ]]; then
 	RUN_ARGS+=(--group="$GROUP")
 fi
 
+if [[ -n $SAVE_PATH ]]; then
+	echo "💾 Will save session to: $SAVE_PATH"
+	RUN_ARGS+=(--save="$SAVE_PATH")
+fi
+
 # force ASTL to use our mocksysfs mount point for the SCMI sysfs rather than the default /sys/fs/arm_telemetry
 export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="$TELEMETRY_ROOT"
 
@@ -153,6 +168,29 @@ ERR=$?
 if [[ $ERR -ne 0 ]]; then
 	echo "❌ Error: $SAMPLE_TEST_BIN returned a non-zero return code $ERR" >&2
 	exit $ERR
+fi
+
+# If a save path was provided (or a load path given directly), demonstrate loading the saved session
+if [[ -n $LOAD_PATH ]]; then
+	echo "📂 Loading session from: $LOAD_PATH"
+	echo "$SAMPLE_TEST_BIN" --load="$LOAD_PATH" --target="tlm-0"
+	"$SAMPLE_TEST_BIN" --load="$LOAD_PATH" --target="tlm-0"
+	LOAD_ERR=$?
+	if [[ $LOAD_ERR -ne 0 ]]; then
+		echo "❌ Error: sample_test --load returned non-zero code $LOAD_ERR" >&2
+		exit $LOAD_ERR
+	fi
+	echo "✅ Session loaded successfully from $LOAD_PATH"
+elif [[ -n $SAVE_PATH ]]; then
+	echo "📂 Re-loading saved session from: $SAVE_PATH"
+	echo "$SAMPLE_TEST_BIN" --load="$SAVE_PATH" --target="tlm-0"
+	"$SAMPLE_TEST_BIN" --load="$SAVE_PATH" --target="tlm-0"
+	LOAD_ERR=$?
+	if [[ $LOAD_ERR -ne 0 ]]; then
+		echo "❌ Error: sample_test --load returned non-zero code $LOAD_ERR" >&2
+		exit $LOAD_ERR
+	fi
+	echo "✅ Session round-trip (save → load) succeeded"
 fi
 
 echo "🏁 Demo complete - exiting."

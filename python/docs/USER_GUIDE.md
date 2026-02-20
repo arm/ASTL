@@ -13,6 +13,7 @@
 |                 |                    |                                          | `get_counter_samples`, `get_metric_samples`           |
 | Public Facade   | `astl`             | Re-exports curated API surface           | `start_collection`, `pause_collection`,               |
 |                 |                    |                                          | `resume_collection`, `stop_collection`, enums         |
+| Session SerDes  | `astl`             | Save/load `.astl` sessions via C API     | `save_collection`, `load_collection`                  |
 | Streaming       | `astl.streaming`   | Iterative (sync & async) polling helpers | `poll_counter_once`, `poll_metric_once`,              |
 |                 |                    |                                          | `stream_counter`, `stream_metric`                     |
 | Session         | `astl.session`     | Lifecycle context management             | `Session` (context manager)                           |
@@ -113,6 +114,7 @@ Call order (typical):
 3. Read / stream / analyze
 4. `pause_collection` / `resume_collection` as needed
 5. `stop_collection`
+6. (optional) `save_collection` to persist a `.astl` archive
 
 Note that initialization of ASTL's internal state is done automatically
 
@@ -131,6 +133,42 @@ with Session(target=t, counters=cs, auto_initialize=True) as sess:
 
 `Session` tolerates already-initialized state and safely no-ops on cleanup if underlying C API
 reports NOT_IMPLEMENTED on certain lifecycle operations.
+
+---
+
+## Save / Load Session Archives
+
+The Python facade exposes the C save/load session APIs:
+
+- `save_collection(output_file_path: str | None = None)`
+  - `None` keeps the default C behavior (save state to cache directory)
+  - passing a path requests `.astl` archive output
+- `load_collection(input_file_path: str, chunk_size_bytes: int = 0)`
+  - loads a previously saved `.astl` archive
+  - `input_file_path` must be a non-empty string
+  - `chunk_size_bytes` is reserved and currently forwarded as-is
+
+```python
+import astl
+
+t = astl.get_targets()[0]
+c = astl.get_counters(t)[0]
+astl.configure_basic_collection(t, counters=[c])
+astl.start_collection(t)
+astl.read_immediate(t)
+astl.stop_collection(t)
+
+# Persist current session to an archive
+astl.save_collection("/tmp/session.astl")
+
+# Later (or in a new process), load archived session
+astl.load_collection("/tmp/session.astl")
+```
+
+Errors from the underlying C API are surfaced as `ASTLError` (or mapped subclasses).
+
+For a runnable end-to-end example, see `python/samples/astl_demo.py`, which now
+demonstrates a save/load round-trip after collection.
 
 ---
 

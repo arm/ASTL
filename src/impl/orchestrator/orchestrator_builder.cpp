@@ -32,11 +32,11 @@ namespace fs = std::filesystem;
  */
 auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_status_code {
   fs::path cache_dir_path = fs::temp_directory_path() / ("astl-" + std::to_string(std::time(nullptr)));
-  auto     astl_file_path = astl::GetEnvVar(astl::EnvVar::ASTL_LOAD_FILE_PATH);
-  if (!astl_file_path.empty()) {
-    auto status = astl::Orchestrator::LoadFromFile(astl_file_path, cache_dir_path);
+  if (configuration.load_file_path) {
+    auto status = astl::Orchestrator::LoadFromFile(*configuration.load_file_path, cache_dir_path);
     if (status != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("Orchestrator::GetInstance failed to load state from ASTL file '{}'", astl_file_path);
+      ASTL_LOG_ERROR("Orchestrator::GetInstance failed to load state from ASTL file '{}'",
+                     configuration.load_file_path->string());
       return status;
     }
   }

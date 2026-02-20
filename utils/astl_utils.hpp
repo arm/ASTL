@@ -25,12 +25,6 @@ enum class EnvVar {
   /* optional override for astl config directory */
   ASTL_CONFIG_DIR,
 
-  /* where to load serialized astl library state from */
-  ASTL_LOAD_FILE_PATH,
-
-  /* where to save serialized astl library state to */
-  ASTL_SAVE_FILE_PATH,
-
   /* selects the output file path for Perfetto format output. If not set, no output is created. */
   ASTL_OUTPUT_PERFETTO,
 

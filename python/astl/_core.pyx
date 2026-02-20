@@ -346,6 +346,54 @@ cpdef stop_collection(Target target=None):
     if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION):
         _check(rc)
 
+cpdef save_collection(output_file_path=None):
+    """Save current ASTL session state.
+
+    Args:
+        output_file_path: Optional path to output `.astl` archive. If ``None``,
+            the C API uses its default cache-directory-only behavior.
+    """
+    cdef astl_save_params_t params
+    cdef bytes encoded_path
+
+    params._size = sizeof(astl_save_params_t)
+    params.flags = 0
+    params.output_file_path = NULL
+
+    if output_file_path is not None:
+        if not isinstance(output_file_path, str):
+            raise TypeError("output_file_path must be str or None")
+        encoded_path = (<str>output_file_path).encode()
+        params.output_file_path = encoded_path
+
+    _check(astlSaveCollection(&params))
+
+cpdef load_collection(input_file_path, chunk_size_bytes: int = 0):
+    """Load a previously saved ASTL session archive.
+
+    Args:
+        input_file_path: Path to `.astl` archive to load (required, non-empty).
+        chunk_size_bytes: Reserved loader chunk size forwarded to the C API.
+    """
+    cdef astl_load_params_t params
+    cdef bytes encoded_path
+
+    if input_file_path is None or input_file_path == "":
+        raise ValueError("input_file_path must be a non-empty string")
+    if not isinstance(input_file_path, str):
+        raise TypeError("input_file_path must be str")
+    if chunk_size_bytes < 0:
+        raise ValueError("chunk_size_bytes must be >= 0")
+
+    encoded_path = (<str>input_file_path).encode()
+
+    params._size = sizeof(astl_load_params_t)
+    params.input_file_path = encoded_path
+    params.chunk_size_bytes = <size_t>chunk_size_bytes
+    params.flags = 0
+
+    _check(astlLoadCollection(&params))
+
 cpdef read_immediate(Target target=None):
     cdef int rc
     if target is None:

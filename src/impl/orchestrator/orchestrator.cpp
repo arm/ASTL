@@ -98,9 +98,12 @@ auto Orchestrator::GetInstance() noexcept
   if (!configuration) {
     return std::unexpected(configuration.error());
   }
-  auto astl_load_file_path = astl::GetEnvVar(astl::EnvVar::ASTL_LOAD_FILE_PATH);
-  if (!astl_load_file_path.empty()) {
-    configuration->load_file_path = astl_load_file_path;
+
+  // One-shot in-process override used by explicit load/import APIs.
+  auto load_override = astl::ConfigurationManager::GetLoadFilePathOverride();
+  if (load_override) {
+    configuration->load_file_path = *load_override;
+    astl::ConfigurationManager::SetLoadFilePathOverride(std::nullopt);
   }
   try {
     astl_status_code status = BuildOrchestrator(configuration.value());
@@ -115,6 +118,11 @@ auto Orchestrator::GetInstance() noexcept
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   return instance_;
+}
+
+auto Orchestrator::ResetInstance() -> void {
+  std::scoped_lock lock(GetMutex());
+  instance_.reset();
 }
 
 auto Orchestrator::GetMutex() -> std::mutex & {
@@ -318,16 +326,6 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
 
     // Emit Summary CSV (if requested) after metrics are summarized (processed samples complete)
     EmitSummaryCsvIfRequested();
-  }
-
-  auto save_astl_file_path = GetEnvVar(astl::EnvVar::ASTL_SAVE_FILE_PATH);
-  if (!save_astl_file_path.empty()) {
-    status = SaveToFile(save_astl_file_path);
-    if (status != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("Orchestrator::StopCollection failed to save state to astl file '{}': {}", save_astl_file_path,
-                     astlStatusString(status));
-      return status;
-    }
   }
 
   return ASTL_STATUS_SUCCESS;
@@ -589,6 +587,23 @@ auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarge
 }
 
 auto Orchestrator::SaveToFile(std::filesystem::path file_path) -> astl_status_code {
+  auto status = SaveStateToCacheDir();
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+
+  const auto &orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  const auto &orchestrator   = orchestrator_or_error->get();
+  const auto  cache_dir_path = orchestrator->_cache_dir;
+
+  status = mz::ZipDirectory(cache_dir_path, file_path);
+  return status;
+}
+
+auto Orchestrator::SaveStateToCacheDir() -> astl_status_code {
   const auto &orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
     return orchestrator_or_error.error();
@@ -625,8 +640,6 @@ auto Orchestrator::SaveToFile(std::filesystem::path file_path) -> astl_status_co
       return status;
     }
   }
-
-  mz::ZipDirectory(cache_dir_path, file_path);
 
   return ASTL_STATUS_SUCCESS;
 }
