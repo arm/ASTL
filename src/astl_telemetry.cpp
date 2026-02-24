@@ -1133,9 +1133,13 @@ auto astlSaveCollection(const astl_save_params_t* params) noexcept -> astl_statu
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   if (params->_size != sizeof(astl_save_params_t)) {
+    return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
+  }
+  if (params->_flags != 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (params->flags != 0) {
+
+  if ((params->_output_file_path == nullptr) || std::string_view{params->_output_file_path}.empty()) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
@@ -1145,16 +1149,10 @@ auto astlSaveCollection(const astl_save_params_t* params) noexcept -> astl_statu
     return orchestrator_or_error.error();
   }
 
-  const bool has_output =
-      (params->output_file_path != nullptr) && (!std::string_view{params->output_file_path}.empty());
-  if (!has_output) {
-    return astl::Orchestrator::SaveStateToCacheDir();
-  }
-
-  auto expanded_path = astl::ExpandFilePath(params->output_file_path);
+  auto expanded_path = astl::ExpandFilePath(params->_output_file_path);
   if (!expanded_path) {
     ASTL_LOG_ERROR("astlSaveCollection: invalid output_file_path '{}': {}",
-                   (params->output_file_path ? params->output_file_path : "<null>"), expanded_path.error());
+                   (params->_output_file_path ? params->_output_file_path : "<null>"), expanded_path.error());
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
@@ -1167,19 +1165,19 @@ auto astlLoadCollection(const astl_load_params_t* params) noexcept -> astl_statu
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   if (params->_size != sizeof(astl_load_params_t)) {
+    return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
+  }
+  if (params->_flags != 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (params->flags != 0) {
-    return ASTL_STATUS_BAD_ARGUMENT;
-  }
-  if ((params->input_file_path == nullptr) || std::string_view{params->input_file_path}.empty()) {
+  if ((params->_input_file_path == nullptr) || std::string_view{params->_input_file_path}.empty()) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
-  auto expanded_path = astl::ExpandFilePath(params->input_file_path);
+  auto expanded_path = astl::ExpandFilePath(params->_input_file_path);
   if (!expanded_path) {
     ASTL_LOG_ERROR("astlLoadCollection: invalid input_file_path '{}': {}",
-                   (params->input_file_path ? params->input_file_path : "<null>"), expanded_path.error());
+                   (params->_input_file_path ? params->_input_file_path : "<null>"), expanded_path.error());
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
@@ -1194,7 +1192,7 @@ auto astlLoadCollection(const astl_load_params_t* params) noexcept -> astl_statu
     return orchestrator_or_error.error();
   }
 
-  (void)params->chunk_size_bytes;  // reserved for future streaming loader
+  (void)params->_chunk_size_bytes;  // reserved for future streaming loader
   return ASTL_STATUS_SUCCESS;
 }
 

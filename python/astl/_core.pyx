@@ -350,21 +350,20 @@ cpdef save_collection(output_file_path=None):
     """Save current ASTL session state.
 
     Args:
-        output_file_path: Optional path to output `.astl` archive. If ``None``,
-            the C API uses its default cache-directory-only behavior.
+        output_file_path: Required path to output `.astl` archive (non-empty string).
     """
     cdef astl_save_params_t params
     cdef bytes encoded_path
 
-    params._size = sizeof(astl_save_params_t)
-    params.flags = 0
-    params.output_file_path = NULL
+    if output_file_path is None or output_file_path == "":
+        raise ValueError("output_file_path must be a non-empty string")
+    if not isinstance(output_file_path, str):
+        raise TypeError("output_file_path must be str")
 
-    if output_file_path is not None:
-        if not isinstance(output_file_path, str):
-            raise TypeError("output_file_path must be str or None")
-        encoded_path = (<str>output_file_path).encode()
-        params.output_file_path = encoded_path
+    params._size = sizeof(astl_save_params_t)
+    params._flags = 0
+    encoded_path = (<str>output_file_path).encode()
+    params._output_file_path = encoded_path
 
     _check(astlSaveCollection(&params))
 
@@ -388,9 +387,9 @@ cpdef load_collection(input_file_path, chunk_size_bytes: int = 0):
     encoded_path = (<str>input_file_path).encode()
 
     params._size = sizeof(astl_load_params_t)
-    params.input_file_path = encoded_path
-    params.chunk_size_bytes = <size_t>chunk_size_bytes
-    params.flags = 0
+    params._input_file_path = encoded_path
+    params._chunk_size_bytes = <size_t>chunk_size_bytes
+    params._flags = 0
 
     _check(astlLoadCollection(&params))
 

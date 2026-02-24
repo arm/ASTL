@@ -503,8 +503,8 @@ auto main(int argc, char* argv[]) -> int {
       return 2;
     }
 
-    ASTL_INIT_STRUCT(astl_load_params_t, load_params, .input_file_path = input_file_path.c_str(), .chunk_size_bytes = 0,
-                     .flags = 0);
+    ASTL_INIT_STRUCT(astl_load_params_t, load_params, ._input_file_path = input_file_path.c_str(),
+                     ._chunk_size_bytes = 0, ._flags = 0);
     status = astlLoadCollection(&load_params);
     std::cout << "astlLoadCollection Status: " << astlStatusString(status) << '\n';
     if (status != ASTL_STATUS_SUCCESS) {
@@ -608,7 +608,7 @@ auto main(int argc, char* argv[]) -> int {
       return 2;
     }
 
-    ASTL_INIT_STRUCT(astl_save_params_t, save_params, .output_file_path = output_file_path.c_str(), .flags = 0);
+    ASTL_INIT_STRUCT(astl_save_params_t, save_params, ._output_file_path = output_file_path.c_str(), ._flags = 0);
     status = astlSaveCollection(&save_params);
     std::cout << "astlSaveCollection Status: " << astlStatusString(status) << '\n';
     if (status != ASTL_STATUS_SUCCESS) {

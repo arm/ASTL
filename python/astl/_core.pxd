@@ -225,14 +225,14 @@ cdef extern from "astl/astl_telemetry.h":
     # save / load session params
     cdef struct astl_save_params_t:
         size_t _size
-        const char* output_file_path
-        uint32_t flags
+        const char* _output_file_path
+        uint32_t _flags
 
     cdef struct astl_load_params_t:
         size_t _size
-        const char* input_file_path
-        size_t chunk_size_bytes
-        uint32_t flags
+        const char* _input_file_path
+        size_t _chunk_size_bytes
+        uint32_t _flags
 
     # targets
     int astlGetTargetCount(uint32_t* target_count)

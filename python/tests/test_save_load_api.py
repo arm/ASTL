@@ -28,13 +28,19 @@ def test_load_collection_nonexistent_file_raises_astl_error():
         astl.load_collection("/tmp/astl_python_wrapper_nonexistent.astl")
 
 
-def test_save_collection_accepts_none_or_string_path():
-    # save_collection(None) is valid at API layer; backend may still return ASTLError
-    # depending on runtime state (e.g. not initialized / no data).
-    try:
+def test_save_collection_rejects_none_path():
+    with pytest.raises(ValueError, match="non-empty string"):
         astl.save_collection(None)
-    except astl.ASTLError:
-        pass
+
+
+def test_save_collection_rejects_empty_path():
+    with pytest.raises(ValueError, match="non-empty string"):
+        astl.save_collection("")
+
+
+def test_save_collection_accepts_string_path():
+    # String path is valid at API layer; backend may still return ASTLError
+    # depending on runtime state (e.g. not initialized / no data).
 
     try:
         astl.save_collection("/tmp/astl_python_wrapper_save.astl")

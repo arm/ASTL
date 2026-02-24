@@ -1307,8 +1307,8 @@ TEST_CASE("astlSaveCollection smoke test", "[wrapper][cache]") {
   REQUIRE(target_count == 1);
 
   // Serialization should fail since we are using a mock metric manager (not a concrete MetricManager).
-  ASTL_INIT_STRUCT(astl_save_params_t, params, .output_file_path = nullptr, .flags = 0);
-  params.output_file_path = save_file_str.c_str();
+  ASTL_INIT_STRUCT(astl_save_params_t, params, ._output_file_path = nullptr, ._flags = 0);
+  params._output_file_path = save_file_str.c_str();
   REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
@@ -1353,9 +1353,9 @@ TEST_CASE("astlLoadCollection smoke test", "[wrapper][cache]") {
   auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = nullptr, .chunk_size_bytes = 0, .flags = 0);
+  ASTL_INIT_STRUCT(astl_load_params_t, params, ._input_file_path = nullptr, ._chunk_size_bytes = 0, ._flags = 0);
   const auto astl_zip_str = astl_zip.string();
-  params.input_file_path  = astl_zip_str.c_str();
+  params._input_file_path = astl_zip_str.c_str();
 
   REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_SUCCESS);
 }
@@ -1370,19 +1370,19 @@ TEST_CASE("astlSaveCollection rejects null params", "[wrapper][cache][bad parame
 
 TEST_CASE("astlSaveCollection rejects wrong _size", "[wrapper][cache][bad parameters]") {
   astl_save_params_t params{};
-  params._size            = 1;  // deliberately wrong
-  params.output_file_path = nullptr;
-  params.flags            = 0;
-  REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+  params._size             = 1;  // deliberately wrong
+  params._output_file_path = nullptr;
+  params._flags            = 0;
+  REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
 }
 
 TEST_CASE("astlSaveCollection rejects non-zero flags", "[wrapper][cache][bad parameters]") {
-  ASTL_INIT_STRUCT(astl_save_params_t, params, .output_file_path = nullptr, .flags = 0);
-  params.flags = 1;  // reserved, must be 0
+  ASTL_INIT_STRUCT(astl_save_params_t, params, ._output_file_path = nullptr, ._flags = 0);
+  params._flags = 1;  // reserved, must be 0
   REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
-TEST_CASE("astlSaveCollection falls back to cache dir when output_file_path is null", "[wrapper][cache]") {
+TEST_CASE("astlSaveCollection rejects null output_file_path and creates no .astl", "[wrapper][cache]") {
   namespace fs = std::filesystem;
 
   const fs::path cache_dir = fs::temp_directory_path() / "astl_save_cache_fallback_test";
@@ -1423,10 +1423,18 @@ TEST_CASE("astlSaveCollection falls back to cache dir when output_file_path is n
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  // null output_file_path → SaveStateToCacheDir path
-  // Uses a mock MetricManager so serialization will fail, but the null-path branch is exercised.
-  ASTL_INIT_STRUCT(astl_save_params_t, params, .output_file_path = nullptr, .flags = 0);
+  // null output_file_path is invalid and should not create any .astl artifact.
+  ASTL_INIT_STRUCT(astl_save_params_t, params, ._output_file_path = nullptr, ._flags = 0);
   REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+
+  bool astl_file_found{false};
+  if (fs::exists(cache_dir)) {
+    astl_file_found =
+        std::any_of(fs::directory_iterator(cache_dir), fs::directory_iterator{}, [](const fs::directory_entry& entry) {
+          return entry.is_regular_file() && entry.path().extension() == ".astl";
+        });
+  }
+  REQUIRE_FALSE(astl_file_found);
 }
 
 TEST_CASE("astlSaveCollection falls back to cache dir when output_file_path is empty string", "[wrapper][cache]") {
@@ -1465,8 +1473,8 @@ TEST_CASE("astlSaveCollection falls back to cache dir when output_file_path is e
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  // empty string → still treated as "no output", falls back to SaveStateToCacheDir
-  ASTL_INIT_STRUCT(astl_save_params_t, params, .output_file_path = "", .flags = 0);
+  // empty string is invalid (no fallback to cache dir)
+  ASTL_INIT_STRUCT(astl_save_params_t, params, ._output_file_path = "", ._flags = 0);
   REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
@@ -1480,26 +1488,26 @@ TEST_CASE("astlLoadCollection rejects null params", "[wrapper][cache][bad parame
 
 TEST_CASE("astlLoadCollection rejects wrong _size", "[wrapper][cache][bad parameters]") {
   astl_load_params_t params{};
-  params._size            = 1;  // deliberately wrong
-  params.input_file_path  = "dummy.astl";
-  params.chunk_size_bytes = 0;
-  params.flags            = 0;
-  REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
+  params._size             = 1;  // deliberately wrong
+  params._input_file_path  = "dummy.astl";
+  params._chunk_size_bytes = 0;
+  params._flags            = 0;
+  REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
 }
 
 TEST_CASE("astlLoadCollection rejects non-zero flags", "[wrapper][cache][bad parameters]") {
-  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = "dummy.astl", .chunk_size_bytes = 0, .flags = 0);
-  params.flags = 1;  // reserved, must be 0
+  ASTL_INIT_STRUCT(astl_load_params_t, params, ._input_file_path = "dummy.astl", ._chunk_size_bytes = 0, ._flags = 0);
+  params._flags = 1;  // reserved, must be 0
   REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
 TEST_CASE("astlLoadCollection rejects null input_file_path", "[wrapper][cache][bad parameters]") {
-  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = nullptr, .chunk_size_bytes = 0, .flags = 0);
+  ASTL_INIT_STRUCT(astl_load_params_t, params, ._input_file_path = nullptr, ._chunk_size_bytes = 0, ._flags = 0);
   REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
 TEST_CASE("astlLoadCollection rejects empty input_file_path", "[wrapper][cache][bad parameters]") {
-  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = "", .chunk_size_bytes = 0, .flags = 0);
+  ASTL_INIT_STRUCT(astl_load_params_t, params, ._input_file_path = "", ._chunk_size_bytes = 0, ._flags = 0);
   REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
@@ -1508,7 +1516,7 @@ TEST_CASE("astlLoadCollection fails for non-existent file", "[wrapper][cache]") 
   auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = "/tmp/astl_nonexistent_12345.astl",
-                   .chunk_size_bytes = 0, .flags = 0);
+  ASTL_INIT_STRUCT(astl_load_params_t, params, ._input_file_path = "/tmp/astl_nonexistent_12345.astl",
+                   ._chunk_size_bytes = 0, ._flags = 0);
   REQUIRE(astlLoadCollection(&params) != ASTL_STATUS_SUCCESS);
 }

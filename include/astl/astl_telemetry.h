@@ -832,22 +832,22 @@ ASTL_API astl_status_code astlStopCollection() ASTL_API_NOEXCEPT;
 
 /*** Save/Load collection session to/from .astl file ***/
 /**
- * @brief Parameters for saving a completed collection to temporary files and optionally
- *        emitting a final .astl file.
+ * @brief Parameters for saving a completed collection to a final .astl file.
  *
  * Semantics:
- *  - The final .astl file is generated only if output_file_path is provided explicitly.
+ *  - _output_file_path is required and must be non-null/non-empty.
+ *  - Paths starting with ~ will be expanded to the user's home directory.
+ *  - Both absolute and relative paths are accepted.
  *  - Intended to be called post-collection (after StopCollection).
  */
 typedef struct astl_save_params_t {
-  size_t      _size;             //!< Size of this struct for versioning
-  const char* output_file_path;  //!< Absolute path to the final .astl file to generate. If nullptr or empty, only temp
-                                 //!< files are produced and no .astl is emitted
-  uint32_t flags;                //!< Reserved for future flags (must be 0 for now)
+  size_t      _size;              //!< Size of this struct for versioning
+  const char* _output_file_path;  //!< Required: path (absolute or relative) to the final .astl file to generate
+  uint32_t    _flags;             //!< Reserved for future flags (must be 0 for now)
 } astl_save_params_t;
 
 /**
- * @brief Save collected samples to temp files and optionally finalize a .astl file.
+ * @brief Save collected samples to a .astl file.
  * @param params Save parameters (see astl_save_params_t).
  * @return ASTL_STATUS_SUCCESS on success; error code otherwise.
  */
@@ -857,14 +857,15 @@ ASTL_API astl_status_code astlSaveCollection(const astl_save_params_t* params) A
  * @brief Parameters for loading a previously saved .astl file.
  *
  * Semantics:
+ * - _input_file_path is required and must be non-null/non-empty, and should point to a valid .astl file.
  *  - After a successful load of a .astl file, Start/Pause/Resume/Stop are disabled; only post-processing is possible.
  *  - If user calls any Configure* API after load, ASTL is cleaned up and ready for new collection.
  */
 typedef struct astl_load_params_t {
-  size_t      _size;             //!< Size of this struct for versioning
-  const char* input_file_path;   //!< Required: absolute path to the .astl file to load
-  size_t      chunk_size_bytes;  //!< Chunk size in bytes for reading segments; 0 uses default
-  uint32_t    flags;             //!< Reserved for future flags (must be 0 for now)
+  size_t      _size;              //!< Size of this struct for versioning
+  const char* _input_file_path;   //!< Required: absolute path to the .astl file to load
+  size_t      _chunk_size_bytes;  //!< Chunk size in bytes for reading segments; 0 uses default
+  uint32_t    _flags;             //!< Reserved for future flags (must be 0 for now)
 } astl_load_params_t;
 
 /**
