@@ -241,21 +241,17 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with unsupported type", "[FiniteSetMet
 }
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
-TEST_CASE("FiniteSetMetric: String values handling", "[FiniteSetMetric]") {
-  // Define a finite set with string values
-  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{std::string{"LOW"}},
-                                                 astl::AstlValue{std::string{"MEDIUM"}},
-                                                 astl::AstlValue{std::string{"HIGH"}}};
+TEST_CASE("FiniteSetMetric: boolean values handling", "[FiniteSetMetric]") {
+  astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{false}, astl::AstlValue{true}};
 
   astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{std::string{"LOW"}},    "LOW_L" },
-      {astl::AstlValue{std::string{"MEDIUM"}}, "MED_L" },
-      {astl::AstlValue{std::string{"HIGH"}},   "HIGH_L"},
+      {astl::AstlValue{false}, "OFF"},
+      {astl::AstlValue{true},  "ON" },
   };
   astl::FiniteSetMetricConfig config{"power_level",
                                      "Power level states",
                                      ASTL_UNITS_WATTS,
-                                     ASTL_VALUE_STRING,
+                                     ASTL_VALUE_BOOL8,
                                      ASTL_METRIC_FINITE_SET_VALUE,
                                      ASTL_CATEGORY_UNCATEGORIZED,
                                      astl::CollectorType::UNKNOWN,
@@ -265,30 +261,28 @@ TEST_CASE("FiniteSetMetric: String values handling", "[FiniteSetMetric]") {
 
   astl::FiniteSetMetric metric(&config, nullptr, nullptr);
 
-  astl::RawSampledData sample1(1, astl::AstlValue{std::string{"LOW"}});
-  astl::RawSampledData sample2(2, astl::AstlValue{std::string{"MEDIUM"}});
-  astl::RawSampledData sample3(3, astl::AstlValue{std::string{"HIGH"}});
-  astl::RawSampledData sample4(4, astl::AstlValue{std::string{"UNKNOWN"}});  // Not in finite set
+  astl::RawSampledData sample1(1, astl::AstlValue{false});
+  astl::RawSampledData sample2(2, astl::AstlValue{true});
+  astl::RawSampledData sample3(3, astl::AstlValue{true});
+  astl::RawSampledData sample4(4, astl::AstlValue{uint64_t{2}});  // Not in finite set
 
   REQUIRE(metric.ReceiveRawSample(sample1) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric.ReceiveRawSample(sample2) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric.ReceiveRawSample(sample3) == ASTL_STATUS_SUCCESS);
-  REQUIRE(metric.ReceiveRawSample(sample4) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(sample4) == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 
   auto summary = metric.GetFiniteSetSummaryData();
-  REQUIRE(summary.total_samples == 4);
-  REQUIRE(summary.unknown_values == 1);  // "UNKNOWN" is not in the finite set
+  REQUIRE(summary.total_samples == 3);
+  REQUIRE(summary.unknown_values == 0);
 
   // Check finite set membership
-  REQUIRE(metric.IsInFiniteSet(astl::AstlValue{std::string{"LOW"}}) == true);
-  REQUIRE(metric.IsInFiniteSet(astl::AstlValue{std::string{"MEDIUM"}}) == true);
-  REQUIRE(metric.IsInFiniteSet(astl::AstlValue{std::string{"HIGH"}}) == true);
-  REQUIRE(metric.IsInFiniteSet(astl::AstlValue{std::string{"UNKNOWN"}}) == false);
+  REQUIRE(metric.IsInFiniteSet(astl::AstlValue{false}) == true);
+  REQUIRE(metric.IsInFiniteSet(astl::AstlValue{true}) == true);
+  REQUIRE(metric.IsInFiniteSet(astl::AstlValue{uint64_t{2}}) == false);
 
   // Check value counts
-  REQUIRE(summary.value_counts.at(astl::AstlValue{std::string{"LOW"}}) == 1);
-  REQUIRE(summary.value_counts.at(astl::AstlValue{std::string{"MEDIUM"}}) == 1);
-  REQUIRE(summary.value_counts.at(astl::AstlValue{std::string{"HIGH"}}) == 1);
-  REQUIRE(summary.value_counts.at(astl::AstlValue{std::string{"UNKNOWN"}}) == 1);
+  REQUIRE(summary.value_counts.at(astl::AstlValue{false}) == 1);
+  REQUIRE(summary.value_counts.at(astl::AstlValue{true}) == 2);
+  REQUIRE(summary.value_counts.find(astl::AstlValue{uint64_t{2}}) == summary.value_counts.end());
 }
 // NOLINTEND(readability-function-cognitive-complexity)

@@ -8,6 +8,38 @@
 
 namespace astl {
 
+namespace {
+
+auto EscapeJsonString(std::string_view input) -> std::string {
+  std::string escaped;
+  escaped.reserve(input.size());
+  for (const char character : input) {
+    switch (character) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        escaped += character;
+        break;
+    }
+  }
+  return escaped;
+}
+
+}  // namespace
+
 PerfettoOutput::PerfettoOutput(std::filesystem::path path) : _path(std::move(path)) {
   // Open (truncate) the output file early. If this fails Ready() will remain false and writes are skipped.
   _trace_stream.open(_path, std::ios::out | std::ios::trunc);
@@ -36,35 +68,6 @@ auto PerfettoOutput::Sanitize(std::string_view input) -> std::string {
     }
   }
   return sanitized;
-}
-
-// Basic JSON escaping for strings used in instant events (escape backslash and quote).
-auto PerfettoOutput::EscapeJsonString(std::string_view input) -> std::string {
-  std::string escaped;
-  escaped.reserve(input.size());
-  for (char character : input) {
-    switch (character) {
-      case '"':
-        escaped += "\\\"";
-        break;
-      case '\\':
-        escaped += "\\\\";
-        break;
-      case '\n':
-        escaped += "\\n";
-        break;
-      case '\r':
-        escaped += "\\r";
-        break;
-      case '\t':
-        escaped += "\\t";
-        break;
-      default:
-        escaped += character;
-        break;
-    }
-  }
-  return escaped;
 }
 
 auto PerfettoOutput::GetPid(const ITarget* target) -> int {
@@ -170,28 +173,18 @@ auto PerfettoOutput::WriteProcessedSamples(const ProcessedSamplesMap& samples) -
       for (const auto& sample : metric_samples) {
         std::visit(
             [&](const auto& inner_value) {
-              using ValueT = std::decay_t<decltype(inner_value)>;
               if (!_first_event) {
                 _trace_stream << ",\n";
               }
               _first_event = false;
 
-              uint64_t    ts_us            = static_cast<uint64_t>(sample.timestamp.time_since_epoch().count());
-              bool        is_string_sample = !std::is_arithmetic_v<ValueT>;
-              std::string category         = PerfettoOutput::DetermineCategory(props._units, is_string_sample);
-              std::string composite_name   = target_name + "." + metric_name;
-              if constexpr (std::is_arithmetic_v<ValueT>) {
-                _trace_stream << R"({"ph":"C","cat":")" << category << R"(","name":")" << composite_name << R"(","ts":)"
-                              << ts_us << R"(,"pid":)" << pid << R"(,"tid":)" << tid << R"(,"args":{"target":")"
-                              << target_name << R"(","metric":")" << metric_name << R"(","value":)" << inner_value
-                              << "}}";
-              } else {
-                std::string value_str = EscapeJsonString(static_cast<std::string>(inner_value));
-                _trace_stream << R"({"ph":"I","cat":")" << category << R"(","name":")" << composite_name << R"(","ts":)"
-                              << ts_us << R"(,"pid":)" << pid << R"(,"tid":)" << tid << R"(,"s":"t","args":{"target":")"
-                              << target_name << R"(","metric":")" << metric_name << R"(","value":")" << value_str
-                              << R"("}})";
-              }
+              uint64_t    ts_us          = static_cast<uint64_t>(sample.timestamp.time_since_epoch().count());
+              std::string category       = PerfettoOutput::DetermineCategory(props._units);
+              std::string composite_name = target_name + "." + metric_name;
+              _trace_stream << R"({"ph":"C","cat":")" << category << R"(","name":")" << composite_name << R"(","ts":)"
+                            << ts_us << R"(,"pid":)" << pid << R"(,"tid":)" << tid << R"(,"args":{"target":")"
+                            << target_name << R"(","metric":")" << metric_name << R"(","value":)" << inner_value
+                            << "}}";
             },
             sample.value.value);
       }
@@ -201,7 +194,7 @@ auto PerfettoOutput::WriteProcessedSamples(const ProcessedSamplesMap& samples) -
   return ASTL_STATUS_SUCCESS;
 }
 
-auto PerfettoOutput::DetermineCategory(astl_units_t units, bool is_string_sample) -> std::string {
+auto PerfettoOutput::DetermineCategory(astl_units_t units) -> std::string {
   switch (units) {
     case ASTL_UNITS_WATTS:
       return "Power";
@@ -225,9 +218,6 @@ auto PerfettoOutput::DetermineCategory(astl_units_t units, bool is_string_sample
       return "Time";
     default:
       break;
-  }
-  if (is_string_sample) {
-    return "State";  // categorize string (event/state) metrics without quantitative unit
   }
   return "";  // fallback empty category
 }

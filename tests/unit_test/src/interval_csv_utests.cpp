@@ -143,9 +143,8 @@ TEST_CASE("IntervalCsvOutput quotes description and sanitizes string samples", "
   StringMetric                metric{"Quoted", ASTL_UNITS_NONE};
   astl::ProcessedSamplesMap   processed;
   const astl::SampleTimestamp base_timestamp{};
-  // Create a string AstlValue sample with embedded quotes
-  astl::ProcessedSampledData string_sample{astl::AstlValue{std::string{"value \"with\" quotes"}}, base_timestamp};
-  processed[&target][&metric].push_back(string_sample);
+  astl::ProcessedSampledData  sample{astl::AstlValue{uint64_t{42}}, base_timestamp};
+  processed[&target][&metric].push_back(sample);
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream ifs(path);
   REQUIRE(ifs.is_open());
@@ -154,8 +153,7 @@ TEST_CASE("IntervalCsvOutput quotes description and sanitizes string samples", "
   REQUIRE(content.find("Quoted,\"Desc, with 'quotes' inside\"") != std::string::npos);
   // Header should include metric column
   REQUIRE(content.find("timestamp_us,target,metric,value") != std::string::npos);
-  // Sample row should show sanitized string (outer quotes preserved, inner double quotes replaced)
-  REQUIRE(content.find("Soc,Quoted,\"value 'with' quotes\"") != std::string::npos);
+  REQUIRE(content.find("Soc,Quoted,42") != std::string::npos);
 }
 
 TEST_CASE("IntervalCsvOutput orders metric groups alphabetically", "[intervalcsv]") {  // NOLINT

@@ -133,7 +133,6 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_VALUE_FLOAT32
         ASTL_VALUE_FLOAT64
         ASTL_VALUE_BOOL8
-        ASTL_VALUE_STRING
         ASTL_VALUE_UNKNOWN
     ctypedef int astl_value_type_t
 
@@ -145,7 +144,6 @@ cdef extern from "astl/astl_telemetry.h":
         float fp32
         double fp64
         bint b8
-        const char* str
     ctypedef _astl_value_t astl_value_t
 
     # Counter

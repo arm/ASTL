@@ -1455,9 +1455,9 @@ TEST_CASE("astlGetSystemInfo switches to host info after configure following loa
 
   REQUIRE(astl::mz::ZipDirectory(src_dir, astl_zip) == ASTL_STATUS_SUCCESS);
 
-  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = nullptr, .chunk_size_bytes = 0, .flags = 0);
+  ASTL_INIT_STRUCT(astl_load_params_t, params, ._input_file_path = nullptr, ._chunk_size_bytes = 0, ._flags = 0);
   const auto astl_zip_str = astl_zip.string();
-  params.input_file_path  = astl_zip_str.c_str();
+  params._input_file_path = astl_zip_str.c_str();
   REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_SUCCESS);
 
   astl_platform_properties_t loaded_info{};
@@ -1491,7 +1491,9 @@ TEST_CASE("astlSaveCollection writes system info into cache", "[wrapper][cache][
   namespace fs = std::filesystem;
 
   const fs::path cache_dir = fs::temp_directory_path() / "astl_save_platform_info_cache";
-  TempFileGuard  cache_dir_guard(cache_dir);
+  const fs::path astl_file = cache_dir / "session.astl";
+  TempFileGuard  cache_guard(cache_dir);
+  TempFileGuard  file_guard(astl_file);
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
@@ -1517,8 +1519,11 @@ TEST_CASE("astlSaveCollection writes system info into cache", "[wrapper][cache][
                                            std::move(metric_manager), std::move(output_manager), cache_dir);
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  ASTL_INIT_STRUCT(astl_save_params_t, params, .output_file_path = nullptr, .flags = 0);
+  const std::string astl_file_str = astl_file.string();
+  ASTL_INIT_STRUCT(astl_save_params_t, params, ._output_file_path = nullptr, ._flags = 0);
+  params._output_file_path = astl_file_str.c_str();
   REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_SUCCESS);
+  REQUIRE(fs::exists(astl_file));
   REQUIRE(fs::exists(cache_dir / astl::kPlatformInfoFileName));
 }
 

@@ -170,42 +170,14 @@ TEST_CASE("AstlValue as ui64", "[AstlValue]") {
   }
 }
 
-TEST_CASE("AstlValue as string", "[AstlValue]") {
-  auto hello = astl::AstlValue{std::string{"Hello, "}};
-  auto world = astl::AstlValue{std::string{"world!"}};
-
-  SECTION("To astl_value_t", "[AstlValue]") {
-    auto [astl_value, astl_type] = hello.ToAstlUnionValue();
-    REQUIRE(astl_type == ASTL_VALUE_STRING);
-    REQUIRE(std::strncmp(astl_value.str, "Hello, ", std::strlen("Hello, ")) == 0);
-  }
-
-  SECTION("Add works for string concat", "[AstlValue]") {
-    auto concat = astl::AstlValue::Add(hello, world);
-    REQUIRE(std::get<std::string>(concat.value().value) == "Hello, world!");
-  }
-
-  SECTION("Add forbids sum of different value types str and integrals", "[AstlValue]") {
-    auto incompatible = astl::AstlValue::Add(hello, astl::AstlValue{uint16_t{0x16}});
-    REQUIRE(incompatible.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
-  }
-
-  SECTION("Format is basically identity function for strings") {
-    std::string formatted = std::format("{}", hello);
-    REQUIRE(formatted == "Hello, ");
-  }
-}
-
 TEST_CASE("AstlValue invalid constructors", "[AstlValue]") {
   const uint64_t     test_value{0xa5};
   const astl_value_t c_value{.ui64 = test_value};
   const auto         truly_unknown_type = static_cast<astl_value_type_t>(ASTL_VALUE_UNKNOWN - 1);
   REQUIRE(astl::AstlValue::FromUnion(astl_value_t{}, ASTL_VALUE_UNKNOWN).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
   REQUIRE(astl::AstlValue::FromUnion(c_value, truly_unknown_type).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
-  REQUIRE(astl::AstlValue::FromMinimum(ASTL_VALUE_STRING).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
   REQUIRE(astl::AstlValue::FromMinimum(ASTL_VALUE_UNKNOWN).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
   REQUIRE(astl::AstlValue::FromMinimum(truly_unknown_type).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
-  REQUIRE(astl::AstlValue::FromMaximum(ASTL_VALUE_STRING).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
   REQUIRE(astl::AstlValue::FromMaximum(ASTL_VALUE_UNKNOWN).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
   REQUIRE(astl::AstlValue::FromMaximum(truly_unknown_type).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
 }
@@ -239,13 +211,6 @@ TEST_CASE("AstlValue::FromUnion", "[AstlValue]") {
   union_value.b8 = true;
   astl_value     = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_BOOL8).value();
   REQUIRE(std::get<bool>(astl_value.value) == true);
-  // string
-  union_value.str = nullptr;
-  astl_value      = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_STRING).value();
-  REQUIRE(std::get<std::string>(astl_value.value).empty());
-  union_value.str = "lorem ipsum dolor sit amet";
-  astl_value      = astl::AstlValue::FromUnion(union_value, ASTL_VALUE_STRING).value();
-  REQUIRE(std::get<std::string>(astl_value.value) == "lorem ipsum dolor sit amet");
 }
 
 TEST_CASE("AstlValue::FromZero", "[AstlValue]") {
@@ -270,9 +235,6 @@ TEST_CASE("AstlValue::FromZero", "[AstlValue]") {
   // bool
   astl_value = astl::AstlValue::FromZero(ASTL_VALUE_BOOL8).value();
   REQUIRE(std::get<bool>(astl_value.value) == false);
-  // string
-  astl_value = astl::AstlValue::FromZero(ASTL_VALUE_STRING).value();
-  REQUIRE(std::get<std::string>(astl_value.value).empty());
 }
 
 TEST_CASE("AstlValue::FromMinimum", "[AstlValue]") {
@@ -346,11 +308,6 @@ TEST_CASE("AstlValue::ToAstlUnionValue", "[AstlValue]") {
   std::tie(astl_value, astl_type) = val.ToAstlUnionValue();
   REQUIRE(astl_type == ASTL_VALUE_BOOL8);
   REQUIRE(astl_value.b8 == true);
-
-  val                             = astl::AstlValue{std::string{"Hello, world!"}};
-  std::tie(astl_value, astl_type) = val.ToAstlUnionValue();
-  REQUIRE(astl_type == ASTL_VALUE_STRING);
-  REQUIRE(std::strncmp(astl_value.str, "Hello, world!", std::strlen("Hello, world!")) == 0);
 }
 
 TEST_CASE("astl::to_string(AstlValue)", "[AstlValue]") {
@@ -366,7 +323,4 @@ TEST_CASE("astl::to_string(AstlValue)", "[AstlValue]") {
 
   val = astl::AstlValue{3.14};
   REQUIRE(astl::to_string(val) == "3.14");
-
-  val = astl::AstlValue{std::string{"Hello, world!"}};
-  REQUIRE(astl::to_string(val) == "Hello, world!");
 }

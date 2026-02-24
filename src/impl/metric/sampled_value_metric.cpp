@@ -129,11 +129,15 @@ auto SampledValueMetric::Summarize() -> astl_status_code {
   } else {
     ASTL_LOG_ERROR("Error computing average sample value: {}", astlStatusString(average.error()));
   }
-  auto none = AstlValue{std::string{"<none>"}};
+  auto to_string_or_none = [](const std::optional<AstlValue>& val) {
+    return val.has_value() ? to_string(val.value()) : std::string{"<none>"};
+  };
+  const auto max_value = to_string_or_none(_summary_data.max);
+  const auto min_value = to_string_or_none(_summary_data.min);
+  const auto avg_value = to_string_or_none(_summary_data.avg);
   // LOG : Metric, Description, Units, Maximum Value, Minimum Value, Average Value, Type
   _summary_logger.LogInfo("{}, {}, {}, {}, {}, {}, {} \n", _configuration->Name(), _configuration->Description(),
-                          _configuration->Units(), _summary_data.max.value_or(none), _summary_data.min.value_or(none),
-                          _summary_data.avg.value_or(none), _configuration->ValueType());
+                          _configuration->Units(), max_value, min_value, avg_value, _configuration->ValueType());
   return ASTL_STATUS_SUCCESS;
 }
 

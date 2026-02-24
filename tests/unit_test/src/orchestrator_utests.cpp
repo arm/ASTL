@@ -114,7 +114,9 @@ TEST_CASE("Orchestrator-Collection", "[Orchestrator]") {
 
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetProperties(_))
+      .SIDE_EFFECT(_1->_handle = mock_target_handle; _1->_name = "mock_target")
+      .RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
   REQUIRE(orchestrator.SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
@@ -242,7 +244,9 @@ TEST_CASE("Orchestrator-StopCollection", "[Orchestrator]") {
   //  start up targets
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetProperties(_))
+      .SIDE_EFFECT(_1->_handle = mock_target_handle; _1->_name = "mock_target")
+      .RETURN(ASTL_STATUS_SUCCESS);
   static const std::string name = "mock_target";
   ALLOW_CALL(*mock_target, Name()).RETURN(name);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
@@ -288,7 +292,9 @@ TEST_CASE("Orchestrator-SinkRawSamples empty span no-op", "[Orchestrator]") {
 
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetProperties(_))
+      .SIDE_EFFECT(_1->_handle = mock_target_handle; _1->_name = "mock_target")
+      .RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
   REQUIRE(orchestrator.SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
@@ -313,7 +319,9 @@ TEST_CASE("Orchestrator-SinkRawSamples bulk growth then skip reserve", "[Orchest
 
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetProperties(_))
+      .SIDE_EFFECT(_1->_handle = mock_target_handle; _1->_name = "mock_target")
+      .RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
   REQUIRE(orchestrator.SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);

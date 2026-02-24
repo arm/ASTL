@@ -179,24 +179,6 @@ TEST_CASE("DeltaMetric: static CalculateDelta function", "[DeltaMetric]") {
     auto delta_value = std::get<uint64_t>(result.value().value);
     REQUIRE(delta_value == 50);
   }
-
-  SECTION("Non-arithmetic values") {
-    astl::AstlValue current{std::string{"test"}};
-    astl::AstlValue previous{std::string{"prev"}};
-
-    auto result = DeltaMetricTestFixture::TestCalculateDelta(current, previous);
-    REQUIRE(!result.has_value());
-    REQUIRE(result.error() == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
-  }
-
-  SECTION("Mixed arithmetic and non-arithmetic") {
-    astl::AstlValue current{uint64_t{150}};
-    astl::AstlValue previous{std::string{"prev"}};
-
-    auto result = DeltaMetricTestFixture::TestCalculateDelta(current, previous);
-    REQUIRE(!result.has_value());
-    REQUIRE(result.error() == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
-  }
 }
 
 TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {

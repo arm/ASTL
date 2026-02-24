@@ -35,7 +35,7 @@ namespace astl {
  * @note the set of possible variants should be equivalent to the union members of astl_value_t.
  */
 struct AstlValue {
-  std::variant<uint8_t, uint16_t, uint32_t, uint64_t, float, double, bool, std::string> value;
+  std::variant<uint8_t, uint16_t, uint32_t, uint64_t, float, double, bool> value;
 
   explicit AstlValue(uint8_t val);
   explicit AstlValue(uint16_t val);
@@ -44,28 +44,12 @@ struct AstlValue {
   explicit AstlValue(float val);
   explicit AstlValue(double val);
   explicit AstlValue(bool val);
-  explicit AstlValue(std::string val);
 
   auto IsArithmetic() const -> bool {
     return std::visit(
         [](auto&& arg) -> bool {
           using T = std::decay_t<decltype(arg)>;
           return std::is_arithmetic_v<T> || std::is_same_v<T, bool>;
-        },
-        value);
-  }
-
-  /**
-   * @brief Check if the AstlValue contains a string or can be converted to a string representation
-   *
-   * @return true if the value is a string or can be converted to string, false otherwise
-   */
-  auto IsStringConvertible() const -> bool {
-    return std::visit(
-        [](auto&& arg) -> bool {
-          using T = std::decay_t<decltype(arg)>;
-          // Accept strings directly or any arithmetic type that can be converted
-          return std::is_same_v<T, std::string> || std::is_arithmetic_v<T> || std::is_same_v<T, bool>;
         },
         value);
   }
@@ -80,10 +64,7 @@ struct AstlValue {
     return std::visit(
         [&result_str](auto&& arg) -> bool {
           using T = std::decay_t<decltype(arg)>;
-          if constexpr (std::is_same_v<T, std::string>) {
-            result_str = arg;
-            return true;
-          } else if constexpr (std::is_same_v<T, bool>) {
+          if constexpr (std::is_same_v<T, bool>) {
             result_str = arg ? "true" : "false";
             return true;
           } else if constexpr (std::is_arithmetic_v<T>) {
@@ -189,7 +170,6 @@ struct AstlValue {
    * @brief Create an AstlValue of the given type with the maximum possible value
    *
    * @return an AstlValue instance with the max representable value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
-   * @note if type == ASTL_VALUE_STRING, this returns ASTL_STATUS_VALID_VALUE_TYPE
    */
   static auto FromMaximum(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
 
@@ -258,9 +238,6 @@ struct AstlValue {
    * @brief convert the C++ style AstlValue to a pair of C API astl_value_t and astl_value_type_t
    *
    * @return a std::pair where the first element is the value and the second idenfifies the type
-   * @note if the AstlValue is of type std::string, the returned astl_value_t will have a char *
-   *       pointing to the AstlValue's internal string buffer. So the AstlValue must outlive the returned
-   *       astl_value_t.
    */
   auto ToAstlUnionValue() const -> std::pair<astl_value_t, astl_value_type_t>;
 

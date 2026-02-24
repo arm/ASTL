@@ -22,7 +22,6 @@
  *
  * Core behaviors:
  *  - Numeric samples are emitted as Perfetto counter events (ph = "C").
- *  - Non-numeric samples (e.g. std::string) are emitted as instant events (ph = "I", scope thread).
  *  - Each target is assigned a stable pid. Each metric under that target is assigned a distinct tid
  *    (thread id) so metrics on the same target appear on separate tracks within the target process.
  *    pid assignment starts at 1; tids for a given pid start at 1 and increment as new metrics appear.
@@ -30,8 +29,7 @@
  *    cannot be opened the output stays disabled (Ready() == false).
  *  - Timestamps are monotonic steady-clock microseconds (not wall time). For correlation across
  *    systems an external mapping to wall time is required.
- *  - Name sanitization replaces whitespace and '"' with '_' for metric and target names; string
- *    sample payloads are escaped using EscapeJsonString() to keep JSON valid.
+ *  - Name sanitization replaces whitespace and '"' with '_' for metric and target names.
  *  - The file is a single JSON array: header '[' written once, events appended with commas, footer
  *    ']' written at destruction for well-formed output even if no samples were produced.
  *
@@ -39,9 +37,6 @@
  *  Counter (numeric):
  *    {"ph":"C","cat":"ASTL","name":"TargetX.MetricA","ts":1234,"pid":1,"tid":1,
  *     "args":{"target":"TargetX","metric":"MetricA","value":3.14}}
- *  Instant (string):
- *    {"ph":"I","cat":"ASTL","name":"TargetX.StateMetric","ts":1235,"pid":1,"tid":1,
- *     "s":"t","args":{"target":"TargetX","metric":"StateMetric","value":"EnteringState"}}
  */
 #ifndef PERFETTO_OUTPUT_HPP_
 #define PERFETTO_OUTPUT_HPP_
@@ -79,8 +74,7 @@ class PerfettoOutput : public IOutput {
    * @brief Serialize processed samples as Perfetto events.
    *
    * For each target/metric/sample triple:
-   *  - If sample value is arithmetic -> emit counter event (ph:"C").
-   *  - Else -> emit instant event (ph:"I") with thread scope (s:"t").
+   *  - Emit counter event (ph:"C").
    *
    * @param processed Nested map Target* -> Metric* -> vector<ProcessedSampledData>
    * @return astl_status_code Success or internal error if output not ready.
@@ -102,8 +96,6 @@ class PerfettoOutput : public IOutput {
   auto WriteFooter() -> void;
   // Sanitize metric/target names for Perfetto (whitespace & quotes -> '_').
   static auto Sanitize(std::string_view input) -> std::string;
-  // Escape a string sample value for JSON inclusion (quotes, backslashes, control chars).
-  static auto EscapeJsonString(std::string_view input) -> std::string;
   // Assign or lookup a stable pid for a target.
   auto GetPid(const ITarget* target) -> int;
   // Assign or lookup a stable tid for a (target, metric) pair.
@@ -119,9 +111,8 @@ class PerfettoOutput : public IOutput {
   //  ASTL_UNITS_MBYTESPERSEC -> "Bandwidth"
   //  ASTL_UNITS_TICKS      -> "Ticks"
   //  ASTL_UNITS_SECONDS    -> "Time"
-  //  (string sample with non-quantitative units) -> "State"
   //  fallback -> ""
-  static auto DetermineCategory(astl_units_t units, bool is_string_sample) -> std::string;
+  static auto DetermineCategory(astl_units_t units) -> std::string;
 };
 
 }  // namespace astl

@@ -193,7 +193,7 @@ TEST_CASE("PerfettoOutput multiple targets & metrics event count", "[perfetto_ou
   REQUIRE(event_count == 12);
 }
 
-TEST_CASE("PerfettoOutput instant string event", "[perfetto_output]") {  // NOLINT
+TEST_CASE("PerfettoOutput boolean event emits counter sample", "[perfetto_output]") {  // NOLINT
   TempFileGuard        tmp_guard{"astl_perfetto_instant.json"};
   astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
@@ -203,16 +203,15 @@ TEST_CASE("PerfettoOutput instant string event", "[perfetto_output]") {  // NOLI
   astl::ProcessedSamplesMap               processed;
   const astl::SampleTimestamp             base_ts{};
   std::vector<astl::ProcessedSampledData> samples;
-  samples.emplace_back(astl::ProcessedSampledData{astl::AstlValue{std::string{"EnteringState"}}, base_ts});
+  samples.emplace_back(astl::ProcessedSampledData{astl::AstlValue{true}, base_ts});
   processed[&target][&metric] = samples;
 
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
-  REQUIRE(content.find("\"ph\":\"I\"") != std::string::npos);
-  REQUIRE(content.find("EnteringState") != std::string::npos);
-  REQUIRE(content.find("\"s\":\"t\"") != std::string::npos);  // scope thread
+  REQUIRE(content.find("\"ph\":\"C\"") != std::string::npos);
+  REQUIRE(content.find("\"value\":1") != std::string::npos);
 }
 
 TEST_CASE("PerfettoOutput per-metric tid differentiation", "[perfetto_output]") {  // NOLINT
@@ -345,23 +344,23 @@ TEST_CASE("PerfettoOutput pid/tid stability across multiple writes", "[perfetto_
   REQUIRE(tid_mb != tid_ma1);
 }
 
-TEST_CASE("PerfettoOutput JSON escaping for instant event", "[perfetto_output]") {  // NOLINT
+TEST_CASE("PerfettoOutput emits numeric sample event", "[perfetto_output]") {  // NOLINT
   TempFileGuard        tmp_guard{"astl_perfetto_escape.json"};
   astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
   TestTargetBase              target{"TEsc"};
   TestMetricBase              metric{"EscMetric"};
   const astl::SampleTimestamp base_ts{};
-  std::string                 raw = std::string{"Quote:\" Backslash:\\ Newline:\n Tab:\t"};
   astl::ProcessedSamplesMap   processed;
   processed[&target][&metric] = {
-      astl::ProcessedSampledData{astl::AstlValue{raw}, base_ts}
+      astl::ProcessedSampledData{astl::AstlValue{static_cast<uint64_t>(7U)}, base_ts}
   };
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream escape_stream(tmp_guard.path);
   REQUIRE(escape_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(escape_stream)), std::istreambuf_iterator<char>());
-  REQUIRE(content.find("Quote:\\\" Backslash:\\\\ Newline:\\n Tab:\\t") != std::string::npos);
+  REQUIRE(content.find("\"name\":\"TEsc.EscMetric\"") != std::string::npos);
+  REQUIRE(content.find("\"value\":7") != std::string::npos);
 }
 
 TEST_CASE("PerfettoOutput skips null target and metric", "[perfetto_output]") {  // NOLINT
@@ -611,13 +610,13 @@ TEST_CASE("PerfettoOutput category inference - state (unit-based)", "[perfetto_o
   const astl::SampleTimestamp base_timestamp{};
   astl::ProcessedSamplesMap   processed;
   processed[&target][&metric] = {
-      astl::ProcessedSampledData{astl::AstlValue{std::string{"EnteringSleep"}}, base_timestamp}
+      astl::ProcessedSampledData{astl::AstlValue{true}, base_timestamp}
   };
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
   std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
-  REQUIRE(content.find("\"cat\":\"State\"") != std::string::npos);
+  REQUIRE(content.find("\"cat\":\"\"") != std::string::npos);
 }
 
 TEST_CASE("PerfettoOutput category inference fallback (unit-based)", "[perfetto_output]") {  // NOLINT

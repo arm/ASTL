@@ -50,8 +50,6 @@ inline void SetOneOf(ProtoOneOf& out, const T& value) {
     out.set_double_value(value);
   } else if constexpr (std::is_same_v<U, bool>) {
     out.set_bool_value(value);
-  } else if constexpr (std::is_same_v<U, std::string>) {
-    out.set_string_value(value);
   } else {
     static_assert(dependent_false<U>::value, "Unsupported AstlValue type");
   }
@@ -76,8 +74,6 @@ inline std::expected<AstlValue, astl_status_code> DeserializeAstlValue(const Pro
       return AstlValue{msg.double_value()};
     case ProtoVal::kBoolValue:
       return AstlValue{msg.bool_value()};
-    case ProtoVal::kStringValue:
-      return AstlValue{msg.string_value()};
 
     case ProtoVal::VALUE_NOT_SET:
     default:

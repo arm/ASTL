@@ -53,7 +53,6 @@ struct FiniteSetSummaryData {
  * - System states: {AstlValue{0U}, AstlValue{1U}, AstlValue{2U}} for Idle/Active/Sleep
  * - CPU C-states: {AstlValue{0U}, AstlValue{1U}, AstlValue{6U}, AstlValue{7U}}
  * - Power levels: {AstlValue{1.0}, AstlValue{2.5}, AstlValue{5.0}}
- * - String states: {AstlValue{std::string{"ON"}}, AstlValue{std::string{"OFF"}}}
  */
 class FiniteSetMetric : public SampledValueMetric {
  public:

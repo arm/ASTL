@@ -30,8 +30,6 @@ auto ValueToString(const astl_value_t& value, astl_value_type_t type) -> std::st
       return std::to_string(value.fp64);
     case ASTL_VALUE_BOOL8:
       return value.b8 ? "true" : "false";
-    case ASTL_VALUE_STRING:
-      return value.str ? std::string(value.str) : std::string("<null>");
     case ASTL_VALUE_UNKNOWN:
     default:
       return "<unknown>";

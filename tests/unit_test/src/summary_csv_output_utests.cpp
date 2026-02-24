@@ -552,7 +552,6 @@ TEST_CASE("HistogramSummarizer type support", "[histogram][summarizer][csv_summa
     REQUIRE(discrete_summarizer.IsSupported(ASTL_VALUE_FLOAT64, ASTL_METRIC_VALUE));
 
     // Non-arithmetic types (supported in discrete mode)
-    REQUIRE(discrete_summarizer.IsSupported(ASTL_VALUE_STRING, ASTL_METRIC_VALUE));
     REQUIRE(discrete_summarizer.IsSupported(ASTL_VALUE_BOOL8, ASTL_METRIC_VALUE));
   }
 
@@ -569,7 +568,6 @@ TEST_CASE("HistogramSummarizer type support", "[histogram][summarizer][csv_summa
     REQUIRE(range_summarizer.IsSupported(ASTL_VALUE_FLOAT64, ASTL_METRIC_VALUE));
 
     // Non-arithmetic types NOT supported in range mode
-    REQUIRE_FALSE(range_summarizer.IsSupported(ASTL_VALUE_STRING, ASTL_METRIC_VALUE));
     REQUIRE_FALSE(range_summarizer.IsSupported(ASTL_VALUE_BOOL8, ASTL_METRIC_VALUE));
 
     // Range mode only supports VALUE, DELTA, and RATE metric types

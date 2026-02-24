@@ -30,23 +30,9 @@ namespace {
 // Forward declaration so the template visitor can find it during instantiation
 inline void SanitizeDescription(std::string& description);
 
-/** @brief Helper to emit a sanitized value variant to a stream.
- *  Numeric values output bare; string values are quoted and internal double
- *  quotes replaced with single quotes.
- */
+/** @brief Helper to emit a value variant to a stream. */
 inline void EmitValue(std::ostream& output_stream, const AstlValue& value) {
-  std::visit(
-      [&](const auto& inner_value) {
-        using ValueT = std::decay_t<decltype(inner_value)>;
-        if constexpr (std::is_arithmetic_v<ValueT>) {
-          output_stream << inner_value;
-        } else {
-          std::string sanitized = static_cast<std::string>(inner_value);
-          SanitizeDescription(sanitized);
-          output_stream << '"' << sanitized << '"';
-        }
-      },
-      value.value);
+  std::visit([&](const auto& inner_value) { output_stream << inner_value; }, value.value);
 }
 
 }  // namespace

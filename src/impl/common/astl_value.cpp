@@ -36,7 +36,6 @@ AstlValue::AstlValue(uint64_t val) : value{val} {}
 AstlValue::AstlValue(float val) : value{val} {}
 AstlValue::AstlValue(double val) : value{val} {}
 AstlValue::AstlValue(bool val) : value{val} {}
-AstlValue::AstlValue(std::string val) : value{std::move(val)} {}
 
 /**
  * @brief convert a C-style astl_value_t to a AstlValue according to the specified astl_value_type_t
@@ -54,7 +53,6 @@ auto AstlValue::FromUnion(const astl_value_t& val, astl_value_type_t type)
     case ASTL_VALUE_FLOAT32:     return AstlValue{val.fp32};
     case ASTL_VALUE_FLOAT64:     return AstlValue{val.fp64};
     case ASTL_VALUE_BOOL8:       return AstlValue{val.b8};
-    case ASTL_VALUE_STRING:      return AstlValue{std::string(val.str ? val.str : "")};
     case ASTL_VALUE_UNKNOWN:     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     default:                     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
@@ -71,7 +69,6 @@ auto AstlValue::FromUnionPromoting(astl_value_type_t type) -> std::expected<Astl
     case ASTL_VALUE_FLOAT32:   return AstlValue{0.0};
     case ASTL_VALUE_FLOAT64:   return AstlValue{0.0};
     case ASTL_VALUE_BOOL8:     return AstlValue{uint64_t{0}};
-    case ASTL_VALUE_STRING:    return AstlValue{std::string()};
     case ASTL_VALUE_UNKNOWN:   return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     default:                   return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
@@ -93,7 +90,6 @@ auto AstlValue::FromMinimum(astl_value_type_t type) -> std::expected<AstlValue, 
     case ASTL_VALUE_FLOAT32:     return AstlValue{std::numeric_limits<float>::lowest()};
     case ASTL_VALUE_FLOAT64:     return AstlValue{std::numeric_limits<double>::lowest()};
     case ASTL_VALUE_BOOL8:       return AstlValue{std::numeric_limits<bool>::min()};
-    case ASTL_VALUE_STRING:      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     case ASTL_VALUE_UNKNOWN:     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     default:                     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
@@ -115,7 +111,6 @@ auto AstlValue::FromZero(astl_value_type_t type) -> std::expected<AstlValue, ast
     case ASTL_VALUE_FLOAT32:     return AstlValue{0.0F};
     case ASTL_VALUE_FLOAT64:     return AstlValue{0.0};
     case ASTL_VALUE_BOOL8:       return AstlValue{false};
-    case ASTL_VALUE_STRING:      return AstlValue{std::string{}};
     case ASTL_VALUE_UNKNOWN:     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     default:                     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
@@ -126,7 +121,6 @@ auto AstlValue::FromZero(astl_value_type_t type) -> std::expected<AstlValue, ast
  * @brief Create an AstlValue of the given type with the maximum possible value
  *
  * @return an AstlValue instance with the max representable value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
- * @note if type == ASTL_VALUE_STRING, this returns ASTL_STATUS_INVALID_VALUE_TYPE
  */
 auto AstlValue::FromMaximum(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code> {
   // clang-format off
@@ -138,7 +132,6 @@ auto AstlValue::FromMaximum(astl_value_type_t type) -> std::expected<AstlValue, 
     case ASTL_VALUE_FLOAT32:     return AstlValue{std::numeric_limits<float>::max()};
     case ASTL_VALUE_FLOAT64:     return AstlValue{std::numeric_limits<double>::max()};
     case ASTL_VALUE_BOOL8:       return AstlValue{std::numeric_limits<bool>::max()};
-    case ASTL_VALUE_STRING:      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     case ASTL_VALUE_UNKNOWN:     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     default:                     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
@@ -149,9 +142,6 @@ auto AstlValue::FromMaximum(astl_value_type_t type) -> std::expected<AstlValue, 
  * @brief convert the C++ style AstlValue to a pair of C API astl_value_t and astl_value_type_t
  *
  * @return a std::pair where the first element is the value and the second idenfifies the type
- * @note if the AstlValue is of type std::string, the returned astl_value_t will have a char *
- *       pointing to the AstlValue's internal string buffer. So the AstlValue must outlive the returned
- *       astl_value_t.
  */
 auto AstlValue::ToAstlUnionValue() const -> std::pair<astl_value_t, astl_value_type_t> {
   astl_value_t      union_val{};
@@ -167,10 +157,6 @@ auto AstlValue::ToAstlUnionValue() const -> std::pair<astl_value_t, astl_value_t
       else if constexpr (std::is_same_v<T, float>)    { union_val.fp32 = arg; type = ASTL_VALUE_FLOAT32; }
       else if constexpr (std::is_same_v<T, double>)   { union_val.fp64 = arg; type = ASTL_VALUE_FLOAT64; }
       else if constexpr (std::is_same_v<T, bool>)     { union_val.b8   = arg; type = ASTL_VALUE_BOOL8; }
-      else if constexpr (std::is_same_v<T, std::string>) {
-        union_val.str = arg.c_str(); // only valid if lifetime is managed externally
-        type = ASTL_VALUE_STRING;
-      }
     }, value);
   // clang-format on
   return {union_val, type};
@@ -215,8 +201,6 @@ auto AstlValue::Add(const AstlValue& addend, const AstlValue& augend) -> std::ex
           }
           Result sum{static_cast<Result>(left_cast + right_cast)};
           return AstlValue{sum};
-        } else if constexpr (std::is_same_v<X, std::string> && std::is_same_v<Y, std::string>) {
-          return AstlValue(left + right);  // string concatenation
         } else {
           return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
         }
@@ -275,8 +259,6 @@ auto to_string(const AstlValue& variant_value) -> std::string {
         using T = std::decay_t<decltype(visited_value)>;
         if constexpr (std::is_same_v<T, bool>) {
           return visited_value ? "true" : "false";
-        } else if constexpr (std::is_same_v<T, std::string>) {
-          return visited_value;
         } else {
           return std::format("{}", visited_value);
         }

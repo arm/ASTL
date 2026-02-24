@@ -26,7 +26,6 @@ enum AstlValueType {
   ASTL_VALUE_FLOAT32 = 6;
   ASTL_VALUE_FLOAT64 = 7;
   ASTL_VALUE_BOOL8   = 8;
-  ASTL_VALUE_STRING  = 9;
   ASTL_VALUE_UNKNOWN_PROTO = 10;
 }
 
@@ -66,6 +65,5 @@ message AstlValue {
     float  float_value   = 5;
     double double_value  = 6;
     bool   bool_value    = 7;
-    string string_value  = 8;
   }
 }

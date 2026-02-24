@@ -92,13 +92,9 @@ auto DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_sta
   // Calculate delta: current - previous
   auto delta_result = AstlValue::Subtract(current_sample, previous_sample);
   if (!delta_result.has_value()) {
-    std::string current_string;
-    std::string previous_string;
-    current_sample.ToStringValue(current_string);
-    previous_sample.ToStringValue(previous_string);
     ASTL_LOG_ERROR(
         "DeltaMetric: error {} when computing delta between current and previous samples. Current: {}, Previous: {}",
-        astlStatusString(delta_result.error()), current_string, previous_string);
+        astlStatusString(delta_result.error()), to_string(current_sample), to_string(previous_sample));
     return std::unexpected(delta_result.error());
   }
 
@@ -150,13 +146,17 @@ auto DeltaMetric::Summarize() -> astl_status_code {
                    astlStatusString(average.error()));
   }
 
-  auto none = AstlValue{std::string{"<none>"}};
+  const auto optional_to_string = [](const auto& optional_value) -> std::string {
+    return optional_value.has_value() ? to_string(optional_value.value()) : std::string{"<none>"};
+  };
+  const auto max_delta = optional_to_string(_delta_summary_data.max_delta);
+  const auto min_delta = optional_to_string(_delta_summary_data.min_delta);
+  const auto avg_delta = optional_to_string(_delta_summary_data.avg_delta);
   _delta_summary_logger.LogInfo(
       "SUMMARY - Metric: {}, Description: {}, Units: {}, Max Delta: {}, Min Delta: {}, Avg Delta: {}, Delta Count: {}, "
       "Type: {} \n",
-      _configuration->Name(), _configuration->Description(), _configuration->Units(),
-      _delta_summary_data.max_delta.value_or(none), _delta_summary_data.min_delta.value_or(none),
-      _delta_summary_data.avg_delta.value_or(none), _delta_count, _configuration->ValueType());
+      _configuration->Name(), _configuration->Description(), _configuration->Units(), max_delta, min_delta, avg_delta,
+      _delta_count, _configuration->ValueType());
 
   return ASTL_STATUS_SUCCESS;
 }

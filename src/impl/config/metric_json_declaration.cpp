@@ -73,9 +73,6 @@ auto ParseJsonValueToAstlValue(const nlohmann::json& val, const std::string& lab
   if (val.is_boolean()) {
     return AstlValue{val.get<bool>()};
   }
-  if (val.is_string()) {
-    return AstlValue{val.get<std::string>()};
-  }
 
   ASTL_LOG_ERROR("Unsupported JSON value type for label '{}' in finite_set_values (metric {})", label, metric_key_name);
   return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);

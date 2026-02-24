@@ -473,8 +473,6 @@ cdef object _decode_value(int value_type, astl_value_t v):
         return v.fp64
     elif value_type == ASTL_VALUE_BOOL8:
         return bool(v.b8)
-    elif value_type == ASTL_VALUE_STRING:
-        return v.str.decode() if v.str != NULL else ""
     else:
         return None
 

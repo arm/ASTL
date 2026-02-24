@@ -102,7 +102,6 @@ TEST_CASE("Serialize/Deserialize round-trip for all supported scalar types") {
   input.push_back(MakeSample(5, AstlValue{3.5F}, 50));
   input.push_back(MakeSample(6, AstlValue{6.25}, 60));
   input.push_back(MakeSample(7, AstlValue{true}, 70));
-  input.push_back(MakeSample(8, AstlValue{std::string{"hi"}}, 80));
 
   std::stringstream str_stream(std::ios::in | std::ios::out | std::ios::binary);
   REQUIRE(astl::ProtobufSerDes::Serialize(input, str_stream) == ASTL_STATUS_SUCCESS);

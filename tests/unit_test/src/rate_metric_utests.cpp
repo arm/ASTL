@@ -183,8 +183,8 @@ TEST_CASE("RateMetric: invalid sample type handling", "[RateMetric]") {
   MockSampleSink   sink;
   astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
-  // Try to send a sample with wrong type (string instead of uint64)
-  astl::AstlValue      invalid_val{std::string{"invalid"}};
+  // Try to send a sample with wrong type (uint32 instead of uint64)
+  astl::AstlValue      invalid_val{uint32_t{123}};
   astl::RawSampledData invalid_sample(1, invalid_val);
   auto                 status = metric.ReceiveRawSample(invalid_sample);
 
@@ -204,16 +204,6 @@ TEST_CASE("RateMetric: CalculateRate static method", "[RateMetric]") {
   // 100 units / 1 second = 100 units/second
   auto rate_value = std::get<double>(result.value().value);
   REQUIRE(rate_value == 100);
-}
-
-TEST_CASE("RateMetric: CalculateRate with non-arithmetic value", "[RateMetric]") {
-  // Test with non-arithmetic value (should fail)
-  astl::AstlValue delta{std::string{"invalid"}};
-  auto            time_interval = std::chrono::microseconds(1000000);
-
-  auto result = RateMetricTestFixture::TestCalculateRate(delta, time_interval);
-  REQUIRE(!result.has_value());
-  REQUIRE(result.error() == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 }
 
 TEST_CASE("RateMetric: sink captures multiple rates", "[RateMetric]") {

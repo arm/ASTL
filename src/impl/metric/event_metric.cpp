@@ -29,12 +29,6 @@ auto EventMetric::Initialize() -> void { _summary.counts.clear(); }
 auto EventMetric::Reset() -> void { Initialize(); }
 
 auto EventMetric::CheckAndStoreEvent(const RawSampledData& raw_sample) -> astl_status_code {
-  // Check if the value can be converted to a string
-  if (!raw_sample.value.IsStringConvertible()) {
-    ASTL_LOG_ERROR("EventMetric {}: received sample that cannot be converted to string", _configuration->Name());
-    return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
-  }
-
   // Convert value to string
   std::string event_str;
   if (!raw_sample.value.ToStringValue(event_str)) {
