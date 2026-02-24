@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <expected>
+#include <format>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -34,6 +35,36 @@ auto ValueToString(const astl_value_t& value, astl_value_type_t type) -> std::st
     case ASTL_VALUE_UNKNOWN:
     default:
       return "<unknown>";
+  }
+}
+
+auto UnitsToString(astl_units_t units) -> std::string {
+  switch (units) {
+    case ASTL_UNITS_NONE:
+      return "";
+    case ASTL_UNITS_TICKS:
+      return "ticks";
+    case ASTL_UNITS_SECONDS:
+      return "s";
+    case ASTL_UNITS_CELSIUS:
+      return "°C";
+    case ASTL_UNITS_JOULES:
+      return "J";
+    case ASTL_UNITS_WATTS:
+      return "W";
+    case ASTL_UNITS_VOLTS:
+      return "V";
+    case ASTL_UNITS_AMPS:
+      return "A";
+    case ASTL_UNITS_BYTES:
+      return "B";
+    case ASTL_UNITS_MBYTESPERSEC:
+      return "MB/s";
+    case ASTL_UNITS_MHERTZ:
+      return "MHz";
+    case ASTL_UNITS_UNKNOWN:
+    default:
+      return "?";
   }
 }
 
@@ -403,6 +434,37 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
   }
 }
 
+auto PrintMinMaxAvgSummary(astl_target_handle_t                         target_handle,
+                           const std::vector<astl_metric_properties_t>& metric_buffer) -> void {
+  std::cout << "\n--- Min/Max/Avg Summary ---\n";
+  for (const auto& metric_props : metric_buffer) {
+    if (std::strncmp(metric_props._name, "AP1", 3) == 0) {
+      continue;  // skip AP1 as mock sysfs doesn't implement the AP1 events
+    }
+    astl_metric_statistics_t summary{};
+    summary._size           = sizeof(astl_metric_statistics_t);
+    auto        status      = astlGetMetricStatistics(target_handle, metric_props._handle, &summary);
+    const char* metric_name = metric_props._name ? metric_props._name : "<null>";
+    if (status == ASTL_STATUS_NOT_SUPPORTED) {
+      std::cout << "  " << metric_name << ": summary not supported for this value type\n";
+      continue;
+    }
+    if (status != ASTL_STATUS_SUCCESS) {
+      std::cout << "  " << metric_name << ": astlGetMetricStatistics Status: " << astlStatusString(status) << '\n';
+      continue;
+    }
+    if (summary._count == 0) {
+      std::cout << "  " << metric_name << ": no samples collected\n";
+      continue;
+    }
+    const std::string unit = UnitsToString(metric_props._units);
+    std::cout << "  " << metric_name << " count=" << summary._count
+              << " min=" << ValueToString(summary._min, metric_props._value_type)
+              << " max=" << ValueToString(summary._max, metric_props._value_type)
+              << " avg=" << std::format("{:.2f}", summary._avg.fp64) << (unit.empty() ? "" : " unit=" + unit) << '\n';
+  }
+}
+
 /**
  * @brief  Example ASTL usage: version, init, target discovery, metric collection.
  *
@@ -558,6 +620,9 @@ auto main(int argc, char* argv[]) -> int {
   // Currently unimplemented. For the first milestone, just read from debug logs
   // TODO(ASTL-60) - Print samples using basic text writer plugin
   RetrieveSamples(target_properties._handle, metric_buffer);
+
+  // Print min/max/avg summary for all collected metrics
+  PrintMinMaxAvgSummary(target_properties._handle, metric_buffer);
 
   return 0;
 }

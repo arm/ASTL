@@ -50,6 +50,14 @@ Samples:
 
 - `get_counter_samples(target, counter) -> list[(timestamp, value)]`
 - `get_metric_samples(target, metric) -> list[(timestamp, value)]`
+- `get_metric_statistics(target, metric) -> MetricStatistics`
+
+  Returns a `MetricStatistics` dataclass with fields `min`, `max`, `avg`, `count`
+  (all Python `float`). Raises `NotSupportedError` for non-arithmetic metric types.
+
+  > **Note:** The underlying C API always stores the average as a `double` (`fp64`)
+  > regardless of the metric's value type (including integer metrics). The Python
+  > wrapper reads `_avg.fp64` unconditionally and exposes it as a `float`.
 
 Entity object attributes (read-only):
 

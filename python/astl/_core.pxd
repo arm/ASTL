@@ -294,3 +294,15 @@ cdef extern from "astl/astl_telemetry.h":
     int astlGetCounterSamplesOnTarget(const void* target_handle, const void* counter_handle, astl_counter_sample_t* samples, uint32_t* sample_count)
     int astlGetMetricSampleCountOnTarget(const void* target_handle, const void* metric_handle, uint32_t* sample_count)
     int astlGetMetricSamplesOnTarget(const void* target_handle, const void* metric_handle, astl_metric_sample_t* samples, uint32_t* sample_count)
+
+    # metric summary
+    cdef struct _astl_metric_statistics_t:
+        size_t   _size
+        astl_value_t _min
+        astl_value_t _max
+        astl_value_t _avg
+        uint64_t _count
+        uint32_t _flags
+    ctypedef _astl_metric_statistics_t astl_metric_statistics_t
+
+    int astlGetMetricStatistics(const void* target_handle, const void* metric_handle, astl_metric_statistics_t* summary)

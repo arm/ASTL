@@ -462,6 +462,66 @@ cdef object _decode_value(int value_type, astl_value_t v):
     else:
         return None
 
+cdef class MetricStatistics:
+    """Min/max/average summary for a collected metric on a target.
+
+    Attributes:
+        count (int): Number of samples processed. If 0, no samples were
+            available and ``min``/``max``/``avg`` should not be used.
+        min: Minimum sampled value (type matches the metric's value_type).
+        max: Maximum sampled value.
+        avg (float): Average of all sampled values.
+    """
+    cdef public uint64_t count
+    cdef public object   min
+    cdef public object   max
+    cdef public object   avg
+
+    def __init__(self, count: int, min, max, avg):
+        self.count = count
+        self.min   = min
+        self.max   = max
+        self.avg   = avg
+
+    def __repr__(self):
+        return (f"<MetricStatistics count={self.count} "
+                f"min={self.min!r} max={self.max!r} avg={self.avg!r}>")
+
+
+cpdef MetricStatistics get_metric_statistics(Target target, Metric metric):
+    """Return a min/max/average summary for ``metric`` on ``target``.
+
+    Args:
+        target: The :class:`Target` the metric was collected on.
+        metric: The :class:`Metric` to summarise.
+
+    Returns:
+        A :class:`MetricStatistics` with ``count``, ``min``, ``max``, and
+        ``avg`` fields.  When ``count`` is 0 no samples were collected and
+        the ``min``/``max``/``avg`` fields are ``None``.
+
+    Raises:
+        ASTLError: on any non-success status code (e.g. NOT_SUPPORTED for
+            non-arithmetic metric types such as BOOL8 or STRING).
+    """
+    cdef astl_metric_statistics_t s
+    s._size  = sizeof(astl_metric_statistics_t)
+    s._flags = 0
+    s._count = 0
+    _check(astlGetMetricStatistics(
+        <const void*>target._handle_ptr,
+        <const void*>metric._handle_ptr,
+        &s,
+    ))
+    if s._count == 0:
+        return MetricStatistics(0, None, None, None)
+    cdef object vmin = _decode_value(metric.value_type, s._min)
+    cdef object vmax = _decode_value(metric.value_type, s._max)
+    # Average is always fp64 regardless of the metric's value_type
+    cdef object vavg = s._avg.fp64
+    return MetricStatistics(s._count, vmin, vmax, vavg)
+
+
 cpdef list get_targets():
     cdef uint32_t count = 0
     _check(astlGetTargetCount(&count))

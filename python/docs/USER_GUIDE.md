@@ -10,7 +10,8 @@
 | --------------- | ------------------ | ---------------------------------------- | ----------------------------------------------------- |
 | Core Binding    | `astl._core`       | Thin Cython bridge to C API              | `get_targets`, `get_counters`,                        |
 |                 |                    |                                          | `get_metrics`, `get_metric_groups`, `read_immediate`, |
-|                 |                    |                                          | `get_counter_samples`, `get_metric_samples`           |
+|                 |                    |                                          | `get_counter_samples`, `get_metric_samples`,          |
+|                 |                    |                                          | `get_metric_statistics`                               |
 | Public Facade   | `astl`             | Re-exports curated API surface           | `start_collection`, `pause_collection`,               |
 |                 |                    |                                          | `resume_collection`, `stop_collection`, enums         |
 | Session SerDes  | `astl`             | Save/load `.astl` sessions via C API     | `save_collection`, `load_collection`                  |
@@ -204,6 +205,50 @@ res_m = poll_metric_once(t, m)
 print(res_c.samples)
 print(res_m.samples)
 ```
+
+---
+
+## Metric Summary API
+
+After stopping collection, call `get_metric_statistics` to retrieve the minimum, maximum,
+average, and sample count for any arithmetic metric without iterating raw sample lists.
+
+```python
+import astl
+
+t = astl.get_targets()[0]
+m = astl.get_metrics(t)[0]       # must be an arithmetic type (int or float)
+
+# ... configure, start, read, stop ...
+
+summary = astl.get_metric_statistics(t, m)
+if summary.count > 0:
+    print(f"count={summary.count}  min={summary.min}  max={summary.max}  avg={summary.avg:.2f}")
+else:
+    print("no samples collected")
+```
+
+### `MetricStatistics` Attributes
+
+| Attribute | Type    | Notes                                                                     |
+| --------- | ------- | ------------------------------------------------------------------------- |
+| `min`     | `float` | Minimum sample value over all collected samples.                          |
+| `max`     | `float` | Maximum sample value over all collected samples.                          |
+| `avg`     | `float` | Arithmetic mean. Always a `float` (`fp64` internally).                    |
+| `count`   | `int`   | Number of samples processed. When `0`, `min`/`max`/`avg` are meaningless. |
+
+> **Important:** The ASTL C API always stores `_avg` as a `double` (`fp64`),
+> regardless of whether the metric's native type is integer or float.
+> The Python wrapper reads `_avg.fp64` unconditionally and returns it as a Python `float`.
+> `min` and `max` are also surfaced as `float` for convenience; the underlying C union
+> members match the metric's native value type.
+
+### Error Handling
+
+| Condition                                     | Exception                                 |
+| --------------------------------------------- | ----------------------------------------- |
+| Non-arithmetic metric type (e.g. string/bool) | `NotSupportedError`                       |
+| Invalid target or metric handle               | `BadArgumentError` / `InvalidHandleError` |
 
 ---
 

@@ -338,7 +338,29 @@ astl_status_code rc = astlLoadCollection(&params);
 - `raw_samples.log` and `sampled_value_summary.log` - metric data (raw + summarized)
 - `sysfs.log` - mock SCMI driver output
 
-8. Clean up allocated resources
+8. Compute min/max/avg summary for a metric (post-collection)
+
+After stopping collection, call `astlGetMetricStatistics` for any arithmetic metric to obtain
+the minimum, maximum, average, and sample count over all collected samples. See the
+[Metric Summary API](#metric-summary-api) section for full details.
+
+```cpp
+astl_metric_statistics_t summary{};       // zero-initialize
+summary._size  = sizeof(astl_metric_statistics_t);
+// summary._flags is already 0 from zero-initialization
+
+astl_status_code rc = astlGetMetricStatistics(
+    target_properties._handle,
+    metric_buffer[0]._handle,
+    &summary);
+
+if (rc == ASTL_STATUS_SUCCESS && summary._count > 0) {
+    // _avg is ALWAYS fp64 regardless of the metric's value type
+    printf("count=%" PRIu64 "  avg=%.2f\n", summary._count, summary._avg.fp64);
+}
+```
+
+9. Clean up allocated resources
 
 ```cpp
 ASTL_FREE_ARRAY(target_properties_buffer)
@@ -394,6 +416,68 @@ node scripts/render_mermaid.js --all
 5. `system_phase_retrieval_shutdown.mmd` – Retrieval APIs, shutdown, representative errors
 
 `system_end_to_end_sequence.mmd` remains as an overview referencing those phases.
+
+## Metric Summary API
+
+`astlGetMetricStatistics` computes a statistical summary (minimum, maximum, average, and
+sample count) over all samples collected for a given metric on a specific target. It is
+called after `astlStopCollectionOnTarget` (or after `astlLoadCollection`).
+
+Only arithmetic value types (integers and floats) are supported.
+
+### `astl_metric_statistics_t` Fields
+
+| Field    | Type           | Notes                                                                                                                             |
+| -------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `_size`  | `size_t`       | **Must** be set to `sizeof(astl_metric_statistics_t)` before the call.                                                            |
+| `_min`   | `astl_value_t` | Minimum sample value. Union member matches the metric's native value type.                                                        |
+| `_max`   | `astl_value_t` | Maximum sample value. Union member matches the metric's native value type.                                                        |
+| `_avg`   | `astl_value_t` | Average value. **Always `fp64`** — read via `summary._avg.fp64` regardless of the metric's value type, including integer metrics. |
+| `_count` | `uint64_t`     | Number of samples processed. When `_count == 0` the min/max/avg fields are zero and must not be interpreted.                      |
+| `_flags` | `uint32_t`     | Reserved. **Must be set to `0`**.                                                                                                 |
+
+> **Key contract:** `_avg` always stores a `double` (`fp64`) even for integer metrics.
+> `_min` and `_max` use the union member that matches the metric's native value type
+> (e.g. `uint64` for `ASTL_VALUE_UINT64` metrics).
+
+### Status Codes
+
+| Code                                   | Meaning                                                     |
+| -------------------------------------- | ----------------------------------------------------------- |
+| `ASTL_STATUS_SUCCESS`                  | Summary computed successfully.                              |
+| `ASTL_STATUS_BAD_ARGUMENT`             | A pointer argument is `NULL`, or `_flags != 0`.             |
+| `ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE` | `_size` does not equal `sizeof(astl_metric_statistics_t)`.  |
+| `ASTL_STATUS_NOT_SUPPORTED`            | The metric type or value type does not support min/max/avg. |
+
+### Example
+
+```c
+#include "astl/astl_telemetry.h"
+#include <inttypes.h>
+#include <stdio.h>
+
+astl_metric_statistics_t summary{};  // zero-initializes all fields
+summary._size = sizeof(astl_metric_statistics_t);
+// summary._flags is already 0; listed here for emphasis
+summary._flags = 0;
+
+astl_status_code rc = astlGetMetricStatistics(
+    target_handle, metric_handle, &summary);
+
+if (rc == ASTL_STATUS_SUCCESS) {
+    if (summary._count > 0) {
+        // _avg is always fp64 — safe for all arithmetic metric types
+        printf("count=%" PRIu64 "  avg=%.2f\n",
+               summary._count, summary._avg.fp64);
+    } else {
+        puts("no samples collected");
+    }
+} else if (rc == ASTL_STATUS_NOT_SUPPORTED) {
+    puts("metric type does not support min/max/avg");
+}
+```
+
+---
 
 ## Output Formats
 

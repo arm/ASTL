@@ -16,6 +16,7 @@
 #include "metric/residency_metric.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "output/i_output_manager.hpp"
+#include "output/summarizer.hpp"
 #include "target.hpp"
 
 /***********************************************************************************
@@ -1390,4 +1391,106 @@ auto astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metri
   // Intentionally ignore the result of DestroyBufferOutput; cleanup best-effort during sample retrieval.
   (void)output_manager->DestroyBufferOutput();
   return status;
+}
+
+/***********************************************************************************
+ **********************          METRIC SUMMARY API         ************************
+ **********************************************************************************/
+
+auto astlGetMetricStatistics(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
+                             astl_metric_statistics_t* summary) noexcept -> astl_status_code {
+  if (!target_handle || !metric_handle || !summary) {
+    ASTL_LOG_ERROR("astlGetMetricStatistics: Invalid argument(s)");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  // Validate flags - must be 0 (reserved for future use)
+  if (summary->_flags != 0) {
+    ASTL_LOG_ERROR("astlGetMetricStatistics: Invalid flags value: {} (must be 0)", summary->_flags);
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  // Validate struct size for versioning
+  if (summary->_size != sizeof(astl_metric_statistics_t)) {
+    ASTL_LOG_ERROR("astlGetMetricStatistics: Invalid summary struct size: {} (expected {})", summary->_size,
+                   sizeof(astl_metric_statistics_t));
+    return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
+  }
+
+  // Zero-initialise output fields so the struct contents are always deterministic,
+  // regardless of whether the caller pre-initialised them.
+  summary->_min   = {};
+  summary->_max   = {};
+  summary->_avg   = {};
+  summary->_count = 0;
+
+  auto get_target_result = GetTargetFromHandle(target_handle);
+  if (!get_target_result) {
+    return get_target_result.error();
+  }
+  const auto* target = *get_target_result;
+
+  auto get_metric_result = GetMetricFromHandle(metric_handle, target_handle);
+  if (!get_metric_result) {
+    return get_metric_result.error();
+  }
+  const auto* metric = *get_metric_result;
+
+  // Get the processed samples for this metric
+  auto samples_result = GetProcessedMetricSamples(metric, target);
+  if (!samples_result) {
+    return samples_result.error();
+  }
+  auto samples = *samples_result;
+
+  // Create a MinMaxAvgSummarizer instance
+  astl::MinMaxAvgSummarizer summarizer;
+
+  // Get metric properties to check if it's supported
+  astl_metric_properties_t metric_properties{};
+  metric_properties._size = sizeof(astl_metric_properties_t);
+  auto props_status       = metric->GetProperties(&metric_properties);
+  if (props_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("astlGetMetricStatistics: Failed to get metric properties");
+    return props_status;
+  }
+
+  if (!summarizer.IsSupported(metric_properties._value_type, metric_properties._metric_type)) {
+    ASTL_LOG_ERROR("astlGetMetricStatistics: Metric type not supported by MinMaxAvgSummarizer");
+    return ASTL_STATUS_NOT_SUPPORTED;
+  }
+
+  // Compute the summary
+  auto summary_result = summarizer.Summarize(samples);
+  if (!summary_result) {
+    ASTL_LOG_ERROR("astlGetMetricStatistics: Failed to compute summary");
+    return summary_result.error();
+  }
+
+  // Extract the MinMaxAvgSummary from the variant
+  auto* min_max_avg_summary = std::get_if<astl::MinMaxAvgSummary>(&(*summary_result));
+  if (!min_max_avg_summary) {
+    ASTL_LOG_ERROR("astlGetMetricStatistics: Unexpected summary type returned");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  // Fill the output structure
+  summary->_count = min_max_avg_summary->count;
+
+  // Handle min value
+  if (min_max_avg_summary->min.has_value()) {
+    summary->_min = min_max_avg_summary->min->ToAstlUnionValue().first;
+  }
+
+  // Handle max value
+  if (min_max_avg_summary->max.has_value()) {
+    summary->_max = min_max_avg_summary->max->ToAstlUnionValue().first;
+  }
+
+  // Handle avg value
+  if (min_max_avg_summary->avg.has_value()) {
+    summary->_avg = min_max_avg_summary->avg->ToAstlUnionValue().first;
+  }
+
+  return ASTL_STATUS_SUCCESS;
 }

@@ -962,6 +962,62 @@ ASTL_API astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t  tar
                                                        astl_metric_sample_t* samples,
                                                        uint32_t*             sample_count) ASTL_API_NOEXCEPT;
 
+/***********************************************************************************
+ **********************          METRIC SUMMARY API         ************************
+ **********************************************************************************/
+
+/**
+ * @brief Structure to hold min/max/average summary statistics for a metric.
+ *
+ * This structure contains the computed minimum, maximum, and average values
+ * for a collected metric on a specific target, along with the number of samples
+ * used in the computation.
+ */
+typedef struct _astl_metric_statistics_t {
+  size_t       _size;  //!< Size of this struct for versioning
+  astl_value_t _min;   //!< Minimum value. Union member matches the metric's value type.
+  astl_value_t _max;   //!< Maximum value. Union member matches the metric's value type.
+  astl_value_t _avg;   //!< Average value. Always stored as fp64 regardless of the metric's
+                       //!< value type (including integer metrics). Always read _avg.fp64.
+  uint64_t _count;     //!< Number of samples processed.
+  uint32_t _flags;     //!< Reserved for future use. Must be set to 0. Future values may
+                       //!< indicate time-weighted summary computation instead of normal
+                       //!< (uniform-weight) summary computation.
+} astl_metric_statistics_t;
+
+/**
+ * @brief Get the min/max/average summary for a specific metric on a specific target.
+ *
+ * This function computes statistical summary (minimum, maximum, and average) for
+ * all collected samples of a given metric on a target.
+ *
+ * The _count field indicates the number of samples processed. If _count > 0,
+ * the _min, _max, and _avg fields contain valid values. If _count == 0,
+ * no samples were available and the min/max/avg fields should not be used.
+ *
+ *
+ * @param[in] target_handle                The handle of the target of interest. Found in
+ *                                         astl_target_properties_t
+ *
+ * @param[in] metric_handle                The handle of the metric of interest. Found in
+ *                                         astl_metric_properties_t
+ *
+ * @param[in/out] summary                  Pointer to the summary structure to fill.
+ *                                         Cannot be NULL.
+ *                                         IMPORTANT: _size field must be set to
+ *                                         sizeof(astl_metric_statistics_t) for versioning
+ *
+ * @return astl_status_code                ASTL_STATUS_SUCCESS on success.
+ *                                         ASTL_STATUS_BAD_ARGUMENT if any argument is NULL
+ *                                         or if _flags is not 0.
+ *                                         ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE if _size does not
+ *                                         equal sizeof(astl_metric_statistics_t).
+ *                                         ASTL_STATUS_NOT_SUPPORTED if the metric type or value type is not supported.
+ */
+ASTL_API astl_status_code astlGetMetricStatistics(astl_target_handle_t      target_handle,
+                                                  astl_metric_handle_t      metric_handle,
+                                                  astl_metric_statistics_t* summary) ASTL_API_NOEXCEPT;
+
 #if defined(__cplusplus)
 }
 #endif
