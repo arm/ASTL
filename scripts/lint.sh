@@ -118,6 +118,11 @@ SOURCE_FILES_TO_LINT=()
 TEST_FILES_TO_LINT=()
 C_HEADERS_TO_LINT=()
 for FILE in "${FILES[@]}"; do
+	if [[ ! -e $FILE ]]; then
+		echo "Skipping non-existent path from diff selection: $FILE"
+		continue
+	fi
+
 	if [[ $FILE == *external/* ]]; then
 		continue
 	elif [[ $FILE == *third_party/* ]]; then

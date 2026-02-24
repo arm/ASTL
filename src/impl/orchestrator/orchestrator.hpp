@@ -11,6 +11,7 @@
 #include "collector/i_collector_manager.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "common/i_raw_sample_sink.hpp"
+#include "metric/i_counter.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "output/i_output_manager.hpp"
 #include "target.hpp"
@@ -25,6 +26,36 @@ namespace fs = std::filesystem;
 
 class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
  public:
+  /**
+   * @brief Per-target metric collection lifecycle state.
+   *
+   * Progression: UNCONFIGURED -> CONFIGURED -> STARTED -> (PAUSED <-> STARTED)* -> STOPPED
+   *
+   * Semantics:
+   *  - UNCONFIGURED: no collection configured.
+   *  - CONFIGURED: Configure*Collection succeeded; ready to start.
+   *  - STARTED: active sampling (entered via StartCollection or ResumeCollection).
+   *  - PAUSED: sampling suspended (entered via PauseCollection; configuration retained).
+   *  - STOPPED: terminal for current configuration (entered via StopCollection).
+   *
+   * Valid transitions:
+   *  - CONFIGURED -> STARTED
+   *  - STARTED -> PAUSED
+   *  - PAUSED -> STARTED
+   *  - STARTED|PAUSED -> STOPPED
+   *
+   * State is tracked per target in _target_collection_states (mutex: _collection_state_mutex).
+   * Pause/resume timestamps recorded in _target_pause_timestamps / _target_resume_timestamps.
+   */
+  enum class TargetCollectionState { UNCONFIGURED, CONFIGURED, STARTED, PAUSED, STOPPED };
+
+  /**
+   * @brief Convert a TargetCollectionState value to a readable string.
+   * @param state lifecycle state enum.
+   * @return std::string_view naming the state (points to static compiler-generated storage).
+   */
+  static auto TargetCollectionStateToString(TargetCollectionState state) -> std::string_view;
+
   /**
    * @brief Create a fully armed and operational Orchestrator from the necessary parts.
    *        One of Orchestrator's class invariants is that it has non-null topology, collector, and metric managers.
@@ -81,6 +112,14 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    */
   static auto GetInstance() noexcept
       -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code>;
+  /**
+   * @brief Returns true if the global Orchestrator instance has been explicitly initialized.
+   *
+   * Unlike GetInstance(), this function will NOT attempt lazy construction. It is used by the
+   * C API wrapper layer to return ASTL_STATUS_NOT_INITIALIZED for lifecycle operations that
+   * require prior `Orchestrator::GetInstance()` invocation.
+   */
+  static auto IsInitialized() -> bool { return instance_ != nullptr; }
 
   /**
    * @brief Destroy the current singleton instance, if any.
@@ -182,27 +221,40 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   auto ReadImmediate(const ITarget *target) -> astl_status_code;
 
   /**
-   * @brief Stop the collection of samples, but leave configuration in place
+   * @brief Pause the collection of samples while retaining configuration and already gathered samples.
    *
-   * @param target The target with an active collection configuration
-   * @note StartCollection should be called before this
-   * @note Re-enable collection with ResumeCollection
-   * @return error status code:
-   *   - ASTL_STATUS_SUCCESS: success
-   *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
-   *   - others: according to individual Collector implementations
+   * Preconditions: target exists; collection is STARTED.
+   * Postconditions: state transitions to PAUSED; collectors quiesced.
+   *
+   * @return status:
+   *  - ASTL_STATUS_SUCCESS on success
+   *  - ASTL_STATUS_INVALID_TARGET_HANDLE if target not managed
+   *  - ASTL_STATUS_COLLECTION_NOT_RUNNING if collection not STARTED
+   *  - ASTL_STATUS_COLLECTION_ALREADY_PAUSED if already PAUSED
+   *  - ASTL_STATUS_PAUSE_UNSUPPORTED if underlying collector cannot pause
+   *  - ASTL_STATUS_INTERNAL_ERROR if a manager dependency is missing
+   *
+   * Thread-safety: acquires internal lifecycle mutex for state check and transition.
+   * Idempotence: repeated calls while PAUSED return ASTL_STATUS_COLLECTION_ALREADY_PAUSED.
    */
   auto PauseCollection(const ITarget *target) -> astl_status_code;
 
   /**
-   * @brief Re-enable the collection of samples, based on previous configuration
+   * @brief Resume collection after a prior pause.
    *
-   * @param target The target with an active collection configuration
-   * @note PauseCollection should be called before this
-   * @return error status code:
-   *   - ASTL_STATUS_SUCCESS: success
-   *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
-   *   - others: according to individual Collector implementations
+   * Preconditions: target exists; state is PAUSED.
+   * Postconditions: state transitions to STARTED; sampling restarts.
+   *
+   * @return status:
+   *  - ASTL_STATUS_SUCCESS on success
+   *  - ASTL_STATUS_INVALID_TARGET_HANDLE if target not managed
+   *  - ASTL_STATUS_COLLECTION_NOT_PAUSED if not currently PAUSED
+   *  - ASTL_STATUS_COLLECTION_ALREADY_RUNNING if already STARTED
+   *  - ASTL_STATUS_RESUME_UNSUPPORTED if underlying collector cannot resume
+   *  - ASTL_STATUS_INTERNAL_ERROR if a manager dependency is missing
+   *
+   * Thread-safety: acquires internal lifecycle mutex for state check and transition.
+   * Idempotence: repeated calls while STARTED return ASTL_STATUS_COLLECTION_ALREADY_RUNNING.
    */
   auto ResumeCollection(const ITarget *target) -> astl_status_code;
 
@@ -222,6 +274,44 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    */
   auto StopCollection(const ITarget *target) -> astl_status_code;
 
+  /**
+   * @brief Get current lifecycle state for a managed target.
+   * @param target Target pointer (must be non-null and owned by this orchestrator).
+   * @return expected with TargetCollectionState or error:
+   *   - ASTL_STATUS_BAD_ARGUMENT if target is null
+   *   - ASTL_STATUS_INVALID_TARGET_HANDLE if not found
+   *
+   * States:
+   *   - UNCONFIGURED: target present but collection not yet configured
+   *   - CONFIGURED: ConfigureMetricCollection succeeded for target
+   *   - STARTED: StartCollection succeeded (or ResumeCollection from PAUSED)
+   *   - PAUSED: PauseCollection succeeded
+   *   - STOPPED: StopCollection succeeded
+   *
+   * Thread-safety: acquires lifecycle mutex; returns copy of enum value.
+   */
+  auto GetTargetCollectionState(const ITarget *target) const -> std::expected<TargetCollectionState, astl_status_code>;
+
+  /**
+   * @brief Snapshot all target lifecycle states.
+   * Thread-safe: locks internal mutex and returns a copy of the mapping.
+   *
+   * @return unordered_map keyed by ITarget* with current TargetCollectionState (see GetTargetCollectionState).
+   * Copy semantics: caller receives independent container safe against subsequent mutations.
+   */
+  auto GetAllTargetCollectionStates() const -> std::unordered_map<const ITarget *, TargetCollectionState>;
+
+  /**
+   * @brief Return the number of collected samples for a given counter on the given target
+   * @param target The target on which collection was configured and performed
+   * @param counter The specific data source that was sampled
+   *
+   * @return a std::expected pair with either:
+   *   - a value: the count of samples taken for the given ICounter on the target
+   *   - OR an error status code such as an invalid handle or bad argument
+   */
+  auto GetCounterSampleCount(const ITarget *target, const ICounter *counter) const
+      -> std::expected<uint32_t, astl_status_code>;
   // TODO(ASTL-58): when OutputManager is implemented, revisit to see if GetMetricManager is even needed
   /**
    * @brief Return a reference to a pointer to the MetricManager, used to enumerate metrics
@@ -295,17 +385,25 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
 
   static auto                          GetMutex() -> std::mutex &;  // manage thread-safe access   to singleton instance
   static std::unique_ptr<Orchestrator> instance_;                   // singleton instance pointer
-  std::unique_ptr<ITopologyManager>    _topology_manager;           // manages the set of Targets
-  std::unique_ptr<ICollectorManager>   _collector_manager;          // manages the collection of raw samples
-  std::unique_ptr<IMetricManager>      _metric_manager;     // manages the processing of raw samples into metrics
-  std::unique_ptr<IOutputManager>      _output_manager;     // manages the output of processed samples
-  RawSamplesMap                        _raw_samples;        // collected raw samples, organized by target
-  mutable std::mutex                   _raw_samples_mtx;    // protect the _raw_samples container
-  ProcessedSamplesMap                  _processed_samples;  // processed metric samples, organized by target and metric
-  mutable std::mutex                   _processed_samples_mtx;       // protect the _processed_samples container
-  bool                                 _perfetto_emitted{false};     // ensure single emission per collection lifecycle
-  bool                                 _intervalcsv_emitted{false};  // ensure single emission per collection lifecycle
-  std::filesystem::path                _cache_dir;  // temporary directory to save and load from ASTL file
+  // Per-target collection lifecycle tracking (see public Doxygen block for semantics)
+  std::unordered_map<const ITarget *, TargetCollectionState> _target_collection_states;  // lifecycle state per target
+  std::unordered_map<const ITarget *, std::chrono::steady_clock::time_point>
+      _target_pause_timestamps;  // last pause time
+  std::unordered_map<const ITarget *, std::chrono::steady_clock::time_point>
+                     _target_resume_timestamps;  // last resume time
+  mutable std::mutex _collection_state_mutex;    // protects lifecycle state and pause/resume timestamp maps
+
+  std::unique_ptr<ITopologyManager>  _topology_manager;   // manages the set of Targets
+  std::unique_ptr<ICollectorManager> _collector_manager;  // manages the collection of raw samples
+  std::unique_ptr<IMetricManager>    _metric_manager;     // manages the processing of raw samples into metrics
+  std::unique_ptr<IOutputManager>    _output_manager;     // manages the output of processed samples
+  RawSamplesMap                      _raw_samples;        // collected raw samples, organized by target
+  mutable std::mutex                 _raw_samples_mtx;    // protect the _raw_samples container
+  ProcessedSamplesMap                _processed_samples;  // processed metric samples, organized by target and metric
+  mutable std::mutex                 _processed_samples_mtx;       // protect the _processed_samples container
+  bool                               _perfetto_emitted{false};     // ensure single emission per collection lifecycle
+  bool                               _intervalcsv_emitted{false};  // ensure single emission per collection lifecycle
+  std::filesystem::path              _cache_dir;  // temporary directory to save and load from ASTL file
 };
 
 }  // namespace astl

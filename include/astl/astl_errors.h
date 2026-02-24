@@ -113,7 +113,9 @@ typedef enum _astl_status_code {
   ASTL_STATUS_INVALID_VALUE_TYPE         = 58,            //!< Invalid astl_value_type_t for operation
   ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE   = 59,            //!< A struct parameter's _size property doesn't match
   ASTL_STATUS_NOT_INITIALIZED            = 60,            //!< Failed to initialize internal state
-
+  ASTL_STATUS_INVALID_STATE_TRANSITION   = 61,            //!< Generic lifecycle transition not permitted.
+  ASTL_STATUS_PAUSE_UNSUPPORTED          = 62,            //!< Collector/hardware cannot pause (treated as no-op error).
+  ASTL_STATUS_RESUME_UNSUPPORTED         = 63,  //!< Collector/hardware cannot resume (treated as no-op error).
   // Add new status codes here
 
   ASTL_STATUS_INTERNAL_ERROR = 127,  //!< Internal failure

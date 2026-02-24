@@ -11,7 +11,7 @@ clean:
     rm -rf build coverage_* python/build
 
 # Aggressibly remove cache files and as many artifacts as possible
-deep_clean: clean
+deep-clean: clean
     #!/usr/bin/env bash
     set -eu -o pipefail
     echo "[purge] Removing additional artifacts"

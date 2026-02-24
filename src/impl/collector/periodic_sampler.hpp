@@ -61,9 +61,9 @@ class PeriodicSampler {
   // Signal cancellation; loop() will exit shortly thereafter.
   void Cancel() { _cancel.store(true); }
 
-  // Pause/Unpause the periodic sampling (skips _collector.Sample())
+  // Pause/Resume the periodic sampling (skips _collector.Sample())
   void Pause() { _paused.store(true); }
-  void Unpause() { _paused.store(false); }
+  void Resume() { _paused.store(false); }
 
  private:
   void Loop() {

@@ -883,21 +883,20 @@ TEST_CASE("astlStartCollection", "[unimplemented for now][wrapper]") {
   REQUIRE(astlStartCollection() == ASTL_STATUS_NOT_IMPLEMENTED);
 }
 
-TEST_CASE("astlPauseCollectionOnTarget", "[unimplemented for now][wrapper]") {
-  REQUIRE(astlPauseCollectionOnTarget(nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+TEST_CASE("astlPauseCollectionOnTarget", "[wrapper]") {
+  REQUIRE(astlPauseCollectionOnTarget(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
-TEST_CASE("astlPauseCollection", "[unimplemented for now][wrapper]") {
-  REQUIRE(astlPauseCollection() == ASTL_STATUS_NOT_IMPLEMENTED);
+TEST_CASE("astlPauseCollection", "[wrapper]") {
+  // With no orchestrator initialized, should return NOT_INITIALIZED
+  REQUIRE(astlPauseCollection() == ASTL_STATUS_NOT_INITIALIZED);
 }
 
-TEST_CASE("astlResumeCollectionOnTarget", "[unimplemented for now][wrapper]") {
-  REQUIRE(astlResumeCollectionOnTarget(nullptr) == ASTL_STATUS_NOT_IMPLEMENTED);
+TEST_CASE("astlResumeCollectionOnTarget", "[wrapper]") {
+  REQUIRE(astlResumeCollectionOnTarget(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
-TEST_CASE("astlResumeCollection", "[unimplemented for now][wrapper]") {
-  REQUIRE(astlResumeCollection() == ASTL_STATUS_NOT_IMPLEMENTED);
-}
+TEST_CASE("astlResumeCollection", "[wrapper]") { REQUIRE(astlResumeCollection() == ASTL_STATUS_NOT_INITIALIZED); }
 
 TEST_CASE("astlStopCollectionOnTarget", "[unimplemented for now][wrapper]") {
   // mock 2 targets

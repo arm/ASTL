@@ -1131,25 +1131,99 @@ auto astlStartCollection() noexcept -> astl_status_code {
 }
 
 auto astlPauseCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
-  (void)target_handle;
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  return result;
+  if (!target_handle) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  auto target_result = GetTargetFromHandle(target_handle);
+  if (!target_result) {
+    return target_result.error();
+  }
+  const auto* target                = *target_result;
+  auto        orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  astl::Orchestrator* orchestrator_ptr = orchestrator_or_error.value().get().get();
+  astl_status_code    status           = orchestrator_ptr->PauseCollection(target);
+  ASTL_LOG_DEBUG("PauseCollection on target '{}' returned with code: {}",
+                 (target ? target->Name() : std::string{"<null>"}), status);
+  // TODO(ASTL-250,ASTL-326): Remove ASTL_STATUS_NOT_IMPLEMENTED once pause/resume is implemented in collector and
+  // metric managers
+  status = ASTL_STATUS_NOT_IMPLEMENTED;
+
+  return status;
 }
 
 auto astlPauseCollection() noexcept -> astl_status_code {
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  return result;
+  // Do not trigger lazy construction; require `Orchestrator::GetInstance()` to have run.
+  if (!astl::Orchestrator::IsInitialized()) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  astl::Orchestrator* orchestrator_ptr = orchestrator_or_error.value().get().get();
+  astl_status_code    aggregate_status = ASTL_STATUS_SUCCESS;
+  for (auto const& target_unique_ptr : orchestrator_ptr->GetTargets()) {
+    auto status = orchestrator_ptr->PauseCollection(target_unique_ptr.get());
+    if (status != ASTL_STATUS_SUCCESS && aggregate_status == ASTL_STATUS_SUCCESS) {
+      aggregate_status = status;
+    }
+  }
+  ASTL_LOG_DEBUG("PauseCollection returned with code: {}", aggregate_status);
+  // TODO(ASTL-250,ASTL-326): Remove ASTL_STATUS_NOT_IMPLEMENTED once pause/resume is implemented in collector and
+  // metric managers
+  aggregate_status = ASTL_STATUS_NOT_IMPLEMENTED;
+  return aggregate_status;
 }
 
 auto astlResumeCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
-  (void)target_handle;
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  return result;
+  if (!target_handle) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  auto target_result = GetTargetFromHandle(target_handle);
+  if (!target_result) {
+    return target_result.error();
+  }
+  const auto* target                = *target_result;
+  auto        orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  astl::Orchestrator* orchestrator_ptr = orchestrator_or_error.value().get().get();
+  astl_status_code    status           = orchestrator_ptr->ResumeCollection(target);
+
+  ASTL_LOG_DEBUG("ResumeCollection on target '{}' returned with code: {}",
+                 (target ? target->Name() : std::string{"<null>"}), status);
+  // TODO(ASTL-250,ASTL-326): Remove ASTL_STATUS_NOT_IMPLEMENTED once pause/resume is implemented in collector and
+  // metric managers
+  status = ASTL_STATUS_NOT_IMPLEMENTED;
+
+  return status;
 }
 
 auto astlResumeCollection() noexcept -> astl_status_code {
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  return result;
+  if (!astl::Orchestrator::IsInitialized()) {
+    return ASTL_STATUS_NOT_INITIALIZED;
+  }
+  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  astl::Orchestrator* orchestrator_ptr = orchestrator_or_error.value().get().get();
+  astl_status_code    aggregate_status = ASTL_STATUS_SUCCESS;
+  for (auto const& target_unique_ptr : orchestrator_ptr->GetTargets()) {
+    auto status = orchestrator_ptr->ResumeCollection(target_unique_ptr.get());
+    if (status != ASTL_STATUS_SUCCESS && aggregate_status == ASTL_STATUS_SUCCESS) {
+      aggregate_status = status;
+    }
+  }
+  ASTL_LOG_DEBUG("ResumeCollection returned with code: {}", aggregate_status);
+  // TODO(ASTL-250,ASTL-326): Remove ASTL_STATUS_NOT_IMPLEMENTED once pause/resume is implemented in collector and
+  // metric managers
+  aggregate_status = ASTL_STATUS_NOT_IMPLEMENTED;
+  return aggregate_status;
 }
 
 auto astlStopCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {

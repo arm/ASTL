@@ -129,7 +129,7 @@ auto LibsensorsCollector::ResumeCollection() -> astl_status_code {
   if (!_periodic_sampler) {
     ASTL_LOG_WARNING("ResumeCollection called when no periodic sampler initialized");
   } else {
-    _periodic_sampler->Unpause();
+    _periodic_sampler->Resume();
   }
   return ASTL_STATUS_SUCCESS;
 };

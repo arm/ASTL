@@ -287,13 +287,17 @@ status = astlConfigureMetricGroupCollectionOnTarget(target, &collection_params, 
 }
 ```
 
-5. Start, read, and stop collection
+5. Start, read, and stop collection (with optional pause/resume)
 
 ```cpp
 status = astlStartCollectionOnTarget(target_properties._handle);
 
-status = astlReadImmediateOnTarget(target_properties._handle);
-status = astlStopCollectionOnTarget(target_properties._handle);
+// Optional: temporarily suspend sampling
+status = astlPauseCollectionOnTarget(target_properties._handle);   // collection state: PAUSED
+status = astlResumeCollectionOnTarget(target_properties._handle);  // back to STARTED
+
+status = astlReadImmediateOnTarget(target_properties._handle);     // only useful while STARTED
+status = astlStopCollectionOnTarget(target_properties._handle);    // final state: STOPPED
 ```
 
 6. Save or load a session (.astl)

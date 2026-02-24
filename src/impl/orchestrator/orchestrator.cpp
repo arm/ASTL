@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>  // for std::reference_wrapper in expected return types
+#include <magic_enum/magic_enum.hpp>
 
 #include "astl/astl_errors.h"
 #include "astl_defines.hpp"
@@ -58,6 +59,10 @@ Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>  topology_manager,
   // If registration fails, later operations using sinks will surface errors.
   (void)_collector_manager->RegisterRawSampleSink(this);
   (void)_metric_manager->RegisterProcessedSampleSink(this);
+  // Initialize state for known targets
+  for (auto const &target_ptr : _topology_manager->GetTargets()) {
+    _target_collection_states[target_ptr.get()] = TargetCollectionState::UNCONFIGURED;
+  }
 }
 
 Orchestrator::~Orchestrator() {
@@ -141,6 +146,26 @@ auto Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets)
   // so changing targets at runtime in a production scenario is not currently supported
   // - must delete all metrics to avoid use-after-free, and assume test code will add necessary new metrics
   _topology_manager->SetTargets(std::move(new_targets));
+  // Synchronize internal collection state machine maps with updated targets list.
+  // We cannot assume SetTargets is only called at initialization time; tests (and potential
+  // dynamic topology discovery) may replace the target vector post-construction. Ensure each
+  // new target receives an Unconfigured state entry and prune removed targets.
+  {
+    std::lock_guard                                            state_lock(_collection_state_mutex);
+    std::unordered_map<const ITarget *, TargetCollectionState> updated_states;
+    for (auto const &target_ptr : _topology_manager->GetTargets()) {
+      const ITarget *raw            = target_ptr.get();
+      auto           state_iterator = _target_collection_states.find(raw);
+      if (state_iterator != _target_collection_states.end()) {
+        // Preserve existing state if target persists.
+        updated_states[raw] = state_iterator->second;
+      } else {
+        // Initialize brand new target entry.
+        updated_states[raw] = TargetCollectionState::UNCONFIGURED;
+      }
+    }
+    _target_collection_states.swap(updated_states);
+  }
   _metric_manager->RemoveAllMetrics();
   return ASTL_STATUS_SUCCESS;
 }
@@ -230,6 +255,10 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget                      
     ASTL_LOG_ERROR("Failed to configure collection on target: {}", astlStatusString(status));
     return status;
   }
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    _target_collection_states[target] = TargetCollectionState::CONFIGURED;
+  }
   return status;
 }
 
@@ -244,7 +273,26 @@ auto Orchestrator::StartCollection(const ITarget *target) -> astl_status_code {
   if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
-
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    auto            state_iterator = _target_collection_states.find(target);
+    if (state_iterator == _target_collection_states.end()) {
+      return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
+    switch (state_iterator->second) {
+      case TargetCollectionState::UNCONFIGURED:
+        return ASTL_STATUS_COLLECTION_NOT_CONFIGURED;
+      case TargetCollectionState::CONFIGURED:
+        break;  // allowed
+      case TargetCollectionState::STARTED:
+        return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+      case TargetCollectionState::PAUSED:
+        return ASTL_STATUS_INVALID_STATE_TRANSITION;  // must call ResumeCollection
+      case TargetCollectionState::STOPPED:
+        return ASTL_STATUS_INVALID_STATE_TRANSITION;
+    }
+    state_iterator->second = TargetCollectionState::STARTED;
+  }
   std::unique_lock lock{_raw_samples_mtx};
   _raw_samples[target].clear();
   lock.unlock();  // in case _collector_manager runs operations on Start that try to sink samples to us
@@ -266,7 +314,33 @@ auto Orchestrator::PauseCollection(const ITarget *target) -> astl_status_code {
   if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
-  return ASTL_STATUS_NOT_IMPLEMENTED;
+  astl_status_code collector_status{ASTL_STATUS_SUCCESS};
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    auto            state_iterator = _target_collection_states.find(target);
+    if (state_iterator == _target_collection_states.end()) {
+      return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
+    if (state_iterator->second == TargetCollectionState::PAUSED) {
+      return ASTL_STATUS_COLLECTION_ALREADY_PAUSED;
+    }
+    if (state_iterator->second != TargetCollectionState::STARTED) {
+      return ASTL_STATUS_COLLECTION_NOT_RUNNING;
+    }
+  }
+  collector_status = _collector_manager->PauseOnTarget(target);
+  if (collector_status != ASTL_STATUS_SUCCESS) {
+    if (collector_status == ASTL_STATUS_NOT_IMPLEMENTED) {
+      return ASTL_STATUS_PAUSE_UNSUPPORTED;
+    }
+    return collector_status;
+  }
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    _target_collection_states[target] = TargetCollectionState::PAUSED;
+    _target_pause_timestamps[target]  = std::chrono::steady_clock::now();
+  }
+  return ASTL_STATUS_SUCCESS;
 }
 
 auto Orchestrator::ResumeCollection(const ITarget *target) -> astl_status_code {
@@ -276,7 +350,33 @@ auto Orchestrator::ResumeCollection(const ITarget *target) -> astl_status_code {
   if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
-  return ASTL_STATUS_NOT_IMPLEMENTED;
+  astl_status_code collector_status{ASTL_STATUS_SUCCESS};
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    auto            state_iterator = _target_collection_states.find(target);
+    if (state_iterator == _target_collection_states.end()) {
+      return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
+    if (state_iterator->second == TargetCollectionState::STARTED) {
+      return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+    }
+    if (state_iterator->second != TargetCollectionState::PAUSED) {
+      return ASTL_STATUS_COLLECTION_NOT_PAUSED;
+    }
+  }
+  collector_status = _collector_manager->ResumeOnTarget(target);
+  if (collector_status != ASTL_STATUS_SUCCESS) {
+    if (collector_status == ASTL_STATUS_NOT_IMPLEMENTED) {
+      return ASTL_STATUS_RESUME_UNSUPPORTED;
+    }
+    return collector_status;
+  }
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    _target_collection_states[target] = TargetCollectionState::STARTED;
+    _target_resume_timestamps[target] = std::chrono::steady_clock::now();
+  }
+  return ASTL_STATUS_SUCCESS;
 }
 
 auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
@@ -327,6 +427,10 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
 
     // Emit Summary CSV (if requested) after metrics are summarized (processed samples complete)
     EmitSummaryCsvIfRequested();
+  }
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    _target_collection_states[target] = TargetCollectionState::STOPPED;
   }
 
   return ASTL_STATUS_SUCCESS;
@@ -587,6 +691,41 @@ auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarge
   return {};  // not found
 }
 
+auto Orchestrator::GetTargetCollectionState(const ITarget *target) const
+    -> std::expected<TargetCollectionState, astl_status_code> {
+  if (!target) {
+    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+  }
+  // Verify target is part of current topology to avoid stale pointer queries after SetTargets.
+  const auto &targets = _topology_manager->GetTargets();
+  auto        index   = std::find_if(std::begin(targets), std::end(targets),
+                                     [target](auto const &owned_target) { return owned_target.get() == target; });
+  if (index == std::end(targets)) {
+    return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
+  }
+  std::lock_guard state_lock(_collection_state_mutex);
+  auto            state_iterator = _target_collection_states.find(target);
+  if (state_iterator == _target_collection_states.end()) {
+    return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
+  }
+  return state_iterator->second;
+}
+
+auto Orchestrator::GetAllTargetCollectionStates() const -> std::unordered_map<const ITarget *, TargetCollectionState> {
+  std::lock_guard state_lock(_collection_state_mutex);
+  return _target_collection_states;  // copy
+}
+
+auto Orchestrator::TargetCollectionStateToString(TargetCollectionState state) -> std::string_view {
+  // magic_enum provides compile-time reflection for enum names without maintaining a manual mapping array.
+  // This reduces maintenance risk when adding states and avoids switch/default boilerplate.
+  auto state_name_view = magic_enum::enum_name(state);
+  if (state_name_view.empty()) {
+    return std::string_view{"UNKNOWN_STATE"};
+  }
+  return state_name_view;  // string_view to static storage provided by magic_enum
+}
+
 auto Orchestrator::SaveToFile(std::filesystem::path file_path) -> astl_status_code {
   auto status = SaveStateToCacheDir();
   if (status != ASTL_STATUS_SUCCESS) {
@@ -674,5 +813,4 @@ auto Orchestrator::LoadFromFile(fs::path file_path, fs::path cache_dir_path) -> 
 
   return ASTL_STATUS_SUCCESS;
 }
-
 }  // namespace astl
