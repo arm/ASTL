@@ -2,12 +2,15 @@
 #include <expected>
 #include <iterator>
 #include <limits>
+#include <optional>
 #include <span>
+#include <string>
 #include <variant>
 
 #include "astl/astl.h"
 #include "common/astl_defines.hpp"
 #include "common/metric_config.hpp"
+#include "common/system_info.hpp"
 #include "config/configuration_manager.hpp"
 #include "metric/counter.hpp"
 #include "metric/finite_set_metric.hpp"
@@ -69,6 +72,8 @@ auto GetOutputManager() noexcept -> std::expected<astl::IOutputManager*, astl_st
   }
   return output_manager.get();
 }
+
+auto SwitchSystemInfoToHostCapture() noexcept -> void { astl::ClearLoadedPlatformInfo(); }
 
 auto GetCounterFromHandle(astl_counter_handle_t counter_handle, const astl::ITarget* target) noexcept
     -> std::expected<const astl::IMetric*, astl_status_code> {
@@ -147,6 +152,34 @@ auto GetFirstElementSizeField(Container const& elements) noexcept
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   return elements[kFirstElementIdx]._size;
+}
+
+/***********************************************************************************
+ **********************            SYSTEM PROPERTIES         ************************
+ **********************************************************************************/
+
+auto astlGetSystemInfo(astl_platform_properties_t* system_info) noexcept -> astl_status_code {
+  if (!system_info) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  if (system_info->_size != sizeof(astl_platform_properties_t)) {
+    return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
+  }
+
+  const auto& info = astl::GetActivePlatformInfo();
+
+  system_info->_soc_name         = info.soc_name.empty() ? nullptr : info.soc_name.c_str();
+  system_info->_vendor_id        = info.vendor_id.empty() ? nullptr : info.vendor_id.c_str();
+  system_info->_os_name          = info.os_name.empty() ? nullptr : info.os_name.c_str();
+  system_info->_kernel_name      = info.kernel_name.empty() ? nullptr : info.kernel_name.c_str();
+  system_info->_kernel_version   = info.kernel_version.empty() ? nullptr : info.kernel_version.c_str();
+  system_info->_kernel_release   = info.kernel_release.empty() ? nullptr : info.kernel_release.c_str();
+  system_info->_firmware_version = info.firmware_version.empty() ? nullptr : info.firmware_version.c_str();
+  system_info->_hostname         = info.hostname.empty() ? nullptr : info.hostname.c_str();
+  system_info->_architecture     = info.architecture.empty() ? nullptr : info.architecture.c_str();
+
+  return ASTL_STATUS_SUCCESS;
 }
 
 /***********************************************************************************
@@ -843,6 +876,9 @@ auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                
   if (!target_handle || !collection_params || !counter_handles || counter_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+
+  SwitchSystemInfoToHostCapture();
+
   auto result = GetTargetFromHandle(target_handle);
   if (!result) {
     return result.error();
@@ -894,6 +930,9 @@ auto astlConfigureCounterCollection(const astl_collection_parameters_t* collecti
   if (sizeof(astl_collection_parameters_t) > collection_params->_size) {
     return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
   }
+
+  SwitchSystemInfoToHostCapture();
+
   std::vector<const astl::ICounter*>     counters;
   std::span<const astl_counter_handle_t> counter_handle_span{counter_handles, counter_count};
   std::transform(begin(counter_handle_span), std::end(counter_handle_span), std::back_inserter(counters),
@@ -931,6 +970,9 @@ auto astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_
   if (collection_params->_size > sizeof(astl_collection_parameters_t)) {
     return ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION;
   }
+
+  SwitchSystemInfoToHostCapture();
+
   auto get_target_result = GetTargetFromHandle(target_handle);
   if (!get_target_result) {
     return get_target_result.error();
@@ -948,6 +990,8 @@ auto astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_
 auto astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
                                    astl_metric_handle_t* metric_handles, uint32_t metric_count) noexcept
     -> astl_status_code {
+  SwitchSystemInfoToHostCapture();
+
   (void)collection_params;
   (void)metric_handles;
   (void)metric_count;
@@ -970,6 +1014,9 @@ auto astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          ta
   if (!metric_group_handles) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+
+  SwitchSystemInfoToHostCapture();
+
   auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
     return orchestrator_or_error.error();
@@ -1014,6 +1061,8 @@ auto astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          ta
 auto astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
                                         astl_metric_group_handle_t*   metric_group_handles,
                                         uint32_t                      metric_group_count) noexcept -> astl_status_code {
+  SwitchSystemInfoToHostCapture();
+
   (void)collection_params;
   (void)metric_group_handles;
   (void)metric_group_count;

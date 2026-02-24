@@ -79,8 +79,9 @@ TEST_CASE("IntervalCsvOutput empty map emits empty file", "[intervalcsv]") {  //
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream ifs(path);
   std::string   content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-  // Empty map => no metric groups written
-  REQUIRE(content.empty());
+  // Empty map => system info section only (no metric groups)
+  REQUIRE(content.find("System Info") != std::string::npos);
+  REQUIRE(content.find("Field,Value") != std::string::npos);
 }
 
 TEST_CASE("IntervalCsvOutput aggregates same metric name across targets", "[intervalcsv]") {  // NOLINT

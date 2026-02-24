@@ -16,10 +16,13 @@
  * under the License.
  ******************************************************************************/
 
+#include <atomic>
+#include <chrono>
 #include <memory>
 
 #include "astl/astl_errors.h"
 #include "collector/collector_builder.hpp"
+#include "common/system_info.hpp"
 #include "config/astl_configuration.hpp"
 #include "metric/metric_builder.hpp"
 #include "orchestrator/orchestrator.hpp"
@@ -28,10 +31,19 @@
 
 namespace fs = std::filesystem;
 
+namespace {
+auto MakeUniqueCacheDirPath() -> fs::path {
+  static std::atomic<uint64_t> unique_suffix{0};
+  const auto now_nanos = static_cast<uint64_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+  const auto suffix    = unique_suffix.fetch_add(1, std::memory_order_relaxed);
+  return fs::temp_directory_path() / ("astl-" + std::to_string(now_nanos) + "-" + std::to_string(suffix));
+}
+}  // namespace
+
 /** @brief Re-initializes all internal components of the library, setting up collectors, metrics, etc.
  */
 auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_status_code {
-  fs::path cache_dir_path = fs::temp_directory_path() / ("astl-" + std::to_string(std::time(nullptr)));
+  fs::path cache_dir_path = MakeUniqueCacheDirPath();
   if (configuration.load_file_path) {
     auto status = astl::Orchestrator::LoadFromFile(*configuration.load_file_path, cache_dir_path);
     if (status != ASTL_STATUS_SUCCESS) {
@@ -39,6 +51,8 @@ auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_sta
                      configuration.load_file_path->string());
       return status;
     }
+  } else {
+    astl::ClearLoadedPlatformInfo();
   }
 
   auto topology_manager = astl::BuildTopologyManager(configuration, cache_dir_path);

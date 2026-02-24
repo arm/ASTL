@@ -5,11 +5,13 @@
 #include "interval_csv_output.hpp"
 
 #include <algorithm>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "csv_system_info.hpp"
 #include "metric/i_metric.hpp"
 #include "target.hpp"
 
@@ -46,6 +48,7 @@ inline void EmitValue(std::ostream& output_stream, const AstlValue& value) {
       },
       value.value);
 }
+
 }  // namespace
 
 namespace {
@@ -131,6 +134,8 @@ auto IntervalCsvOutput::WriteProcessedSamples(const ProcessedSamplesMap& process
   if (!Ready()) {
     return ASTL_STATUS_INTERNAL_ERROR;  // stream not open
   }
+
+  WriteSystemInfoCsvSection(_output_stream);
 
   auto groups = BuildGroups(processed);
 

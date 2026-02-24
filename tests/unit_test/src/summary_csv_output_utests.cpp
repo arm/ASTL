@@ -158,6 +158,18 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
 
     std::string line;
 
+    // Check System Info section header
+    std::getline(file, line);
+    REQUIRE(line == "System Info");
+
+    // Check System Info column headers
+    std::getline(file, line);
+    REQUIRE(line == "Field,Value");
+
+    // Skip system info rows until blank separator
+    while (std::getline(file, line) && !line.empty()) {
+    }
+
     // Check MinMaxAvg section header
     std::getline(file, line);
     REQUIRE(line == "Min/Max/Average Summary");
@@ -205,7 +217,7 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
     REQUIRE(minmax_lines[3].find("Voltage,Target1,3.3,3.5,3.4,3") != std::string::npos);
   }
 
-  SECTION("SUMMARY_CSV mode with empty data creates CSV with header only") {
+  SECTION("SUMMARY_CSV mode with empty data writes system info section") {
     astl::ProcessedSamplesMap empty_samples;
 
     REQUIRE(mgr.OutputProcessedSamples(empty_samples, astl::OutputType::SUMMARY_CSV, nullptr, nullptr) ==
@@ -220,8 +232,11 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
 
     std::string line;
 
-    // With empty data, the file should be empty (no summaries to write)
-    REQUIRE_FALSE(std::getline(file, line));
+    // With empty data, only the system info section is emitted.
+    std::getline(file, line);
+    REQUIRE(line == "System Info");
+    std::getline(file, line);
+    REQUIRE(line == "Field,Value");
   }
 }
 
@@ -245,6 +260,18 @@ TEST_CASE("SummaryCsvOutput direct testing", "[csv_summary]") {  // NOLINT
     REQUIRE(file.is_open());
 
     std::string line;
+
+    // Check System Info section header
+    std::getline(file, line);
+    REQUIRE(line == "System Info");
+
+    // Check System Info column headers
+    std::getline(file, line);
+    REQUIRE(line == "Field,Value");
+
+    // Skip system info rows until blank separator
+    while (std::getline(file, line) && !line.empty()) {
+    }
 
     // Check MinMaxAvg section header
     std::getline(file, line);

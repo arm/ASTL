@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "common/astl_value.hpp"
+#include "common/system_info.hpp"
 
 namespace astl {
 
@@ -124,6 +125,18 @@ auto PerfettoOutput::WriteHeader() -> void {
   // Emit trace-level metadata declaring timestamps are microseconds for Perfetto UI.
   // Use pid 0 (convention for global metadata). This does not allocate target pids/tids.
   _trace_stream << R"({"ph":"M","pid":0,"name":"trace_metadata","args":{"displayTimeUnit":"us"}})";
+
+  const auto& info = GetActivePlatformInfo();
+  _trace_stream << ",\n";
+  _trace_stream << R"({"ph":"M","pid":0,"name":"astl_system_info","args":{"soc_name":")"
+                << EscapeJsonString(info.soc_name) << R"(","vendor_id":")" << EscapeJsonString(info.vendor_id)
+                << R"(","os_name":")" << EscapeJsonString(info.os_name) << R"(","kernel_name":")"
+                << EscapeJsonString(info.kernel_name) << R"(","kernel_release":")"
+                << EscapeJsonString(info.kernel_release) << R"(","kernel_version":")"
+                << EscapeJsonString(info.kernel_version) << R"(","firmware_version":")"
+                << EscapeJsonString(info.firmware_version) << R"(","hostname":")" << EscapeJsonString(info.hostname)
+                << R"(","architecture":")" << EscapeJsonString(info.architecture) << R"("}})";
+
   _first_event = false;  // We have written the first element; subsequent events need leading comma.
   _opened_json = true;
 }

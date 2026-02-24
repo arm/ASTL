@@ -56,6 +56,7 @@ TEST_CASE("PerfettoOutput basic write & JSON structure", "[perfetto_output]") { 
   // Basic JSON array framing and display time unit metadata
   REQUIRE(content.front() == '[');
   REQUIRE(content.find("\"displayTimeUnit\":\"us\"") != std::string::npos);
+  REQUIRE(content.find("\"name\":\"astl_system_info\"") != std::string::npos);
   // File footer ']' is only written at writer destruction; during test lifetime it may still be open.
   // So just ensure the content contains at least one '{' event fragment.
   REQUIRE(content.find('{') != std::string::npos);

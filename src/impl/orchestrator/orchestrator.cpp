@@ -8,6 +8,7 @@
 #include "astl/astl_errors.h"
 #include "astl_defines.hpp"
 #include "astl_logger.hpp"
+#include "common/system_info.hpp"
 #include "config/configuration_manager.hpp"  // for ConfigurationManager::GetConfiguration
 #include "orchestrator/orchestrator_builder.hpp"
 #include "serdes/archive_utils.hpp"
@@ -641,6 +642,13 @@ auto Orchestrator::SaveStateToCacheDir() -> astl_status_code {
     }
   }
 
+  auto system_info_status = SavePlatformInfoToCacheDir(cache_dir_path);
+  if (system_info_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to serialize platform info to cache dir {}: {}", cache_dir_path.string(),
+                   astlStatusString(system_info_status));
+    return system_info_status;
+  }
+
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -654,6 +662,13 @@ auto Orchestrator::LoadFromFile(fs::path file_path, fs::path cache_dir_path) -> 
 
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Failed to unzip ASTL file {}: {}", file_path.string(), astlStatusString(status));
+    return status;
+  }
+
+  status = LoadPlatformInfoFromCacheDir(cache_dir_path);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to deserialize platform info from cache dir {}: {}", cache_dir_path.string(),
+                   astlStatusString(status));
     return status;
   }
 

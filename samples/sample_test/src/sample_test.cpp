@@ -113,6 +113,31 @@ auto PrintVersion() -> void {
   std::cout << "Version string: " << astlVersionString() << "\n";
 }
 
+auto PrintSystemInfo() -> void {
+  astl_platform_properties_t system_info{};
+  system_info._size = sizeof(astl_platform_properties_t);
+  const auto status = astlGetSystemInfo(&system_info);
+  std::cout << "System info status: " << astlStatusString(status) << "\n";
+  if (status != ASTL_STATUS_SUCCESS) {
+    return;
+  }
+
+  const auto print_field = [](const char* name, const char* value) {
+    std::cout << "  " << name << ": " << (value ? value : "<unknown>") << '\n';
+  };
+
+  std::cout << "System info:\n";
+  print_field("SoC", system_info._soc_name);
+  print_field("Vendor ID", system_info._vendor_id);
+  print_field("OS", system_info._os_name);
+  print_field("Kernel", system_info._kernel_name);
+  print_field("Kernel release", system_info._kernel_release);
+  print_field("Kernel version", system_info._kernel_version);
+  print_field("Firmware", system_info._firmware_version);
+  print_field("Host", system_info._hostname);
+  print_field("Architecture", system_info._architecture);
+}
+
 auto GetIntervalArgument(const std::unordered_map<std::string, std::string>& args)
     -> std::expected<std::chrono::milliseconds, int> {
   if (args.contains("interval")) {
@@ -492,6 +517,8 @@ auto main(int argc, char* argv[]) -> int {
     PrintVersion();
     return 0;
   }
+
+  PrintSystemInfo();
 
   astl_status_code status{ASTL_STATUS_SUCCESS};
 

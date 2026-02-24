@@ -95,6 +95,19 @@ cdef extern from "astl/astl_telemetry.h":
         const char* _description
     ctypedef _astl_target_properties_t astl_target_properties_t
 
+    cdef struct _astl_platform_properties_t:
+        size_t _size
+        const char* _soc_name
+        const char* _vendor_id
+        const char* _os_name
+        const char* _kernel_name
+        const char* _kernel_version
+        const char* _kernel_release
+        const char* _firmware_version
+        const char* _hostname
+        const char* _architecture
+    ctypedef _astl_platform_properties_t astl_platform_properties_t
+
     # Units
     cdef enum _astl_units_t:
         ASTL_UNITS_NONE
@@ -235,6 +248,7 @@ cdef extern from "astl/astl_telemetry.h":
         uint32_t _flags
 
     # targets
+    int astlGetSystemInfo(astl_platform_properties_t* system_info)
     int astlGetTargetCount(uint32_t* target_count)
     int astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count)
 

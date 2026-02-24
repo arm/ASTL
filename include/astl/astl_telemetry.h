@@ -60,6 +60,47 @@ extern "C" {
   } while (0)
 
 /***********************************************************************************
+ **********************            SYSTEM PROPERTIES         ************************
+ **********************************************************************************/
+
+/**
+ * @brief System-level platform properties.
+ *
+ * All string fields point to internal immutable storage owned by ASTL and remain valid
+ * until process exit. Any field may be NULL when not available on the running platform.
+ */
+typedef struct _astl_platform_properties_t {
+  size_t _size;  //!< Size of this struct for versioning
+
+  const char* _soc_name;          //!< SoC / platform name (for example from sysfs or device-tree)
+  const char* _vendor_id;         //!< Platform or system vendor identifier
+  const char* _os_name;           //!< Operating system name
+  const char* _kernel_name;       //!< Kernel name (for example, "Linux")
+  const char* _kernel_version;    //!< Kernel version string
+  const char* _kernel_release;    //!< Kernel release string
+  const char* _firmware_version;  //!< Firmware or BIOS version if available
+  const char* _hostname;          //!< Host name
+  const char* _architecture;      //!< Machine architecture (for example, "aarch64")
+} astl_platform_properties_t;
+
+/**
+ * @brief Get system-level platform information.
+ *
+ * Source selection:
+ *  - By default, returns platform information captured from the current host system.
+ *  - After a successful astlLoadCollection(), returns platform information stored in the loaded .astl session.
+ *  - After calling any astlConfigure*Collection* API, returns platform information from the current host system
+ *    again.
+ *
+ * @param[in/out] system_info            Output platform properties structure.
+ *                                       Cannot be NULL and `_size` must be set to
+ *                                       `sizeof(astl_platform_properties_t)`.
+ *
+ * @return astl_status_code
+ */
+ASTL_API astl_status_code astlGetSystemInfo(astl_platform_properties_t* system_info) ASTL_API_NOEXCEPT;
+
+/***********************************************************************************
  **********************               TARGETS               ************************
  **********************************************************************************/
 
@@ -859,7 +900,7 @@ ASTL_API astl_status_code astlSaveCollection(const astl_save_params_t* params) A
  * Semantics:
  * - _input_file_path is required and must be non-null/non-empty, and should point to a valid .astl file.
  *  - After a successful load of a .astl file, Start/Pause/Resume/Stop are disabled; only post-processing is possible.
- *  - If user calls any Configure* API after load, ASTL is cleaned up and ready for new collection.
+ *  - If user calls any Configure*Collection* API after load, system info source switches back to current host capture.
  */
 typedef struct astl_load_params_t {
   size_t      _size;              //!< Size of this struct for versioning

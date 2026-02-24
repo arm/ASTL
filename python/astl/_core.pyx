@@ -162,6 +162,23 @@ def version() -> tuple[int, int, int, str]:
     v = astlVersion()
     return v._major, v._minor, v._micro, astlVersionString().decode()
 
+cpdef dict get_system_info():
+    """Return host/session platform metadata from ASTL as a dictionary."""
+    cdef astl_platform_properties_t info
+    info._size = sizeof(astl_platform_properties_t)
+    _check(astlGetSystemInfo(&info))
+    return {
+        "soc_name": info._soc_name.decode() if info._soc_name != NULL else None,
+        "vendor_id": info._vendor_id.decode() if info._vendor_id != NULL else None,
+        "os_name": info._os_name.decode() if info._os_name != NULL else None,
+        "kernel_name": info._kernel_name.decode() if info._kernel_name != NULL else None,
+        "kernel_version": info._kernel_version.decode() if info._kernel_version != NULL else None,
+        "kernel_release": info._kernel_release.decode() if info._kernel_release != NULL else None,
+        "firmware_version": info._firmware_version.decode() if info._firmware_version != NULL else None,
+        "hostname": info._hostname.decode() if info._hostname != NULL else None,
+        "architecture": info._architecture.decode() if info._architecture != NULL else None,
+    }
+
 cpdef list get_counters(Target target):
     cdef uint32_t count = 0
     _check(astlGetCounterCount(<const void*>target._handle_ptr, &count))

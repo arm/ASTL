@@ -27,6 +27,7 @@
 
 #include "astl_logger.hpp"        // ASTL_LOG_*
 #include "common/astl_value.hpp"  // to_string
+#include "csv_system_info.hpp"
 
 namespace astl {
 
@@ -71,6 +72,8 @@ auto SummaryCsvOutput::WriteSummaries(
     ASTL_LOG_ERROR("Failed to open CSV file for writing: {}", _path.string());
     return ASTL_STATUS_FILE_ERROR;
   }
+
+  WriteSystemInfoCsvSection(csv_file);
 
   // Separate summaries by type in the derived class (CSV-specific logic)
   std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>> minmax_summaries;

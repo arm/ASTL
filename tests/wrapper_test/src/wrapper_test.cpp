@@ -11,6 +11,7 @@
 #include "astl/astl_telemetry.h"
 #include "astl/astl_test_hooks.h"
 #include "common/metric_config.hpp"
+#include "common/system_info.hpp"
 #include "metric/counter.hpp"
 #include "metric/metric_manager.hpp"
 #include "orchestrator/orchestrator.hpp"
@@ -81,6 +82,23 @@ TEST_CASE("astlStatusString", "[matches header definition][wrapper]") {
   // for now at least, anything about ASTL_STATUS_INTERNAL_ERROR is unknown
   astl_status_code truly_unknown = static_cast<astl_status_code>(ASTL_STATUS_INTERNAL_ERROR + ASTL_STATUS_BAD_ARGUMENT);
   REQUIRE(std::string(astlStatusString(truly_unknown)) == "UNKNOWN_ERROR");
+}
+
+TEST_CASE("astlGetSystemInfo", "[wrapper][SystemInfo]") {
+  REQUIRE(astlGetSystemInfo(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+
+  astl_platform_properties_t incompatible_size_info{};
+  incompatible_size_info._size = sizeof(astl_platform_properties_t) - 1;
+  REQUIRE(astlGetSystemInfo(&incompatible_size_info) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+
+  astl_platform_properties_t system_info{};
+  system_info._size = sizeof(astl_platform_properties_t);
+  REQUIRE(astlGetSystemInfo(&system_info) == ASTL_STATUS_SUCCESS);
+
+  REQUIRE((system_info._os_name != nullptr || system_info._kernel_name != nullptr ||
+           system_info._kernel_release != nullptr || system_info._architecture != nullptr ||
+           system_info._hostname != nullptr || system_info._soc_name != nullptr || system_info._vendor_id != nullptr ||
+           system_info._firmware_version != nullptr));
 }
 
 TEST_CASE("astlGetTargetCount", "[Reports 0 targets correctly][wrapper]") {
@@ -1347,6 +1365,22 @@ TEST_CASE("astlLoadCollection smoke test", "[wrapper][cache]") {
     REQUIRE(astl::ProtobufSerDes::Serialize(metric_mgr, metric_file) == ASTL_STATUS_SUCCESS);
   }
 
+  {
+    std::ofstream platform_info_file{src_dir / astl::kPlatformInfoFileName, std::ios::binary | std::ios::out};
+    REQUIRE(platform_info_file.good());
+    platform_info_file << R"({
+  "soc_name": "soc-from-session",
+  "vendor_id": "vendor-from-session",
+  "os_name": "os-from-session",
+  "kernel_name": "kernel-from-session",
+  "kernel_version": "kernel-version-from-session",
+  "kernel_release": "kernel-release-from-session",
+  "firmware_version": "firmware-from-session",
+  "hostname": "host-from-session",
+  "architecture": "arch-from-session"
+})";
+  }
+
   REQUIRE(astl::mz::ZipDirectory(src_dir, astl_zip) == ASTL_STATUS_SUCCESS);
 
   // Wrap in an injector so the original orchestrator is restored after the load resets/rebuilds the singleton.
@@ -1358,6 +1392,135 @@ TEST_CASE("astlLoadCollection smoke test", "[wrapper][cache]") {
   params._input_file_path = astl_zip_str.c_str();
 
   REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_SUCCESS);
+
+  astl_platform_properties_t platform_info{};
+  platform_info._size = sizeof(astl_platform_properties_t);
+  REQUIRE(astlGetSystemInfo(&platform_info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(platform_info._soc_name != nullptr);
+  REQUIRE(platform_info._vendor_id != nullptr);
+  REQUIRE(platform_info._kernel_version != nullptr);
+  REQUIRE(std::string(platform_info._soc_name) == "soc-from-session");
+  REQUIRE(std::string(platform_info._vendor_id) == "vendor-from-session");
+  REQUIRE(std::string(platform_info._kernel_version) == "kernel-version-from-session");
+}
+
+TEST_CASE("astlGetSystemInfo switches to host info after configure following load", "[wrapper][cache][system-info]") {
+  namespace fs = std::filesystem;
+
+  const fs::path src_dir  = fs::temp_directory_path() / "astl_load_wrapper_test_src_switch";
+  const fs::path astl_zip = fs::temp_directory_path() / "astl_load_wrapper_test_switch.astl";
+  TempFileGuard  src_guard(src_dir);
+  TempFileGuard  zip_guard(astl_zip);
+
+  std::error_code ec;
+  fs::create_directories(src_dir, ec);
+  REQUIRE(!ec);
+
+  {
+    std::vector<std::unique_ptr<astl::ITarget>> targets;
+    targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+    astl::TopologyManager topology_mgr{std::move(targets)};
+
+    std::ofstream topology_file{src_dir / astl::kTopologyManagerFileName, std::ios::binary | std::ios::out};
+    REQUIRE(topology_file.good());
+    REQUIRE(astl::ProtobufSerDes::Serialize(topology_mgr, topology_file) == ASTL_STATUS_SUCCESS);
+  }
+  {
+    std::vector<astl::CollectorCapability> collector_caps;
+    collector_caps.emplace_back(astl::CollectorType::SCMI);
+    std::vector<astl::SystemCapability> system_caps;
+    system_caps.emplace_back();
+    astl::Capabilities  caps{std::move(collector_caps), std::move(system_caps)};
+    astl::MetricManager metric_mgr{caps};
+
+    std::ofstream metric_file{src_dir / astl::kMetricManagerFileName, std::ios::binary | std::ios::out};
+    REQUIRE(metric_file.good());
+    REQUIRE(astl::ProtobufSerDes::Serialize(metric_mgr, metric_file) == ASTL_STATUS_SUCCESS);
+  }
+
+  {
+    std::ofstream platform_info_file{src_dir / astl::kPlatformInfoFileName, std::ios::binary | std::ios::out};
+    REQUIRE(platform_info_file.good());
+    platform_info_file << R"({
+  "soc_name": "soc-from-session",
+  "vendor_id": "vendor-from-session",
+  "os_name": "os-from-session",
+  "kernel_name": "kernel-from-session",
+  "kernel_version": "kernel-version-from-session",
+  "kernel_release": "kernel-release-from-session",
+  "firmware_version": "firmware-from-session",
+  "hostname": "host-from-session",
+  "architecture": "arch-from-session"
+})";
+  }
+
+  REQUIRE(astl::mz::ZipDirectory(src_dir, astl_zip) == ASTL_STATUS_SUCCESS);
+
+  ASTL_INIT_STRUCT(astl_load_params_t, params, .input_file_path = nullptr, .chunk_size_bytes = 0, .flags = 0);
+  const auto astl_zip_str = astl_zip.string();
+  params.input_file_path  = astl_zip_str.c_str();
+  REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_SUCCESS);
+
+  astl_platform_properties_t loaded_info{};
+  loaded_info._size = sizeof(astl_platform_properties_t);
+  REQUIRE(astlGetSystemInfo(&loaded_info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(loaded_info._soc_name != nullptr);
+  REQUIRE(std::string(loaded_info._soc_name) == "soc-from-session");
+
+  auto     targets      = AllocateAstlVector<astl_target_properties_t>(1);
+  uint32_t target_count = 1;
+  REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
+  REQUIRE(target_count == 1);
+
+  astl_collection_parameters_t collection_params{};
+  collection_params._size              = sizeof(astl_collection_parameters_t);
+  collection_params._sampling_interval = 100;
+  collection_params._collection_mode   = ASTL_COLLECTION_MODE_SAMPLING;
+  collection_params._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD;
+
+  int                   fake_counter_token  = 0;
+  astl_counter_handle_t fake_counter_handle = &fake_counter_token;
+  (void)astlConfigureCounterCollectionOnTarget(targets[0]._handle, &collection_params, &fake_counter_handle, 1);
+
+  astl_platform_properties_t host_info{};
+  host_info._size = sizeof(astl_platform_properties_t);
+  REQUIRE(astlGetSystemInfo(&host_info) == ASTL_STATUS_SUCCESS);
+  REQUIRE((host_info._soc_name == nullptr || std::string(host_info._soc_name) != "soc-from-session"));
+}
+
+TEST_CASE("astlSaveCollection writes system info into cache", "[wrapper][cache][system-info]") {
+  namespace fs = std::filesystem;
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_save_platform_info_cache";
+  TempFileGuard  cache_dir_guard(cache_dir);
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  auto topology_manager = std::make_unique<astl::TopologyManager>(std::move(targets));
+
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
+
+  std::vector<astl::CollectorCapability> collector_caps;
+  collector_caps.emplace_back(astl::CollectorType::SCMI);
+  std::vector<astl::SystemCapability> system_caps;
+  system_caps.emplace_back();
+  astl::Capabilities caps{std::move(collector_caps), std::move(system_caps)};
+  auto               metric_manager = std::make_unique<astl::MetricManager>(caps);
+
+  auto output_manager = std::make_unique<MockOutputManager>();
+
+  auto orchestrator =
+      std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                           std::move(metric_manager), std::move(output_manager), cache_dir);
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  ASTL_INIT_STRUCT(astl_save_params_t, params, .output_file_path = nullptr, .flags = 0);
+  REQUIRE(astlSaveCollection(&params) == ASTL_STATUS_SUCCESS);
+  REQUIRE(fs::exists(cache_dir / astl::kPlatformInfoFileName));
 }
 
 /******************************************************************************
