@@ -9,6 +9,7 @@
 #include "astl/astl_errors.h"
 #include "astl_defines.hpp"
 #include "astl_logger.hpp"
+#include "common/string_pool.hpp"
 #include "common/system_info.hpp"
 #include "config/configuration_manager.hpp"  // for ConfigurationManager::GetConfiguration
 #include "orchestrator/orchestrator_builder.hpp"
@@ -781,6 +782,12 @@ auto Orchestrator::SaveStateToCacheDir() -> astl_status_code {
     }
   }
 
+  auto pool_status = SaveStringPoolToCacheDir(cache_dir_path);
+  if (pool_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to serialize string pool to {}: {}", cache_dir_path.string(), astlStatusString(pool_status));
+    return pool_status;
+  }
+
   auto system_info_status = SavePlatformInfoToCacheDir(cache_dir_path);
   if (system_info_status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Failed to serialize platform info to cache dir {}: {}", cache_dir_path.string(),
@@ -801,6 +808,13 @@ auto Orchestrator::LoadFromFile(fs::path file_path, fs::path cache_dir_path) -> 
 
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Failed to unzip ASTL file {}: {}", file_path.string(), astlStatusString(status));
+    return status;
+  }
+
+  status = LoadStringPoolFromCacheDir(cache_dir_path);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to deserialize string pool from cache dir {}: {}", cache_dir_path.string(),
+                   astlStatusString(status));
     return status;
   }
 

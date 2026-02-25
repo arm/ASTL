@@ -1,6 +1,8 @@
 
 #include "metric/counter.hpp"
 
+#include "common/string_pool.hpp"
+
 namespace astl {
 
 Counter::Counter(const MetricConfig *config, const ITarget *target) : RawMetric{config, target, nullptr} {}
@@ -11,11 +13,11 @@ Counter::Counter(const MetricConfig *config, const ITarget *target) : RawMetric{
 auto Counter::GetProperties(astl_counter_properties_t *properties) const -> astl_status_code {
   // properties->_size  : set by API caller.
   // properties->_handle : set by caller (MetricManager)
-  properties->_name                  = _configuration->Name().c_str();
-  properties->_description           = _configuration->Description().c_str();
+  properties->_name                  = GetInternedString(_configuration->Name());
+  properties->_description           = GetInternedString(_configuration->Description());
+  properties->_mask                  = 0;
   properties->_min_sampling_interval = 0;
   properties->_units                 = _configuration->Units();
-  properties->_mask                  = std::numeric_limits<decltype(properties->_mask)>::max();
   properties->_formula               = "";
   properties->_value_type            = _configuration->ValueType();
   properties->_counter_type          = ASTL_COUNTER_TYPE_COUNT;

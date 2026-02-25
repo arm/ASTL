@@ -26,8 +26,8 @@
 
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
+#include "common/string_pool.hpp"
 #include "metric/formula_builder.hpp"
-
 namespace astl {
 
 RawMetric::RawMetric(const MetricConfig *configuration, const ITarget *target,
@@ -81,8 +81,8 @@ auto RawMetric::GetProperties(astl_metric_properties_t *properties) const -> ast
   properties->_size = sizeof(astl_metric_properties_t);
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
   properties->_handle                = static_cast<astl_metric_handle_t>(const_cast<RawMetric *>(this));
-  properties->_name                  = _configuration->Name().c_str();
-  properties->_description           = _configuration->Description().c_str();
+  properties->_name                  = GetInternedString(_configuration->Name());
+  properties->_description           = GetInternedString(_configuration->Description());
   properties->_min_sampling_interval = 0;  // TODO(ASTL-40): Set appropriate minimum sampling interval from config.
   properties->_units                 = _configuration->Units();
   properties->_value_type            = _configuration->ValueType();

@@ -19,6 +19,8 @@
 
 #include "metric_group.hpp"
 
+#include "common/string_pool.hpp"
+
 namespace astl {
 
 MetricGroup::MetricGroup(std::string name, std::string description, std::vector<astl_metric_handle_t> metrics)
@@ -41,8 +43,8 @@ auto MetricGroup::ToMetricGroupProperties(astl_metric_group_properties_t* proper
   }
   properties->_size         = sizeof(astl_metric_group_properties_t);
   properties->_handle       = ToApiHandle();
-  properties->_name         = name.c_str();
-  properties->_description  = description.c_str();
+  properties->_name         = GetInternedString(name);
+  properties->_description  = GetInternedString(description);
   properties->_metric_count = static_cast<uint32_t>(metrics.size());
   properties->_metrics      = nullptr;  // user can subsequently allocate and then fill via astlGetMetricGroupMetrics
   return ASTL_STATUS_SUCCESS;

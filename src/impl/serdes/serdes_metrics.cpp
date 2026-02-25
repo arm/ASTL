@@ -19,6 +19,7 @@
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl_logger.hpp"
+#include "common/string_pool.hpp"
 #include "metric/delta_metric.hpp"
 #include "metric/event_metric.hpp"
 #include "metric/finite_set_metric.hpp"
@@ -32,6 +33,24 @@ namespace astl::ProtobufSerDes {
 
 namespace detail {
 
+/**
+ * @brief Serializes a MetricConfig into a protobuf representation.
+ *
+ * Converts a MetricConfig object into its corresponding protobuf message format,
+ * including metric metadata (name, units, type, category) and associated metric groups.
+ *
+ * @param config The MetricConfig to serialize.
+ *
+ * @return An expected containing the serialized protobuf::MetricConfig on success,
+ *         or an astl_status_code error code on failure.
+ *
+ * @note The function interns certain string values (e.g., finite-set labels) into
+ *       the global string pool via GetInternedString() calls. These intern operations
+ *       are performed to pre-populate the string pool for potential reuse during
+ *       deserialization or other downstream operations, even though the interned
+ *       string handles are discarded. If this behavior is not needed, consider
+ *       removing these calls to reduce overhead.
+ */
 static auto SerializeBasicMetricConfig(const MetricConfig& config)
     -> std::expected<astl::protobuf::MetricConfig, astl_status_code> {
   astl::protobuf::MetricConfig out;

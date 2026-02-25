@@ -90,9 +90,8 @@ auto Deserialize<std::unique_ptr<ITopologyManager>>(std::istream& input_stream)
       ASTL_LOG_ERROR("Target with empty name found in protobuf TargetList");
       return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
-
-    const std::string description = proto_target.description();
-    const auto        collector   = static_cast<CollectorType>(proto_target.collector_type());
+    const std::string& description = proto_target.description();
+    const auto         collector   = static_cast<CollectorType>(proto_target.collector_type());
 
     std::optional<std::string> uuid{std::nullopt};
     if (!proto_target.uuid().empty()) {

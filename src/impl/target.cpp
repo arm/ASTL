@@ -3,6 +3,7 @@
 #include <string>
 
 #include "astl/astl.h"
+#include "common/string_pool.hpp"
 
 namespace astl {
 
@@ -19,9 +20,9 @@ auto Target::GetProperties(astl_target_properties_t* target) const -> astl_statu
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   target->_handle      = this;
-  target->_name        = _name.c_str();
-  target->_description = _description.c_str();
-  target->_uuid        = _uuid.has_value() ? _uuid->c_str() : nullptr;
+  target->_name        = GetInternedString(_name);
+  target->_description = GetInternedString(_description);
+  target->_uuid        = _uuid.has_value() ? GetInternedString(*_uuid) : nullptr;
   return ASTL_STATUS_SUCCESS;
 }
 

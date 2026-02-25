@@ -1342,15 +1342,24 @@ TEST_CASE("astlLoadCollection smoke test", "[wrapper][cache]") {
   REQUIRE(!ec);
 
   // Write the minimum required files that the loader expects inside the archive.
+
+  // Topology serialization
   {
     std::vector<std::unique_ptr<astl::ITarget>> targets;
     targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
     astl::TopologyManager topology_mgr{std::move(targets)};
-
-    std::ofstream topology_file{src_dir / astl::kTopologyManagerFileName, std::ios::binary | std::ios::out};
-    REQUIRE(topology_file.good());
-    REQUIRE(astl::ProtobufSerDes::Serialize(topology_mgr, topology_file) == ASTL_STATUS_SUCCESS);
+    std::ofstream         topology_file{src_dir / astl::kTopologyManagerFileName, std::ios::binary | std::ios::out};
+    if (!topology_file.good()) {
+      FAIL("Failed to open topology file for writing");
+      return;
+    }
+    auto topo_status = astl::ProtobufSerDes::Serialize(topology_mgr, topology_file);
+    if (topo_status != ASTL_STATUS_SUCCESS) {
+      FAIL("Failed to serialize topology: " << topo_status);
+      return;
+    }
   }
+  // Metric manager serialization
   {
     std::vector<astl::CollectorCapability> collector_caps;
     collector_caps.emplace_back(astl::CollectorType::SCMI);
@@ -1358,15 +1367,24 @@ TEST_CASE("astlLoadCollection smoke test", "[wrapper][cache]") {
     system_caps.emplace_back();
     astl::Capabilities  caps{std::move(collector_caps), std::move(system_caps)};
     astl::MetricManager metric_mgr{caps};
-
-    std::ofstream metric_file{src_dir / astl::kMetricManagerFileName, std::ios::binary | std::ios::out};
-    REQUIRE(metric_file.good());
-    REQUIRE(astl::ProtobufSerDes::Serialize(metric_mgr, metric_file) == ASTL_STATUS_SUCCESS);
+    std::ofstream       metric_file{src_dir / astl::kMetricManagerFileName, std::ios::binary | std::ios::out};
+    if (!metric_file.good()) {
+      FAIL("Failed to open metric manager file for writing");
+      return;
+    }
+    auto metric_status = astl::ProtobufSerDes::Serialize(metric_mgr, metric_file);
+    if (metric_status != ASTL_STATUS_SUCCESS) {
+      FAIL("Failed to serialize metric manager: " << metric_status);
+      return;
+    }
   }
-
+  // Platform info serialization
   {
     std::ofstream platform_info_file{src_dir / astl::kPlatformInfoFileName, std::ios::binary | std::ios::out};
-    REQUIRE(platform_info_file.good());
+    if (!platform_info_file.good()) {
+      FAIL("Failed to open platform info file for writing");
+      return;
+    }
     platform_info_file << R"({
   "soc_name": "soc-from-session",
   "vendor_id": "vendor-from-session",
@@ -1390,11 +1408,19 @@ TEST_CASE("astlLoadCollection smoke test", "[wrapper][cache]") {
   const auto astl_zip_str = astl_zip.string();
   params._input_file_path = astl_zip_str.c_str();
 
-  REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_SUCCESS);
+  auto load_status = astlLoadCollection(&params);
+  if (load_status != ASTL_STATUS_SUCCESS) {
+    FAIL("astlLoadCollection failed with status: " << load_status);
+    return;
+  }
 
   astl_platform_properties_t platform_info{};
   platform_info._size = sizeof(astl_platform_properties_t);
-  REQUIRE(astlGetSystemInfo(&platform_info) == ASTL_STATUS_SUCCESS);
+  auto sysinfo_status = astlGetSystemInfo(&platform_info);
+  if (sysinfo_status != ASTL_STATUS_SUCCESS) {
+    FAIL("astlGetSystemInfo failed with status: " << sysinfo_status);
+    return;
+  }
   REQUIRE(platform_info._soc_name != nullptr);
   REQUIRE(platform_info._vendor_id != nullptr);
   REQUIRE(platform_info._kernel_version != nullptr);
@@ -1458,18 +1484,35 @@ TEST_CASE("astlGetSystemInfo switches to host info after configure following loa
   ASTL_INIT_STRUCT(astl_load_params_t, params, ._input_file_path = nullptr, ._chunk_size_bytes = 0, ._flags = 0);
   const auto astl_zip_str = astl_zip.string();
   params._input_file_path = astl_zip_str.c_str();
-  REQUIRE(astlLoadCollection(&params) == ASTL_STATUS_SUCCESS);
+  auto load_status        = astlLoadCollection(&params);
+  if (load_status != ASTL_STATUS_SUCCESS) {
+    FAIL("astlLoadCollection failed with status: " << load_status);
+    return;
+  }
 
   astl_platform_properties_t loaded_info{};
-  loaded_info._size = sizeof(astl_platform_properties_t);
-  REQUIRE(astlGetSystemInfo(&loaded_info) == ASTL_STATUS_SUCCESS);
+  loaded_info._size   = sizeof(astl_platform_properties_t);
+  auto sysinfo_status = astlGetSystemInfo(&loaded_info);
+  if (sysinfo_status != ASTL_STATUS_SUCCESS) {
+    FAIL("astlGetSystemInfo (loaded_info) failed with status: " << sysinfo_status);
+    return;
+  }
   REQUIRE(loaded_info._soc_name != nullptr);
   REQUIRE(std::string(loaded_info._soc_name) == "soc-from-session");
 
-  auto     targets      = AllocateAstlVector<astl_target_properties_t>(1);
-  uint32_t target_count = 1;
-  REQUIRE(astlGetTargets(targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
+  auto     targets        = AllocateAstlVector<astl_target_properties_t>(1);
+  uint32_t target_count   = 1;
+  auto     targets_status = astlGetTargets(targets.data(), &target_count);
+  if (targets_status != ASTL_STATUS_SUCCESS) {
+    FAIL("astlGetTargets failed with status: " << targets_status);
+    return;
+  }
   REQUIRE(target_count == 1);
+  // Check that the handle is valid before using it
+  if (targets[0]._handle == nullptr) {
+    FAIL("astlGetTargets returned a null target handle");
+    return;
+  }
 
   astl_collection_parameters_t collection_params{};
   collection_params._size              = sizeof(astl_collection_parameters_t);
@@ -1479,11 +1522,20 @@ TEST_CASE("astlGetSystemInfo switches to host info after configure following loa
 
   int                   fake_counter_token  = 0;
   astl_counter_handle_t fake_counter_handle = &fake_counter_token;
-  (void)astlConfigureCounterCollectionOnTarget(targets[0]._handle, &collection_params, &fake_counter_handle, 1);
+  auto                  config_status =
+      astlConfigureCounterCollectionOnTarget(targets[0]._handle, &collection_params, &fake_counter_handle, 1);
+  if (config_status != ASTL_STATUS_SUCCESS && config_status != ASTL_STATUS_BAD_ARGUMENT) {
+    FAIL("astlConfigureCounterCollectionOnTarget returned unexpected status: " << config_status);
+    return;
+  }
 
   astl_platform_properties_t host_info{};
-  host_info._size = sizeof(astl_platform_properties_t);
-  REQUIRE(astlGetSystemInfo(&host_info) == ASTL_STATUS_SUCCESS);
+  host_info._size      = sizeof(astl_platform_properties_t);
+  auto hostinfo_status = astlGetSystemInfo(&host_info);
+  if (hostinfo_status != ASTL_STATUS_SUCCESS) {
+    FAIL("astlGetSystemInfo (host_info) failed with status: " << hostinfo_status);
+    return;
+  }
   REQUIRE((host_info._soc_name == nullptr || std::string(host_info._soc_name) != "soc-from-session"));
 }
 

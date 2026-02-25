@@ -10,6 +10,7 @@
 #include "astl/astl.h"
 #include "common/astl_defines.hpp"
 #include "common/metric_config.hpp"
+#include "common/string_pool.hpp"
 #include "common/system_info.hpp"
 #include "config/configuration_manager.hpp"
 #include "metric/counter.hpp"
@@ -596,7 +597,7 @@ auto PopulateFiniteSetStateNames(const astl::IMetric* metric, std::span<astl_sta
 
     output_states[index]._size        = sizeof(astl_state_properties_t);
     output_states[index]._value       = astl_value.ToAstlUnionValue().first;
-    output_states[index]._name        = label.c_str();
+    output_states[index]._name        = astl::GetInternedString(label);
     output_states[index]._description = nullptr;  // No descriptions available in current configuration
     ++index;
   }
@@ -634,7 +635,7 @@ auto PopulateResidencyStateNames(const astl::IMetric* metric, std::span<astl_sta
       break;
     }
     output_states[index]._size        = sizeof(astl_state_properties_t);
-    output_states[index]._name        = state_config.state_name.c_str();
+    output_states[index]._name        = astl::GetInternedString(state_config.state_name);
     output_states[index]._description = nullptr;  // No descriptions available in current configuration
     // cppcheck-suppress unreadVariable
     output_states[index]._value = {};  // Zero-initialize unused field for residency metrics
@@ -644,7 +645,7 @@ auto PopulateResidencyStateNames(const astl::IMetric* metric, std::span<astl_sta
   if (inferred_state.has_value() && index < output_states.size()) {
     output_states[index]._size = sizeof(astl_state_properties_t);
     // cppcheck-suppress unreadVariable
-    output_states[index]._name        = inferred_state->c_str();
+    output_states[index]._name        = astl::GetInternedString(*inferred_state);
     output_states[index]._description = nullptr;  // No descriptions available in current configuration
     // cppcheck-suppress unreadVariable
     output_states[index]._value = {};  // Zero-initialize unused field for residency metrics

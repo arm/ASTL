@@ -30,6 +30,7 @@ set(UNIT_TEST_SRCS
     perfetto_output_utests.cpp
     interval_csv_utests.cpp
     summary_csv_output_utests.cpp
+    string_pool_utests.cpp
     protobuf_serdes_utests.cpp
     archive_utests.cpp)
 find_library(SENSORS_LIB sensors)
