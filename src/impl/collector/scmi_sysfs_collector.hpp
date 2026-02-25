@@ -19,6 +19,7 @@
 #ifndef SCMI_SYSFS_COLLECTOR_HPP_
 #define SCMI_SYSFS_COLLECTOR_HPP_
 
+#include <charconv>
 #include <expected>
 #include <filesystem>
 #include <mutex>
@@ -36,6 +37,7 @@
 #include "collector/scmi_data_event.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
+#include "common/scmi/scmi_constants.hpp"
 #include "operation/operation.hpp"
 #include "operation/scmi_read_operation.hpp"
 
@@ -127,6 +129,21 @@ class ScmiSysfsCollector : public ICollector {
   // private methods
 
   /*
+   * @brief Enable a given data event, and return whether it was originally enabled before we enabled it.
+   */
+  auto EnableDataEvent(std::filesystem::path const& data_event_dir_path) -> std::expected<bool, astl_status_code>;
+
+  /* @brief Enable a timestamp for this data event */
+  auto EnableTimestamp(std::filesystem::path const& data_event_to_configure)
+      -> std::expected<std::optional<bool>, astl_status_code>;
+
+  /* @brief Read the timestamp rate for this data event, if available.
+   * This is the rate at which the timestamp increments
+   */
+  auto ReadTimestampRate(std::filesystem::path const& data_event_to_configure)
+      -> std::expected<std::optional<kilohertz>, astl_status_code>;
+
+  /*
    * @brief Enable the given data event ids, returning the set of DataEvents and their initial enable state
    */
   std::expected<std::vector<ScmiDataEvent>, astl_status_code> EnableDataEvents(
@@ -165,15 +182,26 @@ class ScmiSysfsCollector : public ICollector {
 ////////////////////////////////////////////////////////////////////////////////
 namespace scmi_detail {
 
-std::expected<std::filesystem::path, astl_status_code> GetDataEventDirPath(ScmiDataEventId data_event_id);
+auto GetDataEventDirPath(ScmiDataEventId data_event_id) -> std::expected<std::filesystem::path, astl_status_code>;
 
-std::expected<SampleTimestamp, astl_status_code> ParseScmiTimeStamp(std::string const& timestamp_str);
+/* Parse the given text for a timestamp, scale by the given tstamp_rate and return alongside remaining text to parse */
+auto ParseScmiTimeStamp(std::string_view text, kilohertz tstamp_rate)
+    -> std::expected<std::pair<SampleTimestamp, std::string_view>, astl_status_code>;
 
 // Expected format: "<timestamp> <value>"
-std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> ParseDataEventValueWithTimestamp(
-    std::string const& data_read);
+auto ParseDataEventValueWithTimestamp(std::string_view data_read, kilohertz tstamp_rate)
+    -> std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code>;
 
-std::unordered_set<ScmiDataEventId> GetUniqueDataEventsIds(CollectionOperations const& operations);
+auto GetUniqueDataEventsIds(CollectionOperations const& operations) -> std::unordered_set<ScmiDataEventId>;
+
+/*
+ * @brief For each ScmiReadOperation in the given operations, look up its corresponding data event
+ *        and copy the timestamp rate.
+ *        This is needed so that when we execute a ScmiReadOperation and get a timestamp back,
+ *        we know how to interpret it based on the rate at which it increments.
+ */
+auto UpdateSampleOperationsWithTstampRates(std::vector<ScmiDataEvent> const& data_events,
+                                           CollectionOperations const&       operations) -> void;
 
 }  // namespace scmi_detail
 
@@ -231,6 +259,10 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
     return data_events.error();
   }
   _data_events = *data_events;  // keep track of which data events were enabled during configuration
+
+  // copy the tstamp rate for each data event into its corresponding Read operation
+  // so we know how to interpret timestamps on sample
+  scmi_detail::UpdateSampleOperationsWithTstampRates(_data_events, _configuration->Operations());
 
   // log some version info
   std::string de_implementation_version;
@@ -378,6 +410,94 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ReadImmediate() {
   return ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
 }
 
+/* Enable a data event, return true if it was originally enabled */
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::EnableDataEvent(std::filesystem::path const& data_event_dir_path)
+    -> std::expected<bool, astl_status_code> {
+  const auto enable_file_path = data_event_dir_path / kScmiDataEventEnableFileName;
+  // check to see if the data event is already enabled (if so, we don't disable it at the end of collection)
+  std::string enabled_text;
+  auto        result = _scmi_file_interface.Read(enable_file_path, enabled_text);
+  if (result != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to read enable file for data event: {} with error: {}",
+                   data_event_dir_path.filename().string(), result);
+    return std::unexpected{result};
+  }
+  const bool originally_enabled = (enabled_text == kScmiDataEventEnableValue);
+  // enable the data event if it's not already enabled.
+  if (!originally_enabled) {
+    result = _scmi_file_interface.Write(enable_file_path, kScmiDataEventEnableValue);
+    if (result != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("Failed to enable data event: {} with error: {}", data_event_dir_path.filename().string(), result);
+      return std::unexpected{result};
+    }
+  }
+  return originally_enabled;
+}
+
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::EnableTimestamp(std::filesystem::path const& data_event_to_configure)
+    -> std::expected<std::optional<bool>, astl_status_code> {
+  // check to see if timestamps are already enabled for this data event
+  std::optional<bool> timestamp_enabled;  // if 'none', there is no timestamp enable file for this event
+  const auto          tstamp_enable_file_path = data_event_to_configure / kScmiDataEventTstampEnableFileName;
+  if (!_scmi_file_interface.IsValid(tstamp_enable_file_path).value_or(false)) {
+    ASTL_LOG_DEBUG("No timestamp enable file for data event: {}, timestamps will be disabled for this event",
+                   data_event_to_configure.filename().string());
+    return timestamp_enabled;  // return 'none' to indicate no timestamp enable file exists for this event
+  }
+  // there's a tstamp_enable file, try to read the original value to determine
+  // if we need to restore it at the end of collection, and enable it if it's not already enabled
+  std::string tstamp_enabled_text;
+  auto        result = _scmi_file_interface.Read(tstamp_enable_file_path, tstamp_enabled_text);
+  if (result != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to read timestamp enable file for data event: {} with error: {}",
+                   data_event_to_configure.filename().string(), result);
+    return std::unexpected{result};
+  }
+  timestamp_enabled = (tstamp_enabled_text == kScmiDataEventTstampEnableValue);
+  // enable the timestamp if it's not already enabled, but the enable file exists
+  if (!timestamp_enabled.value_or(false)) {
+    result = _scmi_file_interface.Write(tstamp_enable_file_path, kScmiDataEventTstampEnableValue);
+  }
+  return timestamp_enabled;
+}
+
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::ReadTimestampRate(std::filesystem::path const& data_event_to_configure)
+    -> std::expected<std::optional<kilohertz>, astl_status_code> {
+  // read the 'tstamp_rate' file to determine the rate in KHz that the data event's timestamp increments
+  const auto tstamp_rate_file_path = data_event_to_configure / kScmiDataEventTstampRateFileName;
+  if (!_scmi_file_interface.IsValid(tstamp_rate_file_path).value_or(false)) {
+    ASTL_LOG_DEBUG("No timestamp rate file for data event: {}. Using default rate",
+                   data_event_to_configure.filename().string());
+    return std::nullopt;  // not an error, but no timestamp rate file exists
+  }
+  std::string tstamp_rate_text;
+  auto        result = _scmi_file_interface.Read(tstamp_rate_file_path, tstamp_rate_text);
+  if (result != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to read timestamp rate file for data event: {} with error: {}",
+                   data_event_to_configure.filename().string(), result);
+    return std::unexpected{result};
+  }
+  uint32_t tstamp_rate_khz{};
+  auto     parse_result = std::from_chars(
+      tstamp_rate_text.data(), std::next(tstamp_rate_text.data(), static_cast<ptrdiff_t>(tstamp_rate_text.size())),
+      tstamp_rate_khz);
+  if (parse_result.ec != std::errc()) {
+    ASTL_LOG_ERROR("Failed to parse timestamp rate for data event: {} with error: {}, text was: {}",
+                   data_event_to_configure.filename().string(), std::make_error_code(parse_result.ec).message(),
+                   tstamp_rate_text);
+    return std::unexpected{ASTL_STATUS_FILE_ERROR};
+  }
+  if (tstamp_rate_khz == 0) {
+    ASTL_LOG_ERROR("Timestamp rate for data event: {} cannot be 0, text was: {}",
+                   data_event_to_configure.filename().string(), tstamp_rate_text);
+    return std::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
+  }
+  return kilohertz{tstamp_rate_khz};
+}
+
 /*
  * @brief Enable the given data event ids, returning the set of DataEvents and their initial enable state
  */
@@ -386,46 +506,32 @@ std::expected<std::vector<ScmiDataEvent>, astl_status_code> ScmiSysfsCollector<F
     std::unordered_set<ScmiDataEventId> const& data_events_to_enable) {
   std::vector<ScmiDataEvent> enabled_data_events;
   for (const auto& data_event_id : data_events_to_enable) {
-    auto data_event_dir_path = scmi_detail::GetDataEventDirPath(data_event_id);
-    if (!data_event_dir_path) {
-      ASTL_LOG_ERROR("Failed to get data event directory path for ID: {:08X}", data_event_id);
-      return std::unexpected{ASTL_STATUS_FILE_OPEN_FAILED};
+    const auto expected_data_event_dir_path = scmi_detail::GetDataEventDirPath(data_event_id);
+    if (!expected_data_event_dir_path) {
+      ASTL_LOG_WARNING("Data Event directory path for ID: {:08X} is not implemented", data_event_id);
+      continue;
     }
-    const auto enable_file_path = data_event_dir_path.value() / kScmiDataEventEnableFileName;
-    // check to see if the data event is already enabled (if so, we don't disable it at the end of collection)
-    std::string enabled_text;
-    auto        result = _scmi_file_interface.Read(enable_file_path, enabled_text);
-    if (result != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("Failed to read enable file for data event ID: {:08X} with error: {}", data_event_id, result);
-      return std::unexpected{result};
+    // enable the data event
+    const auto data_event_dir_path         = expected_data_event_dir_path.value();
+    const auto expected_originally_enabled = EnableDataEvent(data_event_dir_path);
+    if (!expected_originally_enabled) {
+      return std::unexpected{expected_originally_enabled.error()};
     }
-    const bool originally_enabled = (enabled_text == kScmiDataEventEnableValue);
-    // enable the data event if it's not already enabled.
-    if (!originally_enabled) {
-      result = _scmi_file_interface.Write(enable_file_path, kScmiDataEventEnableValue);
-      if (result != ASTL_STATUS_SUCCESS) {
-        ASTL_LOG_ERROR("Failed to enable data event ID: {:04X} with error: {}", data_event_id, result);
-        return std::unexpected{result};
-      }
+    const auto originally_enabled = expected_originally_enabled.value();
+    // enable the timestamp collection and determine the clock rate
+    const auto expected_timestamp_enabled = EnableTimestamp(data_event_dir_path);
+    if (!expected_timestamp_enabled) {
+      return std::unexpected{expected_timestamp_enabled.error()};
     }
-    // check to see if timestamps are enabled for this data event
-    std::optional<bool> timestamp_enabled;  // if 'none', there is no timestamp enable file for this event
-    const auto          tstamp_enable_file_path = data_event_dir_path.value() / kScmiDataEventTstampEnableFileName;
-    if (_scmi_file_interface.IsValid(tstamp_enable_file_path).value_or(false)) {
-      std::string tstamp_enabled_text;
-      result = _scmi_file_interface.Read(tstamp_enable_file_path, tstamp_enabled_text);
-      if (result != ASTL_STATUS_SUCCESS) {
-        ASTL_LOG_ERROR("Failed to read timestamp enable file for data event ID: {:04X} with error: {}", data_event_id,
-                       result);
-        return std::unexpected{result};
-      }
-      timestamp_enabled = (tstamp_enabled_text == kScmiDataEventTstampEnableValue);
-      // enable the timestamp if it's not already enabled, but the enable file exists
-      if (!timestamp_enabled) {
-        result = _scmi_file_interface.Write(tstamp_enable_file_path, kScmiDataEventTstampEnableValue);
-      }
+    const auto timestamp_enabled = expected_timestamp_enabled.value();
+
+    const auto expected_timestamp_rate = ReadTimestampRate(data_event_dir_path);
+    if (!expected_timestamp_rate) {
+      return std::unexpected{expected_timestamp_rate.error()};
     }
-    enabled_data_events.emplace_back(data_event_id, originally_enabled, timestamp_enabled);
+    const auto timestamp_rate = expected_timestamp_rate.value();
+
+    enabled_data_events.emplace_back(data_event_id, originally_enabled, timestamp_enabled, timestamp_rate);
   }
   return enabled_data_events;
 }
@@ -509,7 +615,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(ScmiReadOperat
   }
   // TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen
   // optimization flags
-  auto parsed_value = scmi_detail::ParseDataEventValueWithTimestamp(data_read);
+  auto parsed_value = scmi_detail::ParseDataEventValueWithTimestamp(data_read, operation.tstamp_rate);
   if (!parsed_value) {
     return parsed_value.error();
   }

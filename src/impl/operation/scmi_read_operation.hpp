@@ -25,6 +25,7 @@
 
 #include <unordered_map>
 
+#include "common/scmi/scmi_constants.hpp"
 #include "operation/operation.hpp"
 
 namespace astl {
@@ -49,14 +50,17 @@ struct ScmiReadOperation : public Operation {
   /*
    * @brief Constructor for read operations
    */
-  explicit ScmiReadOperation(ScmiDataEventId data_event_id) : scmi_data_event_id{data_event_id} {}
+  explicit ScmiReadOperation(ScmiDataEventId data_event_id, kilohertz tstamp_rate)
+      : scmi_data_event_id{data_event_id}, tstamp_rate{tstamp_rate} {}
 
   ScmiReadOperation(const ScmiReadOperation&)            = default;
   ScmiReadOperation& operator=(const ScmiReadOperation&) = default;
   ScmiReadOperation(ScmiReadOperation&&)                 = default;
   ScmiReadOperation& operator=(ScmiReadOperation&&)      = default;
 
-  ScmiDataEventId scmi_data_event_id = 0;  //!< The SCMI data event ID to be used for this operation
+  ScmiDataEventId scmi_data_event_id{0};  //!< The SCMI data event ID to be used for this operation
+  //!< The timestamp rate in KHz for this data event, used to interpret timestamps if they are enabled
+  kilohertz tstamp_rate{1};
 };
 
 }  // namespace astl

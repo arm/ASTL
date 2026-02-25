@@ -109,6 +109,10 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/tstamp_rate"}, _))
+      .SIDE_EFFECT(_2 = "1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+
   MockRawSampleSink     mock_raw_sample_sink;
   const astl::AstlValue expected_value{uint64_t{0x42}};
   REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
@@ -123,7 +127,7 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
   constexpr uint32_t      raw_id = 0x1234;
   astl::ScmiDataEventId   data_event_id{raw_id};
   astl::OperationSequence operations_on_sample;
-  auto                    read_operation = std::make_unique<astl::ScmiReadOperation>(data_event_id);
+  auto                    read_operation = std::make_unique<astl::ScmiReadOperation>(data_event_id, astl::kilohertz{1});
   operations_on_sample.push_back(std::move(read_operation));
 
   astl::CollectionOperations   operations{.operationsBeforeStart{},
@@ -185,6 +189,11 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
       .SIDE_EFFECT(_2 = "1")
       .RETURN(ASTL_STATUS_SUCCESS);
 
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/tstamp_rate"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+
   // collector should read the value
   size_t                         read_value_call_count{0};
   const std::vector<std::string> expected_data{"1234567890 10", "1234567891 11", "1234567892 12", "1234567893 13",
@@ -237,7 +246,7 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
   constexpr uint32_t      raw_id = 0x1234;
   astl::ScmiDataEventId   data_event_id{raw_id};
   astl::OperationSequence operations_on_sample;
-  auto                    read_operation = std::make_unique<astl::ScmiReadOperation>(data_event_id);
+  auto                    read_operation = std::make_unique<astl::ScmiReadOperation>(data_event_id, astl::kilohertz{1});
   operations_on_sample.push_back(std::move(read_operation));
 
   astl::CollectionOperations operations{.operationsBeforeStart{},
@@ -270,8 +279,9 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
   REQUIRE_THAT(samples, Catch::Matchers::Equals(expected_samples));
 }
 
-TEST_CASE("ScmiSysfsCollector::DuplicateTimestampHandling", "[scmi_sysfs_collector]") {
-  // Test that samples with duplicate timestamps are properly discarded
+TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
+  // test that the collector scales timestamps for us based on tstamp_rate, which indicates the rate in KHz that the
+  // tstamps are updated
   MockFileInterface mock_file_interface;
 
   // Allow basic file interface operations
@@ -304,14 +314,13 @@ TEST_CASE("ScmiSysfsCollector::DuplicateTimestampHandling", "[scmi_sysfs_collect
       .RETURN(false);  // for this test, assume no timestamp enable file exists
 
   // Test data with duplicate timestamps
-  size_t                         read_value_call_count{0};
+  size_t read_value_call_count{0};
+  // this test_data increments the timestamps by 1000x. The collector should properly scale these timestamps based on
+  // the tstamp_rate
   const std::vector<std::string> test_data{
-      "1000000 100",  // First sample: timestamp=1000000, value=100
-      "1000000 200",  // Duplicate timestamp: should be discarded
-      "1000001 300",  // Different timestamp: should be accepted
-      "1000001 400",  // Another duplicate: should be discarded
-      "1000002 500"   // Different timestamp: should be accepted
-  };
+      "1000 100",  // First sample: timestamp=1000, value=100, tstamp_rate=4, so timestamp should be scaled to 250ms
+      "2000 200",  // Different timestamp: should be accepted. timestamp=2000, value=200, scaled to 500ms
+      "3000 300", "4000 400", "5000 500"};
 
   REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/value"}, _))
       .IN_SEQUENCE(seq)
@@ -325,16 +334,25 @@ TEST_CASE("ScmiSysfsCollector::DuplicateTimestampHandling", "[scmi_sysfs_collect
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 
+  // timestamps count up at 4KHz
+  ALLOW_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x5678/tstamp_rate"})).RETURN(true);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/tstamp_rate"}, _))
+      .SIDE_EFFECT(_2 = "4")
+      .RETURN(ASTL_STATUS_SUCCESS);
+
   // Track samples received by the sink
-  MockRawSampleSink            mock_raw_sample_sink;
-  std::vector<astl::AstlValue> received_samples;
+  MockRawSampleSink                  mock_raw_sample_sink;
+  std::vector<astl::AstlValue>       received_samples;
+  std::vector<astl::SampleTimestamp> received_timestamps;
 
   // We expect only 3 samples to be received (duplicate timestamps should be discarded)
   REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
-      .TIMES(3)
-      .LR_SIDE_EFFECT(
-          (std::for_each(std::begin(_2), std::end(_2),
-                         [&received_samples](auto const& sample) { received_samples.push_back(sample.value); })))
+      .TIMES(5)
+      .LR_SIDE_EFFECT((std::for_each(std::begin(_2), std::end(_2),
+                                     [&received_samples, &received_timestamps](auto const& sample) {
+                                       received_samples.push_back(sample.value);
+                                       received_timestamps.push_back(sample.timestamp);
+                                     })))
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // Create the collector and configure it
@@ -344,7 +362,7 @@ TEST_CASE("ScmiSysfsCollector::DuplicateTimestampHandling", "[scmi_sysfs_collect
   constexpr uint32_t      raw_id = 0x5678;
   astl::ScmiDataEventId   data_event_id{raw_id};
   astl::OperationSequence operations_on_sample;
-  auto                    read_operation = std::make_unique<astl::ScmiReadOperation>(data_event_id);
+  auto                    read_operation = std::make_unique<astl::ScmiReadOperation>(data_event_id, astl::kilohertz{1});
   operations_on_sample.push_back(std::move(read_operation));
 
   astl::CollectionOperations operations{.operationsBeforeStart{},
@@ -374,10 +392,16 @@ TEST_CASE("ScmiSysfsCollector::DuplicateTimestampHandling", "[scmi_sysfs_collect
 
   REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
 
-  // Verify that only samples with unique timestamps were received
+  // Verify that samples were received with scaled timestamps
   // Expected: 100 (first), 300 (after first duplicate), 500 (after second duplicate)
   const std::vector<astl::AstlValue> expected_samples{
-      astl::AstlValue{uint64_t{0x100}}, astl::AstlValue{uint64_t{0x300}}, astl::AstlValue{uint64_t{0x500}}};
-
+      astl::AstlValue{uint64_t{0x100}}, astl::AstlValue{uint64_t{0x200}}, astl::AstlValue{uint64_t{0x300}},
+      astl::AstlValue{uint64_t{0x400}}, astl::AstlValue{uint64_t{0x500}}};
   REQUIRE_THAT(received_samples, Catch::Matchers::Equals(expected_samples));
+
+  const std::vector<astl::SampleTimestamp> expected_timestamps{
+      astl::SampleTimestamp{250ms}, astl::SampleTimestamp{500ms}, astl::SampleTimestamp{750ms},
+      astl::SampleTimestamp{1000ms}, astl::SampleTimestamp{1250ms}};
+
+  REQUIRE_THAT(received_timestamps, Catch::Matchers::Equals(expected_timestamps));
 }

@@ -18,6 +18,8 @@
 
 #include "collector/scmi_sysfs_collector.hpp"
 
+#include <algorithm>
+#include <charconv>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -28,9 +30,7 @@
 #include "operation/operation.hpp"
 #include "operation/scmi_read_operation.hpp"
 
-namespace astl {
-
-namespace scmi_detail {
+namespace astl::scmi_detail {
 
 namespace fs = std::filesystem;
 
@@ -45,43 +45,53 @@ std::expected<fs::path, astl_status_code> GetDataEventDirPath(ScmiDataEventId da
   return fs::path{"des"} / std::format("0x{:04X}", data_event_id);
 }
 
-std::expected<SampleTimestamp, astl_status_code> ParseScmiTimeStamp(std::string const& timestamp_str) {
-  try {
-    /* SCMI spec says
-     * "The selection of a time base is beyond the scope of this specification
-     * and should be agreed between the agent and the platform by other standard mechanisms."
-     */
-    // for now, assume time base is just in unix milliseconds since epoch,
-    // since that appears to be the case used in examples here:
-    // https://confluence.arm.com/display/CESW/Linux+Kernel+SCMI+Telemetry+Support+-+v4.0+ALPHA_0+--+WIP
-    auto time_since_boot = std::chrono::milliseconds{std::stoull(timestamp_str)};
-    return SampleTimestamp{time_since_boot};
-  } catch (const std::invalid_argument&) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);  // Conversion failed
-  } catch (const std::out_of_range&) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);  // Value out of range
+auto ParseScmiTimeStamp(std::string_view text, kilohertz tstamp_rate)
+    -> std::expected<std::pair<SampleTimestamp, std::string_view>, astl_status_code> {
+  if (tstamp_rate == 0) {
+    ASTL_LOG_ERROR("Timestamp rate cannot be 0 in ParseScmiTimeStamp");
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
+  uint64_t tstamp_ticks{0};
+  auto     parse_result = std::from_chars(text.data(), text.data() + text.size(), tstamp_ticks);
+  if (parse_result.ec != std::errc()) {
+    ASTL_LOG_ERROR("Failed to parse timestamp from value file text: {} with error: {}", text,
+                   std::make_error_code(parse_result.ec).message());
+    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+  }
+  constexpr auto micros_per_milli = 1000ULL;
+  auto           time_since_boot =
+      std::chrono::microseconds{(tstamp_ticks * micros_per_milli) / static_cast<uint64_t>(tstamp_rate)};
+  auto parsed_length           = static_cast<size_t>(parse_result.ptr - text.data());
+  auto remaining_text_to_parse = text.substr(parsed_length);
+  return std::make_pair(SampleTimestamp{time_since_boot}, remaining_text_to_parse);
 }
 
 // Expected format: "<timestamp> <value>"
-std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> ParseDataEventValueWithTimestamp(
-    std::string const& data_read) {
-  auto space_pos = data_read.find(' ');
-  if (space_pos == std::string::npos) {
-    ASTL_LOG_ERROR("ParseDataEventValueWithTimestamp: No space found in data_read: {}", data_read);
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+auto ParseDataEventValueWithTimestamp(std::string_view data_read, kilohertz tstamp_rate)
+    -> std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> {
+  // timestamp is always provided, even though it may be 0. parse it.
+  const auto parse_result = ParseScmiTimeStamp(data_read, tstamp_rate);
+  if (!parse_result) {
+    return std::unexpected{parse_result.error()};
   }
-  // timestamp is provided, parse it
-  auto expected_timestamp = ParseScmiTimeStamp(data_read.substr(0, space_pos));
-  if (!expected_timestamp) {
-    return std::unexpected{expected_timestamp.error()};
+  auto [timestamp, remaining_text] = parse_result.value();
+  // skip past any whitespace between timestamp and value
+  // prefer non-pointer auto here since the iterator type of string_view isn't always char* depending on platform
+  // NOLINTNEXTLINE(readability-qualified-auto)
+  const auto non_ws_it =
+      std::ranges::find_if_not(remaining_text, [](unsigned char maybe_space) { return std::isspace(maybe_space); });
+  if (non_ws_it == std::end(remaining_text)) {
+    ASTL_LOG_ERROR("No value found after timestamp in data read: {}", data_read);
+    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
+  remaining_text = remaining_text.substr(static_cast<size_t>(non_ws_it - remaining_text.begin()));
+
   // now parse value
-  auto value = ScmiDataEventValue::FromString(data_read.substr(space_pos + 1));
+  auto value = ScmiDataEventValue::FromString(remaining_text);
   if (!value) {
     return std::unexpected{value.error()};
   }
-  return std::make_pair(expected_timestamp.value(), value.value());
+  return std::make_pair(timestamp, value.value());
 }
 
 // TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen optimization
@@ -103,5 +113,32 @@ auto GetUniqueDataEventsIds(CollectionOperations const& operations) -> std::unor
   return all_data_events;
 }
 
-}  // namespace scmi_detail
-}  // namespace astl
+/*
+ * @brief For each ScmiReadOperation in the given operations, look up its corresponding data event
+ *        and copy the timestamp rate.
+ *        This is needed so that when we execute a ScmiReadOperation and get a timestamp back,
+ *        we know how to interpret it based on the rate at which it increments.
+ */
+auto UpdateSampleOperationsWithTstampRates(std::vector<ScmiDataEvent> const& data_events,
+                                           CollectionOperations const&       operations) -> void {
+  auto update_list = [&data_events](const auto& operations_list) {
+    for (const auto& operation : operations_list) {
+      if (auto* scmi_operation = dynamic_cast<ScmiReadOperation*>(operation.get())) {
+        auto data_event_it =
+            std::find_if(data_events.begin(), data_events.end(), [&scmi_operation](const ScmiDataEvent& data_event) {
+              return data_event.id == scmi_operation->scmi_data_event_id;
+            });
+        if (data_event_it != data_events.end()) {
+          scmi_operation->tstamp_rate = data_event_it->timestamp_rate.value_or(kilohertz{1});
+        }
+      }
+    }
+  };
+
+  update_list(operations.operationsBeforeStart);
+  update_list(operations.operationsAtStart);
+  update_list(operations.operationsOnSample);
+  update_list(operations.operationsAtStop);
+}
+
+}  // namespace astl::scmi_detail
