@@ -216,7 +216,7 @@ auto GetTargetByName(std::string const& target_name, std::vector<astl_target_pro
           std::cout << "  Description: "
                     << (target_properties_entry._description ? target_properties_entry._description : "<null>") << '\n';
           std::cout << "compare to target_name:" << target_name << '\n';
-          if (target_properties_entry._name == target_name) {
+          if (target_properties_entry._name && target_properties_entry._name == target_name) {
             std::cout << "  --> Selected target\n";
             target_properties = target_properties_entry;
           }
@@ -420,6 +420,9 @@ auto ConfigureAndRunCollection(const astl_target_properties_t&              targ
 auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_metric_properties_t>& metric_buffer)
     -> void {
   for (const auto& metric_props : metric_buffer) {
+    if (!metric_props._name) {
+      continue;  // skip nameless metrics
+    }
     if (std::strncmp(metric_props._name, "AP1", 3) == 0) {
       continue;  // skip AP1 as mock sysfs doesn't implement the AP1 events as listed in example_scmi_specification.json
     }
@@ -442,7 +445,7 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
     bool all_samples_non_zero = std::all_of(samples.begin(), samples.begin() + sample_count,
                                             [](const astl_metric_sample_t& sample) { return sample._value.ui64 != 0; });
 
-    std::cout << "Collected Samples for metric '" << (metric_props._name ? metric_props._name : "<null>") << "':\n";
+    std::cout << "Collected Samples for metric '" << metric_props._name << "':\n";
     for (uint32_t i = 0; i < sample_count; ++i) {
       const auto& sample_entry = samples[i];
       std::cout << "  [" << i << "] ts=" << sample_entry._timestamp
@@ -461,6 +464,9 @@ auto PrintMinMaxAvgSummary(astl_target_handle_t                         target_h
                            const std::vector<astl_metric_properties_t>& metric_buffer) -> void {
   std::cout << "\n--- Min/Max/Avg Summary ---\n";
   for (const auto& metric_props : metric_buffer) {
+    if (!metric_props._name) {
+      continue;  // skip nameless metrics
+    }
     if (std::strncmp(metric_props._name, "AP1", 3) == 0) {
       continue;  // skip AP1 as mock sysfs doesn't implement the AP1 events
     }

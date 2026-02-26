@@ -28,7 +28,7 @@ class ScopedTestFile {
   ScopedTestFile(ScopedTestFile &&)                 = default;
   ScopedTestFile &operator=(ScopedTestFile &&)      = default;
 
-  ~ScopedTestFile() { std::remove(_filePath.c_str()); }
+  ~ScopedTestFile() { (void)std::remove(_filePath.c_str()); }
 
   const std::string &Path() const { return _filePath; }
 

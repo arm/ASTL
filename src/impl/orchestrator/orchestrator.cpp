@@ -418,10 +418,6 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
 
   // if we've now stopped collection on all the targets, finalize metric processing and output
   if (!_collector_manager->IsAnyTargetBeingCollected()) {
-    if (status != ASTL_STATUS_SUCCESS) {
-      return status;
-    }
-
     // Emit Perfetto trace (if requested) after metrics are summarized (processed samples complete)
     EmitPerfettoTraceIfRequested();
 

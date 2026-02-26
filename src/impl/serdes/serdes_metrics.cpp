@@ -174,10 +174,16 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
 
   FiniteSetMetricConfig::FiniteSet       finite_set;
   FiniteSetMetricConfig::ValueToLabelMap labels;
-  for (const auto& entry : finite_set_cfg_proto.value_to_label_map()) {
-    const auto key = static_cast<uint64_t>(entry.first);
-    finite_set.emplace(key);
-    labels.emplace(AstlValue(key), entry.second);
+  try {
+    for (const auto& entry : finite_set_cfg_proto.value_to_label_map()) {
+      const auto key = static_cast<uint64_t>(entry.first);
+      finite_set.emplace(key);
+      labels.emplace(AstlValue(key), entry.second);
+    }
+  } catch (const std::bad_variant_access& e) {
+    ASTL_LOG_ERROR("DeserializeFiniteSetMetricConfig: bad variant access when parsing finite set for metric {}: {}",
+                   name, e.what());
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
 
   if (proto_cfg.metric_groups_size() > 0) {

@@ -296,6 +296,7 @@ TEST_CASE("MetricManager::GetRequiredOperations correctly discriminates metrics 
     REQUIRE(op_seq0.size() == 1);  // the DE ID for target0
     const auto& base_op0 = op_seq0.front();
     const auto* scmi_op0 = dynamic_cast<astl::ScmiReadOperation*>(base_op0.get());
+    REQUIRE(scmi_op0 != nullptr);
     REQUIRE(scmi_op0->scmi_data_event_id == 0xACED);
 
     auto const& ops_target1 = mgr.GetRequiredOperations(multi_target_metric, target1.get());
@@ -304,6 +305,7 @@ TEST_CASE("MetricManager::GetRequiredOperations correctly discriminates metrics 
     REQUIRE(op_seq1.size() == 1);  // the DE ID for target1
     const auto& base_op1 = op_seq1.front();
     const auto* scmi_op1 = dynamic_cast<astl::ScmiReadOperation*>(base_op1.get());
+    REQUIRE(scmi_op1 != nullptr);
     REQUIRE(scmi_op1->scmi_data_event_id == 0xBABE);
 
     REQUIRE(base_op0->GetId() != base_op1->GetId());

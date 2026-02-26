@@ -392,6 +392,13 @@ auto ResidencyMetric::SinkOrderedStateSamples() -> astl_status_code {
     const size_t count = _pending_processed_samples.size();
     for (OperationId op = base, end = static_cast<OperationId>(base + count); op < end; ++op) {
       auto it_sample = _pending_processed_samples.find(op);
+      if (it_sample == _pending_processed_samples.end()) {
+        ASTL_LOG_ERROR(
+            "ResidencyMetric: Expected to find processed sample for operation_id {} when sinking ordered samples "
+            "for metric '{}', but it was missing - this indicates a processing error",
+            op, _configuration->Name());
+        return ASTL_STATUS_INTERNAL_ERROR;
+      }
       // The contiguous OperationId invariant guarantees the element exists; use a descriptive name for clarity.
       const auto& processed_sample = it_sample->second;
       auto        status           = SinkProcessedSample(processed_sample);

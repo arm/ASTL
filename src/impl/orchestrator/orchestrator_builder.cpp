@@ -78,9 +78,14 @@ auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_sta
 
   // wire it all up in our new Orchestrator and replace the global instance with it.
   // Note, Orchestrator destructor should shut down all collection, etc.
-  astl::Orchestrator::InitializeInstance(std::move(topology_manager.value()), std::move(collector_manager.value()),
-                                         std::move(metric_manager.value()), std::move(output_manager.value()),
-                                         cache_dir_path);
+  try {
+    astl::Orchestrator::InitializeInstance(std::move(topology_manager.value()), std::move(collector_manager.value()),
+                                           std::move(metric_manager.value()), std::move(output_manager.value()),
+                                           cache_dir_path);
+  } catch (const std::invalid_argument& e) {
+    ASTL_LOG_ERROR("Orchestrator::InitializeInstance threw an exception: {}", e.what());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
   // the orchestrator owns targets
   return ASTL_STATUS_SUCCESS;
 }
