@@ -147,7 +147,8 @@ auto AstlValue::ToAstlUnionValue() const -> std::pair<astl_value_t, astl_value_t
   astl_value_t      union_val{};
   astl_value_type_t type{ASTL_VALUE_UNKNOWN};
 
-  // clang-format off
+  try {
+    // clang-format off
     std::visit([&](auto&& arg) {
       using T = std::decay_t<decltype(arg)>;
       if      constexpr (std::is_same_v<T, uint8_t>)  { union_val.ui8  = arg; type = ASTL_VALUE_UINT8; }
@@ -158,6 +159,10 @@ auto AstlValue::ToAstlUnionValue() const -> std::pair<astl_value_t, astl_value_t
       else if constexpr (std::is_same_v<T, double>)   { union_val.fp64 = arg; type = ASTL_VALUE_FLOAT64; }
       else if constexpr (std::is_same_v<T, bool>)     { union_val.b8   = arg; type = ASTL_VALUE_BOOL8; }
     }, value);
+  } catch (const std::bad_variant_access& e) {
+    ASTL_LOG_ERROR("Failed to convert AstlValue to astl_value_t: {}", e.what());
+    return {union_val, type};  // return default unknown value on error.
+  }
   // clang-format on
   return {union_val, type};
 }

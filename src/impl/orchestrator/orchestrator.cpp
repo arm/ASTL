@@ -190,14 +190,15 @@ auto Orchestrator::ConfigureCounterCollection(const ITarget                     
   }
 
   // check for supported metrics
-  auto available_counters = _metric_manager->GetAvailableCounters(target);
-  if (!available_counters) {
-    return available_counters.error();
+  auto available_counters_or_error = _metric_manager->GetAvailableCounters(target);
+  if (!available_counters_or_error.has_value()) {
+    return available_counters_or_error.error();
   }
+  const auto available_counters = available_counters_or_error.value();
   for (const auto &counter : counters) {
     auto counter_index = std::ranges::find_if(
-        available_counters.value(), [counter](auto const available_counter) { return available_counter == counter; });
-    if (counter_index == std::end(available_counters.value())) {
+        available_counters, [counter](auto const available_counter) { return available_counter == counter; });
+    if (counter_index == std::end(available_counters)) {
       ASTL_LOG_ERROR("Counter is not supported on target");
       return ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET;
     }
@@ -232,16 +233,17 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget                      
     ASTL_LOG_ERROR("Orchestrator::ConfigureMetricCollection called with null CollectorManager");
     return ASTL_STATUS_INTERNAL_ERROR;
   }
-  auto available_metrics = _metric_manager->GetAvailableMetrics(target);
-  if (!available_metrics) {
-    return available_metrics.error();
+  const auto expected_available_metrics = _metric_manager->GetAvailableMetrics(target);
+  if (!expected_available_metrics.has_value()) {
+    return expected_available_metrics.error();
   }
+  const auto available_metrics = expected_available_metrics.value();
 
   // check for supported metrics
   for (const auto &metric : metrics) {
-    auto metric_index = std::find_if(std::begin(available_metrics.value()), std::end(available_metrics.value()),
+    auto metric_index = std::find_if(std::begin(available_metrics), std::end(available_metrics),
                                      [metric](auto const &available_metric) { return available_metric == metric; });
-    if (metric_index == std::end(available_metrics.value())) {
+    if (metric_index == std::end(available_metrics)) {
       ASTL_LOG_ERROR("Metric is not supported on target");
       return ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET;
     }

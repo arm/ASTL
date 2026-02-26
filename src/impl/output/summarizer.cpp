@@ -92,8 +92,8 @@ auto MinMaxAvgSummarizer::Summarize(std::span<const ProcessedSampledData> sample
     }
 
     // Update min/max
-    summary.min = std::min(sample.value, summary.min.value());
-    summary.max = std::max(sample.value, summary.max.value());
+    summary.min = std::min(sample.value, summary.min.value_or(sample.value));
+    summary.max = std::max(sample.value, summary.max.value_or(sample.value));
 
     // Add to sum
     auto add_result = AstlValue::Add(sum, sample.value);

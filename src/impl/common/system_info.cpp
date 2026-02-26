@@ -1,5 +1,6 @@
 #include "common/system_info.hpp"
 
+#include <expected>
 #include <fstream>
 #include <mutex>
 #include <optional>
@@ -120,32 +121,42 @@ auto CapturePlatformInfoFromSystem() -> PlatformInfoData {
   return info;
 }
 
-auto BuildPlatformInfoJson(const PlatformInfoData& info) -> nlohmann::json {
-  nlohmann::json payload;
-  payload["soc_name"]         = info.soc_name;
-  payload["vendor_id"]        = info.vendor_id;
-  payload["os_name"]          = info.os_name;
-  payload["kernel_name"]      = info.kernel_name;
-  payload["kernel_version"]   = info.kernel_version;
-  payload["kernel_release"]   = info.kernel_release;
-  payload["firmware_version"] = info.firmware_version;
-  payload["hostname"]         = info.hostname;
-  payload["architecture"]     = info.architecture;
-  return payload;
+auto BuildPlatformInfoJson(const PlatformInfoData& info) -> std::expected<nlohmann::json, astl_status_code> {
+  try {
+    nlohmann::json payload;
+    payload["soc_name"]         = info.soc_name;
+    payload["vendor_id"]        = info.vendor_id;
+    payload["os_name"]          = info.os_name;
+    payload["kernel_name"]      = info.kernel_name;
+    payload["kernel_version"]   = info.kernel_version;
+    payload["kernel_release"]   = info.kernel_release;
+    payload["firmware_version"] = info.firmware_version;
+    payload["hostname"]         = info.hostname;
+    payload["architecture"]     = info.architecture;
+    return payload;
+  } catch (const nlohmann::json::exception& e) {
+    ASTL_LOG_ERROR("BuildPlatformInfoJson: failed serializing platform info: {}", e.what());
+    return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+  }
 }
 
-auto ParsePlatformInfoJson(const nlohmann::json& payload) -> PlatformInfoData {
-  PlatformInfoData info{};
-  info.soc_name         = payload.value("soc_name", "");
-  info.vendor_id        = payload.value("vendor_id", "");
-  info.os_name          = payload.value("os_name", "");
-  info.kernel_name      = payload.value("kernel_name", "");
-  info.kernel_version   = payload.value("kernel_version", "");
-  info.kernel_release   = payload.value("kernel_release", "");
-  info.firmware_version = payload.value("firmware_version", "");
-  info.hostname         = payload.value("hostname", "");
-  info.architecture     = payload.value("architecture", "");
-  return info;
+auto ParsePlatformInfoJson(const nlohmann::json& payload) -> std::expected<PlatformInfoData, astl_status_code> {
+  try {
+    PlatformInfoData info{};
+    info.soc_name         = payload.value("soc_name", "");
+    info.vendor_id        = payload.value("vendor_id", "");
+    info.os_name          = payload.value("os_name", "");
+    info.kernel_name      = payload.value("kernel_name", "");
+    info.kernel_version   = payload.value("kernel_version", "");
+    info.kernel_release   = payload.value("kernel_release", "");
+    info.firmware_version = payload.value("firmware_version", "");
+    info.hostname         = payload.value("hostname", "");
+    info.architecture     = payload.value("architecture", "");
+    return info;
+  } catch (const nlohmann::json::exception& e) {
+    ASTL_LOG_ERROR("ParsePlatformInfoJson: failed parsing platform info json: {}", e.what());
+    return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+  }
 }
 
 auto PlatformInfoMutex() -> std::mutex& {
@@ -190,7 +201,11 @@ auto SavePlatformInfoToCacheDir(const std::filesystem::path& cache_dir_path) -> 
     return ASTL_STATUS_FILE_OPEN_FAILED;
   }
 
-  const auto payload = BuildPlatformInfoJson(GetActivePlatformInfo());
+  const auto payload_or_error = BuildPlatformInfoJson(GetActivePlatformInfo());
+  if (!payload_or_error.has_value()) {
+    return payload_or_error.error();
+  }
+  const auto& payload = payload_or_error.value();
   stream << payload.dump();
   if (stream.fail()) {
     ASTL_LOG_ERROR("SavePlatformInfoToCacheDir: failed writing '{}'", output_file.string());
@@ -224,7 +239,11 @@ auto LoadPlatformInfoFromCacheDir(const std::filesystem::path& cache_dir_path) -
     return ASTL_STATUS_INTERNAL_ERROR;
   }
 
-  auto loaded = ParsePlatformInfoJson(payload);
+  auto expected_loaded = ParsePlatformInfoJson(payload);
+  if (!expected_loaded.has_value()) {
+    return expected_loaded.error();
+  }
+  auto loaded = expected_loaded.value();
 
   std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
   LoadedPlatformInfoStorage() = std::move(loaded);

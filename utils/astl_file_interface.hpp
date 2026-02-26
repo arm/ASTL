@@ -30,7 +30,9 @@ inline auto ExpandFilePath(std::string const &file_path_str) -> std::expected<st
     std::filesystem::path path{expanded_path_str};
     return path;
   } catch (const std::exception &e) {
-    return std::unexpected<std::string>(std::format("Failed to parse file path '{}': {}", file_path_str, e.what()));
+    const auto *what = e.what() ? e.what() : "Unknown error";
+    /* coverity[uncaught-exception] */  // I _promise_ this is  a valid format expression
+    return std::unexpected<std::string>(std::format("Failed to parse file path '{}': {}", file_path_str, what));
   }
 }
 
