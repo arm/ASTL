@@ -177,7 +177,7 @@ set_target_properties(
   ${LIBRARY_NAME}
   PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}"
              DEBUG_POSTFIX "d"
-             OUTPUT_NAME "astl-${PROJECT_VERSION_MAJOR}")
+             OUTPUT_NAME "astl_static-${PROJECT_VERSION_MAJOR}")
 
 set_target_properties(
   ${LIBRARY_NAME}

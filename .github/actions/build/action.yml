@@ -3,7 +3,7 @@ description: 'Install dependencies, configure CMake, and build ASTL'
 
 inputs:
   os:
-    description: 'Operating system (ubuntu-latest, windows-latest, macos-15)'
+    description: 'Operating system (ubuntu, windows-latest, macos-15)'
     required: true
   cmake_preset:
     description: 'CMake preset (release, debug)'
@@ -23,12 +23,17 @@ runs:
       uses: SimenB/github-actions-cpu-cores@v2
       id: cpu-cores
 
-    - name: ⤵️ Install apt-get Dependencies (ubuntu-latest)
+    - name: ⤵️ Install apt-get Dependencies (ubuntu)
       if: contains(matrix.os, 'ubuntu')
       shell: bash
       run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential cmake gcovr valgrind parallel jq libsensors-dev ninja-build pkg-config
+        sudo apt-get -o DPkg::Lock::Timeout=300 update
+        sudo apt-get -o DPkg::Lock::Timeout=300 install -y build-essential clang-20 clang-format-20 clang-tidy-20 cmake cppcheck g++ gcc gcovr jq libclang-rt-20-dev libsensors-dev ninja-build parallel pkg-config python3 python3-pip valgrind yamllint
+        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-20 200
+        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 200
+        sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-20 200
+        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-20 200
+        sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-20 200
 
     - name: ⤵️ Install brew Dependencies (macos-15)
       if: inputs.os == 'macos-15'
@@ -52,6 +57,10 @@ runs:
       with:
         vcpkgDirectory: "${{ github.workspace }}/external/vcpkg"
         vcpkgJsonGlob: "**/vcpkg.json"
+
+    - name: ⤵️ Setup MSVC Environment (windows)
+      if: contains(inputs.os, 'windows')
+      uses: ilammy/msvc-dev-cmd@v1
 
     - name: ⚙️ CMake - Configure
       if: inputs.os != 'macos-15'

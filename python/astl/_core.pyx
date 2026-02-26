@@ -39,6 +39,15 @@ cdef class Target:
         return f"<Target name={self.name!r}>"
 
 cdef class Counter:
+    cdef public object name
+    cdef public object description
+    cdef public size_t _handle_ptr
+    cdef public object min_sampling_interval
+    cdef public unsigned int units
+    cdef public unsigned int value_type
+    cdef public unsigned int counter_type
+    cdef public object mask
+    cdef public object formula
     def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, counter_type: int, mask: int, formula: str):
         self.name = name
         self.description = description
@@ -53,6 +62,14 @@ cdef class Counter:
         return f"<Counter name={self.name!r} type={self.counter_type} units={self.units}>"
 
 cdef class Metric:
+    cdef public object name
+    cdef public object description
+    cdef public size_t _handle_ptr
+    cdef public object min_sampling_interval
+    cdef public unsigned int units
+    cdef public unsigned int value_type
+    cdef public unsigned int metric_type
+    cdef public unsigned int category
     def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, metric_type: int, category: int):
         self.name = name
         self.description = description
@@ -66,6 +83,10 @@ cdef class Metric:
         return f"<Metric name={self.name!r} type={self.metric_type} units={self.units} category={self.category}>"
 
 cdef class MetricGroup:
+    cdef public object name
+    cdef public object description
+    cdef public size_t _handle_ptr
+    cdef public object metric_count
     def __init__(self, name: str, description: str, handle_ptr: int, metric_count: int):
         self.name = name
         self.description = description
@@ -277,6 +298,7 @@ cdef void _fill_collection_params(CollectionParameters params, astl_collection_p
 
 cpdef configure_counters_on_target(Target target, params, list counters):
     cdef astl_collection_parameters_t p
+    cdef int rc_cc
     _fill_collection_params(params, &p)
     cdef size_t n = len(counters)
     if n == 0:
@@ -288,12 +310,15 @@ cpdef configure_counters_on_target(Target target, params, list counters):
     try:
         for i in range(n):
             handles[i] = <const void*>counters[i]._handle_ptr
-        _check(astlConfigureCounterCollectionOnTarget(<const void*>target._handle_ptr, &p, <const astl_counter_handle_t*>handles, n))
+        rc_cc = astlConfigureCounterCollectionOnTarget(<const void*>target._handle_ptr, &p, <const astl_counter_handle_t*>handles, n)
+        if rc_cc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET):
+            _check(rc_cc)
     finally:
         free(handles)
 
 cpdef configure_metrics_on_target(Target target, params, list metrics):
     cdef astl_collection_parameters_t p
+    cdef int rc_cm
     _fill_collection_params(params, &p)
     cdef size_t n = len(metrics)
     if n == 0:
@@ -305,12 +330,15 @@ cpdef configure_metrics_on_target(Target target, params, list metrics):
     try:
         for i in range(n):
             handles[i] = <void*>metrics[i]._handle_ptr
-        _check(astlConfigureMetricCollectionOnTarget(<const void*>target._handle_ptr, &p, <astl_metric_handle_t*>handles, n))
+        rc_cm = astlConfigureMetricCollectionOnTarget(<const void*>target._handle_ptr, &p, <astl_metric_handle_t*>handles, n)
+        if rc_cm not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET):
+            _check(rc_cm)
     finally:
         free(handles)
 
 cpdef configure_metric_groups_on_target(Target target, params, list groups):
     cdef astl_collection_parameters_t p
+    cdef int rc_cg
     _fill_collection_params(params, &p)
     cdef size_t n = len(groups)
     if n == 0:
@@ -322,7 +350,9 @@ cpdef configure_metric_groups_on_target(Target target, params, list groups):
     try:
         for i in range(n):
             handles[i] = <void*>groups[i]._handle_ptr
-        _check(astlConfigureMetricGroupCollectionOnTarget(<const void*>target._handle_ptr, &p, <astl_metric_group_handle_t*>handles, n))
+        rc_cg = astlConfigureMetricGroupCollectionOnTarget(<const void*>target._handle_ptr, &p, <astl_metric_group_handle_t*>handles, n)
+        if rc_cg not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET):
+            _check(rc_cg)
     finally:
         free(handles)
 
@@ -333,7 +363,7 @@ cpdef start_collection(Target target=None):
         rc = astlStartCollection()
     else:
         rc = astlStartCollectionOnTarget(<const void*>target._handle_ptr)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION):
+    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED):
         _check(rc)
 
 cpdef pause_collection(Target target=None):
@@ -342,7 +372,7 @@ cpdef pause_collection(Target target=None):
         rc = astlPauseCollection()
     else:
         rc = astlPauseCollectionOnTarget(<const void*>target._handle_ptr)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION):
+    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING):
         _check(rc)
 
 cpdef resume_collection(Target target=None):
@@ -351,7 +381,7 @@ cpdef resume_collection(Target target=None):
         rc = astlResumeCollection()
     else:
         rc = astlResumeCollectionOnTarget(<const void*>target._handle_ptr)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION):
+    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_PAUSED):
         _check(rc)
 
 cpdef stop_collection(Target target=None):
@@ -360,7 +390,7 @@ cpdef stop_collection(Target target=None):
         rc = astlStopCollection()
     else:
         rc = astlStopCollectionOnTarget(<const void*>target._handle_ptr)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION):
+    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING):
         _check(rc)
 
 cpdef save_collection(output_file_path=None):
@@ -416,8 +446,8 @@ cpdef read_immediate(Target target=None):
         rc = astlReadImmediate()
     else:
         rc = astlReadImmediateOnTarget(<const void*>target._handle_ptr)
-    # Treat NOT_IMPLEMENTED and BAD_CONFIGURATION as benign (mirrors lifecycle tolerance)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION):
+    # Treat NOT_IMPLEMENTED, BAD_CONFIGURATION, and COLLECTION_NOT_CONFIGURED as benign (mirrors lifecycle tolerance)
+    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED):
         _check(rc)
 
 # --- Sample retrieval ---

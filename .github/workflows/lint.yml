@@ -16,9 +16,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
-      fail-fast: true
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [self-hosted-ubuntu-24.04]
         cmake_preset: [debug]
 
     env:
@@ -34,13 +34,17 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
 
-      - name: ⤵️ Install Tools (ubuntu-latest)
-        if: matrix.os == 'ubuntu-latest'
+      - name: ⤵️ Install Tools (self-hosted-ubuntu-24.04)
+        if: contains(matrix.os, 'ubuntu')
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-20 cppcheck cmake yamllint libsensors-dev
+          sudo apt-get -o DPkg::Lock::Timeout=300 update
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-format-20 clang-tidy-20 cppcheck cmake ninja-build yamllint libsensors-dev parallel python3 python3-pip clang-format-20 clang-20 libclang-rt-20-dev pkg-config
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 200
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-20 200
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-20 200
-          python3 -m pip install --upgrade --user cmakelang
+          sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-20 200
+          python3 -m pip install --upgrade --break-system-packages --user cmakelang
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       # Restore per-package vcpkg cache
       - name: ⤵️ VCPKG - Restore Cache
@@ -65,7 +69,7 @@ jobs:
           VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
         run: >
           cmake
-          -DCMAKE_CXX_COMPILER=clang
+          -DCMAKE_CXX_COMPILER=clang++
           -DCMAKE_C_COMPILER=clang
           -DENABLE_VALGRIND=OFF
           -S ${{ github.workspace }}
@@ -75,7 +79,7 @@ jobs:
         run: cmake --build --preset ${{ matrix.cmake_preset }} --target proto_gen
 
       - name: 🧹 YAML Lint
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'self-hosted-ubuntu-24.04'
         run: yamllint ${{ github.workspace }}/.github/workflows/*.yaml
 
       - name: 🧹 Check Formatting

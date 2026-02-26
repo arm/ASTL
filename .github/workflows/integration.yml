@@ -16,19 +16,18 @@ permissions:
   contents: read
   checks: write
 
-concurrency:
-  # The concurrency group is created using the workflow name and the PR number
-  # It ensures that only previous runs for the same PR are cancelled
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
+    concurrency:
+      # Unique per workflow + PR/ref + matrix combination so only the matching
+      # in-progress job is cancelled, not all matrix jobs simultaneously.
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.os }}-${{ matrix.cmake_preset }}-${{ matrix.cpp_compiler }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
     strategy:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
-      fail-fast: true
+      fail-fast: false
 
       # Set up a matrix to run the following configurations:
       # - <Windows, Release, latest MSVC compiler toolchain on the default runner image, default generator>
@@ -36,24 +35,24 @@ jobs:
       # - <Linux,   Debug,   latest Clang compiler toolchain on the default runner image, default generator>
       # - <MacOs,   Release, latest Clang compiler toolchain on the default runner image, default generator>
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-15]
+        os: [self-hosted-ubuntu-24.04-arm64, windows-latest, macos-15]
         cmake_preset: [release, debug]
         cpp_compiler: [g++, clang++, cl]
         include:
           - os: windows-latest
             c_compiler: cl
             cpp_compiler: cl
-          - os: ubuntu-latest
+          - os: self-hosted-ubuntu-24.04-arm64
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-latest
+          - os: self-hosted-ubuntu-24.04-arm64
             c_compiler: clang
             cpp_compiler: clang++
           - os: macos-15
             c_compiler: clang
             cpp_compiler: clang++
         exclude:
-          - os: ubuntu-latest
+          - os: self-hosted-ubuntu-24.04-arm64
             cmake_preset: release
           - os: windows-latest
             cmake_preset: debug
@@ -61,7 +60,7 @@ jobs:
             cpp_compiler: g++
           - os: windows-latest
             cpp_compiler: clang++
-          - os: ubuntu-latest
+          - os: self-hosted-ubuntu-24.04-arm64
             cpp_compiler: cl
           - os: macos-15
             cpp_compiler: cl
@@ -90,8 +89,8 @@ jobs:
           cpp_compiler: ${{ matrix.cpp_compiler }}
 
       # ===== TEST STEPS =====
-      - name: 🧪 CMake - Run Unit Tests and Generate Code Coverage (ubuntu-latest)
-        if: matrix.os == 'ubuntu-latest'
+      - name: 🧪 CMake - Run Unit Tests and Generate Code Coverage
+        if: contains(matrix.os, 'ubuntu')
         # Execute tests defined by the CMake configuration.
         # Note that --preset is needed because the default Windows generator
         # is a multi-config generator (Visual Studio generator).
@@ -121,16 +120,16 @@ jobs:
           CMAKE_PRESET: ${{  matrix.cmake_preset }}
 
       - name: 📊 Code Coverage - Merge Coverage from Parallel Runs
-        if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
         run: ${{ github.workspace }}/scripts/merge_coverage.sh ${{ github.workspace }}/build
 
       - name: 📊 Code Coverage - Generate Report with gcovr
-        if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
         run: ${{ github.workspace }}/scripts/create_coverage_report.sh --xml
 
       - name: ⤴️ Code Coverage - Publish to Qlty
         # project overview: https://qlty.sh/gh/Arm-Debug/projects/ASTL
-        if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
         uses: qltysh/qlty-action/coverage@v2
         with:
           token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
@@ -146,7 +145,7 @@ jobs:
         run: ctest -L "integration" --preset ${{ matrix.cmake_preset }}
 
       - name: 📽️ Run Demo with MockSysFs
-        if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
         run: |
           set -o pipefail
           EXPECTED_STRING="astlGetMetricSamplesOnTarget Status: SUCCESS"

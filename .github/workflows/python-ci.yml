@@ -17,7 +17,7 @@ on:
 jobs:
   build-native:
     # Single native C++ build reused by all Python matrix jobs.
-    runs-on: ubuntu-latest
+    runs-on: self-hosted-ubuntu-24.04-arm64
     # Minimal permissions; only needs read access.
     steps:
       - name: Checkout
@@ -25,11 +25,13 @@ jobs:
 
       - name: Install build tooling
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y just
+          sudo apt-get -o DPkg::Lock::Timeout=300 update -y
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y build-essential cmake cppcheck just libsensors-dev ninja-build pkg-config python3 python3-pip
 
       - name: Configure & build (debug preset)
         run: |
+          # Remove stale Cython artifacts from previous runs on this persistent runner
+          rm -f python/astl/_core.cpython-*.so python/astl/_core.cpp
           # Configure and build once. This produces build/debug/lib/libastl-<MAJOR>d.so
           just config debug
           just build debug
@@ -47,9 +49,9 @@ jobs:
 
   build-test:
     needs: build-native
-    runs-on: ubuntu-latest
+    runs-on: self-hosted-ubuntu-24.04-arm64
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
@@ -90,8 +92,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          sudo apt-get update -y
-          sudo apt-get install -y just
+          sudo apt-get -o DPkg::Lock::Timeout=300 update -y
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y just
           just python-reuse-tests
         env:
           ASTL_DISABLE_NATIVE_FALLBACK: "1"
@@ -103,7 +105,7 @@ jobs:
     needs: [build-native, build-test]
     # Run only for scheduled (cron) executions and when upstream succeeded
     if: github.event_name == 'schedule' && !cancelled() && needs.build-test.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted-ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v7
@@ -117,8 +119,8 @@ jobs:
       - name: Install build tooling
         run: |
           python -m pip install --upgrade pip
-          sudo apt-get update -y
-          sudo apt-get install -y just
+          sudo apt-get -o DPkg::Lock::Timeout=300 update -y
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y just
       - name: Build sdist & wheel
         run: |
           set -euo pipefail
@@ -143,7 +145,7 @@ jobs:
             benchmark_output.log
 
   python-full-cycle:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted-ubuntu-24.04
     needs: build-test
     # Restrict to scheduled (cron) runs only when build-test succeeded
     if: github.event_name == 'schedule' && !cancelled() && needs.build-test.result == 'success'
@@ -158,8 +160,8 @@ jobs:
 
       - name: Install just
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y just
+          sudo apt-get -o DPkg::Lock::Timeout=300 update -y
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y just
 
       - name: Run python-full-cycle recipe
         run: |
