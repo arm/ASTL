@@ -112,7 +112,12 @@ auto SaveStringPoolToCacheDir(const std::filesystem::path& cache_dir_path) -> as
   std::sort(snapshot.begin(), snapshot.end());
 
   nlohmann::json payload;
-  payload["strings"] = snapshot;
+  try {
+    payload["strings"] = snapshot;
+  } catch (const nlohmann::json::exception& e) {
+    ASTL_LOG_ERROR("SaveStringPoolToCacheDir: failed serializing string pool to JSON: {}", e.what());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
 
   const auto    output_file = cache_dir_path / kStringPoolName;
   std::ofstream stream(output_file, std::ios::binary | std::ios::out | std::ios::trunc);
@@ -145,21 +150,19 @@ auto LoadStringPoolFromCacheDir(const std::filesystem::path& cache_dir_path) -> 
   nlohmann::json payload;
   try {
     stream >> payload;
+    if (!payload.contains("strings") || !payload["strings"].is_array()) {
+      ASTL_LOG_ERROR("LoadStringPoolFromCacheDir: 'strings' array missing in '{}'", input_file.string());
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+    for (const auto& value : payload["strings"]) {
+      if (!value.is_string()) {
+        continue;
+      }
+      (void)GetInternedString(value.get<std::string>());
+    }
   } catch (const std::exception& e) {
     ASTL_LOG_ERROR("LoadStringPoolFromCacheDir: invalid payload in '{}': {}", input_file.string(), e.what());
     return ASTL_STATUS_INTERNAL_ERROR;
-  }
-
-  if (!payload.contains("strings") || !payload["strings"].is_array()) {
-    ASTL_LOG_ERROR("LoadStringPoolFromCacheDir: 'strings' array missing in '{}'", input_file.string());
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-
-  for (const auto& value : payload["strings"]) {
-    if (!value.is_string()) {
-      continue;
-    }
-    (void)GetInternedString(value.get<std::string>());
   }
 
   return ASTL_STATUS_SUCCESS;

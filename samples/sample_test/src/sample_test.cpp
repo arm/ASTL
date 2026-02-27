@@ -4,6 +4,7 @@
 #include <cstring>
 #include <expected>
 #include <format>
+#include <iomanip>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -487,11 +488,14 @@ auto PrintMinMaxAvgSummary(astl_target_handle_t                         target_h
       std::cout << "  " << metric_name << ": no samples collected\n";
       continue;
     }
-    const std::string unit = UnitsToString(metric_props._units);
-    std::cout << "  " << metric_name << " count=" << summary._count
-              << " min=" << ValueToString(summary._min, metric_props._value_type)
-              << " max=" << ValueToString(summary._max, metric_props._value_type)
-              << " avg=" << std::format("{:.2f}", summary._avg.fp64) << (unit.empty() ? "" : " unit=" + unit) << '\n';
+    const std::string  unit = UnitsToString(metric_props._units);
+    std::ostringstream avg_ss;
+    avg_ss << std::fixed << std::setprecision(2);
+    avg_ss << "  " << metric_name << " count=" << summary._count
+           << " min=" << ValueToString(summary._min, metric_props._value_type)
+           << " max=" << ValueToString(summary._max, metric_props._value_type) << " avg=" << summary._avg.fp64
+           << (unit.empty() ? "" : " unit=" + unit) << '\n';
+    std::cout << avg_ss.str();
   }
 }
 

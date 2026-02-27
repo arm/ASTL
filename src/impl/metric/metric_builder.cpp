@@ -360,6 +360,10 @@ auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, co
                         std::optional<std::filesystem::path> cache_dir_path)
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
   if (configuration.load_file_path.has_value()) {
+    if (!cache_dir_path.has_value()) {
+      ASTL_LOG_ERROR("Cache directory path must be provided when load_file_path is specified in configuration");
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
     return BuildMetricManagerFromASTLFile(targets, cache_dir_path.value());
   }
 

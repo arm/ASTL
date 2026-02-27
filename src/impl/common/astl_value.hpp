@@ -47,6 +47,9 @@ struct AstlValue {
   explicit AstlValue(bool val);
 
   auto IsArithmetic() const -> bool {
+    if (value.valueless_by_exception()) {
+      return false;
+    }
     return std::visit(
         [](auto&& arg) -> bool {
           using T = std::decay_t<decltype(arg)>;

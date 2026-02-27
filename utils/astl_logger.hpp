@@ -570,7 +570,7 @@ class Logger {
       spdlog::register_logger(_logger);
     } catch (const spdlog::spdlog_ex& ex) {
       const auto* what = ex.what() ? ex.what() : "unknown spdlog error";
-      // coverity[uncaugtht_exception] - this is a valid std::format format string.
+      // coverity[uncaught_exception:FALSE] - this is a valid std::format format string.
       spdlog_initialization_errors.push_back(
           std::format("Logger initialization failed: could not register logger with spdlog: {}", what));
     }
