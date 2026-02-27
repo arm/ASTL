@@ -324,3 +324,36 @@ TEST_CASE("astl::to_string(AstlValue)", "[AstlValue]") {
   val = astl::AstlValue{3.14};
   REQUIRE(astl::to_string(val) == "3.14");
 }
+
+TEST_CASE("AstlValue mixed-variant equality and ordering", "[AstlValue][comparison]") {
+  SECTION("Equality across different integral variants is numeric") {
+    REQUIRE(astl::AstlValue{uint8_t{42}} == astl::AstlValue{uint16_t{42}});
+    REQUIRE(astl::AstlValue{bool{true}} == astl::AstlValue{uint8_t{1}});
+    REQUIRE(astl::AstlValue{bool{false}} == astl::AstlValue{uint8_t{0}});
+  }
+
+  SECTION("Equality across float and double variants is numeric") {
+    REQUIRE(astl::AstlValue{float{3.5F}} == astl::AstlValue{double{3.5}});
+  }
+
+  SECTION("Integral-vs-floating equality is always false") {
+    REQUIRE_FALSE(astl::AstlValue{uint8_t{7}} == astl::AstlValue{float{7.0F}});
+    REQUIRE_FALSE(astl::AstlValue{uint64_t{1}} == astl::AstlValue{double{1.0}});
+  }
+
+  SECTION("Ordering across integral variants is numeric") {
+    REQUIRE(astl::AstlValue{uint8_t{4}} < astl::AstlValue{uint16_t{5}});
+    REQUIRE(astl::AstlValue{uint64_t{9}} > astl::AstlValue{uint8_t{8}});
+  }
+
+  SECTION("Ordering across floating variants is numeric") {
+    REQUIRE(astl::AstlValue{float{1.25F}} < astl::AstlValue{double{1.5}});
+    REQUIRE(astl::AstlValue{double{2.0}} > astl::AstlValue{float{1.99F}});
+  }
+
+  SECTION("Mixed integral/floating ordering is deterministic") {
+    REQUIRE(astl::AstlValue{uint8_t{5}} < astl::AstlValue{float{5.0F}});
+    REQUIRE(astl::AstlValue{double{0.0}} > astl::AstlValue{uint64_t{999}});
+    REQUIRE(astl::AstlValue{uint64_t{999}} < astl::AstlValue{double{0.0}});
+  }
+}

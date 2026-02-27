@@ -18,6 +18,7 @@
 
 #include "common/astl_value.hpp"
 
+#include <compare>
 #include <cstdint>
 #include <expected>
 #include <format>
@@ -36,6 +37,70 @@ AstlValue::AstlValue(uint64_t val) : value{val} {}
 AstlValue::AstlValue(float val) : value{val} {}
 AstlValue::AstlValue(double val) : value{val} {}
 AstlValue::AstlValue(bool val) : value{val} {}
+
+auto AstlValue::operator==(const AstlValue& other) const -> bool {
+  // first, handle cases where one or both variants are valueless_by_exception
+  if (value.valueless_by_exception() && other.value.valueless_by_exception()) {
+    return true;
+  }
+  if (value.valueless_by_exception() || other.value.valueless_by_exception()) {
+    return false;
+  }
+
+  const auto is_equal = [](const auto& lhs, const auto& rhs) -> bool {
+    using L = std::decay_t<decltype(lhs)>;
+    using R = std::decay_t<decltype(rhs)>;
+
+    constexpr bool lhs_is_floating = std::is_floating_point_v<L>;
+    constexpr bool rhs_is_floating = std::is_floating_point_v<R>;
+
+    // Policy: integral-vs-floating comparisons are never equal.
+    if constexpr (lhs_is_floating != rhs_is_floating) {
+      return false;
+    }
+
+    if constexpr (lhs_is_floating && rhs_is_floating) {
+      return static_cast<long double>(lhs) == static_cast<long double>(rhs);
+    }
+
+    // Integral family (including bool): compare numerically.
+    return static_cast<uint64_t>(lhs) == static_cast<uint64_t>(rhs);
+  };
+  return std::visit(is_equal, value, other.value);
+}
+
+auto AstlValue::operator<=>(const AstlValue& other) const -> std::partial_ordering {
+  // first, handle valueless-by-exception edge cases
+  if (value.valueless_by_exception() && other.value.valueless_by_exception()) {
+    return std::partial_ordering::equivalent;
+  }
+  if (value.valueless_by_exception()) {
+    return std::partial_ordering::less;
+  }
+  if (other.value.valueless_by_exception()) {
+    return std::partial_ordering::greater;
+  }
+
+  const auto spaceship = [](const auto& lhs, const auto& rhs) -> std::partial_ordering {
+    using L = std::decay_t<decltype(lhs)>;
+    using R = std::decay_t<decltype(rhs)>;
+
+    constexpr bool lhs_is_floating = std::is_floating_point_v<L>;
+    constexpr bool rhs_is_floating = std::is_floating_point_v<R>;
+
+    // Policy: impose deterministic category ordering for mixed integral/floating comparisons.
+    if constexpr (lhs_is_floating != rhs_is_floating) {
+      return lhs_is_floating ? std::partial_ordering::greater : std::partial_ordering::less;
+    }
+
+    if constexpr (lhs_is_floating && rhs_is_floating) {
+      return static_cast<long double>(lhs) <=> static_cast<long double>(rhs);
+    }
+    // Integral family (including bool): compare numerically.
+    return static_cast<uint64_t>(lhs) <=> static_cast<uint64_t>(rhs);
+  };
+  return std::visit(spaceship, value, other.value);
+}
 
 /**
  * @brief convert a C-style astl_value_t to a AstlValue according to the specified astl_value_type_t

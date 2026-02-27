@@ -19,6 +19,7 @@
 #ifndef ASTL_VALUE_HPP_
 #define ASTL_VALUE_HPP_
 
+#include <compare>
 #include <cstdint>
 #include <expected>
 #include <format>
@@ -241,7 +242,9 @@ struct AstlValue {
    */
   auto ToAstlUnionValue() const -> std::pair<astl_value_t, astl_value_type_t>;
 
-  auto operator<=>(AstlValue const&) const = default;
+  auto operator==(const AstlValue& other) const -> bool;
+
+  auto operator<=>(const AstlValue& other) const -> std::partial_ordering;
 };
 
 /**
