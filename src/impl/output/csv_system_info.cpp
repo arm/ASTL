@@ -5,6 +5,7 @@
 
 #include "csv_system_info.hpp"
 
+#include <ostream>
 #include <string>
 #include <string_view>
 

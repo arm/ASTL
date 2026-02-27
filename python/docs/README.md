@@ -50,7 +50,7 @@ Samples:
 
 - `get_counter_samples(target, counter) -> list[(timestamp, value)]`
 - `get_metric_samples(target, metric) -> list[(timestamp, value)]`
-- `get_metric_statistics(target, metric) -> MetricStatistics`
+- `get_metric_statistics_on_target(target, metric) -> MetricStatistics`
 
   Returns a `MetricStatistics` dataclass with fields `min`, `max`, `avg`, `count`
   (all Python `float`). Raises `NotSupportedError` for non-arithmetic metric types.
@@ -58,6 +58,14 @@ Samples:
   > **Note:** The underlying C API always stores the average as a `double` (`fp64`)
   > regardless of the metric's value type (including integer metrics). The Python
   > wrapper reads `_avg.fp64` unconditionally and exposes it as a `float`.
+
+- `get_metric_discrete_histogram_on_target(target, metric) -> list[DiscreteHistogramBin]`
+
+  Returns one `DiscreteHistogramBin` per unique sampled value. Each bin exposes
+  `value` (native metric type) and `count` (number of samples with that exact
+  value). Returns an empty list when no samples were collected. Raises
+  `NotSupportedError` for metric or value types not supported by the summarizer (e.g.
+  `fp64`).
 
 Entity object attributes (read-only):
 

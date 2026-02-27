@@ -1,4 +1,5 @@
-"""Tests for astl.get_metric_statistics / MetricStatistics."""
+"""Tests for astl.get_metric_statistics_on_target / MetricStatistics and
+astl.get_metric_discrete_histogram_on_target / DiscreteHistogramBin."""
 import pytest
 
 import astl
@@ -9,8 +10,8 @@ import astl
 # ---------------------------------------------------------------------------
 
 def test_metric_statistics_exported():
-    """MetricStatistics and get_metric_statistics must be importable from astl."""
-    assert hasattr(astl, "get_metric_statistics")
+    """MetricStatistics and get_metric_statistics_on_target must be importable from astl."""
+    assert hasattr(astl, "get_metric_statistics_on_target")
     assert hasattr(astl, "MetricStatistics")
 
 
@@ -46,8 +47,8 @@ def test_metric_statistics_repr():
 # Integration test (skipped when no live targets are available)
 # ---------------------------------------------------------------------------
 
-def test_get_metric_statistics_live():
-    """End-to-end: collect samples then call get_metric_statistics.
+def test_get_metric_statistics_on_target_live():
+    """End-to-end: collect samples then call get_metric_statistics_on_target.
 
     Skipped when no targets / arithmetic metrics are available (CI without
     hardware) or the metric type is not supported by the summarizer.
@@ -79,7 +80,7 @@ def test_get_metric_statistics_live():
     astl.read_immediate(target)
     astl.stop_collection(target)
 
-    summary = astl.get_metric_statistics(target, metric)
+    summary = astl.get_metric_statistics_on_target(target, metric)
 
     assert isinstance(summary, astl.MetricStatistics)
     assert isinstance(summary.count, int)
@@ -92,3 +93,58 @@ def test_get_metric_statistics_live():
         # min <= avg <= max (numerically)
         assert float(summary.min) <= float(summary.avg) + 1e-9
         assert float(summary.avg) <= float(summary.max) + 1e-9
+
+
+# ---------------------------------------------------------------------------
+# Discrete histogram
+# ---------------------------------------------------------------------------
+
+def test_get_metric_discrete_histogram_on_target_live():
+    """End-to-end: collect samples then call get_metric_discrete_histogram_on_target.
+
+    Skipped when no targets / discrete-friendly metrics are available (CI
+    without hardware) or the metric type is not supported by the summarizer.
+    """
+    targets = astl.get_targets()
+    if not targets:
+        pytest.skip("No targets available")
+
+    target = targets[0]
+    metrics = astl.get_metrics(target)
+
+    integer_types = {
+        astl.ValueType.UINT8,
+        astl.ValueType.UINT16,
+        astl.ValueType.UINT32,
+        astl.ValueType.UINT64,
+    }
+    candidates = [m for m in metrics if m.value_type in integer_types]
+    if not candidates:
+        pytest.skip("No integer metrics available on first target")
+
+    metric = candidates[0]
+    params = astl.CollectionParameters(sampling_interval=0, mode=astl.CollectionMode.IMMEDIATE)
+    astl.configure_metrics_on_target(target, params, [metric])
+    astl.start_collection(target)
+    astl.read_immediate(target)
+    astl.stop_collection(target)
+
+    try:
+        bins = astl.get_metric_discrete_histogram_on_target(target, metric)
+    except astl.NotSupportedError:
+        pytest.skip(f"Metric type {metric.value_type} not supported by discrete histogram summarizer")
+
+    assert isinstance(bins, list)
+    for b in bins:
+        assert isinstance(b, astl.DiscreteHistogramBin)
+        assert isinstance(b.count, int)
+        assert b.count > 0
+        assert b.value is not None
+
+    # Each unique value should appear exactly once across all bins
+    values = [b.value for b in bins]
+    assert len(values) == len(set(values)), "Histogram bins must have unique values"
+
+    # Total sample count across bins must be >= number of bins
+    total_samples = sum(b.count for b in bins)
+    assert total_samples >= len(bins)

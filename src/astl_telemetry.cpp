@@ -1519,22 +1519,22 @@ auto astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metri
  **********************          METRIC SUMMARY API         ************************
  **********************************************************************************/
 
-auto astlGetMetricStatistics(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                             astl_metric_statistics_t* summary) noexcept -> astl_status_code {
+auto astlGetMetricStatisticsOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
+                                     astl_metric_statistics_t* summary) noexcept -> astl_status_code {
   if (!target_handle || !metric_handle || !summary) {
-    ASTL_LOG_ERROR("astlGetMetricStatistics: Invalid argument(s)");
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Invalid argument(s)");
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
   // Validate flags - must be 0 (reserved for future use)
   if (summary->_flags != 0) {
-    ASTL_LOG_ERROR("astlGetMetricStatistics: Invalid flags value: {} (must be 0)", summary->_flags);
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Invalid flags value: {} (must be 0)", summary->_flags);
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
   // Validate struct size for versioning
   if (summary->_size != sizeof(astl_metric_statistics_t)) {
-    ASTL_LOG_ERROR("astlGetMetricStatistics: Invalid summary struct size: {} (expected {})", summary->_size,
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Invalid summary struct size: {} (expected {})", summary->_size,
                    sizeof(astl_metric_statistics_t));
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
@@ -1573,26 +1573,26 @@ auto astlGetMetricStatistics(astl_target_handle_t target_handle, astl_metric_han
   metric_properties._size = sizeof(astl_metric_properties_t);
   auto props_status       = metric->GetProperties(&metric_properties);
   if (props_status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("astlGetMetricStatistics: Failed to get metric properties");
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Failed to get metric properties");
     return props_status;
   }
 
   if (!summarizer.IsSupported(metric_properties._value_type, metric_properties._metric_type)) {
-    ASTL_LOG_ERROR("astlGetMetricStatistics: Metric type not supported by MinMaxAvgSummarizer");
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Metric type not supported by MinMaxAvgSummarizer");
     return ASTL_STATUS_NOT_SUPPORTED;
   }
 
   // Compute the summary
   auto summary_result = summarizer.Summarize(samples);
   if (!summary_result) {
-    ASTL_LOG_ERROR("astlGetMetricStatistics: Failed to compute summary");
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Failed to compute summary");
     return summary_result.error();
   }
 
   // Extract the MinMaxAvgSummary from the variant
   auto* min_max_avg_summary = std::get_if<astl::MinMaxAvgSummary>(&(*summary_result));
   if (!min_max_avg_summary) {
-    ASTL_LOG_ERROR("astlGetMetricStatistics: Unexpected summary type returned");
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Unexpected summary type returned");
     return ASTL_STATUS_INTERNAL_ERROR;
   }
 
@@ -1614,5 +1614,137 @@ auto astlGetMetricStatistics(astl_target_handle_t target_handle, astl_metric_han
     summary->_avg = min_max_avg_summary->avg->ToAstlUnionValue().first;
   }
 
+  return ASTL_STATUS_SUCCESS;
+}
+
+namespace {
+
+/**
+ * @brief Shared helper: run the HistogramSummarizer (discrete mode) for the given
+ *        target/metric and return the HistogramSummary, or an error status.
+ */
+auto ComputeDiscreteHistogram(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle)
+    -> std::expected<astl::HistogramSummary, astl_status_code> {
+  auto get_target_result = GetTargetFromHandle(target_handle);
+  if (!get_target_result) {
+    return std::unexpected(get_target_result.error());
+  }
+  const auto* target = *get_target_result;
+
+  auto get_metric_result = GetMetricFromHandle(metric_handle, target_handle);
+  if (!get_metric_result) {
+    return std::unexpected(get_metric_result.error());
+  }
+  const auto* metric = *get_metric_result;
+
+  // Check supported metric/value type
+  astl_metric_properties_t metric_properties{};
+  metric_properties._size = sizeof(astl_metric_properties_t);
+  auto props_status       = metric->GetProperties(&metric_properties);
+  if (props_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("ComputeDiscreteHistogram: Failed to get metric properties");
+    return std::unexpected(props_status);
+  }
+
+  astl::HistogramSummarizer summarizer;  // default constructor = discrete mode
+  if (!summarizer.IsSupported(metric_properties._value_type, metric_properties._metric_type)) {
+    ASTL_LOG_ERROR("ComputeDiscreteHistogram: Metric type not supported by HistogramSummarizer");
+    return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+  }
+
+  auto samples_result = GetProcessedMetricSamples(metric, target);
+  if (!samples_result) {
+    return std::unexpected(samples_result.error());
+  }
+
+  auto summary_result = summarizer.Summarize(*samples_result);
+  if (!summary_result) {
+    ASTL_LOG_ERROR("ComputeDiscreteHistogram: Failed to compute histogram");
+    return std::unexpected(summary_result.error());
+  }
+
+  auto* histogram = std::get_if<astl::HistogramSummary>(&(*summary_result));
+  if (!histogram) {
+    ASTL_LOG_ERROR("ComputeDiscreteHistogram: Unexpected summary type returned");
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+  }
+
+  return std::move(*histogram);
+}
+
+}  // namespace
+
+auto astlGetMetricDiscreteHistogramBinCountOnTarget(astl_target_handle_t target_handle,
+                                                    astl_metric_handle_t metric_handle, uint32_t* bin_count) noexcept
+    -> astl_status_code {
+  if (!target_handle || !metric_handle || !bin_count) {
+    ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramBinCountOnTarget: Invalid argument(s)");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  auto histogram_result = ComputeDiscreteHistogram(target_handle, metric_handle);
+  if (!histogram_result) {
+    return histogram_result.error();
+  }
+
+  if (histogram_result->bins.size() > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramBinCountOnTarget: bin count exceeds uint32_t max: {}",
+                   histogram_result->bins.size());
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  *bin_count = static_cast<uint32_t>(histogram_result->bins.size());
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto astlGetMetricDiscreteHistogramOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
+                                            astl_discrete_histogram_bin_t* bins, uint32_t* bin_count) noexcept
+    -> astl_status_code {
+  if (!target_handle || !metric_handle || !bins || !bin_count) {
+    ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramOnTarget: Invalid argument(s)");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  if (*bin_count == 0) {
+    ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramOnTarget: bin_count must be > 0");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  std::span<astl_discrete_histogram_bin_t> bins_span{bins, *bin_count};
+
+  // Validate struct size via the first element
+  if (bins_span[0]._size != sizeof(astl_discrete_histogram_bin_t)) {
+    ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramOnTarget: Invalid bin struct size: {} (expected {})",
+                   bins_span[0]._size, sizeof(astl_discrete_histogram_bin_t));
+    return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
+  }
+
+  auto histogram_result = ComputeDiscreteHistogram(target_handle, metric_handle);
+  if (!histogram_result) {
+    return histogram_result.error();
+  }
+
+  const auto& internal_bins = histogram_result->bins;
+  if (internal_bins.size() > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramOnTarget: bin count exceeds uint32_t max: {}", internal_bins.size());
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  uint32_t required_count = static_cast<uint32_t>(internal_bins.size());
+
+  if (*bin_count < required_count) {
+    ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramOnTarget: bin array too small (capacity={}, required={})", *bin_count,
+                   required_count);
+    *bin_count = required_count;
+    return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
+  }
+
+  // Fill the caller's array
+  for (uint32_t i = 0; i < required_count; ++i) {
+    bins_span[i]._size  = sizeof(astl_discrete_histogram_bin_t);
+    bins_span[i]._value = internal_bins[i].value.ToAstlUnionValue().first;
+    bins_span[i]._count = static_cast<uint64_t>(internal_bins[i].count);
+  }
+
+  *bin_count = required_count;
   return ASTL_STATUS_SUCCESS;
 }

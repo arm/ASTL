@@ -472,14 +472,15 @@ auto PrintMinMaxAvgSummary(astl_target_handle_t                         target_h
     }
     astl_metric_statistics_t summary{};
     summary._size           = sizeof(astl_metric_statistics_t);
-    auto        status      = astlGetMetricStatistics(target_handle, metric_props._handle, &summary);
+    auto        status      = astlGetMetricStatisticsOnTarget(target_handle, metric_props._handle, &summary);
     const char* metric_name = metric_props._name ? metric_props._name : "<null>";
     if (status == ASTL_STATUS_NOT_SUPPORTED) {
       std::cout << "  " << metric_name << ": summary not supported for this value type\n";
       continue;
     }
     if (status != ASTL_STATUS_SUCCESS) {
-      std::cout << "  " << metric_name << ": astlGetMetricStatistics Status: " << astlStatusString(status) << '\n';
+      std::cout << "  " << metric_name << ": astlGetMetricStatisticsOnTarget Status: " << astlStatusString(status)
+                << '\n';
       continue;
     }
     if (summary._count == 0) {

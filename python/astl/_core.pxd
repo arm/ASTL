@@ -317,4 +317,14 @@ cdef extern from "astl/astl_telemetry.h":
         uint32_t _flags
     ctypedef _astl_metric_statistics_t astl_metric_statistics_t
 
-    int astlGetMetricStatistics(const void* target_handle, const void* metric_handle, astl_metric_statistics_t* summary)
+    int astlGetMetricStatisticsOnTarget(const void* target_handle, const void* metric_handle, astl_metric_statistics_t* summary)
+
+    # discrete histogram
+    cdef struct _astl_discrete_histogram_bin_t:
+        size_t _size
+        astl_value_t _value
+        uint64_t _count
+    ctypedef _astl_discrete_histogram_bin_t astl_discrete_histogram_bin_t
+
+    int astlGetMetricDiscreteHistogramBinCountOnTarget(const void* target_handle, const void* metric_handle, uint32_t* bin_count)
+    int astlGetMetricDiscreteHistogramOnTarget(const void* target_handle, const void* metric_handle, astl_discrete_histogram_bin_t* bins, uint32_t* bin_count)

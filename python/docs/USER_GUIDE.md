@@ -11,7 +11,8 @@
 | Core Binding    | `astl._core`       | Thin Cython bridge to C API              | `get_targets`, `get_counters`,                        |
 |                 |                    |                                          | `get_metrics`, `get_metric_groups`, `read_immediate`, |
 |                 |                    |                                          | `get_counter_samples`, `get_metric_samples`,          |
-|                 |                    |                                          | `get_metric_statistics`                               |
+|                 |                    |                                          | `get_metric_statistics_on_target`,                    |
+|                 |                    |                                          | `get_metric_discrete_histogram_on_target`             |
 | Public Facade   | `astl`             | Re-exports curated API surface           | `start_collection`, `pause_collection`,               |
 |                 |                    |                                          | `resume_collection`, `stop_collection`, enums         |
 | Session SerDes  | `astl`             | Save/load `.astl` sessions via C API     | `save_collection`, `load_collection`                  |
@@ -210,7 +211,7 @@ print(res_m.samples)
 
 ## Metric Summary API
 
-After stopping collection, call `get_metric_statistics` to retrieve the minimum, maximum,
+After stopping collection, call `get_metric_statistics_on_target` to retrieve the minimum, maximum,
 average, and sample count for any arithmetic metric without iterating raw sample lists.
 
 ```python
@@ -221,7 +222,7 @@ m = astl.get_metrics(t)[0]       # must be an arithmetic type (int or float)
 
 # ... configure, start, read, stop ...
 
-summary = astl.get_metric_statistics(t, m)
+summary = astl.get_metric_statistics_on_target(t, m)
 if summary.count > 0:
     print(f"count={summary.count}  min={summary.min}  max={summary.max}  avg={summary.avg:.2f}")
 else:
@@ -243,12 +244,58 @@ else:
 > `min` and `max` are also surfaced as `float` for convenience; the underlying C union
 > members match the metric's native value type.
 
-### Error Handling
+### Metric Statistics Error Handling
 
 | Condition                                     | Exception                                 |
 | --------------------------------------------- | ----------------------------------------- |
 | Non-arithmetic metric type (e.g. string/bool) | `NotSupportedError`                       |
 | Invalid target or metric handle               | `BadArgumentError` / `InvalidHandleError` |
+
+---
+
+## Discrete Histogram API
+
+For metrics that take a finite set of discrete values (e.g. frequency steps,
+residency states), `get_metric_discrete_histogram_on_target` is more informative than a
+min/max/avg summary: it returns the exact distribution of observed values.
+
+```python
+import astl
+
+t = astl.get_targets()[0]
+m = astl.get_metrics(t)[0]   # must be a supported metric type
+
+# ... configure, start, read, stop ...
+
+try:
+    bins = astl.get_metric_discrete_histogram_on_target(t, m)
+except astl.NotSupportedError:
+    print("Discrete histogram not supported for this metric type")
+else:
+    for b in bins:
+        print(f"  value={b.value}  count={b.count}")
+```
+
+### Two-step C API
+
+Internally the function calls `astlGetMetricDiscreteHistogramBinCountOnTarget` to
+allocate an exact-sized array, then `astlGetMetricDiscreteHistogramOnTarget` to fill
+it. The Python wrapper hides this detail completely.
+
+### `DiscreteHistogramBin` Attributes
+
+| Attribute | Type  | Notes                                                            |
+| --------- | ----- | ---------------------------------------------------------------- |
+| `value`   | `Any` | The exact sampled value; type matches the metric's `value_type`. |
+| `count`   | `int` | Number of samples whose value equals `value`. Always `>= 1`.     |
+
+### Discrete Histogram Error Handling
+
+| Condition                             | Exception           |
+| ------------------------------------- | ------------------- |
+| Unsupported metric type (e.g. `fp64`) | `NotSupportedError` |
+| Invalid target or metric handle       | `BadArgumentError`  |
+| Bin buffer too small (internal)       | `ASTLError`         |
 
 ---
 

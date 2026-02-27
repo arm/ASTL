@@ -1054,10 +1054,77 @@ typedef struct _astl_metric_statistics_t {
  *                                         equal sizeof(astl_metric_statistics_t).
  *                                         ASTL_STATUS_NOT_SUPPORTED if the metric type or value type is not supported.
  */
-ASTL_API astl_status_code astlGetMetricStatistics(astl_target_handle_t      target_handle,
-                                                  astl_metric_handle_t      metric_handle,
-                                                  astl_metric_statistics_t* summary) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricStatisticsOnTarget(astl_target_handle_t      target_handle,
+                                                          astl_metric_handle_t      metric_handle,
+                                                          astl_metric_statistics_t* summary) ASTL_API_NOEXCEPT;
 
+/**
+ * @brief A single bin in a discrete histogram.
+ *
+ * Each bin represents one unique value observed in the collected samples and the
+ * number of times that exact value appeared.
+ */
+typedef struct _astl_discrete_histogram_bin_t {
+  size_t _size;         //!< Size of this struct for versioning. Must be set to
+                        //!< sizeof(astl_discrete_histogram_bin_t) on the first array element.
+  astl_value_t _value;  //!< The exact value for this bin. Union member matches the metric's value type.
+  uint64_t     _count;  //!< Number of samples whose value exactly equals _value.
+} astl_discrete_histogram_bin_t;
+
+/**
+ * @brief Query the number of discrete histogram bins for a specific metric on a specific target.
+ *
+ * This is step 1 of the two-step discrete histogram API. The returned @p bin_count
+ * must be used to allocate an array of astl_discrete_histogram_bin_t large enough
+ * to receive all bins in the subsequent call to astlGetMetricDiscreteHistogramOnTarget().
+ *
+ * A bin corresponds to one unique value observed across all collected samples for the
+ * given (target, metric) pair. If no samples were collected, @p bin_count is set to 0.
+ *
+ * @param[in]  target_handle  The handle of the target of interest. Found in astl_target_properties_t.
+ * @param[in]  metric_handle  The handle of the metric of interest. Found in astl_metric_properties_t.
+ * @param[out] bin_count      Receives the number of unique-value bins. Cannot be NULL.
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success.
+ *                            ASTL_STATUS_BAD_ARGUMENT if any argument is NULL.
+ *                            ASTL_STATUS_NOT_SUPPORTED if the metric type is not
+ *                            supported by the discrete histogram summarizer.
+ */
+ASTL_API astl_status_code astlGetMetricDiscreteHistogramBinCountOnTarget(astl_target_handle_t target_handle,
+                                                                         astl_metric_handle_t metric_handle,
+                                                                         uint32_t* bin_count) ASTL_API_NOEXCEPT;
+
+/**
+ * @brief Populate a caller-allocated array with the discrete histogram bins for a metric.
+ *
+ * This is step 2 of the two-step discrete histogram API. The caller must have previously
+ * called astlGetMetricDiscreteHistogramBinCountOnTarget() to obtain @p bin_count and must have allocated
+ * an array of at least @p bin_count elements of type astl_discrete_histogram_bin_t.
+ *
+ * @param[in]     target_handle  The handle of the target of interest.
+ * @param[in]     metric_handle  The handle of the metric of interest.
+ * @param[in/out] bins           Array of bins to fill. Cannot be NULL.
+ *                               IMPORTANT: _size field of the first element must be set to
+ *                               sizeof(astl_discrete_histogram_bin_t) for versioning.
+ * @param[in/out] bin_count      On entry: capacity of the @p bins array.
+ *                               On exit: number of bins actually written.
+ *                               Cannot be NULL.
+ *
+ * @return astl_status_code      ASTL_STATUS_SUCCESS on success.
+ *                               ASTL_STATUS_BAD_ARGUMENT if any argument is NULL or if
+ *                               @p bin_count is 0.
+ *                               ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE if bins[0]._size does
+ *                               not equal sizeof(astl_discrete_histogram_bin_t).
+ *                               ASTL_STATUS_NOT_SUPPORTED if the metric type is not
+ *                               supported by the discrete histogram summarizer.
+ *                               ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL if the
+ *                               provided array is too small to hold all bins (bin_count
+ *                               is updated to the required count).
+ */
+ASTL_API astl_status_code astlGetMetricDiscreteHistogramOnTarget(astl_target_handle_t           target_handle,
+                                                                 astl_metric_handle_t           metric_handle,
+                                                                 astl_discrete_histogram_bin_t* bins,
+                                                                 uint32_t* bin_count) ASTL_API_NOEXCEPT;
 #if defined(__cplusplus)
 }
 #endif

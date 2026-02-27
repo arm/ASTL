@@ -532,7 +532,7 @@ cdef class MetricStatistics:
                 f"min={self.min!r} max={self.max!r} avg={self.avg!r}>")
 
 
-cpdef MetricStatistics get_metric_statistics(Target target, Metric metric):
+cpdef MetricStatistics get_metric_statistics_on_target(Target target, Metric metric):
     """Return a min/max/average summary for ``metric`` on ``target``.
 
     Args:
@@ -552,7 +552,7 @@ cpdef MetricStatistics get_metric_statistics(Target target, Metric metric):
     s._size  = sizeof(astl_metric_statistics_t)
     s._flags = 0
     s._count = 0
-    _check(astlGetMetricStatistics(
+    _check(astlGetMetricStatisticsOnTarget(
         <const void*>target._handle_ptr,
         <const void*>metric._handle_ptr,
         &s,
@@ -564,6 +564,75 @@ cpdef MetricStatistics get_metric_statistics(Target target, Metric metric):
     # Average is always fp64 regardless of the metric's value_type
     cdef object vavg = s._avg.fp64
     return MetricStatistics(s._count, vmin, vmax, vavg)
+
+
+cdef class DiscreteHistogramBin:
+    """A single bin in a discrete histogram.
+
+    Attributes:
+        value: The exact sampled value for this bin (type matches the
+            metric's value_type).
+        count (int): Number of samples that had exactly this value.
+    """
+    cdef public object   value
+    cdef public uint32_t count
+
+    def __init__(self, value, count: int):
+        self.value = value
+        self.count = count
+
+    def __repr__(self):
+        return f"<DiscreteHistogramBin value={self.value!r} count={self.count}>"
+
+
+cpdef list get_metric_discrete_histogram_on_target(Target target, Metric metric):
+    """Return the discrete histogram bins for ``metric`` on ``target``.
+
+    Uses the two-step C API: first queries the bin count, then allocates and
+    fills the bin array.
+
+    Args:
+        target: The :class:`Target` the metric was collected on.
+        metric: The :class:`Metric` to histogram.
+
+    Returns:
+        A list of :class:`DiscreteHistogramBin` objects, one per unique
+        sampled value.  Returns an empty list when no samples were collected.
+
+    Raises:
+        ASTLError or a subclass (e.g. NotSupportedError): on any non-success
+            status code (e.g. NOT_SUPPORTED for metric types not supported by
+            the discrete histogram summarizer).
+    """
+    cdef uint32_t bin_count = 0
+    _check(astlGetMetricDiscreteHistogramBinCountOnTarget(
+        <const void*>target._handle_ptr,
+        <const void*>metric._handle_ptr,
+        &bin_count,
+    ))
+    if bin_count == 0:
+        return []
+    cdef astl_discrete_histogram_bin_t* bins = \
+        <astl_discrete_histogram_bin_t*>calloc(bin_count, sizeof(astl_discrete_histogram_bin_t))
+    if bins == NULL:
+        raise MemoryError()
+    bins[0]._size = sizeof(astl_discrete_histogram_bin_t)
+    try:
+        _check(astlGetMetricDiscreteHistogramOnTarget(
+            <const void*>target._handle_ptr,
+            <const void*>metric._handle_ptr,
+            bins,
+            &bin_count,
+        ))
+        out = []
+        for i in range(bin_count):
+            out.append(DiscreteHistogramBin(
+                _decode_value(metric.value_type, bins[i]._value),
+                bins[i]._count,
+            ))
+        return out
+    finally:
+        free(bins)
 
 
 cpdef list get_targets():

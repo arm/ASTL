@@ -318,8 +318,8 @@ Key rules:
 #include "astl/astl_telemetry.h"
 
 ASTL_INIT_STRUCT(astl_save_params_t, params,
-                 .output_file_path = "/tmp/session.astl",  // nullptr/empty => temp files only
-                 .flags = 0);
+                 ._output_file_path = "/tmp/session.astl",  // nullptr/empty => temp files only
+                 ._flags = 0);
 
 astl_status_code rc = astlSaveCollection(&params);
 ```
@@ -330,9 +330,9 @@ astl_status_code rc = astlSaveCollection(&params);
 #include "astl/astl_telemetry.h"
 
 ASTL_INIT_STRUCT(astl_load_params_t, params,
-                 .input_file_path = "/tmp/session.astl",
-                 .chunk_size_bytes = 0,  // reserved; 0 uses default
-                 .flags = 0);
+                 ._input_file_path = "/tmp/session.astl",
+                 ._chunk_size_bytes = 0,  // reserved; 0 uses default
+                 ._flags = 0);
 
 astl_status_code rc = astlLoadCollection(&params);
 ```
@@ -344,7 +344,7 @@ astl_status_code rc = astlLoadCollection(&params);
 
 8. Compute min/max/avg summary for a metric (post-collection)
 
-After stopping collection, call `astlGetMetricStatistics` for any arithmetic metric to obtain
+After stopping collection, call `astlGetMetricStatisticsOnTarget` for any arithmetic metric to obtain
 the minimum, maximum, average, and sample count over all collected samples. See the
 [Metric Summary API](#metric-summary-api) section for full details.
 
@@ -353,7 +353,7 @@ astl_metric_statistics_t summary{};       // zero-initialize
 summary._size  = sizeof(astl_metric_statistics_t);
 // summary._flags is already 0 from zero-initialization
 
-astl_status_code rc = astlGetMetricStatistics(
+astl_status_code rc = astlGetMetricStatisticsOnTarget(
     target_properties._handle,
     metric_buffer[0]._handle,
     &summary);
@@ -364,7 +364,35 @@ if (rc == ASTL_STATUS_SUCCESS && summary._count > 0) {
 }
 ```
 
-9. Clean up allocated resources
+9. Compute discrete histogram for a metric (post-collection)
+
+For metrics that take a finite set of values (e.g. frequency steps, residency states),
+use the two-step `astlGetMetricDiscreteHistogramBinCountOnTarget` /
+`astlGetMetricDiscreteHistogramOnTarget` API to obtain the exact distribution of observed values.
+See the [Discrete Histogram API](#discrete-histogram-api) section for full details.
+
+```cpp
+uint32_t bin_count = 0;
+astl_status_code rc = astlGetMetricDiscreteHistogramBinCountOnTarget(
+    target_properties._handle, metric_buffer[0]._handle, &bin_count);
+
+if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
+    std::vector<astl_discrete_histogram_bin_t> bins(bin_count);
+    bins[0]._size = sizeof(astl_discrete_histogram_bin_t);
+
+    rc = astlGetMetricDiscreteHistogramOnTarget(
+        target_properties._handle, metric_buffer[0]._handle,
+        bins.data(), &bin_count);
+
+    if (rc == ASTL_STATUS_SUCCESS) {
+        for (uint32_t i = 0; i < bin_count; ++i)
+            printf("value=%.0f  count=%u\n",
+                   (double)bins[i]._value.ui64, bins[i]._count);
+    }
+}
+```
+
+10. Clean up allocated resources
 
 ```cpp
 ASTL_FREE_ARRAY(target_properties_buffer)
@@ -423,7 +451,7 @@ node scripts/render_mermaid.js --all
 
 ## Metric Summary API
 
-`astlGetMetricStatistics` computes a statistical summary (minimum, maximum, average, and
+`astlGetMetricStatisticsOnTarget` computes a statistical summary (minimum, maximum, average, and
 sample count) over all samples collected for a given metric on a specific target. It is
 called after `astlStopCollectionOnTarget` (or after `astlLoadCollection`).
 
@@ -444,7 +472,7 @@ Only arithmetic value types (integers and floats) are supported.
 > `_min` and `_max` use the union member that matches the metric's native value type
 > (e.g. `uint64` for `ASTL_VALUE_UINT64` metrics).
 
-### Status Codes
+### Metric Summary Status Codes
 
 | Code                                   | Meaning                                                     |
 | -------------------------------------- | ----------------------------------------------------------- |
@@ -465,7 +493,7 @@ summary._size = sizeof(astl_metric_statistics_t);
 // summary._flags is already 0; listed here for emphasis
 summary._flags = 0;
 
-astl_status_code rc = astlGetMetricStatistics(
+astl_status_code rc = astlGetMetricStatisticsOnTarget(
     target_handle, metric_handle, &summary);
 
 if (rc == ASTL_STATUS_SUCCESS) {
@@ -480,6 +508,78 @@ if (rc == ASTL_STATUS_SUCCESS) {
     puts("metric type does not support min/max/avg");
 }
 ```
+
+---
+
+## Discrete Histogram API
+
+`astlGetMetricDiscreteHistogramBinCountOnTarget` and `astlGetMetricDiscreteHistogramOnTarget` implement a
+two-step API that returns the exact distribution of observed values for a metric — one bin
+per unique value. Both functions are called after `astlStopCollectionOnTarget` (or after `astlLoadCollection`).
+
+### Two-step Usage Pattern
+
+```c
+#include "astl/astl_telemetry.h"
+#include <stdlib.h>
+#include <stdio.h>
+
+/* Step 1 – query the number of unique-value bins */
+uint32_t bin_count = 0;
+astl_status_code rc = astlGetMetricDiscreteHistogramBinCountOnTarget(
+    target_handle, metric_handle, &bin_count);
+
+if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
+    /* Step 2 – allocate and fill */
+    astl_discrete_histogram_bin_t* bins =
+        (astl_discrete_histogram_bin_t*)calloc(bin_count, sizeof(*bins));
+    if (bins) {
+        bins[0]._size = sizeof(astl_discrete_histogram_bin_t);
+
+        rc = astlGetMetricDiscreteHistogramOnTarget(
+            target_handle, metric_handle, bins, &bin_count);
+
+        if (rc == ASTL_STATUS_SUCCESS) {
+            for (uint32_t i = 0; i < bin_count; ++i) {
+                /* _value union member matches the metric's native value type */
+                printf("value=%" PRIu64 "  count=%u\n",
+                       bins[i]._value.ui64, bins[i]._count);
+            }
+        }
+        free(bins);
+    }
+} else if (rc == ASTL_STATUS_NOT_SUPPORTED) {
+    puts("metric type does not support discrete histogram");
+}
+```
+
+### `astl_discrete_histogram_bin_t` Fields
+
+| Field    | Type           | Notes                                                                                      |
+| -------- | -------------- | ------------------------------------------------------------------------------------------ |
+| `_size`  | `size_t`       | **Must** be set to `sizeof(astl_discrete_histogram_bin_t)` on the first array element.     |
+| `_value` | `astl_value_t` | The exact sampled value for this bin. Union member matches the metric's native value type. |
+| `_count` | `uint64_t`     | Number of samples whose value exactly equals `_value`.                                     |
+
+### Discrete Histogram Status Codes
+
+#### `astlGetMetricDiscreteHistogramBinCountOnTarget`
+
+| Code                        | Meaning                                                           |
+| --------------------------- | ----------------------------------------------------------------- |
+| `ASTL_STATUS_SUCCESS`       | `bin_count` set to the number of unique values (0 if no samples). |
+| `ASTL_STATUS_BAD_ARGUMENT`  | A pointer argument is `NULL`.                                     |
+| `ASTL_STATUS_NOT_SUPPORTED` | Metric type not supported by the discrete histogram summarizer.   |
+
+#### `astlGetMetricDiscreteHistogramOnTarget`
+
+| Code                                          | Meaning                                                                    |
+| --------------------------------------------- | -------------------------------------------------------------------------- |
+| `ASTL_STATUS_SUCCESS`                         | Bins filled successfully.                                                  |
+| `ASTL_STATUS_BAD_ARGUMENT`                    | A pointer argument is `NULL`, or `bin_count` is `0` on entry.              |
+| `ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE`        | `bins[0]._size` does not equal `sizeof(astl_discrete_histogram_bin_t)`.    |
+| `ASTL_STATUS_NOT_SUPPORTED`                   | Metric type not supported.                                                 |
+| `ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL` | Array capacity < required bin count; `bin_count` updated to required size. |
 
 ---
 
