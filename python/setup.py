@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext

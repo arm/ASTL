@@ -1,8 +1,15 @@
-# Coverity URL commit-msg Hook
+<!--
+SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
 
-This directory contains a commit-msg hook script that automatically:
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# Git Hooks
+
+This directory contains hook scripts that automatically:
 
 - adds Coverity query URLs to commit messages when Coverity IDs (CIDs) are mentioned.
+- runs license lint checks before a commit is finalized.
   (TODO - later extend to format, do cppcheck (clang-tidy might be too lengthy))
 
 ## Overview
@@ -10,6 +17,10 @@ This directory contains a commit-msg hook script that automatically:
 ### add_coverity_url.py
 
 When you commit code that fixes Coverity issues and mention the CIDs in your commit message, this hook will automatically generate and insert a clickable URL that links directly to those defects in Coverity.
+
+### pre-commit license lint
+
+The installed `pre-commit` hook invokes `scripts/license_lint.sh` before each commit. If the lint check fails, the commit is blocked.
 
 ## Installation
 
@@ -19,11 +30,16 @@ To install the hooks, run:
 ./scripts/hooks/install_hooks.sh
 ```
 
-This will create a `commit-msg` hook in your `.git/hooks/` directory.
+This will create both a `commit-msg` hook and a `pre-commit` hook in your `.git/hooks/` directory.
 
 ## Usage
 
-Once installed, the hook works automatically. Just write your commit message as usual, mentioning CIDs:
+Once installed, the hooks work automatically:
+
+- `pre-commit`: runs `scripts/license_lint.sh`.
+- `commit-msg`: appends a Coverity URL when CIDs are detected.
+
+For the `commit-msg` hook, write your commit message as usual, mentioning CIDs:
 
 ### Example 1: CIDs on separate lines
 
@@ -100,4 +116,5 @@ To remove the hook:
 
 ```bash
 rm .git/hooks/commit-msg
+rm .git/hooks/pre-commit
 ```

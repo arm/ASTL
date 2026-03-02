@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Overview
 #   When coverage is generated in parallel, each .gcda (coverage database) must be written as a separate file per process to avoid multiple-writer issues.
 #   Unfortunately, gcovr does not handle the alternate .gcda names very well.

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Contribution Guide
 
 Thank you for your interest in contributing to our project! We strive to maintain a welcoming and inclusive community.

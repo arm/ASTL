@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # set the default build type to RelWithDebInfo if not specified
 if(NOT CMAKE_BUILD_TYPE)
   message(STATUS "Default CMAKE_BUILD_TYPE not set. Using Release with Debug Info")

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for astl.get_metric_statistics_on_target / MetricStatistics and
 astl.get_metric_discrete_histogram_on_target / DiscreteHistogramBin."""
 import pytest

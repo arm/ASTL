@@ -1,8 +1,6 @@
-/*******************************************************************************
- * SPDX-FileCopyrightText: Copyright (C) 2025 Arm Limited and/or its affiliates
- * SPDX-FileCopyrightText: <open-source-office@arm.com>
- * SPDX-License-Identifier: Apache-2.0
- ******************************************************************************/
+// SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #include <vector>
 

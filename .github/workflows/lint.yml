@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 name: Lint
 
 permissions:
@@ -43,7 +47,7 @@ jobs:
           sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-20 200
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-20 200
           sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-20 200
-          python3 -m pip install --upgrade --break-system-packages --user cmakelang
+          python3 -m pip install --upgrade --break-system-packages --user cmakelang reuse
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       # Restore per-package vcpkg cache
@@ -87,6 +91,9 @@ jobs:
 
       - name: 🧹 Lint with cppcheck
         run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
+
+      - name: ️✍️ Check License Headers
+        run: ./scripts/license_lint.sh
 
       - name: 🧹 Lint with clang-tidy
         run: ${{ github.workspace }}/scripts/lint.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }} pull-request

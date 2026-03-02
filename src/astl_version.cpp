@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 #include "astl/astl.h"
 
 constexpr auto              kAstlVersion = astl_version_t{ASTL_VERSION_MAJOR, ASTL_VERSION_MINOR, ASTL_VERSION_MICRO};

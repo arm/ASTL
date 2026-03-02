@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Optional pandas integration helpers.
 
 ``to_dataframe`` converts a mapping of ``entity_name -> list[(timestamp, value)]``

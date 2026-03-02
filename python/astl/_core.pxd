@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Cython declarations for a subset of the ASTL C API."""
 
 from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t

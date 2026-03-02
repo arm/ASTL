@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Diagnostics utilities for ASTL Python bindings.
 
 Captures a lightweight snapshot of the host Python environment plus optional

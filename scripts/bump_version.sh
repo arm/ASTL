@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Check for exactly 2 parameters
 if [ "$#" -ne 2 ]; then
 	echo "Error: Exactly 2 parameters required" >&2

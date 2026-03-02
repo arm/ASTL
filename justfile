@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # https://just.systems/man/en/
 
 alias  b := build
@@ -10,7 +14,7 @@ clean:
     echo "[clean] Removing build artifacts"
     rm -rf build coverage_* python/build
 
-# Aggressibly remove cache files and as many artifacts as possible
+# Aggressively remove cache files and as many artifacts as possible
 deep-clean: clean
     #!/usr/bin/env bash
     set -eu -o pipefail
@@ -49,6 +53,11 @@ lint preset='debug':
     #!/usr/bin/env bash
     set -eu -o pipefail
     ./scripts/lint.sh build/{{preset}} pull-request
+
+license-lint:
+    #!/user/bin/env bash
+    set -eu -o pipefail
+    ./scripts/license_lint.sh
 
 # run unit tests
 test preset='debug': build

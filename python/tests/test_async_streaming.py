@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for async streaming helpers (stream_counter / stream_metric).
 
 Uses monkeypatching to avoid dependence on actual targets/counters.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 #ifndef I_COUNTER_HPP_
 #define I_COUNTER_HPP_
 

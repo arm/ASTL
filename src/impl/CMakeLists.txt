@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # build a static library `astl_static` that's easy to link with the shared library `astl` or with unit tests. useful for
 # providing access to internal functions and classes of the implementation, without exporting everything across the
 # shared library interface

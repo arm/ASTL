@@ -1,0 +1,54 @@
+version = 1
+
+# 3rd party licenses
+[[annotations]]
+path = "**/gplot++.h"
+SPDX-FileCopyrightText = "Copyright 2020 Maurizio Tomasi"
+SPDX-License-Identifier = "MIT"
+
+# Version file is imported directly to cmake, so don't annotate it in-text
+[[annotations]]
+path = "VERSION.md"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+
+# Annotate all .json config files with the Apache-2.0 license
+[[annotations]]
+path = "**/*.json"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# generaged images from documentation
+[[annotations]]
+path = "doc/design/*.svg"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "doc/*.svg"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+
+
+
+# Test output files for comparison with expected output, but ignore them for linting
+[[annotations]]
+path = "tools/mock_sysfs/unit_tests/**/expected.txt"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Test config
+[[annotations]]
+path = "tools/mock_sysfs/config/*.csv"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# demo config
+[[annotations]]
+path = "tests/demo/data/*.csv"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Helper to locate built ASTL shared library for runtime if not installed system-wide.
 Currently unused but can be expanded to modify ctypes / LD paths dynamically.
 """

@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /**
  * @file astl_errors.h
  * @brief Public status / error code enumeration and helpers for ASTL.

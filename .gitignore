@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Ignore vendored Python headers (generated/copied by vendor_headers.sh)
 python/astl/include/astl/
 python/astl/LICENSE
@@ -69,6 +73,7 @@ dkms.conf
 
 # Ignore vcpkg directories
 external
+.vcpkg-cache
 
 # Ignore build directories
 build/

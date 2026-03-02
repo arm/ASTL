@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 #ifndef INCLUDE_ASTL_UTILS_HPP_
 #define INCLUDE_ASTL_UTILS_HPP_
 
