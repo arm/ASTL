@@ -15,7 +15,11 @@ find_package_handle_standard_args(astl REQUIRED_VARS
   )
 
 if(astl_FOUND AND NOT TARGET Astl::astl)
-  add_library(Astl::astl SHARED IMPORTED)
+  if(ASTL_STATIC_LINK)
+    add_library(Astl::astl STATIC IMPORTED)
+  else()
+    add_library(Astl::astl SHARED IMPORTED)
+  endif()
   set_target_properties(Astl::astl PROPERTIES
     IMPORTED_LINK_INTERFACE_LANGUAGES "C"
     IMPORTED_LOCATION "${ASTL_INSTALL_LIB_DIR}"

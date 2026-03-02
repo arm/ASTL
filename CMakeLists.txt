@@ -85,6 +85,13 @@ else()
   message(STATUS "This project has a top-level one called [${CMAKE_PROJECT_NAME}]")
 endif()
 
+# Ensure executables and shared libraries can find .so dependencies relative to their own location at runtime. $ORIGIN
+# resolves to the directory containing the binary.
+if(UNIX AND NOT APPLE)
+  set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib")
+  set(CMAKE_BUILD_RPATH "$ORIGIN;$ORIGIN/../lib")
+endif()
+
 # Add ASTL_DEBUG macro for all targets
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions(ASTL_DEBUG)

@@ -23,11 +23,6 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
-    concurrency:
-      # Unique per workflow + PR/ref + matrix combination so only the matching
-      # in-progress job is cancelled, not all matrix jobs simultaneously.
-      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.os }}-${{ matrix.cmake_preset }}-${{ matrix.cpp_compiler }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
     strategy:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
