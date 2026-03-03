@@ -6,9 +6,12 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <string_view>
+#include <system_error>
 #include <unordered_set>
 
 #include "astl_logger.hpp"

@@ -74,6 +74,9 @@ enum class EnvVar {
 
   /* used by tests to know if running under sudo */
   SUDO_UID,
+
+  /* used by tests to force SCMI process-lock temp dir lookup failure */
+  ASTL_TEST_FORCE_SCMI_PROCESS_LOCK_TEMP_DIR_FAILURE,
 };
 
 /**

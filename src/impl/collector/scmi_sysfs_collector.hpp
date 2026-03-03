@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "astl_file_interface.hpp"
 #include "astl_logger.hpp"
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
@@ -24,6 +25,7 @@
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "common/scmi/scmi_constants.hpp"
+#include "filesystem_process_lock.hpp"
 #include "operation/operation.hpp"
 #include "operation/scmi_read_operation.hpp"
 
@@ -37,7 +39,7 @@ namespace astl {
 template <typename FileInterfaceT>
 class ScmiSysfsCollector : public ICollector {
  public:
-  ~ScmiSysfsCollector() override = default;
+  ~ScmiSysfsCollector() override;
 
   ScmiSysfsCollector() = delete;  // needs to be initialized with the base path for the telemetry directory
   explicit ScmiSysfsCollector(FileInterfaceT file_interface);
@@ -111,6 +113,8 @@ class ScmiSysfsCollector : public ICollector {
   std::unique_ptr<PeriodicSampler> _periodic_sampler;
   std::unordered_map<ScmiDataEventId, SampleTimestamp>
       _previous_timestamps;  //!< Track previous timestamp per data event ID to detect duplicates
+  std::unique_ptr<FilesystemProcessLock<FileInterfaceT>>
+      _process_lock;  //!< Process-level lock that serializes SCMI sysfs use across processes.
 
   // private methods
 
@@ -161,6 +165,17 @@ class ScmiSysfsCollector : public ICollector {
    * @brief Stop any background threads or async tasks that were started for interval sampling.
    */
   void StopIntervalSampling();
+
+  /**
+   * @brief Acquire (or validate) the process-level SCMI sysfs lock.
+   * @return ASTL_STATUS_SUCCESS on success, otherwise a lock/open failure status.
+   */
+  astl_status_code AcquireProcessLock();
+
+  /**
+   * @brief Release the process-level SCMI sysfs lock, if currently held.
+   */
+  void ReleaseProcessLock() noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -168,7 +183,20 @@ class ScmiSysfsCollector : public ICollector {
 ////////////////////////////////////////////////////////////////////////////////
 namespace scmi_detail {
 
-auto GetDataEventDirPath(ScmiDataEventId data_event_id) -> std::expected<std::filesystem::path, astl_status_code>;
+/**
+ * @brief Lock file name used for inter-process SCMI sysfs serialization.
+ */
+inline constexpr std::string_view kScmiProcessLockFileName = ".astl_scmi_sysfs.lock";
+
+inline auto GetProcessLockTempDirectory(std::error_code& error_code) -> std::filesystem::path {
+#if defined(ASTL_TEST_GET_TEMP_DIRECTORY_PATH)
+  return ASTL_TEST_GET_TEMP_DIRECTORY_PATH(error_code);
+#else
+  return std::filesystem::temp_directory_path(error_code);
+#endif
+}
+
+std::expected<std::filesystem::path, astl_status_code> GetDataEventDirPath(ScmiDataEventId data_event_id);
 
 /* Parse the given text for a timestamp, scale by the given tstamp_rate and return alongside remaining text to parse */
 auto ParseScmiTimeStamp(std::string_view text, kilohertz tstamp_rate)
@@ -198,6 +226,16 @@ auto UpdateSampleOperationsWithTstampRates(std::vector<ScmiDataEvent> const& dat
 template <typename FileInterfaceT>
 ScmiSysfsCollector<FileInterfaceT>::ScmiSysfsCollector(FileInterfaceT file_interface)
     : _scmi_file_interface{std::move(file_interface)} {}
+
+template <typename FileInterfaceT>
+ScmiSysfsCollector<FileInterfaceT>::~ScmiSysfsCollector() {
+  // Ensure any active or paused collection is properly stopped before releasing resources.
+  if (_collection_state == CollectionState::STARTED || _collection_state == CollectionState::PAUSED) {
+    ASTL_LOG_WARNING(
+        "ScmiSysfsCollector destroyed while collection is active or paused. Forcing StopCollection for cleanup.");
+    StopCollection();
+  }
+}
 
 /*
  * @brief Get the capabilities of this collector, including the collector type.
@@ -230,6 +268,17 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
   if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::STOPPED) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot reconfigure while already started
   }
+
+  auto lock_status = AcquireProcessLock();
+  if (lock_status != ASTL_STATUS_SUCCESS) {
+    if (lock_status == ASTL_STATUS_COLLECTION_ALREADY_RUNNING) {
+      ASTL_LOG_ERROR("SCMI sysfs is already in use by another process");
+    } else {
+      ASTL_LOG_ERROR("Failed to acquire SCMI sysfs process lock: {}", astl::to_string(lock_status));
+    }
+    return lock_status;
+  }
+
   // enable the telemetry subsystem
   auto result = _scmi_file_interface.Write(std::filesystem::path{kScmiTlmEnableFileName}, kScmiTlmEnableValue);
   if (result != ASTL_STATUS_SUCCESS) {
@@ -381,6 +430,7 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StopCollection() {
   _data_events.clear();
   _previous_timestamps.clear();  // Clear previous timestamps for next collection cycle
   _collection_state = CollectionState::STOPPED;
+  ReleaseProcessLock();
   return result;
 }
 
@@ -665,6 +715,31 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StartIntervalSampling() {
 template <typename FileInterfaceT>
 void ScmiSysfsCollector<FileInterfaceT>::StopIntervalSampling() {
   _periodic_sampler = nullptr;  // destroy periodic_sampler and wait for its thread pool to empty
+}
+
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::AcquireProcessLock() -> astl_status_code {
+  if (_process_lock && _process_lock->IsLocked()) {
+    return ASTL_STATUS_SUCCESS;
+  }
+  std::error_code error_code;
+  const auto      temp_dir = scmi_detail::GetProcessLockTempDirectory(error_code);
+  if (error_code) {
+    ASTL_LOG_ERROR("Failed to get temporary directory path for SCMI process lock: {}", error_code.message());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  const auto process_lock_file_path = temp_dir / std::string{scmi_detail::kScmiProcessLockFileName};
+  _process_lock =
+      std::make_unique<FilesystemProcessLock<FileInterfaceT>>(_scmi_file_interface, process_lock_file_path.string());
+  return _process_lock->Status();
+}
+
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::ReleaseProcessLock() noexcept -> void {
+  if (_process_lock) {
+    _process_lock->Release();
+    _process_lock.reset();
+  }
 }
 
 }  // namespace astl
