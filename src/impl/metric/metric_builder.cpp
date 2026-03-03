@@ -112,11 +112,21 @@ static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecificat
         // already processed this counter, skip it
         continue;
       }
-      std::string description = "Underlying counter for " + metric_name;
-      auto        new_counter_config =
-          std::make_unique<MetricConfig>(std::move(counter_name), std::move(description), ASTL_UNITS_UNKNOWN,
-                                         ASTL_VALUE_UNKNOWN, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
-                                         CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id});
+      processed_counter_names.insert(counter_name);
+      std::string      description = "Underlying counter for " + metric_name;
+      constexpr double unit_scaled = 1.0;
+      constexpr double base10      = 10.0;
+      const double     value_scale_factor =
+          register_declaration.base10_unit_modifier == 0
+                  ? unit_scaled
+                  : std::pow(base10, static_cast<double>(register_declaration.base10_unit_modifier));
+
+      astl_value_type_t value_type =
+          register_declaration.base10_unit_modifier == 0 ? ASTL_VALUE_UINT64 : ASTL_VALUE_FLOAT64;
+
+      auto new_counter_config = std::make_unique<MetricConfig>(
+          std::move(counter_name), std::move(description), ASTL_UNITS_UNKNOWN, value_type, ASTL_CATEGORY_UNCATEGORIZED,
+          ASTL_METRIC_VALUE, CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id, value_scale_factor});
 
       configurations_on_targets.emplace(std::move(new_counter_config), applicable_targets);
     }

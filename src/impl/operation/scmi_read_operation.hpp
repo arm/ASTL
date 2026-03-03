@@ -36,8 +36,8 @@ struct ScmiReadOperation : public Operation {
   /*
    * @brief Constructor for read operations
    */
-  explicit ScmiReadOperation(ScmiDataEventId data_event_id, kilohertz tstamp_rate)
-      : scmi_data_event_id{data_event_id}, tstamp_rate{tstamp_rate} {}
+  explicit ScmiReadOperation(ScmiDataEventId data_event_id, kilohertz tstamp_rate, double value_scale_factor = 1.0)
+      : scmi_data_event_id{data_event_id}, tstamp_rate{tstamp_rate}, value_scale_factor{value_scale_factor} {}
 
   ScmiReadOperation(const ScmiReadOperation&)            = default;
   ScmiReadOperation& operator=(const ScmiReadOperation&) = default;
@@ -47,6 +47,7 @@ struct ScmiReadOperation : public Operation {
   ScmiDataEventId scmi_data_event_id{0};  //!< The SCMI data event ID to be used for this operation
   //!< The timestamp rate in KHz for this data event, used to interpret timestamps if they are enabled
   kilohertz tstamp_rate{1};
+  double    value_scale_factor{1.0};  //!< The scale factor for the raw value
 };
 
 }  // namespace astl

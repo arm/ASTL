@@ -173,6 +173,15 @@ auto FindMatchingScmiRegistersForResidency(astl::metrics::spec::MetricJsonDeclar
       }
       // instance count, register name, component name all match, let's add this to the state table.
       result.state_to_base_data_event_id.emplace(matching_state_name->first, block_member.base_de_id);
+      // @todo(ASTL-331) support non-zero base10 unit modifiers for residency metrics.
+      // For now, just check our assumption that it's zero
+      if (block_member.base10_unit_modifier != 0) {
+        ASTL_LOG_ERROR(
+            "SCMI register {} has non-zero base10 unit modifier {},"
+            " which is currently not supported for residency metrics",
+            block_member.name, block_member.base10_unit_modifier);
+        return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+      }
     }
   }
   // double-check that all the necessary states were found

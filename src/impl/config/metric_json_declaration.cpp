@@ -4,6 +4,7 @@
 
 #include "config/metric_json_declaration.hpp"
 
+#include <cmath>
 #include <format>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -130,17 +131,20 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   }
 
   MetricConfigOnTargets metric_configs_on_targets;
-  const auto            value_type = ParseValueType(metric_declaration);
-  const auto            category   = ParseCategory(metric_declaration.category);
+  const auto            category = ParseCategory(metric_declaration.category);
 
   for (const auto& scmi_metric_declaration : metric_registers) {
-    const auto& metric_name          = scmi_metric_declaration.GetFullyQualifiedName();
-    const auto  units                = scmi_metric_declaration.units;
-    const auto  base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
-    (void)base10_unit_modifier;  // @todo(ASTL-303) currently unused in this implementation
-    const auto& de_id = scmi_metric_declaration.de_id;
+    const auto&      metric_name          = scmi_metric_declaration.GetFullyQualifiedName();
+    const auto       units                = scmi_metric_declaration.units;
+    const auto       base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
+    constexpr double base10               = 10.0;
+    const double     value_scale_factor   = std::pow(base10, static_cast<double>(base10_unit_modifier));
+
+    // if there's a base10 multiplier, need to  treat it as a float, otherwise use configured type.
+    const auto  value_type = base10_unit_modifier ? ASTL_VALUE_FLOAT64 : ParseValueType(metric_declaration);
+    const auto& de_id      = scmi_metric_declaration.de_id;
     // @todo(ASTL-186) - may need to handle different data event ids for different targets
-    ScmiOperationBuilder operation_builder{de_id};
+    ScmiOperationBuilder operation_builder{de_id, value_scale_factor};
     auto                 finite_set_copy = finite_set;      // copy for this metric instance
     auto                 labels_copy     = value_to_label;  // copy for this metric instance
 
@@ -190,7 +194,8 @@ static auto GetResidencyMetricStateToInfoMapForInstance(
                      metric_key_name);
       return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
-    auto                             data_event_id = scmi::spec::GetDataEventId(state_iter->second, instance);
+    auto data_event_id = scmi::spec::GetDataEventId(state_iter->second, instance);
+    // @todo(ASTL-331) support non-zero base10 unit modifiers for residency metrics.
     ScmiOperationBuilder             operation_builder{data_event_id};
     ResidencyMetricConfig::StateInfo state_info{state_name, tick_frequency, std::move(operation_builder)};
     state_to_info_map[state_name] = std::move(state_info);
@@ -211,6 +216,7 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   MetricConfigOnTargets metric_configs_on_targets;
 
   // get some essential data from the metric_declaration
+  // @todo(ASTL-331) if supporting base10 unit modifiers for residency metrics, need to make the value type f64
   const auto value_type     = ParseValueType(metric_declaration);
   const auto category       = ParseCategory(metric_declaration.category);
   const auto collector_type = ParseCollectorType(metric_declaration);
@@ -283,14 +289,16 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
     ASTL_LOG_INFO("No Data Event IDs found for metric {}", metric_key_name);
   }
   MetricConfigOnTargets metric_configs_on_targets;
-  const auto            value_type = ParseValueType(metric_declaration);
-  const auto            category   = ParseCategory(metric_declaration.category);
+  const auto            category = ParseCategory(metric_declaration.category);
 
   for (const auto& scmi_metric_declaration : metric_registers) {
-    const auto units                = scmi_metric_declaration.units;
-    const auto base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
-    (void)base10_unit_modifier;  // @todo(ASTL-303) currently unused in this implementation
-    ScmiOperationBuilder operation_builder{scmi_metric_declaration.de_id};
+    const auto           units                = scmi_metric_declaration.units;
+    const auto           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
+    constexpr double     base10               = 10.0;
+    const double         value_scale_factor   = std::pow(base10, static_cast<double>(base10_unit_modifier));
+    ScmiOperationBuilder operation_builder{scmi_metric_declaration.de_id, value_scale_factor};
+    // if there's a base10 unit modifier, we need to treat the value as a float and apply the modifier in the collector
+    const auto value_type = base10_unit_modifier ? ASTL_VALUE_FLOAT64 : ParseValueType(metric_declaration);
 
     auto formula_result = BuildFormula(metric_declaration.formula);
     if (!formula_result.has_value()) {
@@ -299,7 +307,6 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
 
     auto metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
     auto new_metric_config = std::make_unique<MetricConfig>(
-        // @todo(ASTL-303) - consider how best to use the base10_unit_modifier in the MetricConfig and collector
         scmi_metric_declaration.GetFullyQualifiedName(), metric_declaration.description, units, value_type, category,
         metric_type, std::move(metric_groups), collector_type.value(), std::move(operation_builder),
         std::move(formula_result.value()));
