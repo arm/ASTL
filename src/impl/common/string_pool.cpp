@@ -125,8 +125,12 @@ auto SaveStringPoolToCacheDir(const std::filesystem::path& cache_dir_path) -> as
     ASTL_LOG_ERROR("SaveStringPoolToCacheDir: failed opening '{}'", output_file.string());
     return ASTL_STATUS_FILE_OPEN_FAILED;
   }
-
-  stream << payload.dump();
+  try {
+    stream << payload.dump();
+  } catch (const nlohmann::json::exception& e) {
+    ASTL_LOG_ERROR("SaveStringPoolToCacheDir: failed serializing string pool to JSON: {}", e.what());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
   if (stream.fail()) {
     ASTL_LOG_ERROR("SaveStringPoolToCacheDir: failed writing '{}'", output_file.string());
     return ASTL_STATUS_FILE_ERROR;

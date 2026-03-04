@@ -62,6 +62,13 @@ auto BuildTopologyManager(const AstlConfiguration& configuration, std::optional<
   std::vector<std::unique_ptr<ITarget>> targets;
 
   if (configuration.load_file_path.has_value()) {
+    if (!cache_dir_path.has_value()) {
+      ASTL_LOG_ERROR(
+          "configuration.load_file_path has value: `{}` but cache_dir_path is not set."
+          " Cannot load topology from ASTL file without a cache directory path.",
+          configuration.load_file_path->string());
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
     return BuildTopologyManagerFromASTLFile(cache_dir_path.value());
   }
 
