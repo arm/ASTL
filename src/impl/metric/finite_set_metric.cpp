@@ -87,10 +87,13 @@ auto FiniteSetMetric::LogFiniteSetSummary() -> void {
     auto     count_it = _finite_set_summary.value_counts.find(value);
     uint64_t count    = (count_it != _finite_set_summary.value_counts.end()) ? count_it->second : 0;
 
-    std::string value_display = to_string(value);
-    auto        label_it      = _finite_set_configuration->GetLabels().find(value);
-    if (label_it != _finite_set_configuration->GetLabels().end()) {
-      value_display += " (" + label_it->second + ")";
+    std::string value_display     = to_string(value);
+    auto        state_info_result = _finite_set_configuration->GetStateInfoForValue(value);
+    if (state_info_result.has_value()) {
+      value_display += " (" + state_info_result.value()->state_name + ")";
+    } else {
+      ASTL_LOG_ERROR("FiniteSetMetric: no StateInfo for value {} in finite set - this is a configuration error",
+                     to_string(value));
     }
 
     std::string log_msg = "\n Value " + value_display + ": " + std::to_string(count) + " samples";

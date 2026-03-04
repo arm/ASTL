@@ -360,17 +360,17 @@ TEST_CASE("MetricHandle + FiniteSetMetric: protobuf round-trip", "[MetricHandle]
       astl::AstlValue{uint64_t{2}},
   };
 
-  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{uint64_t{0}}, "STATE_ZERO"},
-      {astl::AstlValue{uint64_t{1}}, "STATE_ONE" },
-      {astl::AstlValue{uint64_t{2}}, "STATE_TWO" },
+  astl::FiniteSetMetricConfig::ValueToInfoMap state_info = {
+      {astl::AstlValue{uint64_t{0}}, {"STATE_ZERO", "Value is zero"}},
+      {astl::AstlValue{uint64_t{1}}, {"STATE_ONE", "Value is one"}  },
+      {astl::AstlValue{uint64_t{2}}, {"STATE_TWO", "Value is two"}  },
   };
 
   astl::MetricHandle handle;
   handle.config = std::make_unique<astl::FiniteSetMetricConfig>(
       "finite_test_metric", "finite-set unit-test metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64,
       ASTL_METRIC_FINITE_SET_VALUE, ASTL_CATEGORY_UNCATEGORIZED, astl::CollectorType::UNKNOWN,
-      astl::NullOperationBuilder{}, finite_set, labels);
+      astl::NullOperationBuilder{}, finite_set, state_info);
 
   REQUIRE(handle.config);
   REQUIRE(handle.config->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
@@ -431,6 +431,16 @@ TEST_CASE("MetricHandle + FiniteSetMetric: protobuf round-trip", "[MetricHandle]
   REQUIRE(finite_set_after.contains(astl::AstlValue{uint64_t{0}}));
   REQUIRE(finite_set_after.contains(astl::AstlValue{uint64_t{1}}));
   REQUIRE(finite_set_after.contains(astl::AstlValue{uint64_t{2}}));
+
+  // State labels AND descriptions must survive the round-trip
+  const auto& rebuilt_state_info = rebuilt_finite_cfg->GetStateInfo();
+  REQUIRE(rebuilt_state_info.size() == 3);
+  REQUIRE(rebuilt_state_info.at(astl::AstlValue{uint64_t{0}}).state_name == "STATE_ZERO");
+  REQUIRE(rebuilt_state_info.at(astl::AstlValue{uint64_t{0}}).state_description == "Value is zero");
+  REQUIRE(rebuilt_state_info.at(astl::AstlValue{uint64_t{1}}).state_name == "STATE_ONE");
+  REQUIRE(rebuilt_state_info.at(astl::AstlValue{uint64_t{1}}).state_description == "Value is one");
+  REQUIRE(rebuilt_state_info.at(astl::AstlValue{uint64_t{2}}).state_name == "STATE_TWO");
+  REQUIRE(rebuilt_state_info.at(astl::AstlValue{uint64_t{2}}).state_description == "Value is two");
 
   // Summarize should still succeed
   REQUIRE(fs_after->Summarize() == ASTL_STATUS_SUCCESS);

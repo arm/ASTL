@@ -8,8 +8,13 @@ package astl.protobuf;
 
 import "serdes/serdes_common.proto";
 
+message FiniteSetStateInfo {
+  string label       = 1;
+  string description = 2;
+}
+
 message FiniteSetMetric {
-  map<int64, string> value_to_label_map = 1;
+  map<int64, FiniteSetStateInfo> value_to_state_info = 1;
 }
 
 message StateInfo {

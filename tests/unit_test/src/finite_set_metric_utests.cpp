@@ -24,17 +24,17 @@ struct FiniteSetTestHarness {
   astl::FiniteSetMetricConfig              config;
   astl::FiniteSetMetric                    metric;
 
-  // create the target, mock  sink, metric config, and FiniteSetMetric instances based on the given labels
-  explicit FiniteSetTestHarness(astl::FiniteSetMetricConfig::ValueToLabelMap const& labels)
+  // create the target, mock  sink, metric config, and FiniteSetMetric instances based on the given state info
+  explicit FiniteSetTestHarness(astl::FiniteSetMetricConfig::ValueToInfoMap const& state_info)
       : mock_target(std::make_unique<MockTarget>()),
         mock_sink(std::make_unique<MockProcessedSampleSink>()),
         config{
             "test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_FINITE_SET_VALUE,
             ASTL_CATEGORY_UNCATEGORIZED, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{},
-            // values of labels as std::set<astl::AstlValue>
-            astl::FiniteSetMetricConfig::FiniteSet{std::ranges::begin(labels | std::views::keys),
-                                                                                                  std::ranges::end(labels | std::views::keys)},
-            labels
+            // values of state_info as std::set<astl::AstlValue>
+            astl::FiniteSetMetricConfig::FiniteSet{std::ranges::begin(state_info | std::views::keys),
+                                                                                                  std::ranges::end(state_info | std::views::keys)},
+            state_info
   },
         metric(&config, mock_target.get(), mock_sink.get()) {
     ALLOW_CALL(*mock_target, Name()).RETURN("mock_target");
@@ -45,12 +45,12 @@ struct FiniteSetTestHarness {
 TEST_CASE("FiniteSetMetric: construction & basic functionality", "[FiniteSetMetric]") {
   // Construct a metric for 64-bit unsigned samples
   // Provide labels for readability
-  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{uint64_t{0}}, "STATE_ZERO"},
-      {astl::AstlValue{uint64_t{1}}, "STATE_ONE" },
-      {astl::AstlValue{uint64_t{2}}, "STATE_TWO" },
+  astl::FiniteSetMetricConfig::ValueToInfoMap state_info = {
+      {astl::AstlValue{uint64_t{0}}, {"STATE_ZERO", "Value is zero"}},
+      {astl::AstlValue{uint64_t{1}}, {"STATE_ONE", "Value is one"}  },
+      {astl::AstlValue{uint64_t{2}}, {"STATE_TWO", "Value is two"}  },
   };
-  FiniteSetTestHarness harness{labels};
+  FiniteSetTestHarness harness{state_info};
 
   // Test that we can construct the metric successfully and call basic methods
   const auto& retrieved_set = harness.metric.GetFiniteSet();
@@ -58,12 +58,12 @@ TEST_CASE("FiniteSetMetric: construction & basic functionality", "[FiniteSetMetr
 }
 
 TEST_CASE("FiniteSetMetric: finite set checking", "[FiniteSetMetric]") {
-  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{uint64_t{0}}, "ZERO"},
-      {astl::AstlValue{uint64_t{1}}, "ONE" },
-      {astl::AstlValue{uint64_t{2}}, "TWO" },
+  astl::FiniteSetMetricConfig::ValueToInfoMap state_info = {
+      {astl::AstlValue{uint64_t{0}}, {"ZERO", "Zero state"}},
+      {astl::AstlValue{uint64_t{1}}, {"ONE", "One state"}  },
+      {astl::AstlValue{uint64_t{2}}, {"TWO", "Two state"}  },
   };
-  FiniteSetTestHarness harness{labels};
+  FiniteSetTestHarness harness{state_info};
 
   // Test finite set membership
   REQUIRE(harness.metric.IsInFiniteSet(astl::AstlValue{uint64_t{0}}) == true);
@@ -75,12 +75,12 @@ TEST_CASE("FiniteSetMetric: finite set checking", "[FiniteSetMetric]") {
 }
 
 TEST_CASE("FiniteSetMetric: get finite set values", "[FiniteSetMetric]") {
-  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{uint64_t{0}}, "VAL0"},
-      {astl::AstlValue{uint64_t{1}}, "VAL1"},
-      {astl::AstlValue{uint64_t{2}}, "VAL2"},
+  astl::FiniteSetMetricConfig::ValueToInfoMap state_info = {
+      {astl::AstlValue{uint64_t{0}}, {"VAL0", "Value 0"}},
+      {astl::AstlValue{uint64_t{1}}, {"VAL1", "Value 1"}},
+      {astl::AstlValue{uint64_t{2}}, {"VAL2", "Value 2"}},
   };
-  FiniteSetTestHarness harness{labels};
+  FiniteSetTestHarness harness{state_info};
 
   const auto& retrieved_set = harness.metric.GetFiniteSet();
   REQUIRE(retrieved_set.size() == 3);
@@ -91,12 +91,12 @@ TEST_CASE("FiniteSetMetric: get finite set values", "[FiniteSetMetric]") {
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("FiniteSetMetric: ReceiveSample with valid values", "[FiniteSetMetric]") {
-  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{uint64_t{0}}, "S0"},
-      {astl::AstlValue{uint64_t{1}}, "S1"},
-      {astl::AstlValue{uint64_t{2}}, "S2"},
+  astl::FiniteSetMetricConfig::ValueToInfoMap state_info = {
+      {astl::AstlValue{uint64_t{0}}, {"S0", "Sample state 0"}},
+      {astl::AstlValue{uint64_t{1}}, {"S1", "Sample state 1"}},
+      {astl::AstlValue{uint64_t{2}}, {"S2", "Sample state 2"}},
   };
-  FiniteSetTestHarness harness{labels};
+  FiniteSetTestHarness harness{state_info};
   ALLOW_CALL(*(harness.mock_sink), SinkProcessedSamples(trompeloeil::_, trompeloeil::_, trompeloeil::_))
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -123,12 +123,12 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with valid values", "[FiniteSetMetric]
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 TEST_CASE("FiniteSetMetric: ReceiveSample with unknown values", "[FiniteSetMetric]") {
-  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{uint64_t{0}}, "A"},
-      {astl::AstlValue{uint64_t{1}}, "B"},
-      {astl::AstlValue{uint64_t{2}}, "C"},
+  astl::FiniteSetMetricConfig::ValueToInfoMap state_info = {
+      {astl::AstlValue{uint64_t{0}}, {"A", "State A"}},
+      {astl::AstlValue{uint64_t{1}}, {"B", "State B"}},
+      {astl::AstlValue{uint64_t{2}}, {"C", "State C"}},
   };
-  FiniteSetTestHarness harness{labels};
+  FiniteSetTestHarness harness{state_info};
   ALLOW_CALL(*(harness.mock_sink), SinkProcessedSamples(trompeloeil::_, trompeloeil::_, trompeloeil::_))
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -156,12 +156,12 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with unknown values", "[FiniteSetMetri
 // NOLINTEND(readability-function-cognitive-complexity)
 
 TEST_CASE("FiniteSetMetric: Reset functionality", "[FiniteSetMetric]") {
-  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{uint64_t{0}}, "RESET0"},
-      {astl::AstlValue{uint64_t{1}}, "RESET1"},
-      {astl::AstlValue{uint64_t{2}}, "RESET2"},
+  astl::FiniteSetMetricConfig::ValueToInfoMap state_info = {
+      {astl::AstlValue{uint64_t{0}}, {"RESET0", "Reset state 0"}},
+      {astl::AstlValue{uint64_t{1}}, {"RESET1", "Reset state 1"}},
+      {astl::AstlValue{uint64_t{2}}, {"RESET2", "Reset state 2"}},
   };
-  FiniteSetTestHarness harness{labels};
+  FiniteSetTestHarness harness{state_info};
   ALLOW_CALL(*(harness.mock_sink), SinkProcessedSamples(trompeloeil::_, trompeloeil::_, trompeloeil::_))
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -185,12 +185,12 @@ TEST_CASE("FiniteSetMetric: Reset functionality", "[FiniteSetMetric]") {
 }
 
 TEST_CASE("FiniteSetMetric: Summarize operation", "[FiniteSetMetric]") {
-  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{uint64_t{0}}, "SUM0"},
-      {astl::AstlValue{uint64_t{1}}, "SUM1"},
-      {astl::AstlValue{uint64_t{2}}, "SUM2"},
+  astl::FiniteSetMetricConfig::ValueToInfoMap state_info = {
+      {astl::AstlValue{uint64_t{0}}, {"SUM0", "Summary state 0"}},
+      {astl::AstlValue{uint64_t{1}}, {"SUM1", "Summary state 1"}},
+      {astl::AstlValue{uint64_t{2}}, {"SUM2", "Summary state 2"}},
   };
-  FiniteSetTestHarness harness{labels};
+  FiniteSetTestHarness harness{state_info};
   ALLOW_CALL(*(harness.mock_sink), SinkProcessedSamples(trompeloeil::_, trompeloeil::_, trompeloeil::_))
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -212,12 +212,12 @@ TEST_CASE("FiniteSetMetric: Summarize operation", "[FiniteSetMetric]") {
 
 TEST_CASE("FiniteSetMetric: ReceiveSample with unsupported type", "[FiniteSetMetric]") {
   // Create a metric expecting UINT64 values
-  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{uint64_t{0}}, "U64_0"},
-      {astl::AstlValue{uint64_t{1}}, "U64_1"},
-      {astl::AstlValue{uint64_t{2}}, "U64_2"},
+  astl::FiniteSetMetricConfig::ValueToInfoMap state_info = {
+      {astl::AstlValue{uint64_t{0}}, {"U64_0", "Unsigned 64-bit state 0"}},
+      {astl::AstlValue{uint64_t{1}}, {"U64_1", "Unsigned 64-bit state 1"}},
+      {astl::AstlValue{uint64_t{2}}, {"U64_2", "Unsigned 64-bit state 2"}},
   };
-  FiniteSetTestHarness harness{labels};
+  FiniteSetTestHarness harness{state_info};
 
   // Try to send a FLOAT32 value (which should be rejected by the base class, since harness is build with UINT64)
   astl::AstlValue      val{float{40.0}};
@@ -227,12 +227,13 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with unsupported type", "[FiniteSetMet
 }
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
-TEST_CASE("FiniteSetMetric: boolean values handling", "[FiniteSetMetric]") {
+TEST_CASE("FiniteSetMetric: Boolean values handling", "[FiniteSetMetric]") {
+  // Define a finite set with boolean values
   astl::FiniteSetMetric::FiniteSet finite_set = {astl::AstlValue{false}, astl::AstlValue{true}};
 
-  astl::FiniteSetMetricConfig::ValueToLabelMap labels = {
-      {astl::AstlValue{false}, "OFF"},
-      {astl::AstlValue{true},  "ON" },
+  astl::FiniteSetMetricConfig::ValueToInfoMap state_info = {
+      {astl::AstlValue{false}, {"OFF", "Power is off"}},
+      {astl::AstlValue{true},  {"ON", "Power is on"}  },
   };
   astl::FiniteSetMetricConfig config{"power_level",
                                      "Power level states",
@@ -243,7 +244,7 @@ TEST_CASE("FiniteSetMetric: boolean values handling", "[FiniteSetMetric]") {
                                      astl::CollectorType::UNKNOWN,
                                      astl::NullOperationBuilder{},
                                      finite_set,
-                                     labels};
+                                     state_info};
 
   astl::FiniteSetMetric metric(&config, nullptr, nullptr);
 
@@ -269,6 +270,6 @@ TEST_CASE("FiniteSetMetric: boolean values handling", "[FiniteSetMetric]") {
   // Check value counts
   REQUIRE(summary.value_counts.at(astl::AstlValue{false}) == 1);
   REQUIRE(summary.value_counts.at(astl::AstlValue{true}) == 2);
-  REQUIRE(summary.value_counts.find(astl::AstlValue{uint64_t{2}}) == summary.value_counts.end());
+  REQUIRE(!summary.value_counts.contains(astl::AstlValue{uint64_t{2}}));
 }
 // NOLINTEND(readability-function-cognitive-complexity)

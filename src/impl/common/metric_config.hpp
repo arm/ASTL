@@ -9,6 +9,7 @@
 #ifndef METRIC_CONFIG_HPP_
 #define METRIC_CONFIG_HPP_
 
+#include <expected>
 #include <map>
 #include <memory>
 #include <optional>
@@ -195,12 +196,19 @@ class ResidencyMetricConfig final : public MetricConfig {
 
   // Structure to hold both data event ID and tick frequency for a state
   struct StateInfo {
-    std::string         state_name;  // State name (e.g., "C1", "C6") - same as register name in JSON
+    std::string         state_name;         // State name (e.g., "C1", "C6") - same as register name in JSON
+    std::string         state_description;  // Description of the state
     double              tick_frequency;
     AnyOperationBuilder operation_builder;
   };
 
   using StateToInfoMap = std::unordered_map<std::string, StateInfo>;  // state name -> state info
+
+  // Structure to hold name and description for the inferred state
+  struct InferredStateInfo {
+    std::string name;         // State name (e.g., "C0", "Active")
+    std::string description;  // Description of the inferred state
+  };
 
   /**
    * @brief Construct a ResidencyMetricConfig with state-specific data event IDs and tick frequencies.
@@ -215,14 +223,14 @@ class ResidencyMetricConfig final : public MetricConfig {
    * @param metric_type     Expected to be the ASTL "residency" metric type.
    * @param collector_type  Collector type responsible for gathering residency counters.
    * @param state_info      Mapping from state name -> {operation_builder, tick_frequency}.
-   * @param inferred_state  Optional state name to be inferred from the metric (e.g., "C0").
+   * @param inferred_state  Optional inferred state info (name and description).
    * @param formula         Formula for processing raw samples (ExpressionFormula or IdentityFormula).
    */
   explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
                                  CollectorType collector_type, StateToInfoMap state_info,
-                                 std::optional<std::string> inferred_state = std::nullopt,
-                                 AnyFormula                 formula        = IdentityFormula{})
+                                 std::optional<InferredStateInfo> inferred_state = std::nullopt,
+                                 AnyFormula                       formula        = IdentityFormula{})
       : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
                      NullOperationBuilder{}, std::move(formula)),
         _state_info(std::move(state_info)),
@@ -242,15 +250,15 @@ class ResidencyMetricConfig final : public MetricConfig {
   auto GetStateInfo() const -> StateToInfoMap const & { return _state_info; }
 
   /**
-   * @brief Get the inferred state name if specified.
+   * @brief Get the inferred state info if specified.
    *
-   * @return Optional inferred state name
+   * @return Optional inferred state info (name and description)
    */
-  const std::optional<std::string> &InferredState() const { return _inferred_state; }
+  const std::optional<InferredStateInfo> &InferredState() const { return _inferred_state; }
 
  private:
-  StateToInfoMap             _state_info;      // Mapping of target -> (state name -> {data_event_id, tick_frequency})
-  std::optional<std::string> _inferred_state;  // Optional inferred state name
+  StateToInfoMap                   _state_info;  // Mapping of target -> (state name -> {data_event_id, tick_frequency})
+  std::optional<InferredStateInfo> _inferred_state;  // Optional inferred state name and description
 };
 
 /**
@@ -261,9 +269,15 @@ class ResidencyMetricConfig final : public MetricConfig {
  */
 class FiniteSetMetricConfig final : public MetricConfig {
  public:
+  // Structure to hold value, label, and description for a finite set state
+  struct StateInfo {
+    std::string state_name;         // Human-readable label
+    std::string state_description;  // Description of the state
+  };
+
   // Forward declaration for AstlValue - will need to include the appropriate header
-  using FiniteSet       = std::set<AstlValue>;
-  using ValueToLabelMap = std::map<AstlValue, std::string>;  ///< Mapping from value -> human-readable label
+  using FiniteSet      = std::set<AstlValue>;
+  using ValueToInfoMap = std::map<AstlValue, StateInfo>;  ///< Mapping from value -> state info (label + description)
 
   /**
    * @brief Construct a FiniteSetMetricConfig with a predefined set of valid values.
@@ -277,17 +291,18 @@ class FiniteSetMetricConfig final : public MetricConfig {
    * @param operation_builder  variant type that will create operations for the given target for a certain collector
    * type
    * @param finite_set      Set of valid AstlValue objects that define the finite set.
-   * @param labels          Mapping from finite set values to human-readable labels.
+   * @param state_info      Mapping from finite set values to state info (label + description).
    * @param formula         Formula for processing raw samples (ExpressionFormula or IdentityFormula).
    */
   explicit FiniteSetMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
                                  CollectorType collector_type, AnyOperationBuilder operation_builder,
-                                 FiniteSet finite_set, ValueToLabelMap labels, AnyFormula formula = IdentityFormula{})
+                                 FiniteSet finite_set, ValueToInfoMap state_info,
+                                 AnyFormula formula = IdentityFormula{})
       : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
                      std::move(operation_builder), std::move(formula)),
         _finite_set(std::move(finite_set)),
-        _labels(std::move(labels)) {}
+        _state_info(std::move(state_info)) {}
 
   FiniteSetMetricConfig(const FiniteSetMetricConfig &)            = delete;
   FiniteSetMetricConfig &operator=(const FiniteSetMetricConfig &) = delete;
@@ -318,26 +333,30 @@ class FiniteSetMetricConfig final : public MetricConfig {
   size_t FiniteSetSize() const { return _finite_set.size(); }
 
   /**
-   * @brief Get the labels mapping from values to human-readable labels.
+   * @brief Get the state info mapping from values to state information.
    *
-   * @return Map of finite set values to their labels.
+   * @return Map of finite set values to their state info (label + description).
    */
-  const ValueToLabelMap &GetLabels() const { return _labels; }
+  const ValueToInfoMap &GetStateInfo() const { return _state_info; }
 
   /**
-   * @brief Get the label for a specific value, if it exists.
+   * @brief Get the state info for a specific value, if it exists.
    *
-   * @param value The AstlValue to get the label for.
-   * @return The label string if found, empty string otherwise.
+   * @param value The AstlValue to get the state info for.
+   * @return std::expected containing a pointer to StateInfo if found, or
+   * std::unexpected(ASTL_STATUS_BAD_CONFIGURATION) if the value is not present.
    */
-  [[nodiscard]] std::string GetLabelForValue(const AstlValue &value) const {
-    auto iter = _labels.find(value);
-    return (iter != _labels.end()) ? iter->second : "";
+  [[nodiscard]] std::expected<const StateInfo *, astl_status_code> GetStateInfoForValue(const AstlValue &value) const {
+    auto iter = _state_info.find(value);
+    if (iter == _state_info.end()) {
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+    return &iter->second;
   }
 
  private:
-  FiniteSet       _finite_set;  ///< The set of valid AstlValue objects
-  ValueToLabelMap _labels;      ///< Mapping from finite set values to human-readable labels
+  FiniteSet      _finite_set;  ///< The set of valid AstlValue objects
+  ValueToInfoMap _state_info;  ///< Mapping from value -> state info (label + description)
 };
 
 using MetricConfigOnTargets =

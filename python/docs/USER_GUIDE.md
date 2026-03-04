@@ -18,7 +18,8 @@ SPDX-License-Identifier: Apache-2.0
 |                 |                    |                                          | `get_metrics`, `get_metric_groups`, `read_immediate`, |
 |                 |                    |                                          | `get_counter_samples`, `get_metric_samples`,          |
 |                 |                    |                                          | `get_metric_statistics_on_target`,                    |
-|                 |                    |                                          | `get_metric_discrete_histogram_on_target`             |
+|                 |                    |                                          | `get_metric_discrete_histogram_on_target`,            |
+|                 |                    |                                          | `get_metric_states_on_target`                         |
 | Public Facade   | `astl`             | Re-exports curated API surface           | `start_collection`, `pause_collection`,               |
 |                 |                    |                                          | `resume_collection`, `stop_collection`, enums         |
 | Session SerDes  | `astl`             | Save/load `.astl` sessions via C API     | `save_collection`, `load_collection`                  |
@@ -305,6 +306,64 @@ it. The Python wrapper hides this detail completely.
 
 ---
 
+## Metric State Discovery API
+
+For metrics that have a fixed set of named states—either discrete enumerated values
+(`ASTL_METRIC_FINITE_SET_VALUE`) or named residency buckets (`ASTL_METRIC_RESIDENCY`)—
+`get_metric_states_on_target` returns all possible states so you can label collected
+samples or drive UI dropdowns without hard-coding platform knowledge.
+
+```python
+import astl
+
+t = astl.get_targets()[0]
+metrics = astl.get_metrics(t)
+
+# --- Finite-set metric (e.g. CPU power-mode selector) ---
+finite_metrics = [m for m in metrics if m.metric_type == astl.MetricType.FINITE_SET_VALUE]
+if finite_metrics:
+    m = finite_metrics[0]
+    states = astl.get_metric_states_on_target(t, m)
+    for s in states:
+        print(f"  label={s.name!r}  encoded_value={s.value}")
+
+# --- Residency metric (e.g. C-state time residency) ---
+residency_metrics = [m for m in metrics if m.metric_type == astl.MetricType.RESIDENCY]
+if residency_metrics:
+    m = residency_metrics[0]
+    states = astl.get_metric_states_on_target(t, m)
+    for s in states:           # value is None for residency metrics
+        print(f"  state={s.name!r}  description={s.description!r}")
+```
+
+### Two-step C API
+
+Internally the function calls `astlGetMetricStateCountOnTarget` to determine the
+number of states, allocates an exact-sized `astl_state_properties_t[]` buffer, then
+calls `astlGetMetricStatesOnTarget` to fill it. The Python wrapper hides this detail
+completely.
+
+### `MetricState` Attributes
+
+| Attribute     | Type          | Notes                                                                                      |
+| ------------- | ------------- | ------------------------------------------------------------------------------------------ |
+| `name`        | `str`         | Human-readable label for the state (always populated).                                     |
+| `description` | `str \| None` | Optional longer description of the state; `None` when not provided by the platform config. |
+| `value`       | `Any \| None` | Decoded enumerated value for `FINITE_SET_VALUE` metrics; `None` for `RESIDENCY` metrics.   |
+
+> **Order guarantee:** the list is returned in the same order as the C API delivers the
+> states. For residency metrics this matches the sample-vector order returned by
+> `get_metric_samples`, so you can zip states and sample sub-values index-by-index.
+
+### Metric State Discovery Error Handling
+
+| Condition                                       | Exception           |
+| ----------------------------------------------- | ------------------- |
+| Metric is not `FINITE_SET_VALUE` or `RESIDENCY` | `NotSupportedError` |
+| Invalid target or metric handle                 | `BadArgumentError`  |
+
+---
+
 ## Streaming & Periodic Polling
 
 ### Synchronous
@@ -533,12 +592,14 @@ print(frame_or_list)
 
 ## Glossary
 
-| Term     | Meaning                                            |
-| -------- | -------------------------------------------------- |
-| Counter  | Monotonic or raw hardware/firmware value           |
-| Metric   | Possibly computed / aggregated value from counters |
-| Sample   | Timestamped reading (counter or metric)            |
-| Poll Gap | Time delta between consecutive poll timestamps     |
+| Term              | Meaning                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------ |
+| Counter           | Monotonic or raw hardware/firmware value                                                               |
+| Metric            | Possibly computed / aggregated value from counters                                                     |
+| Sample            | Timestamped reading (counter or metric)                                                                |
+| Poll Gap          | Time delta between consecutive poll timestamps                                                         |
+| Finite-set metric | Metric whose value comes from a fixed enumerated set (e.g. CPU power mode); maps to `MetricState`      |
+| Residency metric  | Metric reporting time spent in each named state (e.g. C-states); each state name maps to `MetricState` |
 
 ---
 

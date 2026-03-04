@@ -14,31 +14,35 @@ using namespace std::chrono_literals;
 
 static std::vector<astl::ResidencyMetricConfig::StateInfo> CreateTestStateInfos(double frequency = 1000000.0) {
   return {
-      {"C6", frequency, astl::ScmiOperationBuilder{0x67DE}}, // C6 state with specified frequency
-      {"C1", frequency, astl::ScmiOperationBuilder{0x68DE}}, // C1 state with specified frequency
-      {"C2", frequency, astl::ScmiOperationBuilder{0x69DE}}, // C2 state with specified frequency
+      {"C6", "CPU deep sleep state",  frequency,
+       astl::ScmiOperationBuilder{0x67DE}                                          }, // C6 state with specified frequency
+      {"C1", "CPU clock gated state", frequency,
+       astl::ScmiOperationBuilder{0x68DE}                                          }, // C1 state with specified frequency
+      {"C2", "CPU sleep state 2",     frequency, astl::ScmiOperationBuilder{0x69DE}}, // C2 state with specified frequency
   };
 }
 
 static auto GetStatetoInfoMap() -> const astl::ResidencyMetricConfig::StateToInfoMap& {
   static astl::ResidencyMetricConfig::StateToInfoMap state_info = {
-      {"C6", {"C6", 1000000.0, astl::ScmiOperationBuilder{0x67DE}}},
-      {"C1", {"C1", 1000000.0, astl::ScmiOperationBuilder{0x68DE}}},
-      {"C2", {"C2", 1000000.0, astl::ScmiOperationBuilder{0x69DE}}}
+      {"C6", {"C6", "CPU deep sleep state", 1000000.0, astl::ScmiOperationBuilder{0x67DE}} },
+      {"C1", {"C1", "CPU clock gated state", 1000000.0, astl::ScmiOperationBuilder{0x68DE}}},
+      {"C2", {"C2", "CPU sleep state 2", 1000000.0, astl::ScmiOperationBuilder{0x69DE}}    }
   };
   return state_info;
 }
 
 static const astl::ResidencyMetricConfig* GetResidencyConfig() {
-  static astl::ResidencyMetricConfig config{"test_cpu_cstate_residency",
-                                            "Unit test CPU C-state residency metric",
-                                            ASTL_UNITS_TICKS,
-                                            ASTL_VALUE_UINT64,
-                                            ASTL_METRIC_RESIDENCY,
-                                            ASTL_CATEGORY_UNCATEGORIZED,
-                                            astl::CollectorType::SCMI,
-                                            GetStatetoInfoMap(),
-                                            "Active"};
+  static astl::ResidencyMetricConfig config{
+      "test_cpu_cstate_residency",
+      "Unit test CPU C-state residency metric",
+      ASTL_UNITS_TICKS,
+      ASTL_VALUE_UINT64,
+      ASTL_METRIC_RESIDENCY,
+      ASTL_CATEGORY_UNCATEGORIZED,
+      astl::CollectorType::SCMI,
+      GetStatetoInfoMap(),
+      astl::ResidencyMetricConfig::InferredStateInfo{"Active", "CPU active state"}
+  };
   return &config;
 }
 
@@ -145,7 +149,7 @@ TEST_CASE("ResidencyMetric: deterministic processed sample sink order", "[Reside
   std::transform(state_configs.begin(), state_configs.end(), std::back_inserter(configured_order),
                  [](const auto& config) { return config.state_name; });
   if (inferred_state_opt.has_value()) {
-    configured_order.push_back(inferred_state_opt.value());
+    configured_order.push_back(inferred_state_opt->name);
   }
 
   // configured_order should have 4 entries: C6, C1, C2, Active
@@ -202,7 +206,7 @@ TEST_CASE("ResidencyMetric: tick to seconds conversion", "[ResidencyMetric]") {
 
   SECTION("Valid conversion") {
     astl::AstlValue                        ticks{uint64_t{1000000}};  // 1 million ticks
-    astl::ResidencyMetricConfig::StateInfo config{"C0", 1000000.0,
+    astl::ResidencyMetricConfig::StateInfo config{"C0", "CPU fully active state", 1000000.0,
                                                   astl::ScmiOperationBuilder{0x67DE}};  // 1MHz frequency
     auto result = ResidencyMetricTestFixture::TestConvertTicksToMicroseconds(ticks, config);
 
@@ -212,7 +216,7 @@ TEST_CASE("ResidencyMetric: tick to seconds conversion", "[ResidencyMetric]") {
 
   SECTION("Invalid tick frequency") {
     astl::AstlValue                        ticks{uint64_t{1000000}};
-    astl::ResidencyMetricConfig::StateInfo config{"InvalidState", 0.0,
+    astl::ResidencyMetricConfig::StateInfo config{"InvalidState", "State with invalid frequency", 0.0,
                                                   astl::ScmiOperationBuilder{0x1234}};  // Invalid frequency
     auto result = ResidencyMetricTestFixture::TestConvertTicksToMicroseconds(ticks, config);
 

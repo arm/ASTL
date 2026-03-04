@@ -123,7 +123,8 @@ See [Build steps for developers](#build-steps-for-developers) for more detailed 
 
 > Looking for the Python telemetry wrapper? See the
 > **[ASTL Python User Guide](python/docs/USER_GUIDE.md)** for: initialization, streaming (sync &
-> async), diagnostics CLI, derived metrics, DataFrame integration, benchmarking, and
+> async), diagnostics CLI, derived metrics, DataFrame integration, benchmarking,
+> metric state discovery (`get_metric_states_on_target` / `MetricState`), and
 > exception model.
 
 ### Usage
@@ -410,13 +411,13 @@ for usage details.
 
 ## String Pointer Lifetimes and Ownership
 
-**Important:** The `astlGetMetricStates` API returns `const char*` pointers to state name strings (`astl_state_properties_t._name`). These pointers refer to internal storage owned by ASTL's metric and configuration objects.
+**Important:** The `astlGetMetricStatesOnTarget` API returns `const char*` pointers to state name strings (`astl_state_properties_t._name`). These pointers refer to internal storage owned by ASTL's metric and configuration objects.
 
 ### Lifetime Guarantees
 
 State name pointers are valid only for the current collection session:
 
-1. **During a collection session**: All state name pointers returned by `astlGetMetricStates` remain valid throughout the current collection session (across start/stop/pause/resume cycles).
+1. **During a collection session**: All state name pointers returned by `astlGetMetricStatesOnTarget` remain valid throughout the current collection session (across start/stop/pause/resume cycles).
 
 2. **After reconfiguration**: State name pointers become **invalid** immediately when ASTL is reconfigured for a subsequent collection. Accessing these pointers after reconfiguration results in undefined behavior.
 

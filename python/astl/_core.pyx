@@ -99,6 +99,32 @@ cdef class MetricGroup:
     def __repr__(self):
         return f"<MetricGroup name={self.name!r} metrics={self.metric_count}>"
 
+cdef class MetricState:
+    """A state or possible value for a discrete or residency metric.
+
+    For finite-set metrics (ASTL_METRIC_FINITE_SET_VALUE): ``value`` holds the
+    decoded enumerated value and ``name`` provides its human-readable label.
+    For residency metrics (ASTL_METRIC_RESIDENCY): only ``name`` is meaningful
+    (e.g. ``"C6"``, ``"Active"``); ``value`` is ``None``.
+
+    Attributes:
+        name (str): State or label name (always populated).
+        description (str | None): Optional human-readable description of the state.
+        value: Decoded enumerated value for finite-set metrics; ``None`` for
+            residency metrics.
+    """
+    cdef public object name
+    cdef public object description
+    cdef public object value
+
+    def __init__(self, name: str, description, value):
+        self.name = name
+        self.description = description
+        self.value = value
+
+    def __repr__(self):
+        return f"<MetricState name={self.name!r} value={self.value!r}>"
+
 class Category:
     """Namespace of ASTL category codes (mirrors astl_category_t enum)."""
     COUNT = ASTL_CATEGORY_COUNT
@@ -637,6 +663,60 @@ cpdef list get_metric_discrete_histogram_on_target(Target target, Metric metric)
         return out
     finally:
         free(bins)
+
+
+cpdef list get_metric_states_on_target(Target target, Metric metric):
+    """Return the state descriptors for a finite-set or residency metric.
+
+    Uses the two-step C API: first queries the state count via
+    ``astlGetMetricStateCountOnTarget``, then allocates and fills the state
+    array via ``astlGetMetricStatesOnTarget``.
+
+    Args:
+        target: The :class:`Target` to query.
+        metric: The :class:`Metric` to query. Must be of type
+            ``ASTL_METRIC_FINITE_SET_VALUE`` or ``ASTL_METRIC_RESIDENCY``.
+
+    Returns:
+        A list of :class:`MetricState` objects.  For finite-set metrics each
+        state carries both a decoded ``value`` and a ``name`` label.  For
+        residency metrics only ``name`` is meaningfully populated; ``value``
+        is ``None``.  Returns an empty list when the metric has no states.
+
+    Raises:
+        ASTLError / NotSupportedError: when the metric type is neither
+            ASTL_METRIC_FINITE_SET_VALUE nor ASTL_METRIC_RESIDENCY.
+    """
+    cdef uint32_t count = 0
+    _check(astlGetMetricStateCountOnTarget(
+        <const void*>target._handle_ptr,
+        <const void*>metric._handle_ptr,
+        &count,
+    ))
+    if count == 0:
+        return []
+    cdef astl_state_properties_t* arr = \
+        <astl_state_properties_t*>calloc(count, sizeof(astl_state_properties_t))
+    if arr == NULL:
+        raise MemoryError()
+    arr[0]._size = sizeof(astl_state_properties_t)
+    try:
+        _check(astlGetMetricStatesOnTarget(
+            <const void*>target._handle_ptr,
+            <const void*>metric._handle_ptr,
+            arr,
+            &count,
+        ))
+        is_finite_set = metric.metric_type == ASTL_METRIC_FINITE_SET_VALUE
+        out = []
+        for i in range(count):
+            name = arr[i]._name.decode() if arr[i]._name != NULL else ""
+            desc = arr[i]._description.decode() if arr[i]._description != NULL else ""
+            value = _decode_value(metric.value_type, arr[i]._value) if is_finite_set else None
+            out.append(MetricState(name, desc, value))
+        return out
+    finally:
+        free(arr)
 
 
 cpdef list get_targets():

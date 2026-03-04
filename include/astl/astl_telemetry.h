@@ -442,7 +442,7 @@ ASTL_API astl_status_code astlGetMetrics(astl_target_handle_t target_handle, ast
 typedef struct _astl_state_properties_t {
   size_t       _size;         //!< Size of this struct for versioning
   const char*  _name;         //!< State/label name (always set)
-  const char*  _description;  //!< Optional description of the state (may be NULL)
+  const char*  _description;  //!< Description of the state (always set)
   astl_value_t _value;        //!< The value (only used for finite set metrics)
 } astl_state_properties_t;
 
@@ -470,9 +470,9 @@ typedef struct _astl_state_properties_t {
  *                                    ASTL_STATUS_NOT_SUPPORTED if metric is neither
  *                                    finite set nor residency type.
  */
-ASTL_API astl_status_code astlGetMetricStateCount(astl_target_handle_t target_handle,
-                                                  astl_metric_handle_t metric_handle,
-                                                  uint32_t*            state_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricStateCountOnTarget(astl_target_handle_t target_handle,
+                                                          astl_metric_handle_t metric_handle,
+                                                          uint32_t*            state_count) ASTL_API_NOEXCEPT;
 
 /**
  * @brief Get the state names for a metric.
@@ -509,8 +509,10 @@ ASTL_API astl_status_code astlGetMetricStateCount(astl_target_handle_t target_ha
  *                                    ASTL_STATUS_NOT_SUPPORTED if metric is neither
  *                                    finite set nor residency type.
  */
-ASTL_API astl_status_code astlGetMetricStates(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                              astl_state_properties_t* states, uint32_t* state_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricStatesOnTarget(astl_target_handle_t     target_handle,
+                                                      astl_metric_handle_t     metric_handle,
+                                                      astl_state_properties_t* states,
+                                                      uint32_t*                state_count) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************              METRIC GROUPS             *********************

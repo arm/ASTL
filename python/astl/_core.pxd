@@ -217,6 +217,17 @@ cdef extern from "astl/astl_telemetry.h":
         astl_metric_properties_t* _metrics
     ctypedef _astl_metric_group_properties_t astl_metric_group_properties_t
 
+    # Metric state discovery
+    cdef struct _astl_state_properties_t:
+        size_t _size
+        const char* _name
+        const char* _description
+        astl_value_t _value
+    ctypedef _astl_state_properties_t astl_state_properties_t
+
+    int astlGetMetricStateCountOnTarget(const void* target_handle, const void* metric_handle, uint32_t* state_count)
+    int astlGetMetricStatesOnTarget(const void* target_handle, const void* metric_handle, astl_state_properties_t* states, uint32_t* state_count)
+
     # Collection enums (for future lifecycle exposure)
     cdef enum _astl_collection_mode_t:
         ASTL_COLLECTION_MODE_SAMPLING

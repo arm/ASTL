@@ -48,12 +48,14 @@ auto ResidencyMetric::InitializeResidencyState() -> void {
   }
 
   // Initialize tracking for inferred state if configured
-  if (const auto& inferred_state = _residency_configuration->InferredState().value_or(""); !inferred_state.empty()) {
-    _state_time_totals[inferred_state]           = std::chrono::duration<double>(0.0);
-    _state_percentage_sums[inferred_state]       = 0.0;
-    _state_sample_counts[inferred_state]         = 0;
-    _summary_data.min_percentage[inferred_state] = std::numeric_limits<double>::max();
-    _summary_data.max_percentage[inferred_state] = 0.0;
+  if (const auto& inferred_state_info = _residency_configuration->InferredState();
+      inferred_state_info.has_value() && !inferred_state_info->name.empty()) {
+    const auto& inferred_state_name                   = inferred_state_info->name;
+    _state_time_totals[inferred_state_name]           = std::chrono::duration<double>(0.0);
+    _state_percentage_sums[inferred_state_name]       = 0.0;
+    _state_sample_counts[inferred_state_name]         = 0;
+    _summary_data.min_percentage[inferred_state_name] = std::numeric_limits<double>::max();
+    _summary_data.max_percentage[inferred_state_name] = 0.0;
   }
 }
 
@@ -224,7 +226,7 @@ auto ResidencyMetric::Summarize() -> astl_status_code {
   if (_summary_data.inferred_state_percentage.has_value() && _residency_configuration->InferredState().has_value()) {
     _residency_summary_logger.LogInfo(
         "{}, {}, {:.6f}, {:.2f}, {:.2f}, {:.2f}\n", _configuration->Name(),
-        _residency_configuration->InferredState().value(), _summary_data.inferred_state_time.value_or(0.0),
+        _residency_configuration->InferredState()->name, _summary_data.inferred_state_time.value_or(0.0),
         _summary_data.inferred_state_percentage.value(), _summary_data.inferred_state_percentage.value(),
         _summary_data.inferred_state_percentage.value());
   }
@@ -357,7 +359,7 @@ auto ResidencyMetric::CalculateInferredStateResidencyForInterval(std::chrono::mi
 
   // Create StateResidencyData for the inferred state and capture time for pending sink ordering
   if (inferred_time_microseconds.count() > 0) {
-    auto status = UpdateStateResidencyStatistics(_residency_configuration->InferredState().value(),
+    auto status = UpdateStateResidencyStatistics(_residency_configuration->InferredState()->name,
                                                  inferred_time_microseconds, inferred_percentage, timestamp);
     if (status != ASTL_STATUS_SUCCESS) {
       return status;

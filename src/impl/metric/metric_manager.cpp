@@ -293,12 +293,12 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
       // Create state configurations from the metric config for the specific target
       std::vector<ResidencyMetricConfig::StateInfo> state_configs;
       // turn the map of state->info to a vector of StateInfo
-      std::ranges::transform(residency_config->GetStateInfo(), std::back_inserter(state_configs),
-                             [](const auto& state_pair) {
-                               const auto& [state_name, state_data] = state_pair;
-                               return ResidencyMetricConfig::StateInfo{state_name, state_data.tick_frequency,
-                                                                       state_data.operation_builder};
-                             });
+      std::ranges::transform(
+          residency_config->GetStateInfo(), std::back_inserter(state_configs), [](const auto& state_pair) {
+            const auto& [state_name, state_data] = state_pair;
+            return ResidencyMetricConfig::StateInfo{state_name, state_data.state_description, state_data.tick_frequency,
+                                                    state_data.operation_builder};
+          });
       return std::make_unique<ResidencyMetric>(residency_config, state_configs, target, sink);
     }
     case astl_metric_type_t::ASTL_METRIC_FINITE_SET_VALUE: {

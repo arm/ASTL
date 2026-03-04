@@ -94,8 +94,11 @@ static auto SerializeFiniteSetMetric(const MetricConfig& metric_config, const IT
 
   auto* finite_set_msg = config->mutable_finite_set();
 
-  for (const auto& [value, label] : finite_set_config.GetLabels()) {
-    (*finite_set_msg->mutable_value_to_label_map())[*value.ToInt64()] = label;
+  for (const auto& [value, state_info] : finite_set_config.GetStateInfo()) {
+    const int64_t key     = *value.ToInt64();
+    auto&         pb_info = (*finite_set_msg->mutable_value_to_state_info())[key];
+    pb_info.set_label(state_info.state_name);
+    pb_info.set_description(state_info.state_description);
   }
 
   return out_or_err;
@@ -158,13 +161,13 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   const auto metric_type = static_cast<astl_metric_type_t>(proto_cfg.metric_type());
   const auto collector   = static_cast<CollectorType>(proto_cfg.collector_type());
 
-  FiniteSetMetricConfig::FiniteSet       finite_set;
-  FiniteSetMetricConfig::ValueToLabelMap labels;
+  FiniteSetMetricConfig::FiniteSet      finite_set;
+  FiniteSetMetricConfig::ValueToInfoMap state_info;
   try {
-    for (const auto& entry : finite_set_cfg_proto.value_to_label_map()) {
-      const auto key = static_cast<uint64_t>(entry.first);
+    for (const auto& [key_i64, pb_info] : finite_set_cfg_proto.value_to_state_info()) {
+      const auto key = static_cast<uint64_t>(key_i64);
       finite_set.emplace(key);
-      labels.emplace(AstlValue(key), entry.second);
+      state_info.emplace(AstlValue(key), FiniteSetMetricConfig::StateInfo{pb_info.label(), pb_info.description()});
     }
   } catch (const std::bad_variant_access& e) {
     ASTL_LOG_ERROR("DeserializeFiniteSetMetricConfig: bad variant access when parsing finite set for metric {}: {}",
@@ -180,7 +183,7 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   AnyFormula formula = IdentityFormula{};
   auto       cfg = std::make_unique<FiniteSetMetricConfig>(name, description, units, value_type, metric_type, category,
                                                            collector, NullOperationBuilder{}, std::move(finite_set),
-                                                           std::move(labels), std::move(formula));
+                                                           std::move(state_info), std::move(formula));
   return cfg;
 }
 

@@ -23,6 +23,12 @@ Discovery:
 - `get_counters(target) -> list[Counter]`
 - `get_metrics(target) -> list[Metric]`
 - `get_metric_groups(target) -> list[MetricGroup]`
+- `get_metric_states_on_target(target, metric) -> list[MetricState]`
+
+  Returns the named states for `FINITE_SET_VALUE` or `RESIDENCY` metrics.
+  For finite-set metrics each `MetricState` has both `name` (label) and `value`
+  (decoded enumerated value). For residency metrics only `name` is populated;
+  `value` is `None`. Raises `NotSupportedError` for other metric types.
 
 Collection Configuration (per target for now):
 
@@ -77,11 +83,11 @@ Entity object attributes (read-only):
 
 - Target: `name`, `description`, `_handle_ptr`
 - Counter: `name`, `description`, `min_sampling_interval`, `units`,
-  `value_type`,
-  `counter_type`, `mask`, `formula`
+  `value_type`, `counter_type`, `mask`, `formula`
 - Metric: `name`, `description`, `min_sampling_interval`, `units`,
-  `value_type`, `metric_type`
+  `value_type`, `metric_type`, `category`
 - MetricGroup: `name`, `description`, `metric_count`
+- MetricState: `name`, `description`, `value`
 
 ## Build / Install (Editable)
 

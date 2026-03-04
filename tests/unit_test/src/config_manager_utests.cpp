@@ -98,21 +98,24 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
   residency_declaration.unit                = "seconds";
   residency_declaration.metric_type         = "residency";
   residency_declaration.collection.protocol = "scmi";
-  residency_declaration.inferred_state      = "Active";
+  residency_declaration.inferred_state = astl::ResidencyMetricConfig::InferredStateInfo{"Active", "CPU active state"};
 
   // Set up states configuration
   nlohmann::json states_json;
   states_json["C1"] = {
       {"register",       "C1_RESIDENCY_COUNTER"},
-      {"tick_frequency", 1000000.0             }
+      {"tick_frequency", 1000000.0             },
+      {"description",    "C1 idle state"       }
   };
   states_json["C3"] = {
       {"register",       "C3_RESIDENCY_COUNTER"},
-      {"tick_frequency", 1000000.0             }
+      {"tick_frequency", 1000000.0             },
+      {"description",    "C3 deep idle state"  }
   };
   states_json["C6"] = {
       {"register",       "C6_RESIDENCY_COUNTER"},
-      {"tick_frequency", 1000000.0             }
+      {"tick_frequency", 1000000.0             },
+      {"description",    "C6 power-off state"  }
   };
 
   std::map<std::string, nlohmann::json> states_map;
@@ -204,9 +207,13 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
     finite_decl.collection.protocol      = "scmi";
     finite_decl.collection.register_name = "P_STATE";
 
-    // json finite_set_values representation: array of single-key objects
-    std::vector<nlohmann::json> finite_json{nlohmann::json{{"P0", 0}}, nlohmann::json{{"P1", 1}},
-                                            nlohmann::json{{"P2", 2}}, nlohmann::json{{"P3", 3}}};
+    // json finite_set_values representation: object map of label -> {value, description}
+    std::map<std::string, nlohmann::json> finite_json{
+        {"P0", {{"value", 0}, {"description", "Performance state 0"}}},
+        {"P1", {{"value", 1}, {"description", "Performance state 1"}}},
+        {"P2", {{"value", 2}, {"description", "Performance state 2"}}},
+        {"P3", {{"value", 3}, {"description", "Performance state 3"}}},
+    };
     finite_decl.finite_set_values = finite_json;
 
     auto metric_configs_result =

@@ -86,34 +86,34 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
-  // Expect: finite_set_values = [ {"P0":0}, {"P1":1}, ... ] each element exactly one key -> primitive value
-  FiniteSetMetricConfig::FiniteSet           finite_set;      // unique values
-  std::unordered_map<std::string, AstlValue> label_to_value;  // label to AstlValue mapping (temporary use for parsing)
+  // Expect: finite_set_values = {"P0": {"value": 0, "description": "..."}, "P1": {"value": 1, "description": "..."},
+  // ...}
+  FiniteSetMetricConfig::FiniteSet      finite_set;  // unique values
+  FiniteSetMetricConfig::ValueToInfoMap value_to_info;
 
-  for (const auto& obj : metric_declaration.finite_set_values.value()) {
-    if (!obj.is_object() || obj.size() != 1) {
-      ASTL_LOG_ERROR("Each element of finite_set_values for metric {} must be an object with exactly one key",
-                     metric_key_name);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-    }
-    const auto  iter  = obj.begin();
-    const auto& label = iter.key();
-    const auto& val   = iter.value();
+  for (const auto& [label, entry] : metric_declaration.finite_set_values.value()) {
     if (label.empty()) {
       ASTL_LOG_ERROR("Empty label in finite_set_values for metric {}", metric_key_name);
       return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
+    if (!entry.is_object() || !entry.contains("value") || !entry.contains("description")) {
+      ASTL_LOG_ERROR(
+          "finite_set_values entry '{}' for metric {} must be an object with 'value' and 'description' fields", label,
+          metric_key_name);
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
 
-    auto parsed_value_result = ParseJsonValueToAstlValue(val, label, metric_key_name);
+    auto parsed_value_result = ParseJsonValueToAstlValue(entry["value"], label, metric_key_name);
     if (!parsed_value_result) {
       return std::unexpected(parsed_value_result.error());
     }
 
-    if (!label_to_value.emplace(label, *parsed_value_result).second) {
-      ASTL_LOG_ERROR("Duplicate finite set label '{}' in metric {}", label, metric_key_name);
+    if (!finite_set.emplace(*parsed_value_result).second) {
+      ASTL_LOG_ERROR("Duplicate finite set value for label '{}' in metric {}", label, metric_key_name);
       return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
-    finite_set.emplace(*parsed_value_result);
+    value_to_info[*parsed_value_result] =
+        FiniteSetMetricConfig::StateInfo{label, entry["description"].get<std::string>()};
   }
 
   if (finite_set.empty()) {
@@ -122,13 +122,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   }
 
   ASTL_LOG_INFO("Parsed finite set metric '{}' with {} labels and {} unique values", metric_key_name,
-                label_to_value.size(), finite_set.size());
-
-  // Convert label_to_value map to value_to_label map for use in FiniteSetMetricConfig
-  FiniteSetMetricConfig::ValueToLabelMap value_to_label;
-  for (const auto& [label, value] : label_to_value) {
-    value_to_label[value] = label;
-  }
+                value_to_info.size(), finite_set.size());
 
   MetricConfigOnTargets metric_configs_on_targets;
   const auto            category = ParseCategory(metric_declaration.category);
@@ -145,8 +139,8 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     const auto& de_id      = scmi_metric_declaration.de_id;
     // @todo(ASTL-186) - may need to handle different data event ids for different targets
     ScmiOperationBuilder operation_builder{de_id, value_scale_factor};
-    auto                 finite_set_copy = finite_set;      // copy for this metric instance
-    auto                 labels_copy     = value_to_label;  // copy for this metric instance
+    auto                 finite_set_copy = finite_set;     // copy for this metric instance
+    auto                 info_copy       = value_to_info;  // copy for this metric instance
 
     auto formula_result = BuildFormula(metric_declaration.formula);
     if (!formula_result.has_value()) {
@@ -156,7 +150,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     auto new_metric_config = std::make_unique<FiniteSetMetricConfig>(
         // @todo(ASTL-303) - consider how best to use the base10_unit_modifier in the MetricConfig and collector
         metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE, category,
-        collector_type.value(), std::move(operation_builder), std::move(finite_set_copy), std::move(labels_copy),
+        collector_type.value(), std::move(operation_builder), std::move(finite_set_copy), std::move(info_copy),
         std::move(formula_result.value()));
 
     metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
@@ -186,7 +180,13 @@ static auto GetResidencyMetricStateToInfoMapForInstance(
                      metric_key_name);
       return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
-    double tick_frequency = state_config["tick_frequency"].get<double>();  // Frequency in Hz
+    if (!state_config.contains("description")) {
+      ASTL_LOG_ERROR("State '{}' in residency metric {} missing required 'description' field", state_name,
+                     metric_key_name);
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+    double      tick_frequency    = state_config["tick_frequency"].get<double>();  // Frequency in Hz
+    std::string state_description = state_config["description"].get<std::string>();
 
     auto state_iter = matching_scmi_register_definitions.state_to_base_data_event_id.find(state_name);
     if (state_iter == matching_scmi_register_definitions.state_to_base_data_event_id.end()) {
@@ -197,7 +197,8 @@ static auto GetResidencyMetricStateToInfoMapForInstance(
     auto data_event_id = scmi::spec::GetDataEventId(state_iter->second, instance);
     // @todo(ASTL-331) support non-zero base10 unit modifiers for residency metrics.
     ScmiOperationBuilder             operation_builder{data_event_id};
-    ResidencyMetricConfig::StateInfo state_info{state_name, tick_frequency, std::move(operation_builder)};
+    ResidencyMetricConfig::StateInfo state_info{state_name, state_description, tick_frequency,
+                                                std::move(operation_builder)};
     state_to_info_map[state_name] = std::move(state_info);
   }
   return state_to_info_map;

@@ -142,11 +142,13 @@ struct MetricJsonDeclaration {
   std::optional<nlohmann::json> formula;
 
   // Residency-specific fields
-  std::optional<std::string> inferred_state;                    //!< Name of inferred state (for residency metrics)
-  std::optional<std::map<std::string, nlohmann::json>> states;  //!< State definitions (for residency metrics)
+  std::optional<ResidencyMetricConfig::InferredStateInfo>
+                                                       inferred_state;  //!< Inferred state info (for residency metrics)
+  std::optional<std::map<std::string, nlohmann::json>> states;          //!< State definitions (for residency metrics)
 
   // Finite set specific fields
-  std::optional<std::vector<nlohmann::json>> finite_set_values;  //!< Valid values for finite set metrics
+  // Map of label -> {"value": <numeric/bool>, "description": <string>}
+  std::optional<std::map<std::string, nlohmann::json>> finite_set_values;  //!< Valid values for finite set metrics
 };
 
 inline void from_json(const nlohmann::json& json_data, MetricJsonDeclaration& metric) {
@@ -174,16 +176,20 @@ inline void from_json(const nlohmann::json& json_data, MetricJsonDeclaration& me
   }
 
   // Handle residency-specific fields
+  // Expected format: "inferred_state": {"name": "C0", "description": "CPU active state"}
   if (json_data.contains("inferred_state")) {
-    metric.inferred_state = json_data["inferred_state"].get<std::string>();
+    const auto& inferred_state_json = json_data["inferred_state"];
+    metric.inferred_state           = ResidencyMetricConfig::InferredStateInfo{
+        inferred_state_json.at("name").get<std::string>(), inferred_state_json.at("description").get<std::string>()};
   }
   if (json_data.contains("states")) {
     metric.states = json_data["states"].get<std::map<std::string, nlohmann::json>>();
   }
 
   // Handle finite set specific fields
+  // Expected format: {"P0": {"value": 0, "description": "..."}, "P1": {"value": 1, "description": "..."}, ...}
   if (json_data.contains("finite_set_values")) {
-    metric.finite_set_values = json_data["finite_set_values"].get<std::vector<nlohmann::json>>();
+    metric.finite_set_values = json_data["finite_set_values"].get<std::map<std::string, nlohmann::json>>();
   }
 }
 
