@@ -294,7 +294,7 @@ else()
 endif()
 
 # define a CLI application to use the library
-add_subdirectory(tools/astl_cli)
+add_subdirectory(tools/atx)
 
 include(CTest)
 

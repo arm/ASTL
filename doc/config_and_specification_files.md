@@ -74,7 +74,7 @@ With other metric definitions, and a automatically detected lm-sensors target,
 we might see metrics with names like the table below:
 
 ```bash
-$ ./build/debug/bin/astl_cli list-metrics
+$ ./build/debug/bin/atx list-metrics
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐
 │       Metric Name      │                      Description              │  Units  │ Metric Type │
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐
@@ -143,7 +143,7 @@ Essentially, ASTL will build metric names with <component>.<instance>.<name> whe
 from 0 to the 'count' element containing these members.
 
 ```bash
-$ ./build/debug/bin/astl_cli list-metrics
+$ ./build/debug/bin/atx list-metrics
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐
 │       Metric Name      │                      Description              │  Units  │ Metric Type │
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐
