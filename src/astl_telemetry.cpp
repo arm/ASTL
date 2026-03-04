@@ -6,6 +6,7 @@
 #include <expected>
 #include <iterator>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -80,6 +81,15 @@ auto GetOutputManager() noexcept -> std::expected<astl::IOutputManager*, astl_st
 
 auto SwitchSystemInfoToHostCapture() noexcept -> void { astl::ClearLoadedPlatformInfo(); }
 
+auto GetCApiMutex() noexcept -> std::mutex& {
+  // Global C-API serialization point.
+  // Purpose: make exported C entrypoints safe under concurrent calls while preserving
+  // existing non-thread-safe internals and singleton lazy-init flows.
+  // We intentionally use a non-recursive mutex and avoid lock re-entry patterns.
+  static std::mutex c_api_mutex;
+  return c_api_mutex;
+}
+
 auto GetCounterFromHandle(astl_counter_handle_t counter_handle, const astl::ITarget* target) noexcept
     -> std::expected<const astl::IMetric*, astl_status_code> {
   auto const& orchestrator = astl::Orchestrator::GetInstance();
@@ -136,14 +146,14 @@ auto GetProcessedMetricSamples(const astl::IMetric* metric, const astl::ITarget*
   return samples_result;
 }
 
-auto GetProcessedSamples() noexcept
-    -> std::expected<std::reference_wrapper<astl::ProcessedSamplesMap>, astl_status_code> {
+auto GetProcessedSamplesSnapshot() noexcept -> std::expected<astl::ProcessedSamplesMap, astl_status_code> {
   auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
     return std::unexpected{orchestrator_or_error.error()};
   }
   const auto& orchestrator = orchestrator_or_error->get();
-  return orchestrator->GetProcessedSamples();
+  // Snapshot return avoids exposing references to mutable shared state across threads.
+  return orchestrator->GetProcessedSamplesSnapshot();
 }
 
 constexpr uint32_t kFirstElementIdx{0};
@@ -164,6 +174,7 @@ auto GetFirstElementSizeField(Container const& elements) noexcept
  **********************************************************************************/
 
 auto astlGetSystemInfo(astl_platform_properties_t* system_info) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!system_info) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -192,6 +203,7 @@ auto astlGetSystemInfo(astl_platform_properties_t* system_info) noexcept -> astl
  **********************************************************************************/
 
 auto astlGetTargetCount(uint32_t* target_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -248,6 +260,7 @@ auto GetVersionedTargetPropertiesSpan(astl_target_properties_t* targets, uint32_
 }
 
 auto astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!targets) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -311,6 +324,7 @@ auto astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) n
  **********************************************************************************/
 // TODO(ASTL-180) counter should be re-implemented as just a RawMetric.
 auto astlGetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !counter_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -335,6 +349,7 @@ auto astlGetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_c
 
 auto astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties_t* counters,
                      uint32_t* counter_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !counters || !counter_count || *counter_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -403,6 +418,7 @@ auto astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties
  **********************************************************************************/
 
 auto astlGetMetricCount(astl_target_handle_t target_handle, uint32_t* metric_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !metric_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -427,6 +443,7 @@ auto astlGetMetricCount(astl_target_handle_t target_handle, uint32_t* metric_cou
 
 auto astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t* metrics,
                     uint32_t* metric_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   // check input arguments
   if (!target_handle || !metrics || !metric_count || *metric_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -492,6 +509,7 @@ auto astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t
 
 auto astlGetMetricStateCount(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
                              uint32_t* state_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !metric_handle || !state_count) {
     ASTL_LOG_ERROR("astlGetMetricStateCount: Invalid argument(s)");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -664,6 +682,7 @@ auto PopulateResidencyStateNames(const astl::IMetric* metric, std::span<astl_sta
 
 auto astlGetMetricStates(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
                          astl_state_properties_t* states, uint32_t* state_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !metric_handle || !states || !state_count || *state_count == 0) {
     ASTL_LOG_ERROR("astlGetMetricStates: Invalid argument(s)");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -727,6 +746,7 @@ auto astlGetMetricStates(astl_target_handle_t target_handle, astl_metric_handle_
 
 auto astlGetMetricGroupCount(astl_target_handle_t target_handle, uint32_t* metric_group_count) noexcept
     -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle) {
     ASTL_LOG_ERROR("astlGetMetricGroupCount: target_handle is null");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -767,6 +787,7 @@ auto astlGetMetricGroupCount(astl_target_handle_t target_handle, uint32_t* metri
 
 auto astlGetMetricGroups(astl_target_handle_t target_handle, astl_metric_group_properties_t* metric_groups,
                          uint32_t* metric_group_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !metric_groups || !metric_group_count || *metric_group_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -811,6 +832,7 @@ auto astlGetMetricGroups(astl_target_handle_t target_handle, astl_metric_group_p
 
 auto astlGetMetricGroupMetrics(astl_target_handle_t target_handle, const astl_metric_group_properties_t* metric_group,
                                astl_metric_properties_t* metrics) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle) {
     ASTL_LOG_ERROR("astlGetMetricGroupMetrics: target_handle cannot be null");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -878,6 +900,7 @@ auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                
                                             const astl_collection_parameters_t* collection_params,
                                             const astl_counter_handle_t*        counter_handles,
                                             uint32_t counter_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !collection_params || !counter_handles || counter_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -923,6 +946,7 @@ auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                
 auto astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,
                                     const astl_counter_handle_t* counter_handles, uint32_t counter_count) noexcept
     -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!collection_params || !counter_handles) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -965,6 +989,7 @@ auto astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_
                                            astl_collection_parameters_t* collection_params,
                                            astl_metric_handle_t* metric_handles, uint32_t metric_count) noexcept
     -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   // check input arguments for null and api version
   if (!target_handle || !collection_params || !metric_handles || !metric_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -995,6 +1020,7 @@ auto astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_
 auto astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
                                    astl_metric_handle_t* metric_handles, uint32_t metric_count) noexcept
     -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   SwitchSystemInfoToHostCapture();
 
   (void)collection_params;
@@ -1009,6 +1035,7 @@ auto astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          ta
                                                 astl_collection_parameters_t* collection_params,
                                                 astl_metric_group_handle_t*   metric_group_handles,
                                                 uint32_t metric_group_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   // check input arguments
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -1066,6 +1093,7 @@ auto astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          ta
 auto astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
                                         astl_metric_group_handle_t*   metric_group_handles,
                                         uint32_t                      metric_group_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   SwitchSystemInfoToHostCapture();
 
   (void)collection_params;
@@ -1077,6 +1105,7 @@ auto astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection
 }
 
 auto astlReadImmediateOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1095,7 +1124,8 @@ auto astlReadImmediateOnTarget(astl_target_handle_t target_handle) noexcept -> a
 }
 
 auto astlReadImmediate() noexcept -> astl_status_code {
-  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  auto const&                 orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
     return orchestrator_or_error.error();
   }
@@ -1112,6 +1142,7 @@ auto astlReadImmediate() noexcept -> astl_status_code {
 }
 
 auto astlStartCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1131,11 +1162,13 @@ auto astlStartCollectionOnTarget(astl_target_handle_t target_handle) noexcept ->
 }
 
 auto astlStartCollection() noexcept -> astl_status_code {
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  astl_status_code            result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
 auto astlPauseCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1160,6 +1193,7 @@ auto astlPauseCollectionOnTarget(astl_target_handle_t target_handle) noexcept ->
 }
 
 auto astlPauseCollection() noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   // Do not trigger lazy construction; require `Orchestrator::GetInstance()` to have run.
   if (!astl::Orchestrator::IsInitialized()) {
     return ASTL_STATUS_NOT_INITIALIZED;
@@ -1184,6 +1218,7 @@ auto astlPauseCollection() noexcept -> astl_status_code {
 }
 
 auto astlResumeCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1209,6 +1244,7 @@ auto astlResumeCollectionOnTarget(astl_target_handle_t target_handle) noexcept -
 }
 
 auto astlResumeCollection() noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!astl::Orchestrator::IsInitialized()) {
     return ASTL_STATUS_NOT_INITIALIZED;
   }
@@ -1232,6 +1268,7 @@ auto astlResumeCollection() noexcept -> astl_status_code {
 }
 
 auto astlStopCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1251,12 +1288,14 @@ auto astlStopCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> 
 }
 
 auto astlStopCollection() noexcept -> astl_status_code {
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  astl_status_code            result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
 /*** Save collection session to .astl file ***/
 auto astlSaveCollection(const astl_save_params_t* params) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!params) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1289,6 +1328,7 @@ auto astlSaveCollection(const astl_save_params_t* params) noexcept -> astl_statu
 
 /*** Load collection session from .astl file ***/
 auto astlLoadCollection(const astl_load_params_t* params) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!params) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1327,6 +1367,7 @@ auto astlLoadCollection(const astl_load_params_t* params) noexcept -> astl_statu
 /*** COLLECTED COUNTER SAMPLES ***/
 auto astlGetCounterSampleCountOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
                                        uint32_t* sample_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !counter_handle || !sample_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1362,6 +1403,7 @@ auto astlGetCounterSampleCountOnTarget(astl_target_handle_t target_handle, astl_
 auto astlGetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
                                    astl_counter_sample_t* samples, uint32_t* sample_count) noexcept
     -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !counter_handle || !samples || !sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1429,6 +1471,7 @@ auto astlGetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_coun
 /*** COLLECTED METRIC SAMPLES ***/
 auto astlGetMetricSampleCountOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
                                       uint32_t* sample_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !metric_handle || !sample_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1463,6 +1506,7 @@ auto astlGetMetricSampleCountOnTarget(astl_target_handle_t target_handle, astl_m
 
 auto astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
                                   astl_metric_sample_t* samples, uint32_t* sample_count) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !metric_handle || !samples || !sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1479,14 +1523,14 @@ auto astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metri
   }
   const auto* metric = *get_metric_result;
 
-  auto collected_samples_or_error = GetProcessedSamples();
+  auto collected_samples_or_error = GetProcessedMetricSamples(metric, target);
   if (!collected_samples_or_error) {
     return collected_samples_or_error.error();
   }
-  auto collected_samples = *collected_samples_or_error;  // reference_wrapper<ProcessedSamplesMap>
+  const auto& collected_samples = *collected_samples_or_error;
 
   std::span<astl_metric_sample_t> output_samples{samples, *sample_count};
-  if (*sample_count < collected_samples.get().size()) {
+  if (*sample_count < collected_samples.size()) {
     *sample_count = 0;
     return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
   }
@@ -1512,8 +1556,14 @@ auto astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metri
     return create_buffer_result;
   }
 
-  astl_status_code status =
-      output_manager->OutputProcessedSamples(collected_samples.get(), astl::OutputType::BUFFER, target, metric);
+  auto processed_samples_snapshot_or_error = GetProcessedSamplesSnapshot();
+  if (!processed_samples_snapshot_or_error) {
+    (void)output_manager->DestroyBufferOutput();
+    return processed_samples_snapshot_or_error.error();
+  }
+
+  astl_status_code status = output_manager->OutputProcessedSamples(*processed_samples_snapshot_or_error,
+                                                                   astl::OutputType::BUFFER, target, metric);
   // Intentionally ignore the result of DestroyBufferOutput; cleanup best-effort during sample retrieval.
   (void)output_manager->DestroyBufferOutput();
   return status;
@@ -1525,6 +1575,7 @@ auto astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metri
 
 auto astlGetMetricStatisticsOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
                                      astl_metric_statistics_t* summary) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   if (!target_handle || !metric_handle || !summary) {
     ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Invalid argument(s)");
     return ASTL_STATUS_BAD_ARGUMENT;

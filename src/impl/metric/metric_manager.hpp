@@ -11,6 +11,7 @@
 #define METRIC_MANAGER_HPP_
 
 #include <memory>
+#include <mutex>
 #include <span>
 #include <unordered_map>
 #include <unordered_set>
@@ -56,8 +57,8 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   MetricManager()                                = delete;
   MetricManager(const MetricManager&)            = delete;
   MetricManager& operator=(const MetricManager&) = delete;
-  MetricManager(MetricManager&&)                 = default;
-  MetricManager& operator=(MetricManager&&)      = default;
+  MetricManager(MetricManager&&)                 = delete;
+  MetricManager& operator=(MetricManager&&)      = delete;
 
   explicit MetricManager(const Capabilities& capabilities) : _capabilities(capabilities) {}
 
@@ -136,6 +137,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    *
    * @param sink Non-null pointer to a sink implementation whose lifetime must outlive its
    *             unregistration or destruction of this manager.
+   *             Must not be called from inside a SinkProcessedSamples callback.
    * @return ASTL_STATUS_SUCCESS on success, ASTL_STATUS_BAD_ARGUMENT if sink is null.
    */
   auto RegisterProcessedSampleSink(IProcessedSampleSink* sink) -> astl_status_code override;
@@ -147,6 +149,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * callbacks.
    *
    * @param sink Pointer previously passed to RegisterProcessedSampleSink.
+   *             Must not be called from inside a SinkProcessedSamples callback.
    * @return ASTL_STATUS_SUCCESS (even if sink not found), ASTL_STATUS_BAD_ARGUMENT if null.
    */
   auto UnregisterProcessedSampleSink(IProcessedSampleSink* sink) -> astl_status_code override;
@@ -348,6 +351,9 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
 
   // Same data as in `_metric_groups`, but using raw pointers to MetricGroups for exposure.
   std::vector<astl_metric_group_handle_t> _metric_group_api_handles;
+
+  // Coarse-grained mutex for all shared registries/maps used by API and ingestion paths.
+  mutable std::mutex _mutex;
 };
 
 }  // namespace astl

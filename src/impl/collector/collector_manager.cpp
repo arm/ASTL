@@ -16,9 +16,8 @@ CollectorManager::CollectorManager(
     : _collectors{std::move(collectors)} {
   // tell each collector to send their samples to CollectorManager. Each Collector has only one sample-sink,
   // but collector manager can support multiple sinks.
-  for (auto& [target, cur_collector_vector] : _collectors) {
-    (void)target;
-    for (auto& cur_collector : cur_collector_vector) {
+  for (auto& target_collectors : _collectors) {
+    for (auto& cur_collector : target_collectors.second) {
       cur_collector->SetRawSampleSink(this);
     }
   }
@@ -29,6 +28,7 @@ CollectorManager::CollectorManager(
 
 auto CollectorManager::ReportCollectionCapabilities() const
     -> std::unordered_map<const ITarget*, std::vector<CollectorCapability>> {
+  std::lock_guard<std::mutex>                                          lock(_mutex);
   std::unordered_map<const ITarget*, std::vector<CollectorCapability>> capabilities;
   for (const auto& [target, collectors] : _collectors) {
     for (const auto& collector : collectors) {
@@ -42,6 +42,7 @@ auto CollectorManager::RegisterRawSampleSink(IRawSampleSink* sink) -> astl_statu
   if (!sink) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+  std::lock_guard<std::mutex> lock(_mutex);
   _registered_raw_sample_sinks.insert(sink);
   return ASTL_STATUS_SUCCESS;
 }
@@ -50,7 +51,8 @@ auto CollectorManager::UnregisterRawSampleSink(IRawSampleSink* sink) -> astl_sta
   if (!sink) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto num_removed = _registered_raw_sample_sinks.erase(sink);
+  std::lock_guard<std::mutex> lock(_mutex);
+  auto                        num_removed = _registered_raw_sample_sinks.erase(sink);
   if (num_removed == 0) {
     return ASTL_STATUS_INTERNAL_ERROR;  // sink was not registered
   }
@@ -60,66 +62,112 @@ auto CollectorManager::UnregisterRawSampleSink(IRawSampleSink* sink) -> astl_sta
 auto CollectorManager::ConfigureCollectionOnTarget(const ITarget*                      target,
                                                    astl_collection_parameters_t const& collection_params,
                                                    CollectionOperations&&              operations) -> astl_status_code {
-  auto collector = SelectCollector(target, operations.requirements);
-  if (!collector) {
-    return collector.error();
+  ICollector* selected_collector = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    auto                        collector = SelectCollectorLocked(target, operations.requirements);
+    if (!collector) {
+      return collector.error();
+    }
+    selected_collector = collector.value();
   }
   CollectionConfiguration configuration_instance(target, std::move(operations), collection_params);
-  return collector.value()->ConfigureCollection(std::move(configuration_instance));
+  return selected_collector->ConfigureCollection(std::move(configuration_instance));
 }
 
 auto CollectorManager::StartOnTarget(const ITarget* target) -> astl_status_code {
-  if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-    // if we have a collector for this target, start it, and add it to the active collection set
-    _targets_with_active_collection.insert(target);
-    return collector->second.front()->StartCollection();
+  ICollector* selected_collector = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
+      selected_collector = collector->second.front().get();
+    } else {
+      return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
   }
-  return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  const auto status = selected_collector->StartCollection();
+  if (status == ASTL_STATUS_SUCCESS) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _targets_with_active_collection.insert(target);
+  }
+  return status;
 }
 
 auto CollectorManager::PauseOnTarget(const ITarget* target) -> astl_status_code {
-  if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-    return collector->second.front()->PauseCollection();
+  ICollector* selected_collector = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
+      selected_collector = collector->second.front().get();
+    } else {
+      return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
   }
-  return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  return selected_collector->PauseCollection();
 }
 
 auto CollectorManager::ResumeOnTarget(const ITarget* target) -> astl_status_code {
-  if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-    return collector->second.front()->ResumeCollection();
+  ICollector* selected_collector = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
+      selected_collector = collector->second.front().get();
+    } else {
+      return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
   }
-  return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  return selected_collector->ResumeCollection();
 }
 
 auto CollectorManager::ReadImmediateOnTarget(const ITarget* target) -> astl_status_code {
-  if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-    // if we have a collector for this target, sample from it
-    return collector->second.front()->ReadImmediate();
+  ICollector* selected_collector = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
+      // if we have a collector for this target, sample from it
+      selected_collector = collector->second.front().get();
+    } else {
+      return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
   }
-  return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  return selected_collector->ReadImmediate();
 }
 
 auto CollectorManager::StopOnTarget(const ITarget* target) -> astl_status_code {
-  // remove target from active collection set if present
-  _targets_with_active_collection.erase(target);
-
-  if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-    // if we have a collector for this target, stop it
-    return collector->second.front()->StopCollection();
+  ICollector* selected_collector = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
+      selected_collector = collector->second.front().get();
+    } else {
+      return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
   }
-
-  return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  const auto status = selected_collector->StopCollection();
+  if (status == ASTL_STATUS_SUCCESS) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _targets_with_active_collection.erase(target);
+  }
+  return status;
 }
 
-auto CollectorManager::IsAnyTargetBeingCollected() const -> bool { return !_targets_with_active_collection.empty(); }
+auto CollectorManager::IsAnyTargetBeingCollected() const -> bool {
+  std::lock_guard<std::mutex> lock(_mutex);
+  return !_targets_with_active_collection.empty();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // IRawSampleSink implementation
 ////////////////////////////////////////////////////////////////////////////////
 auto CollectorManager::SinkRawSamples(const ITarget* target, std::span<RawSampledData> raw_samples)
     -> astl_status_code {
-  astl_status_code result = ASTL_STATUS_SUCCESS;
-  for (const auto& sink : _registered_raw_sample_sinks) {
+  // NOTE:
+  // Sinks are invoked while holding _mutex.
+  // RegisterRawSampleSink()/UnregisterRawSampleSink() must NOT be called from
+  // within SinkRawSamples callbacks, directly or indirectly, or this can deadlock.
+  std::lock_guard<std::mutex> lock(_mutex);
+  astl_status_code            result = ASTL_STATUS_SUCCESS;
+  for (auto* sink : _registered_raw_sample_sinks) {
     auto sink_result = sink->SinkRawSamples(target, raw_samples);
     // will return the most recent failure, but continues trying to send samples to all sinks
     if (sink_result != ASTL_STATUS_SUCCESS) {
@@ -133,8 +181,12 @@ auto CollectorManager::SinkRawSamples(const ITarget* target, std::span<RawSample
 // private helpers
 ////////////////////////////////////////////////////////////////////////////////
 
-// given a target and a set of desired capabilities, choose a suitable collector
-auto CollectorManager::SelectCollector(const ITarget* target, CollectorCapability const& requirements)
+/**
+ * @brief Given a target and required capabilities, choose a suitable collector.
+ *
+ * Requires: caller holds `_mutex`.
+ */
+auto CollectorManager::SelectCollectorLocked(const ITarget* target, CollectorCapability const& requirements)
     -> std::expected<ICollector*, astl_status_code> {
   // find a set of collectors associated with the given target
   const auto& potential_collectors = _collectors.find(target);

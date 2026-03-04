@@ -90,6 +90,7 @@ auto Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topolog
                                       std::unique_ptr<ICollectorManager> collector_manager,
                                       std::unique_ptr<IMetricManager>    metric_manager,
                                       std::unique_ptr<IOutputManager> output_manager, fs::path cache_dir_path) -> void {
+  // Serialize singleton construction to prevent racing double-initialization.
   std::scoped_lock lock(GetMutex());
   if (!Orchestrator::instance_) {
     Orchestrator::instance_ =
@@ -100,11 +101,14 @@ auto Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topolog
 
 auto Orchestrator::GetInstance() noexcept
     -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code> {
-  if (instance_) {
-    return std::reference_wrapper<std::unique_ptr<Orchestrator>>(instance_);
+  // Fast path under lock: instance already initialized.
+  {
+    std::scoped_lock lock(GetMutex());
+    if (instance_) {
+      return std::reference_wrapper<std::unique_ptr<Orchestrator>>(instance_);
+    }
   }
 
-  // Lazy construction without taking the mutex (convention: only InitializeInstance guards creation)
   auto configuration = astl::ConfigurationManager::GetConfiguration();
   if (!configuration) {
     return std::unexpected(configuration.error());
@@ -125,13 +129,18 @@ auto Orchestrator::GetInstance() noexcept
     ASTL_LOG_ERROR("Exception during Orchestrator initialization: {}", ex.what());
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
-  if (!instance_) {
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+  // Re-check under lock after construction attempt.
+  {
+    std::scoped_lock lock(GetMutex());
+    if (!instance_) {
+      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    }
+    return std::reference_wrapper<std::unique_ptr<Orchestrator>>(instance_);
   }
-  return instance_;
 }
 
 auto Orchestrator::ResetInstance() -> void {
+  // Ensure teardown cannot race with concurrent GetInstance/InitializeInstance.
   std::scoped_lock lock(GetMutex());
   instance_.reset();
 }
@@ -400,6 +409,14 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
   if (index == std::end(targets)) {
     return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  }
+
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    auto            state_iterator = _target_collection_states.find(target);
+    if (state_iterator == _target_collection_states.end()) {
+      return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
   }
 
   auto status = _collector_manager->StopOnTarget(target);  // finalize collector state

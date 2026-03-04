@@ -20,13 +20,13 @@
 #include "sampled_value_metric.hpp"
 
 namespace astl {
-
 /**
  * @brief Helper to look up an ICounter handle representing a counter for a specific target from a metric API handle
  */
 auto MetricManager::GetCounterOnTarget(astl_counter_handle_t counter_handle, const ITarget* target) const
     -> std::expected<IMetric*, astl_status_code> {
-  const auto* counter_details = static_cast<const CounterHandle*>(counter_handle);
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto*                 counter_details = static_cast<const CounterHandle*>(counter_handle);
   if (const auto index = std::ranges::find_if(
           _counter_handles, [counter_handle](const auto& handle) { return handle.get() == counter_handle; });
       index == _counter_handles.end()) {
@@ -49,6 +49,7 @@ auto MetricManager::GetCounterOnTarget(astl_counter_handle_t counter_handle, con
  */
 auto MetricManager::RegisterCounter(std::unique_ptr<MetricConfig>      counter_config,
                                     std::vector<const ITarget*> const& targets) -> astl_status_code {
+  std::lock_guard<std::mutex> lock(_mutex);
   if (!counter_config) {
     ASTL_LOG_ERROR("RegisterCounter: Invalid counter config");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -86,7 +87,8 @@ auto MetricManager::RegisterCounter(std::unique_ptr<MetricConfig>      counter_c
  * @return The number of available counters for the given target, or an error.
  */
 auto MetricManager::GetNumAvailableCounters(const ITarget* target) const -> size_t {
-  const auto target_iter = _target_to_counters_map.find(target);
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto                  target_iter = _target_to_counters_map.find(target);
   if (target_iter == _target_to_counters_map.end()) {
     ASTL_LOG_ERROR("GetNumAvailableCounters: Target '{}' not found", target->Name());
     return 0;
@@ -106,7 +108,8 @@ auto MetricManager::GetNumAvailableCounters(const ITarget* target) const -> size
  */
 auto MetricManager::GetAvailableCounters(const ITarget* target) const
     -> std::expected<std::span<const astl_counter_handle_t>, astl_status_code> {
-  const auto target_iter = _target_to_counters_map.find(target);
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto                  target_iter = _target_to_counters_map.find(target);
   if (target_iter == _target_to_counters_map.end()) {
     std::string targets;
     for (const auto& target_counters : _target_to_counters_map) {
@@ -129,7 +132,8 @@ auto MetricManager::GetAvailableCounters(const ITarget* target) const
  */
 auto MetricManager::GetCounterProperties(astl_counter_handle_t counter, astl_counter_properties_t* properties) const
     -> astl_status_code {
-  const auto* counter_details = static_cast<const CounterHandle*>(counter);
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto*                 counter_details = static_cast<const CounterHandle*>(counter);
   if (!counter_details) {
     ASTL_LOG_ERROR("GetCounterProperties: Invalid counter handle {}", counter);
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -158,6 +162,7 @@ auto MetricManager::GetCounterProperties(astl_counter_handle_t counter, astl_cou
  */
 auto MetricManager::GetCounterRequiredOperations(std::span<const astl_counter_handle_t> counters, const ITarget* target)
     -> std::expected<CollectionOperations, astl_status_code> {
+  std::lock_guard<std::mutex> lock(_mutex);
   /**
    * This method performs the following steps for each given counter:
    * - Validates each counter is registered (returns BAD_ARGUMENT if not).
@@ -191,13 +196,13 @@ auto MetricManager::GetCounterRequiredOperations(std::span<const astl_counter_ha
       return std::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
     }
 
-    auto counter_or_error = GetCounterOnTarget(counter_handle, target);
-    if (!counter_or_error.has_value()) {
+    auto counter_iter = counter_handle->target_to_counter_map.find(target);
+    if (counter_iter == counter_handle->target_to_counter_map.end()) {
       ASTL_LOG_ERROR("GetCounterRequiredOperations: Failed to get counter {} on target {}", config->Name(),
                      target->Name());
-      return std::unexpected{counter_or_error.error()};
+      return std::unexpected{ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET};
     }
-    auto* counter = *counter_or_error;
+    auto* counter = counter_iter->second.get();
 
     auto operations_result = counter->GetOperations();
     if (!operations_result.has_value()) {
@@ -321,7 +326,8 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
  */
 auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target) const
     -> std::expected<IMetric*, astl_status_code> {
-  const auto* metric_details = static_cast<const MetricHandle*>(metric_handle);
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto*                 metric_details = static_cast<const MetricHandle*>(metric_handle);
 
   if (!metric_details) {
     ASTL_LOG_ERROR("GetMetricOnTarget: Invalid metric handle {}", metric_handle);
@@ -341,6 +347,7 @@ auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const 
 }
 
 auto MetricManager::RegisterProcessedSampleSink(IProcessedSampleSink* sink) -> astl_status_code {
+  std::lock_guard<std::mutex> lock(_mutex);
   if (!sink) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -349,18 +356,19 @@ auto MetricManager::RegisterProcessedSampleSink(IProcessedSampleSink* sink) -> a
 }
 
 auto MetricManager::UnregisterProcessedSampleSink(IProcessedSampleSink* sink) -> astl_status_code {
+  std::lock_guard<std::mutex> lock(_mutex);
   if (!sink) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
-  // Unregistration is a no-op if the sink was not registered. no need to check for num_removed
+  // Unregistration is a no-op if the sink was not registered.
   _registered_processed_sample_sinks.erase(sink);
-
   return ASTL_STATUS_SUCCESS;
 }
 
 auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_config,
                                    std::vector<const ITarget*> const& targets) -> astl_status_code {
+  std::lock_guard<std::mutex> lock(_mutex);
   ASTL_LOG_TRACE("RegisterMetric {} on {} targets", metric_config ? metric_config->Name() : "<null>", targets.size());
   CollectorType collector_type = metric_config->GetCollectorType();
   if (!IsCollectorTypeSupported(collector_type)) {
@@ -397,7 +405,8 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
 }
 
 auto MetricManager::GetNumAvailableMetrics(const ITarget* target) const -> size_t {
-  const auto target_iter = _target_to_metrics_map.find(target);
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto                  target_iter = _target_to_metrics_map.find(target);
   if (target_iter == _target_to_metrics_map.end()) {
     ASTL_LOG_ERROR("GetNumAvailableMetrics: Target '{}' not found", target->Name());
     return 0;
@@ -407,7 +416,8 @@ auto MetricManager::GetNumAvailableMetrics(const ITarget* target) const -> size_
 
 auto MetricManager::GetAvailableMetrics(const ITarget* target) const
     -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> {
-  const auto target_iter = _target_to_metrics_map.find(target);
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto                  target_iter = _target_to_metrics_map.find(target);
   if (target_iter == _target_to_metrics_map.end()) {
     std::string targets;
     for (const auto& target_metrics : _target_to_metrics_map) {
@@ -425,7 +435,8 @@ auto MetricManager::GetAvailableMetrics(const ITarget* target) const
  */
 auto MetricManager::GetProperties(astl_metric_handle_t metric, astl_metric_properties_t* properties) const
     -> astl_status_code {
-  const auto* metric_details = static_cast<const MetricHandle*>(metric);
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto*                 metric_details = static_cast<const MetricHandle*>(metric);
   if (!metric_details) {
     ASTL_LOG_ERROR("GetProperties: Invalid metric handle {}", metric);
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -442,6 +453,7 @@ auto MetricManager::GetProperties(astl_metric_handle_t metric, astl_metric_prope
 
 auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> metrics, const ITarget* target)
     -> std::expected<CollectionOperations, astl_status_code> {
+  std::lock_guard<std::mutex> lock(_mutex);
   /**
    * This method performs the following steps for each given metric:
    * - Validates each metric is registered (returns BAD_ARGUMENT if not).
@@ -476,12 +488,12 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
       return std::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
     }
 
-    auto metric_or_error = GetMetricOnTarget(metric_handle, target);
-    if (!metric_or_error.has_value()) {
+    auto metric_iter = metric_handle->target_to_metric_map.find(target);
+    if (metric_iter == metric_handle->target_to_metric_map.end() || !metric_iter->second) {
       ASTL_LOG_ERROR("GetRequiredOperations: Failed to get metric {} on target {}", config->Name(), target->Name());
-      return std::unexpected{metric_or_error.error()};
+      return std::unexpected{ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET};
     }
-    IMetric* metric = *metric_or_error;
+    IMetric* metric = metric_iter->second.get();
 
     // NOTE: GetOperations() carries a constraint to run
     // single-threaded so that OperationIds are allocated in contiguous ascending order.
@@ -512,34 +524,44 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
 }
 
 auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code {
-  for (const auto& [target, samples] : raw_samples) {
-    for (const auto& sample : samples) {
-      // Find the metric handle corresponding to this operation ID
-      auto op_iter = _operation_to_metric_map.find(sample.operation_id);
-      if (op_iter == _operation_to_metric_map.end()) {
-        ASTL_LOG_ERROR("ProcessData: No metric associated with operation ID {}", sample.operation_id);
-        return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+  std::vector<std::pair<IMetric*, RawSampledData>> processing_queue;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    for (const auto& [target, samples] : raw_samples) {
+      (void)target;
+      for (const auto& sample : samples) {
+        // Find the metric handle corresponding to this operation ID
+        auto op_iter = _operation_to_metric_map.find(sample.operation_id);
+        if (op_iter == _operation_to_metric_map.end()) {
+          ASTL_LOG_ERROR("ProcessData: No metric associated with operation ID {}", sample.operation_id);
+          return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+        }
+        processing_queue.emplace_back(op_iter->second, sample);
       }
-      IMetric* metric_handle = op_iter->second;
-      // Process the sample and propagate errors
-      // TODO (https://jira.arm.com/browse/ASTL-130): MetricManager needs to ensure Monotonicity in timestamp.
-      astl_status_code status = metric_handle->ReceiveRawSample(sample);
-      if (status != ASTL_STATUS_SUCCESS) {
-        ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} with status {}", sample.operation_id,
-                       astlStatusString(status));
-        return status;
-      }
+    }
+  }
+
+  for (const auto& [metric_handle, sample] : processing_queue) {
+    // Process the sample and propagate errors
+    // TODO (https://jira.arm.com/browse/ASTL-130): MetricManager needs to ensure Monotonicity in timestamp.
+    astl_status_code status = metric_handle->ReceiveRawSample(sample);
+    if (status != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} with status {}", sample.operation_id,
+                     astlStatusString(status));
+      return status;
     }
   }
   return ASTL_STATUS_SUCCESS;
 }
 
 auto MetricManager::GetMetricGroups() const -> std::span<const astl_metric_group_handle_t> {
+  std::lock_guard<std::mutex> lock(_mutex);
   return std::span<const astl_metric_group_handle_t>(_metric_group_api_handles);
 }
 
 auto MetricManager::GetMetricGroups(const ITarget* target) const
     -> std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> {
+  std::lock_guard<std::mutex> lock(_mutex);
   if (_target_to_metric_groups_map.empty()) {
     ASTL_LOG_WARNING("GetMetricGroups: No metric groups registered in manager");
     return std::span<const astl_metric_group_handle_t>{};
@@ -555,7 +577,8 @@ auto MetricManager::GetMetricGroups(const ITarget* target) const
 
 auto MetricManager::GetMetricGroupProperties(astl_metric_group_handle_t      group,
                                              astl_metric_group_properties_t* properties) const -> astl_status_code {
-  const auto* metric_group_details = static_cast<const MetricGroup*>(group);
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto*                 metric_group_details = static_cast<const MetricGroup*>(group);
   if (!metric_group_details) {
     ASTL_LOG_ERROR("GetMetricGroupProperties: Invalid metric group handle {}", group);
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -568,6 +591,7 @@ auto MetricManager::GetMetricGroupProperties(astl_metric_group_handle_t      gro
  */
 auto MetricManager::GetMetricsInGroup(astl_metric_group_handle_t group) const
     -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> {
+  std::lock_guard<std::mutex> lock(_mutex);
   if (group == nullptr) {
     ASTL_LOG_ERROR("GetMetricsInGroup: Invalid metric group handle {}", group);
     return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
@@ -577,6 +601,7 @@ auto MetricManager::GetMetricsInGroup(astl_metric_group_handle_t group) const
 }
 
 auto MetricManager::SummarizeMetrics() -> astl_status_code {
+  std::lock_guard<std::mutex> lock(_mutex);
   _operation_to_metric_map.clear();  // release the memory tying operation IDs to metrics
   for (const auto& metric_details : _metric_handles) {
     for (auto& [target, metric] : metric_details->target_to_metric_map) {
@@ -592,6 +617,7 @@ auto MetricManager::SummarizeMetrics() -> astl_status_code {
 }
 
 auto MetricManager::RemoveAllMetrics() -> void {
+  std::lock_guard<std::mutex> lock(_mutex);
   _metric_handles.clear();
   _metric_groups.clear();
   _metric_group_api_handles.clear();
@@ -601,7 +627,8 @@ auto MetricManager::RemoveAllMetrics() -> void {
 }
 
 auto MetricManager::IsCollectorTypeSupported(CollectorType required_collector_type) const -> bool {
-  // Check against the manager's capabilities
+  // Check against the manager's capabilities.
+  // NOTE: caller is responsible for synchronization when needed.
   const std::vector<CollectorCapability>& collector_caps = _capabilities.GetCollectorCapability();
   return std::any_of(collector_caps.begin(), collector_caps.end(),
                      [&](const CollectorCapability& cap) { return cap.GetCollectorType() == required_collector_type; });
@@ -668,6 +695,7 @@ auto MetricManager::AddMetricGroupToTargets(astl_metric_group_handle_t         g
 }
 
 auto MetricManager::GetTargetForMetric(const IMetric* metric) const -> std::expected<const ITarget*, astl_status_code> {
+  std::lock_guard<std::mutex> lock(_mutex);
   for (const auto& metric_details : _metric_handles) {
     for (const auto& [target, metric_instance] : metric_details->target_to_metric_map) {
       if (metric_instance.get() == metric) {
@@ -681,9 +709,14 @@ auto MetricManager::GetTargetForMetric(const IMetric* metric) const -> std::expe
 
 auto MetricManager::SinkProcessedSamples(const ITarget* target, const IMetric* metric,
                                          std::span<const ProcessedSampledData> processed_samples) -> astl_status_code {
-  astl_status_code result = ASTL_STATUS_SUCCESS;
-  for (const auto& sink : _registered_processed_sample_sinks) {
-    auto sink_result = sink->SinkProcessedSamples(target, metric, processed_samples);
+  // NOTE:
+  // Sinks are invoked while holding _mutex.
+  // RegisterProcessedSampleSink()/UnregisterProcessedSampleSink() must NOT be called from
+  // within SinkProcessedSamples callbacks, directly or indirectly, or this can deadlock.
+  std::lock_guard<std::mutex> lock(_mutex);
+  astl_status_code            result = ASTL_STATUS_SUCCESS;
+  for (auto* sink : _registered_processed_sample_sinks) {
+    const auto sink_result = sink->SinkProcessedSamples(target, metric, processed_samples);
     if (sink_result != ASTL_STATUS_SUCCESS) {
       result = sink_result;  // record last failure and continue
     }

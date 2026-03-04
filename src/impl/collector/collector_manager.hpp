@@ -5,6 +5,7 @@
 #ifndef COLLECTOR_MANAGER_HPP_
 #define COLLECTOR_MANAGER_HPP_
 
+#include <mutex>
 #include <span>
 #include <unordered_map>
 #include <unordered_set>
@@ -45,7 +46,18 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
       -> std::unordered_map<const ITarget*, std::vector<CollectorCapability>> override;
 
   // ICollectorManager implementation
+  /**
+   * @brief Register a sink for raw sample fan-out.
+   *
+   * Must not be called from inside a SinkRawSamples callback.
+   */
   [[nodiscard]] auto RegisterRawSampleSink(IRawSampleSink* sink) -> astl_status_code override;
+
+  /**
+   * @brief Unregister a previously registered raw sample sink.
+   *
+   * Must not be called from inside a SinkRawSamples callback.
+   */
   [[nodiscard]] auto UnregisterRawSampleSink(IRawSampleSink* sink) -> astl_status_code override;
 
   [[nodiscard]] auto ConfigureCollectionOnTarget(const ITarget*                      target,
@@ -70,14 +82,23 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
  private:
   std::unordered_set<IRawSampleSink*> _registered_raw_sample_sinks;
 
-  /// @todo ASTL-145 It's a bit of an anti-pattern to take a raw pointer to a unique_ptr for ITarget*
   std::unordered_map<const ITarget*, std::vector<std::unique_ptr<ICollector>>> _collectors;
 
   std::unordered_set<const ITarget*> _targets_with_active_collection;  // track which targets have active collection
 
-  /// given a target and a set of desired capabilities, choose a suitable collector
-  /// @todo ASTL-145 It's a bit of an anti-pattern to take a raw pointer to a unique_ptr for ITarget*
-  auto SelectCollector(const ITarget* target, CollectorCapability const& requirements)
+  /**
+   * @brief Protects collector maps, active-target tracking, and sink registration/fan-out.
+   */
+  mutable std::mutex _mutex;
+
+  /**
+   * @brief Given a target and required capabilities, choose a suitable collector.
+   *
+   * Requires: caller holds `_mutex`.
+   *
+   * @todo ASTL-145 It's a bit of an anti-pattern to take a raw pointer to a unique_ptr for ITarget*
+   */
+  auto SelectCollectorLocked(const ITarget* target, CollectorCapability const& requirements)
       -> std::expected<ICollector*, astl_status_code>;
 };
 

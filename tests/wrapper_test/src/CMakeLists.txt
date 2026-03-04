@@ -11,7 +11,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 add_executable(wrapper_test wrapper_test.cpp metric_groups_tests.cpp metric_state_discovery_tests.cpp
-                            summary_api_tests.cpp)
+                            summary_api_tests.cpp thread_safety_tests.cpp)
 
 target_compile_definitions(wrapper_test PRIVATE ASTL_BUILD)
 

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <utility>
@@ -14,6 +15,7 @@
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl/astl_test_hooks.h"
+#include "collector/collector_manager.hpp"
 #include "common/metric_config.hpp"
 #include "common/system_info.hpp"
 #include "metric/counter.hpp"

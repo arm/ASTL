@@ -338,6 +338,14 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
     return std::reference_wrapper<ProcessedSamplesMap>(_processed_samples);
   }
 
+  // Thread-safe copy-out API used by C-wrapper reads.
+  // Returning by value prevents callers from observing concurrent mutation of
+  // the internal processed-sample map.
+  auto GetProcessedSamplesSnapshot() const -> ProcessedSamplesMap {
+    std::lock_guard lock{_processed_samples_mtx};
+    return _processed_samples;
+  }
+
   /**
    * @brief Retrieve the collected samples for the given target and metric,
    *        or an error if the target+metric combination isn't valid
@@ -387,8 +395,13 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    */
   auto EmitIntervalCsvIfRequested() -> void;
 
-  static auto                          GetMutex() -> std::mutex &;  // manage thread-safe access   to singleton instance
-  static std::unique_ptr<Orchestrator> instance_;                   // singleton instance pointer
+  /**
+   * @brief Global singleton initialization mutex.
+   *
+   * Guards `instance_` construction/teardown paths used by InitializeInstance/GetInstance/ResetInstance.
+   */
+  static auto                          GetMutex() -> std::mutex &;
+  static std::unique_ptr<Orchestrator> instance_;  // singleton instance pointer
   // Per-target collection lifecycle tracking (see public Doxygen block for semantics)
   std::unordered_map<const ITarget *, TargetCollectionState> _target_collection_states;  // lifecycle state per target
   std::unordered_map<const ITarget *, std::chrono::steady_clock::time_point>
