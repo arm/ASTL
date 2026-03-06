@@ -240,6 +240,12 @@ target_include_directories(
 # statically link in `astl_static` to the shared library
 target_link_libraries(${LIBRARY_NAME} PRIVATE Astl::astl_static)
 
+# Export all symbols in the dynamic symbol table for debug builds (enables readable backtrace_symbols output)
+if(UNIX AND NOT APPLE)
+  target_link_options(${LIBRARY_NAME} PRIVATE $<$<CONFIG:Debug>:-rdynamic>)
+  target_link_libraries(${LIBRARY_NAME} PRIVATE $<$<AND:$<CONFIG:Debug>,$<PLATFORM_ID:Linux>>:dl>)
+endif()
+
 # find spdlog, include it as a header-only dependency. This is a little slower (+10-12s) to compile ASTL, but necessary
 # because #including spdlog headers in multiple translation units causes linker errors like LNK2005
 find_package(spdlog CONFIG REQUIRED)
