@@ -33,17 +33,19 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   /**
    * @brief Per-target metric collection lifecycle state.
    *
-   * Progression: UNCONFIGURED -> CONFIGURED -> STARTED -> (PAUSED <-> STARTED)* -> STOPPED
+   * Progression: UNCONFIGURED -> CONFIGURED -> STARTING -> STARTED -> (PAUSED <-> STARTED)* -> STOPPED
    *
    * Semantics:
    *  - UNCONFIGURED: no collection configured.
    *  - CONFIGURED: Configure*Collection succeeded; ready to start.
+   *  - STARTING: start operation is in flight; used to serialize concurrent start attempts.
    *  - STARTED: active sampling (entered via StartCollection or ResumeCollection).
    *  - PAUSED: sampling suspended (entered via PauseCollection; configuration retained).
    *  - STOPPED: terminal for current configuration (entered via StopCollection).
    *
    * Valid transitions:
-   *  - CONFIGURED -> STARTED
+   *  - CONFIGURED -> STARTING -> STARTED
+   *  - STARTING -> CONFIGURED (on start failure)
    *  - STARTED -> PAUSED
    *  - PAUSED -> STARTED
    *  - STARTED|PAUSED -> STOPPED
@@ -51,7 +53,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    * State is tracked per target in _target_collection_states (mutex: _collection_state_mutex).
    * Pause/resume timestamps recorded in _target_pause_timestamps / _target_resume_timestamps.
    */
-  enum class TargetCollectionState { UNCONFIGURED, CONFIGURED, STARTED, PAUSED, STOPPED };
+  enum class TargetCollectionState { UNCONFIGURED, CONFIGURED, STARTING, STARTED, PAUSED, STOPPED };
 
   /**
    * @brief Convert a TargetCollectionState value to a readable string.

@@ -27,7 +27,7 @@ static auto GetScmiSysFsTelemetryRootPath() -> std::filesystem::path {
 
 static auto ValidateAstlConfigDirPath(const std::filesystem::path& config_dir_path) -> astl_status_code {
   if (!std::filesystem::is_directory(config_dir_path)) {
-    ASTL_LOG_ERROR("ASTL config directory does not exist: {}", config_dir_path.string());
+    ASTL_LOG_WARNING("ASTL config directory does not exist: {}", config_dir_path.string());
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
   // potentially add some more lightweight checks here, maybe a checksum with warnings on modifications?

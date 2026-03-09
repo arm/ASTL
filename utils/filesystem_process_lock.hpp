@@ -50,6 +50,8 @@ namespace process_lock_detail {
 template <typename FileSystemT>
 inline constexpr bool kRealFilesystem = std::is_same_v<std::remove_cvref_t<FileSystemT>, FileInterface>;
 
+inline constexpr unsigned int kSharedLockFileMode = 0777U;
+
 }  // namespace process_lock_detail
 
 /**
@@ -160,12 +162,19 @@ class FilesystemProcessLock {
     return;
 #else
     const auto lock_file_path = _root_to_lock / _lock_file_name;
+    // Create/read-write a shared lock file usable across users.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-    const int fd = ::open(lock_file_path.c_str(), O_CREAT | O_RDWR, 0600);
+    const int fd = ::open(lock_file_path.c_str(), O_CREAT | O_RDWR, process_lock_detail::kSharedLockFileMode);
     if (fd < 0) {
       ASTL_LOG_ERROR("Failed to open process lock file '{}': {}", lock_file_path.string(), std::strerror(errno));
       _status = ASTL_STATUS_FILE_OPEN_FAILED;
       return;
+    }
+    // Keep permissions permissive even if the file already existed with tighter mode.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+    if (::fchmod(fd, process_lock_detail::kSharedLockFileMode) != 0) {
+      ASTL_LOG_WARNING("Failed to set permissions on process lock file '{}': {}", lock_file_path.string(),
+                       std::strerror(errno));
     }
 
     if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {

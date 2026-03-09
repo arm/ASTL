@@ -8,6 +8,7 @@
 #include <charconv>
 #include <expected>
 #include <filesystem>
+#include <iterator>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -112,9 +113,8 @@ class ScmiSysfsCollector : public ICollector {
       _collection_mutex;  // prevent the collection configuration from being accessed by two threads at once
   std::unique_ptr<PeriodicSampler> _periodic_sampler;
   std::unordered_map<ScmiDataEventId, SampleTimestamp>
-      _previous_timestamps;  //!< Track previous timestamp per data event ID to detect duplicates
-  std::unique_ptr<FilesystemProcessLock<FileInterfaceT>>
-      _process_lock;  //!< Process-level lock that serializes SCMI sysfs use across processes.
+       _previous_timestamps;            //!< Track previous timestamp per data event ID to detect duplicates
+  bool _holds_process_lock_ref{false};  //!< True when this collector instance has retained one shared lock reference.
 
   // private methods
 
@@ -176,6 +176,24 @@ class ScmiSysfsCollector : public ICollector {
    * @brief Release the process-level SCMI sysfs lock, if currently held.
    */
   void ReleaseProcessLock() noexcept;
+
+  /**
+   * @brief Roll back collector configuration state, including enabled SCMI data events.
+   *
+   * @param rollback_context Context string used in warning logs when restore fails.
+   */
+  void RollbackConfigurationState(const char* rollback_context) noexcept;
+
+  struct SharedProcessLockState {
+    std::mutex                                             mutex;
+    std::unique_ptr<FilesystemProcessLock<FileInterfaceT>> lock;
+    size_t                                                 refcount{0};
+  };
+
+  /**
+   * @brief Accessor for process-scoped lock state shared by collector instances of this FileInterfaceT.
+   */
+  static auto GetSharedProcessLockState() -> SharedProcessLockState&;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -235,6 +253,8 @@ ScmiSysfsCollector<FileInterfaceT>::~ScmiSysfsCollector() {
         "ScmiSysfsCollector destroyed while collection is active or paused. Forcing StopCollection for cleanup.");
     StopCollection();
   }
+  std::scoped_lock lock{_collection_mutex};
+  RollbackConfigurationState("collector destruction");
 }
 
 /*
@@ -278,12 +298,29 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
     }
     return lock_status;
   }
+  auto rollback_configuration_state = [this]() { RollbackConfigurationState("ConfigureCollection failure"); };
 
   // enable the telemetry subsystem
   auto result = _scmi_file_interface.Write(std::filesystem::path{kScmiTlmEnableFileName}, kScmiTlmEnableValue);
   if (result != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_CRITICAL("Error {} enabling SCMI Telemetry subsystem!", astl::to_string(result));
-    return result;
+    std::string current_tlm_enable;
+    const auto  read_result =
+        _scmi_file_interface.Read(std::filesystem::path{kScmiTlmEnableFileName}, current_tlm_enable);
+    uint32_t    current_tlm_enable_value = 0;
+    const auto* telemetry_value_begin    = current_tlm_enable.data();
+    const auto* telemetry_value_end =
+        std::next(telemetry_value_begin, static_cast<std::ptrdiff_t>(current_tlm_enable.size()));
+    const bool telemetry_already_enabled =
+        (read_result == ASTL_STATUS_SUCCESS) &&
+        (std::from_chars(telemetry_value_begin, telemetry_value_end, current_tlm_enable_value).ec == std::errc{}) &&
+        (current_tlm_enable_value != 0);
+    if (!telemetry_already_enabled) {
+      ASTL_LOG_CRITICAL("Error {} enabling SCMI Telemetry subsystem!", astl::to_string(result));
+      rollback_configuration_state();
+      return result;
+    }
+    ASTL_LOG_WARNING("SCMI Telemetry enable write failed with '{}', but subsystem already reports enabled. Continuing.",
+                     astl::to_string(result));
   }
 
   _configuration          = std::move(configuration);
@@ -291,6 +328,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
   auto all_data_event_ids = scmi_detail::GetUniqueDataEventsIds(_configuration->Operations());
   auto data_events        = EnableDataEvents(all_data_event_ids);
   if (!data_events) {
+    rollback_configuration_state();
     return data_events.error();
   }
   _data_events = *data_events;  // keep track of which data events were enabled during configuration
@@ -309,7 +347,12 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
   result = _scmi_file_interface.Read(std::filesystem::path{kScmiVersion}, telemetry_protocol_version);
   ASTL_LOG_INFO("version: {}", result == ASTL_STATUS_SUCCESS ? telemetry_protocol_version : astl::to_string(result));
 
-  return ExecuteCollectionOperations(_configuration->Operations().operationsBeforeStart);
+  result = ExecuteCollectionOperations(_configuration->Operations().operationsBeforeStart);
+  if (result != ASTL_STATUS_SUCCESS) {
+    rollback_configuration_state();
+    return result;
+  }
+  return ASTL_STATUS_SUCCESS;
 }
 
 /*
@@ -551,23 +594,27 @@ std::expected<std::vector<ScmiDataEvent>, astl_status_code> ScmiSysfsCollector<F
     const auto data_event_dir_path         = expected_data_event_dir_path.value();
     const auto expected_originally_enabled = EnableDataEvent(data_event_dir_path);
     if (!expected_originally_enabled) {
+      static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
       return std::unexpected{expected_originally_enabled.error()};
     }
     const auto originally_enabled = expected_originally_enabled.value();
+    enabled_data_events.emplace_back(data_event_id, originally_enabled, std::nullopt, std::nullopt);
+    auto& configured_data_event = enabled_data_events.back();
     // enable the timestamp collection and determine the clock rate
     const auto expected_timestamp_enabled = EnableTimestamp(data_event_dir_path);
     if (!expected_timestamp_enabled) {
+      static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
       return std::unexpected{expected_timestamp_enabled.error()};
     }
-    const auto timestamp_enabled = expected_timestamp_enabled.value();
+    const auto timestamp_enabled            = expected_timestamp_enabled.value();
+    configured_data_event.timestamp_enabled = timestamp_enabled;
 
     const auto expected_timestamp_rate = ReadTimestampRate(data_event_dir_path);
     if (!expected_timestamp_rate) {
+      static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
       return std::unexpected{expected_timestamp_rate.error()};
     }
-    const auto timestamp_rate = expected_timestamp_rate.value();
-
-    enabled_data_events.emplace_back(data_event_id, originally_enabled, timestamp_enabled, timestamp_rate);
+    configured_data_event.timestamp_rate = expected_timestamp_rate.value();
   }
   return enabled_data_events;
 }
@@ -725,8 +772,21 @@ void ScmiSysfsCollector<FileInterfaceT>::StopIntervalSampling() {
 }
 
 template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::GetSharedProcessLockState() -> SharedProcessLockState& {
+  static SharedProcessLockState state;
+  return state;
+}
+
+template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::AcquireProcessLock() -> astl_status_code {
-  if (_process_lock && _process_lock->IsLocked()) {
+  if (_holds_process_lock_ref) {
+    return ASTL_STATUS_SUCCESS;
+  }
+  auto&            shared_state = GetSharedProcessLockState();
+  std::scoped_lock shared_lock{shared_state.mutex};
+  if (shared_state.lock && shared_state.lock->IsLocked()) {
+    ++shared_state.refcount;
+    _holds_process_lock_ref = true;
     return ASTL_STATUS_SUCCESS;
   }
   std::error_code error_code;
@@ -736,17 +796,54 @@ auto ScmiSysfsCollector<FileInterfaceT>::AcquireProcessLock() -> astl_status_cod
     return ASTL_STATUS_INTERNAL_ERROR;
   }
   const auto process_lock_file_path = temp_dir / std::string{scmi_detail::kScmiProcessLockFileName};
-  _process_lock =
+  shared_state.lock =
       std::make_unique<FilesystemProcessLock<FileInterfaceT>>(_scmi_file_interface, process_lock_file_path.string());
-  return _process_lock->Status();
+  const auto status = shared_state.lock->Status();
+  if (status != ASTL_STATUS_SUCCESS) {
+    shared_state.lock.reset();
+    shared_state.refcount = 0;
+    return status;
+  }
+  shared_state.refcount   = 1;
+  _holds_process_lock_ref = true;
+  return ASTL_STATUS_SUCCESS;
 }
 
 template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::ReleaseProcessLock() noexcept -> void {
-  if (_process_lock) {
-    _process_lock->Release();
-    _process_lock.reset();
+  if (!_holds_process_lock_ref) {
+    return;
   }
+  auto&            shared_state = GetSharedProcessLockState();
+  std::scoped_lock shared_lock{shared_state.mutex};
+  _holds_process_lock_ref = false;
+  if (shared_state.refcount > 0) {
+    --shared_state.refcount;
+  } else {
+    ASTL_LOG_ERROR(
+        "ScmiSysfsCollector: process lock refcount underflow (logic error): "
+        "_holds_process_lock_ref was true but refcount is already 0");
+  }
+  if (shared_state.refcount == 0 && shared_state.lock) {
+    shared_state.lock->Release();
+    shared_state.lock.reset();
+  }
+}
+
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::RollbackConfigurationState(const char* rollback_context) noexcept -> void {
+  if (!_data_events.empty()) {
+    auto restore_result = RestoreDataEventEnabledState(_data_events);
+    if (restore_result != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_WARNING("Failed to roll back SCMI data event state after {}: {}", rollback_context,
+                       astl::to_string(restore_result));
+    }
+    _data_events.clear();
+  }
+  _previous_timestamps.clear();
+  _configuration.reset();
+  _collection_state = CollectionState::UNCONFIGURED;
+  ReleaseProcessLock();
 }
 
 }  // namespace astl

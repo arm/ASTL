@@ -299,7 +299,10 @@ auto Orchestrator::StartCollection(const ITarget *target) -> astl_status_code {
       case TargetCollectionState::UNCONFIGURED:
         return ASTL_STATUS_COLLECTION_NOT_CONFIGURED;
       case TargetCollectionState::CONFIGURED:
+        state_iterator->second = TargetCollectionState::STARTING;
         break;  // allowed
+      case TargetCollectionState::STARTING:
+        return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
       case TargetCollectionState::STARTED:
         return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
       case TargetCollectionState::PAUSED:
@@ -307,12 +310,21 @@ auto Orchestrator::StartCollection(const ITarget *target) -> astl_status_code {
       case TargetCollectionState::STOPPED:
         return ASTL_STATUS_INVALID_STATE_TRANSITION;
     }
-    state_iterator->second = TargetCollectionState::STARTED;
   }
   std::unique_lock lock{_raw_samples_mtx};
   _raw_samples[target].clear();
   lock.unlock();  // in case _collector_manager runs operations on Start that try to sink samples to us
-  return _collector_manager->StartOnTarget(target);
+  const auto status = _collector_manager->StartOnTarget(target);
+  {
+    // Re-acquire lock and guard against a concurrent StopCollection that may have already
+    // transitioned us out of STARTING while StartOnTarget() was in flight.
+    std::lock_guard state_lock(_collection_state_mutex);
+    auto            it = _target_collection_states.find(target);
+    if (it != _target_collection_states.end() && it->second == TargetCollectionState::STARTING) {
+      it->second = (status != ASTL_STATUS_SUCCESS) ? TargetCollectionState::CONFIGURED : TargetCollectionState::STARTED;
+    }
+  }
+  return status;
 }
 
 auto Orchestrator::ReadImmediate(const ITarget *target) -> astl_status_code {
@@ -416,6 +428,11 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
     auto            state_iterator = _target_collection_states.find(target);
     if (state_iterator == _target_collection_states.end()) {
       return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
+    // Reject stop requests while a start attempt is still in flight to keep
+    // collector behavior and state transitions consistent (disallow STOP during STARTING).
+    if (state_iterator->second == TargetCollectionState::STARTING) {
+      return ASTL_STATUS_INVALID_STATE_TRANSITION;
     }
   }
 

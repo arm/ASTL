@@ -3,12 +3,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
 #include <utility>
 #include <vector>
+#if defined(__linux__)
+#  include <sys/wait.h>
+#  include <unistd.h>
+#endif
 
 #include "../include/scope"
 #include "astl_utils.hpp"
@@ -98,11 +103,11 @@ TEST_CASE("ScmiSysfsCollector returns internal error when process-lock temp dir 
   REQUIRE(ASTL_STATUS_INTERNAL_ERROR == collector.ConfigureCollection(std::move(configuration)));
 }
 
-TEST_CASE("ScmiSysfsCollector blocks concurrent cross-process configure", "[scmi_sysfs_collector][process_lock]") {
+TEST_CASE("ScmiSysfsCollector allows multiple collectors in one process", "[scmi_sysfs_collector][process_lock]") {
   namespace fs = std::filesystem;
 
   const fs::path  base_path         = fs::temp_directory_path() / "astl_scmi_process_lock_test";
-  const fs::path  process_lock_path = fs::temp_directory_path() / ".astl_scmi_sysfs.lock";
+  const fs::path  process_lock_path = fs::temp_directory_path() / astl::scmi_detail::kScmiProcessLockFileName;
   std::error_code ec;
   fs::remove(process_lock_path, ec);
   fs::remove_all(base_path, ec);
@@ -130,32 +135,159 @@ TEST_CASE("ScmiSysfsCollector blocks concurrent cross-process configure", "[scmi
       ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
   };
 
-  astl::ScmiSysfsCollector<astl::FileInterface> collector_1{astl::FileInterface(base_path)};
-  astl::ScmiSysfsCollector<astl::FileInterface> collector_2{astl::FileInterface(base_path)};
+  {
+    astl::ScmiSysfsCollector<astl::FileInterface> collector_1{astl::FileInterface(base_path)};
+    astl::ScmiSysfsCollector<astl::FileInterface> collector_2{astl::FileInterface(base_path)};
 
-  astl::CollectionConfiguration configuration_1{nullptr, make_operations(), collection_params};
-  REQUIRE(ASTL_STATUS_SUCCESS == collector_1.ConfigureCollection(std::move(configuration_1)));
+    astl::CollectionConfiguration configuration_1{nullptr, make_operations(), collection_params};
+    REQUIRE(ASTL_STATUS_SUCCESS == collector_1.ConfigureCollection(std::move(configuration_1)));
 
-  astl::CollectionConfiguration configuration_2{nullptr, make_operations(), collection_params};
-#if defined(__linux__)
-  REQUIRE(ASTL_STATUS_COLLECTION_ALREADY_RUNNING == collector_2.ConfigureCollection(std::move(configuration_2)));
-#else
-  // TODO(ASTL-333): currently on non-Linux platforms, we don't have a way to enforce the process lock, so this will
-  // succeed. We should ideally have a way to enforce the process lock on all platforms, but for now we'll just
-  // ensure that the collector returns an error when it fails to create the process lock file due to temp directory
-  // issues (covered in a separate test).
-  REQUIRE(ASTL_STATUS_SUCCESS == collector_2.ConfigureCollection(std::move(configuration_2)));
-#endif
+    astl::CollectionConfiguration configuration_2{nullptr, make_operations(), collection_params};
+    REQUIRE(ASTL_STATUS_SUCCESS == collector_2.ConfigureCollection(std::move(configuration_2)));
+  }  // collectors destroyed before filesystem cleanup
 
   fs::remove_all(base_path, ec);
   fs::remove(process_lock_path, ec);
 }
 
+#if defined(__linux__)
+TEST_CASE("ScmiSysfsCollector blocks configure from second process", "[scmi_sysfs_collector][process_lock]") {
+  namespace fs = std::filesystem;
+
+  const fs::path  base_path         = fs::temp_directory_path() / "astl_scmi_process_lock_cross_process_test";
+  const fs::path  process_lock_path = fs::temp_directory_path() / astl::scmi_detail::kScmiProcessLockFileName;
+  std::error_code ec;
+  fs::remove(process_lock_path, ec);
+  fs::remove_all(base_path, ec);
+  fs::create_directories(base_path, ec);
+  REQUIRE_FALSE(ec);
+
+  {
+    std::ofstream de_version(base_path / "de_implementation_version");
+    REQUIRE(de_version.good());
+    de_version << "0.0.0";
+  }
+  {
+    std::ofstream version(base_path / "version");
+    REQUIRE(version.good());
+    version << "0.0.1";
+  }
+
+  auto make_operations = []() {
+    return astl::CollectionOperations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
+  };
+  astl_collection_parameters_t collection_params{
+      ._size              = sizeof(astl_collection_parameters_t),
+      ._sampling_interval = 0,
+      ._collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+      ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
+  };
+
+  std::array<int, 2> sync_pipe{-1, -1};
+  REQUIRE(pipe(sync_pipe.data()) == 0);
+
+  const pid_t child_pid = fork();
+  REQUIRE(child_pid >= 0);
+  if (child_pid == 0) {
+    close(sync_pipe[1]);
+    char start_signal{};
+    if (read(sync_pipe[0], &start_signal, 1) != 1) {
+      close(sync_pipe[0]);
+      _exit(2);
+    }
+    close(sync_pipe[0]);
+
+    astl::ScmiSysfsCollector<astl::FileInterface> child_collector{astl::FileInterface(base_path)};
+    astl::CollectionConfiguration                 child_configuration{nullptr, make_operations(), collection_params};
+    const auto status = child_collector.ConfigureCollection(std::move(child_configuration));
+    _exit(status == ASTL_STATUS_COLLECTION_ALREADY_RUNNING ? 0 : 1);
+  }
+
+  close(sync_pipe[0]);
+
+  astl::ScmiSysfsCollector<astl::FileInterface> parent_collector{astl::FileInterface(base_path)};
+  astl::CollectionConfiguration                 parent_configuration{nullptr, make_operations(), collection_params};
+  REQUIRE(ASTL_STATUS_SUCCESS == parent_collector.ConfigureCollection(std::move(parent_configuration)));
+
+  const std::array<char, 1> start_signal_buf{'x'};
+  REQUIRE(write(sync_pipe[1], start_signal_buf.data(), start_signal_buf.size()) == 1);
+  close(sync_pipe[1]);
+
+  int wait_status = 0;
+  REQUIRE(waitpid(child_pid, &wait_status, 0) == child_pid);
+  REQUIRE(WIFEXITED(wait_status));
+  REQUIRE(WEXITSTATUS(wait_status) == 0);
+
+  REQUIRE(ASTL_STATUS_SUCCESS == parent_collector.StartCollection());
+  REQUIRE(ASTL_STATUS_SUCCESS == parent_collector.StopCollection());
+
+  fs::remove_all(base_path, ec);
+  fs::remove(process_lock_path, ec);
+}
+
+TEST_CASE("ScmiSysfsCollector releases process lock on destructor after configure only",
+          "[scmi_sysfs_collector][process_lock]") {
+  namespace fs = std::filesystem;
+
+  const fs::path  base_path         = fs::temp_directory_path() / "astl_scmi_process_lock_destructor_release_test";
+  const fs::path  process_lock_path = fs::temp_directory_path() / astl::scmi_detail::kScmiProcessLockFileName;
+  std::error_code ec;
+  fs::remove(process_lock_path, ec);
+  fs::remove_all(base_path, ec);
+  fs::create_directories(base_path, ec);
+  REQUIRE_FALSE(ec);
+
+  {
+    std::ofstream de_version(base_path / "de_implementation_version");
+    REQUIRE(de_version.good());
+    de_version << "0.0.0";
+  }
+  {
+    std::ofstream version(base_path / "version");
+    REQUIRE(version.good());
+    version << "0.0.1";
+  }
+
+  auto make_operations = []() {
+    return astl::CollectionOperations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
+  };
+  astl_collection_parameters_t collection_params{
+      ._size              = sizeof(astl_collection_parameters_t),
+      ._sampling_interval = 0,
+      ._collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+      ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
+  };
+
+  {
+    astl::ScmiSysfsCollector<astl::FileInterface> collector{astl::FileInterface(base_path)};
+    astl::CollectionConfiguration                 configuration{nullptr, make_operations(), collection_params};
+    REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  }  // Collector destroyed without Start/Stop. Lock must be released here.
+
+  const pid_t child_pid = fork();
+  REQUIRE(child_pid >= 0);
+  if (child_pid == 0) {
+    astl::ScmiSysfsCollector<astl::FileInterface> child_collector{astl::FileInterface(base_path)};
+    astl::CollectionConfiguration                 child_configuration{nullptr, make_operations(), collection_params};
+    const auto status = child_collector.ConfigureCollection(std::move(child_configuration));
+    _exit(status == ASTL_STATUS_SUCCESS ? 0 : 1);
+  }
+
+  int wait_status = 0;
+  REQUIRE(waitpid(child_pid, &wait_status, 0) == child_pid);
+  REQUIRE(WIFEXITED(wait_status));
+  REQUIRE(WEXITSTATUS(wait_status) == 0);
+
+  fs::remove_all(base_path, ec);
+  fs::remove(process_lock_path, ec);
+}
+#endif
+
 TEST_CASE("ScmiSysfsCollector releases process lock after stop", "[scmi_sysfs_collector][process_lock]") {
   namespace fs = std::filesystem;
 
   const fs::path  base_path         = fs::temp_directory_path() / "astl_scmi_process_lock_release_test";
-  const fs::path  process_lock_path = fs::temp_directory_path() / ".astl_scmi_sysfs.lock";
+  const fs::path  process_lock_path = fs::temp_directory_path() / astl::scmi_detail::kScmiProcessLockFileName;
   std::error_code ec;
   fs::remove(process_lock_path, ec);
   fs::remove_all(base_path, ec);
@@ -191,9 +323,11 @@ TEST_CASE("ScmiSysfsCollector releases process lock after stop", "[scmi_sysfs_co
     REQUIRE(ASTL_STATUS_SUCCESS == collector_1.StopCollection());
   }
 
-  astl::ScmiSysfsCollector<astl::FileInterface> collector_2{astl::FileInterface(base_path)};
-  astl::CollectionConfiguration                 configuration_2{nullptr, make_operations(), collection_params};
-  REQUIRE(ASTL_STATUS_SUCCESS == collector_2.ConfigureCollection(std::move(configuration_2)));
+  {
+    astl::ScmiSysfsCollector<astl::FileInterface> collector_2{astl::FileInterface(base_path)};
+    astl::CollectionConfiguration                 configuration_2{nullptr, make_operations(), collection_params};
+    REQUIRE(ASTL_STATUS_SUCCESS == collector_2.ConfigureCollection(std::move(configuration_2)));
+  }  // collector destroyed before filesystem cleanup
 
   fs::remove_all(base_path, ec);
   fs::remove(process_lock_path, ec);
@@ -203,7 +337,7 @@ TEST_CASE("ScmiSysfsCollector breaks stale process lock", "[scmi_sysfs_collector
   namespace fs = std::filesystem;
 
   const fs::path  base_path         = fs::temp_directory_path() / "astl_scmi_process_lock_stale_test";
-  const fs::path  process_lock_path = fs::temp_directory_path() / ".astl_scmi_sysfs.lock";
+  const fs::path  process_lock_path = fs::temp_directory_path() / astl::scmi_detail::kScmiProcessLockFileName;
   std::error_code ec;
   fs::remove(process_lock_path, ec);
   fs::remove_all(base_path, ec);
@@ -237,10 +371,12 @@ TEST_CASE("ScmiSysfsCollector breaks stale process lock", "[scmi_sysfs_collector
       ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
   };
 
-  astl::ScmiSysfsCollector<astl::FileInterface> collector{astl::FileInterface(base_path)};
-  astl::CollectionConfiguration                 configuration{nullptr, make_operations(), collection_params};
+  {
+    astl::ScmiSysfsCollector<astl::FileInterface> collector{astl::FileInterface(base_path)};
+    astl::CollectionConfiguration                 configuration{nullptr, make_operations(), collection_params};
 
-  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+    REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  }  // collector destroyed before filesystem cleanup
 
   fs::remove_all(base_path, ec);
   fs::remove(process_lock_path, ec);
