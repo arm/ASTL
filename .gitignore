@@ -87,6 +87,7 @@ build/
 tmp/
 Testing/Temporary/
 plots/
+atx.astl
 
 # vim buffer files
 *.swp
