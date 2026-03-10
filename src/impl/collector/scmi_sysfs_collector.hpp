@@ -702,15 +702,8 @@ auto ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(ScmiReadOperat
   if (!parsed_value) {
     return parsed_value.error();
   }
-  auto       timestamp       = parsed_value->first;
-  const auto scale_to_double = [](ScmiDataEventValue event_value, double scale_factor) -> double {
-    return static_cast<double>(event_value.value) * scale_factor;
-  };
-  // The raw value read from the file is a 64-bit integer,
-  // but we may want to scale that based on the value_scale_factor
-  auto raw_value = operation.value_scale_factor == 1.0
-                       ? AstlValue{parsed_value->second.value}  // unscaled uint64_t
-                       : AstlValue{scale_to_double(parsed_value->second, operation.value_scale_factor)};
+  auto timestamp = parsed_value->first;
+  auto raw_value = AstlValue{parsed_value->second.value};
 
   /**
    * @brief Discard samples that arrive with the same timestamp as the previous one.

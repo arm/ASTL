@@ -36,6 +36,8 @@ message MetricConfig {
   AstlCategory    category      = 6;
   repeated string metric_groups = 7;
   CollectorType collector_type  = 8;
+  // Raw collector sample type before formula/scaling processing.
+  AstlValueType input_value_type = 9;
 
   oneof metric {
     ResidencyMetric residency_metric = 20;

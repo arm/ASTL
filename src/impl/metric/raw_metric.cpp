@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <expected>
 #include <string>
 
@@ -107,9 +106,10 @@ auto RawMetric::GetOperations() -> std::expected<OperationSequence, astl_status_
 
 auto RawMetric::CheckSampleValueType(const RawSampledData &raw_sample) const -> astl_status_code {
   const auto sample_type = raw_sample.value.ToAstlUnionValue().second;
-  if (sample_type != _configuration->ValueType()) {
-    ASTL_LOG_ERROR("Metric {}: received sample with type {} but expected type {}", _configuration->Name(), sample_type,
-                   _configuration->ValueType());
+  // Validate against collector-facing raw input contract, not the post-formula output type.
+  if (sample_type != _configuration->InputValueType()) {
+    ASTL_LOG_ERROR("Metric {}: received sample with type {} but expected input type {}", _configuration->Name(),
+                   sample_type, _configuration->InputValueType());
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
   return ASTL_STATUS_SUCCESS;

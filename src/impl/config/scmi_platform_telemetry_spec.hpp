@@ -340,13 +340,20 @@ auto GetMetricRegistersScmiData(astl::metrics::spec::MetricJsonDeclaration const
  * @brief A helper to hold SCMI json spec data matching a residency metric's required registers
  */
 struct ResidencyStateRegisterDefinitions {
+  struct StateRegisterDefinition {
+    // Per-state base DE_ID before instance offset is applied.
+    ScmiDataEventId base_data_event_id{};
+    // Preserved so residency can use the same post-collection scaling path in follow-up work.
+    int32_t base10_unit_modifier{};
+  };
+
   // number of instances of the members in the matching scmi layout member
-  // note that these registers in `state_to_base_data_event_id` might come from different layout members.
+  // note that these registers in `state_to_register_def` might come from different layout members.
   // When matching these registers, it's simply an error if their layout blocks have different 'count' values.
   std::size_t count{0};
   std::string component;  // component name from the scmi spec
-  // map of state names (from the residency metric declaration) to base SCMI data event ID.
-  std::unordered_map<std::string, ScmiDataEventId> state_to_base_data_event_id;
+  // map of state names (from the residency metric declaration) to SCMI register metadata.
+  std::unordered_map<std::string, StateRegisterDefinition> state_to_register_def;
 };
 
 /**

@@ -694,6 +694,7 @@ TEST_CASE("MetricManager::GetCounterOnTarget with registered counter", "[MetricM
     REQUIRE(std::string(props._name) == "TestCounter");
     REQUIRE(std::string(props._description) == "A test counter metric");
     REQUIRE(props._units == astl_units_t::ASTL_UNITS_BYTES);
+    REQUIRE(std::string(props._formula) == "value");
   }
 
   SECTION("GetCounterRequiredOperations returns correct operation") {
@@ -708,6 +709,119 @@ TEST_CASE("MetricManager::GetCounterOnTarget with registered counter", "[MetricM
     REQUIRE(scmi_op != nullptr);
     REQUIRE(scmi_op->scmi_data_event_id == 0x6001);
   }
+}
+
+TEST_CASE("MetricManager::GetCounterProperties exposes scaling formula", "[MetricManager][Counter]") {
+  MetricManager mgr{MakeCaps(CollectorType::SCMI)};
+  auto          target = std::make_unique<MockTarget>();
+  std::string   target_name{"TLM-0"};
+  ALLOW_CALL(*target, Name()).RETURN(target_name);
+
+  auto counter_config = std::make_unique<astl::MetricConfig>(
+      "ScaledCounter", "Counter with scaling", astl_units_t::ASTL_UNITS_WATTS, astl_value_type_t::ASTL_VALUE_FLOAT64,
+      ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI,
+      astl::ScmiOperationBuilder{
+          0x6002
+  },
+      astl::AnyFormula{astl::ScalingFormula{1, 1000}}, astl_value_type_t::ASTL_VALUE_UINT64);
+
+  REQUIRE(mgr.RegisterCounter(std::move(counter_config), {target.get()}) == ASTL_STATUS_SUCCESS);
+
+  auto counters_or_error = mgr.GetAvailableCounters(target.get());
+  REQUIRE(counters_or_error.has_value());
+  REQUIRE(counters_or_error->size() == 1);
+  auto counter_api_handle = astl_counter_handle_t{(*counters_or_error)[0]};
+
+  astl_counter_properties_t props{};
+  auto                      status = mgr.GetCounterProperties(counter_api_handle, &props);
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::string(props._formula) == "value / 1000");
+  REQUIRE(props._value_type == ASTL_VALUE_UINT64);
+}
+
+TEST_CASE("MetricManager::GetCounterProperties exposes composed expression and scaling", "[MetricManager][Counter]") {
+  MetricManager mgr{MakeCaps(CollectorType::SCMI)};
+  auto          target = std::make_unique<MockTarget>();
+  std::string   target_name{"TLM-0"};
+  ALLOW_CALL(*target, Name()).RETURN(target_name);
+
+  auto expr_result = astl::ExpressionFormula::Create("value + 1");
+  REQUIRE(expr_result.has_value());
+  auto composed = astl::ComposeFormulas(
+      astl::AnyFormula{
+          std::move(expr_result.value())
+  },
+      astl::AnyFormula{astl::ScalingFormula{1, 1000}});
+
+  auto counter_config = std::make_unique<astl::MetricConfig>(
+      "ComposedCounter", "Counter with expression and scaling", astl_units_t::ASTL_UNITS_WATTS,
+      astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI,
+      astl::ScmiOperationBuilder{0x6003}, std::move(composed), astl_value_type_t::ASTL_VALUE_UINT64);
+
+  REQUIRE(mgr.RegisterCounter(std::move(counter_config), {target.get()}) == ASTL_STATUS_SUCCESS);
+
+  auto counters_or_error = mgr.GetAvailableCounters(target.get());
+  REQUIRE(counters_or_error.has_value());
+  REQUIRE(counters_or_error->size() == 1);
+  auto counter_api_handle = astl_counter_handle_t{(*counters_or_error)[0]};
+
+  astl_counter_properties_t props{};
+  auto                      status = mgr.GetCounterProperties(counter_api_handle, &props);
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::string(props._formula).find("/ 1000") != std::string::npos);
+  REQUIRE(props._value_type == ASTL_VALUE_UINT64);
+  auto api_formula = astl::ExpressionFormula::Create(std::string{props._formula});
+  REQUIRE(api_formula.has_value());
+  auto api_result = api_formula->Apply(astl::AstlValue{uint64_t{1000}});
+  REQUIRE(api_result.has_value());
+  REQUIRE(astl::to_string(*api_result) == "1");
+}
+
+TEST_CASE("MetricManager::GetCounterProperties keeps integer-literal scaling in fallback pipeline rendering",
+          "[MetricManager][Counter]") {
+  MetricManager mgr{MakeCaps(CollectorType::SCMI)};
+  auto          target = std::make_unique<MockTarget>();
+  std::string   target_name{"TLM-0"};
+  ALLOW_CALL(*target, Name()).RETURN(target_name);
+
+  auto expr_a = astl::ExpressionFormula::Create("value + 1");
+  auto expr_b = astl::ExpressionFormula::Create("value + 2");
+  REQUIRE(expr_a.has_value());
+  REQUIRE(expr_b.has_value());
+
+  std::vector<astl::FormulaPipeline::PipelineStep> steps;
+  steps.emplace_back(std::move(expr_a.value()));
+  steps.emplace_back(astl::ScalingFormula{1, 1000});
+  steps.emplace_back(std::move(expr_b.value()));
+  astl::AnyFormula pipeline_formula{astl::FormulaPipeline{std::move(steps)}};
+  auto             expected_result = astl::ApplyFormula(pipeline_formula, astl::AstlValue{uint64_t{1000}});
+  REQUIRE(expected_result.has_value());
+
+  auto counter_config = std::make_unique<astl::MetricConfig>(
+      "FallbackCounter", "Counter with multi-step pipeline", astl_units_t::ASTL_UNITS_WATTS,
+      astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI,
+      astl::ScmiOperationBuilder{0x6004}, std::move(pipeline_formula), astl_value_type_t::ASTL_VALUE_UINT64);
+
+  REQUIRE(mgr.RegisterCounter(std::move(counter_config), {target.get()}) == ASTL_STATUS_SUCCESS);
+
+  auto counters_or_error = mgr.GetAvailableCounters(target.get());
+  REQUIRE(counters_or_error.has_value());
+  REQUIRE(counters_or_error->size() == 1);
+  auto counter_api_handle = astl_counter_handle_t{(*counters_or_error)[0]};
+
+  astl_counter_properties_t props{};
+  auto                      status = mgr.GetCounterProperties(counter_api_handle, &props);
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::string(props._formula).find("->") == std::string::npos);
+  REQUIRE(std::string(props._formula).find("0.001") == std::string::npos);
+  REQUIRE(props._value_type == ASTL_VALUE_UINT64);
+
+  // End-to-end lock: emitted API formula must parse in TinyExpr and evaluate the same as metric post-processing.
+  auto api_formula = astl::ExpressionFormula::Create(std::string{props._formula});
+  REQUIRE(api_formula.has_value());
+  auto api_result = api_formula->Apply(astl::AstlValue{uint64_t{1000}});
+  REQUIRE(api_result.has_value());
+  REQUIRE(astl::to_string(*api_result) == astl::to_string(*expected_result));
 }
 
 TEST_CASE("MetricManager::RegisterMetric with no metrics means no groups!", "[MetricManager][MetricGroup]") {

@@ -18,12 +18,13 @@ auto Counter::GetProperties(astl_counter_properties_t *properties) const -> astl
   // properties->_handle : set by caller (MetricManager)
   properties->_name                  = GetInternedString(_configuration->Name());
   properties->_description           = GetInternedString(_configuration->Description());
-  properties->_mask                  = 0;
   properties->_min_sampling_interval = 0;
   properties->_units                 = _configuration->Units();
-  properties->_formula               = "";
-  properties->_value_type            = _configuration->ValueType();
-  properties->_counter_type          = ASTL_COUNTER_TYPE_COUNT;
+  // Expose the same composed formula used by metric post-processing for raw counter consumers.
+  properties->_formula = GetInternedString(FormatFormulaForApi(_configuration->GetFormula()));
+  // Counter sample payloads are always reported in the raw/on-wire type expected by collection APIs.
+  properties->_value_type   = _configuration->InputValueType();
+  properties->_counter_type = ASTL_COUNTER_TYPE_COUNT;
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -39,7 +40,7 @@ auto Counter::GetOperations() -> std::expected<OperationSequence, astl_status_co
 
 auto Counter::ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code {
   // if the counter has an expected value type, check that the sample matches it
-  if (ASTL_VALUE_UNKNOWN != _configuration->ValueType()) {
+  if (ASTL_VALUE_UNKNOWN != _configuration->InputValueType()) {
     auto type_check_result = CheckSampleValueType(raw_sample);
     if (type_check_result != ASTL_STATUS_SUCCESS) {
       return type_check_result;

@@ -2,11 +2,14 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <nlohmann/json.hpp>
 
 #include "../../test_includes.hpp"  // include before catch2
 #include "common/astl_value.hpp"
+#include "config/metric_json_declaration.hpp"
 #include "metric/expression_formula.hpp"
 #include "metric/formula_builder.hpp"
 
@@ -96,6 +99,36 @@ TEST_CASE("FormulaBuilder - Invalid Input", "[FormulaBuilder]") {
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
+
+  SECTION("Decimal literals are rejected") {
+    nlohmann::json json   = "value * 0.001";
+    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Scientific notation literals are rejected") {
+    nlohmann::json json   = "value * 1e-3";
+    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+}
+
+TEST_CASE("BuildScalingFormulaFromBase10Modifier handles INT32_MIN safely", "[FormulaBuilder]") {
+  auto formula = astl::metrics::spec::BuildScalingFormulaFromBase10Modifier(std::numeric_limits<int32_t>::min());
+  auto result  = astl::ApplyFormula(formula, astl::AstlValue{std::numeric_limits<uint64_t>::max()});
+  REQUIRE(result.has_value());
+  REQUIRE(std::holds_alternative<double>(result->value));
+  REQUIRE(std::get<double>(result->value) > 0.0);
+  REQUIRE(std::get<double>(result->value) < 1.0);
+}
+
+TEST_CASE("ScalingFormula reports overflow on checked multiply", "[FormulaBuilder]") {
+  astl::ScalingFormula formula{2, 1};
+  auto                 result = formula.Apply(astl::AstlValue{std::numeric_limits<uint64_t>::max()});
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(result.error() == ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
 }
 
 // =============================================================================
@@ -133,6 +166,69 @@ TEST_CASE("AnyFormula - GetFormulaDescription Helper", "[AnyFormula]") {
   SECTION("IdentityFormula description") {
     astl::AnyFormula formula = astl::IdentityFormula{};
     REQUIRE(astl::GetFormulaDescription(formula) == "NONE");
+  }
+}
+
+TEST_CASE("ComposeFormulas and FormulaPipeline semantics", "[AnyFormula][FormulaPipeline]") {
+  SECTION("Order of application is preserved") {
+    astl::AnyFormula first  = astl::ScalingFormula{2, 1};  // value -> value * 2
+    auto             second = astl::ExpressionFormula::Create("value + 1");
+    REQUIRE(second.has_value());
+
+    auto composed = astl::ComposeFormulas(std::move(first), astl::AnyFormula{std::move(second.value())});
+    auto result   = astl::ApplyFormula(composed, astl::AstlValue{uint64_t{3}});
+
+    REQUIRE(result.has_value());
+    REQUIRE(std::holds_alternative<double>(result->value));
+    REQUIRE_THAT(std::get<double>(result->value), WithinAbs(7.0, 0.00001));
+  }
+
+  SECTION("Composing with Identity returns the other formula") {
+    auto expr = astl::ExpressionFormula::Create("value + 4");
+    REQUIRE(expr.has_value());
+
+    auto left_identity =
+        astl::ComposeFormulas(astl::AnyFormula{astl::IdentityFormula{}}, astl::AnyFormula{std::move(expr.value())});
+    REQUIRE(std::holds_alternative<astl::ExpressionFormula>(left_identity));
+
+    auto expr_again = astl::ExpressionFormula::Create("value + 4");
+    REQUIRE(expr_again.has_value());
+    auto right_identity = astl::ComposeFormulas(astl::AnyFormula{std::move(expr_again.value())},
+                                                astl::AnyFormula{astl::IdentityFormula{}});
+    REQUIRE(std::holds_alternative<astl::ExpressionFormula>(right_identity));
+  }
+
+  SECTION("Nested pipelines are flattened") {
+    auto expr = astl::ExpressionFormula::Create("value + 5");
+    REQUIRE(expr.has_value());
+
+    auto pipeline_left = astl::ComposeFormulas(
+        astl::AnyFormula{
+            astl::ScalingFormula{2, 1}
+    },
+        astl::AnyFormula{astl::ScalingFormula{3, 1}});
+    REQUIRE(std::holds_alternative<astl::FormulaPipeline>(pipeline_left));
+
+    auto pipeline_right =
+        astl::ComposeFormulas(astl::AnyFormula{astl::IdentityFormula{}}, astl::AnyFormula{std::move(expr.value())});
+    REQUIRE(std::holds_alternative<astl::ExpressionFormula>(pipeline_right));
+
+    auto flattened = astl::ComposeFormulas(std::move(pipeline_left), std::move(pipeline_right));
+    REQUIRE(std::holds_alternative<astl::FormulaPipeline>(flattened));
+    REQUIRE(std::get<astl::FormulaPipeline>(flattened).Steps().size() == 3);
+  }
+
+  SECTION("Error propagation short-circuits through pipeline apply") {
+    // ScalingFormula rejects bool input; once that fails, Apply() must return the error.
+    auto composed = astl::ComposeFormulas(
+        astl::AnyFormula{
+            astl::ScalingFormula{2, 1}
+    },
+        astl::AnyFormula{astl::IdentityFormula{}});
+    auto result = astl::ApplyFormula(composed, astl::AstlValue{true});
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
   }
 }
 

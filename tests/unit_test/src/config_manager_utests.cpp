@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <cmath>
+
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl_errors.h"
@@ -275,6 +277,104 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
         astl::metrics::spec::CreateScmiMetricConfigs("P-State", bad_decl, mock_scmi_spec, mock_scmi_targets);
     REQUIRE_FALSE(bad_result.has_value());
     REQUIRE(bad_result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+}
+
+TEST_CASE("CreateBasicMetricConfigs/CreateFiniteSetMetricConfigs lock formula-before-scaling order",
+          "[ConfigManager][FormulaOrder]") {
+  SECTION("Basic metric path (CreateBasicMetricConfigs) order is formula then scaling") {
+    astl::scmi::spec::ScmiSpecification mock_scmi_spec;
+    mock_scmi_spec.members = {
+        {.count        = 1,
+         .start_offset = 0,
+         .block_size   = 32,
+         .metrics      = {{"POWER_COUNTER",
+                           {.base_de_id           = 0x1200,
+                            .name                 = "POWER_COUNTER",
+                            .component            = "CPU",
+                            .description          = "Power counter",
+                            .unit                 = "W",
+                            .base10_unit_modifier = -3,
+                            .rel_offset           = 0x00}}}}
+    };
+
+    std::vector<const astl::ITarget*> mock_scmi_targets;
+    astl::Target mock_target_tlm0("tlm-0", "dummy test target", astl::CollectorType::SCMI, nullptr);
+    mock_scmi_targets.push_back(&mock_target_tlm0);
+
+    astl::metrics::spec::MetricJsonDeclaration basic_decl;
+    basic_decl.description              = "CPU Power";
+    basic_decl.metric_type              = "value";
+    basic_decl.category                 = "POWER";
+    basic_decl.collection.protocol      = "scmi";
+    basic_decl.collection.register_name = "POWER_COUNTER";
+    basic_decl.formula                  = nlohmann::json("value + 1");
+
+    auto metric_configs_result =
+        astl::metrics::spec::CreateScmiMetricConfigs("CPU Power", basic_decl, mock_scmi_spec, mock_scmi_targets);
+    REQUIRE(metric_configs_result.has_value());
+
+    auto metric_configs = std::move(metric_configs_result.value());
+    REQUIRE(metric_configs.size() == 1);
+    auto* cfg = metric_configs.begin()->first.get();
+    REQUIRE(cfg != nullptr);
+    REQUIRE(cfg->ValueType() == ASTL_VALUE_FLOAT64);
+    REQUIRE(cfg->InputValueType() == ASTL_VALUE_UINT64);
+
+    auto applied = astl::ApplyFormula(cfg->GetFormula(), astl::AstlValue{uint64_t{1000}});
+    REQUIRE(applied.has_value());
+    REQUIRE(std::holds_alternative<double>(applied->value));
+    // Locks intended order: (value + 1) then / 1000 => 1.001.
+    REQUIRE(std::fabs(std::get<double>(applied->value) - 1.001) < 1e-12);
+  }
+
+  SECTION("Finite-set metric path (CreateFiniteSetMetricConfigs) order is formula then scaling") {
+    astl::scmi::spec::ScmiSpecification mock_scmi_spec;
+    mock_scmi_spec.members = {
+        {.count        = 1,
+         .start_offset = 0,
+         .block_size   = 32,
+         .metrics      = {{"P_STATE",
+                           {.base_de_id           = 0x1300,
+                            .name                 = "P_STATE",
+                            .component            = "AP",
+                            .description          = "P-state",
+                            .unit                 = "",
+                            .base10_unit_modifier = -1,
+                            .rel_offset           = 0x00}}}}
+    };
+
+    std::vector<const astl::ITarget*> mock_scmi_targets;
+    astl::Target mock_target_tlm0("tlm-0", "dummy test target", astl::CollectorType::SCMI, nullptr);
+    mock_scmi_targets.push_back(&mock_target_tlm0);
+
+    astl::metrics::spec::MetricJsonDeclaration finite_decl;
+    finite_decl.description              = "Current CPU performance state";
+    finite_decl.metric_type              = "finite_set";
+    finite_decl.collection.protocol      = "scmi";
+    finite_decl.collection.register_name = "P_STATE";
+    finite_decl.formula                  = nlohmann::json("value + 1");
+    finite_decl.finite_set_values        = std::map<std::string, nlohmann::json>{
+        {"P0", {{"value", 0}, {"description", "Performance state 0"}}},
+        {"P1", {{"value", 1}, {"description", "Performance state 1"}}},
+    };
+
+    auto metric_configs_result =
+        astl::metrics::spec::CreateScmiMetricConfigs("P-State", finite_decl, mock_scmi_spec, mock_scmi_targets);
+    REQUIRE(metric_configs_result.has_value());
+
+    auto metric_configs = std::move(metric_configs_result.value());
+    REQUIRE(metric_configs.size() == 1);
+    auto* finite_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(metric_configs.begin()->first.get());
+    REQUIRE(finite_cfg != nullptr);
+    REQUIRE(finite_cfg->ValueType() == ASTL_VALUE_FLOAT64);
+    REQUIRE(finite_cfg->InputValueType() == ASTL_VALUE_UINT64);
+
+    auto applied = astl::ApplyFormula(finite_cfg->GetFormula(), astl::AstlValue{uint64_t{20}});
+    REQUIRE(applied.has_value());
+    REQUIRE(std::holds_alternative<double>(applied->value));
+    // Locks intended order: (value + 1) then / 10 => 2.1.
+    REQUIRE(std::fabs(std::get<double>(applied->value) - 2.1) < 1e-12);
   }
 }
 

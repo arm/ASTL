@@ -171,26 +171,29 @@ auto FindMatchingScmiRegistersForResidency(astl::metrics::spec::MetricJsonDeclar
                          result.count, layout_member.count);
         continue;
       }
-      // instance count, register name, component name all match, let's add this to the state table.
-      result.state_to_base_data_event_id.emplace(matching_state_name->first, block_member.base_de_id);
-      // @todo(ASTL-331) support non-zero base10 unit modifiers for residency metrics.
-      // For now, just check our assumption that it's zero
+      // Residency scaling for non-zero base10 modifiers is not implemented yet.
+      // Fail fast to avoid silently producing incorrect residency values.
       if (block_member.base10_unit_modifier != 0) {
         ASTL_LOG_ERROR(
-            "SCMI register {} has non-zero base10 unit modifier {},"
-            " which is currently not supported for residency metrics",
+            "SCMI residency register {} has non-zero base10 unit modifier {}, which is currently not supported",
             block_member.name, block_member.base10_unit_modifier);
         return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
       }
+      // instance count, register name, component name all match, let's add this to the state table.
+      result.state_to_register_def.emplace(
+          // Keep state-level metadata together so residency config/build can stay protocol-agnostic.
+          matching_state_name->first, ResidencyStateRegisterDefinitions::StateRegisterDefinition{
+                                          .base_data_event_id   = block_member.base_de_id,
+                                          .base10_unit_modifier = block_member.base10_unit_modifier});
     }
   }
   // double-check that all the necessary states were found
   for (const auto& [state_name, state_config] : metric_declaration.states.value()) {
-    if (!result.state_to_base_data_event_id.contains(state_name)) {
+    if (!result.state_to_register_def.contains(state_name)) {
       ASTL_LOG_ERROR("State '{}' in residency metric not found in scmi spec!", state_name);
     }
   }
-  if (result.state_to_base_data_event_id.size() != metric_declaration.states->size()) {
+  if (result.state_to_register_def.size() != metric_declaration.states->size()) {
     ASTL_LOG_ERROR("Some residency metric states were not found in scmi spec!");
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }

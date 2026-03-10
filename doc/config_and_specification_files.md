@@ -246,6 +246,18 @@ Metrics declaration files (e.g., [`config/metrics/mocksysfs/metrics.json`](../co
 | **collection.scmi_instance_filter** | Selects specific instance of repeated counter by instance number | `"1"` |
 | **formula** | Post-processing formula for raw data | `"value * 1000"` |
 
+#### Formula and `base10_unit_modifier` order
+
+For SCMI-backed metrics with a non-zero `base10_unit_modifier`, ASTL composes transformations in this order:
+
+1. Apply user `formula` from the metrics declaration.
+2. Apply SCMI `base10_unit_modifier` scaling.
+
+Scaling is represented as composable `/ 10^N` or `* 10^N` formula steps. Large negative modifiers are not collapsed
+to zero, so floating-point fractional results remain available when applicable.
+To keep generated formula pipelines bounded, ASTL clamps `base10_unit_modifier` magnitude to 190
+(`|base10_unit_modifier| > 190` is treated as `+/-190`, with a warning log).
+
 ### Metrics Parsing Implementation
 
 Metrics declaration files are parsed by:

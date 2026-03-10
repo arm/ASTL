@@ -662,9 +662,7 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counter
   // Mock 1 counter on 1 target
   auto            counter1    = std::make_unique<MockCounter>();
   astl::ICounter* counter_ptr = counter1.get();
-  ALLOW_CALL(*counter1, GetProperties(ANY(astl_counter_properties_t*)))
-      .SIDE_EFFECT(_1->_mask = 0xaced)
-      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*counter1, GetProperties(ANY(astl_counter_properties_t*))).RETURN(ASTL_STATUS_SUCCESS);
 
   // set up 1 mock target
   auto                 mock_target_1      = std::make_unique<MockTarget>();

@@ -87,6 +87,7 @@ astl::protobuf::MetricManager BuildValidMetricManagerProto() {
   cfg->set_description("unit-test metric");
   cfg->set_units(static_cast<astl::protobuf::AstlUnits>(ASTL_UNITS_CELSIUS));
   cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+  cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
   cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
   cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
   cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
@@ -290,6 +291,7 @@ TEST_CASE("MetricHandle + SampledValueMetric: protobuf round-trip", "[MetricHand
   REQUIRE(handle.config);
   REQUIRE(handle.config->MetricType() == ASTL_METRIC_VALUE);
   REQUIRE(handle.config->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(handle.config->InputValueType() == ASTL_VALUE_UINT64);
 
   auto metric = std::make_unique<astl::SampledValueMetric>(handle.config.get(),  // const MetricConfig*
                                                            tgt,                  // const ITarget*
@@ -314,6 +316,7 @@ TEST_CASE("MetricHandle + SampledValueMetric: protobuf round-trip", "[MetricHand
   REQUIRE(rebuilt_metric_handle->config->Description() == "unit-test metric");
   REQUIRE(rebuilt_metric_handle->config->MetricType() == ASTL_METRIC_VALUE);
   REQUIRE(rebuilt_metric_handle->config->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(rebuilt_metric_handle->config->InputValueType() == ASTL_VALUE_UINT64);
   REQUIRE(rebuilt_metric_handle->config->Units() == ASTL_UNITS_CELSIUS);
 
   REQUIRE(rebuilt_metric_handle->target_to_metric_map.size() == 1);
@@ -330,6 +333,51 @@ TEST_CASE("MetricHandle + SampledValueMetric: protobuf round-trip", "[MetricHand
   REQUIRE(sv_after != nullptr);
 
   REQUIRE(sv_after->Summarize() == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("MetricHandle + SampledValueMetric preserves input_value_type through protobuf",
+          "[MetricHandle][SampledValueMetric][protobuf]") {
+  auto orch_expected = astl::Orchestrator::GetInstance();
+  REQUIRE(orch_expected.has_value());
+  auto* orch = orch_expected->get().get();
+  REQUIRE(orch != nullptr);
+
+  {
+    std::vector<std::unique_ptr<astl::ITarget>> targets;
+    targets.push_back(
+        MakeTarget("tlm-0", "unit-test target", astl::CollectorType::UNKNOWN, "0xCAFEBABECAFEBABECAFEBABEBEEF0000"));
+    REQUIRE(orch->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  }
+  const auto& targets = orch->GetTargets();
+  REQUIRE_FALSE(targets.empty());
+  const astl::ITarget* target = targets[0].get();
+  REQUIRE(target != nullptr);
+
+  astl::MetricHandle handle;
+  handle.config =
+      std::make_unique<astl::MetricConfig>("scaled_metric", "scaled metric", ASTL_UNITS_WATTS, ASTL_VALUE_FLOAT64,
+                                           ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, astl::CollectorType::UNKNOWN,
+                                           astl::NullOperationBuilder{}, astl::IdentityFormula{}, ASTL_VALUE_UINT64);
+  REQUIRE(handle.config != nullptr);
+  REQUIRE(handle.config->ValueType() == ASTL_VALUE_FLOAT64);
+  REQUIRE(handle.config->InputValueType() == ASTL_VALUE_UINT64);
+
+  auto metric = std::make_unique<astl::SampledValueMetric>(handle.config.get(), target, nullptr);
+  handle.target_to_metric_map.emplace(target, std::move(metric));
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(astl::ProtobufSerDes::Serialize(handle, cache_stream) == ASTL_STATUS_SUCCESS);
+
+  cache_stream.seekg(0);
+  auto rebuilt_or_err =
+      astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream, targets);
+  REQUIRE(rebuilt_or_err.has_value());
+  REQUIRE(rebuilt_or_err->size() == 1);
+  const auto& rebuilt = rebuilt_or_err->at(0);
+  REQUIRE(rebuilt != nullptr);
+  REQUIRE(rebuilt->config != nullptr);
+  REQUIRE(rebuilt->config->ValueType() == ASTL_VALUE_FLOAT64);
+  REQUIRE(rebuilt->config->InputValueType() == ASTL_VALUE_UINT64);
 }
 
 TEST_CASE("MetricHandle + FiniteSetMetric: protobuf round-trip", "[MetricHandle][FiniteSetMetric][protobuf]") {
@@ -375,6 +423,7 @@ TEST_CASE("MetricHandle + FiniteSetMetric: protobuf round-trip", "[MetricHandle]
   REQUIRE(handle.config);
   REQUIRE(handle.config->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
   REQUIRE(handle.config->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(handle.config->InputValueType() == ASTL_VALUE_UINT64);
 
   auto* finite_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(handle.config.get());
   REQUIRE(finite_cfg != nullptr);
@@ -407,6 +456,7 @@ TEST_CASE("MetricHandle + FiniteSetMetric: protobuf round-trip", "[MetricHandle]
   REQUIRE(rebuilt_metric_handle->config->Description() == "finite-set unit-test metric");
   REQUIRE(rebuilt_metric_handle->config->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
   REQUIRE(rebuilt_metric_handle->config->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(rebuilt_metric_handle->config->InputValueType() == ASTL_VALUE_UINT64);
   REQUIRE(rebuilt_metric_handle->config->Units() == ASTL_UNITS_NONE);
 
   auto* rebuilt_finite_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(rebuilt_metric_handle->config.get());
@@ -503,6 +553,7 @@ TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[Metric
   REQUIRE(rebuilt_handle->config->Description() == "unit-test metric");
   REQUIRE(rebuilt_handle->config->MetricType() == ASTL_METRIC_VALUE);
   REQUIRE(rebuilt_handle->config->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(rebuilt_handle->config->InputValueType() == ASTL_VALUE_UINT64);
   REQUIRE(rebuilt_handle->config->Units() == ASTL_UNITS_CELSIUS);
 
   REQUIRE(rebuilt_handle->target_to_metric_map.size() == 1);
@@ -555,4 +606,11 @@ TEST_CASE(
   //  - BuildCapabilities ran
   //  - RebuildMetricHandles succeeded
   //  - RebuildOperationMap succeeded
+  auto metrics_or_err = mgr->GetAvailableMetrics(targets[0].get());
+  REQUIRE(metrics_or_err.has_value());
+  REQUIRE_FALSE(metrics_or_err->empty());
+  auto* first_handle = static_cast<const astl::MetricHandle*>((*metrics_or_err)[0]);
+  REQUIRE(first_handle != nullptr);
+  REQUIRE(first_handle->config != nullptr);
+  REQUIRE(first_handle->config->InputValueType() == first_handle->config->ValueType());
 }

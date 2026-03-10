@@ -226,6 +226,8 @@ inline void from_json(const nlohmann::json& json_data, MetricsDeclaration& metri
 }
 
 auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std::optional<CollectorType>;
+// Convert a protocol-specific base10 exponent into a protocol-agnostic scaling formula.
+auto BuildScalingFormulaFromBase10Modifier(int32_t base10_unit_modifier) -> AnyFormula;
 
 /**
  * @brief helper function to create a MetricConfig object from a MetricJsonDeclaration and ScmiSpecification

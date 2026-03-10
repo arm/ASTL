@@ -121,7 +121,7 @@ class RawMetric : public virtual IMetric {
 
  protected:
   /**
-   * @brief Validate that the raw sample's value type matches this metric's expected type.
+   * @brief Validate that the raw sample's value type matches this metric's expected input type.
    * @param raw_sample Raw sample to validate.
    * @return ASTL_STATUS_SUCCESS if types match; ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE otherwise.
    */
@@ -134,10 +134,10 @@ class RawMetric : public virtual IMetric {
   auto LogRawSample(const RawSampledData &raw_sample) -> void;
 
   /**
-   * @brief Apply the formula to a raw sample value to produce a processed value.
+   * @brief Apply configured scaling and formula to produce a processed value.
    *
-   * This method applies the formula configured for this metric.
-   * It uses the formula from the metric configuration.
+   * Scaling is represented as a formula step inside AnyFormula (possibly a FormulaPipeline),
+   * so RawMetric always uses a single formula application path.
    *
    * @param raw_value The raw sample value to process
    * @return Processed AstlValue if formula application succeeds, or an error status code
@@ -153,7 +153,7 @@ class RawMetric : public virtual IMetric {
 
   // Member variables for metrics are protected to allow access in derived classes.
   // NOLINTBEGIN - Disable clang-tidy checks for protected members.
-  // The common parameters used by all metric types like formula, mask go in here.
+  // The common parameters used by all metric types (formula, target, sink wiring) go in here.
 
   // non-owned pointer to the configuration for this metric (owned by the MetricHandle)
   MetricConfig const *_configuration;

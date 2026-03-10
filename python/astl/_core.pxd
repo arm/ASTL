@@ -166,7 +166,6 @@ cdef extern from "astl/astl_telemetry.h":
         const char* _description
         uint32_t _min_sampling_interval
         astl_units_t _units
-        uint64_t _mask
         const char* _formula
         astl_value_type_t _value_type
         astl_counter_type_t _counter_type

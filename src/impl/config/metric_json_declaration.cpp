@@ -4,7 +4,7 @@
 
 #include "config/metric_json_declaration.hpp"
 
-#include <cmath>
+#include <cstdint>
 #include <format>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -24,12 +24,6 @@ using json = nlohmann::json;
 
 namespace astl::metrics::spec {
 
-auto ParseValueType(const MetricJsonDeclaration& metric_declaration) -> astl_value_type_t {
-  // alternatively parse the size field of the scmi spec
-  (void)metric_declaration;  // unused in this implementation
-  return ASTL_VALUE_UINT64;
-}
-
 auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std::optional<CollectorType> {
   auto collector_type_lower = astl::ToLowerCopy(metric_declaration.collection.protocol);
   if (collector_type_lower == "scmi") {
@@ -39,6 +33,84 @@ auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std:
     return CollectorType::LIBSENSORS;
   }
   return std::nullopt;
+}
+
+auto ParseValueType(const MetricJsonDeclaration& metric_declaration) -> astl_value_type_t {
+  auto collector_type = ParseCollectorType(metric_declaration);
+  if (!collector_type.has_value()) {
+    return ASTL_VALUE_UNKNOWN;
+  }
+  switch (*collector_type) {
+    case CollectorType::SCMI:
+      // SCMI collector reads deXX files as unsigned 64-bit raw values by contract.
+      // Keep input typing fixed here unless collector semantics change.
+      return ASTL_VALUE_UINT64;
+    case CollectorType::LIBSENSORS:
+      // Libsensors readings are normalized as doubles by the collector implementation.
+      return ASTL_VALUE_FLOAT64;
+    default:
+      return ASTL_VALUE_UNKNOWN;
+  }
+}
+
+auto ParseScmiOutputValueType(astl_value_type_t input_value_type, int32_t base10_unit_modifier) -> astl_value_type_t {
+  if (input_value_type == ASTL_VALUE_UNKNOWN) {
+    return ASTL_VALUE_UNKNOWN;
+  }
+  // SCMI base10 scaling is implemented through ScalingFormula, which always yields float64.
+  if (base10_unit_modifier != 0) {
+    return ASTL_VALUE_FLOAT64;
+  }
+  return input_value_type;
+}
+
+auto BuildScalingFormulaFromBase10Modifier(int32_t base10_unit_modifier) -> AnyFormula {
+  // Convert protocol metadata (base10 exponent) into a protocol-agnostic formula step.
+  if (base10_unit_modifier == 0) {
+    return AnyFormula{IdentityFormula{}};
+  }
+  constexpr int      chunk_exponent = 19;  // 10^19 fits in uint64.
+  constexpr uint64_t chunk_literal  = 10000000000000000000ULL;
+  constexpr uint64_t decimal_radix  = 10ULL;
+
+  auto append_scale_step = [](AnyFormula formula, uint64_t numerator, uint64_t denominator) -> AnyFormula {
+    // Compose as explicit pipeline stages so very large powers of ten stay representable.
+    return ComposeFormulas(std::move(formula), AnyFormula{
+                                                   ScalingFormula{numerator, denominator}
+    });
+  };
+
+  AnyFormula result = AnyFormula{IdentityFormula{}};
+  int64_t    exponent{base10_unit_modifier};
+  const bool is_positive = exponent > 0;
+  if (!is_positive) {
+    exponent = -exponent;  // safe for INT32_MIN via int64_t widening above
+  }
+  // Guard against pathological modifiers that would otherwise build massive pipelines.
+  // Note: we intentionally do not collapse large negative exponents to zero because scaling
+  // is applied in float64 space and callers can rely on non-zero fractional results.
+  constexpr int64_t max_supported_exponent = 190;  // 10 chunk-steps of 10^19.
+  if (exponent > max_supported_exponent) {
+    ASTL_LOG_WARNING("Clamping base10_unit_modifier {} to {} for scaling pipeline construction", base10_unit_modifier,
+                     is_positive ? max_supported_exponent : -max_supported_exponent);
+    exponent = max_supported_exponent;
+  }
+
+  while (exponent >= chunk_exponent) {
+    // Chunk by 10^19 to stay within uint64 literal range and keep formulas parser-friendly.
+    result = is_positive ? append_scale_step(std::move(result), chunk_literal, 1)
+                         : append_scale_step(std::move(result), 1, chunk_literal);
+    exponent -= chunk_exponent;
+  }
+  if (exponent > 0) {
+    uint64_t literal = 1;
+    for (int i = 0; i < exponent; ++i) {
+      literal *= decimal_radix;
+    }
+    result = is_positive ? append_scale_step(std::move(result), literal, 1)
+                         : append_scale_step(std::move(result), 1, literal);
+  }
+  return result;
 }
 
 /**
@@ -126,19 +198,16 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
 
   MetricConfigOnTargets metric_configs_on_targets;
   const auto            category = ParseCategory(metric_declaration.category);
-
+  // SCMI collection remains uint64 on-wire; output value type may change after scaling.
+  const auto input_value_type = ParseValueType(metric_declaration);
   for (const auto& scmi_metric_declaration : metric_registers) {
-    const auto&      metric_name          = scmi_metric_declaration.GetFullyQualifiedName();
-    const auto       units                = scmi_metric_declaration.units;
-    const auto       base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
-    constexpr double base10               = 10.0;
-    const double     value_scale_factor   = std::pow(base10, static_cast<double>(base10_unit_modifier));
-
-    // if there's a base10 multiplier, need to  treat it as a float, otherwise use configured type.
-    const auto  value_type = base10_unit_modifier ? ASTL_VALUE_FLOAT64 : ParseValueType(metric_declaration);
-    const auto& de_id      = scmi_metric_declaration.de_id;
+    const auto&             metric_name          = scmi_metric_declaration.GetFullyQualifiedName();
+    const auto              units                = scmi_metric_declaration.units;
+    const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
+    const astl_value_type_t value_type           = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
+    const auto&             de_id                = scmi_metric_declaration.de_id;
     // @todo(ASTL-186) - may need to handle different data event ids for different targets
-    ScmiOperationBuilder operation_builder{de_id, value_scale_factor};
+    ScmiOperationBuilder operation_builder{de_id};
     auto                 finite_set_copy = finite_set;     // copy for this metric instance
     auto                 info_copy       = value_to_info;  // copy for this metric instance
 
@@ -146,12 +215,14 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     if (!formula_result.has_value()) {
       return std::unexpected(formula_result.error());
     }
+    // Apply user formula first, then protocol-derived scaling uniformly in the formula pipeline.
+    auto composed_formula =
+        ComposeFormulas(std::move(formula_result.value()), BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
 
     auto new_metric_config = std::make_unique<FiniteSetMetricConfig>(
-        // @todo(ASTL-303) - consider how best to use the base10_unit_modifier in the MetricConfig and collector
         metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE, category,
         collector_type.value(), std::move(operation_builder), std::move(finite_set_copy), std::move(info_copy),
-        std::move(formula_result.value()));
+        std::move(composed_formula), input_value_type);
 
     metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
   }
@@ -188,15 +259,14 @@ static auto GetResidencyMetricStateToInfoMapForInstance(
     double      tick_frequency    = state_config["tick_frequency"].get<double>();  // Frequency in Hz
     std::string state_description = state_config["description"].get<std::string>();
 
-    auto state_iter = matching_scmi_register_definitions.state_to_base_data_event_id.find(state_name);
-    if (state_iter == matching_scmi_register_definitions.state_to_base_data_event_id.end()) {
+    auto state_iter = matching_scmi_register_definitions.state_to_register_def.find(state_name);
+    if (state_iter == matching_scmi_register_definitions.state_to_register_def.end()) {
       ASTL_LOG_ERROR("State '{}' in residency metric {} not found in matching SCMI registers", state_name,
                      metric_key_name);
       return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
-    auto data_event_id = scmi::spec::GetDataEventId(state_iter->second, instance);
-    // @todo(ASTL-331) support non-zero base10 unit modifiers for residency metrics.
-    ScmiOperationBuilder             operation_builder{data_event_id};
+    auto                 data_event_id = scmi::spec::GetDataEventId(state_iter->second.base_data_event_id, instance);
+    ScmiOperationBuilder operation_builder{data_event_id};
     ResidencyMetricConfig::StateInfo state_info{state_name, state_description, tick_frequency,
                                                 std::move(operation_builder)};
     state_to_info_map[state_name] = std::move(state_info);
@@ -217,8 +287,6 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   MetricConfigOnTargets metric_configs_on_targets;
 
   // get some essential data from the metric_declaration
-  // @todo(ASTL-331) if supporting base10 unit modifiers for residency metrics, need to make the value type f64
-  const auto value_type     = ParseValueType(metric_declaration);
   const auto category       = ParseCategory(metric_declaration.category);
   const auto collector_type = ParseCollectorType(metric_declaration);
   if (!collector_type || collector_type != CollectorType::SCMI) {
@@ -232,6 +300,9 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   if (!matching_scmi_register_definitions) {
     return std::unexpected(matching_scmi_register_definitions.error());
   }
+  // Residency state counters come from SCMI raw reads, so input type remains uint64.
+  const auto value_type       = ParseValueType(metric_declaration);
+  const auto input_value_type = value_type;
 
   for (scmi::spec::InstanceId instance = 0; instance < matching_scmi_register_definitions->count; ++instance) {
     // if an instance number is specified, only create one metric config for that instance
@@ -255,7 +326,7 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     auto new_config = std::make_unique<ResidencyMetricConfig>(
         name, metric_declaration.description, ParseUnits(metric_declaration.unit.value_or("")), value_type,
         ASTL_METRIC_RESIDENCY, category, collector_type.value(), std::move(state_to_info_map_result.value()),
-        metric_declaration.inferred_state, std::move(formula_result.value()));
+        metric_declaration.inferred_state, std::move(formula_result.value()), input_value_type);
 
     metric_configs_on_targets.emplace(std::move(new_config), applicable_targets);
   }
@@ -291,26 +362,28 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
   }
   MetricConfigOnTargets metric_configs_on_targets;
   const auto            category = ParseCategory(metric_declaration.category);
+  // SCMI collection remains uint64 on-wire; output value type may change after scaling.
+  const auto input_value_type = ParseValueType(metric_declaration);
 
   for (const auto& scmi_metric_declaration : metric_registers) {
-    const auto           units                = scmi_metric_declaration.units;
-    const auto           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
-    constexpr double     base10               = 10.0;
-    const double         value_scale_factor   = std::pow(base10, static_cast<double>(base10_unit_modifier));
-    ScmiOperationBuilder operation_builder{scmi_metric_declaration.de_id, value_scale_factor};
-    // if there's a base10 unit modifier, we need to treat the value as a float and apply the modifier in the collector
-    const auto value_type = base10_unit_modifier ? ASTL_VALUE_FLOAT64 : ParseValueType(metric_declaration);
+    const auto              units                = scmi_metric_declaration.units;
+    const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
+    ScmiOperationBuilder    operation_builder{scmi_metric_declaration.de_id};
+    const astl_value_type_t value_type = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
 
     auto formula_result = BuildFormula(metric_declaration.formula);
     if (!formula_result.has_value()) {
       return std::unexpected(formula_result.error());
     }
+    // Apply user formula first, then protocol-derived scaling uniformly in the formula pipeline.
+    auto composed_formula =
+        ComposeFormulas(std::move(formula_result.value()), BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
 
     auto metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
     auto new_metric_config = std::make_unique<MetricConfig>(
         scmi_metric_declaration.GetFullyQualifiedName(), metric_declaration.description, units, value_type, category,
         metric_type, std::move(metric_groups), collector_type.value(), std::move(operation_builder),
-        std::move(formula_result.value()));
+        std::move(composed_formula), input_value_type);
     metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
   }
   return metric_configs_on_targets;

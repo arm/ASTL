@@ -113,20 +113,19 @@ static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecificat
         continue;
       }
       processed_counter_names.insert(counter_name);
-      std::string      description = "Underlying counter for " + metric_name;
-      constexpr double unit_scaled = 1.0;
-      constexpr double base10      = 10.0;
-      const double     value_scale_factor =
-          register_declaration.base10_unit_modifier == 0
-                  ? unit_scaled
-                  : std::pow(base10, static_cast<double>(register_declaration.base10_unit_modifier));
-
-      astl_value_type_t value_type =
-          register_declaration.base10_unit_modifier == 0 ? ASTL_VALUE_UINT64 : ASTL_VALUE_FLOAT64;
+      std::string description = "Underlying counter for " + metric_name;
+      // Normalize SCMI base10 metadata into formula-space so collectors remain raw-only.
+      auto scaling_formula =
+          metrics::spec::BuildScalingFormulaFromBase10Modifier(register_declaration.base10_unit_modifier);
+      // SCMI raw payload values are always uint64.
+      constexpr astl_value_type_t input_value_type = ASTL_VALUE_UINT64;
+      // Keep counter ValueType aligned with on-wire samples; scaling remains in formula-space only.
+      const astl_value_type_t value_type = input_value_type;
 
       auto new_counter_config = std::make_unique<MetricConfig>(
           std::move(counter_name), std::move(description), ASTL_UNITS_UNKNOWN, value_type, ASTL_CATEGORY_UNCATEGORIZED,
-          ASTL_METRIC_VALUE, CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id, value_scale_factor});
+          ASTL_METRIC_VALUE, CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id},
+          std::move(scaling_formula), input_value_type);
 
       configurations_on_targets.emplace(std::move(new_counter_config), applicable_targets);
     }

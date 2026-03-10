@@ -17,7 +17,7 @@ namespace astl {
  */
 class ScmiOperationBuilder {
  public:
-  explicit ScmiOperationBuilder(ScmiDataEventId data_event_id, double value_scale_factor = 1.0);
+  explicit ScmiOperationBuilder(ScmiDataEventId data_event_id);
 
   [[nodiscard]] auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code>;
 
@@ -25,7 +25,6 @@ class ScmiOperationBuilder {
 
  private:
   ScmiDataEventId _data_event_id;
-  double          _value_scale_factor{1.0};  //!< The scale factor for the raw value (based on base10_unit_modifier)
 };
 
 /**
@@ -34,14 +33,12 @@ class ScmiOperationBuilder {
  */
 class ScmiMultiTargetOperationBuilder {
  public:
-  explicit ScmiMultiTargetOperationBuilder(ScmiTargetToDataEventIdMap data_event_ids, double value_scale_factor = 1.0);
+  explicit ScmiMultiTargetOperationBuilder(ScmiTargetToDataEventIdMap data_event_ids);
 
   [[nodiscard]] auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code>;
 
  private:
   ScmiTargetToDataEventIdMap _data_event_ids;
-  //!< The scale factor for the raw value (determined by base10_unit_modifier
-  double _value_scale_factor{1.0};
 };
 
 static_assert(OperationBuilder<ScmiOperationBuilder>);

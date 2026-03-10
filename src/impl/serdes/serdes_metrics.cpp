@@ -45,6 +45,7 @@ static auto SerializeBasicMetricConfig(const MetricConfig& config)
   out.set_description(config.Description());
   out.set_units(static_cast<astl::protobuf::AstlUnits>(config.Units()));
   out.set_value_type(static_cast<astl::protobuf::AstlValueType>(config.ValueType()));
+  out.set_input_value_type(static_cast<astl::protobuf::AstlValueType>(config.InputValueType()));
   out.set_metric_type(static_cast<astl::protobuf::AstlMetricType>(config.MetricType()));
   out.set_category(static_cast<astl::protobuf::AstlCategory>(config.Category()));
 
@@ -127,21 +128,22 @@ static auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& pro
   const std::string& name        = proto_cfg.metric_name();
   const std::string& description = proto_cfg.description();
 
-  const auto units       = static_cast<astl_units_t>(proto_cfg.units());
-  const auto value_type  = static_cast<astl_value_type_t>(proto_cfg.value_type());
-  const auto category    = static_cast<astl_category_t>(proto_cfg.category());
-  const auto metric_type = static_cast<astl_metric_type_t>(proto_cfg.metric_type());
-  const auto collector   = static_cast<CollectorType>(proto_cfg.collector_type());
+  const auto units            = static_cast<astl_units_t>(proto_cfg.units());
+  const auto value_type       = static_cast<astl_value_type_t>(proto_cfg.value_type());
+  const auto input_value_type = static_cast<astl_value_type_t>(proto_cfg.input_value_type());
+  const auto category         = static_cast<astl_category_t>(proto_cfg.category());
+  const auto metric_type      = static_cast<astl_metric_type_t>(proto_cfg.metric_type());
+  const auto collector        = static_cast<CollectorType>(proto_cfg.collector_type());
 
   if (proto_cfg.metric_groups_size() == 0) {
     auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, category, metric_type, collector,
-                                              NullOperationBuilder{});
+                                              NullOperationBuilder{}, IdentityFormula{}, input_value_type);
     return cfg;
   }
 
   std::vector<std::string> groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
   auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, category, metric_type, groups,
-                                            collector, NullOperationBuilder{});
+                                            collector, NullOperationBuilder{}, IdentityFormula{}, input_value_type);
   return cfg;
 }
 
@@ -155,11 +157,12 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   const std::string& name                 = proto_cfg.metric_name();
   const std::string& description          = proto_cfg.description();
 
-  const auto units       = static_cast<astl_units_t>(proto_cfg.units());
-  const auto value_type  = static_cast<astl_value_type_t>(proto_cfg.value_type());
-  const auto category    = static_cast<astl_category_t>(proto_cfg.category());
-  const auto metric_type = static_cast<astl_metric_type_t>(proto_cfg.metric_type());
-  const auto collector   = static_cast<CollectorType>(proto_cfg.collector_type());
+  const auto units            = static_cast<astl_units_t>(proto_cfg.units());
+  const auto value_type       = static_cast<astl_value_type_t>(proto_cfg.value_type());
+  const auto input_value_type = static_cast<astl_value_type_t>(proto_cfg.input_value_type());
+  const auto category         = static_cast<astl_category_t>(proto_cfg.category());
+  const auto metric_type      = static_cast<astl_metric_type_t>(proto_cfg.metric_type());
+  const auto collector        = static_cast<CollectorType>(proto_cfg.collector_type());
 
   FiniteSetMetricConfig::FiniteSet      finite_set;
   FiniteSetMetricConfig::ValueToInfoMap state_info;
@@ -183,7 +186,7 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   AnyFormula formula = IdentityFormula{};
   auto       cfg = std::make_unique<FiniteSetMetricConfig>(name, description, units, value_type, metric_type, category,
                                                            collector, NullOperationBuilder{}, std::move(finite_set),
-                                                           std::move(state_info), std::move(formula));
+                                                           std::move(state_info), std::move(formula), input_value_type);
   return cfg;
 }
 

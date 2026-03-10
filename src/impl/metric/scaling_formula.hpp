@@ -5,7 +5,11 @@
 #ifndef SCALING_FORMULA_HPP_
 #define SCALING_FORMULA_HPP_
 
+#include <cmath>
+#include <cstdint>
 #include <expected>
+#include <limits>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -17,18 +21,28 @@
 namespace astl {
 
 /**
- * @brief Formula that multiplies values by a scaling factor.
+ * @brief Formula that scales values by an exact rational factor (numerator/denominator).
  *
  * This formula is useful for unit conversions (e.g., raw counts to watts).
- * Supports all arithmetic types except bool.
+ * Internal execution preserves fractional results by computing:
+ * `static_cast<double>(value * numerator) / denominator`.
+ * For integral inputs, multiply is overflow-checked before conversion.
+ * Supports all arithmetic types except bool and returns a float64 value.
  */
 class ScalingFormula {
  public:
-  explicit ScalingFormula(double scale_factor) : _scale_factor(scale_factor) {
-    // Pre-compute description string
-    std::ostringstream oss;
-    oss << "SCALING " << _scale_factor;
-    _description = oss.str();
+  explicit ScalingFormula(uint64_t numerator, uint64_t denominator = 1)
+      : _numerator(numerator), _denominator(denominator) {
+    // Canonicalize the ratio so runtime behavior and rendered formulas are stable.
+    if (_denominator != 0 && _numerator != 0) {
+      const auto divisor = std::gcd(_numerator, _denominator);
+      _numerator /= divisor;
+      _denominator /= divisor;
+    }
+    if (_numerator == 0) {
+      _denominator = 1;
+    }
+    RefreshDescription();
   }
 
   [[nodiscard]] auto Apply(const AstlValue& value) const -> std::expected<AstlValue, astl_status_code> {
@@ -38,17 +52,25 @@ class ScalingFormula {
 
           // Only support arithmetic types (not bool)
           if constexpr (std::is_arithmetic_v<T> && !std::is_same_v<T, bool>) {
-            // Perform scaling in double precision
-            double scaled = static_cast<double>(val) * _scale_factor;
-
-            // For integer types, round to nearest integer
+            if (_denominator == 0) {
+              return std::unexpected(ASTL_STATUS_DIVIDE_BY_ZERO);
+            }
             if constexpr (std::is_integral_v<T>) {
-              constexpr double k_rounding_offset = 0.5;
-              T                result = static_cast<T>(scaled + (scaled >= 0 ? k_rounding_offset : -k_rounding_offset));
-              return AstlValue{result};
+              const auto raw_value = static_cast<uint64_t>(val);
+              // Make overflow behavior explicit instead of silently wrapping the multiplication.
+              if (_numerator != 0 && raw_value > std::numeric_limits<uint64_t>::max() / _numerator) {
+                return std::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
+              }
+              const uint64_t product = raw_value * _numerator;
+              const double   scaled  = static_cast<double>(product) / static_cast<double>(_denominator);
+              return AstlValue{scaled};
             } else {
-              // For floating point types, return as-is
-              return AstlValue{static_cast<T>(scaled)};
+              const double scaled =
+                  (static_cast<double>(val) * static_cast<double>(_numerator)) / static_cast<double>(_denominator);
+              if (!std::isfinite(scaled)) {
+                return std::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
+              }
+              return AstlValue{scaled};
             }
           } else {
             return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
@@ -59,10 +81,18 @@ class ScalingFormula {
 
   [[nodiscard]] auto Description() const -> std::string_view { return _description; }
 
-  [[nodiscard]] auto GetScaleFactor() const -> double { return _scale_factor; }
+  [[nodiscard]] auto GetNumerator() const -> uint64_t { return _numerator; }
+  [[nodiscard]] auto GetDenominator() const -> uint64_t { return _denominator; }
 
  private:
-  double      _scale_factor{1.0};
+  auto RefreshDescription() -> void {
+    std::ostringstream oss;
+    oss << "SCALING " << _numerator << "/" << _denominator;
+    _description = oss.str();
+  }
+
+  uint64_t    _numerator{1};
+  uint64_t    _denominator{1};
   std::string _description;
 };
 

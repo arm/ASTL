@@ -8,8 +8,7 @@
 #include "target.hpp"
 namespace astl {
 
-ScmiOperationBuilder::ScmiOperationBuilder(ScmiDataEventId data_event_id, double value_scale_factor)
-    : _data_event_id(data_event_id), _value_scale_factor(value_scale_factor) {}
+ScmiOperationBuilder::ScmiOperationBuilder(ScmiDataEventId data_event_id) : _data_event_id(data_event_id) {}
 
 [[nodiscard]] auto ScmiOperationBuilder::BuildOperations(const ITarget* target) const
     -> std::expected<OperationSequence, astl_status_code> {
@@ -19,15 +18,14 @@ ScmiOperationBuilder::ScmiOperationBuilder(ScmiDataEventId data_event_id, double
   // When sample collection is configured, the scmi collector should read the tstamp_rate files and _update_
   // the tstamp_rate_khz value in the ScmiReadOperations so we can interpret the timestamps correctly when sampling
   const kilohertz default_tstamp_rate{1};
-  seq.push_back(std::make_unique<ScmiReadOperation>(_data_event_id, default_tstamp_rate, _value_scale_factor));
+  seq.push_back(std::make_unique<ScmiReadOperation>(_data_event_id, default_tstamp_rate));
   return seq;
 }
 
 [[nodiscard]] auto ScmiOperationBuilder::GetDataEventId() const -> ScmiDataEventId { return _data_event_id; }
 
-ScmiMultiTargetOperationBuilder::ScmiMultiTargetOperationBuilder(ScmiTargetToDataEventIdMap data_event_ids,
-                                                                 double                     value_scale_factor)
-    : _data_event_ids(std::move(data_event_ids)), _value_scale_factor(value_scale_factor) {}
+ScmiMultiTargetOperationBuilder::ScmiMultiTargetOperationBuilder(ScmiTargetToDataEventIdMap data_event_ids)
+    : _data_event_ids(std::move(data_event_ids)) {}
 
 [[nodiscard]] auto ScmiMultiTargetOperationBuilder::BuildOperations(const ITarget* target) const
     -> std::expected<OperationSequence, astl_status_code> {
@@ -39,7 +37,7 @@ ScmiMultiTargetOperationBuilder::ScmiMultiTargetOperationBuilder(ScmiTargetToDat
       // When sample collection is configured, the scmi collector should read the tstamp_rate files and _update_
       // the tstamp_rate_khz value in the ScmiReadOperations so we can interpret the timestamps correctly when sampling
       const kilohertz default_tstamp_rate{1};
-      seq.push_back(std::make_unique<ScmiReadOperation>(data_event_id, default_tstamp_rate, _value_scale_factor));
+      seq.push_back(std::make_unique<ScmiReadOperation>(data_event_id, default_tstamp_rate));
     }
     return seq;
   }

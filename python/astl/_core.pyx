@@ -50,9 +50,8 @@ cdef class Counter:
     cdef public unsigned int units
     cdef public unsigned int value_type
     cdef public unsigned int counter_type
-    cdef public object mask
     cdef public object formula
-    def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, counter_type: int, mask: int, formula: str):
+    def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, counter_type: int, formula: str):
         self.name = name
         self.description = description
         self._handle_ptr = handle_ptr
@@ -60,7 +59,6 @@ cdef class Counter:
         self.units = units
         self.value_type = value_type
         self.counter_type = counter_type
-        self.mask = mask
         self.formula = formula
     def __repr__(self):
         return f"<Counter name={self.name!r} type={self.counter_type} units={self.units}>"
@@ -246,7 +244,8 @@ cpdef list get_counters(Target target):
             name = arr[i]._name.decode() if arr[i]._name != NULL else ""
             desc = arr[i]._description.decode() if arr[i]._description != NULL else ""
             formula = arr[i]._formula.decode() if arr[i]._formula != NULL else ""
-            py_list.append(Counter(name, desc, <size_t>arr[i]._handle, arr[i]._min_sampling_interval, arr[i]._units, arr[i]._value_type, arr[i]._counter_type, arr[i]._mask, formula))
+            py_list.append(Counter(name, desc, <size_t>arr[i]._handle, arr[i]._min_sampling_interval, arr[i]._units,
+                                   arr[i]._value_type, arr[i]._counter_type, formula))
         return py_list
     finally:
         free(arr)

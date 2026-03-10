@@ -265,11 +265,9 @@ typedef struct _astl_counter_properties_t {
   astl_units_t _units;                           //!< The raw units of the counter. For example, for memory transfers,
                                                  //!< it would be ASTL_UNIT_BYTES. For temperature, it would be
                                                  //!< ASTL_UNITS_CELSIUS
-  uint64_t    _mask;                             //!< Optional: Mask is used to clear out bits in the 64bit container
-  const char* _formula;               //!< Transformation required on the counter. Example: & MASK >> 2 DELTA / TIME.
-                                      //!< This example would mean: Mask the counter first,
-                                      //!<  Then shift the value by 2; do Value2 - Value1 to get a delta and divide the
-                                      //!<  result by the elapsed time
+  const char* _formula;               //!< TinyExpr-compatible transformation expression for raw counter samples.
+                                      //!< formula is emitted with integer literals
+                                      //!< (e.g. `(value + 1) / 1000`, `value * 1000`), not decimals.
   astl_value_type_t _value_type;      //!< The type of the value read from the counter. It is used for
                                       //!< interpreting the 64bit reading.
   astl_counter_type_t _counter_type;  //!< The counter type. It is used for data processing, output

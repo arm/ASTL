@@ -287,3 +287,65 @@ TEST_CASE("GetMetricRegistersScmiData", "[ConfigManager]") {
   REQUIRE(scmi_metrics_definitions[3].GetFullyQualifiedName() == "VDDR.TEMP_PRESENT");
   REQUIRE(scmi_metrics_definitions[3].de_id == 0x00034441);
 }
+
+TEST_CASE("FindMatchingScmiRegistersForResidency rejects non-zero base10 modifiers", "[ConfigManager]") {
+  std::string raw_scmi_spec = R"json(
+  {
+    "uuid": "1200/2",
+    "description": "Test Platform Telemetry Data Capture Format Specification",
+    "tdcf_instance_id": "[7:0]",
+    "chiplet_id": "[15:8]",
+    "size": 256,
+    "members": [
+      {
+        "count": 1,
+        "start_offset": 0,
+        "block_size": 24,
+        "metrics": {
+          "RESIDENCY_TICKS": {
+            "base_de_id": "0x00001000",
+            "name": "RESIDENCY_TICKS",
+            "component": "CPU",
+            "description": "State residency ticks",
+            "unit": "none",
+            "base10_unit_modifier": -3,
+            "rel_offset": "0x0000"
+          }
+        }
+      }
+    ]
+  }
+  )json";
+
+  std::string metrics_definition_json = R"json(
+  {
+    "metrics": {
+      "CPU Residency": {
+        "description": "CPU residency metric",
+        "unit": "us",
+        "metric_type": "residency",
+        "category": "COUNT",
+        "collection": {
+          "protocol": "scmi"
+        },
+        "states": {
+          "C1": {
+            "register": "RESIDENCY_TICKS",
+            "tick_frequency": 1000000,
+            "description": "Idle state"
+          }
+        }
+      }
+    }
+  }
+  )json";
+
+  auto scmi_specification  = json::parse(raw_scmi_spec).get<astl::scmi::spec::ScmiSpecification>();
+  auto metrics_declaration = json::parse(metrics_definition_json).get<astl::metrics::spec::MetricsDeclaration>();
+  auto residency_metric_declaration = metrics_declaration.metrics.at("CPU Residency");
+
+  auto result =
+      astl::scmi::spec::FindMatchingScmiRegistersForResidency(residency_metric_declaration, scmi_specification);
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(result.error() == ASTL_STATUS_NOT_IMPLEMENTED);
+}

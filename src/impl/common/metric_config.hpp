@@ -65,11 +65,13 @@ class MetricConfig {
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                         astl_value_type_t value_type, astl_category_t category, astl_metric_type_t metric_type,
                         CollectorType collector_type, AnyOperationBuilder operation_builder,
-                        AnyFormula formula = IdentityFormula{})
+                        AnyFormula formula = IdentityFormula{}, astl_value_type_t input_value_type = ASTL_VALUE_UNKNOWN)
       : _metric_name(name),
         _description(description),
         _units(units),
         _value_type(value_type),
+        // Default input type to the output type unless caller explicitly separates them.
+        _input_value_type(input_value_type == ASTL_VALUE_UNKNOWN ? value_type : input_value_type),
         _metric_type(metric_type),
         _category(category),
         _collector_type(collector_type),
@@ -93,11 +95,14 @@ class MetricConfig {
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                         astl_value_type_t value_type, astl_category_t category, astl_metric_type_t metric_type,
                         std::vector<std::string> metric_groups, CollectorType collector_type,
-                        AnyOperationBuilder operation_builder, AnyFormula formula = IdentityFormula{})
+                        AnyOperationBuilder operation_builder, AnyFormula formula = IdentityFormula{},
+                        astl_value_type_t input_value_type = ASTL_VALUE_UNKNOWN)
       : _metric_name(name),
         _description(description),
         _units(units),
         _value_type(value_type),
+        // Default input type to the output type unless caller explicitly separates them.
+        _input_value_type(input_value_type == ASTL_VALUE_UNKNOWN ? value_type : input_value_type),
         _metric_type(metric_type),
         _category(category),
         _metric_groups(std::move(metric_groups)),
@@ -138,6 +143,10 @@ class MetricConfig {
    */
   astl_value_type_t ValueType() const { return _value_type; }
   /**
+   * @brief Return the expected collector sample type before metric-level processing.
+   */
+  astl_value_type_t InputValueType() const { return _input_value_type; }
+  /**
    * @brief Return the metric type.
    *
    * @return astl_metric_type_t The metric type.
@@ -170,10 +179,11 @@ class MetricConfig {
   auto GetFormula() const -> const AnyFormula & { return _formula; }
 
  private:
-  std::string       _metric_name;  // Metric name as specified in the configuration file
-  std::string       _description;  // Human-readable description of the metric
-  astl_units_t      _units;        // Measurement units for the metric (e.g., seconds, bytes)
-  astl_value_type_t _value_type;   // Data type of the metric value (e.g., raw, processed)
+  std::string       _metric_name;       // Metric name as specified in the configuration file
+  std::string       _description;       // Human-readable description of the metric
+  astl_units_t      _units;             // Measurement units for the metric (e.g., seconds, bytes)
+  astl_value_type_t _value_type;        // Data type of the metric value (e.g., raw, processed)
+  astl_value_type_t _input_value_type;  // Collector-provided raw sample type before transformations
   // Semantic type of the metric defined by ASTL design doc(e.g., value, delta, residency)
   astl_metric_type_t       _metric_type;     // Semantic metric type (value, delta, residency, etc.)
   astl_category_t          _category;        // High-level domain category (power, temperature, count, etc.)
@@ -229,10 +239,11 @@ class ResidencyMetricConfig final : public MetricConfig {
   explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
                                  CollectorType collector_type, StateToInfoMap state_info,
-                                 std::optional<InferredStateInfo> inferred_state = std::nullopt,
-                                 AnyFormula                       formula        = IdentityFormula{})
+                                 std::optional<InferredStateInfo> inferred_state   = std::nullopt,
+                                 AnyFormula                       formula          = IdentityFormula{},
+                                 astl_value_type_t                input_value_type = ASTL_VALUE_UNKNOWN)
       : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
-                     NullOperationBuilder{}, std::move(formula)),
+                     NullOperationBuilder{}, std::move(formula), input_value_type),
         _state_info(std::move(state_info)),
         _inferred_state(std::move(inferred_state)) {}
 
@@ -298,9 +309,10 @@ class FiniteSetMetricConfig final : public MetricConfig {
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
                                  CollectorType collector_type, AnyOperationBuilder operation_builder,
                                  FiniteSet finite_set, ValueToInfoMap state_info,
-                                 AnyFormula formula = IdentityFormula{})
+                                 AnyFormula        formula          = IdentityFormula{},
+                                 astl_value_type_t input_value_type = ASTL_VALUE_UNKNOWN)
       : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
-                     std::move(operation_builder), std::move(formula)),
+                     std::move(operation_builder), std::move(formula), input_value_type),
         _finite_set(std::move(finite_set)),
         _state_info(std::move(state_info)) {}
 

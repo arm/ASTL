@@ -19,7 +19,6 @@ class Counter:
     units: int
     value_type: int
     counter_type: int
-    mask: int
     formula: str
 
 class Metric:

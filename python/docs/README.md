@@ -83,7 +83,7 @@ Entity object attributes (read-only):
 
 - Target: `name`, `description`, `_handle_ptr`
 - Counter: `name`, `description`, `min_sampling_interval`, `units`,
-  `value_type`, `counter_type`, `mask`, `formula`
+  `value_type`, `counter_type`, `formula`
 - Metric: `name`, `description`, `min_sampling_interval`, `units`,
   `value_type`, `metric_type`, `category`
 - MetricGroup: `name`, `description`, `metric_count`
