@@ -20,6 +20,18 @@
 
 namespace astl {
 
+// GCC generates a false-positive -Wmaybe-uninitialized when ScalingFormula is
+// moved as part of a std::variant move constructor. The two uint64_t members
+// (_numerator, _denominator) are always initialised via default member
+// initialisers, but the compiler loses track of that when it vectorises the
+// pair into a 128-bit load inside the deeply-inlined variant machinery.
+// The guard excludes Clang, which defines __GNUC__ for compatibility but does
+// not recognise this warning group and would error on the unknown option.
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 /**
  * @brief Formula that scales values by an exact rational factor (numerator/denominator).
  *
@@ -97,6 +109,10 @@ class ScalingFormula {
 };
 
 static_assert(Formula<ScalingFormula>, "ScalingFormula does not satisfy Formula concept");
+
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic pop
+#endif
 
 }  // namespace astl
 
