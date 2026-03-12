@@ -222,35 +222,37 @@ inline auto StopCollection() -> astl_status_code {
 inline auto GetCounterSampleCountOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
                                           uint32_t* sample_count) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_counter_sample_count_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
-                   .counter_handle = counter_handle, .sample_count = sample_count);
+                   .counter_handle = counter_handle, .sample_count = sample_count, .start_ts = 0, .end_ts = 0);
   return astlGetCounterSampleCountOnTarget(&params);
 }
 
 inline auto GetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
                                       astl_sample_t* samples, uint32_t* sample_count) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_counter_samples_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
-                   .counter_handle = counter_handle, .samples = samples, .sample_count = sample_count);
+                   .counter_handle = counter_handle, .samples = samples, .sample_count = sample_count, .start_ts = 0,
+                   .end_ts = 0);
   return astlGetCounterSamplesOnTarget(&params);
 }
 
 inline auto GetMetricSampleCountOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
                                          uint32_t* sample_count) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_metric_sample_count_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
-                   .metric_handle = metric_handle, .sample_count = sample_count);
+                   .metric_handle = metric_handle, .sample_count = sample_count, .start_ts = 0, .end_ts = 0);
   return astlGetMetricSampleCountOnTarget(&params);
 }
 
 inline auto GetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
                                      astl_sample_t* samples, uint32_t* sample_count) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
-                   .metric_handle = metric_handle, .samples = samples, .sample_count = sample_count);
+                   .metric_handle = metric_handle, .samples = samples, .sample_count = sample_count, .start_ts = 0,
+                   .end_ts = 0);
   return astlGetMetricSamplesOnTarget(&params);
 }
 
 inline auto GetMetricStatisticsOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
                                         astl_metric_statistics_t* summary) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_metric_statistics_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
-                   .metric_handle = metric_handle, .summary = summary);
+                   .metric_handle = metric_handle, .summary = summary, .start_ts = 0, .end_ts = 0);
   return astlGetMetricStatisticsOnTarget(&params);
 }
 
@@ -258,7 +260,8 @@ inline auto GetMetricDiscreteHistogramBinCountOnTarget(astl_target_handle_t targ
                                                        astl_metric_handle_t metric_handle, uint32_t* bin_count)
     -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_metric_discrete_histogram_bin_count_on_target_params_t, params, .flags = 0,
-                   .target_handle = target_handle, .metric_handle = metric_handle, .bin_count = bin_count);
+                   .target_handle = target_handle, .metric_handle = metric_handle, .bin_count = bin_count,
+                   .start_ts = 0, .end_ts = 0);
   return astlGetMetricDiscreteHistogramBinCountOnTarget(&params);
 }
 
@@ -266,8 +269,8 @@ inline auto GetMetricDiscreteHistogramOnTarget(astl_target_handle_t target_handl
                                                astl_discrete_histogram_bin_t* bins, uint32_t* bin_count)
     -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_metric_discrete_histogram_on_target_params_t, params, .flags = 0,
-                   .target_handle = target_handle, .metric_handle = metric_handle, .bins = bins,
-                   .bin_count = bin_count);
+                   .target_handle = target_handle, .metric_handle = metric_handle, .bins = bins, .bin_count = bin_count,
+                   .start_ts = 0, .end_ts = 0);
   return astlGetMetricDiscreteHistogramOnTarget(&params);
 }
 

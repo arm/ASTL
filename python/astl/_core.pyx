@@ -610,6 +610,8 @@ cpdef list get_counter_samples(Target target, Counter counter):
     count_params.target_handle = <const void*>target.handle_ptr
     count_params.counter_handle = <const void*>counter.handle_ptr
     count_params.sample_count = &count
+    count_params.start_ts = 0
+    count_params.end_ts = 0
     _check(astlGetCounterSampleCountOnTarget(&count_params))
     if count == 0:
         return []
@@ -624,6 +626,8 @@ cpdef list get_counter_samples(Target target, Counter counter):
         params.counter_handle = <const void*>counter.handle_ptr
         params.samples = arr
         params.sample_count = &count
+        params.start_ts = 0
+        params.end_ts = 0
         _check(astlGetCounterSamplesOnTarget(&params))
         out = []
         for i in range(count):
@@ -642,6 +646,8 @@ cpdef list get_metric_samples(Target target, Metric metric):
     count_params.target_handle = <const void*>target.handle_ptr
     count_params.metric_handle = <const void*>metric.handle_ptr
     count_params.sample_count = &count
+    count_params.start_ts = 0
+    count_params.end_ts = 0
     _check(astlGetMetricSampleCountOnTarget(&count_params))
     if count == 0:
         return []
@@ -656,6 +662,8 @@ cpdef list get_metric_samples(Target target, Metric metric):
         params.metric_handle = <const void*>metric.handle_ptr
         params.samples = arr
         params.sample_count = &count
+        params.start_ts = 0
+        params.end_ts = 0
         _check(astlGetMetricSamplesOnTarget(&params))
         out = []
         for i in range(count):
@@ -735,6 +743,8 @@ cpdef MetricStatistics get_metric_statistics_on_target(Target target, Metric met
     params.target_handle = <const void*>target.handle_ptr
     params.metric_handle = <const void*>metric.handle_ptr
     params.summary = &s
+    params.start_ts = 0
+    params.end_ts = 0
     _check(astlGetMetricStatisticsOnTarget(&params))
     if s.count == 0:
         return MetricStatistics(0, None, None, None)
@@ -792,6 +802,8 @@ cpdef list get_metric_discrete_histogram_on_target(Target target, Metric metric)
     count_params.target_handle = <const void*>target.handle_ptr
     count_params.metric_handle = <const void*>metric.handle_ptr
     count_params.bin_count = &bin_count
+    count_params.start_ts = 0
+    count_params.end_ts = 0
     _check(astlGetMetricDiscreteHistogramBinCountOnTarget(&count_params))
     if bin_count == 0:
         return []
@@ -808,6 +820,8 @@ cpdef list get_metric_discrete_histogram_on_target(Target target, Metric metric)
         params.metric_handle = <const void*>metric.handle_ptr
         params.bins = bins
         params.bin_count = &bin_count
+        params.start_ts = 0
+        params.end_ts = 0
         _check(astlGetMetricDiscreteHistogramOnTarget(&params))
         out = []
         for i in range(bin_count):

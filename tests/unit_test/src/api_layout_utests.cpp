@@ -304,47 +304,50 @@ static_assert(IsStdLayout<astl_get_counter_sample_count_on_target_params_t>());
 static_assert(offsetof(astl_get_counter_sample_count_on_target_params_t, size) == 0);
 static_assert(offsetof(astl_get_counter_sample_count_on_target_params_t, flags) == kFlagsOffset);
 static_assert(offsetof(astl_get_counter_sample_count_on_target_params_t, target_handle) == kFirstPtrOffset);
-static_assert(sizeof(astl_get_counter_sample_count_on_target_params_t) ==
-              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_counter_handle_t, uint32_t*>());
+static_assert(
+    sizeof(astl_get_counter_sample_count_on_target_params_t) ==
+    StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_counter_handle_t, uint32_t*, uint64_t, uint64_t>());
 
 static_assert(IsStdLayout<astl_get_counter_samples_on_target_params_t>());
 static_assert(offsetof(astl_get_counter_samples_on_target_params_t, size) == 0);
 static_assert(offsetof(astl_get_counter_samples_on_target_params_t, flags) == kFlagsOffset);
 static_assert(offsetof(astl_get_counter_samples_on_target_params_t, target_handle) == kFirstPtrOffset);
-static_assert(
-    sizeof(astl_get_counter_samples_on_target_params_t) ==
-    StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_counter_handle_t, astl_sample_t*, uint32_t*>());
+static_assert(sizeof(astl_get_counter_samples_on_target_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_counter_handle_t, astl_sample_t*, uint32_t*,
+                               uint64_t, uint64_t>());
 
 static_assert(IsStdLayout<astl_get_metric_sample_count_on_target_params_t>());
 static_assert(offsetof(astl_get_metric_sample_count_on_target_params_t, size) == 0);
 static_assert(offsetof(astl_get_metric_sample_count_on_target_params_t, flags) == kFlagsOffset);
 static_assert(offsetof(astl_get_metric_sample_count_on_target_params_t, target_handle) == kFirstPtrOffset);
-static_assert(sizeof(astl_get_metric_sample_count_on_target_params_t) ==
-              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, uint32_t*>());
+static_assert(
+    sizeof(astl_get_metric_sample_count_on_target_params_t) ==
+    StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, uint32_t*, uint64_t, uint64_t>());
 
 static_assert(IsStdLayout<astl_get_metric_samples_on_target_params_t>());
 static_assert(offsetof(astl_get_metric_samples_on_target_params_t, size) == 0);
 static_assert(offsetof(astl_get_metric_samples_on_target_params_t, flags) == kFlagsOffset);
 static_assert(offsetof(astl_get_metric_samples_on_target_params_t, target_handle) == kFirstPtrOffset);
-static_assert(
-    sizeof(astl_get_metric_samples_on_target_params_t) ==
-    StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, astl_sample_t*, uint32_t*>());
+static_assert(sizeof(astl_get_metric_samples_on_target_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, astl_sample_t*, uint32_t*,
+                               uint64_t, uint64_t>());
 
 static_assert(IsStdLayout<astl_get_metric_statistics_on_target_params_t>());
 static_assert(offsetof(astl_get_metric_statistics_on_target_params_t, size) == 0);
 static_assert(offsetof(astl_get_metric_statistics_on_target_params_t, flags) == kFlagsOffset);
 static_assert(offsetof(astl_get_metric_statistics_on_target_params_t, target_handle) == kFirstPtrOffset);
-static_assert(
-    sizeof(astl_get_metric_statistics_on_target_params_t) ==
-    StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, astl_metric_statistics_t*>());
+static_assert(sizeof(astl_get_metric_statistics_on_target_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, astl_metric_statistics_t*,
+                               uint64_t, uint64_t>());
 
 static_assert(IsStdLayout<astl_get_metric_discrete_histogram_bin_count_on_target_params_t>());
 static_assert(offsetof(astl_get_metric_discrete_histogram_bin_count_on_target_params_t, size) == 0);
 static_assert(offsetof(astl_get_metric_discrete_histogram_bin_count_on_target_params_t, flags) == kFlagsOffset);
 static_assert(offsetof(astl_get_metric_discrete_histogram_bin_count_on_target_params_t, target_handle) ==
               kFirstPtrOffset);
-static_assert(sizeof(astl_get_metric_discrete_histogram_bin_count_on_target_params_t) ==
-              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, uint32_t*>());
+static_assert(
+    sizeof(astl_get_metric_discrete_histogram_bin_count_on_target_params_t) ==
+    StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, uint32_t*, uint64_t, uint64_t>());
 
 static_assert(IsStdLayout<astl_get_metric_discrete_histogram_on_target_params_t>());
 static_assert(offsetof(astl_get_metric_discrete_histogram_on_target_params_t, size) == 0);
@@ -352,7 +355,7 @@ static_assert(offsetof(astl_get_metric_discrete_histogram_on_target_params_t, fl
 static_assert(offsetof(astl_get_metric_discrete_histogram_on_target_params_t, target_handle) == kFirstPtrOffset);
 static_assert(sizeof(astl_get_metric_discrete_histogram_on_target_params_t) ==
               StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t,
-                               astl_discrete_histogram_bin_t*, uint32_t*>());
+                               astl_discrete_histogram_bin_t*, uint32_t*, uint64_t, uint64_t>());
 
 }  // namespace
 

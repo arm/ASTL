@@ -635,6 +635,89 @@ if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
 
 ---
 
+## Timestamp Filtering
+
+All sample-retrieval and summary APIs accept two timestamp filter fields that restrict which
+collected samples contribute to the result:
+
+| Field      | Type       | Meaning                                                                                                   |
+| ---------- | ---------- | --------------------------------------------------------------------------------------------------------- |
+| `start_ts` | `uint64_t` | If non-zero, only samples with `timestamp >= start_ts` are included. Uses `CLOCK_MONOTONIC_RAW` on Linux. |
+| `end_ts`   | `uint64_t` | If non-zero, only samples with `timestamp <= end_ts` are included. Uses `CLOCK_MONOTONIC_RAW` on Linux.   |
+
+Setting both fields to `0` (the default when using `ASTL_INIT_STRUCT`) disables filtering and
+includes all collected samples.
+
+### Clock Source
+
+All sample timestamps are expressed in nanoseconds on the **`CLOCK_MONOTONIC_RAW`** clock
+(`clock_gettime(CLOCK_ID_MONOTONIC_RAW, ...)`). Regardless of the underlying hardware
+collector's native clock, ASTL converts every timestamp to `CLOCK_MONOTONIC_RAW` before storing
+the sample. Use the same clock when computing the filter bounds:
+
+```c
+#include <time.h>
+#include <stdint.h>
+
+static uint64_t now_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+}
+```
+
+### APIs That Support Filtering
+
+The following APIs honour `start_ts` / `end_ts`:
+
+- `astlGetCounterSampleCountOnTarget`
+- `astlGetCounterSamplesOnTarget`
+- `astlGetMetricSampleCountOnTarget`
+- `astlGetMetricSamplesOnTarget`
+- `astlGetMetricStatisticsOnTarget`
+- `astlGetMetricDiscreteHistogramBinCountOnTarget`
+- `astlGetMetricDiscreteHistogramOnTarget`
+
+### Usage Example
+
+```c
+#include "astl/astl_telemetry.h"
+#include <time.h>
+
+static uint64_t now_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+}
+
+/* Record a window of interest during collection */
+uint64_t window_start = now_ns();
+/* ... workload under measurement ... */
+uint64_t window_end = now_ns();
+
+/* Retrieve only the samples that fall within that window */
+astl_metric_statistics_t summary = {0};
+summary.size  = sizeof(astl_metric_statistics_t);
+summary.flags = ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG;
+
+ASTL_INIT_STRUCT(astl_get_metric_statistics_on_target_params_t, stats_params,
+    .flags                  = 0,
+    .target_handle          = target_handle,
+    .metric_handle          = metric_handle,
+    .summary                = &summary,
+    .start_ts = window_start,
+    .end_ts   = window_end);
+
+astl_status_code rc = astlGetMetricStatisticsOnTarget(&stats_params);
+```
+
+### Status Codes
+
+If either filter field is non-zero, the API currently returns
+`ASTL_STATUS_NOT_IMPLEMENTED`. Full filtering support will be added in a future release.
+
+---
+
 ## Output Formats
 
 ASTL supports multiple output mechanisms for processed telemetry samples:

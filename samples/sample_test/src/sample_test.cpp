@@ -461,7 +461,7 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
     uint32_t sample_count{};
     ASTL_INIT_STRUCT(astl_get_metric_sample_count_on_target_params_t, get_metric_sample_count_params, .flags = 0,
                      .target_handle = target_handle, .metric_handle = metric_props.handle,
-                     .sample_count = &sample_count);
+                     .sample_count = &sample_count, .start_ts = 0, .end_ts = 0);
     auto status = astlGetMetricSampleCountOnTarget(&get_metric_sample_count_params);
     std::cout << "astlGetMetricSampleCountOnTarget Status: " << astlStatusString(status) << " (count=" << sample_count
               << ")\n";
@@ -471,7 +471,7 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
     std::vector<astl_sample_t> samples(sample_count);
     ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, get_metric_samples_params, .flags = 0,
                      .target_handle = target_handle, .metric_handle = metric_props.handle, .samples = samples.data(),
-                     .sample_count = &sample_count);
+                     .sample_count = &sample_count, .start_ts = 0, .end_ts = 0);
     status = astlGetMetricSamplesOnTarget(&get_metric_samples_params);
     if (status != ASTL_STATUS_SUCCESS) {
       return;
@@ -509,7 +509,8 @@ auto PrintMinMaxAvgSummary(astl_target_handle_t target_handle, const std::vector
     summary.size  = sizeof(astl_metric_statistics_t);
     summary.flags = ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG;
     ASTL_INIT_STRUCT(astl_get_metric_statistics_on_target_params_t, get_metric_statistics_params, .flags = 0,
-                     .target_handle = target_handle, .metric_handle = metric_props.handle, .summary = &summary);
+                     .target_handle = target_handle, .metric_handle = metric_props.handle, .summary = &summary,
+                     .start_ts = 0, .end_ts = 0);
     auto        status      = astlGetMetricStatisticsOnTarget(&get_metric_statistics_params);
     const char* metric_name = metric_props.name ? metric_props.name : "<null>";
     if (status == ASTL_STATUS_NOT_SUPPORTED) {

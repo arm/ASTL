@@ -1589,6 +1589,9 @@ auto astlGetCounterSampleCountOnTarget(const astl_get_counter_sample_count_on_ta
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
+  if (params->start_ts != 0 || params->end_ts != 0) {
+    return ASTL_STATUS_NOT_IMPLEMENTED;
+  }
   const auto* target_handle  = params->target_handle;
   const auto* counter_handle = params->counter_handle;
   auto*       sample_count   = params->sample_count;
@@ -1630,6 +1633,9 @@ auto astlGetCounterSamplesOnTarget(const astl_get_counter_samples_on_target_para
   const auto                  params_status = ValidateApiParams(params);
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
+  }
+  if (params->start_ts != 0 || params->end_ts != 0) {
+    return ASTL_STATUS_NOT_IMPLEMENTED;
   }
   const auto* target_handle  = params->target_handle;
   const auto* counter_handle = params->counter_handle;
@@ -1691,6 +1697,9 @@ auto astlGetMetricSampleCountOnTarget(const astl_get_metric_sample_count_on_targ
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
+  if (params->start_ts != 0 || params->end_ts != 0) {
+    return ASTL_STATUS_NOT_IMPLEMENTED;
+  }
   const auto* target_handle = params->target_handle;
   const auto* metric_handle = params->metric_handle;
   auto*       sample_count  = params->sample_count;
@@ -1732,6 +1741,9 @@ auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params
   const auto                  params_status = ValidateApiParams(params);
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
+  }
+  if (params->start_ts != 0 || params->end_ts != 0) {
+    return ASTL_STATUS_NOT_IMPLEMENTED;
   }
   const auto* target_handle = params->target_handle;
   const auto* metric_handle = params->metric_handle;
@@ -1799,6 +1811,9 @@ auto astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_
   const auto                  params_status = ValidateApiParams(params);
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
+  }
+  if (params->start_ts != 0 || params->end_ts != 0) {
+    return ASTL_STATUS_NOT_IMPLEMENTED;
   }
   const auto* target_handle = params->target_handle;
   const auto* metric_handle = params->metric_handle;
@@ -1980,6 +1995,9 @@ auto astlGetMetricDiscreteHistogramBinCountOnTarget(
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
+  if (params->start_ts != 0 || params->end_ts != 0) {
+    return ASTL_STATUS_NOT_IMPLEMENTED;
+  }
   const auto* target_handle = params->target_handle;
   const auto* metric_handle = params->metric_handle;
   auto*       bin_count     = params->bin_count;
@@ -2009,6 +2027,9 @@ auto astlGetMetricDiscreteHistogramOnTarget(
   const auto                  params_status = ValidateApiParams(params);
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
+  }
+  if (params->start_ts != 0 || params->end_ts != 0) {
+    return ASTL_STATUS_NOT_IMPLEMENTED;
   }
   const auto* target_handle = params->target_handle;
   const auto* metric_handle = params->metric_handle;

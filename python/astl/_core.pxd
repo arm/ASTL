@@ -455,6 +455,8 @@ cdef extern from "astl/astl_telemetry.h":
         const void* target_handle
         const void* counter_handle
         uint32_t* sample_count
+        uint64_t start_ts
+        uint64_t end_ts
 
     cdef struct astl_get_counter_samples_on_target_params_t:
         size_t size
@@ -463,6 +465,8 @@ cdef extern from "astl/astl_telemetry.h":
         const void* counter_handle
         astl_sample_t* samples
         uint32_t* sample_count
+        uint64_t start_ts
+        uint64_t end_ts
 
     cdef struct astl_get_metric_sample_count_on_target_params_t:
         size_t size
@@ -470,6 +474,8 @@ cdef extern from "astl/astl_telemetry.h":
         const void* target_handle
         const void* metric_handle
         uint32_t* sample_count
+        uint64_t start_ts
+        uint64_t end_ts
 
     cdef struct astl_get_metric_samples_on_target_params_t:
         size_t size
@@ -478,6 +484,8 @@ cdef extern from "astl/astl_telemetry.h":
         const void* metric_handle
         astl_sample_t* samples
         uint32_t* sample_count
+        uint64_t start_ts
+        uint64_t end_ts
 
     int astlGetCounterSampleCountOnTarget(const astl_get_counter_sample_count_on_target_params_t* params)
     int astlGetCounterSamplesOnTarget(const astl_get_counter_samples_on_target_params_t* params)
@@ -500,6 +508,8 @@ cdef extern from "astl/astl_telemetry.h":
         const void* target_handle
         const void* metric_handle
         astl_metric_statistics_t* summary
+        uint64_t start_ts
+        uint64_t end_ts
 
     int astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_params_t* params)
 
@@ -516,6 +526,8 @@ cdef extern from "astl/astl_telemetry.h":
         const void* target_handle
         const void* metric_handle
         uint32_t* bin_count
+        uint64_t start_ts
+        uint64_t end_ts
 
     cdef struct astl_get_metric_discrete_histogram_on_target_params_t:
         size_t size
@@ -524,6 +536,8 @@ cdef extern from "astl/astl_telemetry.h":
         const void* metric_handle
         astl_discrete_histogram_bin_t* bins
         uint32_t* bin_count
+        uint64_t start_ts
+        uint64_t end_ts
 
     int astlGetMetricDiscreteHistogramBinCountOnTarget(const astl_get_metric_discrete_histogram_bin_count_on_target_params_t* params)
     int astlGetMetricDiscreteHistogramOnTarget(const astl_get_metric_discrete_histogram_on_target_params_t* params)

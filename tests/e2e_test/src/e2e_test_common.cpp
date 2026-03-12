@@ -112,7 +112,8 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
   for (size_t i = 0; i < metric_handles.size(); ++i) {
     uint32_t sample_count{};
     ASTL_INIT_STRUCT(astl_get_metric_sample_count_on_target_params_t, get_metric_sample_count_params, .flags = 0,
-                     .target_handle = target_handle, .metric_handle = metric_handles[i], .sample_count = &sample_count);
+                     .target_handle = target_handle, .metric_handle = metric_handles[i], .sample_count = &sample_count,
+                     .start_ts = 0, .end_ts = 0);
     auto status = astlGetMetricSampleCountOnTarget(&get_metric_sample_count_params);
 
     if (status == ASTL_STATUS_SUCCESS && sample_count > 0) {
