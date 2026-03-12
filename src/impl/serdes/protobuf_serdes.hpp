@@ -115,7 +115,7 @@ auto SerializeCurrentBatch(const std::string& target_name, const std::vector<Raw
  * `astl::protobuf::TargetList`, and writes the serialized data to the
  * specified output stream.
  *
- * Each target’s name, description, collector type, and UUID are copied from
+ * Each target's name, description, collector type, and ID are copied from
  * the internal `ITarget` representation. Parent handles are currently unused.
  *
  * @param[in] topology_manager The topology manager containing the targets to serialize.

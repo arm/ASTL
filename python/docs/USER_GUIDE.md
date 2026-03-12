@@ -245,9 +245,9 @@ else:
 | `avg`     | `float` | Arithmetic mean. Always a `float` (`fp64` internally).                    |
 | `count`   | `int`   | Number of samples processed. When `0`, `min`/`max`/`avg` are meaningless. |
 
-> **Important:** The ASTL C API always stores `_avg` as a `double` (`fp64`),
+> **Important:** The ASTL C API always stores `avg` as a `double` (`fp64`),
 > regardless of whether the metric's native type is integer or float.
-> The Python wrapper reads `_avg.fp64` unconditionally and returns it as a Python `float`.
+> The Python wrapper reads `avg.fp64` unconditionally and returns it as a Python `float`.
 > `min` and `max` are also surfaced as `float` for convenience; the underlying C union
 > members match the metric's native value type.
 
@@ -339,7 +339,7 @@ if residency_metrics:
 ### Two-step C API
 
 Internally the function calls `astlGetMetricStateCountOnTarget` to determine the
-number of states, allocates an exact-sized `astl_state_properties_t[]` buffer, then
+number of states, allocates an exact-sized `astl_state_props_t[]` buffer, then
 calls `astlGetMetricStatesOnTarget` to fill it. The Python wrapper hides this detail
 completely.
 

@@ -28,20 +28,23 @@ auto CheckMockSysfs(const std::string& sysfs_root) -> bool {
   return true;
 }
 
-auto GetTargetByName(const std::string& target_name, astl_target_properties_t& target_properties) -> bool {
+auto GetTargetByName(const std::string& target_name, astl_target_props_t& target_properties) -> bool {
   uint32_t target_count = 0;
-  auto     status       = astlGetTargetCount(&target_count);
+  ASTL_INIT_STRUCT(astl_get_target_count_params_t, get_target_count_params, .flags = 0, .target_count = &target_count);
+  auto status = astlGetTargetCount(&get_target_count_params);
   if (status != ASTL_STATUS_SUCCESS || target_count == 0) {
     std::cerr << "No targets found" << std::endl;
     return false;
   }
 
-  std::vector<astl_target_properties_t> targets(target_count);
+  std::vector<astl_target_props_t> targets(target_count);
   if (!targets.empty()) {
-    targets[0]._size = sizeof(astl_target_properties_t);
+    targets[0].size = sizeof(astl_target_props_t);
   }
 
-  status = astlGetTargets(targets.data(), &target_count);
+  ASTL_INIT_STRUCT(astl_get_targets_params_t, get_targets_params, .flags = 0, .targets = targets.data(),
+                   .target_count = &target_count);
+  status = astlGetTargets(&get_targets_params);
   if (status != ASTL_STATUS_SUCCESS && status != ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED) {
     std::cerr << "Failed to get targets" << std::endl;
     return false;
@@ -49,9 +52,9 @@ auto GetTargetByName(const std::string& target_name, astl_target_properties_t& t
 
   // Search for target by name
   for (uint32_t i = 0; i < target_count; ++i) {
-    if (targets[i]._name && target_name == targets[i]._name) {
+    if (targets[i].name && target_name == targets[i].name) {
       target_properties = targets[i];
-      std::cout << "✓ Using target: " << target_properties._name << std::endl;
+      std::cout << "✓ Using target: " << target_properties.name << std::endl;
       return true;
     }
   }
@@ -60,7 +63,7 @@ auto GetTargetByName(const std::string& target_name, astl_target_properties_t& t
   std::cerr << "Target '" << target_name << "' not found" << std::endl;
   std::cerr << "Available targets (" << target_count << "):" << std::endl;
   for (uint32_t i = 0; i < target_count; ++i) {
-    std::cerr << "  [" << i << "] " << (targets[i]._name ? targets[i]._name : "<unnamed>") << std::endl;
+    std::cerr << "  [" << i << "] " << (targets[i].name ? targets[i].name : "<unnamed>") << std::endl;
   }
   return false;
 }
@@ -68,18 +71,22 @@ auto GetTargetByName(const std::string& target_name, astl_target_properties_t& t
 auto GetMetrics(astl_target_handle_t target_handle, std::vector<astl_metric_handle_t>& metric_handles,
                 std::vector<std::string>& metric_names) -> bool {
   uint32_t metric_count = 0;
-  auto     status       = astlGetMetricCount(target_handle, &metric_count);
+  ASTL_INIT_STRUCT(astl_get_metric_count_params_t, get_metric_count_params, .flags = 0, .target_handle = target_handle,
+                   .metric_count = &metric_count);
+  auto status = astlGetMetricCount(&get_metric_count_params);
   if (status != ASTL_STATUS_SUCCESS || metric_count == 0) {
     std::cerr << "No metrics found" << std::endl;
     return false;
   }
 
-  std::vector<astl_metric_properties_t> metrics(metric_count);
+  std::vector<astl_metric_props_t> metrics(metric_count);
   if (!metrics.empty()) {
-    metrics[0]._size = sizeof(astl_metric_properties_t);
+    metrics[0].size = sizeof(astl_metric_props_t);
   }
 
-  status = astlGetMetrics(target_handle, metrics.data(), &metric_count);
+  ASTL_INIT_STRUCT(astl_get_metrics_params_t, get_metrics_params, .flags = 0, .target_handle = target_handle,
+                   .metrics = metrics.data(), .metric_count = &metric_count);
+  status = astlGetMetrics(&get_metrics_params);
   if (status != ASTL_STATUS_SUCCESS) {
     std::cerr << "Failed to get metrics" << std::endl;
     return false;
@@ -90,8 +97,8 @@ auto GetMetrics(astl_target_handle_t target_handle, std::vector<astl_metric_hand
   std::cout << "✓ Will collect " << metrics_to_use << " metric(s)" << std::endl;
 
   for (size_t i = 0; i < metrics_to_use; ++i) {
-    metric_handles.push_back(metrics[i]._handle);
-    metric_names.push_back(metrics[i]._name ? metrics[i]._name : "<unnamed>");
+    metric_handles.push_back(metrics[i].handle);
+    metric_names.push_back(metrics[i].name ? metrics[i].name : "<unnamed>");
     std::cout << "  - " << metric_names[i] << std::endl;
   }
 
@@ -104,7 +111,9 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
 
   for (size_t i = 0; i < metric_handles.size(); ++i) {
     uint32_t sample_count{};
-    auto     status = astlGetMetricSampleCountOnTarget(target_handle, metric_handles[i], &sample_count);
+    ASTL_INIT_STRUCT(astl_get_metric_sample_count_on_target_params_t, get_metric_sample_count_params, .flags = 0,
+                     .target_handle = target_handle, .metric_handle = metric_handles[i], .sample_count = &sample_count);
+    auto status = astlGetMetricSampleCountOnTarget(&get_metric_sample_count_params);
 
     if (status == ASTL_STATUS_SUCCESS && sample_count > 0) {
       total_samples += sample_count;

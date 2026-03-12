@@ -13,10 +13,22 @@ endif()
 add_executable(wrapper_test wrapper_test.cpp metric_groups_tests.cpp metric_state_discovery_tests.cpp
                             summary_api_tests.cpp thread_safety_tests.cpp)
 
+if(MSVC)
+  # Ensure third-party trompeloeil warning suppression is applied on every wrapper test TU.
+  foreach(wrapper_src IN ITEMS wrapper_test.cpp metric_groups_tests.cpp metric_state_discovery_tests.cpp
+                               summary_api_tests.cpp thread_safety_tests.cpp)
+    set_source_files_properties(${wrapper_src} APPEND_STRING PROPERTY COMPILE_FLAGS " /wd4172")
+  endforeach()
+endif()
+
 target_compile_definitions(wrapper_test PRIVATE ASTL_BUILD)
 
 include(Warnings)
 set_project_warnings(wrapper_test)
+if(MSVC)
+  # Suppress warning from third-party trompeloeil headers in test-only code paths.
+  target_compile_options(wrapper_test PRIVATE /wd4172)
+endif()
 
 # astl.h and others should come as include paths along with the target_link_libraries joining Astl::astl_static
 target_link_libraries(

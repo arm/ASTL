@@ -44,29 +44,33 @@ namespace astl_test {
 void TestMultiThreadedEndToEnd() {
   INFO("Multi-Threaded E2E with MockSysfs");
 
-  astl_target_properties_t target_properties{};
+  astl_target_props_t target_properties{};
   REQUIRE(GetTargetByName("tlm-0", target_properties));
 
   std::vector<astl_metric_handle_t> metric_handles;
   std::vector<std::string>          metric_names;
-  REQUIRE(GetMetrics(target_properties._handle, metric_handles, metric_names));
+  REQUIRE(GetMetrics(target_properties.handle, metric_handles, metric_names));
 
   ThreadSyncHelper  sync;
   std::atomic<bool> test_failed{false};
 
   // Thread 1: Configure collection parameters
-  std::thread configure_thread([&sync, &test_failed, target_handle = target_properties._handle, &metric_handles]() {
+  std::thread configure_thread([&sync, &test_failed, target_handle = target_properties.handle, &metric_handles]() {
     std::cout << "[Thread 1] Configuring..." << std::endl;
 
-    astl_collection_parameters_t params{
-        ._size              = sizeof(astl_collection_parameters_t),
-        ._sampling_interval = 100,
-        ._collection_mode   = ASTL_COLLECTION_MODE_SAMPLING,
-        ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
-    };
+    astl_collection_params_t params{
+        .size  = sizeof(astl_collection_params_t),
+        .flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
 
-    auto status = astlConfigureMetricCollectionOnTarget(target_handle, &params, metric_handles.data(),
-                                                        static_cast<uint32_t>(metric_handles.size()));
+        .sampling_interval = 100,
+
+        .collection_mode = ASTL_COLLECTION_MODE_SAMPLING,
+    };
+    ASTL_INIT_STRUCT(astl_configure_metric_collection_on_target_params_t, configure_params, .flags = 0,
+                     .target_handle = target_handle, .collection_params = &params,
+                     .metric_handles = metric_handles.data(),
+                     .metric_count   = static_cast<uint32_t>(metric_handles.size()));
+    auto status = astlConfigureMetricCollectionOnTarget(&configure_params);
 
     if (status != ASTL_STATUS_SUCCESS) {
       std::cerr << "[Thread 1] Configure failed: " << astlStatusString(status) << std::endl;
@@ -80,14 +84,16 @@ void TestMultiThreadedEndToEnd() {
   });
 
   // Thread 2: Start collection
-  std::thread start_thread([&sync, &test_failed, target_handle = target_properties._handle]() {
+  std::thread start_thread([&sync, &test_failed, target_handle = target_properties.handle]() {
     sync.WaitForPhase(1);
     if (sync.error_occurred) {
       return;
     }
 
     std::cout << "[Thread 2] Starting..." << std::endl;
-    auto status = astlStartCollectionOnTarget(target_handle);
+    ASTL_INIT_STRUCT(astl_start_collection_on_target_params_t, start_params, .flags = 0,
+                     .target_handle = target_handle);
+    auto status = astlStartCollectionOnTarget(&start_params);
 
     if (status != ASTL_STATUS_SUCCESS) {
       std::cerr << "[Thread 2] Start failed: " << astlStatusString(status) << std::endl;
@@ -101,7 +107,7 @@ void TestMultiThreadedEndToEnd() {
   });
 
   // Thread 3: Collect samples then stop
-  std::thread stop_thread([&sync, &test_failed, target_handle = target_properties._handle]() {
+  std::thread stop_thread([&sync, &test_failed, target_handle = target_properties.handle]() {
     sync.WaitForPhase(2);
     if (sync.error_occurred) {
       return;
@@ -111,7 +117,8 @@ void TestMultiThreadedEndToEnd() {
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
     std::cout << "[Thread 3] Stopping..." << std::endl;
-    auto status = astlStopCollectionOnTarget(target_handle);
+    ASTL_INIT_STRUCT(astl_stop_collection_on_target_params_t, stop_params, .flags = 0, .target_handle = target_handle);
+    auto status = astlStopCollectionOnTarget(&stop_params);
 
     if (status != ASTL_STATUS_SUCCESS) {
       std::cerr << "[Thread 3] Stop failed: " << astlStatusString(status) << std::endl;
@@ -133,7 +140,7 @@ void TestMultiThreadedEndToEnd() {
   REQUIRE_FALSE(sync.error_occurred.load());
 
   std::cout << "\n=== Retrieving Samples ===" << std::endl;
-  uint32_t samples_collected = RetrieveSamples(target_properties._handle, metric_handles, metric_names);
+  uint32_t samples_collected = RetrieveSamples(target_properties.handle, metric_handles, metric_names);
 
   std::cout << "\n✓ Total: " << samples_collected << " samples" << std::endl;
   REQUIRE(samples_collected > 0);
@@ -161,12 +168,12 @@ void TestMultiThreadedEndToEnd() {
 void TestMultipleConfigureAfterStart() {
   INFO("Multiple Configure After Start Collection");
 
-  astl_target_properties_t target_properties{};
+  astl_target_props_t target_properties{};
   REQUIRE(GetTargetByName("tlm-0", target_properties));
 
   std::vector<astl_metric_handle_t> metric_handles;
   std::vector<std::string>          metric_names;
-  REQUIRE(GetMetrics(target_properties._handle, metric_handles, metric_names));
+  REQUIRE(GetMetrics(target_properties.handle, metric_handles, metric_names));
 
   ThreadSyncHelper  sync;
   std::atomic<int>  failed_configs{0};
@@ -175,18 +182,22 @@ void TestMultipleConfigureAfterStart() {
   constexpr int     num_config_threads = 3;
 
   // Thread 1: Configure and start collection
-  std::thread main_thread([&sync, &test_failed, target_handle = target_properties._handle, &metric_handles]() {
+  std::thread main_thread([&sync, &test_failed, target_handle = target_properties.handle, &metric_handles]() {
     std::cout << "[Thread 1] Configuring..." << std::endl;
 
-    astl_collection_parameters_t params{
-        ._size              = sizeof(astl_collection_parameters_t),
-        ._sampling_interval = 100,
-        ._collection_mode   = ASTL_COLLECTION_MODE_SAMPLING,
-        ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
-    };
+    astl_collection_params_t params{
+        .size  = sizeof(astl_collection_params_t),
+        .flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
 
-    auto status = astlConfigureMetricCollectionOnTarget(target_handle, &params, metric_handles.data(),
-                                                        static_cast<uint32_t>(metric_handles.size()));
+        .sampling_interval = 100,
+
+        .collection_mode = ASTL_COLLECTION_MODE_SAMPLING,
+    };
+    ASTL_INIT_STRUCT(astl_configure_metric_collection_on_target_params_t, configure_params, .flags = 0,
+                     .target_handle = target_handle, .collection_params = &params,
+                     .metric_handles = metric_handles.data(),
+                     .metric_count   = static_cast<uint32_t>(metric_handles.size()));
+    auto status = astlConfigureMetricCollectionOnTarget(&configure_params);
 
     if (status != ASTL_STATUS_SUCCESS) {
       std::cerr << "[Thread 1] Configure failed: " << astlStatusString(status) << std::endl;
@@ -198,7 +209,9 @@ void TestMultipleConfigureAfterStart() {
     std::cout << "[Thread 1] ✓ Configured" << std::endl;
     std::cout << "[Thread 1] Starting collection..." << std::endl;
 
-    status = astlStartCollectionOnTarget(target_handle);
+    ASTL_INIT_STRUCT(astl_start_collection_on_target_params_t, start_params, .flags = 0,
+                     .target_handle = target_handle);
+    status = astlStartCollectionOnTarget(&start_params);
     if (status != ASTL_STATUS_SUCCESS) {
       std::cerr << "[Thread 1] Start failed: " << astlStatusString(status) << std::endl;
       test_failed = true;
@@ -213,7 +226,7 @@ void TestMultipleConfigureAfterStart() {
   // Threads 2-4: Attempt to configure after collection has started
   std::vector<std::thread> config_threads;
   for (int i = 0; i < num_config_threads; ++i) {
-    config_threads.emplace_back([&sync, &failed_configs, &expected_failures, target_handle = target_properties._handle,
+    config_threads.emplace_back([&sync, &failed_configs, &expected_failures, target_handle = target_properties.handle,
                                  &metric_handles, thread_id = i + 2]() {
       sync.WaitForPhase(1);
       if (sync.error_occurred) {
@@ -222,15 +235,19 @@ void TestMultipleConfigureAfterStart() {
 
       std::cout << "[Thread " << thread_id << "] Attempting to configure after start..." << std::endl;
 
-      astl_collection_parameters_t params{
-          ._size              = sizeof(astl_collection_parameters_t),
-          ._sampling_interval = 200,
-          ._collection_mode   = ASTL_COLLECTION_MODE_SAMPLING,
-          ._optimization      = ASTL_COLLECTION_OPTIMIZATION_MEMORY,
-      };
+      astl_collection_params_t params{
+          .size  = sizeof(astl_collection_params_t),
+          .flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY,
 
-      auto status = astlConfigureMetricCollectionOnTarget(target_handle, &params, metric_handles.data(),
-                                                          static_cast<uint32_t>(metric_handles.size()));
+          .sampling_interval = 200,
+
+          .collection_mode = ASTL_COLLECTION_MODE_SAMPLING,
+      };
+      ASTL_INIT_STRUCT(astl_configure_metric_collection_on_target_params_t, configure_params, .flags = 0,
+                       .target_handle = target_handle, .collection_params = &params,
+                       .metric_handles = metric_handles.data(),
+                       .metric_count   = static_cast<uint32_t>(metric_handles.size()));
+      auto status = astlConfigureMetricCollectionOnTarget(&configure_params);
 
       if (status != ASTL_STATUS_SUCCESS) {
         std::cout << "[Thread " << thread_id << "] ✓ Configure correctly failed: " << astlStatusString(status)
@@ -244,7 +261,7 @@ void TestMultipleConfigureAfterStart() {
   }
 
   // Thread 5: Stop collection after all configure attempts
-  std::thread stop_thread([&sync, &test_failed, target_handle = target_properties._handle]() {
+  std::thread stop_thread([&sync, &test_failed, target_handle = target_properties.handle]() {
     sync.WaitForPhase(1);
     if (sync.error_occurred) {
       return;
@@ -254,7 +271,8 @@ void TestMultipleConfigureAfterStart() {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
     std::cout << "[Thread " << (num_config_threads + 2) << "] Stopping collection..." << std::endl;
-    auto status = astlStopCollectionOnTarget(target_handle);
+    ASTL_INIT_STRUCT(astl_stop_collection_on_target_params_t, stop_params, .flags = 0, .target_handle = target_handle);
+    auto status = astlStopCollectionOnTarget(&stop_params);
 
     if (status != ASTL_STATUS_SUCCESS) {
       std::cerr << "[Thread " << (num_config_threads + 2) << "] Stop failed: " << astlStatusString(status) << std::endl;

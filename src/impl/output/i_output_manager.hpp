@@ -68,8 +68,8 @@ struct IOutputManager {
    *  - ASTL_STATUS_OUT_OF_MEMORY if allocation for the output fails
    *  - ASTL_STATUS_INTERNAL_ERROR for unexpected failures
    */
-  [[nodiscard]] virtual auto CreateBufferOutput(std::span<astl_metric_sample_t> samples_buffer,
-                                                uint32_t* buffer_sample_count) -> astl_status_code = 0;
+  [[nodiscard]] virtual auto CreateBufferOutput(std::span<astl_sample_t> samples_buffer, uint32_t* buffer_sample_count)
+      -> astl_status_code = 0;
 
   /**
    * @brief Destroy and de-register the buffer output (idempotent).

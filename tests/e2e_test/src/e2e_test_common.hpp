@@ -82,7 +82,7 @@ auto CheckMockSysfs(const std::string& sysfs_root) -> bool;
  * @param target_properties Output parameter for target properties
  * @return true if target found, false otherwise
  */
-auto GetTargetByName(const std::string& target_name, astl_target_properties_t& target_properties) -> bool;
+auto GetTargetByName(const std::string& target_name, astl_target_props_t& target_properties) -> bool;
 
 /**
  * @brief Get available metrics for a target

@@ -37,6 +37,65 @@ constexpr auto IsArithmeticValueType(astl_value_type_t value_type) -> bool {
 
 }  // namespace
 
+auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData> samples)
+    -> std::expected<std::optional<AstlValue>, astl_status_code> {
+  if (samples.empty()) {
+    return std::optional<AstlValue>{};
+  }
+
+  double weighted_sum = 0.0;
+  double total_weight = 0.0;
+
+  for (size_t idx = 0; (idx + 1) < samples.size(); ++idx) {
+    const auto& current = samples[idx];
+    const auto& next    = samples[idx + 1];
+    if (!current.value.IsArithmetic() || !next.value.IsArithmetic()) {
+      continue;
+    }
+    if (next.timestamp <= current.timestamp) {
+      continue;
+    }
+
+    auto current_value = current.value.ToDouble();
+    if (!current_value.has_value()) {
+      return std::unexpected(current_value.error());
+    }
+
+    const auto interval_us = next.timestamp.time_since_epoch().count() - current.timestamp.time_since_epoch().count();
+    const auto weight      = static_cast<double>(interval_us);
+    weighted_sum += current_value.value() * weight;
+    total_weight += weight;
+  }
+
+  if (total_weight > 0.0) {
+    const auto weighted_avg = weighted_sum / total_weight;
+    const auto rounded_avg  = std::round(weighted_avg * 100.0) / 100.0;
+    return std::optional<AstlValue>{AstlValue{rounded_avg}};
+  }
+
+  // Fallback for single-sample / identical-timestamp streams: arithmetic mean.
+  double arithmetic_sum   = 0.0;
+  size_t arithmetic_count = 0;
+  for (const auto& sample : samples) {
+    if (!sample.value.IsArithmetic()) {
+      continue;
+    }
+    auto value = sample.value.ToDouble();
+    if (!value.has_value()) {
+      return std::unexpected(value.error());
+    }
+    arithmetic_sum += value.value();
+    ++arithmetic_count;
+  }
+
+  if (arithmetic_count == 0) {
+    return std::optional<AstlValue>{};
+  }
+  const auto regular_avg = arithmetic_sum / static_cast<double>(arithmetic_count);
+  const auto rounded_avg = std::round(regular_avg * 100.0) / 100.0;
+  return std::optional<AstlValue>{AstlValue{rounded_avg}};
+}
+
 // MinMaxAvgSummarizer Implementation
 auto MinMaxAvgSummarizer::Summarize(std::span<const ProcessedSampledData> samples) const
     -> std::expected<SummaryResult, astl_status_code> {

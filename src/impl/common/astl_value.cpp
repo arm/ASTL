@@ -43,14 +43,12 @@ auto AstlValue::operator==(const AstlValue& other) const -> bool {
     // Policy: integral-vs-floating comparisons are never equal.
     if constexpr (lhs_is_floating != rhs_is_floating) {
       return false;
-    }
-
-    if constexpr (lhs_is_floating && rhs_is_floating) {
+    } else if constexpr (lhs_is_floating && rhs_is_floating) {
       return static_cast<long double>(lhs) == static_cast<long double>(rhs);
+    } else {
+      // Integral family (including bool): compare numerically.
+      return static_cast<uint64_t>(lhs) == static_cast<uint64_t>(rhs);
     }
-
-    // Integral family (including bool): compare numerically.
-    return static_cast<uint64_t>(lhs) == static_cast<uint64_t>(rhs);
   };
   return std::visit(is_equal, value, other.value);
 }
@@ -280,8 +278,9 @@ auto AstlValue::Subtract(const AstlValue& minuend, const AstlValue& subtrahend)
         std::conditional_t<std::is_same_v<std::decay_t<decltype(lhs)>, bool>, uint8_t, std::decay_t<decltype(lhs)>>;
     if constexpr (std::is_integral_v<T> && std::is_unsigned_v<T>) {
       return lhs < rhs;
+    } else {
+      return false;  // no underflow for signed or floating point types
     }
-    return false;  // no underflow for signed or floating point types
   };
 
   return std::visit(

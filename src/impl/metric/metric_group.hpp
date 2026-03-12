@@ -37,7 +37,7 @@ struct MetricGroup {
   /**
    * @brief Fill in the given properties struct with this group's details.
    */
-  auto ToMetricGroupProperties(astl_metric_group_properties_t* properties) const -> astl_status_code;
+  auto ToMetricGroupProperties(astl_metric_group_props_t* properties) const -> astl_status_code;
 };
 
 }  // namespace astl

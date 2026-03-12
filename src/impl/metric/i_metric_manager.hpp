@@ -87,8 +87,8 @@ struct IMetricManager {
    *
    * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
    */
-  [[nodiscard]] virtual auto GetCounterProperties(astl_counter_handle_t      counter,
-                                                  astl_counter_properties_t* properties) const -> astl_status_code = 0;
+  [[nodiscard]] virtual auto GetCounterProperties(astl_counter_handle_t counter, astl_counter_props_t* properties) const
+      -> astl_status_code = 0;
 
   /**
    * @brief Get the collection of collector operations needed to sample the given counter on the given target
@@ -171,7 +171,7 @@ struct IMetricManager {
    *
    * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
    */
-  [[nodiscard]] virtual auto GetProperties(astl_metric_handle_t metric, astl_metric_properties_t* properties) const
+  [[nodiscard]] virtual auto GetProperties(astl_metric_handle_t metric, astl_metric_props_t* properties) const
       -> astl_status_code = 0;
 
   /**
@@ -229,8 +229,8 @@ struct IMetricManager {
   /**
    * @brief Assign values such as name, description, etc to the given metric groups properties pointer.
    */
-  auto virtual GetMetricGroupProperties(astl_metric_group_handle_t      group,
-                                        astl_metric_group_properties_t* properties) const -> astl_status_code = 0;
+  auto virtual GetMetricGroupProperties(astl_metric_group_handle_t group, astl_metric_group_props_t* properties) const
+      -> astl_status_code = 0;
 
   /**
    * @brief Retrieve the metric handles associated with a given metric group instance

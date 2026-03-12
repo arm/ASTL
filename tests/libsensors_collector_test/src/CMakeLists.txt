@@ -23,6 +23,10 @@ if(SENSORS_LIB)
 
   include(Warnings)
   set_project_warnings(${TARGET})
+  if(MSVC)
+    # Suppress warning from third-party trompeloeil headers in test-only code paths.
+    target_compile_options(${TARGET} PRIVATE /wd4172)
+  endif()
 
   # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
   target_link_libraries(

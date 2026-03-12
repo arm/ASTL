@@ -31,13 +31,13 @@ std::vector<astl::ProcessedSampledData> MakeSamples(size_t n) {
 }  // namespace
 
 TEST_CASE("BufferOutput::WriteProcessedSamples basic behaviors", "[output_manager][buffer_output]") {  // NOLINT
-  constexpr size_t                           capacity = 5;
-  std::array<astl_metric_sample_t, capacity> buffer{};
-  uint32_t           count_capacity = static_cast<uint32_t>(capacity);  // caller provided capacity
-  astl::BufferOutput buffer_output(std::span<astl_metric_sample_t>(buffer), &count_capacity);
+  constexpr size_t                    capacity = 5;
+  std::array<astl_sample_t, capacity> buffer{};
+  uint32_t                            count_capacity = static_cast<uint32_t>(capacity);  // caller provided capacity
+  astl::BufferOutput                  buffer_output(std::span<astl_sample_t>(buffer), &count_capacity);
 
   SECTION("Null count pointer causes INTERNAL_ERROR") {
-    astl::BufferOutput bad_output(std::span<astl_metric_sample_t>(buffer), nullptr);
+    astl::BufferOutput bad_output(std::span<astl_sample_t>(buffer), nullptr);
     auto               samples = MakeSamples(2);
     REQUIRE(bad_output.WriteProcessedSamples(samples) == ASTL_STATUS_INTERNAL_ERROR);
   }
@@ -53,11 +53,11 @@ TEST_CASE("BufferOutput::WriteProcessedSamples basic behaviors", "[output_manage
   }
 
   SECTION("Buffer exactly filled returns SUCCESS (no extra capacity)") {
-    std::array<astl_metric_sample_t, 3> tight_buffer{};
-    uint32_t                            tight_capacity = 3;
-    astl::BufferOutput                  tight_output(std::span<astl_metric_sample_t>(tight_buffer), &tight_capacity);
-    auto                                samples = MakeSamples(3);
-    tight_capacity                              = static_cast<uint32_t>(samples.size());
+    std::array<astl_sample_t, 3> tight_buffer{};
+    uint32_t                     tight_capacity = 3;
+    astl::BufferOutput           tight_output(std::span<astl_sample_t>(tight_buffer), &tight_capacity);
+    auto                         samples = MakeSamples(3);
+    tight_capacity                       = static_cast<uint32_t>(samples.size());
     REQUIRE(tight_output.WriteProcessedSamples(samples) == ASTL_STATUS_SUCCESS);
     REQUIRE(tight_capacity == samples.size());
   }
@@ -70,22 +70,22 @@ TEST_CASE("BufferOutput::WriteProcessedSamples basic behaviors", "[output_manage
 }
 
 TEST_CASE("OutputManager::Create/DestroyBufferOutput lifecycle", "[output_manager]") {  // NOLINT
-  astl::OutputManager                 mgr;
-  std::array<astl_metric_sample_t, 4> buf{};
-  uint32_t                            buf_capacity = 4;
+  astl::OutputManager          mgr;
+  std::array<astl_sample_t, 4> buf{};
+  uint32_t                     buf_capacity = 4;
 
   SECTION("CreateBufferOutput succeeds with non-empty span") {
-    REQUIRE(mgr.CreateBufferOutput(std::span<astl_metric_sample_t>(buf), &buf_capacity) == ASTL_STATUS_SUCCESS);
+    REQUIRE(mgr.CreateBufferOutput(std::span<astl_sample_t>(buf), &buf_capacity) == ASTL_STATUS_SUCCESS);
   }
 
   SECTION("CreateBufferOutput with empty span fails") {
-    std::span<astl_metric_sample_t> empty_span{};
+    std::span<astl_sample_t> empty_span{};
     REQUIRE(mgr.CreateBufferOutput(empty_span, &buf_capacity) == ASTL_STATUS_BAD_ARGUMENT);
   }
 
   SECTION("DestroyBufferOutput is idempotent") {
     REQUIRE(mgr.DestroyBufferOutput() == ASTL_STATUS_SUCCESS);  // no output yet
-    REQUIRE(mgr.CreateBufferOutput(std::span<astl_metric_sample_t>(buf), &buf_capacity) == ASTL_STATUS_SUCCESS);
+    REQUIRE(mgr.CreateBufferOutput(std::span<astl_sample_t>(buf), &buf_capacity) == ASTL_STATUS_SUCCESS);
     REQUIRE(mgr.DestroyBufferOutput() == ASTL_STATUS_SUCCESS);
     REQUIRE(mgr.DestroyBufferOutput() == ASTL_STATUS_SUCCESS);
   }
@@ -97,11 +97,11 @@ struct TinyTarget : public astl::ITarget {
   astl::CollectorType collector_type{astl::CollectorType::SCMI};
   auto                GetCollectorType() const -> astl::CollectorType override { return collector_type; }
   auto                Name() const -> std::string const& override { return name; }
-  auto                GetProperties(astl_target_properties_t* props) const -> astl_status_code override {
+  auto                GetProperties(astl_target_props_t* props) const -> astl_status_code override {
     if (!props) {
       return ASTL_STATUS_BAD_ARGUMENT;
     }
-    props->_handle = this;
+    props->handle = this;
     return ASTL_STATUS_SUCCESS;
   }
 };
@@ -122,7 +122,7 @@ struct TinyMetric : public astl::IMetric {
   void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
   void             Reset() override {}
   astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-  astl_status_code GetProperties(astl_metric_properties_t* props) const override {
+  astl_status_code GetProperties(astl_metric_props_t* props) const override {
     (void)props;
     return ASTL_STATUS_SUCCESS;
   }
@@ -134,11 +134,11 @@ struct TinyMetric : public astl::IMetric {
 };
 
 TEST_CASE("OutputManager::OutputProcessedSamples error paths", "[output_manager]") {  // NOLINT
-  astl::OutputManager                 mgr;
-  std::array<astl_metric_sample_t, 8> out_buf{};
-  uint32_t                            out_capacity = 8;
+  astl::OutputManager          mgr;
+  std::array<astl_sample_t, 8> out_buf{};
+  uint32_t                     out_capacity = 8;
   // Create buffer output for writing
-  REQUIRE(mgr.CreateBufferOutput(std::span<astl_metric_sample_t>(out_buf), &out_capacity) == ASTL_STATUS_SUCCESS);
+  REQUIRE(mgr.CreateBufferOutput(std::span<astl_sample_t>(out_buf), &out_capacity) == ASTL_STATUS_SUCCESS);
 
   TinyTarget target;
   TinyMetric metric;
@@ -164,10 +164,10 @@ TEST_CASE("OutputManager::OutputProcessedSamples error paths", "[output_manager]
 }
 
 TEST_CASE("OutputManager::OutputProcessedSamples success path", "[output_manager]") {  // NOLINT
-  astl::OutputManager                 mgr;
-  std::array<astl_metric_sample_t, 8> out_buf{};
-  uint32_t                            out_capacity = 8;
-  REQUIRE(mgr.CreateBufferOutput(std::span<astl_metric_sample_t>(out_buf), &out_capacity) == ASTL_STATUS_SUCCESS);
+  astl::OutputManager          mgr;
+  std::array<astl_sample_t, 8> out_buf{};
+  uint32_t                     out_capacity = 8;
+  REQUIRE(mgr.CreateBufferOutput(std::span<astl_sample_t>(out_buf), &out_capacity) == ASTL_STATUS_SUCCESS);
 
   TinyTarget                target;
   TinyMetric                metric;

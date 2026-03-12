@@ -100,8 +100,9 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 
 if(MSVC)
-  # Enable UTF-8 file encoding and standard C++ exception handling (no SEH)
-  add_compile_options(/utf-8 /EHsc)
+  # Enable UTF-8 file encoding and standard C++ exception handling (no SEH). /wd4267: suppress size_t->int conversion
+  # noise from generated protobuf headers.
+  add_compile_options(/utf-8 /EHsc /wd4267)
 endif()
 
 message(STATUS "CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")

@@ -87,7 +87,7 @@ struct TestMetric : public IMetric {
     return summarizeStatus;
   }
 
-  astl_status_code GetProperties(astl_metric_properties_t* /*props*/) const override {
+  astl_status_code GetProperties(astl_metric_props_t* /*props*/) const override {
     // No special properties
     return ASTL_STATUS_SUCCESS;
   }
@@ -688,13 +688,13 @@ TEST_CASE("MetricManager::GetCounterOnTarget with registered counter", "[MetricM
   REQUIRE(result.has_value());
 
   SECTION("GetCounterProperties returns correct properties") {
-    astl_counter_properties_t props{};
-    auto                      status = mgr.GetCounterProperties(counter_api_handle, &props);
+    astl_counter_props_t props{};
+    auto                 status = mgr.GetCounterProperties(counter_api_handle, &props);
     REQUIRE(status == ASTL_STATUS_SUCCESS);
-    REQUIRE(std::string(props._name) == "TestCounter");
-    REQUIRE(std::string(props._description) == "A test counter metric");
-    REQUIRE(props._units == astl_units_t::ASTL_UNITS_BYTES);
-    REQUIRE(std::string(props._formula) == "value");
+    REQUIRE(std::string(props.name) == "TestCounter");
+    REQUIRE(std::string(props.description) == "A test counter metric");
+    REQUIRE(props.units == astl_units_t::ASTL_UNITS_BYTES);
+    REQUIRE(std::string(props.formula) == "value");
   }
 
   SECTION("GetCounterRequiredOperations returns correct operation") {
@@ -730,13 +730,13 @@ TEST_CASE("MetricManager::GetCounterProperties exposes scaling formula", "[Metri
   auto counters_or_error = mgr.GetAvailableCounters(target.get());
   REQUIRE(counters_or_error.has_value());
   REQUIRE(counters_or_error->size() == 1);
-  auto counter_api_handle = astl_counter_handle_t{(*counters_or_error)[0]};
+  const auto* counter_api_handle = astl_counter_handle_t{(*counters_or_error)[0]};
 
-  astl_counter_properties_t props{};
-  auto                      status = mgr.GetCounterProperties(counter_api_handle, &props);
+  astl_counter_props_t props{};
+  auto                 status = mgr.GetCounterProperties(counter_api_handle, &props);
   REQUIRE(status == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string(props._formula) == "value / 1000");
-  REQUIRE(props._value_type == ASTL_VALUE_UINT64);
+  REQUIRE(std::string(props.formula) == "value / 1000");
+  REQUIRE(props.value_type == ASTL_VALUE_UINT64);
 }
 
 TEST_CASE("MetricManager::GetCounterProperties exposes composed expression and scaling", "[MetricManager][Counter]") {
@@ -763,14 +763,14 @@ TEST_CASE("MetricManager::GetCounterProperties exposes composed expression and s
   auto counters_or_error = mgr.GetAvailableCounters(target.get());
   REQUIRE(counters_or_error.has_value());
   REQUIRE(counters_or_error->size() == 1);
-  auto counter_api_handle = astl_counter_handle_t{(*counters_or_error)[0]};
+  const auto* counter_api_handle = astl_counter_handle_t{(*counters_or_error)[0]};
 
-  astl_counter_properties_t props{};
-  auto                      status = mgr.GetCounterProperties(counter_api_handle, &props);
+  astl_counter_props_t props{};
+  auto                 status = mgr.GetCounterProperties(counter_api_handle, &props);
   REQUIRE(status == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string(props._formula).find("/ 1000") != std::string::npos);
-  REQUIRE(props._value_type == ASTL_VALUE_UINT64);
-  auto api_formula = astl::ExpressionFormula::Create(std::string{props._formula});
+  REQUIRE(std::string(props.formula).find("/ 1000") != std::string::npos);
+  REQUIRE(props.value_type == ASTL_VALUE_UINT64);
+  auto api_formula = astl::ExpressionFormula::Create(std::string{props.formula});
   REQUIRE(api_formula.has_value());
   auto api_result = api_formula->Apply(astl::AstlValue{uint64_t{1000}});
   REQUIRE(api_result.has_value());
@@ -807,17 +807,17 @@ TEST_CASE("MetricManager::GetCounterProperties keeps integer-literal scaling in 
   auto counters_or_error = mgr.GetAvailableCounters(target.get());
   REQUIRE(counters_or_error.has_value());
   REQUIRE(counters_or_error->size() == 1);
-  auto counter_api_handle = astl_counter_handle_t{(*counters_or_error)[0]};
+  const auto* counter_api_handle = astl_counter_handle_t{(*counters_or_error)[0]};
 
-  astl_counter_properties_t props{};
-  auto                      status = mgr.GetCounterProperties(counter_api_handle, &props);
+  astl_counter_props_t props{};
+  auto                 status = mgr.GetCounterProperties(counter_api_handle, &props);
   REQUIRE(status == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string(props._formula).find("->") == std::string::npos);
-  REQUIRE(std::string(props._formula).find("0.001") == std::string::npos);
-  REQUIRE(props._value_type == ASTL_VALUE_UINT64);
+  REQUIRE(std::string(props.formula).find("->") == std::string::npos);
+  REQUIRE(std::string(props.formula).find("0.001") == std::string::npos);
+  REQUIRE(props.value_type == ASTL_VALUE_UINT64);
 
   // End-to-end lock: emitted API formula must parse in TinyExpr and evaluate the same as metric post-processing.
-  auto api_formula = astl::ExpressionFormula::Create(std::string{props._formula});
+  auto api_formula = astl::ExpressionFormula::Create(std::string{props.formula});
   REQUIRE(api_formula.has_value());
   auto api_result = api_formula->Apply(astl::AstlValue{uint64_t{1000}});
   REQUIRE(api_result.has_value());

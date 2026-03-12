@@ -129,13 +129,13 @@ TEST_CASE("IntervalCsvOutput quotes description and sanitizes string samples", "
   class StringMetric : public TestMetricBase {  // NOLINT
    public:
     using TestMetricBase::TestMetricBase;
-    astl_status_code GetProperties(astl_metric_properties_t* props) const override {
+    astl_status_code GetProperties(astl_metric_props_t* props) const override {
       auto status = TestMetricBase::GetProperties(props);
       if (status != ASTL_STATUS_SUCCESS) {
         return status;
       }
       static const char* desc = "Desc, with \"quotes\" inside";  // NOLINT
-      props->_description     = desc;
+      props->description      = desc;
       return ASTL_STATUS_SUCCESS;
     }
   };

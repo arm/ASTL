@@ -57,22 +57,22 @@ auto RawMetric::SinkProcessedSample(const ProcessedSampledData &processed_sample
   return _processed_sample_sink->SinkProcessedSamples(_target, this, {&sample, 1});
 }
 
-auto RawMetric::GetProperties(astl_metric_properties_t *properties) const -> astl_status_code {
+auto RawMetric::GetProperties(astl_metric_props_t *properties) const -> astl_status_code {
   if (properties == nullptr) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
   // Fill in the metric properties structure
-  properties->_size = sizeof(astl_metric_properties_t);
+  properties->size = sizeof(astl_metric_props_t);
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-  properties->_handle                = static_cast<astl_metric_handle_t>(const_cast<RawMetric *>(this));
-  properties->_name                  = GetInternedString(_configuration->Name());
-  properties->_description           = GetInternedString(_configuration->Description());
-  properties->_min_sampling_interval = 0;  // TODO(ASTL-40): Set appropriate minimum sampling interval from config.
-  properties->_units                 = _configuration->Units();
-  properties->_value_type            = _configuration->ValueType();
-  properties->_metric_type           = _configuration->MetricType();
-  properties->_category              = _configuration->Category();
+  properties->handle                = static_cast<astl_metric_handle_t>(const_cast<RawMetric *>(this));
+  properties->name                  = GetInternedString(_configuration->Name());
+  properties->description           = GetInternedString(_configuration->Description());
+  properties->min_sampling_interval = 0;  // TODO(ASTL-40): Set appropriate minimum sampling interval from config.
+  properties->units                 = _configuration->Units();
+  properties->value_type            = _configuration->ValueType();
+  properties->metric_type           = _configuration->MetricType();
+  properties->category              = _configuration->Category();
 
   return ASTL_STATUS_SUCCESS;
 }

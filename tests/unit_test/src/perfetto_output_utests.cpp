@@ -433,13 +433,13 @@ TEST_CASE("PerfettoOutput category inference - power & temperature (unit-based)"
     void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
     void             Reset() override {}
     astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-    astl_status_code GetProperties(astl_metric_properties_t* props) const override {
+    astl_status_code GetProperties(astl_metric_props_t* props) const override {
       if (!props) {
         return ASTL_STATUS_BAD_ARGUMENT;
       }
-      props->_handle = this;
-      props->_name   = name_.c_str();
-      props->_units  = units_;
+      props->handle = this;
+      props->name   = name_.c_str();
+      props->units  = units_;
       return ASTL_STATUS_SUCCESS;
     }
     auto             Name() const -> std::string const& override { return name_; }
@@ -490,13 +490,13 @@ TEST_CASE("PerfettoOutput category inference - frequency (unit-based)", "[perfet
     void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
     void             Reset() override {}
     astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-    astl_status_code GetProperties(astl_metric_properties_t* props) const override {
+    astl_status_code GetProperties(astl_metric_props_t* props) const override {
       if (!props) {
         return ASTL_STATUS_BAD_ARGUMENT;
       }
-      props->_handle = this;
-      props->_name   = name_.c_str();
-      props->_units  = units_;
+      props->handle = this;
+      props->name   = name_.c_str();
+      props->units  = units_;
       return ASTL_STATUS_SUCCESS;
     }
     auto             Name() const -> std::string const& override { return name_; }
@@ -541,13 +541,13 @@ TEST_CASE("PerfettoOutput category inference - voltage (unit-based)", "[perfetto
     void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
     void             Reset() override {}
     astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-    astl_status_code GetProperties(astl_metric_properties_t* props) const override {
+    astl_status_code GetProperties(astl_metric_props_t* props) const override {
       if (!props) {
         return ASTL_STATUS_BAD_ARGUMENT;
       }
-      props->_handle = this;
-      props->_name   = name_.c_str();
-      props->_units  = units_;
+      props->handle = this;
+      props->name   = name_.c_str();
+      props->units  = units_;
       return ASTL_STATUS_SUCCESS;
     }
     auto             Name() const -> std::string const& override { return name_; }
@@ -592,13 +592,13 @@ TEST_CASE("PerfettoOutput category inference - state (unit-based)", "[perfetto_o
     void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
     void             Reset() override {}
     astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-    astl_status_code GetProperties(astl_metric_properties_t* props) const override {
+    astl_status_code GetProperties(astl_metric_props_t* props) const override {
       if (!props) {
         return ASTL_STATUS_BAD_ARGUMENT;
       }
-      props->_handle = this;
-      props->_name   = name_.c_str();
-      props->_units  = units_;
+      props->handle = this;
+      props->name   = name_.c_str();
+      props->units  = units_;
       return ASTL_STATUS_SUCCESS;
     }
     auto             Name() const -> std::string const& override { return name_; }
@@ -645,13 +645,13 @@ TEST_CASE("PerfettoOutput category inference fallback (unit-based)", "[perfetto_
     void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
     void             Reset() override {}
     astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-    astl_status_code GetProperties(astl_metric_properties_t* props) const override {
+    astl_status_code GetProperties(astl_metric_props_t* props) const override {
       if (!props) {
         return ASTL_STATUS_BAD_ARGUMENT;
       }
-      props->_handle = this;
-      props->_name   = name_.c_str();
-      props->_units  = units_;
+      props->handle = this;
+      props->name   = name_.c_str();
+      props->units  = units_;
       return ASTL_STATUS_SUCCESS;
     }
     auto             Name() const -> std::string const& override { return name_; }

@@ -40,7 +40,7 @@ class BufferOutput : public IOutput {
    *                            of usable elements). On successful write it is replaced with the
    *                            number of samples written. Must be non-null.
    */
-  explicit BufferOutput(std::span<astl_metric_sample_t> samples_buffer, uint32_t* buffer_sample_count)
+  explicit BufferOutput(std::span<astl_sample_t> samples_buffer, uint32_t* buffer_sample_count)
       : _samples_buffer(samples_buffer), _buffer_sample_count(buffer_sample_count) {}
 
   BufferOutput(const BufferOutput&)            = default;
@@ -60,8 +60,8 @@ class BufferOutput : public IOutput {
 
  private:
   // internal classes + enums
-  std::span<astl_metric_sample_t> _samples_buffer;       //!< Destination span for metric samples
-  uint32_t*                       _buffer_sample_count;  //!< In: capacity  Out: samples written
+  std::span<astl_sample_t> _samples_buffer;       //!< Destination span for metric samples
+  uint32_t*                _buffer_sample_count;  //!< In: capacity  Out: samples written
 };
 
 }  // namespace astl

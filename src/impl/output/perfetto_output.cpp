@@ -169,9 +169,9 @@ auto PerfettoOutput::WriteProcessedSamples(const ProcessedSamplesMap& samples) -
       if (!metric || metric_samples.empty()) {
         continue;
       }
-      std::string              metric_name = Sanitize(metric->Name());
-      int                      tid         = GetTid(target, metric);
-      astl_metric_properties_t props{};  // NOLINT(cppcoreguidelines-pro-type-member-init)
+      std::string         metric_name = Sanitize(metric->Name());
+      int                 tid         = GetTid(target, metric);
+      astl_metric_props_t props{};  // NOLINT(cppcoreguidelines-pro-type-member-init)
       metric->GetProperties(&props);
 
       for (const auto& sample : metric_samples) {
@@ -183,7 +183,7 @@ auto PerfettoOutput::WriteProcessedSamples(const ProcessedSamplesMap& samples) -
               _first_event = false;
 
               uint64_t    ts_us          = static_cast<uint64_t>(sample.timestamp.time_since_epoch().count());
-              std::string category       = PerfettoOutput::DetermineCategory(props._units);
+              std::string category       = PerfettoOutput::DetermineCategory(props.units);
               std::string composite_name = target_name + "." + metric_name;
               _trace_stream << R"({"ph":"C","cat":")" << category << R"(","name":")" << composite_name << R"(","ts":)"
                             << ts_us << R"(,"pid":)" << pid << R"(,"tid":)" << tid << R"(,"args":{"target":")"

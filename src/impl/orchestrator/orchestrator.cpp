@@ -184,8 +184,7 @@ auto Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets)
   return ASTL_STATUS_SUCCESS;
 }
 
-auto Orchestrator::ConfigureCounterCollection(const ITarget                         *target,
-                                              const astl_collection_parameters_t    *collection_params,
+auto Orchestrator::ConfigureCounterCollection(const ITarget *target, const astl_collection_params_t *collection_params,
                                               std::span<const astl_counter_handle_t> counters) -> astl_status_code {
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
@@ -229,8 +228,7 @@ auto Orchestrator::ConfigureCounterCollection(const ITarget                     
   return status;
 }
 
-auto Orchestrator::ConfigureMetricCollection(const ITarget                        *target,
-                                             const astl_collection_parameters_t   *collection_params,
+auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_collection_params_t *collection_params,
                                              std::span<const astl_metric_handle_t> metrics) -> astl_status_code {
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
@@ -555,12 +553,12 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
   }
 
   /* Get the target name - just for logging */
-  astl_target_properties_t properties;
-  auto                     result = target->GetProperties(&properties);
+  astl_target_props_t properties;
+  auto                result = target->GetProperties(&properties);
   if (result != ASTL_STATUS_SUCCESS) {
     return result;
   }
-  ASTL_LOG_DEBUG("Received {} samples for target {}", raw_samples.size(), properties._name);
+  ASTL_LOG_DEBUG("Received {} samples for target {}", raw_samples.size(), properties.name);
 
   if (!raw_samples.empty()) [[likely]] {
     std::vector<RawSampledData> batch_samples{};
@@ -596,7 +594,7 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
     }
 
     if (!batch_samples.empty()) {
-      auto res = astl::ProtobufSerDes::SerializeCurrentBatch(properties._name, batch_samples, _cache_dir);
+      auto res = astl::ProtobufSerDes::SerializeCurrentBatch(properties.name, batch_samples, _cache_dir);
       if (res != ASTL_STATUS_SUCCESS) {
         return res;
       }

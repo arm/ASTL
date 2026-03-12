@@ -36,8 +36,8 @@ auto SummaryOutput::ComputeSummariesForMetric(  // NOLINT(readability-convert-me
   std::vector<SummaryResult> results;
 
   // Get metric properties to check if summarizers can handle this metric
-  astl_metric_properties_t metric_props{};
-  metric_props._size = sizeof(astl_metric_properties_t);
+  astl_metric_props_t metric_props{};
+  metric_props.size = sizeof(astl_metric_props_t);
 
   auto props_result = metric->GetProperties(&metric_props);
   if (props_result != ASTL_STATUS_SUCCESS) {
@@ -52,7 +52,7 @@ auto SummaryOutput::ComputeSummariesForMetric(  // NOLINT(readability-convert-me
 
   // Try each summarizer that can handle this metric
   for (const auto& summarizer : summarizers_) {
-    if (!summarizer->IsSupported(metric_props._value_type, metric_props._metric_type)) {
+    if (!summarizer->IsSupported(metric_props.value_type, metric_props.metric_type)) {
       ASTL_LOG_DEBUG("Skipping summarizer '{}' for metric '{}' from target '{}' - not supported",
                      summarizer->GetSummaryType(), metric_name, target->Name());
       continue;

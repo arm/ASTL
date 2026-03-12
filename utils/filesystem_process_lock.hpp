@@ -146,8 +146,9 @@ class FilesystemProcessLock {
 #else
       return _status == ASTL_STATUS_SUCCESS;
 #endif
+    } else {
+      return _status == ASTL_STATUS_SUCCESS;
     }
-    return _status == ASTL_STATUS_SUCCESS;
   }
 
   /** @brief Backend-specific lock acquisition entry point. */
@@ -155,43 +156,43 @@ class FilesystemProcessLock {
     if constexpr (!process_lock_detail::kRealFilesystem<FileSystemT>) {
       _status = ASTL_STATUS_SUCCESS;
       return;
-    }
-
+    } else {
 #if !defined(__linux__)
-    _status = ASTL_STATUS_SUCCESS;
-    return;
-#else
-    const auto lock_file_path = _root_to_lock / _lock_file_name;
-    // Create/read-write a shared lock file usable across users.
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-    const int fd = ::open(lock_file_path.c_str(), O_CREAT | O_RDWR, process_lock_detail::kSharedLockFileMode);
-    if (fd < 0) {
-      ASTL_LOG_ERROR("Failed to open process lock file '{}': {}", lock_file_path.string(), std::strerror(errno));
-      _status = ASTL_STATUS_FILE_OPEN_FAILED;
+      _status = ASTL_STATUS_SUCCESS;
       return;
-    }
-    // Keep permissions permissive even if the file already existed with tighter mode.
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-    if (::fchmod(fd, process_lock_detail::kSharedLockFileMode) != 0) {
-      ASTL_LOG_WARNING("Failed to set permissions on process lock file '{}': {}", lock_file_path.string(),
-                       std::strerror(errno));
-    }
-
-    if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {
-      const int lock_errno = errno;
-      (void)::close(fd);
-      if (lock_errno == EWOULDBLOCK || lock_errno == EAGAIN) {
-        _status = ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+#else
+      const auto lock_file_path = _root_to_lock / _lock_file_name;
+      // Create/read-write a shared lock file usable across users.
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+      const int fd = ::open(lock_file_path.c_str(), O_CREAT | O_RDWR, process_lock_detail::kSharedLockFileMode);
+      if (fd < 0) {
+        ASTL_LOG_ERROR("Failed to open process lock file '{}': {}", lock_file_path.string(), std::strerror(errno));
+        _status = ASTL_STATUS_FILE_OPEN_FAILED;
         return;
       }
-      ASTL_LOG_ERROR("Failed to lock process lock file '{}': {}", lock_file_path.string(), std::strerror(lock_errno));
-      _status = ASTL_STATUS_FILE_OPEN_FAILED;
-      return;
-    }
+      // Keep permissions permissive even if the file already existed with tighter mode.
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+      if (::fchmod(fd, process_lock_detail::kSharedLockFileMode) != 0) {
+        ASTL_LOG_WARNING("Failed to set permissions on process lock file '{}': {}", lock_file_path.string(),
+                         std::strerror(errno));
+      }
 
-    _lock_fd = fd;
-    _status  = ASTL_STATUS_SUCCESS;
+      if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        const int lock_errno = errno;
+        (void)::close(fd);
+        if (lock_errno == EWOULDBLOCK || lock_errno == EAGAIN) {
+          _status = ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+          return;
+        }
+        ASTL_LOG_ERROR("Failed to lock process lock file '{}': {}", lock_file_path.string(), std::strerror(lock_errno));
+        _status = ASTL_STATUS_FILE_OPEN_FAILED;
+        return;
+      }
+
+      _lock_fd = fd;
+      _status  = ASTL_STATUS_SUCCESS;
 #endif
+    }
   }
 
   std::filesystem::path _root_to_lock;

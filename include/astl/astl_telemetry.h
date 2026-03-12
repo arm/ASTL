@@ -8,15 +8,15 @@
  * @file astl_telemetry.h
  * @brief Core public telemetry collection C API for the Arm SoC Telemetry Library (ASTL).
  *
- * This header exposes functions to initialize the library, enumerate targets,
+ * This header exposes functions to enumerate targets,
  * discover counters/metrics/groups, configure collection parameters (sampling,
  * snapshot, immediate), control collection lifecycle (start / pause / resume /
  * stop / immediate read) and retrieve collected counter & metric samples. All
- * API structs include a leading `_size` field for versioning; callers MUST set
+ * API structs include a leading `size` field for versioning; callers MUST set
  * this field to `sizeof(struct_type)` before calling into the API so that
  * forward/backward compatibility can be managed. Buffer-returning APIs follow a
  * two-step pattern: query required counts, allocate & initialize (setting the
- * first element's `_size`), then call the getter to populate data.
+ * first element's `size`), then call the getter to populate data.
  */
 #ifndef INCLUDE_ASTL_TELEMETRY_H_
 #define INCLUDE_ASTL_TELEMETRY_H_
@@ -37,21 +37,21 @@ extern "C" {
 
 /**
  * @brief macro to declare a struct of type `type` with name `var` and initialize all fields,
- *        including the _size field for API versioning
+ *        including the size field for API versioning
  * @example
- * `ASTL_INIT_STRUCT(astl_initialization_parameters_t, init_params, ._config_file_path="~/astl/config.json")
+ * `ASTL_INIT_STRUCT(astl_get_system_info_params_t, params, .flags = 0, .system_info = &platform_info)`
  */
 #define ASTL_INIT_STRUCT(type, var, ...) \
-  type var { ._size = sizeof(type) __VA_OPT__(, ) __VA_ARGS__ }
+  type var { .size = sizeof(type) __VA_OPT__(, ) __VA_ARGS__ }
 
 /**
  * @brief macro to declare and 0-initialize a `count`-length array of structs of type `type` named `var`
- *        Will initialize the `_size` field of the first element in the array for API versioning
+ *        Will initialize the `size` field of the first element in the array for API versioning
  */
 #define ASTL_ALLOC_ARRAY(type, var, count)          \
   type* var = (type*)calloc((count), sizeof(type)); \
   if (var) {                                        \
-    var[0]._size = sizeof(type);                    \
+    var[0].size = sizeof(type);                     \
   }
 
 /**
@@ -75,19 +75,33 @@ extern "C" {
  * All string fields point to internal immutable storage owned by ASTL and remain valid
  * until process exit. Any field may be NULL when not available on the running platform.
  */
-typedef struct _astl_platform_properties_t {
-  size_t _size;  //!< Size of this struct for versioning
+typedef struct _astl_platform_props_t {
+  size_t      size;              //!< Size of this struct for versioning; set size to sizeof(astl_platform_props_t).
+  uint32_t    flags;             //!< Source selector input and selected-source output (astl_system_info_flags_t)
+  const char* soc_name;          //!< SoC / platform name (for example from sysfs or device-tree)
+  const char* vendor_id;         //!< Platform or system vendor identifier
+  const char* os_name;           //!< Operating system name
+  const char* kernel_name;       //!< Kernel name (for example, "Linux")
+  const char* kernel_version;    //!< Kernel version string
+  const char* kernel_release;    //!< Kernel release string
+  const char* firmware_version;  //!< Firmware or BIOS version if available
+  const char* hostname;          //!< Host name
+  const char* architecture;      //!< Machine architecture (for example, "aarch64")
+} astl_platform_props_t;
 
-  const char* _soc_name;          //!< SoC / platform name (for example from sysfs or device-tree)
-  const char* _vendor_id;         //!< Platform or system vendor identifier
-  const char* _os_name;           //!< Operating system name
-  const char* _kernel_name;       //!< Kernel name (for example, "Linux")
-  const char* _kernel_version;    //!< Kernel version string
-  const char* _kernel_release;    //!< Kernel release string
-  const char* _firmware_version;  //!< Firmware or BIOS version if available
-  const char* _hostname;          //!< Host name
-  const char* _architecture;      //!< Machine architecture (for example, "aarch64")
-} astl_platform_properties_t;
+typedef enum _astl_system_info_flags_t {
+  ASTL_SYSTEM_INFO_FLAG_HOST           = (1U << 0),  //!< Use current host system information
+  ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION = (1U << 1)   //!< Use loaded-session system information
+} astl_system_info_flags_t;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_system_info_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_system_info_params_t).
+  uint32_t flags;  //!< Source selector input/output flags (astl_system_info_flags_t). 0 selects default behavior.
+  astl_platform_props_t* system_info;  //!< Output platform properties. Cannot be NULL; set
+                                       //!< system_info->size to sizeof(astl_platform_props_t).
+} astl_get_system_info_params_t;
 
 /**
  * @brief Get system-level platform information.
@@ -98,19 +112,16 @@ typedef struct _astl_platform_properties_t {
  *  - After calling any astlConfigure*Collection* API, returns platform information from the current host system
  *    again.
  *
- * @param[in/out] system_info            Output platform properties structure.
- *                                       Cannot be NULL and `_size` must be set to
- *                                       `sizeof(astl_platform_properties_t)`.
- *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_get_system_info_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetSystemInfo(astl_platform_properties_t* system_info) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetSystemInfo(const astl_get_system_info_params_t* params) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************               TARGETS               ************************
  **********************************************************************************/
 
-/** A target can be any level in the system where telemetry can be collected. Could be Hardware,
+/** A target can be any level in the system where telemetry can be collected. Could be hardware,
  * firmware, driver, OS or any data source on the system.
  */
 
@@ -118,48 +129,52 @@ typedef const void* astl_target_handle_t;  //!< Abstraction of a target handle
 
 /** A target properties structure describes a target on which telemetry can be collected
  */
-typedef struct _astl_target_properties_t {
-  size_t               _size;           //!< size of this struct for versioning
-  astl_target_handle_t _handle;         //!< Internal handle ot target
-  astl_target_handle_t _parent_handle;  //!< Internal handle to the parent device where this target
-                                        //!< resides. Null means top level target
-  const char* _name;                    //!< Device name
-  const char* _description;             //!< Device Description
-  const char* _uuid;                    //!< Optional null-terminated UUID string (nullptr if not available)
-                                        //!< What other fields? Socket number? Node number?
-                                        //!< PCIe BDF? Vendor? Model name? Model number?
-                                        //!< Serial number? Version? Unique ID?
-} astl_target_properties_t;
+typedef struct _astl_target_props_t {
+  size_t               size;           //!< Size of this struct for versioning; set size to sizeof(astl_target_props_t).
+  astl_target_handle_t handle;         //!< Internal handle to target
+  astl_target_handle_t parent_handle;  //!< Internal handle to the parent device where this target
+                                       //!< resides. NULL means top-level target.
+  const char* name;                    //!< Device name
+  const char* description;             //!< Device description
+  const char* id;                      //!< Optional null-terminated target identifier string (NULL if not available)
+                                       //!< What other fields? Socket number? Node number?
+                                       //!< PCIe BDF? Vendor? Model name? Model number?
+                                       //!< Serial number? Version? Unique ID?
+} astl_target_props_t;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_target_count_params_t {
+  size_t    size;          //!< Size of this struct for versioning; set size to sizeof(astl_get_target_count_params_t).
+  uint32_t  flags;         //!< Reserved for future flags (must be 0 for now).
+  uint32_t* target_count;  //!< Output number of discoverable targets. Cannot be NULL.
+} astl_get_target_count_params_t;
 
 /**
- * @brief Get the number of targets on the systems on which telemetry collection can be done
+ * @brief Get the number of targets on the system on which telemetry collection can be done
  *
- * @param[in/out] target_count             Number of targets
- *                                         Cannot be NULL. target_count will contain the number of
- *                                         targets. The value should be used to allocate a buffer of
- *                                         astl_target_properties_t big enough to hold
- *                                         target_count_elements
- *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_get_target_count_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetTargetCount(uint32_t* target_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetTargetCount(const astl_get_target_count_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_targets_params_t {
+  size_t               size;     //!< Size of this struct for versioning; set size to sizeof(astl_get_targets_params_t).
+  uint32_t             flags;    //!< Reserved for future flags (must be 0 for now).
+  astl_target_props_t* targets;  //!< Caller-allocated target array. Cannot be NULL; set
+                                 //!< targets[0].size to sizeof(astl_target_props_t).
+  uint32_t* target_count;        //!< In: target-array capacity. Out: number of elements written. Cannot be NULL.
+} astl_get_targets_params_t;
 
 /**
  * @brief Get properties of all targets on the system on which collection can be done
  *
- * @param[in/out] targets                  Array of target properties. Cannot be NULL. It should
- *                                         point to an allocated buffer of
- *                                         sizeof(aslt_target_properties_t) * (target_count)
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_target_properties_t) for versioning
- *
- * @param[in/out] target_count             The number of elements the targets buffer was allocated
- *                                         for. Returns the number of elements written to the targets
- *                                         buffer.
- *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_get_targets_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetTargets(const astl_get_targets_params_t* params) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************               DATA TYPES               *********************
@@ -181,12 +196,12 @@ typedef enum _astl_units_t {
   ASTL_UNITS_BYTES        = 8,  //!< Bytes transferred
   ASTL_UNITS_MBYTESPERSEC = 9,  //!< Bandwidth in MB/s. For calculated metrics but hardware may
                                 //!< already be doing the calculation, not ideal but possible
-  ASTL_UNITS_MHERTZ = 10,       //!< Frequency readings in Mhz
+  ASTL_UNITS_MHERTZ = 10,       //!< Frequency readings in MHz
 
   ASTL_UNITS_UNKNOWN = 0xFFFFFFFF,  //!< Unknown units
 } astl_units_t;
 
-/** Genetic value types we expect to use.
+/** Generic value types we expect to use.
  */
 typedef enum _astl_value_type_t {
   ASTL_VALUE_UINT8   = 0,  //!< Unsigned 8bit integer (char)
@@ -211,7 +226,7 @@ typedef union _astl_value_t {
   uint32_t ui32;  //!< 32bits unsigned integer for UINT32
   uint64_t ui64;  //!< 64bits unsigned integer for UINT64
   float    fp32;  //!< 32bits float for FLOAT32
-  double   fp64;  //!< 64bits float for FLAAT64
+  double   fp64;  //!< 64bits float for FLOAT64
   bool     b8;    //!< 8bits boolean for BOOL8
 } astl_value_t;
 
@@ -222,22 +237,20 @@ typedef union _astl_value_t {
 /** A counter contains the most basic raw form of the data. Most of the time, it requires
  * postprocessing to make sense of the data. These raw value containers can be collected directly
  * to minimize post processing overhead or to do different processing with the data elsewhere.
- * It is expected that users of the counter interface would do post precessing of the raw data
+ * It is expected that users of the counter interface would do post processing of the raw data
  * themselves
  */
 
 typedef const void* astl_counter_handle_t;  //!< Abstraction of a counter handle
 
-/** A counter sample is the raw form of the data we read. It contains both the timestamp when the
- * reading was made and the reading itself
- * Note: The sample is relevant to the target and counter specified in GetSamples API
+/** A sample contains the timestamp and value captured for a target/counter or target/metric pair.
+ * NOTE: This struct intentionally has no `size` field to minimize the total collected dataset size.
+ * Do not use ASTL_INIT_STRUCT for astl_sample_t elements.
  */
-typedef struct _astl_counter_sample_t {
-  size_t _size;  //!< Size of this struct for versioning
-
-  uint64_t     _timestamp;  //!< The timestamp when this value was captured
-  astl_value_t _value;      //!< The value captured
-} astl_counter_sample_t;
+typedef struct _astl_sample_t {
+  uint64_t     timestamp;  //!< The timestamp when this value was captured
+  astl_value_t value;      //!< The value captured
+} astl_sample_t;
 
 /** The type of the counter. The type helps decide how to process the counter and how to display the
  * processed data
@@ -254,64 +267,62 @@ typedef enum _astl_counter_type_t {
 
 /** A counter properties structure describes a counter
  */
-typedef struct _astl_counter_properties_t {
-  size_t                _size;                   //!< Size of this struct for versioning
-  astl_counter_handle_t _handle;                 //!< The handle of this counter
-  const char*           _name;                   //!< The name of this counter
-  const char*           _description;            //!< The description of this counter
-  uint32_t              _min_sampling_interval;  //!< The minimum sampling interval this counter can be collected
-                                                 //!< in ms. Example: 10 means counter cannot be collected
-                                                 //!< faster than every 10ms
-  astl_units_t _units;                           //!< The raw units of the counter. For example, for memory transfers,
-                                                 //!< it would be ASTL_UNIT_BYTES. For temperature, it would be
-                                                 //!< ASTL_UNITS_CELSIUS
-  const char* _formula;               //!< TinyExpr-compatible transformation expression for raw counter samples.
-                                      //!< formula is emitted with integer literals
-                                      //!< (e.g. `(value + 1) / 1000`, `value * 1000`), not decimals.
-  astl_value_type_t _value_type;      //!< The type of the value read from the counter. It is used for
-                                      //!< interpreting the 64bit reading.
-  astl_counter_type_t _counter_type;  //!< The counter type. It is used for data processing, output
-                                      //!< formatting or visualization
-} astl_counter_properties_t;
+typedef struct _astl_counter_props_t {
+  size_t                size;         //!< Size of this struct for versioning; set size to sizeof(astl_counter_props_t).
+  astl_counter_handle_t handle;       //!< The handle of this counter
+  const char*           name;         //!< The name of this counter
+  const char*           description;  //!< The description of this counter
+  uint32_t              min_sampling_interval;  //!< The minimum sampling interval this counter can be collected
+                                                //!< in ms. Example: 10 means counter cannot be collected
+                                                //!< faster than every 10ms
+  astl_units_t units;                           //!< The raw units of the counter. For example, for memory transfers,
+                                                //!< it would be ASTL_UNITS_BYTES. For temperature, it would be
+                                                //!< ASTL_UNITS_CELSIUS
+  const char* formula;               //!< Transformation required on the counter. Example: & MASK >> 2 DELTA / TIME.
+                                     //!< This example would mean: Mask the counter first,
+                                     //!<  Then shift the value by 2; do Value2 - Value1 to get a delta and divide the
+                                     //!<  result by the elapsed time
+  astl_value_type_t value_type;      //!< The type of the value read from the counter. It is used for
+                                     //!< interpreting the 64bit reading.
+  astl_counter_type_t counter_type;  //!< The counter type. It is used for data processing, output
+                                     //!< formatting or visualization
+} astl_counter_props_t;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_counter_count_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_counter_count_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  uint32_t*            counter_count;  //!< Output number of counters on target. Cannot be NULL.
+} astl_get_counter_count_params_t;
 
 /**
  * @brief Get the number of telemetry counters that can be collected on the specified target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @param[in/out] counter_count            Number of counters
- *                                         Cannot be NULL. counter_count will contain the number of
- *                                         counters. The value should be used to allocate a buffer
- *                                         of astl_counter_properties_t big enough to hold
- *                                         counter_count elements
- *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_get_counter_count_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetCounterCount(astl_target_handle_t target_handle,
-                                              uint32_t*            counter_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetCounterCount(const astl_get_counter_count_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_counters_params_t {
+  size_t                size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_counters_params_t).
+  uint32_t              flags;  //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t  target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_counter_props_t* counters;       //!< Caller-allocated counter array. Cannot be NULL; set
+                                        //!< counters[0].size to sizeof(astl_counter_props_t).
+  uint32_t* counter_count;  //!< In: counter-array capacity. Out: number of elements written. Cannot be NULL.
+} astl_get_counters_params_t;
 
 /**
  * @brief Get properties of all counters that can be collected on the specified target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @param[in/out] counters                 Array of counter properties structures. Cannot be NULL.
- *                                         It should point to the buffer of
- *                                         sizeof(aslt_counter_properties_t) * (counter_count)
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_counter_properties_t) for versioning
- *
- * @param[in/out] counter_count            The number of elements the counters buffer was allocated
- *                                         for. Returns the number of elements written to the counter
- *                                         buffer.
- *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_get_counters_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetCounters(astl_target_handle_t       target_handle_handle,
-                                          astl_counter_properties_t* counters,
-                                          uint32_t*                  counter_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetCounters(const astl_get_counters_params_t* params) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************              METRIC                    *********************
@@ -327,17 +338,6 @@ ASTL_API astl_status_code astlGetCounters(astl_target_handle_t       target_hand
  */
 
 typedef const void* astl_metric_handle_t;  //!< Abstraction of a metric handle
-
-/** A metric sample structure describes a collected and processed value of a metric.
- * It contains both the timestamp when the reading was made and the reading itself
- * Note: The sample is relevant to the target and metric specified in GetSamples API
- */
-typedef struct _astl_metric_sample_t {
-  size_t       _size;       //!< Size of this struct for versioning
-  uint64_t     _timestamp;  //!< the timestamp in microseconds when this value was captured
-  astl_value_t _value;      //!< The value captured. Should use _value_type in the
-                            //!< astl_metric_properties_t structure to properly interpret _value
-} astl_metric_sample_t;
 
 /** The type of the metric. The type helps decide how to further process, summarize and display metric data
  */
@@ -369,60 +369,58 @@ typedef enum _astl_category_t {
 
 /** A metric properties structure describes a metric
  */
-typedef struct _astl_metric_properties_t {
-  size_t               _size;                   //!< Size of this struct for versioning
-  astl_metric_handle_t _handle;                 //!< This handle of this metric
-  const char*          _name;                   //!< The name of this metric
-  const char*          _description;            //!< The description of this metric
-  uint32_t             _min_sampling_interval;  //!< The minimum sampling interval this metric can be collected
-                                                //!< in ms. It is the largest minimum sampling interval
-                                                //!< value from all counters used in this metric
-  astl_units_t _units;                          //!< The units of the metric. For example, for bandwidth, it would be
-                                                //!< ASTL_UNIT_MBYTESPERSEC
-  astl_value_type_t _value_type;                //!< The type of the processed value from the metric. Is is used
-                                                //!< for interpreting the 64bit metric value
-  astl_metric_type_t _metric_type;              //!< The metric type. It is used for output formatting and
-                                                //!< visualization
-  astl_category_t _category;                    //!< High-level category such as POWER, TEMPERATURE etc.
-} astl_metric_properties_t;
+typedef struct _astl_metric_props_t {
+  size_t               size;         //!< Size of this struct for versioning; set size to sizeof(astl_metric_props_t).
+  astl_metric_handle_t handle;       //!< Handle for this metric
+  const char*          name;         //!< The name of this metric
+  const char*          description;  //!< The description of this metric
+  uint32_t             min_sampling_interval;  //!< The minimum sampling interval this metric can be collected
+                                               //!< in ms. It is the largest minimum sampling interval
+                                               //!< value from all counters used in this metric
+  astl_units_t units;                          //!< The units of the metric. For example, for bandwidth, it would be
+                                               //!< ASTL_UNITS_MBYTESPERSEC
+  astl_value_type_t value_type;                //!< The type of the processed value from the metric. It is used
+                                               //!< for interpreting the 64bit metric value
+  astl_metric_type_t metric_type;              //!< The metric type. It is used for output formatting and
+                                               //!< visualization
+  astl_category_t category;                    //!< High-level category such as POWER, TEMPERATURE etc.
+} astl_metric_props_t;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_count_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_metric_count_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  uint32_t*            metric_count;   //!< Output number of metrics on target. Cannot be NULL.
+} astl_get_metric_count_params_t;
 
 /**
  * @brief Get the number of telemetry metrics that can be collected on the specified target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @param[in/out] metric_count             Number of metrics
- *                                         Cannot be NULL. metric_count will contain the number of
- *                                         metrics. The value should be used to allocate a buffer
- *                                         of astl_metric_properties_t big enough to hold metric_count
- *                                         elements
- *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_get_metric_count_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricCount(astl_target_handle_t target_handle_handle,
-                                             uint32_t*            metric_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricCount(const astl_get_metric_count_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metrics_params_t {
+  size_t               size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_metrics_params_t).
+  uint32_t             flags;  //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_props_t* metrics;        //!< Caller-allocated metric array. Cannot be NULL; set
+                                       //!< metrics[0].size to sizeof(astl_metric_props_t).
+  uint32_t* metric_count;              //!< In: metric-array capacity. Out: number of elements written. Cannot be NULL.
+} astl_get_metrics_params_t;
 
 /**
  * @brief Get properties of all metrics that can be collected on the specified target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @param[in/out] metrics                  Array of metric properties structures. Cannot be NULL.
- *                                         It should point to the buffer of
- *                                         sizeof(aslt_metric_properties_t) * (metric_count)
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_metric_properties_t) for versioning
- *
- * @param[in/out] metric_count             The number of elements the metrics buffer was allocated
- *                                         for. Returns the number of elements written to the metrics
- *                                         buffer.
- *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_get_metrics_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t* metrics,
-                                         uint32_t* metric_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetrics(const astl_get_metrics_params_t* params) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************      METRIC VALUE/STATE DISCOVERY      *********************
@@ -432,17 +430,28 @@ ASTL_API astl_status_code astlGetMetrics(astl_target_handle_t target_handle, ast
  * Used by both finite set metrics (ASTL_METRIC_FINITE_SET_VALUE) and residency metrics
  * (ASTL_METRIC_RESIDENCY).
  *
- * For finite set metrics: _value contains the possible value, _name provides a human-readable label.
- * For residency metrics: _name contains the state name (e.g., "C6", "C1", "Active"), _value is unused.
+ * For finite set metrics: value contains the possible value, name provides a human-readable label.
+ * For residency metrics: name contains the state name (e.g., "C6", "C1", "Active"), value is unused.
  *
  * The order of states returned defines the sequence in which processed samples are reported.
  */
-typedef struct _astl_state_properties_t {
-  size_t       _size;         //!< Size of this struct for versioning
-  const char*  _name;         //!< State/label name (always set)
-  const char*  _description;  //!< Description of the state (always set)
-  astl_value_t _value;        //!< The value (only used for finite set metrics)
-} astl_state_properties_t;
+typedef struct _astl_state_props_t {
+  size_t       size;         //!< Size of this struct for versioning; set size to sizeof(astl_state_props_t).
+  const char*  name;         //!< State/label name (always set)
+  const char*  description;  //!< Description of the state (always set)
+  astl_value_t value;        //!< The value (only used for finite set metrics)
+} astl_state_props_t;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_state_count_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_get_metric_state_count_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_handle_t metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
+  uint32_t*            state_count;    //!< Output number of states/values for the metric. Cannot be NULL.
+} astl_get_metric_state_count_on_target_params_t;
 
 /**
  * @brief Get the number of state names for a metric.
@@ -453,24 +462,25 @@ typedef struct _astl_state_properties_t {
  * For finite set metrics: Returns the count of possible enumerated values.
  * For residency metrics: Returns the count of tracked states (including any inferred state).
  *
- * @param[in] target_handle           The handle of the target of interest. Found in
- *                                    astl_target_properties_t
+ * @param params Parameters for this call (see astl_get_metric_state_count_on_target_params_t).
  *
- * @param[in] metric_handle           The handle of the metric of interest. Found in
- *                                    astl_metric_properties_t. Must be a finite set or residency metric.
- *
- * @param[in/out] state_count    Number of state names.
- *                                    Cannot be NULL. Will contain the number of state names
- *                                    that should be used to allocate a buffer for
- *                                    astl_state_properties_t structures.
- *
- * @return astl_status_code            ASTL_STATUS_SUCCESS on success.
- *                                    ASTL_STATUS_NOT_SUPPORTED if metric is neither
- *                                    finite set nor residency type.
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricStateCountOnTarget(astl_target_handle_t target_handle,
-                                                          astl_metric_handle_t metric_handle,
-                                                          uint32_t*            state_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricStateCountOnTarget(const astl_get_metric_state_count_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_states_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_get_metric_states_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_handle_t metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
+  astl_state_props_t*  states;         //!< Caller-allocated state array. Cannot be NULL; set
+                                       //!< states[0].size to sizeof(astl_state_props_t).
+  uint32_t* state_count;               //!< In: state-array capacity. Out: number of elements written. Cannot be NULL.
+} astl_get_metric_states_on_target_params_t;
 
 /**
  * @brief Get the state names for a metric.
@@ -479,38 +489,20 @@ ASTL_API astl_status_code astlGetMetricStateCountOnTarget(astl_target_handle_t t
  *
  * For finite set metrics (ASTL_METRIC_FINITE_SET_VALUE):
  *   - Returns all possible enumerated values with their labels
- *   - Each element has both _value and _name populated
- *   - _value contains the possible value, _name contains the human-readable label
+ *   - Each element has both value and name populated
+ *   - value contains the possible value, name contains the human-readable label
  *
  * For residency metrics (ASTL_METRIC_RESIDENCY):
  *   - Returns state names in the order samples are reported
- *   - Each element has _name populated with the state name (e.g., "C6", "C1")
- *   - _value field is unused for residency metrics
+ *   - Each element has name populated with the state name (e.g., "C6", "C1")
+ *   - value field is unused for residency metrics
  *   - If an inferred state exists, it appears as the last element
  *
- * @param[in] target_handle           The handle of the target of interest. Found in
- *                                    astl_target_properties_t
- *
- * @param[in] metric_handle           The handle of the metric of interest. Found in
- *                                    astl_metric_properties_t. Must be a finite set or residency metric.
- *
- * @param[in/out] states         Array of state name structures. Cannot be NULL.
- *                                    It should point to an allocated buffer of
- *                                    sizeof(astl_state_properties_t) * (state_count)
- *                                    IMPORTANT: _size field of at least the first element in the array
- *                                    must be set to sizeof(astl_state_properties_t) for versioning
- *
- * @param[in/out] state_count    The number of elements the states buffer was allocated
- *                                    for. Returns the number of elements written to the buffer.
- *
- * @return astl_status_code            ASTL_STATUS_SUCCESS on success.
- *                                    ASTL_STATUS_NOT_SUPPORTED if metric is neither
- *                                    finite set nor residency type.
+ * @param params Parameters for this call (see astl_get_metric_states_on_target_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricStatesOnTarget(astl_target_handle_t     target_handle,
-                                                      astl_metric_handle_t     metric_handle,
-                                                      astl_state_properties_t* states,
-                                                      uint32_t*                state_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricStatesOnTarget(const astl_get_metric_states_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************              METRIC GROUPS             *********************
@@ -530,92 +522,89 @@ typedef const void* astl_metric_group_handle_t;  //!< Abstraction of a metric gr
 
 /** A metric group properties structure describes a metric group.
  */
-typedef struct _astl_metric_group_properties_t {
-  size_t                     _size;          //!< Size of this struct for versioning
-  astl_metric_group_handle_t _handle;        //!< The handle of this metric group
-  const char*                _name;          //!< The name of this metric group
-  const char*                _description;   //!< The description of this metric group
-  uint32_t                   _metric_count;  //!< The number of metrics in this metric group.
-                                             //!< astlGetMetricGroupMetrics API uses this value to
-                                             //!< determine the size of the metrics buffer that is passed in
+typedef struct _astl_metric_group_props_t {
+  size_t size;  //!< Size of this struct for versioning; set size to sizeof(astl_metric_group_props_t).
+  astl_metric_group_handle_t handle;        //!< The handle of this metric group
+  const char*                name;          //!< The name of this metric group
+  const char*                description;   //!< The description of this metric group
+  uint32_t                   metric_count;  //!< The number of metrics in this metric group.
+                                            //!< astlGetMetricGroupMetrics API uses this value to
+                                            //!< determine the size of the metrics buffer that is passed in
+  astl_metric_props_t* metrics;             //!< Initially null, users can set this to an allocated buffer
+                                            //!< to hold the properties of all metrics in this metric group.
+                                            //!< Before calling astlGetMetricGroupMetrics API, users must allocate this
+                                            //!< to hold `metric_count` metrics.
+                                            //!< Also, be sure to set the size field of at least the first element in
+                                            //!< the array to sizeof(astl_metric_props_t) for ABI versioning
+} astl_metric_group_props_t;
 
-  astl_metric_properties_t* _metrics;  //!< Initially null, users can set this to an allocated buffer
-                                       //!< to hold the properties of all metrics in this metric group.
-                                       //!< Before calling astlGetMetricGroupMetrics API, users _must_ allocate this to
-                                       //!< hold `_metric_count` metrics.
-                                       //!< Also, be sure to set the _size field of at least the first element
-                                       //!< in the array to sizeof(astl_metric_properties_t) for ABI versioning
-} astl_metric_group_properties_t;
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_group_count_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_metric_group_count_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;       //!< Target handle of interest from astl_target_props_t.
+  uint32_t*            metric_group_count;  //!< Output number of metric groups on target. Cannot be NULL.
+} astl_get_metric_group_count_params_t;
 
 /**
  * @brief Get the number of telemetry metric groups defined for the specified target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_get_metric_group_count_params_t).
  *
- * @param[in/out] metric_count             Number of metric groups
- *                                         Cannot be NULL. metric_group_count will contain the number
- *                                         of metric groups. The value should be used to allocate a buffer
- *                                         of astl_metric_group_properties_t big enough to hold metric_group_count
- *                                         elements
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricGroupCount(astl_target_handle_t target_handle,
-                                                  uint32_t*            metric_group_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricGroupCount(const astl_get_metric_group_count_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_groups_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_metric_groups_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t       target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_group_props_t* metric_groups;  //!< Caller-allocated metric-group array. Cannot be NULL;
+                                             //!< set metric_groups[0].size to sizeof(astl_metric_group_props_t).
+  uint32_t* metric_group_count;  //!< In: group-array capacity. Out: number of elements written. Cannot be NULL.
+} astl_get_metric_groups_params_t;
 
 /**
  * @brief Get properties of all metric groups defined for the specified target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_get_metric_groups_params_t).
  *
- * @param[in/out] metric_groups            Array of metric group properties structures. Cannot be
- *                                         NULL. It should point to the buffer of
- *                                         sizeof(aslt_metric_group_properties_t) * (metric_group_count)
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_metric_group_properties_t) for versioning
- *
- * @param[in/out] metric_group_count       The number of elements the metric groups buffer was
- * allocated for. Returns the number of elements written to the metric groups buffer.
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricGroups(astl_target_handle_t            target_handle,
-                                              astl_metric_group_properties_t* metric_groups,
-                                              uint32_t*                       metric_group_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricGroups(const astl_get_metric_groups_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_group_metrics_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_metric_group_metrics_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t             target_handle;  //!< Target handle of interest from astl_target_props_t.
+  const astl_metric_group_props_t* metric_group;   //!< Metric-group descriptor. Cannot be NULL;
+                                                   //!< uses metric_group->metric_count and handle.
+  astl_metric_props_t* metrics;                    //!< Caller-allocated metric array. Cannot be NULL; set
+                                                   //!< metrics[0].size to sizeof(astl_metric_props_t).
+} astl_get_metric_group_metrics_params_t;
 
 /**
  * @brief Get properties of all metrics that can be collected on the specified target that are part
  * of the specified metric group
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- * astl_target_properties_t
+ * @param params Parameters for this call (see astl_get_metric_group_metrics_params_t).
  *
- * @param[in/out] metric_group             Pointer to a single metric group properties structure. Cannot be NULL.
- *                                         Contains the _metric_count which determines the size of the `metrics` buffer,
- *                                         and the _handle which identifies the metric group of interest.
- *
- * @param[in/out] metrics                  Array of metric properties structures. Cannot be NULL.
- *                                         It should point to the buffer of size
- *                                         `sizeof(aslt_metric_properties_t) * (metric_group._metric_count)`
- *                                         _metric_count is found in the astl_metric_group_properties_t
- *                                         structure.
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_metric_properties_t) for versioning
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricGroupMetrics(astl_target_handle_t                  target_handle,
-                                                    const astl_metric_group_properties_t* metric_group,
-                                                    astl_metric_properties_t*             metrics) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricGroupMetrics(const astl_get_metric_group_metrics_params_t* params)
+    ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************              COLLECTION                *********************
  **********************************************************************************/
 
 /* Collection configuration and control section. Users are expected to use an
- * `astl_collection_parameters_t` instance to set the parameters and pass the structure to the
+ * `astl_collection_params_t` instance to set the parameters and pass the structure to the
  * configure API. Any subsequent configure collection call using any of the configure API would
  * overwrite previous configurations. Configurations would persist per session: Once configured,
  * multiple start/stop collection calls can be made until data is processed. Collection
@@ -627,390 +616,487 @@ ASTL_API astl_status_code astlGetMetricGroupMetrics(astl_target_handle_t        
  */
 typedef enum _astl_collection_mode_t {
   ASTL_COLLECTION_MODE_SAMPLING  = 0,  //!< Fixed time interval collection mode. Example: every 100ms
-  ASTL_COLLECTION_MODE_IMMEDIATE = 1,  //!< Data is captured only when User makes an read API call
+  ASTL_COLLECTION_MODE_IMMEDIATE = 1,  //!< Data is captured only when the user makes a read API call
                                        //!< for immediate capturing of the data.
-  ASTL_COLLECTION_MODE_SNAPSHOT = 2,   //!< Data points are captures when start collection and stop
+  ASTL_COLLECTION_MODE_SNAPSHOT = 2,   //!< Data points are captured when start collection and stop
                                        //!< collection API are called
 } astl_collection_mode_t;
 
-/** The collection optimization. Configures the collection to prioritize a specific optimization
- * if possible
+/** Collection-parameter flag masks.
+ * Select one optimization preference. Use ASTL_COLLECTION_PARAMETERS_FLAG_NONE for no optimization.
  */
-typedef enum _astl_collection_optimization_t {
-  ASTL_COLLECTION_OPTIMIZATION_OVERHEAD     = 0,  //!< Minimize performance overhead
-  ASTL_COLLECTION_OPTIMIZATION_MEMORY       = 1,  //!< Minimize memory usage
-  ASTL_COLLECTION_OPTIMIZATION_INTERFERENCE = 2,  //!< Minimize disruption of normal behavior of
-                                                  //!< the system
-} astl_collection_optimization_t;
+typedef enum _astl_collection_parameters_flags_t {
+  ASTL_COLLECTION_PARAMETERS_FLAG_NONE                  = 0U,         //!< No optimization preference
+  ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD     = (1U << 0),  //!< Minimize performance overhead
+  ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY       = (1U << 1),  //!< Minimize memory usage
+  ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE = (1U << 2),  //!< Minimize disruption of normal behavior
+                                                                      //!< of the system
+} astl_collection_parameters_flags_t;
 
 /** collection parameter structure describes parameters for the collection
  */
-typedef struct _astl_collection_parameters_t {
-  size_t   _size;                                //!< Size of this struct for versioning
-  uint32_t _sampling_interval;                   //!< optional, used to set the sampling interval in ms if the
-                                                 //!< collection mode is set to ASTL_COLLECTION_MODE_SAMPLING.
-  astl_collection_mode_t _collection_mode;       //!< SAMPLING, SNAPSHOT, IMMEDIATE.
-                                                 //!< Note: Traced events are not configurable;
-                                                 //!< they are captured when they happen
-  astl_collection_optimization_t _optimization;  //!< (Placeholder for future optimization knobs)
-} astl_collection_parameters_t;
+typedef struct _astl_collection_params_t {
+  size_t   size;               //!< Size of this struct for versioning; set size to sizeof(astl_collection_params_t).
+  uint32_t flags;              //!< Optimization preference flags (ASTL_COLLECTION_PARAMETERS_FLAG_* masks).
+  uint32_t sampling_interval;  //!< optional, used to set the sampling interval in ms if the
+                               //!< collection mode is set to ASTL_COLLECTION_MODE_SAMPLING.
+  astl_collection_mode_t collection_mode;  //!< SAMPLING, SNAPSHOT, IMMEDIATE.
+                                           //!< Note: Traced events are not configurable;
+                                           //!< they are captured when they happen
+} astl_collection_params_t;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_configure_counter_collection_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_configure_counter_collection_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  const astl_collection_params_t*
+      collection_params;                         //!< Collection parameters. Cannot be NULL;
+                                                 //!< collection_params->size must be sizeof(astl_collection_params_t).
+  const astl_counter_handle_t* counter_handles;  //!< Counter handles to collect. Cannot be NULL.
+  uint32_t                     counter_count;    //!< Number of handles in counter_handles.
+} astl_configure_counter_collection_on_target_params_t;
 
 /**
  * @brief Configure a counter collection for a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_configure_counter_collection_on_target_params_t).
  *
- * @param[in] collection_params            Collection parameters structure
- *                                         IMPORTANT: _size field must be set to sizeof(astl_collection_parameters_t)
- *                                         for versioning
- *
- * @param[in] counter_handles              Array of counter handles to collect. Cannot be NULL. It
- *                                         should point to the buffer of
- *                                         sizeof(aslt_counter_handle_t) * (counter_count)
- *
- * @param[in] counter_count                The number of counters in the buffer of counter handles
- *                                         configured for collection
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlConfigureCounterCollectionOnTarget(astl_target_handle_t                target_handle,
-                                                                 const astl_collection_parameters_t* collection_params,
-                                                                 const astl_counter_handle_t*        counter_handles,
-                                                                 uint32_t counter_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlConfigureCounterCollectionOnTarget(
+    const astl_configure_counter_collection_on_target_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_configure_counter_collection_params_t {
+  size_t size;     //!< Size of this struct for versioning; set size to
+                   //!< sizeof(astl_configure_counter_collection_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+  const astl_collection_params_t*
+      collection_params;  //!< Collection parameters. Cannot be NULL;
+                          //!< collection_params->size must be sizeof(astl_collection_params_t).
+  const astl_counter_handle_t*
+           counter_handles;  //!< Counter handles to collect across all applicable targets. Cannot be NULL.
+  uint32_t counter_count;    //!< Number of handles in counter_handles.
+} astl_configure_counter_collection_params_t;
 
 /**
  * @brief Configure a counter collection for all targets on which the specified counters can be
  * collected
  *
- * @param[in] collection_params            Collection parameters structure
- *                                         IMPORTANT: _size field must be set to sizeof(astl_collection_parameters_t)
- *                                         for versioning
+ * @param params Parameters for this call (see astl_configure_counter_collection_params_t).
  *
- * @param[in] counter_handles              Array of counter handles to collect. Cannot be NULL. It
- *                                         should point to the buffer of
- *                                         sizeof(aslt_counter_handle_t) * (counter_count)
- *
- * @param[in] counter_count                The number of counters in the buffer of counter handles
- *                                         configured for collection
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,
-                                                         const astl_counter_handle_t*        counter_handles,
-                                                         uint32_t counter_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlConfigureCounterCollection(const astl_configure_counter_collection_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_configure_metric_collection_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_configure_metric_collection_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  const astl_collection_params_t*
+      collection_params;                       //!< Collection parameters. Cannot be NULL;
+                                               //!< collection_params->size must be sizeof(astl_collection_params_t).
+  const astl_metric_handle_t* metric_handles;  //!< Metric handles to collect. Cannot be NULL.
+  uint32_t                    metric_count;    //!< Number of handles in metric_handles.
+} astl_configure_metric_collection_on_target_params_t;
 
 /**
  * @brief Configure a metric collection for a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_configure_metric_collection_on_target_params_t).
  *
- * @param[in] collection_params            Collection parameters structure
- *                                         IMPORTANT: _size field must be set to sizeof(astl_collection_parameters_t)
- *                                         for versioning
- *
- * @param[in] metric_handles               Array of metric handles to collect. Cannot be NULL. It
- *                                         should point to the buffer of
- *                                         sizeof(aslt_metric_handle_t) * (metric_count)
- *
- * @param[in] metric_count                 The number of metrics in the buffer of metric handles
- *                                         configured for collection
- *
- * @return astl_error_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
-                                                                astl_collection_parameters_t* collection_params,
-                                                                astl_metric_handle_t*         metric_handles,
-                                                                uint32_t metric_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlConfigureMetricCollectionOnTarget(
+    const astl_configure_metric_collection_on_target_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_configure_metric_collection_params_t {
+  size_t size;     //!< Size of this struct for versioning; set size to
+                   //!< sizeof(astl_configure_metric_collection_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+  const astl_collection_params_t*
+      collection_params;  //!< Collection parameters. Cannot be NULL;
+                          //!< collection_params->size must be sizeof(astl_collection_params_t).
+  const astl_metric_handle_t*
+           metric_handles;  //!< Metric handles to collect across all applicable targets. Cannot be NULL.
+  uint32_t metric_count;    //!< Number of handles in metric_handles.
+} astl_configure_metric_collection_params_t;
 
 /**
  * @brief Configure a metric collection for all targets on which the specified metrics can be
  * collected
  *
- * @param[in] collection_params            Collection parameters structure
- *                                         IMPORTANT: _size field must be set to sizeof(astl_collection_parameters_t)
- *                                         for versioning
+ * @param params Parameters for this call (see astl_configure_metric_collection_params_t).
  *
- * @param[in] metric_handles               Array of metric handles to collect. Cannot be NULL. It
- *                                         should point to the buffer of
- *                                         sizeof(aslt_metric_handle_t) * (metric_count)
- *
- * @param[in] metric_count                 The number of metrics in the buffer of metric handles
- *                                         configured for collection
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
-                                                        astl_metric_handle_t*         metric_handles,
-                                                        uint32_t                      metric_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlConfigureMetricCollection(const astl_configure_metric_collection_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_configure_metric_group_collection_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_configure_metric_group_collection_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  const astl_collection_params_t*
+      collection_params;  //!< Collection parameters. Cannot be NULL;
+                          //!< collection_params->size must be sizeof(astl_collection_params_t).
+  const astl_metric_group_handle_t* metric_group_handles;  //!< Metric-group handles to collect. Cannot be NULL.
+  uint32_t                          metric_group_count;    //!< Number of handles in metric_group_handles.
+} astl_configure_metric_group_collection_on_target_params_t;
 
 /**
  * @brief Configure a metric group collection for a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_configure_metric_group_collection_on_target_params_t).
  *
- * @param[in] collection_params            Collection parameters structure
- *                                         IMPORTANT: _size field must be set to sizeof(astl_collection_parameters_t)
- *                                         for versioning
- *
- * @param[in] metric_group_handles         Array of metric group handles to collect. Cannot be
- *                                         NULL. It should point to the buffer of
- *                                         sizeof(aslt_metric_group_handle_t) * (metric_group_count)
- *
- * @param[in] metric_group_count           The number of metric groups in the buffer of metric group
- *                                         handles configured for collection
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          target_handle,
-                                                                     astl_collection_parameters_t* collection_params,
-                                                                     astl_metric_group_handle_t*   metric_group_handles,
-                                                                     uint32_t metric_group_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlConfigureMetricGroupCollectionOnTarget(
+    const astl_configure_metric_group_collection_on_target_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_configure_metric_group_collection_params_t {
+  size_t size;     //!< Size of this struct for versioning; set size to
+                   //!< sizeof(astl_configure_metric_group_collection_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+  const astl_collection_params_t*
+      collection_params;  //!< Collection parameters. Cannot be NULL;
+                          //!< collection_params->size must be sizeof(astl_collection_params_t).
+  const astl_metric_group_handle_t* metric_group_handles;  //!< Metric-group handles to collect across all applicable
+                                                           //!< targets. Cannot be NULL.
+  uint32_t metric_group_count;                             //!< Number of handles in metric_group_handles.
+} astl_configure_metric_group_collection_params_t;
 
 /**
- * @brief Configure a metric group collection for all targets on which the specified metrics can be
+ * @brief Configure a metric group collection for all targets on which the specified metric groups can be
  * collected
  *
- * @param[in] collection_params            Collection parameters structure
- *                                         IMPORTANT: _size field must be set to sizeof(astl_collection_parameters_t)
- *                                         for versioning
+ * @param params Parameters for this call (see astl_configure_metric_group_collection_params_t).
  *
- * @param[in] metric_group_handles         Array of metric group handles to collect. Cannot be
- *                                         NULL. It should point to the buffer of
- *                                         sizeof(aslt_metric_group_handle_t) * (metric_group_count)
- *
- * @param[in] metric_group_count           The number of metric groups in the buffer of metric group
- *                                         handles configured for collection
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
-                                                             astl_metric_group_handle_t*   metric_group_handles,
-                                                             uint32_t metric_group_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code
+astlConfigureMetricGroupCollection(const astl_configure_metric_group_collection_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_read_immediate_on_target_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_read_immediate_on_target_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+} astl_read_immediate_on_target_params_t;
 
 /**
  * @brief Do an immediate sample capture of configured counters or metrics on a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_read_immediate_on_target_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlReadImmediateOnTarget(astl_target_handle_t target_handle) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlReadImmediateOnTarget(const astl_read_immediate_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_read_immediate_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_read_immediate_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+} astl_read_immediate_params_t;
 
 /**
  * @brief Do an immediate sample capture of configured counters or metrics on all configured targets
  *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_read_immediate_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlReadImmediate() ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlReadImmediate(const astl_read_immediate_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_start_collection_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_start_collection_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle to start.
+} astl_start_collection_on_target_params_t;
 
 /**
  * @brief Start telemetry collection on a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_start_collection_on_target_params_t).
  *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlStartCollectionOnTarget(astl_target_handle_t target_handle) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlStartCollectionOnTarget(const astl_start_collection_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_start_collection_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_start_collection_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+} astl_start_collection_params_t;
 
 /**
  * @brief Start telemetry collection on all targets
  *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_start_collection_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlStartCollection() ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlStartCollection(const astl_start_collection_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_pause_collection_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_pause_collection_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle to pause.
+} astl_pause_collection_on_target_params_t;
 
 /**
  * @brief Pause telemetry collection on a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_pause_collection_on_target_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlPauseCollectionOnTarget(astl_target_handle_t target_handle) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlPauseCollectionOnTarget(const astl_pause_collection_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_pause_collection_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_pause_collection_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+} astl_pause_collection_params_t;
 
 /**
  * @brief Pause telemetry collection on all targets
  *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_pause_collection_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlPauseCollection() ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlPauseCollection(const astl_pause_collection_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_resume_collection_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_resume_collection_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle to resume.
+} astl_resume_collection_on_target_params_t;
 
 /**
  * @brief Resume telemetry collection on a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_resume_collection_on_target_params_t).
  *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlResumeCollectionOnTarget(astl_target_handle_t target_handle) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlResumeCollectionOnTarget(const astl_resume_collection_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_resume_collection_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_resume_collection_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+} astl_resume_collection_params_t;
 
 /**
  * @brief Resume telemetry collection on all targets
  *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_resume_collection_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlResumeCollection() ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlResumeCollection(const astl_resume_collection_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_stop_collection_on_target_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_stop_collection_on_target_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle to stop.
+} astl_stop_collection_on_target_params_t;
 
 /**
  * @brief Stop telemetry collection on a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_stop_collection_on_target_params_t).
  *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlStopCollectionOnTarget(astl_target_handle_t target_handle) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlStopCollectionOnTarget(const astl_stop_collection_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_stop_collection_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_stop_collection_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+} astl_stop_collection_params_t;
 
 /**
  * @brief Stop telemetry collection on all targets
  *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_stop_collection_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlStopCollection() ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlStopCollection(const astl_stop_collection_params_t* params) ASTL_API_NOEXCEPT;
 
 /*** Save/Load collection session to/from .astl file ***/
-/**
- * @brief Parameters for saving a completed collection to a final .astl file.
- *
- * Semantics:
- *  - _output_file_path is required and must be non-null/non-empty.
- *  - Paths starting with ~ will be expanded to the user's home directory.
- *  - Both absolute and relative paths are accepted.
- *  - Intended to be called post-collection (after StopCollection).
+/** A parameter structure describes inputs and outputs for this API call.
  */
 typedef struct astl_save_params_t {
-  size_t      _size;              //!< Size of this struct for versioning
-  const char* _output_file_path;  //!< Required: path (absolute or relative) to the final .astl file to generate
-  uint32_t    _flags;             //!< Reserved for future flags (must be 0 for now)
+  size_t      size;              //!< Size of this struct for versioning; set size to sizeof(astl_save_params_t).
+  uint32_t    flags;             //!< Reserved for future flags (must be 0 for now)
+  const char* output_file_path;  //!< Path (absolute or relative) of the final .astl file to generate.
 } astl_save_params_t;
 
 /**
  * @brief Save collected samples to a .astl file.
- * @param params Save parameters (see astl_save_params_t).
- * @return ASTL_STATUS_SUCCESS on success; error code otherwise.
+ *        Should be called after collection is stopped to persist collected data to a .astl file.
+ *
+ * @param params Parameters for this call (see astl_save_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
 ASTL_API astl_status_code astlSaveCollection(const astl_save_params_t* params) ASTL_API_NOEXCEPT;
 
-/**
- * @brief Parameters for loading a previously saved .astl file.
- *
- * Semantics:
- * - _input_file_path is required and must be non-null/non-empty, and should point to a valid .astl file.
- *  - After a successful load of a .astl file, Start/Pause/Resume/Stop are disabled; only post-processing is possible.
- *  - If user calls any Configure*Collection* API after load, system info source switches back to current host capture.
+/** A parameter structure describes inputs and outputs for this API call.
  */
 typedef struct astl_load_params_t {
-  size_t      _size;              //!< Size of this struct for versioning
-  const char* _input_file_path;   //!< Required: absolute path to the .astl file to load
-  size_t      _chunk_size_bytes;  //!< Chunk size in bytes for reading segments; 0 uses default
-  uint32_t    _flags;             //!< Reserved for future flags (must be 0 for now)
+  size_t      size;              //!< Size of this struct for versioning; set size to sizeof(astl_load_params_t).
+  uint32_t    flags;             //!< Reserved for future flags (must be 0 for now)
+  const char* input_file_path;   //!< Path to the .astl file to load. Must be non-null/non-empty.
+  size_t      chunk_size_bytes;  //!< Chunk size in bytes for segmented reads; 0 uses library default.
 } astl_load_params_t;
 
 /**
  * @brief Load a previously saved .astl file for post-processing only.
  *        After loading, collection control APIs (Start/Pause/Resume/Stop) are disabled
  *        until the user calls a Configure* API, which resets ASTL to allow new collection.
- * @param params Load parameters (see astl_load_params_t).
- * @return ASTL_STATUS_SUCCESS on success; error code otherwise.
+ *
+ * @param params Parameters for this call (see astl_load_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
 ASTL_API astl_status_code astlLoadCollection(const astl_load_params_t* params) ASTL_API_NOEXCEPT;
 
 /*** COLLECTED COUNTER SAMPLES ***/
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_counter_sample_count_on_target_params_t {
+  size_t size;                           //!< Size of this struct for versioning; set size to
+                                         //!< sizeof(astl_get_counter_sample_count_on_target_params_t).
+  uint32_t              flags;           //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t  target_handle;   //!< Target handle of interest from astl_target_props_t.
+  astl_counter_handle_t counter_handle;  //!< Counter handle of interest from astl_counter_props_t.
+  uint32_t*             sample_count;    //!< Output number of collected samples for (target_handle, counter_handle).
+} astl_get_counter_sample_count_on_target_params_t;
+
 /**
  * @brief Get the number of samples collected for specific counter on a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_get_counter_sample_count_on_target_params_t).
  *
- * @param[in] counter_handle               The handle of the counter of interest. Found in
- *                                         astl_counter_properties_t
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetCounterSampleCountOnTarget(astl_target_handle_t  target_handle,
-                                                            astl_counter_handle_t counter_handle,
-                                                            uint32_t*             sample_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code
+astlGetCounterSampleCountOnTarget(const astl_get_counter_sample_count_on_target_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_counter_samples_on_target_params_t {
+  size_t size;                           //!< Size of this struct for versioning; set size to
+                                         //!< sizeof(astl_get_counter_samples_on_target_params_t).
+  uint32_t              flags;           //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t  target_handle;   //!< Target handle of interest from astl_target_props_t.
+  astl_counter_handle_t counter_handle;  //!< Counter handle of interest from astl_counter_props_t.
+  astl_sample_t*        samples;         //!< Caller-allocated sample array. Cannot be NULL.
+  uint32_t*             sample_count;    //!< In: sample-array capacity. Out: number of samples written. Cannot be NULL.
+} astl_get_counter_samples_on_target_params_t;
 
 /**
  * @brief Get the samples collected for specific counter on a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_get_counter_samples_on_target_params_t).
  *
- * @param[in] counter_handle               The handle of the counter of interest. Found in
- *                                         astl_counter_properties_t
- *
- * @param[in/out] samples                  Array of collected samples. Cannot be
- *                                         NULL. It should point to the buffer of
- *                                         sizeof(aslt_counter_sample_t) * (sample_count)
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_counter_sample_t)
- *                                         for versioning
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetCounterSamplesOnTarget(astl_target_handle_t   target_handle,
-                                                        astl_counter_handle_t  counter_handle,
-                                                        astl_counter_sample_t* samples,
-                                                        uint32_t*              sample_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetCounterSamplesOnTarget(const astl_get_counter_samples_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
 
 /*** COLLECTED METRIC SAMPLES ***/
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_sample_count_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_get_metric_sample_count_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_handle_t metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
+  uint32_t*            sample_count;   //!< Output number of collected samples for (target_handle, metric_handle).
+} astl_get_metric_sample_count_on_target_params_t;
+
 /**
  * @brief Get the number of samples collected for specific metric on a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
- *
- * @param[in] metric_handle                The handle of the metric of interest. Found in
- *                                         astl_metric_properties_t
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
+ * @param params Parameters for this call (see astl_get_metric_sample_count_on_target_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricSampleCountOnTarget(astl_target_handle_t target_handle,
-                                                           astl_metric_handle_t metric_handle,
-                                                           uint32_t*            sample_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code
+astlGetMetricSampleCountOnTarget(const astl_get_metric_sample_count_on_target_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_samples_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_get_metric_samples_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_handle_t metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
+  astl_sample_t*       samples;        //!< Caller-allocated sample array. Cannot be NULL.
+  uint32_t*            sample_count;   //!< In: sample-array capacity. Out: number of samples written. Cannot be NULL.
+} astl_get_metric_samples_on_target_params_t;
 
 /**
  * @brief Get the samples collected for specific metric on a specific target
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_get_metric_samples_on_target_params_t).
  *
- * @param[in] metric_handle                The handle of the metric of interest. Found in
- *                                         astl_metric_properties_t
- *
- * @param[in/out] samples                  Array of collected samples. Cannot be
- *                                         NULL. It should point to the buffer of
- *                                         sizeof(aslt_metric_sample_t) * (sample_count)
- *                                         IMPORTANT: _size field of at least the first element in the array
- *                                         must be set to sizeof(astl_metric_sample_t)
- *                                         for versioning
- *
- * @param[in/out] sample_count             The number of collected samples
- *
- * @return astl_status_code
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t  target_handle,
-                                                       astl_metric_handle_t  metric_handle,
-                                                       astl_metric_sample_t* samples,
-                                                       uint32_t*             sample_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************          METRIC SUMMARY API         ************************
  **********************************************************************************/
+
+/** Flags controlling how metric averages are computed in astl_metric_statistics_t. */
+typedef enum _astl_metric_statistics_flags_t {
+  ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG       = (1U << 0),  //!< Compute arithmetic mean across samples.
+  ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG = (1U << 1)   //!< Compute time-weighted average using sample intervals.
+} astl_metric_statistics_flags_t;
 
 /**
  * @brief Structure to hold min/max/average summary statistics for a metric.
@@ -1020,16 +1106,26 @@ ASTL_API astl_status_code astlGetMetricSamplesOnTarget(astl_target_handle_t  tar
  * used in the computation.
  */
 typedef struct _astl_metric_statistics_t {
-  size_t       _size;  //!< Size of this struct for versioning
-  astl_value_t _min;   //!< Minimum value. Union member matches the metric's value type.
-  astl_value_t _max;   //!< Maximum value. Union member matches the metric's value type.
-  astl_value_t _avg;   //!< Average value. Always stored as fp64 regardless of the metric's
-                       //!< value type (including integer metrics). Always read _avg.fp64.
-  uint64_t _count;     //!< Number of samples processed.
-  uint32_t _flags;     //!< Reserved for future use. Must be set to 0. Future values may
-                       //!< indicate time-weighted summary computation instead of normal
-                       //!< (uniform-weight) summary computation.
+  size_t       size;   //!< Size of this struct for versioning; set size to sizeof(astl_metric_statistics_t).
+  uint32_t     flags;  //!< Average-mode selector input and selected-mode output (astl_metric_statistics_flags_t).
+  astl_value_t min;    //!< Minimum value. Union member matches the metric's value type.
+  astl_value_t max;    //!< Maximum value. Union member matches the metric's value type.
+  astl_value_t avg;    //!< Average value. Always stored as fp64 regardless of the metric's
+                       //!< value type (including integer metrics). Always read avg.fp64.
+  uint64_t count;      //!< Number of samples processed.
 } astl_metric_statistics_t;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_statistics_on_target_params_t {
+  size_t size;                              //!< Size of this struct for versioning; set size to
+                                            //!< sizeof(astl_get_metric_statistics_on_target_params_t).
+  uint32_t                  flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t      target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_handle_t      metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
+  astl_metric_statistics_t* summary;        //!< Output summary structure. Cannot be NULL; set
+                                            //!< summary->size to sizeof(astl_metric_statistics_t).
+} astl_get_metric_statistics_on_target_params_t;
 
 /**
  * @brief Get the min/max/average summary for a specific metric on a specific target.
@@ -1037,32 +1133,17 @@ typedef struct _astl_metric_statistics_t {
  * This function computes statistical summary (minimum, maximum, and average) for
  * all collected samples of a given metric on a target.
  *
- * The _count field indicates the number of samples processed. If _count > 0,
- * the _min, _max, and _avg fields contain valid values. If _count == 0,
+ * The count field indicates the number of samples processed. If count > 0,
+ * the min, max, and avg fields contain valid values. If count == 0,
  * no samples were available and the min/max/avg fields should not be used.
  *
  *
- * @param[in] target_handle                The handle of the target of interest. Found in
- *                                         astl_target_properties_t
+ * @param params Parameters for this call (see astl_get_metric_statistics_on_target_params_t).
  *
- * @param[in] metric_handle                The handle of the metric of interest. Found in
- *                                         astl_metric_properties_t
- *
- * @param[in/out] summary                  Pointer to the summary structure to fill.
- *                                         Cannot be NULL.
- *                                         IMPORTANT: _size field must be set to
- *                                         sizeof(astl_metric_statistics_t) for versioning
- *
- * @return astl_status_code                ASTL_STATUS_SUCCESS on success.
- *                                         ASTL_STATUS_BAD_ARGUMENT if any argument is NULL
- *                                         or if _flags is not 0.
- *                                         ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE if _size does not
- *                                         equal sizeof(astl_metric_statistics_t).
- *                                         ASTL_STATUS_NOT_SUPPORTED if the metric type or value type is not supported.
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricStatisticsOnTarget(astl_target_handle_t      target_handle,
-                                                          astl_metric_handle_t      metric_handle,
-                                                          astl_metric_statistics_t* summary) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
 
 /**
  * @brief A single bin in a discrete histogram.
@@ -1071,11 +1152,21 @@ ASTL_API astl_status_code astlGetMetricStatisticsOnTarget(astl_target_handle_t  
  * number of times that exact value appeared.
  */
 typedef struct _astl_discrete_histogram_bin_t {
-  size_t _size;         //!< Size of this struct for versioning. Must be set to
-                        //!< sizeof(astl_discrete_histogram_bin_t) on the first array element.
-  astl_value_t _value;  //!< The exact value for this bin. Union member matches the metric's value type.
-  uint64_t     _count;  //!< Number of samples whose value exactly equals _value.
+  size_t       size;   //!< Size of this struct for versioning; set size to sizeof(astl_discrete_histogram_bin_t).
+  astl_value_t value;  //!< The exact value for this bin. Union member matches the metric's value type.
+  uint64_t     count;  //!< Number of samples whose value exactly equals value.
 } astl_discrete_histogram_bin_t;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_discrete_histogram_bin_count_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_get_metric_discrete_histogram_bin_count_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_handle_t metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
+  uint32_t*            bin_count;      //!< Output number of unique-value bins. Cannot be NULL.
+} astl_get_metric_discrete_histogram_bin_count_on_target_params_t;
 
 /**
  * @brief Query the number of discrete histogram bins for a specific metric on a specific target.
@@ -1087,18 +1178,25 @@ typedef struct _astl_discrete_histogram_bin_t {
  * A bin corresponds to one unique value observed across all collected samples for the
  * given (target, metric) pair. If no samples were collected, @p bin_count is set to 0.
  *
- * @param[in]  target_handle  The handle of the target of interest. Found in astl_target_properties_t.
- * @param[in]  metric_handle  The handle of the metric of interest. Found in astl_metric_properties_t.
- * @param[out] bin_count      Receives the number of unique-value bins. Cannot be NULL.
+ * @param params Parameters for this call (see astl_get_metric_discrete_histogram_bin_count_on_target_params_t).
  *
- * @return astl_status_code   ASTL_STATUS_SUCCESS on success.
- *                            ASTL_STATUS_BAD_ARGUMENT if any argument is NULL.
- *                            ASTL_STATUS_NOT_SUPPORTED if the metric type is not
- *                            supported by the discrete histogram summarizer.
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricDiscreteHistogramBinCountOnTarget(astl_target_handle_t target_handle,
-                                                                         astl_metric_handle_t metric_handle,
-                                                                         uint32_t* bin_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricDiscreteHistogramBinCountOnTarget(
+    const astl_get_metric_discrete_histogram_bin_count_on_target_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_discrete_histogram_on_target_params_t {
+  size_t size;                                   //!< Size of this struct for versioning; set size to
+                                                 //!< sizeof(astl_get_metric_discrete_histogram_on_target_params_t).
+  uint32_t                       flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t           target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_handle_t           metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
+  astl_discrete_histogram_bin_t* bins;           //!< Caller-allocated bin array. Cannot be NULL; set
+                                                 //!< bins[0].size to sizeof(astl_discrete_histogram_bin_t).
+  uint32_t* bin_count;  //!< In: bin-array capacity. Out: number of bins written/required. Cannot be NULL.
+} astl_get_metric_discrete_histogram_on_target_params_t;
 
 /**
  * @brief Populate a caller-allocated array with the discrete histogram bins for a metric.
@@ -1107,32 +1205,16 @@ ASTL_API astl_status_code astlGetMetricDiscreteHistogramBinCountOnTarget(astl_ta
  * called astlGetMetricDiscreteHistogramBinCountOnTarget() to obtain @p bin_count and must have allocated
  * an array of at least @p bin_count elements of type astl_discrete_histogram_bin_t.
  *
- * @param[in]     target_handle  The handle of the target of interest.
- * @param[in]     metric_handle  The handle of the metric of interest.
- * @param[in/out] bins           Array of bins to fill. Cannot be NULL.
- *                               IMPORTANT: _size field of the first element must be set to
- *                               sizeof(astl_discrete_histogram_bin_t) for versioning.
- * @param[in/out] bin_count      On entry: capacity of the @p bins array.
- *                               On exit: number of bins actually written.
- *                               Cannot be NULL.
+ * @param params Parameters for this call (see astl_get_metric_discrete_histogram_on_target_params_t).
  *
- * @return astl_status_code      ASTL_STATUS_SUCCESS on success.
- *                               ASTL_STATUS_BAD_ARGUMENT if any argument is NULL or if
- *                               @p bin_count is 0.
- *                               ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE if bins[0]._size does
- *                               not equal sizeof(astl_discrete_histogram_bin_t).
- *                               ASTL_STATUS_NOT_SUPPORTED if the metric type is not
- *                               supported by the discrete histogram summarizer.
- *                               ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL if the
- *                               provided array is too small to hold all bins (bin_count
- *                               is updated to the required count).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricDiscreteHistogramOnTarget(astl_target_handle_t           target_handle,
-                                                                 astl_metric_handle_t           metric_handle,
-                                                                 astl_discrete_histogram_bin_t* bins,
-                                                                 uint32_t* bin_count) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricDiscreteHistogramOnTarget(
+    const astl_get_metric_discrete_histogram_on_target_params_t* params) ASTL_API_NOEXCEPT;
+
 #if defined(__cplusplus)
 }
+
 #endif
 
 #endif  // INCLUDE_ASTL_TELEMETRY_H_

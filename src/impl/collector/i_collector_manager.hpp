@@ -42,8 +42,8 @@ struct ICollectorManager {
   /* CollectorManager should choose a suitable collector for the given operations and target,
    * and enable it according to the collection parameters.
    */
-  [[nodiscard]] virtual auto ConfigureCollectionOnTarget(const ITarget*                      target,
-                                                         astl_collection_parameters_t const& collection_params,
+  [[nodiscard]] virtual auto ConfigureCollectionOnTarget(const ITarget*                  target,
+                                                         astl_collection_params_t const& collection_params,
                                                          CollectionOperations&& configuration) -> astl_status_code = 0;
 
   /* Start the configured collection for the given target */

@@ -31,17 +31,17 @@ sequenceDiagram
     API-->>User: status
 
     %% Discovery (condensed)
-    User->>API: astlGetTargets()
+    User->>API: astlGetTargets(get_targets_params)
     API->>Orchestrator: GetTargets()
     Orchestrator-->>API: vector<ITarget*>
     API-->>User: targets
 
     %% Metric enumeration (two-step using count + list)
-    User->>API: astlGetMetricCount(target)
+    User->>API: astlGetMetricCount(get_metric_count_params)
     API->>Orchestrator: GetMetricCountOnTarget(target)
     Orchestrator-->>API: count | error
     API-->>User: count | error
-    User->>API: astlGetMetrics(target, buffer, &count)
+    User->>API: astlGetMetrics(get_metrics_params)
     API->>Orchestrator: GetMetricsOnTarget(target, buffer, &count)
     Orchestrator->>MetricManager: GetAvailableMetrics(target)
     MetricManager-->>Orchestrator: metric props | error

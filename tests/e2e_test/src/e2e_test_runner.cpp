@@ -67,7 +67,7 @@ int main(int argc, char* argv[]) {
   std::cout << "========================================\n";
 
   auto version = astlVersion();
-  std::cout << "ASTL Version: " << version._major << "." << version._minor << "." << version._micro << "\n";
+  std::cout << "ASTL Version: " << version.major << "." << version.minor << "." << version.micro << "\n";
   std::cout << "TELEMETRY_ROOT: " << g_telemetry_root << "\n\n";
 
   // Create new argv without TELEMETRY_ROOT for Catch2 using RAII

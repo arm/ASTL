@@ -78,39 +78,36 @@ cdef extern from "astl/astl_errors.h":
 
 cdef extern from "astl/astl_version.h":
     cdef struct _astl_version_t:
-        uint32_t _major
-        uint32_t _minor
-        uint32_t _micro
+        uint32_t major
+        uint32_t minor
+        uint32_t micro
     ctypedef _astl_version_t astl_version_t
     const char* astlVersionString()
     astl_version_t astlVersion()
 
 cdef extern from "astl/astl_telemetry.h":
-    cdef struct _astl_initialization_parameters_t:
-        size_t _size
-        const char* _configuration_file_path
-    ctypedef _astl_initialization_parameters_t astl_initialization_parameters_t
+    cdef struct _astl_target_props_t:
+        size_t size
+        const void* handle
+        const void* parent_handle
+        const char* name
+        const char* description
+        const char* id
+    ctypedef _astl_target_props_t astl_target_props_t
 
-    cdef struct _astl_target_properties_t:
-        size_t _size
-        const void* _handle
-        const void* _parent_handle
-        const char* _name
-        const char* _description
-    ctypedef _astl_target_properties_t astl_target_properties_t
-
-    cdef struct _astl_platform_properties_t:
-        size_t _size
-        const char* _soc_name
-        const char* _vendor_id
-        const char* _os_name
-        const char* _kernel_name
-        const char* _kernel_version
-        const char* _kernel_release
-        const char* _firmware_version
-        const char* _hostname
-        const char* _architecture
-    ctypedef _astl_platform_properties_t astl_platform_properties_t
+    cdef struct _astl_platform_props_t:
+        size_t size
+        uint32_t flags
+        const char* soc_name
+        const char* vendor_id
+        const char* os_name
+        const char* kernel_name
+        const char* kernel_version
+        const char* kernel_release
+        const char* firmware_version
+        const char* hostname
+        const char* architecture
+    ctypedef _astl_platform_props_t astl_platform_props_t
 
     # Units
     cdef enum _astl_units_t:
@@ -159,17 +156,17 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_COUNTER_TYPE_UNKNOWN
     ctypedef unsigned int astl_counter_type_t
 
-    cdef struct _astl_counter_properties_t:
-        size_t _size
-        const void* _handle
-        const char* _name
-        const char* _description
-        uint32_t _min_sampling_interval
-        astl_units_t _units
-        const char* _formula
-        astl_value_type_t _value_type
-        astl_counter_type_t _counter_type
-    ctypedef _astl_counter_properties_t astl_counter_properties_t
+    cdef struct _astl_counter_props_t:
+        size_t size
+        const void* handle
+        const char* name
+        const char* description
+        uint32_t min_sampling_interval
+        astl_units_t units
+        const char* formula
+        astl_value_type_t value_type
+        astl_counter_type_t counter_type
+    ctypedef _astl_counter_props_t astl_counter_props_t
 
     # Metric
     ctypedef const void* astl_metric_handle_t
@@ -193,39 +190,36 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_CATEGORY_UNCATEGORIZED
     ctypedef unsigned int astl_category_t
 
-    cdef struct _astl_metric_properties_t:
-        size_t _size
-        const void* _handle
-        const char* _name
-        const char* _description
-        uint32_t _min_sampling_interval
-        astl_units_t _units
-        astl_value_type_t _value_type
-        astl_metric_type_t _metric_type
-        astl_category_t _category
-    ctypedef _astl_metric_properties_t astl_metric_properties_t
+    cdef struct _astl_metric_props_t:
+        size_t size
+        const void* handle
+        const char* name
+        const char* description
+        uint32_t min_sampling_interval
+        astl_units_t units
+        astl_value_type_t value_type
+        astl_metric_type_t metric_type
+        astl_category_t category
+    ctypedef _astl_metric_props_t astl_metric_props_t
 
     # Metric Group
     ctypedef const void* astl_metric_group_handle_t
-    cdef struct _astl_metric_group_properties_t:
-        size_t _size
-        const void* _handle
-        const char* _name
-        const char* _description
-        uint32_t _metric_count
-        astl_metric_properties_t* _metrics
-    ctypedef _astl_metric_group_properties_t astl_metric_group_properties_t
+    cdef struct _astl_metric_group_props_t:
+        size_t size
+        const void* handle
+        const char* name
+        const char* description
+        uint32_t metric_count
+        astl_metric_props_t* metrics
+    ctypedef _astl_metric_group_props_t astl_metric_group_props_t
 
     # Metric state discovery
-    cdef struct _astl_state_properties_t:
-        size_t _size
-        const char* _name
-        const char* _description
-        astl_value_t _value
-    ctypedef _astl_state_properties_t astl_state_properties_t
-
-    int astlGetMetricStateCountOnTarget(const void* target_handle, const void* metric_handle, uint32_t* state_count)
-    int astlGetMetricStatesOnTarget(const void* target_handle, const void* metric_handle, astl_state_properties_t* states, uint32_t* state_count)
+    cdef struct _astl_state_props_t:
+        size_t size
+        const char* name
+        const char* description
+        astl_value_t value
+    ctypedef _astl_state_props_t astl_state_props_t
 
     # Collection enums (for future lifecycle exposure)
     cdef enum _astl_collection_mode_t:
@@ -234,111 +228,302 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_COLLECTION_MODE_SNAPSHOT
     ctypedef int astl_collection_mode_t
 
-    cdef enum _astl_collection_optimization_t:
-        ASTL_COLLECTION_OPTIMIZATION_OVERHEAD
-        ASTL_COLLECTION_OPTIMIZATION_MEMORY
-        ASTL_COLLECTION_OPTIMIZATION_INTERFERENCE
-    ctypedef int astl_collection_optimization_t
+    cdef enum _astl_collection_parameters_flags_t:
+        ASTL_COLLECTION_PARAMETERS_FLAG_NONE = 0
+        ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD = (1 << 0)
+        ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY = (1 << 1)
+        ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE = (1 << 2)
+    ctypedef int astl_collection_parameters_flags_t
 
-    cdef struct _astl_collection_parameters_t:
-        size_t _size
-        uint32_t _sampling_interval
-        astl_collection_mode_t _collection_mode
-        astl_collection_optimization_t _optimization
-    ctypedef _astl_collection_parameters_t astl_collection_parameters_t
+    cdef struct _astl_collection_params_t:
+        size_t size
+        uint32_t flags
+        uint32_t sampling_interval
+        astl_collection_mode_t collection_mode
+    ctypedef _astl_collection_params_t astl_collection_params_t
 
     # save / load session params
     cdef struct astl_save_params_t:
-        size_t _size
-        const char* _output_file_path
-        uint32_t _flags
+        size_t size
+        uint32_t flags
+        const char* output_file_path
 
     cdef struct astl_load_params_t:
-        size_t _size
-        const char* _input_file_path
-        size_t _chunk_size_bytes
-        uint32_t _flags
+        size_t size
+        uint32_t flags
+        const char* input_file_path
+        size_t chunk_size_bytes
+
+    cdef struct astl_get_system_info_params_t:
+        size_t size
+        uint32_t flags
+        astl_platform_props_t* system_info
+
+    cdef struct astl_get_target_count_params_t:
+        size_t size
+        uint32_t flags
+        uint32_t* target_count
+
+    cdef struct astl_get_targets_params_t:
+        size_t size
+        uint32_t flags
+        astl_target_props_t* targets
+        uint32_t* target_count
+
+    cdef struct astl_get_counter_count_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        uint32_t* counter_count
+
+    cdef struct astl_get_counters_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        astl_counter_props_t* counters
+        uint32_t* counter_count
+
+    cdef struct astl_get_metric_count_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        uint32_t* metric_count
+
+    cdef struct astl_get_metrics_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        astl_metric_props_t* metrics
+        uint32_t* metric_count
+
+    cdef struct astl_get_metric_group_count_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        uint32_t* metric_group_count
+
+    cdef struct astl_get_metric_groups_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        astl_metric_group_props_t* metric_groups
+        uint32_t* metric_group_count
+
+    cdef struct astl_get_metric_group_metrics_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const astl_metric_group_props_t* metric_group
+        astl_metric_props_t* metrics
+
+    cdef struct astl_get_metric_state_count_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* metric_handle
+        uint32_t* state_count
+
+    cdef struct astl_get_metric_states_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* metric_handle
+        astl_state_props_t* states
+        uint32_t* state_count
+
+    cdef struct astl_configure_counter_collection_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const astl_collection_params_t* collection_params
+        const astl_counter_handle_t* counter_handles
+        uint32_t counter_count
+
+    cdef struct astl_configure_metric_collection_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const astl_collection_params_t* collection_params
+        const astl_metric_handle_t* metric_handles
+        uint32_t metric_count
+
+    cdef struct astl_configure_metric_group_collection_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const astl_collection_params_t* collection_params
+        const astl_metric_group_handle_t* metric_group_handles
+        uint32_t metric_group_count
+
+    cdef struct astl_read_immediate_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+
+    cdef struct astl_read_immediate_params_t:
+        size_t size
+        uint32_t flags
+
+    cdef struct astl_start_collection_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+
+    cdef struct astl_start_collection_params_t:
+        size_t size
+        uint32_t flags
+
+    cdef struct astl_pause_collection_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+
+    cdef struct astl_pause_collection_params_t:
+        size_t size
+        uint32_t flags
+
+    cdef struct astl_resume_collection_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+
+    cdef struct astl_resume_collection_params_t:
+        size_t size
+        uint32_t flags
+
+    cdef struct astl_stop_collection_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+
+    cdef struct astl_stop_collection_params_t:
+        size_t size
+        uint32_t flags
 
     # targets
-    int astlGetSystemInfo(astl_platform_properties_t* system_info)
-    int astlGetTargetCount(uint32_t* target_count)
-    int astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count)
+    int astlGetSystemInfo(const astl_get_system_info_params_t* params)
+    int astlGetTargetCount(const astl_get_target_count_params_t* params)
+    int astlGetTargets(const astl_get_targets_params_t* params)
 
     # counters
-    int astlGetCounterCount(const void* target_handle, uint32_t* counter_count)
-    int astlGetCounters(const void* target_handle, astl_counter_properties_t* counters, uint32_t* counter_count)
+    int astlGetCounterCount(const astl_get_counter_count_params_t* params)
+    int astlGetCounters(const astl_get_counters_params_t* params)
 
     # metrics
-    int astlGetMetricCount(const void* target_handle, uint32_t* metric_count)
-    int astlGetMetrics(const void* target_handle, astl_metric_properties_t* metrics, uint32_t* metric_count)
+    int astlGetMetricCount(const astl_get_metric_count_params_t* params)
+    int astlGetMetrics(const astl_get_metrics_params_t* params)
 
     # metric groups
-    int astlGetMetricGroupCount(const void* target_handle, uint32_t* metric_group_count)
-    int astlGetMetricGroups(const void* target_handle, astl_metric_group_properties_t* groups, uint32_t* group_count)
-    int astlGetMetricGroupMetrics(const void* target_handle, const astl_metric_group_properties_t* group, astl_metric_properties_t* metrics)
+    int astlGetMetricGroupCount(const astl_get_metric_group_count_params_t* params)
+    int astlGetMetricGroups(const astl_get_metric_groups_params_t* params)
+    int astlGetMetricGroupMetrics(const astl_get_metric_group_metrics_params_t* params)
+    int astlGetMetricStateCountOnTarget(const astl_get_metric_state_count_on_target_params_t* params)
+    int astlGetMetricStatesOnTarget(const astl_get_metric_states_on_target_params_t* params)
 
     # collection configuration
-    int astlConfigureCounterCollectionOnTarget(const void* target_handle, const astl_collection_parameters_t* params, const astl_counter_handle_t* counter_handles, uint32_t counter_count)
-    int astlConfigureCounterCollection(const astl_collection_parameters_t* params, const astl_counter_handle_t* counter_handles, uint32_t counter_count)
-    int astlConfigureMetricCollectionOnTarget(const void* target_handle, astl_collection_parameters_t* params, astl_metric_handle_t* metric_handles, uint32_t metric_count)
-    int astlConfigureMetricCollection(astl_collection_parameters_t* params, astl_metric_handle_t* metric_handles, uint32_t metric_count)
-    int astlConfigureMetricGroupCollectionOnTarget(const void* target_handle, astl_collection_parameters_t* params, astl_metric_group_handle_t* group_handles, uint32_t group_count)
-    int astlConfigureMetricGroupCollection(astl_collection_parameters_t* params, astl_metric_group_handle_t* group_handles, uint32_t group_count)
+    int astlConfigureCounterCollectionOnTarget(const astl_configure_counter_collection_on_target_params_t* params)
+    int astlConfigureMetricCollectionOnTarget(const astl_configure_metric_collection_on_target_params_t* params)
+    int astlConfigureMetricGroupCollectionOnTarget(const astl_configure_metric_group_collection_on_target_params_t* params)
 
     # immediate read
-    int astlReadImmediateOnTarget(const void* target_handle)
-    int astlReadImmediate()
+    int astlReadImmediateOnTarget(const astl_read_immediate_on_target_params_t* params)
+    int astlReadImmediate(const astl_read_immediate_params_t* params)
 
     # lifecycle control
-    int astlStartCollectionOnTarget(const void* target_handle)
-    int astlStartCollection()
-    int astlPauseCollectionOnTarget(const void* target_handle)
-    int astlPauseCollection()
-    int astlResumeCollectionOnTarget(const void* target_handle)
-    int astlResumeCollection()
-    int astlStopCollectionOnTarget(const void* target_handle)
-    int astlStopCollection()
+    int astlStartCollectionOnTarget(const astl_start_collection_on_target_params_t* params)
+    int astlStartCollection(const astl_start_collection_params_t* params)
+    int astlPauseCollectionOnTarget(const astl_pause_collection_on_target_params_t* params)
+    int astlPauseCollection(const astl_pause_collection_params_t* params)
+    int astlResumeCollectionOnTarget(const astl_resume_collection_on_target_params_t* params)
+    int astlResumeCollection(const astl_resume_collection_params_t* params)
+    int astlStopCollectionOnTarget(const astl_stop_collection_on_target_params_t* params)
+    int astlStopCollection(const astl_stop_collection_params_t* params)
 
     # save/load collection
     int astlSaveCollection(const astl_save_params_t* params)
     int astlLoadCollection(const astl_load_params_t* params)
 
     # samples
-    cdef struct _astl_counter_sample_t:
-        size_t _size
-        uint64_t _timestamp
-        astl_value_t _value
-    ctypedef _astl_counter_sample_t astl_counter_sample_t
+    cdef struct _astl_sample_t:
+        uint64_t timestamp
+        astl_value_t value
+    ctypedef _astl_sample_t astl_sample_t
 
-    cdef struct _astl_metric_sample_t:
-        size_t _size
-        uint64_t _timestamp
-        astl_value_t _value
-    ctypedef _astl_metric_sample_t astl_metric_sample_t
+    cdef struct astl_get_counter_sample_count_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* counter_handle
+        uint32_t* sample_count
 
-    int astlGetCounterSampleCountOnTarget(const void* target_handle, const void* counter_handle, uint32_t* sample_count)
-    int astlGetCounterSamplesOnTarget(const void* target_handle, const void* counter_handle, astl_counter_sample_t* samples, uint32_t* sample_count)
-    int astlGetMetricSampleCountOnTarget(const void* target_handle, const void* metric_handle, uint32_t* sample_count)
-    int astlGetMetricSamplesOnTarget(const void* target_handle, const void* metric_handle, astl_metric_sample_t* samples, uint32_t* sample_count)
+    cdef struct astl_get_counter_samples_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* counter_handle
+        astl_sample_t* samples
+        uint32_t* sample_count
+
+    cdef struct astl_get_metric_sample_count_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* metric_handle
+        uint32_t* sample_count
+
+    cdef struct astl_get_metric_samples_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* metric_handle
+        astl_sample_t* samples
+        uint32_t* sample_count
+
+    int astlGetCounterSampleCountOnTarget(const astl_get_counter_sample_count_on_target_params_t* params)
+    int astlGetCounterSamplesOnTarget(const astl_get_counter_samples_on_target_params_t* params)
+    int astlGetMetricSampleCountOnTarget(const astl_get_metric_sample_count_on_target_params_t* params)
+    int astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params_t* params)
 
     # metric summary
     cdef struct _astl_metric_statistics_t:
-        size_t   _size
-        astl_value_t _min
-        astl_value_t _max
-        astl_value_t _avg
-        uint64_t _count
-        uint32_t _flags
+        size_t   size
+        uint32_t flags
+        astl_value_t min
+        astl_value_t max
+        astl_value_t avg
+        uint64_t count
     ctypedef _astl_metric_statistics_t astl_metric_statistics_t
 
-    int astlGetMetricStatisticsOnTarget(const void* target_handle, const void* metric_handle, astl_metric_statistics_t* summary)
+    cdef struct astl_get_metric_statistics_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* metric_handle
+        astl_metric_statistics_t* summary
+
+    int astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_params_t* params)
 
     # discrete histogram
     cdef struct _astl_discrete_histogram_bin_t:
-        size_t _size
-        astl_value_t _value
-        uint64_t _count
+        size_t size
+        astl_value_t value
+        uint64_t count
     ctypedef _astl_discrete_histogram_bin_t astl_discrete_histogram_bin_t
 
-    int astlGetMetricDiscreteHistogramBinCountOnTarget(const void* target_handle, const void* metric_handle, uint32_t* bin_count)
-    int astlGetMetricDiscreteHistogramOnTarget(const void* target_handle, const void* metric_handle, astl_discrete_histogram_bin_t* bins, uint32_t* bin_count)
+    cdef struct astl_get_metric_discrete_histogram_bin_count_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* metric_handle
+        uint32_t* bin_count
+
+    cdef struct astl_get_metric_discrete_histogram_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* metric_handle
+        astl_discrete_histogram_bin_t* bins
+        uint32_t* bin_count
+
+    int astlGetMetricDiscreteHistogramBinCountOnTarget(const astl_get_metric_discrete_histogram_bin_count_on_target_params_t* params)
+    int astlGetMetricDiscreteHistogramOnTarget(const astl_get_metric_discrete_histogram_on_target_params_t* params)

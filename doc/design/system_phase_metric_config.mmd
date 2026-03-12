@@ -12,7 +12,7 @@ sequenceDiagram
     participant MetricManager as MetricManager
     participant CollectorManager as CollectorManager
 
-    User->>API: astlConfigureMetricCollectionOnTarget(target, metrics, params)
+    User->>API: astlConfigureMetricCollectionOnTarget(configure_metric_params)
     API->>Orchestrator: ConfigureMetricCollectionOnTarget(...)
     Orchestrator->>MetricManager: GetRequiredOperations()
     MetricManager->>MetricManager: DeriveOperations
@@ -28,7 +28,7 @@ sequenceDiagram
     end
 
     opt Counter collection placeholder
-    User->>API: astlConfigureCounterCollectionOnTarget(target,...)
+    User->>API: astlConfigureCounterCollectionOnTarget(configure_counter_params)
     API->>Orchestrator: ConfigureCounterCollectionOnTarget(...)
         Orchestrator-->>API: NOT_SUPPORTED
     end

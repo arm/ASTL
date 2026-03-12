@@ -13,7 +13,7 @@ sequenceDiagram
     participant Metrics
     participant CollectorManager as CollectorManager
 
-    User->>API: astlStopCollectionOnTarget(target)
+    User->>API: astlStopCollectionOnTarget(stop_params)
     API->>Orchestrator: StopCollectionOnTarget(target)
     Orchestrator->>MetricManager: ProcessRawSamples(buffers)
     MetricManager->>Metrics: ReceiveRawSample(each)

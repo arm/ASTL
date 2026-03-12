@@ -97,13 +97,19 @@ doc preset='debug':
 python-full-cycle preset='debug':
     #!/usr/bin/env bash
     set -eu -o pipefail
-    PYBIN="${PY:-python3}"
+    PYBIN="${PY:-python}"
+    if ! command -v "$PYBIN" >/dev/null 2>&1; then
+        PYBIN="python3"
+    fi
     echo "[python-full-cycle] Using Python: $PYBIN"
     echo "[python-full-cycle] Configuring CMake preset={{preset}}"
     cmake -S . --preset {{preset}} -DENABLE_VALGRIND=OFF
     cmake --build --preset {{preset}} --parallel=$(nproc)
     if [ ! -d .venv ]; then $PYBIN -m venv .venv; fi
     source .venv/bin/activate
+    # Avoid inherited cross-compilation toolchain variables (e.g. aarch64-linux-gnu-g++).
+    # Let Python/setuptools pick a native compiler compatible with the active interpreter.
+    unset CC CXX CPP LDSHARED
     python -m pip install --upgrade pip >/dev/null
     # Install with optional pandas if available (non-fatal if it fails)
     python -m pip install -e python[pandas] pytest build mypy >/dev/null 2>&1 || python -m pip install -e python pytest build mypy >/dev/null

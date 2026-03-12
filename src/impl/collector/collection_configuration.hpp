@@ -29,14 +29,14 @@ class CollectionConfiguration {
    * @param[in] collection_params     Collection parameters (interval, strategy, etc)
    **/
   CollectionConfiguration(const ITarget* target, CollectionOperations collectionOperations,
-                          astl_collection_parameters_t const& collection_params)
+                          astl_collection_params_t const& collection_params)
       : _target{target}, _operations{std::move(collectionOperations)}, _collection_params{collection_params} {}
 
   const ITarget* Target() const { return _target; }
 
   CollectionOperations const& Operations() const { return _operations; }
 
-  astl_collection_parameters_t CollectionParams() const { return _collection_params; }
+  astl_collection_params_t CollectionParams() const { return _collection_params; }
 
  private:
   const ITarget* _target = nullptr;
@@ -44,8 +44,7 @@ class CollectionConfiguration {
   CollectionOperations _operations;
 
   // input from the astl API on how to collect (interval, optimization strategy, etc)
-  astl_collection_parameters_t _collection_params = {0, 0, ASTL_COLLECTION_MODE_IMMEDIATE,
-                                                     ASTL_COLLECTION_OPTIMIZATION_MEMORY};
+  astl_collection_params_t _collection_params = {0, 0, 0, ASTL_COLLECTION_MODE_IMMEDIATE};
 };
 
 }  // namespace astl

@@ -13,18 +13,18 @@ Counter::Counter(const MetricConfig *config, const ITarget *target) : RawMetric{
 /**
  * @brief Assign values such as name, units, etc to the given properties pointer.
  */
-auto Counter::GetProperties(astl_counter_properties_t *properties) const -> astl_status_code {
-  // properties->_size  : set by API caller.
-  // properties->_handle : set by caller (MetricManager)
-  properties->_name                  = GetInternedString(_configuration->Name());
-  properties->_description           = GetInternedString(_configuration->Description());
-  properties->_min_sampling_interval = 0;
-  properties->_units                 = _configuration->Units();
+auto Counter::GetProperties(astl_counter_props_t *properties) const -> astl_status_code {
+  // properties->size  : set by API caller.
+  // properties->handle : set by caller (MetricManager)
+  properties->name                  = GetInternedString(_configuration->Name());
+  properties->description           = GetInternedString(_configuration->Description());
+  properties->min_sampling_interval = 0;
+  properties->units                 = _configuration->Units();
   // Expose the same composed formula used by metric post-processing for raw counter consumers.
-  properties->_formula = GetInternedString(FormatFormulaForApi(_configuration->GetFormula()));
+  properties->formula = GetInternedString(FormatFormulaForApi(_configuration->GetFormula()));
   // Counter sample payloads are always reported in the raw/on-wire type expected by collection APIs.
-  properties->_value_type   = _configuration->InputValueType();
-  properties->_counter_type = ASTL_COUNTER_TYPE_COUNT;
+  properties->value_type   = _configuration->InputValueType();
+  properties->counter_type = ASTL_COUNTER_TYPE_COUNT;
   return ASTL_STATUS_SUCCESS;
 }
 

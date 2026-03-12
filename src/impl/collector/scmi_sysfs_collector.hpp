@@ -376,7 +376,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::StartCollection() -> astl_status_code {
     return result;  // Propagate the error code from the operation
   }
 
-  switch (_configuration->CollectionParams()._collection_mode) {
+  switch (_configuration->CollectionParams().collection_mode) {
     case ASTL_COLLECTION_MODE_IMMEDIATE:
       // Immediate mode does not require any special setup, we will collect data on ReadImmediate calls
       break;
@@ -446,7 +446,7 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StopCollection() {
   if (_collection_state != CollectionState::STARTED || !_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot stop while not started or unconfigured
   }
-  switch (_configuration->CollectionParams()._collection_mode) {
+  switch (_configuration->CollectionParams().collection_mode) {
     case ASTL_COLLECTION_MODE_IMMEDIATE:
       // Immediate mode does not require any special teardown
       break;
@@ -748,7 +748,7 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StartIntervalSampling() {
     return ASTL_STATUS_INTERNAL_ERROR;
   }
 
-  auto interval     = std::chrono::milliseconds{_configuration.value().CollectionParams()._sampling_interval};
+  auto interval     = std::chrono::milliseconds{_configuration.value().CollectionParams().sampling_interval};
   _periodic_sampler = std::make_unique<PeriodicSampler>(this, interval);
   return ASTL_STATUS_SUCCESS;
 }

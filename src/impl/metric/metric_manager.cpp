@@ -130,7 +130,7 @@ auto MetricManager::GetAvailableCounters(const ITarget* target) const
  *
  * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
  */
-auto MetricManager::GetCounterProperties(astl_counter_handle_t counter, astl_counter_properties_t* properties) const
+auto MetricManager::GetCounterProperties(astl_counter_handle_t counter, astl_counter_props_t* properties) const
     -> astl_status_code {
   std::lock_guard<std::mutex> lock(_mutex);
   const auto*                 counter_details = static_cast<const CounterHandle*>(counter);
@@ -145,7 +145,7 @@ auto MetricManager::GetCounterProperties(astl_counter_handle_t counter, astl_cou
   }
   first_counter_instance->second->GetProperties(properties);
   // ensure that the properties struct going out the API has a reference to this counter handle
-  properties->_handle = counter;
+  properties->handle = counter;
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -433,7 +433,7 @@ auto MetricManager::GetAvailableMetrics(const ITarget* target) const
 /**
  * @brief Assign values such as name, units, etc to the given properties pointer.
  */
-auto MetricManager::GetProperties(astl_metric_handle_t metric, astl_metric_properties_t* properties) const
+auto MetricManager::GetProperties(astl_metric_handle_t metric, astl_metric_props_t* properties) const
     -> astl_status_code {
   std::lock_guard<std::mutex> lock(_mutex);
   const auto*                 metric_details = static_cast<const MetricHandle*>(metric);
@@ -447,7 +447,7 @@ auto MetricManager::GetProperties(astl_metric_handle_t metric, astl_metric_prope
     return ASTL_STATUS_INTERNAL_ERROR;
   }
   first_metric_instance->second->GetProperties(properties);
-  properties->_handle = metric;  // the properties needs to be associated with the MetricHandle
+  properties->handle = metric;  // the properties needs to be associated with the MetricHandle
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -575,8 +575,8 @@ auto MetricManager::GetMetricGroups(const ITarget* target) const
   return std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code>(std::in_place, handles_span);
 }
 
-auto MetricManager::GetMetricGroupProperties(astl_metric_group_handle_t      group,
-                                             astl_metric_group_properties_t* properties) const -> astl_status_code {
+auto MetricManager::GetMetricGroupProperties(astl_metric_group_handle_t group,
+                                             astl_metric_group_props_t* properties) const -> astl_status_code {
   std::lock_guard<std::mutex> lock(_mutex);
   const auto*                 metric_group_details = static_cast<const MetricGroup*>(group);
   if (!metric_group_details) {

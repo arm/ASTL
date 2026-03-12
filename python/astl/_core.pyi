@@ -10,11 +10,12 @@ class ASTLError(Exception): ...
 class Target:
     name: str
     description: str
-    _handle_ptr: int
+    handle_ptr: int
 
 class Counter:
     name: str
     description: str
+    handle_ptr: int
     min_sampling_interval: int
     units: int
     value_type: int
@@ -24,6 +25,7 @@ class Counter:
 class Metric:
     name: str
     description: str
+    handle_ptr: int
     min_sampling_interval: int
     units: int
     value_type: int
@@ -33,17 +35,19 @@ class Metric:
 class MetricGroup:
     name: str
     description: str
+    handle_ptr: int
     metric_count: int
 
 class CollectionParameters:
     sampling_interval: int
     mode: int
-    optimization: int
-    def __init__(self, sampling_interval: int = ..., mode: int = ..., optimization: int = ...) -> None: ...
+    flags: int
+    def __init__(self, sampling_interval: int = ..., mode: int = ..., flags: int = ...) -> None: ...
 
 class CollectionMode:  # minimal enum-like stub
     IMMEDIATE: int
-    PERIODIC: int
+    SAMPLING: int
+    SNAPSHOT: int
 
 class Category:
     COUNT: int
@@ -70,9 +74,9 @@ def get_metrics(target: Target) -> List[Metric]: ...
 def get_metric_groups(target: Target) -> List[MetricGroup]: ...
 
 # Configuration helpers
-def configure_counters_on_target(target: Target | None, params: CollectionParameters, counters: List[Counter]) -> None: ...
-def configure_metrics_on_target(target: Target | None, params: CollectionParameters, metrics: List[Metric]) -> None: ...
-def configure_metric_groups_on_target(target: Target | None, params: CollectionParameters, groups: List[MetricGroup]) -> None: ...
+def configure_counters_on_target(target: Target, params: CollectionParameters, counters: List[Counter]) -> None: ...
+def configure_metrics_on_target(target: Target, params: CollectionParameters, metrics: List[Metric]) -> None: ...
+def configure_metric_groups_on_target(target: Target, params: CollectionParameters, groups: List[MetricGroup]) -> None: ...
 
 def start_collection(target: Target | None = ...) -> None: ...
 

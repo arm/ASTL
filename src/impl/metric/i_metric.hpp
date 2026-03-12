@@ -84,9 +84,8 @@ struct IMetric {
 
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
-   * TODO(ASTL-89): External C-interface data structure should be backward compatible.
    */
-  virtual auto GetProperties(astl_metric_properties_t *properties) const -> astl_status_code = 0;
+  virtual auto GetProperties(astl_metric_props_t *properties) const -> astl_status_code = 0;
 
   /**
    * @brief Retrieve the metric's name as a string

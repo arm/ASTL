@@ -67,7 +67,7 @@ class OutputManager : public IOutputManager {
    * If a buffer output already exists it is replaced. Future change: consider returning
    * ASTL_STATUS_ALREADY_INITIALIZED to force explicit destruction.
    */
-  [[nodiscard]] auto CreateBufferOutput(std::span<astl_metric_sample_t> samples_buffer, uint32_t* buffer_sample_count)
+  [[nodiscard]] auto CreateBufferOutput(std::span<astl_sample_t> samples_buffer, uint32_t* buffer_sample_count)
       -> astl_status_code override;
 
   /**

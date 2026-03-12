@@ -23,7 +23,7 @@ template <typename T>
 auto AllocateAstlVector(size_t count) -> std::vector<T> {
   std::vector<T> objects{count};
   if (count > 0) {
-    objects[0]._size = sizeof(T);
+    objects[0].size = sizeof(T);
   }
   return objects;
 }

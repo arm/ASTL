@@ -74,10 +74,10 @@ inline std::unordered_map<std::string, MetricGroup> BuildGroups(const ProcessedS
       const std::string& metric_name = metric_ptr->Name();
       auto&              group       = groups[metric_name];
       if (group.description.empty()) {
-        astl_metric_properties_t props{};
+        astl_metric_props_t props{};
         metric_ptr->GetProperties(&props);
-        if (props._description && *props._description) {
-          group.description = props._description;
+        if (props.description && *props.description) {
+          group.description = props.description;
         }
       }
       group.rows.reserve(group.rows.size() + samples.size());

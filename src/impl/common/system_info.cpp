@@ -168,25 +168,31 @@ auto PlatformInfoMutex() -> std::mutex& {
   return platform_info_mutex;
 }
 
-auto LoadedPlatformInfoStorage() -> std::optional<PlatformInfoData>& {
-  static std::optional<PlatformInfoData> loaded_platform_info;
-  return loaded_platform_info;
+auto LoadedPlatformInfoPointerStorage() -> std::shared_ptr<const PlatformInfoData>* {
+  static std::shared_ptr<const PlatformInfoData> loaded_platform_info_ptr = nullptr;
+  return &loaded_platform_info_ptr;
 }
 
 }  // namespace
 
-auto GetActivePlatformInfo() -> const PlatformInfoData& {
-  {
-    std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
-    if (LoadedPlatformInfoStorage().has_value()) {
-      return *LoadedPlatformInfoStorage();
-    }
-  }
-
+auto GetHostPlatformInfo() -> const PlatformInfoData& {
   static std::once_flag   init_once;
   static PlatformInfoData captured_info;
   std::call_once(init_once, [] { captured_info = CapturePlatformInfoFromSystem(); });
   return captured_info;
+}
+
+auto GetLoadedPlatformInfo() -> std::shared_ptr<const PlatformInfoData> {
+  std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
+  return *LoadedPlatformInfoPointerStorage();
+}
+
+auto GetActivePlatformInfo() -> const PlatformInfoData& {
+  auto loaded_info = GetLoadedPlatformInfo();
+  if (loaded_info != nullptr) {
+    return *loaded_info;
+  }
+  return GetHostPlatformInfo();
 }
 
 auto SavePlatformInfoToCacheDir(const std::filesystem::path& cache_dir_path) -> astl_status_code {
@@ -224,7 +230,7 @@ auto LoadPlatformInfoFromCacheDir(const std::filesystem::path& cache_dir_path) -
 
   if (!std::filesystem::exists(input_file)) {
     std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
-    LoadedPlatformInfoStorage().reset();
+    *LoadedPlatformInfoPointerStorage() = {};
     ASTL_LOG_WARNING("LoadPlatformInfoFromCacheDir: '{}' not present; using host info", input_file.string());
     return ASTL_STATUS_SUCCESS;
   }
@@ -250,13 +256,13 @@ auto LoadPlatformInfoFromCacheDir(const std::filesystem::path& cache_dir_path) -
   auto loaded = expected_loaded.value();
 
   std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
-  LoadedPlatformInfoStorage() = std::move(loaded);
+  *LoadedPlatformInfoPointerStorage() = std::make_shared<const PlatformInfoData>(std::move(loaded));
   return ASTL_STATUS_SUCCESS;
 }
 
 auto ClearLoadedPlatformInfo() -> void {
   std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
-  LoadedPlatformInfoStorage().reset();
+  *LoadedPlatformInfoPointerStorage() = nullptr;
 }
 
 }  // namespace astl

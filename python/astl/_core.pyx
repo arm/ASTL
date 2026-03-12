@@ -33,19 +33,19 @@ cdef inline void _check(int code):
 cdef class Target:
     cdef public object name
     cdef public object description
-    cdef public size_t _handle_ptr
+    cdef public size_t handle_ptr
     def __init__(self, name: str, description: str, handle_ptr: int):
         # Expose name/description to Python space (tests access target.name)
         self.name = name
         self.description = description
-        self._handle_ptr = handle_ptr
+        self.handle_ptr = handle_ptr
     def __repr__(self):
         return f"<Target name={self.name!r}>"
 
 cdef class Counter:
     cdef public object name
     cdef public object description
-    cdef public size_t _handle_ptr
+    cdef public size_t handle_ptr
     cdef public object min_sampling_interval
     cdef public unsigned int units
     cdef public unsigned int value_type
@@ -54,7 +54,7 @@ cdef class Counter:
     def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, counter_type: int, formula: str):
         self.name = name
         self.description = description
-        self._handle_ptr = handle_ptr
+        self.handle_ptr = handle_ptr
         self.min_sampling_interval = min_interval
         self.units = units
         self.value_type = value_type
@@ -66,7 +66,7 @@ cdef class Counter:
 cdef class Metric:
     cdef public object name
     cdef public object description
-    cdef public size_t _handle_ptr
+    cdef public size_t handle_ptr
     cdef public object min_sampling_interval
     cdef public unsigned int units
     cdef public unsigned int value_type
@@ -75,7 +75,7 @@ cdef class Metric:
     def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, metric_type: int, category: int):
         self.name = name
         self.description = description
-        self._handle_ptr = handle_ptr
+        self.handle_ptr = handle_ptr
         self.min_sampling_interval = min_interval
         self.units = units
         self.value_type = value_type
@@ -87,12 +87,12 @@ cdef class Metric:
 cdef class MetricGroup:
     cdef public object name
     cdef public object description
-    cdef public size_t _handle_ptr
+    cdef public size_t handle_ptr
     cdef public object metric_count
     def __init__(self, name: str, description: str, handle_ptr: int, metric_count: int):
         self.name = name
         self.description = description
-        self._handle_ptr = handle_ptr
+        self.handle_ptr = handle_ptr
         self.metric_count = metric_count
     def __repr__(self):
         return f"<MetricGroup name={self.name!r} metrics={self.metric_count}>"
@@ -209,95 +209,140 @@ def status_name(code: int) -> str:
 def version() -> tuple[int, int, int, str]:
     """Return (major, minor, micro, string) for the compiled ASTL library."""
     v = astlVersion()
-    return v._major, v._minor, v._micro, astlVersionString().decode()
+    return v.major, v.minor, v.micro, astlVersionString().decode()
 
 cpdef dict get_system_info():
     """Return host/session platform metadata from ASTL as a dictionary."""
-    cdef astl_platform_properties_t info
-    info._size = sizeof(astl_platform_properties_t)
-    _check(astlGetSystemInfo(&info))
+    cdef astl_platform_props_t info
+    cdef astl_get_system_info_params_t params
+    info.size = sizeof(astl_platform_props_t)
+    info.flags = 0
+    params.size = sizeof(astl_get_system_info_params_t)
+
+    params.flags = 0
+    params.system_info = &info
+    _check(astlGetSystemInfo(&params))
     return {
-        "soc_name": info._soc_name.decode() if info._soc_name != NULL else None,
-        "vendor_id": info._vendor_id.decode() if info._vendor_id != NULL else None,
-        "os_name": info._os_name.decode() if info._os_name != NULL else None,
-        "kernel_name": info._kernel_name.decode() if info._kernel_name != NULL else None,
-        "kernel_version": info._kernel_version.decode() if info._kernel_version != NULL else None,
-        "kernel_release": info._kernel_release.decode() if info._kernel_release != NULL else None,
-        "firmware_version": info._firmware_version.decode() if info._firmware_version != NULL else None,
-        "hostname": info._hostname.decode() if info._hostname != NULL else None,
-        "architecture": info._architecture.decode() if info._architecture != NULL else None,
+        "soc_name": info.soc_name.decode() if info.soc_name != NULL else None,
+        "vendor_id": info.vendor_id.decode() if info.vendor_id != NULL else None,
+        "os_name": info.os_name.decode() if info.os_name != NULL else None,
+        "kernel_name": info.kernel_name.decode() if info.kernel_name != NULL else None,
+        "kernel_version": info.kernel_version.decode() if info.kernel_version != NULL else None,
+        "kernel_release": info.kernel_release.decode() if info.kernel_release != NULL else None,
+        "firmware_version": info.firmware_version.decode() if info.firmware_version != NULL else None,
+        "hostname": info.hostname.decode() if info.hostname != NULL else None,
+        "architecture": info.architecture.decode() if info.architecture != NULL else None,
     }
 
 cpdef list get_counters(Target target):
     cdef uint32_t count = 0
-    _check(astlGetCounterCount(<const void*>target._handle_ptr, &count))
+    cdef astl_get_counter_count_params_t count_params
+    cdef astl_get_counters_params_t params
+    count_params.size = sizeof(astl_get_counter_count_params_t)
+
+    count_params.flags = 0
+    count_params.target_handle = <const void*>target.handle_ptr
+    count_params.counter_count = &count
+    _check(astlGetCounterCount(&count_params))
     if count == 0:
         return []
-    cdef astl_counter_properties_t* arr = <astl_counter_properties_t*>calloc(count, sizeof(astl_counter_properties_t))
+    cdef astl_counter_props_t* arr = <astl_counter_props_t*>calloc(count, sizeof(astl_counter_props_t))
     if arr == NULL:
         raise MemoryError("Failed to allocate counter properties buffer")
-    arr[0]._size = sizeof(astl_counter_properties_t)
+    arr[0].size = sizeof(astl_counter_props_t)
     try:
-        _check(astlGetCounters(<const void*>target._handle_ptr, arr, &count))
+        params.size = sizeof(astl_get_counters_params_t)
+
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.counters = arr
+        params.counter_count = &count
+        _check(astlGetCounters(&params))
         py_list = []
         for i in range(count):
-            name = arr[i]._name.decode() if arr[i]._name != NULL else ""
-            desc = arr[i]._description.decode() if arr[i]._description != NULL else ""
-            formula = arr[i]._formula.decode() if arr[i]._formula != NULL else ""
-            py_list.append(Counter(name, desc, <size_t>arr[i]._handle, arr[i]._min_sampling_interval, arr[i]._units,
-                                   arr[i]._value_type, arr[i]._counter_type, formula))
+            name = arr[i].name.decode() if arr[i].name != NULL else ""
+            desc = arr[i].description.decode() if arr[i].description != NULL else ""
+            formula = arr[i].formula.decode() if arr[i].formula != NULL else ""
+            py_list.append(Counter(name, desc, <size_t>arr[i].handle, arr[i].min_sampling_interval, arr[i].units,
+                                   arr[i].value_type, arr[i].counter_type, formula))
         return py_list
     finally:
         free(arr)
 
 cpdef list get_metrics(Target target):
     cdef uint32_t count = 0
-    cdef int rc = astlGetMetricCount(<const void*>target._handle_ptr, &count)
+    cdef astl_get_metric_count_params_t count_params
+    cdef astl_get_metrics_params_t params
+    count_params.size = sizeof(astl_get_metric_count_params_t)
+
+    count_params.flags = 0
+    count_params.target_handle = <const void*>target.handle_ptr
+    count_params.metric_count = &count
+    cdef int rc = astlGetMetricCount(&count_params)
     if rc in (ASTL_STATUS_NO_METRICS_FOUND, ASTL_STATUS_BAD_ARGUMENT):
         return []
     _check(rc)
     if count == 0:
         return []
-    cdef astl_metric_properties_t* arr = <astl_metric_properties_t*>calloc(count, sizeof(astl_metric_properties_t))
+    cdef astl_metric_props_t* arr = <astl_metric_props_t*>calloc(count, sizeof(astl_metric_props_t))
     if arr == NULL:
         raise MemoryError("Failed to allocate metric properties buffer")
-    arr[0]._size = sizeof(astl_metric_properties_t)
+    arr[0].size = sizeof(astl_metric_props_t)
     try:
-        rc = astlGetMetrics(<const void*>target._handle_ptr, arr, &count)
+        params.size = sizeof(astl_get_metrics_params_t)
+
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.metrics = arr
+        params.metric_count = &count
+        rc = astlGetMetrics(&params)
         if rc in (ASTL_STATUS_NO_METRICS_FOUND, ASTL_STATUS_BAD_ARGUMENT):
             return []
         _check(rc)
         py_list = []
         for i in range(count):
-            name = arr[i]._name.decode() if arr[i]._name != NULL else ""
-            desc = arr[i]._description.decode() if arr[i]._description != NULL else ""
-            py_list.append(Metric(name, desc, <size_t>arr[i]._handle, arr[i]._min_sampling_interval, arr[i]._units, arr[i]._value_type, arr[i]._metric_type, arr[i]._category))
+            name = arr[i].name.decode() if arr[i].name != NULL else ""
+            desc = arr[i].description.decode() if arr[i].description != NULL else ""
+            py_list.append(Metric(name, desc, <size_t>arr[i].handle, arr[i].min_sampling_interval, arr[i].units, arr[i].value_type, arr[i].metric_type, arr[i].category))
         return py_list
     finally:
         free(arr)
 
 cpdef list get_metric_groups(Target target):
     cdef uint32_t count = 0
-    cdef int rc = astlGetMetricGroupCount(<const void*>target._handle_ptr, &count)
+    cdef astl_get_metric_group_count_params_t count_params
+    cdef astl_get_metric_groups_params_t params
+    count_params.size = sizeof(astl_get_metric_group_count_params_t)
+
+    count_params.flags = 0
+    count_params.target_handle = <const void*>target.handle_ptr
+    count_params.metric_group_count = &count
+    cdef int rc = astlGetMetricGroupCount(&count_params)
     if rc in (ASTL_STATUS_NO_METRIC_GROUPS_FOUND, ASTL_STATUS_NOT_IMPLEMENTED):
         return []
     _check(rc)
     if count == 0:
         return []
-    cdef astl_metric_group_properties_t* arr = <astl_metric_group_properties_t*>calloc(count, sizeof(astl_metric_group_properties_t))
+    cdef astl_metric_group_props_t* arr = <astl_metric_group_props_t*>calloc(count, sizeof(astl_metric_group_props_t))
     if arr == NULL:
         raise MemoryError("Failed to allocate metric group properties buffer")
-    arr[0]._size = sizeof(astl_metric_group_properties_t)
+    arr[0].size = sizeof(astl_metric_group_props_t)
     try:
-        rc = astlGetMetricGroups(<const void*>target._handle_ptr, arr, &count)
+        params.size = sizeof(astl_get_metric_groups_params_t)
+
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.metric_groups = arr
+        params.metric_group_count = &count
+        rc = astlGetMetricGroups(&params)
         if rc in (ASTL_STATUS_NO_METRIC_GROUPS_FOUND, ASTL_STATUS_NOT_IMPLEMENTED):
             return []
         _check(rc)
         py_list = []
         for i in range(count):
-            name = arr[i]._name.decode() if arr[i]._name != NULL else ""
-            desc = arr[i]._description.decode() if arr[i]._description != NULL else ""
-            py_list.append(MetricGroup(name, desc, <size_t>arr[i]._handle, arr[i]._metric_count))
+            name = arr[i].name.decode() if arr[i].name != NULL else ""
+            desc = arr[i].description.decode() if arr[i].description != NULL else ""
+            py_list.append(MetricGroup(name, desc, <size_t>arr[i].handle, arr[i].metric_count))
         return py_list
     finally:
         free(arr)
@@ -310,23 +355,25 @@ class CollectionMode:
 cdef class CollectionParameters:
     cdef public int sampling_interval
     cdef public int mode
-    cdef public int optimization
+    cdef public int flags
 
-    def __init__(self, sampling_interval: int = 0, mode: int = CollectionMode.IMMEDIATE, optimization: int = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD):
+    def __init__(self, sampling_interval: int = 0, mode: int = CollectionMode.IMMEDIATE, flags: int = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD):
         self.sampling_interval = sampling_interval
         self.mode = mode
-        self.optimization = optimization
+        self.flags = flags
 
-cdef void _fill_collection_params(CollectionParameters params, astl_collection_parameters_t* p):
-    p._size = sizeof(astl_collection_parameters_t)
-    p._sampling_interval = <uint32_t>params.sampling_interval
-    p._collection_mode = <astl_collection_mode_t>params.mode
-    p._optimization = <astl_collection_optimization_t>params.optimization
+cdef void _fill_collection_params(CollectionParameters params, astl_collection_params_t* p):
+    p.size = sizeof(astl_collection_params_t)
+    p.flags = 0
+    p.sampling_interval = <uint32_t>params.sampling_interval
+    p.collection_mode = <astl_collection_mode_t>params.mode
+    p.flags = <uint32_t>params.flags
 
 # --- Configuration helpers ---
 
 cpdef configure_counters_on_target(Target target, params, list counters):
-    cdef astl_collection_parameters_t p
+    cdef astl_collection_params_t p
+    cdef astl_configure_counter_collection_on_target_params_t call_params
     cdef int rc_cc
     _fill_collection_params(params, &p)
     cdef size_t n = len(counters)
@@ -338,15 +385,23 @@ cpdef configure_counters_on_target(Target target, params, list counters):
         raise MemoryError()
     try:
         for i in range(n):
-            handles[i] = <const void*>counters[i]._handle_ptr
-        rc_cc = astlConfigureCounterCollectionOnTarget(<const void*>target._handle_ptr, &p, <const astl_counter_handle_t*>handles, n)
+            handles[i] = <const void*>counters[i].handle_ptr
+        call_params.size = sizeof(astl_configure_counter_collection_on_target_params_t)
+
+        call_params.flags = 0
+        call_params.target_handle = <const void*>target.handle_ptr
+        call_params.collection_params = &p
+        call_params.counter_handles = <const astl_counter_handle_t*>handles
+        call_params.counter_count = <uint32_t>n
+        rc_cc = astlConfigureCounterCollectionOnTarget(&call_params)
         if rc_cc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET):
             _check(rc_cc)
     finally:
         free(handles)
 
 cpdef configure_metrics_on_target(Target target, params, list metrics):
-    cdef astl_collection_parameters_t p
+    cdef astl_collection_params_t p
+    cdef astl_configure_metric_collection_on_target_params_t call_params
     cdef int rc_cm
     _fill_collection_params(params, &p)
     cdef size_t n = len(metrics)
@@ -358,15 +413,23 @@ cpdef configure_metrics_on_target(Target target, params, list metrics):
         raise MemoryError()
     try:
         for i in range(n):
-            handles[i] = <void*>metrics[i]._handle_ptr
-        rc_cm = astlConfigureMetricCollectionOnTarget(<const void*>target._handle_ptr, &p, <astl_metric_handle_t*>handles, n)
+            handles[i] = <void*>metrics[i].handle_ptr
+        call_params.size = sizeof(astl_configure_metric_collection_on_target_params_t)
+
+        call_params.flags = 0
+        call_params.target_handle = <const void*>target.handle_ptr
+        call_params.collection_params = &p
+        call_params.metric_handles = <const astl_metric_handle_t*>handles
+        call_params.metric_count = <uint32_t>n
+        rc_cm = astlConfigureMetricCollectionOnTarget(&call_params)
         if rc_cm not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET):
             _check(rc_cm)
     finally:
         free(handles)
 
 cpdef configure_metric_groups_on_target(Target target, params, list groups):
-    cdef astl_collection_parameters_t p
+    cdef astl_collection_params_t p
+    cdef astl_configure_metric_group_collection_on_target_params_t call_params
     cdef int rc_cg
     _fill_collection_params(params, &p)
     cdef size_t n = len(groups)
@@ -378,8 +441,15 @@ cpdef configure_metric_groups_on_target(Target target, params, list groups):
         raise MemoryError()
     try:
         for i in range(n):
-            handles[i] = <void*>groups[i]._handle_ptr
-        rc_cg = astlConfigureMetricGroupCollectionOnTarget(<const void*>target._handle_ptr, &p, <astl_metric_group_handle_t*>handles, n)
+            handles[i] = <void*>groups[i].handle_ptr
+        call_params.size = sizeof(astl_configure_metric_group_collection_on_target_params_t)
+
+        call_params.flags = 0
+        call_params.target_handle = <const void*>target.handle_ptr
+        call_params.collection_params = &p
+        call_params.metric_group_handles = <const astl_metric_group_handle_t*>handles
+        call_params.metric_group_count = <uint32_t>n
+        rc_cg = astlConfigureMetricGroupCollectionOnTarget(&call_params)
         if rc_cg not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET):
             _check(rc_cg)
     finally:
@@ -388,37 +458,73 @@ cpdef configure_metric_groups_on_target(Target target, params, list groups):
 # --- Lifecycle ---
 cpdef start_collection(Target target=None):
     cdef int rc
+    cdef astl_start_collection_params_t params
+    cdef astl_start_collection_on_target_params_t target_params
     if target is None:
-        rc = astlStartCollection()
+        params.size = sizeof(astl_start_collection_params_t)
+
+        params.flags = 0
+        rc = astlStartCollection(&params)
     else:
-        rc = astlStartCollectionOnTarget(<const void*>target._handle_ptr)
+        target_params.size = sizeof(astl_start_collection_on_target_params_t)
+
+        target_params.flags = 0
+        target_params.target_handle = <const void*>target.handle_ptr
+        rc = astlStartCollectionOnTarget(&target_params)
     if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED):
         _check(rc)
 
 cpdef pause_collection(Target target=None):
     cdef int rc
+    cdef astl_pause_collection_params_t params
+    cdef astl_pause_collection_on_target_params_t target_params
     if target is None:
-        rc = astlPauseCollection()
+        params.size = sizeof(astl_pause_collection_params_t)
+
+        params.flags = 0
+        rc = astlPauseCollection(&params)
     else:
-        rc = astlPauseCollectionOnTarget(<const void*>target._handle_ptr)
+        target_params.size = sizeof(astl_pause_collection_on_target_params_t)
+
+        target_params.flags = 0
+        target_params.target_handle = <const void*>target.handle_ptr
+        rc = astlPauseCollectionOnTarget(&target_params)
     if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING):
         _check(rc)
 
 cpdef resume_collection(Target target=None):
     cdef int rc
+    cdef astl_resume_collection_params_t params
+    cdef astl_resume_collection_on_target_params_t target_params
     if target is None:
-        rc = astlResumeCollection()
+        params.size = sizeof(astl_resume_collection_params_t)
+
+        params.flags = 0
+        rc = astlResumeCollection(&params)
     else:
-        rc = astlResumeCollectionOnTarget(<const void*>target._handle_ptr)
+        target_params.size = sizeof(astl_resume_collection_on_target_params_t)
+
+        target_params.flags = 0
+        target_params.target_handle = <const void*>target.handle_ptr
+        rc = astlResumeCollectionOnTarget(&target_params)
     if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_PAUSED):
         _check(rc)
 
 cpdef stop_collection(Target target=None):
     cdef int rc
+    cdef astl_stop_collection_params_t params
+    cdef astl_stop_collection_on_target_params_t target_params
     if target is None:
-        rc = astlStopCollection()
+        params.size = sizeof(astl_stop_collection_params_t)
+
+        params.flags = 0
+        rc = astlStopCollection(&params)
     else:
-        rc = astlStopCollectionOnTarget(<const void*>target._handle_ptr)
+        target_params.size = sizeof(astl_stop_collection_on_target_params_t)
+
+        target_params.flags = 0
+        target_params.target_handle = <const void*>target.handle_ptr
+        rc = astlStopCollectionOnTarget(&target_params)
     if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING):
         _check(rc)
 
@@ -436,10 +542,12 @@ cpdef save_collection(output_file_path=None):
     if not isinstance(output_file_path, str):
         raise TypeError("output_file_path must be str")
 
-    params._size = sizeof(astl_save_params_t)
-    params._flags = 0
+    params.size = sizeof(astl_save_params_t)
+
+
+    params.flags = 0
     encoded_path = (<str>output_file_path).encode()
-    params._output_file_path = encoded_path
+    params.output_file_path = encoded_path
 
     _check(astlSaveCollection(&params))
 
@@ -462,19 +570,30 @@ cpdef load_collection(input_file_path, chunk_size_bytes: int = 0):
 
     encoded_path = (<str>input_file_path).encode()
 
-    params._size = sizeof(astl_load_params_t)
-    params._input_file_path = encoded_path
-    params._chunk_size_bytes = <size_t>chunk_size_bytes
-    params._flags = 0
+    params.size = sizeof(astl_load_params_t)
+
+
+    params.flags = 0
+    params.input_file_path = encoded_path
+    params.chunk_size_bytes = <size_t>chunk_size_bytes
 
     _check(astlLoadCollection(&params))
 
 cpdef read_immediate(Target target=None):
     cdef int rc
+    cdef astl_read_immediate_params_t params
+    cdef astl_read_immediate_on_target_params_t target_params
     if target is None:
-        rc = astlReadImmediate()
+        params.size = sizeof(astl_read_immediate_params_t)
+
+        params.flags = 0
+        rc = astlReadImmediate(&params)
     else:
-        rc = astlReadImmediateOnTarget(<const void*>target._handle_ptr)
+        target_params.size = sizeof(astl_read_immediate_on_target_params_t)
+
+        target_params.flags = 0
+        target_params.target_handle = <const void*>target.handle_ptr
+        rc = astlReadImmediateOnTarget(&target_params)
     # Treat NOT_IMPLEMENTED, BAD_CONFIGURATION, and COLLECTION_NOT_CONFIGURED as benign (mirrors lifecycle tolerance)
     if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED):
         _check(rc)
@@ -483,36 +602,64 @@ cpdef read_immediate(Target target=None):
 
 cpdef list get_counter_samples(Target target, Counter counter):
     cdef uint32_t count = 0
-    _check(astlGetCounterSampleCountOnTarget(<const void*>target._handle_ptr, <const void*>counter._handle_ptr, &count))
+    cdef astl_get_counter_sample_count_on_target_params_t count_params
+    cdef astl_get_counter_samples_on_target_params_t params
+    count_params.size = sizeof(astl_get_counter_sample_count_on_target_params_t)
+
+    count_params.flags = 0
+    count_params.target_handle = <const void*>target.handle_ptr
+    count_params.counter_handle = <const void*>counter.handle_ptr
+    count_params.sample_count = &count
+    _check(astlGetCounterSampleCountOnTarget(&count_params))
     if count == 0:
         return []
-    cdef astl_counter_sample_t* arr = <astl_counter_sample_t*>calloc(count, sizeof(astl_counter_sample_t))
+    cdef astl_sample_t* arr = <astl_sample_t*>calloc(count, sizeof(astl_sample_t))
     if arr == NULL:
         raise MemoryError()
-    arr[0]._size = sizeof(astl_counter_sample_t)
     try:
-        _check(astlGetCounterSamplesOnTarget(<const void*>target._handle_ptr, <const void*>counter._handle_ptr, arr, &count))
+        params.size = sizeof(astl_get_counter_samples_on_target_params_t)
+
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.counter_handle = <const void*>counter.handle_ptr
+        params.samples = arr
+        params.sample_count = &count
+        _check(astlGetCounterSamplesOnTarget(&params))
         out = []
         for i in range(count):
-            out.append((arr[i]._timestamp, _decode_value(counter.value_type, arr[i]._value)))
+            out.append((arr[i].timestamp, _decode_value(counter.value_type, arr[i].value)))
         return out
     finally:
         free(arr)
 
 cpdef list get_metric_samples(Target target, Metric metric):
     cdef uint32_t count = 0
-    _check(astlGetMetricSampleCountOnTarget(<const void*>target._handle_ptr, <const void*>metric._handle_ptr, &count))
+    cdef astl_get_metric_sample_count_on_target_params_t count_params
+    cdef astl_get_metric_samples_on_target_params_t params
+    count_params.size = sizeof(astl_get_metric_sample_count_on_target_params_t)
+
+    count_params.flags = 0
+    count_params.target_handle = <const void*>target.handle_ptr
+    count_params.metric_handle = <const void*>metric.handle_ptr
+    count_params.sample_count = &count
+    _check(astlGetMetricSampleCountOnTarget(&count_params))
     if count == 0:
         return []
-    cdef astl_metric_sample_t* arr = <astl_metric_sample_t*>calloc(count, sizeof(astl_metric_sample_t))
+    cdef astl_sample_t* arr = <astl_sample_t*>calloc(count, sizeof(astl_sample_t))
     if arr == NULL:
         raise MemoryError()
-    arr[0]._size = sizeof(astl_metric_sample_t)
     try:
-        _check(astlGetMetricSamplesOnTarget(<const void*>target._handle_ptr, <const void*>metric._handle_ptr, arr, &count))
+        params.size = sizeof(astl_get_metric_samples_on_target_params_t)
+
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.metric_handle = <const void*>metric.handle_ptr
+        params.samples = arr
+        params.sample_count = &count
+        _check(astlGetMetricSamplesOnTarget(&params))
         out = []
         for i in range(count):
-            out.append((arr[i]._timestamp, _decode_value(metric.value_type, arr[i]._value)))
+            out.append((arr[i].timestamp, _decode_value(metric.value_type, arr[i].value)))
         return out
     finally:
         free(arr)
@@ -578,21 +725,24 @@ cpdef MetricStatistics get_metric_statistics_on_target(Target target, Metric met
             non-arithmetic metric types such as BOOL8 or STRING).
     """
     cdef astl_metric_statistics_t s
-    s._size  = sizeof(astl_metric_statistics_t)
-    s._flags = 0
-    s._count = 0
-    _check(astlGetMetricStatisticsOnTarget(
-        <const void*>target._handle_ptr,
-        <const void*>metric._handle_ptr,
-        &s,
-    ))
-    if s._count == 0:
+    s.size  = sizeof(astl_metric_statistics_t)
+    s.flags = 0
+    s.count = 0
+    cdef astl_get_metric_statistics_on_target_params_t params
+    params.size = sizeof(astl_get_metric_statistics_on_target_params_t)
+
+    params.flags = 0
+    params.target_handle = <const void*>target.handle_ptr
+    params.metric_handle = <const void*>metric.handle_ptr
+    params.summary = &s
+    _check(astlGetMetricStatisticsOnTarget(&params))
+    if s.count == 0:
         return MetricStatistics(0, None, None, None)
-    cdef object vmin = _decode_value(metric.value_type, s._min)
-    cdef object vmax = _decode_value(metric.value_type, s._max)
+    cdef object vmin = _decode_value(metric.value_type, s.min)
+    cdef object vmax = _decode_value(metric.value_type, s.max)
     # Average is always fp64 regardless of the metric's value_type
-    cdef object vavg = s._avg.fp64
-    return MetricStatistics(s._count, vmin, vmax, vavg)
+    cdef object vavg = s.avg.fp64
+    return MetricStatistics(s.count, vmin, vmax, vavg)
 
 
 cdef class DiscreteHistogramBin:
@@ -634,30 +784,36 @@ cpdef list get_metric_discrete_histogram_on_target(Target target, Metric metric)
             the discrete histogram summarizer).
     """
     cdef uint32_t bin_count = 0
-    _check(astlGetMetricDiscreteHistogramBinCountOnTarget(
-        <const void*>target._handle_ptr,
-        <const void*>metric._handle_ptr,
-        &bin_count,
-    ))
+    cdef astl_get_metric_discrete_histogram_bin_count_on_target_params_t count_params
+    cdef astl_get_metric_discrete_histogram_on_target_params_t params
+    count_params.size = sizeof(astl_get_metric_discrete_histogram_bin_count_on_target_params_t)
+
+    count_params.flags = 0
+    count_params.target_handle = <const void*>target.handle_ptr
+    count_params.metric_handle = <const void*>metric.handle_ptr
+    count_params.bin_count = &bin_count
+    _check(astlGetMetricDiscreteHistogramBinCountOnTarget(&count_params))
     if bin_count == 0:
         return []
     cdef astl_discrete_histogram_bin_t* bins = \
         <astl_discrete_histogram_bin_t*>calloc(bin_count, sizeof(astl_discrete_histogram_bin_t))
     if bins == NULL:
         raise MemoryError()
-    bins[0]._size = sizeof(astl_discrete_histogram_bin_t)
+    bins[0].size = sizeof(astl_discrete_histogram_bin_t)
     try:
-        _check(astlGetMetricDiscreteHistogramOnTarget(
-            <const void*>target._handle_ptr,
-            <const void*>metric._handle_ptr,
-            bins,
-            &bin_count,
-        ))
+        params.size = sizeof(astl_get_metric_discrete_histogram_on_target_params_t)
+
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.metric_handle = <const void*>metric.handle_ptr
+        params.bins = bins
+        params.bin_count = &bin_count
+        _check(astlGetMetricDiscreteHistogramOnTarget(&params))
         out = []
         for i in range(bin_count):
             out.append(DiscreteHistogramBin(
-                _decode_value(metric.value_type, bins[i]._value),
-                bins[i]._count,
+                _decode_value(metric.value_type, bins[i].value),
+                bins[i].count,
             ))
         return out
     finally:
@@ -687,31 +843,37 @@ cpdef list get_metric_states_on_target(Target target, Metric metric):
             ASTL_METRIC_FINITE_SET_VALUE nor ASTL_METRIC_RESIDENCY.
     """
     cdef uint32_t count = 0
-    _check(astlGetMetricStateCountOnTarget(
-        <const void*>target._handle_ptr,
-        <const void*>metric._handle_ptr,
-        &count,
-    ))
+    cdef astl_get_metric_state_count_on_target_params_t count_params
+    cdef astl_get_metric_states_on_target_params_t params
+    count_params.size = sizeof(astl_get_metric_state_count_on_target_params_t)
+
+    count_params.flags = 0
+    count_params.target_handle = <const void*>target.handle_ptr
+    count_params.metric_handle = <const void*>metric.handle_ptr
+    count_params.state_count = &count
+    _check(astlGetMetricStateCountOnTarget(&count_params))
     if count == 0:
         return []
-    cdef astl_state_properties_t* arr = \
-        <astl_state_properties_t*>calloc(count, sizeof(astl_state_properties_t))
+    cdef astl_state_props_t* arr = \
+        <astl_state_props_t*>calloc(count, sizeof(astl_state_props_t))
     if arr == NULL:
         raise MemoryError()
-    arr[0]._size = sizeof(astl_state_properties_t)
+    arr[0].size = sizeof(astl_state_props_t)
     try:
-        _check(astlGetMetricStatesOnTarget(
-            <const void*>target._handle_ptr,
-            <const void*>metric._handle_ptr,
-            arr,
-            &count,
-        ))
+        params.size = sizeof(astl_get_metric_states_on_target_params_t)
+
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.metric_handle = <const void*>metric.handle_ptr
+        params.states = arr
+        params.state_count = &count
+        _check(astlGetMetricStatesOnTarget(&params))
         is_finite_set = metric.metric_type == ASTL_METRIC_FINITE_SET_VALUE
         out = []
         for i in range(count):
-            name = arr[i]._name.decode() if arr[i]._name != NULL else ""
-            desc = arr[i]._description.decode() if arr[i]._description != NULL else ""
-            value = _decode_value(metric.value_type, arr[i]._value) if is_finite_set else None
+            name = arr[i].name.decode() if arr[i].name != NULL else ""
+            desc = arr[i].description.decode() if arr[i].description != NULL else ""
+            value = _decode_value(metric.value_type, arr[i].value) if is_finite_set else None
             out.append(MetricState(name, desc, value))
         return out
     finally:
@@ -720,20 +882,31 @@ cpdef list get_metric_states_on_target(Target target, Metric metric):
 
 cpdef list get_targets():
     cdef uint32_t count = 0
-    _check(astlGetTargetCount(&count))
+    cdef astl_get_target_count_params_t count_params
+    cdef astl_get_targets_params_t params
+    count_params.size = sizeof(astl_get_target_count_params_t)
+
+    count_params.flags = 0
+    count_params.target_count = &count
+    _check(astlGetTargetCount(&count_params))
     if count == 0:
         return []
-    cdef astl_target_properties_t* arr = <astl_target_properties_t*>calloc(count, sizeof(astl_target_properties_t))
+    cdef astl_target_props_t* arr = <astl_target_props_t*>calloc(count, sizeof(astl_target_props_t))
     if arr == NULL:
         raise MemoryError("Failed to allocate target properties buffer")
-    arr[0]._size = sizeof(astl_target_properties_t)
+    arr[0].size = sizeof(astl_target_props_t)
     try:
-        _check(astlGetTargets(arr, &count))
+        params.size = sizeof(astl_get_targets_params_t)
+
+        params.flags = 0
+        params.targets = arr
+        params.target_count = &count
+        _check(astlGetTargets(&params))
         py_list = []
         for i in range(count):
-            name = arr[i]._name.decode() if arr[i]._name != NULL else ""
-            desc = arr[i]._description.decode() if arr[i]._description != NULL else ""
-            py_list.append(Target(name, desc, <size_t>arr[i]._handle))
+            name = arr[i].name.decode() if arr[i].name != NULL else ""
+            desc = arr[i].description.decode() if arr[i].description != NULL else ""
+            py_list.append(Target(name, desc, <size_t>arr[i].handle))
         return py_list
     finally:
         free(arr)

@@ -24,14 +24,14 @@ sequenceDiagram
     rect rgb(230,230,255)
     Note over User,Orchestrator: Initialization & Discovery (see phase 1)
     Orchestrator-->>API: status
-    User->>API: astlGetTargets()
+    User->>API: astlGetTargets(get_targets_params)
     API->>Orchestrator: GetTargets()
     Orchestrator-->>API: targets
     end
 
     rect rgb(230,255,230)
     Note over API,MetricManager: Metric Config (see phase 2)
-    User->>API: astlConfigureMetricCollectionOnTarget(target, metrics, params)
+    User->>API: astlConfigureMetricCollectionOnTarget(configure_metric_params)
     API->>Orchestrator: ConfigureMetricCollectionOnTarget(...)
     Orchestrator->>MetricManager: Derive ops
     MetricManager-->>Orchestrator: ops | error
@@ -42,7 +42,7 @@ sequenceDiagram
 
     rect rgb(255,245,230)
     Note over User,CollectorManager: Collection & Immediate Read (phase 3)
-    User->>API: astlStartCollectionOnTarget(target)
+    User->>API: astlStartCollectionOnTarget(start_params)
     API->>Orchestrator: StartCollectionOnTarget(target)
     Orchestrator->>CollectorManager: StartOnTarget(target)
     loop Sampling
@@ -50,7 +50,7 @@ sequenceDiagram
         Orchestrator->>Orchestrator: buffer
     end
     alt Immediate read
-        User->>API: astlReadImmediateOnTarget(target)
+        User->>API: astlReadImmediateOnTarget(immediate_params)
         API->>Orchestrator: ReadImmediateOnTarget(target)
     Orchestrator->>CollectorManager: ReadImmediateOnTarget(target)
     CollectorManager-->>Orchestrator: Raw sample
@@ -60,7 +60,7 @@ sequenceDiagram
 
     rect rgb(255,235,235)
     Note over API,MetricManager: Stop & Processing (phase 4)
-    User->>API: astlStopCollectionOnTarget(target)
+    User->>API: astlStopCollectionOnTarget(stop_params)
     API->>Orchestrator: StopCollectionOnTarget(target)
     Orchestrator->>MetricManager: ProcessRawSamples()
     MetricManager-->>Orchestrator: summaries
@@ -72,10 +72,10 @@ sequenceDiagram
     rect rgb(240,240,240)
     Note over User,Orchestrator: Retrieval & Shutdown (phase 5)
     %% Metric retrieval (two-step example)
-    User->>API: astlGetMetricSampleCountOnTarget(target, metric)
+    User->>API: astlGetMetricSampleCountOnTarget(get_metric_sample_count_params)
     API->>Orchestrator: GetMetricSampleCountOnTarget(target, metric)
     Orchestrator-->>API: count | error
-    User->>API: astlGetMetricSamplesOnTarget(target, metric, buffer, count)
+    User->>API: astlGetMetricSamplesOnTarget(get_metric_samples_params)
     API->>Orchestrator: GetMetricSamplesOnTarget(target, metric, buffer, count)
     Orchestrator-->>API: samples | error
     %% Shutdown (no astlShutdown API implemented yet)

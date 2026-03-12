@@ -89,7 +89,7 @@ class Counter : public RawMetric, public virtual ICounter {
    * @param properties Non-null pointer to structure to populate.
    * @return ASTL_STATUS_SUCCESS or ASTL_STATUS_BAD_ARGUMENT.
    */
-  auto GetProperties(astl_metric_properties_t *properties) const -> astl_status_code override {
+  auto GetProperties(astl_metric_props_t *properties) const -> astl_status_code override {
     return RawMetric::GetProperties(properties);
   };
 
@@ -101,9 +101,9 @@ class Counter : public RawMetric, public virtual ICounter {
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    */
-  auto GetProperties(astl_counter_properties_t *properties) const -> astl_status_code override;
+  auto GetProperties(astl_counter_props_t *properties) const -> astl_status_code override;
 
-  /** Note that GetProperties(astl_metric_properties_t) is implemented final in RawMetric */
+  /** Note that GetProperties(astl_metric_props_t) is implemented final in RawMetric */
 
   /**
    * @brief Forward a single processed sample to the registered sink (if any).

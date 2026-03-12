@@ -14,18 +14,18 @@ sequenceDiagram
 
     %% Retrieval
     %% Counter samples retrieval (two-step: count then fetch)
-    User->>API: astlGetCounterSampleCountOnTarget(target,counter)
+    User->>API: astlGetCounterSampleCountOnTarget(get_counter_sample_count_params)
     API->>Orchestrator: GetCounterSampleCountOnTarget(target,counter)
     Orchestrator-->>API: invalid handle | count
-    User->>API: astlGetCounterSamplesOnTarget(target,counter,buffer,count)
+    User->>API: astlGetCounterSamplesOnTarget(get_counter_samples_params)
     API->>Orchestrator: GetCounterSamplesOnTarget(target,counter,buffer,count)
     Orchestrator-->>API: samples | error
 
     %% Metric samples retrieval (two-step: count then fetch)
-    User->>API: astlGetMetricSampleCountOnTarget(target,metric)
+    User->>API: astlGetMetricSampleCountOnTarget(get_metric_sample_count_params)
     API->>Orchestrator: GetMetricSampleCountOnTarget(target,metric)
     Orchestrator-->>API: invalid handle | count
-    User->>API: astlGetMetricSamplesOnTarget(target,metric,buffer,count)
+    User->>API: astlGetMetricSamplesOnTarget(get_metric_samples_params)
     API->>Orchestrator: GetMetricSamplesOnTarget(target,metric,buffer,count)
     Orchestrator-->>API: samples | error
 

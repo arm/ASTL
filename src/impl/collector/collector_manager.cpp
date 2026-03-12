@@ -59,9 +59,9 @@ auto CollectorManager::UnregisterRawSampleSink(IRawSampleSink* sink) -> astl_sta
   return ASTL_STATUS_SUCCESS;
 }
 
-auto CollectorManager::ConfigureCollectionOnTarget(const ITarget*                      target,
-                                                   astl_collection_parameters_t const& collection_params,
-                                                   CollectionOperations&&              operations) -> astl_status_code {
+auto CollectorManager::ConfigureCollectionOnTarget(const ITarget*                  target,
+                                                   astl_collection_params_t const& collection_params,
+                                                   CollectionOperations&&          operations) -> astl_status_code {
   ICollector* selected_collector = nullptr;
   {
     std::lock_guard<std::mutex> lock(_mutex);

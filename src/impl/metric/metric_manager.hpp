@@ -104,7 +104,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    *
    * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
    */
-  [[nodiscard]] auto GetCounterProperties(astl_counter_handle_t counter, astl_counter_properties_t* properties) const
+  [[nodiscard]] auto GetCounterProperties(astl_counter_handle_t counter, astl_counter_props_t* properties) const
       -> astl_status_code override;
 
   /**
@@ -183,8 +183,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    */
-  auto GetProperties(astl_metric_handle_t metric, astl_metric_properties_t* properties) const
-      -> astl_status_code override;
+  auto GetProperties(astl_metric_handle_t metric, astl_metric_props_t* properties) const -> astl_status_code override;
 
   /**
    * @brief Build the sequence of operations required to collect the given metrics.
@@ -223,7 +222,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @param group The metric group API handle
    * @param properties A non-null pointer to a struct that to be populated with info about the given group
    */
-  auto GetMetricGroupProperties(astl_metric_group_handle_t group, astl_metric_group_properties_t* properties) const
+  auto GetMetricGroupProperties(astl_metric_group_handle_t group, astl_metric_group_props_t* properties) const
       -> astl_status_code override;
 
   /**

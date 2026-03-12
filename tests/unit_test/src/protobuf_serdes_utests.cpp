@@ -243,10 +243,10 @@ TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager
     REQUIRE(target_0.Name() == "tlm-1");
     REQUIRE(target_0.GetCollectorType() == astl::CollectorType::SCMI);
 
-    astl_target_properties_t props{};
+    astl_target_props_t props{};
     REQUIRE(target_0.GetProperties(&props) == ASTL_STATUS_SUCCESS);
-    REQUIRE(std::string{props._description ? props._description : ""} == "Target discovered via SCMI");
-    REQUIRE(std::string{props._uuid ? props._uuid : ""} == "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
+    REQUIRE(std::string{props.description ? props.description : ""} == "Target discovered via SCMI");
+    REQUIRE(std::string{props.id ? props.id : ""} == "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
   }
 
   // Check second target properties
@@ -255,10 +255,10 @@ TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager
     REQUIRE(target_1.Name() == "tlm-0");
     REQUIRE(target_1.GetCollectorType() == astl::CollectorType::SCMI);
 
-    astl_target_properties_t props{};
+    astl_target_props_t props{};
     REQUIRE(target_1.GetProperties(&props) == ASTL_STATUS_SUCCESS);
-    REQUIRE(std::string{props._description ? props._description : ""} == "Target discovered via SCMI");
-    REQUIRE(std::string{props._uuid ? props._uuid : ""} == "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
+    REQUIRE(std::string{props.description ? props.description : ""} == "Target discovered via SCMI");
+    REQUIRE(std::string{props.id ? props.id : ""} == "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
   }
 }
 
@@ -609,7 +609,7 @@ TEST_CASE(
   auto metrics_or_err = mgr->GetAvailableMetrics(targets[0].get());
   REQUIRE(metrics_or_err.has_value());
   REQUIRE_FALSE(metrics_or_err->empty());
-  auto* first_handle = static_cast<const astl::MetricHandle*>((*metrics_or_err)[0]);
+  const auto* first_handle = static_cast<const astl::MetricHandle*>((*metrics_or_err)[0]);
   REQUIRE(first_handle != nullptr);
   REQUIRE(first_handle->config != nullptr);
   REQUIRE(first_handle->config->InputValueType() == first_handle->config->ValueType());

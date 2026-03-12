@@ -27,26 +27,26 @@ sequenceDiagram
     MetricManager->>MetricManager: store MetricHandle
 
     %% Enumeration from public API call (astlGetMetrics -> GetAvailableMetrics)
-    User->>Orchestrator: astlGetMetrics()
+    User->>Orchestrator: astlGetMetrics(get_metrics_params)
     Orchestrator->>MetricManager: GetAvailableMetrics()
     MetricManager-->>Orchestrator: span<astl_metric_handle_t>
     Orchestrator-->>User: metric handles
 
     %% Build required operations for a target prior to collection
-    User->>Orchestrator: astlConfigureMetricCollectionOnTarget(target, params, metrics)
+    User->>Orchestrator: astlConfigureMetricCollectionOnTarget(configure_metric_params)
     Orchestrator->>MetricManager: GetRequiredOperations(metrics, target)
     MetricManager-->>Orchestrator: CollectionOperations
     Orchestrator->>Orchestrator: configure collectors (CollectorManager)
 
     %% Collection lifecycle (simplified)
-    User->>Orchestrator: astlStartCollectionOnTarget(target)
+    User->>Orchestrator: astlStartCollectionOnTarget(start_params)
     Orchestrator->>CollectorManager: Start(target)
-    User->>Orchestrator: astlReadImmediateOnTarget(target)
+    User->>Orchestrator: astlReadImmediateOnTarget(immediate_params)
     Orchestrator->>CollectorManager: ReadImmediate(target)
     CollectorManager->>MetricManager: SinkProcessedSamples(metric, processed)
     MetricManager->>Metric1: ReceiveRawSample / Summarize (as needed)
     MetricManager->>Metric2: ReceiveRawSample / Summarize (as needed)
-    User->>Orchestrator: astlStopCollectionOnTarget(target)
+    User->>Orchestrator: astlStopCollectionOnTarget(stop_params)
     Orchestrator->>CollectorManager: Stop(target)
 
     %% Destruction

@@ -112,14 +112,15 @@ auto PrintHelp() -> void {
 
 auto PrintVersion() -> void {
   astl_version_t version = astlVersion();
-  std::cout << "ASTL v" << version._major << "." << version._minor << "." << version._micro << "\n";
+  std::cout << "ASTL v" << version.major << "." << version.minor << "." << version.micro << "\n";
   std::cout << "Version string: " << astlVersionString() << "\n";
 }
 
 auto PrintSystemInfo() -> void {
-  astl_platform_properties_t system_info{};
-  system_info._size = sizeof(astl_platform_properties_t);
-  const auto status = astlGetSystemInfo(&system_info);
+  astl_platform_props_t system_info{};
+  system_info.size = sizeof(astl_platform_props_t);
+  ASTL_INIT_STRUCT(astl_get_system_info_params_t, get_system_info_params, .flags = 0, .system_info = &system_info);
+  const auto status = astlGetSystemInfo(&get_system_info_params);
   std::cout << "System info status: " << astlStatusString(status) << "\n";
   if (status != ASTL_STATUS_SUCCESS) {
     return;
@@ -130,15 +131,15 @@ auto PrintSystemInfo() -> void {
   };
 
   std::cout << "System info:\n";
-  print_field("SoC", system_info._soc_name);
-  print_field("Vendor ID", system_info._vendor_id);
-  print_field("OS", system_info._os_name);
-  print_field("Kernel", system_info._kernel_name);
-  print_field("Kernel release", system_info._kernel_release);
-  print_field("Kernel version", system_info._kernel_version);
-  print_field("Firmware", system_info._firmware_version);
-  print_field("Host", system_info._hostname);
-  print_field("Architecture", system_info._architecture);
+  print_field("SoC", system_info.soc_name);
+  print_field("Vendor ID", system_info.vendor_id);
+  print_field("OS", system_info.os_name);
+  print_field("Kernel", system_info.kernel_name);
+  print_field("Kernel release", system_info.kernel_release);
+  print_field("Kernel version", system_info.kernel_version);
+  print_field("Firmware", system_info.firmware_version);
+  print_field("Host", system_info.hostname);
+  print_field("Architecture", system_info.architecture);
 }
 
 auto GetIntervalArgument(const std::unordered_map<std::string, std::string>& args)
@@ -190,10 +191,11 @@ auto GetMetricGroupArgument(const std::unordered_map<std::string, std::string>& 
   return std::string{};
 }
 
-auto GetTargetByName(std::string const& target_name, std::vector<astl_target_properties_t>& target_properties_buffer,
-                     astl_target_properties_t& target_properties) -> astl_status_code {
-  uint32_t         target_count = 0;
-  astl_status_code status       = astlGetTargetCount(&target_count);
+auto GetTargetByName(std::string const& target_name, std::vector<astl_target_props_t>& target_properties_buffer,
+                     astl_target_props_t& target_properties) -> astl_status_code {
+  uint32_t target_count = 0;
+  ASTL_INIT_STRUCT(astl_get_target_count_params_t, get_target_count_params, .flags = 0, .target_count = &target_count);
+  astl_status_code status = astlGetTargetCount(&get_target_count_params);
   std::cout << "Target count: " << target_count << "\n";
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
@@ -206,9 +208,10 @@ auto GetTargetByName(std::string const& target_name, std::vector<astl_target_pro
     return ASTL_STATUS_SUCCESS;
   }
 
-  target_properties_buffer[0]._size = sizeof(astl_target_properties_t);
-
-  status = astlGetTargets(target_properties_buffer.data(), &target_count);
+  target_properties_buffer[0].size = sizeof(astl_target_props_t);
+  ASTL_INIT_STRUCT(astl_get_targets_params_t, get_targets_params, .flags = 0,
+                   .targets = target_properties_buffer.data(), .target_count = &target_count);
+  status = astlGetTargets(&get_targets_params);
   target_properties_buffer.resize(target_count);
   std::cout << "astlGetTargets Status: " << astlStatusString(status) << '\n';
 
@@ -216,12 +219,12 @@ auto GetTargetByName(std::string const& target_name, std::vector<astl_target_pro
     std::ranges::for_each(
         target_properties_buffer, [&target_properties, target_name](const auto& target_properties_entry) {
           std::cout << "Target info:" << '\n';
-          std::cout << "  Name:        " << (target_properties_entry._name ? target_properties_entry._name : "<null>")
+          std::cout << "  Name:        " << (target_properties_entry.name ? target_properties_entry.name : "<null>")
                     << '\n';
           std::cout << "  Description: "
-                    << (target_properties_entry._description ? target_properties_entry._description : "<null>") << '\n';
+                    << (target_properties_entry.description ? target_properties_entry.description : "<null>") << '\n';
           std::cout << "compare to target_name:" << target_name << '\n';
-          if (target_properties_entry._name && target_properties_entry._name == target_name) {
+          if (target_properties_entry.name && target_properties_entry.name == target_name) {
             std::cout << "  --> Selected target\n";
             target_properties = target_properties_entry;
           }
@@ -233,10 +236,11 @@ auto GetTargetByName(std::string const& target_name, std::vector<astl_target_pro
   return ASTL_STATUS_INTERNAL_ERROR;
 }
 
-auto GetTargets(std::vector<astl_target_properties_t>& target_properties_buffer,
-                astl_target_properties_t&              target_properties) -> astl_status_code {
-  uint32_t         target_count = 0;
-  astl_status_code status       = astlGetTargetCount(&target_count);
+auto GetTargets(std::vector<astl_target_props_t>& target_properties_buffer, astl_target_props_t& target_properties)
+    -> astl_status_code {
+  uint32_t target_count = 0;
+  ASTL_INIT_STRUCT(astl_get_target_count_params_t, get_target_count_params, .flags = 0, .target_count = &target_count);
+  astl_status_code status = astlGetTargetCount(&get_target_count_params);
   std::cout << "Target count: " << target_count << "\n";
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
@@ -248,17 +252,18 @@ auto GetTargets(std::vector<astl_target_properties_t>& target_properties_buffer,
     return ASTL_STATUS_NO_TARGETS_FOUND;
   }
 
-  target_properties_buffer[0]._size = sizeof(astl_target_properties_t);
-
-  status = astlGetTargets(target_properties_buffer.data(), &target_count);
+  target_properties_buffer[0].size = sizeof(astl_target_props_t);
+  ASTL_INIT_STRUCT(astl_get_targets_params_t, get_targets_params, .flags = 0,
+                   .targets = target_properties_buffer.data(), .target_count = &target_count);
+  status = astlGetTargets(&get_targets_params);
   target_properties_buffer.resize(target_count);
   std::cout << "astlGetTargets Status: " << astlStatusString(status) << '\n';
 
   if (target_count > 0 && (status == ASTL_STATUS_SUCCESS || status == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED)) {
     std::ranges::for_each(target_properties_buffer, [](const auto target_properties) {
       std::cout << "Target info:" << '\n';
-      std::cout << "  Name:        " << (target_properties._name ? target_properties._name : "<null>") << '\n';
-      std::cout << "  Description: " << (target_properties._description ? target_properties._description : "<null>")
+      std::cout << "  Name:        " << (target_properties.name ? target_properties.name : "<null>") << '\n';
+      std::cout << "  Description: " << (target_properties.description ? target_properties.description : "<null>")
                 << '\n';
     });
     target_properties = target_properties_buffer[0];
@@ -269,48 +274,55 @@ auto GetTargets(std::vector<astl_target_properties_t>& target_properties_buffer,
   return ASTL_STATUS_INTERNAL_ERROR;
 }
 
-auto GetCounters(const astl_target_properties_t& target_properties)
-    -> std::expected<std::vector<astl_counter_properties_t>, astl_status_code> {
+auto GetCounters(const astl_target_props_t& target_properties)
+    -> std::expected<std::vector<astl_counter_props_t>, astl_status_code> {
   uint32_t counter_count{};
-  auto     status = astlGetCounterCount(target_properties._handle, &counter_count);
+  ASTL_INIT_STRUCT(astl_get_counter_count_params_t, get_counter_count_params, .flags = 0,
+                   .target_handle = target_properties.handle, .counter_count = &counter_count);
+  auto status = astlGetCounterCount(&get_counter_count_params);
   std::cout << "Counter count: " << counter_count << "\n";
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetCounterCount Status: " << astlStatusString(status) << '\n';
-    std::cout << "target_handle: " << target_properties._handle << " \n";
+    std::cout << "target_handle: " << target_properties.handle << " \n";
     return std::unexpected{status};
   }
   if (counter_count == 0) {
     std::cout << "No counters found for target.\n";
     return {};
   }
-  std::vector<astl_counter_properties_t> counter_buffer;
+  std::vector<astl_counter_props_t> counter_buffer;
   counter_buffer.resize(counter_count);
   for (auto& counter : counter_buffer) {
-    counter._size = sizeof(astl_counter_properties_t);
+    counter.size = sizeof(astl_counter_props_t);
   }
-  status = astlGetCounters(target_properties._handle, counter_buffer.data(), &counter_count);
+  ASTL_INIT_STRUCT(astl_get_counters_params_t, get_counters_params, .flags = 0,
+                   .target_handle = target_properties.handle, .counters = counter_buffer.data(),
+                   .counter_count = &counter_count);
+  status = astlGetCounters(&get_counters_params);
   std::cout << "astlGetCounters Status: " << astlStatusString(status) << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
     return std::unexpected{status};
   }
-  return std::expected<std::vector<astl_counter_properties_t>, astl_status_code>(std::move(counter_buffer));
+  return std::expected<std::vector<astl_counter_props_t>, astl_status_code>(std::move(counter_buffer));
 }
 
-void PrintCounters(std::vector<astl_counter_properties_t> const& counter_buffer) {
+void PrintCounters(std::vector<astl_counter_props_t> const& counter_buffer) {
   for (const auto& counter_props : counter_buffer) {
     std::cout << "Counter info:" << '\n';
-    std::cout << "  Name:        " << (counter_props._name ? counter_props._name : "<null>") << '\n';
-    std::cout << "  Description: " << (counter_props._description ? counter_props._description : "<null>") << '\n';
+    std::cout << "  Name:        " << (counter_props.name ? counter_props.name : "<null>") << '\n';
+    std::cout << "  Description: " << (counter_props.description ? counter_props.description : "<null>") << '\n';
   }
 }
 
-auto GetMetrics(const astl_target_properties_t& target_properties, std::vector<astl_metric_properties_t>& metric_buffer,
+auto GetMetrics(const astl_target_props_t& target_properties, std::vector<astl_metric_props_t>& metric_buffer,
                 uint32_t& metric_count) -> astl_status_code {
-  astl_status_code status = astlGetMetricCount(target_properties._handle, &metric_count);
+  ASTL_INIT_STRUCT(astl_get_metric_count_params_t, get_metric_count_params, .flags = 0,
+                   .target_handle = target_properties.handle, .metric_count = &metric_count);
+  astl_status_code status = astlGetMetricCount(&get_metric_count_params);
   std::cout << "Metric count: " << metric_count << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetMetricCount Status: " << astlStatusString(status) << '\n';
-    std::cout << "target_handle: " << target_properties._handle << " \n";
+    std::cout << "target_handle: " << target_properties.handle << " \n";
     std::cout << "&metric_count: " << &metric_count << " \n";
     return status;
   }
@@ -322,30 +334,37 @@ auto GetMetrics(const astl_target_properties_t& target_properties, std::vector<a
   }
 
   if (metric_count > 0) {
-    metric_buffer[0]._size = sizeof(astl_metric_properties_t);
+    metric_buffer[0].size = sizeof(astl_metric_props_t);
   }
-  status = astlGetMetrics(target_properties._handle, metric_buffer.data(), &metric_count);
+  ASTL_INIT_STRUCT(astl_get_metrics_params_t, get_metrics_params, .flags = 0, .target_handle = target_properties.handle,
+                   .metrics = metric_buffer.data(), .metric_count = &metric_count);
+  status = astlGetMetrics(&get_metrics_params);
   std::cout << "astlGetMetrics Status: " << astlStatusString(status) << '\n';
   return status;
 }
 
-auto GetMetricsInGroup(const astl_target_properties_t& target_properties, const std::string& group_name)
-    -> std::expected<std::vector<astl_metric_properties_t>, astl_status_code> {
+auto GetMetricsInGroup(const astl_target_props_t& target_properties, const std::string& group_name)
+    -> std::expected<std::vector<astl_metric_props_t>, astl_status_code> {
   uint32_t metric_group_count{0};
-  auto     status = astlGetMetricGroupCount(target_properties._handle, &metric_group_count);
+  ASTL_INIT_STRUCT(astl_get_metric_group_count_params_t, get_metric_group_count_params, .flags = 0,
+                   .target_handle = target_properties.handle, .metric_group_count = &metric_group_count);
+  auto status = astlGetMetricGroupCount(&get_metric_group_count_params);
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetMetricGroupCount Status: " << astlStatusString(status) << '\n';
     return std::unexpected<astl_status_code>(status);
   }
   std::cout << "astlGetMetricGroupCount: " << metric_group_count << '\n';
   if (metric_group_count == 0) {
-    return std::vector<astl_metric_properties_t>{};
+    return std::vector<astl_metric_props_t>{};
   }
-  std::vector<astl_metric_group_properties_t> metric_groups_properties(metric_group_count);
-  metric_groups_properties[0]._size = sizeof(astl_metric_group_properties_t);
+  std::vector<astl_metric_group_props_t> metric_groups_properties(metric_group_count);
+  metric_groups_properties[0].size = sizeof(astl_metric_group_props_t);
 
   // retrieve the metric groups
-  status = astlGetMetricGroups(target_properties._handle, metric_groups_properties.data(), &metric_group_count);
+  ASTL_INIT_STRUCT(astl_get_metric_groups_params_t, get_metric_groups_params, .flags = 0,
+                   .target_handle = target_properties.handle, .metric_groups = metric_groups_properties.data(),
+                   .metric_group_count = &metric_group_count);
+  status = astlGetMetricGroups(&get_metric_groups_params);
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetMetricGroups Status: " << astlStatusString(status) << '\n';
     return std::unexpected<astl_status_code>(status);
@@ -353,23 +372,26 @@ auto GetMetricsInGroup(const astl_target_properties_t& target_properties, const 
 
   // find the requested metric group
   auto metric_group = std::find_if(metric_groups_properties.begin(), metric_groups_properties.end(),
-                                   [&group_name](const astl_metric_group_properties_t& group_props) {
-                                     return group_props._name != nullptr && group_name == group_props._name;
+                                   [&group_name](const astl_metric_group_props_t& group_props) {
+                                     return group_props.name != nullptr && group_name == group_props.name;
                                    });
   if (metric_group == metric_groups_properties.end()) {
     std::cout << "Metric group '" << group_name << "' not found.\n";
-    return std::vector<astl_metric_properties_t>{};
+    return std::vector<astl_metric_props_t>{};
   }
   // allocate buffer for the group's metrics
-  std::vector<astl_metric_properties_t> metrics_properties(metric_group->_metric_count);
-  if (metric_group->_metric_count > 0) {
-    metrics_properties[0]._size = sizeof(astl_metric_properties_t);
+  std::vector<astl_metric_props_t> metrics_properties(metric_group->metric_count);
+  if (metric_group->metric_count > 0) {
+    metrics_properties[0].size = sizeof(astl_metric_props_t);
   }
   // _metrics member of metric_group_properties is a convenience - letting user allocate buffer
   // for metrics, and associate it with the metric group.
-  metric_group->_metrics = metrics_properties.data();
+  metric_group->metrics = metrics_properties.data();
 
-  status = astlGetMetricGroupMetrics(target_properties._handle, &(*metric_group), metric_group->_metrics);
+  ASTL_INIT_STRUCT(astl_get_metric_group_metrics_params_t, get_metric_group_metrics_params, .flags = 0,
+                   .target_handle = target_properties.handle, .metric_group = &(*metric_group),
+                   .metrics = metric_group->metrics);
+  status = astlGetMetricGroupMetrics(&get_metric_group_metrics_params);
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetMetricGroupMetrics Status: " << astlStatusString(status) << '\n';
     return std::unexpected(status);
@@ -377,34 +399,37 @@ auto GetMetricsInGroup(const astl_target_properties_t& target_properties, const 
   return metrics_properties;
 }
 
-auto ConfigureAndRunCollection(const astl_target_properties_t&              target_properties,
-                               const std::vector<astl_metric_properties_t>& metric_buffer, bool do_interval,
+auto ConfigureAndRunCollection(const astl_target_props_t&              target_properties,
+                               const std::vector<astl_metric_props_t>& metric_buffer, bool do_interval,
                                std::chrono::seconds duration_seconds, std::chrono::milliseconds sampling_interval)
     -> astl_status_code {
-  ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params,
-                   ._sampling_interval = do_interval ? static_cast<uint32_t>(sampling_interval.count()) : 0,
-                   ._collection_mode   = do_interval ? ASTL_COLLECTION_MODE_SAMPLING : ASTL_COLLECTION_MODE_IMMEDIATE,
-                   ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD);
+  ASTL_INIT_STRUCT(astl_collection_params_t, collection_params,
+                   .flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
+                   .sampling_interval = do_interval ? static_cast<uint32_t>(sampling_interval.count()) : 0,
+                   .collection_mode   = do_interval ? ASTL_COLLECTION_MODE_SAMPLING : ASTL_COLLECTION_MODE_IMMEDIATE);
 
   // Build a vector of metric handles from metric_buffer
   std::vector<astl_metric_handle_t> metric_handles_vec;
   metric_handles_vec.reserve(metric_buffer.size());
   std::transform(metric_buffer.begin(), metric_buffer.end(), std::back_inserter(metric_handles_vec),
-                 [](const astl_metric_properties_t& metric_properties) { return metric_properties._handle; });
+                 [](const astl_metric_props_t& metric_properties) { return metric_properties.handle; });
 
   const auto metric_count = static_cast<uint32_t>(metric_handles_vec.size());
   // Lint: readability-qualified-auto -> express pointer constness explicitly
-  const auto* const target_handle = target_properties._handle;
+  const auto* const target_handle = target_properties.handle;
 
-  astl_status_code status =
-      astlConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles_vec.data(), metric_count);
+  ASTL_INIT_STRUCT(astl_configure_metric_collection_on_target_params_t, configure_params, .flags = 0,
+                   .target_handle = target_handle, .collection_params = &collection_params,
+                   .metric_handles = metric_handles_vec.data(), .metric_count = metric_count);
+  astl_status_code status = astlConfigureMetricCollectionOnTarget(&configure_params);
   std::cout << "astlConfigureMetricCollectionOnTarget Status: " << astlStatusString(status) << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "Failed to configure metric collection - exiting early" << '\n';
     return status;
   }
 
-  status = astlStartCollectionOnTarget(target_handle);
+  ASTL_INIT_STRUCT(astl_start_collection_on_target_params_t, start_params, .flags = 0, .target_handle = target_handle);
+  status = astlStartCollectionOnTarget(&start_params);
   std::cout << "astlStartCollectionOnTarget Status: " << astlStatusString(status) << '\n';
 
   if (do_interval && duration_seconds > std::chrono::seconds::zero()) {
@@ -412,49 +437,54 @@ auto ConfigureAndRunCollection(const astl_target_properties_t&              targ
   }
 
   if (!do_interval) {
-    status = astlReadImmediateOnTarget(target_handle);
+    ASTL_INIT_STRUCT(astl_read_immediate_on_target_params_t, read_params, .flags = 0, .target_handle = target_handle);
+    status = astlReadImmediateOnTarget(&read_params);
     std::cout << "ReadImmediate: " << astlStatusString(status) << '\n';
   }
 
-  status = astlStopCollectionOnTarget(target_handle);
+  ASTL_INIT_STRUCT(astl_stop_collection_on_target_params_t, stop_params, .flags = 0, .target_handle = target_handle);
+  status = astlStopCollectionOnTarget(&stop_params);
   std::cout << "astlStopCollectionOnTarget Status: " << astlStatusString(status) << '\n';
 
   return status;
 }
 
-auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_metric_properties_t>& metric_buffer)
+auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_metric_props_t>& metric_buffer)
     -> void {
   for (const auto& metric_props : metric_buffer) {
-    if (!metric_props._name) {
+    if (!metric_props.name) {
       continue;  // skip nameless metrics
     }
-    if (std::strncmp(metric_props._name, "AP1", 3) == 0) {
+    if (std::strncmp(metric_props.name, "AP1", 3) == 0) {
       continue;  // skip AP1 as mock sysfs doesn't implement the AP1 events as listed in example_scmi_specification.json
     }
     uint32_t sample_count{};
-    auto     status = astlGetMetricSampleCountOnTarget(target_handle, metric_props._handle, &sample_count);
+    ASTL_INIT_STRUCT(astl_get_metric_sample_count_on_target_params_t, get_metric_sample_count_params, .flags = 0,
+                     .target_handle = target_handle, .metric_handle = metric_props.handle,
+                     .sample_count = &sample_count);
+    auto status = astlGetMetricSampleCountOnTarget(&get_metric_sample_count_params);
     std::cout << "astlGetMetricSampleCountOnTarget Status: " << astlStatusString(status) << " (count=" << sample_count
               << ")\n";
     if (status != ASTL_STATUS_SUCCESS || sample_count == 0) {
       continue;
     }
-    std::vector<astl_metric_sample_t> samples(sample_count);
-    if (!samples.empty()) {
-      samples[0]._size = sizeof(astl_metric_sample_t);
-    }
-    status = astlGetMetricSamplesOnTarget(target_handle, metric_props._handle, samples.data(), &sample_count);
+    std::vector<astl_sample_t> samples(sample_count);
+    ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, get_metric_samples_params, .flags = 0,
+                     .target_handle = target_handle, .metric_handle = metric_props.handle, .samples = samples.data(),
+                     .sample_count = &sample_count);
+    status = astlGetMetricSamplesOnTarget(&get_metric_samples_params);
     if (status != ASTL_STATUS_SUCCESS) {
       return;
     }
     // Check if all samples are non-zero
     bool all_samples_non_zero = std::all_of(samples.begin(), samples.begin() + sample_count,
-                                            [](const astl_metric_sample_t& sample) { return sample._value.ui64 != 0; });
+                                            [](const astl_sample_t& sample) { return sample.value.ui64 != 0; });
 
-    std::cout << "Collected Samples for metric '" << metric_props._name << "':\n";
+    std::cout << "Collected Samples for metric '" << metric_props.name << "':\n";
     for (uint32_t i = 0; i < sample_count; ++i) {
       const auto& sample_entry = samples[i];
-      std::cout << "  [" << i << "] ts=" << sample_entry._timestamp
-                << " value=" << ValueToString(sample_entry._value, metric_props._value_type) << '\n';
+      std::cout << "  [" << i << "] ts=" << sample_entry.timestamp
+                << " value=" << ValueToString(sample_entry.value, metric_props.value_type) << '\n';
     }
     // Only print success status if all samples are non-zero
     if (all_samples_non_zero) {
@@ -465,20 +495,23 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
   }
 }
 
-auto PrintMinMaxAvgSummary(astl_target_handle_t                         target_handle,
-                           const std::vector<astl_metric_properties_t>& metric_buffer) -> void {
+auto PrintMinMaxAvgSummary(astl_target_handle_t target_handle, const std::vector<astl_metric_props_t>& metric_buffer)
+    -> void {
   std::cout << "\n--- Min/Max/Avg Summary ---\n";
   for (const auto& metric_props : metric_buffer) {
-    if (!metric_props._name) {
+    if (!metric_props.name) {
       continue;  // skip nameless metrics
     }
-    if (std::strncmp(metric_props._name, "AP1", 3) == 0) {
+    if (std::strncmp(metric_props.name, "AP1", 3) == 0) {
       continue;  // skip AP1 as mock sysfs doesn't implement the AP1 events
     }
     astl_metric_statistics_t summary{};
-    summary._size           = sizeof(astl_metric_statistics_t);
-    auto        status      = astlGetMetricStatisticsOnTarget(target_handle, metric_props._handle, &summary);
-    const char* metric_name = metric_props._name ? metric_props._name : "<null>";
+    summary.size  = sizeof(astl_metric_statistics_t);
+    summary.flags = ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG;
+    ASTL_INIT_STRUCT(astl_get_metric_statistics_on_target_params_t, get_metric_statistics_params, .flags = 0,
+                     .target_handle = target_handle, .metric_handle = metric_props.handle, .summary = &summary);
+    auto        status      = astlGetMetricStatisticsOnTarget(&get_metric_statistics_params);
+    const char* metric_name = metric_props.name ? metric_props.name : "<null>";
     if (status == ASTL_STATUS_NOT_SUPPORTED) {
       std::cout << "  " << metric_name << ": summary not supported for this value type\n";
       continue;
@@ -488,16 +521,16 @@ auto PrintMinMaxAvgSummary(astl_target_handle_t                         target_h
                 << '\n';
       continue;
     }
-    if (summary._count == 0) {
+    if (summary.count == 0) {
       std::cout << "  " << metric_name << ": no samples collected\n";
       continue;
     }
-    const std::string  unit = UnitsToString(metric_props._units);
+    const std::string  unit = UnitsToString(metric_props.units);
     std::ostringstream avg_ss;
     avg_ss << std::fixed << std::setprecision(2);
-    avg_ss << "  " << metric_name << " count=" << summary._count
-           << " min=" << ValueToString(summary._min, metric_props._value_type)
-           << " max=" << ValueToString(summary._max, metric_props._value_type) << " avg=" << summary._avg.fp64
+    avg_ss << "  " << metric_name << " count=" << summary.count
+           << " min=" << ValueToString(summary.min, metric_props.value_type)
+           << " max=" << ValueToString(summary.max, metric_props.value_type) << " avg=" << summary.avg.fp64
            << (unit.empty() ? "" : " unit=" + unit) << '\n';
     std::cout << avg_ss.str();
   }
@@ -543,8 +576,8 @@ auto main(int argc, char* argv[]) -> int {
       return 2;
     }
 
-    ASTL_INIT_STRUCT(astl_load_params_t, load_params, ._input_file_path = input_file_path.c_str(),
-                     ._chunk_size_bytes = 0, ._flags = 0);
+    ASTL_INIT_STRUCT(astl_load_params_t, load_params, .flags = 0, .input_file_path = input_file_path.c_str(),
+                     .chunk_size_bytes = 0);
     status = astlLoadCollection(&load_params);
     std::cout << "astlLoadCollection Status: " << astlStatusString(status) << '\n';
     if (status != ASTL_STATUS_SUCCESS) {
@@ -582,8 +615,8 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   // Get targets
-  std::vector<astl_target_properties_t> target_properties_buffer;
-  astl_target_properties_t              target_properties;
+  std::vector<astl_target_props_t> target_properties_buffer;
+  astl_target_props_t              target_properties;
   if (args.contains("target")) {
     status = GetTargetByName(args["target"], target_properties_buffer, target_properties);
   } else {
@@ -604,7 +637,7 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   // Get metrics
-  std::vector<astl_metric_properties_t> metric_buffer;
+  std::vector<astl_metric_props_t> metric_buffer;
   if (!metric_group_name.empty()) {
     auto metrics_or_error = GetMetricsInGroup(target_properties, metric_group_name);
     if (!metrics_or_error) {
@@ -626,7 +659,7 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   if (metric_buffer.empty()) {
-    std::cout << "no metrics available to collect on target: " << target_properties._name << '\n';
+    std::cout << "no metrics available to collect on target: " << target_properties.name << '\n';
     return 0;
   }
 
@@ -648,7 +681,7 @@ auto main(int argc, char* argv[]) -> int {
       return 2;
     }
 
-    ASTL_INIT_STRUCT(astl_save_params_t, save_params, ._output_file_path = output_file_path.c_str(), ._flags = 0);
+    ASTL_INIT_STRUCT(astl_save_params_t, save_params, .flags = 0, .output_file_path = output_file_path.c_str());
     status = astlSaveCollection(&save_params);
     std::cout << "astlSaveCollection Status: " << astlStatusString(status) << '\n';
     if (status != ASTL_STATUS_SUCCESS) {
@@ -659,10 +692,10 @@ auto main(int argc, char* argv[]) -> int {
   // Retrieve and display samples
   // Currently unimplemented. For the first milestone, just read from debug logs
   // TODO(ASTL-60) - Print samples using basic text writer plugin
-  RetrieveSamples(target_properties._handle, metric_buffer);
+  RetrieveSamples(target_properties.handle, metric_buffer);
 
   // Print min/max/avg summary for all collected metrics
-  PrintMinMaxAvgSummary(target_properties._handle, metric_buffer);
+  PrintMinMaxAvgSummary(target_properties.handle, metric_buffer);
 
   return 0;
 }

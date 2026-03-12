@@ -24,10 +24,10 @@ astl::ProcessedSampledData MakeProcessedSample(uint64_t value, astl::SampleTimes
 
 TEST_CASE("BufferOutput writes exact capacity with success", "[buffer_output]") {
   // Arrange
-  constexpr uint32_t                         capacity = 3;
-  std::array<astl_metric_sample_t, capacity> backing{};
-  uint32_t                                   sample_count_capacity = capacity;  // preset capacity per contract
-  astl::BufferOutput                         output(std::span<astl_metric_sample_t>(backing), &sample_count_capacity);
+  constexpr uint32_t                  capacity = 3;
+  std::array<astl_sample_t, capacity> backing{};
+  uint32_t                            sample_count_capacity = capacity;  // preset capacity per contract
+  astl::BufferOutput                  output(std::span<astl_sample_t>(backing), &sample_count_capacity);
 
   // Build three processed samples
   const astl::SampleTimestamp             base_ts{};  // epoch
@@ -45,13 +45,12 @@ TEST_CASE("BufferOutput writes exact capacity with success", "[buffer_output]") 
 
   REQUIRE(backing.size() == samples.size());
 
-  auto require_processed_sample_matches_metric_sample = [](const astl_metric_sample_t&       metric_sample,
+  auto require_processed_sample_matches_metric_sample = [](const astl_sample_t&              metric_sample,
                                                            const astl::ProcessedSampledData& processed_sample) {
-    REQUIRE(metric_sample._size == sizeof(astl_metric_sample_t));
-    REQUIRE(metric_sample._timestamp == processed_sample.timestamp.time_since_epoch().count());
+    REQUIRE(metric_sample.timestamp == processed_sample.timestamp.time_since_epoch().count());
     auto [sample_value, sample_value_type] = processed_sample.value.ToAstlUnionValue();
     (void)sample_value_type;
-    REQUIRE(metric_sample._value.ui64 == sample_value.ui64);
+    REQUIRE(metric_sample.value.ui64 == sample_value.ui64);
     return metric_sample;
   };
 
@@ -61,10 +60,10 @@ TEST_CASE("BufferOutput writes exact capacity with success", "[buffer_output]") 
 
 TEST_CASE("BufferOutput returns BUFFER_LARGER_THAN_NEEDED when slack remains", "[buffer_output]") {
   // Arrange
-  constexpr uint32_t                         capacity = 5;  // buffer bigger than sample set
-  std::array<astl_metric_sample_t, capacity> backing{};
-  uint32_t                                   sample_count_capacity = capacity;  // provide capacity
-  astl::BufferOutput                         output(std::span<astl_metric_sample_t>(backing), &sample_count_capacity);
+  constexpr uint32_t                  capacity = 5;  // buffer bigger than sample set
+  std::array<astl_sample_t, capacity> backing{};
+  uint32_t                            sample_count_capacity = capacity;  // provide capacity
+  astl::BufferOutput                  output(std::span<astl_sample_t>(backing), &sample_count_capacity);
 
   std::vector<astl::ProcessedSampledData> samples;
   const astl::SampleTimestamp             base_ts{};
@@ -77,16 +76,16 @@ TEST_CASE("BufferOutput returns BUFFER_LARGER_THAN_NEEDED when slack remains", "
   // Assert
   REQUIRE(status == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED);
   REQUIRE(sample_count_capacity == samples.size());
-  REQUIRE(backing[0]._value.ui64 == 1U);
-  REQUIRE(backing[1]._value.ui64 == 2U);
+  REQUIRE(backing[0].value.ui64 == 1U);
+  REQUIRE(backing[1].value.ui64 == 2U);
 }
 
 TEST_CASE("BufferOutput fails when provided capacity smaller than samples", "[buffer_output]") {
   // Arrange
-  constexpr uint32_t                         capacity = 2;  // claim capacity smaller than actual sample list
-  std::array<astl_metric_sample_t, capacity> backing{};
-  uint32_t                                   sample_count_capacity = capacity;  // preset capacity
-  astl::BufferOutput                         output(std::span<astl_metric_sample_t>(backing), &sample_count_capacity);
+  constexpr uint32_t                  capacity = 2;  // claim capacity smaller than actual sample list
+  std::array<astl_sample_t, capacity> backing{};
+  uint32_t                            sample_count_capacity = capacity;  // preset capacity
+  astl::BufferOutput                  output(std::span<astl_sample_t>(backing), &sample_count_capacity);
 
   std::vector<astl::ProcessedSampledData> samples;
   const astl::SampleTimestamp             base_ts{};
@@ -107,8 +106,8 @@ TEST_CASE("BufferOutput fails when provided capacity smaller than samples", "[bu
 
 TEST_CASE("BufferOutput handles null count pointer (internal error)", "[buffer_output]") {
   // Arrange
-  std::array<astl_metric_sample_t, 2>     backing{};
-  astl::BufferOutput                      output(std::span<astl_metric_sample_t>(backing), nullptr);
+  std::array<astl_sample_t, 2>            backing{};
+  astl::BufferOutput                      output(std::span<astl_sample_t>(backing), nullptr);
   std::vector<astl::ProcessedSampledData> samples;
   const astl::SampleTimestamp             sample_ts{};
   samples.emplace_back(MakeProcessedSample(5U, sample_ts));
@@ -122,9 +121,9 @@ TEST_CASE("BufferOutput handles null count pointer (internal error)", "[buffer_o
 
 TEST_CASE("BufferOutput writing zero samples returns BUFFER_LARGER_THAN_NEEDED (slack)", "[buffer_output]") {
   // Arrange
-  std::array<astl_metric_sample_t, 4>     backing{};
+  std::array<astl_sample_t, 4>            backing{};
   uint32_t                                capacity = static_cast<uint32_t>(backing.size());
-  astl::BufferOutput                      output(std::span<astl_metric_sample_t>(backing), &capacity);
+  astl::BufferOutput                      output(std::span<astl_sample_t>(backing), &capacity);
   std::vector<astl::ProcessedSampledData> empty;
 
   // Act

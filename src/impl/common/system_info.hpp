@@ -6,6 +6,7 @@
 #define ASTL_SYSTEM_INFO_HPP_
 
 #include <filesystem>
+#include <memory>
 #include <string>
 
 #include "astl/astl_errors.h"
@@ -27,6 +28,8 @@ struct PlatformInfoData {
 };
 
 auto GetActivePlatformInfo() -> const PlatformInfoData&;
+auto GetHostPlatformInfo() -> const PlatformInfoData&;
+auto GetLoadedPlatformInfo() -> std::shared_ptr<const PlatformInfoData>;
 auto SavePlatformInfoToCacheDir(const std::filesystem::path& cache_dir_path) -> astl_status_code;
 auto LoadPlatformInfoFromCacheDir(const std::filesystem::path& cache_dir_path) -> astl_status_code;
 auto ClearLoadedPlatformInfo() -> void;

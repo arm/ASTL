@@ -9,21 +9,21 @@
 namespace astl::ProtobufSerDes {
 
 static auto SerializeTarget(const ITarget& target, astl::protobuf::Target* proto_target) -> astl_status_code {
-  astl_target_properties_t props{};
+  astl_target_props_t props{};
   if (auto status = target.GetProperties(&props); status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Failed to get target properties for target {}", target.Name());
     return status;
   }
 
   proto_target->set_name(target.Name());
-  if (props._description != nullptr) {
-    proto_target->set_description(props._description);
+  if (props.description != nullptr) {
+    proto_target->set_description(props.description);
   }
   proto_target->set_collector_type(static_cast<astl::protobuf::CollectorType>(target.GetCollectorType()));
 
   // Parent currently unused -> skip _parent_handle
-  if (props._uuid != nullptr) {
-    proto_target->set_uuid(props._uuid);
+  if (props.id != nullptr) {
+    proto_target->set_id(props.id);
   }
 
   return ASTL_STATUS_SUCCESS;
@@ -79,12 +79,12 @@ auto Deserialize<std::unique_ptr<ITopologyManager>>(std::istream& input_stream)
     const std::string& description = proto_target.description();
     const auto         collector   = static_cast<CollectorType>(proto_target.collector_type());
 
-    std::optional<std::string> uuid{std::nullopt};
-    if (!proto_target.uuid().empty()) {
-      uuid = proto_target.uuid();
+    std::optional<std::string> id{std::nullopt};
+    if (!proto_target.id().empty()) {
+      id = proto_target.id();
     }
 
-    auto target = std::make_unique<Target>(name, description, collector, nullptr, uuid);
+    auto target = std::make_unique<Target>(name, description, collector, nullptr, id);
 
     targets.push_back(std::move(target));
   }

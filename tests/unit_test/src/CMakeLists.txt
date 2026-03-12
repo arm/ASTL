@@ -10,6 +10,7 @@ if(NOT CMAKE_BUILD_TYPE)
       CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif()
 set(UNIT_TEST_SRCS
+    api_layout_utests.cpp
     astl_value_utests.cpp
     collector_manager_utests.cpp
     file_interface_utests.cpp
@@ -48,6 +49,10 @@ add_executable(unit_test ${UNIT_TEST_SRCS})
 target_compile_definitions(unit_test PRIVATE ASTL_BUILD)
 include(Warnings)
 set_project_warnings(unit_test)
+if(MSVC)
+  # Suppress warning from third-party trompeloeil headers in test-only code paths.
+  target_compile_options(unit_test PRIVATE /wd4172)
+endif()
 target_include_directories(unit_test PRIVATE "${CMAKE_BINARY_DIR}/src/impl/gen"
                                              "${CMAKE_SOURCE_DIR}/tests/unit_test/include")
 # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static

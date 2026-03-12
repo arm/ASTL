@@ -69,10 +69,13 @@ target_sources(
           "${PROJECT_SOURCE_DIR}/src/astl_test_hooks.cpp"
           "${PROJECT_SOURCE_DIR}/src/astl_version.cpp")
 
-# Disable conversion warnings for third-party tinyexpr++ code
+# Disable noisy warnings from third-party tinyexpr++ code
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   set_source_files_properties("${PROJECT_SOURCE_DIR}/third_party/tinyexpr-plusplus/tinyexpr.cpp"
                               PROPERTIES COMPILE_OPTIONS "-Wno-conversion")
+elseif(MSVC)
+  set_source_files_properties("${PROJECT_SOURCE_DIR}/third_party/tinyexpr-plusplus/tinyexpr.cpp"
+                              PROPERTIES COMPILE_OPTIONS "/wd4146;/wd4702")
 endif()
 
 # Enable uint64 mode for tinyexpr++ for exact integer arithmetic Enable bitwise operators so & and | work as bitwise
@@ -165,6 +168,14 @@ endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp" ${GEN_FILES}
                               PROPERTIES COMPILE_OPTIONS "-Wno-conversion;-Wno-nullability-extension")
+elseif(MSVC)
+  # Suppress noisy warnings from protobuf-generated code and includes when compiling on MSVC: - C4267: size_t -> int
+  # conversion in generated accessors - C4100: unreferenced parameters in generated helper functions
+  foreach(gen_src IN LISTS GEN_FILES)
+    set_source_files_properties(${gen_src} APPEND_STRING PROPERTY COMPILE_FLAGS " /wd4267 /wd4100")
+  endforeach()
+  set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp" APPEND_STRING PROPERTY
+                              COMPILE_FLAGS " /wd4267 /wd4100")
 endif()
 
 target_link_libraries(${LIBRARY_NAME} PRIVATE protobuf::libprotobuf)

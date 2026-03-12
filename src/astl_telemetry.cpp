@@ -158,42 +158,109 @@ auto GetProcessedSamplesSnapshot() noexcept -> std::expected<astl::ProcessedSamp
 
 constexpr uint32_t kFirstElementIdx{0};
 
-// Used to get the '_size' field of the first element in the span, array, etc of astl_target_properties_t or other
+template <typename ParamsT>
+auto ValidateApiParams(const ParamsT* params) noexcept -> astl_status_code {
+  if (params == nullptr) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (params->size != sizeof(ParamsT)) {
+    return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
+  }
+  if (params->flags != 0U) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto ValidateCollectionParamsFlags(const astl_collection_params_t* collection_params) noexcept -> astl_status_code {
+  const uint32_t k_allowed_collection_flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD |
+                                              ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY |
+                                              ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE;
+  const uint32_t request_flags = collection_params->flags;
+  if ((request_flags & ~k_allowed_collection_flags) != 0U) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  // Optimization flags are mutually exclusive.
+  if (request_flags != 0U && ((request_flags & (request_flags - 1U)) != 0U)) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+// Used to get the '_size' field of the first element in the span, array, etc of astl_target_props_t or other
 // structs
 template <typename Container>
 auto GetFirstElementSizeField(Container const& elements) noexcept
-    -> std::expected<decltype(elements[kFirstElementIdx]._size), astl_status_code> {
+    -> std::expected<decltype(elements[kFirstElementIdx].size), astl_status_code> {
   if (std::size(elements) == 0) {
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
-  return elements[kFirstElementIdx]._size;
+  return elements[kFirstElementIdx].size;
 }
 
 /***********************************************************************************
  **********************            SYSTEM PROPERTIES         ************************
  **********************************************************************************/
 
-auto astlGetSystemInfo(astl_platform_properties_t* system_info) noexcept -> astl_status_code {
+auto astlGetSystemInfo(const astl_get_system_info_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  auto* system_info = params->system_info;
   if (!system_info) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
-  if (system_info->_size != sizeof(astl_platform_properties_t)) {
+  if (system_info->size != sizeof(astl_platform_props_t)) {
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
 
-  const auto& info = astl::GetActivePlatformInfo();
+  const uint32_t k_allowed_source_flags = (ASTL_SYSTEM_INFO_FLAG_HOST | ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION);
+  const uint32_t request_flags          = system_info->flags;
+  if ((request_flags & ~k_allowed_source_flags) != 0U) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if ((request_flags & ASTL_SYSTEM_INFO_FLAG_HOST) != 0U &&
+      (request_flags & ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION) != 0U) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
 
-  system_info->_soc_name         = info.soc_name.empty() ? nullptr : info.soc_name.c_str();
-  system_info->_vendor_id        = info.vendor_id.empty() ? nullptr : info.vendor_id.c_str();
-  system_info->_os_name          = info.os_name.empty() ? nullptr : info.os_name.c_str();
-  system_info->_kernel_name      = info.kernel_name.empty() ? nullptr : info.kernel_name.c_str();
-  system_info->_kernel_version   = info.kernel_version.empty() ? nullptr : info.kernel_version.c_str();
-  system_info->_kernel_release   = info.kernel_release.empty() ? nullptr : info.kernel_release.c_str();
-  system_info->_firmware_version = info.firmware_version.empty() ? nullptr : info.firmware_version.c_str();
-  system_info->_hostname         = info.hostname.empty() ? nullptr : info.hostname.c_str();
-  system_info->_architecture     = info.architecture.empty() ? nullptr : info.architecture.c_str();
+  const astl::PlatformInfoData*                 info = nullptr;
+  std::shared_ptr<const astl::PlatformInfoData> loaded_info_ref{};
+  uint32_t                                      selected_flag = 0U;
+  if ((request_flags & ASTL_SYSTEM_INFO_FLAG_HOST) != 0U) {
+    info          = &astl::GetHostPlatformInfo();
+    selected_flag = ASTL_SYSTEM_INFO_FLAG_HOST;
+  } else if ((request_flags & ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION) != 0U) {
+    loaded_info_ref = astl::GetLoadedPlatformInfo();
+    info            = loaded_info_ref.get();
+    if (info == nullptr) {
+      return ASTL_STATUS_BAD_ARGUMENT;
+    }
+    selected_flag = ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION;
+  } else {
+    loaded_info_ref = astl::GetLoadedPlatformInfo();
+    if (loaded_info_ref != nullptr) {
+      info          = loaded_info_ref.get();
+      selected_flag = ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION;
+    } else {
+      info          = &astl::GetHostPlatformInfo();
+      selected_flag = ASTL_SYSTEM_INFO_FLAG_HOST;
+    }
+  }
+
+  system_info->flags            = selected_flag;
+  system_info->soc_name         = info->soc_name.empty() ? nullptr : info->soc_name.c_str();
+  system_info->vendor_id        = info->vendor_id.empty() ? nullptr : info->vendor_id.c_str();
+  system_info->os_name          = info->os_name.empty() ? nullptr : info->os_name.c_str();
+  system_info->kernel_name      = info->kernel_name.empty() ? nullptr : info->kernel_name.c_str();
+  system_info->kernel_version   = info->kernel_version.empty() ? nullptr : info->kernel_version.c_str();
+  system_info->kernel_release   = info->kernel_release.empty() ? nullptr : info->kernel_release.c_str();
+  system_info->firmware_version = info->firmware_version.empty() ? nullptr : info->firmware_version.c_str();
+  system_info->hostname         = info->hostname.empty() ? nullptr : info->hostname.c_str();
+  system_info->architecture     = info->architecture.empty() ? nullptr : info->architecture.c_str();
 
   return ASTL_STATUS_SUCCESS;
 }
@@ -202,8 +269,13 @@ auto astlGetSystemInfo(astl_platform_properties_t* system_info) noexcept -> astl
  **********************               TARGETS               ************************
  **********************************************************************************/
 
-auto astlGetTargetCount(uint32_t* target_count) noexcept -> astl_status_code {
+auto astlGetTargetCount(const astl_get_target_count_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  auto* target_count = params->target_count;
   if (!target_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -222,45 +294,39 @@ auto astlGetTargetCount(uint32_t* target_count) noexcept -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
-using VersionedPropertiesSpan = std::variant<std::span<astl_target_properties_t> >;
+using VersionedPropertiesSpan = std::variant<std::span<astl_target_props_t> >;
 
 /**
- * @brief retrieve either an error code or a span of some version of astl_target_properties
- *
- * If/when we add a field to astl_target_properties_t, we'll keep a copy of that original
- * declaration and rename it astl_target_properties_v1_t so we can provide overloaded functions
- * for it.
+ * @brief Retrieve either an error code or a span of astl_target_props_t.
  */
-auto GetVersionedTargetPropertiesSpan(astl_target_properties_t* targets, uint32_t target_count) noexcept
+auto GetVersionedTargetPropertiesSpan(astl_target_props_t* targets, uint32_t target_count) noexcept
     -> std::expected<VersionedPropertiesSpan, astl_status_code> {
-  // at first, assume the caller's targets are the same size as the astl_target_properties_t struct in our header.
-  std::span<astl_target_properties_t> target_span{targets, target_count};
-  auto                                given_struct_size = GetFirstElementSizeField(target_span);
+  // at first, assume the caller's targets are the same size as the astl_target_props_t struct in our header.
+  std::span<astl_target_props_t> target_span{targets, target_count};
+  auto                           given_struct_size = GetFirstElementSizeField(target_span);
   if (!given_struct_size) {
     return std::unexpected(given_struct_size.error());
   }
   switch (*given_struct_size) {
-    case sizeof(astl_target_properties_t):
+    case sizeof(astl_target_props_t):
       return target_span;
-    // future extension:
-    // case sizeof(astl_target_properties_v1_t):
-    // return std::span<astl_target_properties_v1_t>(targets, target_count);
     default:
-      if (sizeof(astl_target_properties_t) > *given_struct_size) {
-        // if we add elements to the astl_target_properties_t in the future,
-        // we'll have an opportunity to add backwards-compatibility code here
+      if (sizeof(astl_target_props_t) > *given_struct_size) {
         return std::unexpected(ASTL_STATUS_OLD_TARGET_PROPERTIES_STRUCT_VERSION);
       } else {
-        // in this case, the caller's version of the struct is newer than ours
-        // and we don't know how to handle it. We _could_ only touch the
-        // fields we know about, but for now we'll return an error
         return std::unexpected(ASTL_STATUS_NEW_TARGET_PROPERTIES_STRUCT_VERSION);
       }
   }
 }
 
-auto astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) noexcept -> astl_status_code {
+auto astlGetTargets(const astl_get_targets_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  auto* targets      = params->targets;
+  auto* target_count = params->target_count;
   if (!targets) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -287,8 +353,8 @@ auto astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) n
   if (available_targets_count > *target_count) {
     return ASTL_STATUS_TARGET_PROPERTIES_BUFFER_TOO_SMALL;
   }
-  // convert our raw pointer to _some_ version of astl_target_properties_t into a std::span
-  // of a specific struct, maybe astl_target_properties_t, maybe astl_target_properties_v0_t,
+  // convert our raw pointer to _some_ version of astl_target_props_t into a std::span
+  // of a specific struct, maybe astl_target_props_t, maybe astl_target_properties_v0_t,
   // or just an error if we can't support the given struct size.
   auto target_span = GetVersionedTargetPropertiesSpan(targets, *target_count);
   if (!target_span) {
@@ -323,8 +389,14 @@ auto astlGetTargets(astl_target_properties_t* targets, uint32_t* target_count) n
  **********************              COUNTER                   *********************
  **********************************************************************************/
 // TODO(ASTL-180) counter should be re-implemented as just a RawMetric.
-auto astlGetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_count) noexcept -> astl_status_code {
+auto astlGetCounterCount(const astl_get_counter_count_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  auto*       counter_count = params->counter_count;
   if (!target_handle || !counter_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -347,15 +419,21 @@ auto astlGetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_c
   return ASTL_STATUS_SUCCESS;
 }
 
-auto astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties_t* counters,
-                     uint32_t* counter_count) noexcept -> astl_status_code {
+auto astlGetCounters(const astl_get_counters_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  auto*       counters      = params->counters;
+  auto*       counter_count = params->counter_count;
   if (!target_handle || !counters || !counter_count || *counter_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  const auto                           counter_buffer_size  = *counter_count;
-  auto                                 counters_buffer_size = *counter_count;
-  std::span<astl_counter_properties_t> output_counters{counters, *counter_count};
+  const auto                      counter_buffer_size  = *counter_count;
+  auto                            counters_buffer_size = *counter_count;
+  std::span<astl_counter_props_t> output_counters{counters, *counter_count};
   *counter_count = 0;  // in case there's an error to return
 
   auto get_metric_manager_result = GetMetricManager();
@@ -384,19 +462,15 @@ auto astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties
     *counter_count = 0;
     return ASTL_STATUS_NO_COUNTERS_FOUND;
   }
-  std::span<astl_counter_properties_t> counter_span{counters, counter_buffer_size};
-  auto                                 counter_struct_size = GetFirstElementSizeField(counter_span);
+  std::span<astl_counter_props_t> counter_span{counters, counter_buffer_size};
+  auto                            counter_struct_size = GetFirstElementSizeField(counter_span);
   if (!counter_struct_size) {
     return counter_struct_size.error();
   }
-  if (*counter_struct_size < sizeof(astl_counter_properties_t)) {
-    // if we add elements to the astl_counter_properties_t in the future,
-    // we'll have an opportunity to add backwards-compatibility code here
+  if (*counter_struct_size < sizeof(astl_counter_props_t)) {
     return ASTL_STATUS_OLD_COUNTER_PROPERTIES_STRUCT_VERSION;
   }
-  if (*counter_struct_size > sizeof(astl_counter_properties_t)) {
-    // caller's version of the struct is newer than ours
-    // We _could_ only touch the fields we know about, but for now we'll return an error
+  if (*counter_struct_size > sizeof(astl_counter_props_t)) {
     return ASTL_STATUS_NEW_COUNTER_PROPERTIES_STRUCT_VERSION;
   }
   for (size_t i = 0; i < available_counters.size(); ++i) {
@@ -417,8 +491,14 @@ auto astlGetCounters(astl_target_handle_t target_handle, astl_counter_properties
  **********************              METRIC                    *********************
  **********************************************************************************/
 
-auto astlGetMetricCount(astl_target_handle_t target_handle, uint32_t* metric_count) noexcept -> astl_status_code {
+auto astlGetMetricCount(const astl_get_metric_count_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  auto*       metric_count  = params->metric_count;
   if (!target_handle || !metric_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -441,9 +521,15 @@ auto astlGetMetricCount(astl_target_handle_t target_handle, uint32_t* metric_cou
   return ASTL_STATUS_SUCCESS;
 }
 
-auto astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t* metrics,
-                    uint32_t* metric_count) noexcept -> astl_status_code {
+auto astlGetMetrics(const astl_get_metrics_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  auto*       metrics       = params->metrics;
+  auto*       metric_count  = params->metric_count;
   // check input arguments
   if (!target_handle || !metrics || !metric_count || *metric_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -459,7 +545,7 @@ auto astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t
   }
   const auto* target = *get_target_result;
 
-  std::span<astl_metric_properties_t> output_metrics{metrics, *metric_count};
+  std::span<astl_metric_props_t> output_metrics{metrics, *metric_count};
   *metric_count = 0;  // in case there's an error to return
 
   const auto& available_metrics_result = metric_manager->GetAvailableMetrics(target);
@@ -477,15 +563,15 @@ auto astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t
   if (available_metrics.empty()) {
     return ASTL_STATUS_NO_METRICS_FOUND;
   }
-  // check struct size of astl_metric_properties_t for ABI compatibility
+  // check struct size of astl_metric_props_t
   auto metric_struct_size = GetFirstElementSizeField(output_metrics);
   if (!metric_struct_size) {
     return metric_struct_size.error();
   }
-  if (*metric_struct_size < sizeof(astl_metric_properties_t)) {
+  if (*metric_struct_size < sizeof(astl_metric_props_t)) {
     return ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION;
   }
-  if (*metric_struct_size > sizeof(astl_metric_properties_t)) {
+  if (*metric_struct_size > sizeof(astl_metric_props_t)) {
     return ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION;
   }
   // copy properties from metrics to the provided buffer
@@ -507,9 +593,16 @@ auto astlGetMetrics(astl_target_handle_t target_handle, astl_metric_properties_t
  **********************      METRIC STATE DISCOVERY      *********************
  **********************************************************************************/
 
-auto astlGetMetricStateCountOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                     uint32_t* state_count) noexcept -> astl_status_code {
+auto astlGetMetricStateCountOnTarget(const astl_get_metric_state_count_on_target_params_t* params) noexcept
+    -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  const auto* metric_handle = params->metric_handle;
+  auto*       state_count   = params->state_count;
   if (!target_handle || !metric_handle || !state_count) {
     ASTL_LOG_ERROR("astlGetMetricStateCountOnTarget: Invalid argument(s)");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -537,9 +630,9 @@ auto astlGetMetricStateCountOnTarget(astl_target_handle_t target_handle, astl_me
   const auto* metric = *metric_or_error;
 
   // Get metric properties to determine the metric type
-  astl_metric_properties_t properties{};
-  properties._size = sizeof(astl_metric_properties_t);
-  auto status      = metric->GetProperties(&properties);
+  astl_metric_props_t properties{};
+  properties.size = sizeof(astl_metric_props_t);
+  auto status     = metric->GetProperties(&properties);
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("astlGetMetricStateCountOnTarget: Failed to get metric properties");
     return status;
@@ -548,7 +641,7 @@ auto astlGetMetricStateCountOnTarget(astl_target_handle_t target_handle, astl_me
   size_t count = 0;
 
   // Handle finite set metrics
-  if (properties._metric_type == ASTL_METRIC_FINITE_SET_VALUE) {
+  if (properties.metric_type == ASTL_METRIC_FINITE_SET_VALUE) {
     const auto* finite_set_metric = dynamic_cast<const astl::FiniteSetMetric*>(metric);
     if (!finite_set_metric) {
       ASTL_LOG_ERROR("astlGetMetricStateCountOnTarget: Failed to cast to FiniteSetMetric");
@@ -562,7 +655,7 @@ auto astlGetMetricStateCountOnTarget(astl_target_handle_t target_handle, astl_me
     count = finite_set_config->GetStateInfo().size();
   }
   // Handle residency metrics
-  else if (properties._metric_type == ASTL_METRIC_RESIDENCY) {
+  else if (properties.metric_type == ASTL_METRIC_RESIDENCY) {
     const auto* residency_metric = dynamic_cast<const astl::ResidencyMetric*>(metric);
     if (!residency_metric) {
       ASTL_LOG_ERROR("astlGetMetricStateCountOnTarget: Failed to cast to ResidencyMetric");
@@ -576,7 +669,7 @@ auto astlGetMetricStateCountOnTarget(astl_target_handle_t target_handle, astl_me
     count = residency_metric->GetStateConfigs().size() + (residency_config->InferredState().has_value() ? 1 : 0);
   } else {
     ASTL_LOG_ERROR("astlGetMetricStateCountOnTarget: Metric {} is neither a finite set nor residency metric",
-                   properties._name);
+                   properties.name);
     return ASTL_STATUS_NOT_SUPPORTED;
   }
 
@@ -591,7 +684,7 @@ auto astlGetMetricStateCountOnTarget(astl_target_handle_t target_handle, astl_me
 
 namespace {
 
-auto PopulateFiniteSetStateNames(const astl::IMetric* metric, std::span<astl_state_properties_t> output_states,
+auto PopulateFiniteSetStateNames(const astl::IMetric* metric, std::span<astl_state_props_t> output_states,
                                  uint32_t* state_count) noexcept -> astl_status_code {
   const auto* finite_set_metric = dynamic_cast<const astl::FiniteSetMetric*>(metric);
   if (!finite_set_metric) {
@@ -618,10 +711,10 @@ auto PopulateFiniteSetStateNames(const astl::IMetric* metric, std::span<astl_sta
       break;
     }
 
-    output_states[index]._size        = sizeof(astl_state_properties_t);
-    output_states[index]._value       = astl_value.ToAstlUnionValue().first;
-    output_states[index]._name        = astl::GetInternedString(info.state_name);
-    output_states[index]._description = astl::GetInternedString(info.state_description);
+    output_states[index].size        = sizeof(astl_state_props_t);
+    output_states[index].value       = astl_value.ToAstlUnionValue().first;
+    output_states[index].name        = astl::GetInternedString(info.state_name);
+    output_states[index].description = astl::GetInternedString(info.state_description);
     ++index;
   }
 
@@ -629,7 +722,7 @@ auto PopulateFiniteSetStateNames(const astl::IMetric* metric, std::span<astl_sta
   return ASTL_STATUS_SUCCESS;
 }
 
-auto PopulateResidencyStateNames(const astl::IMetric* metric, std::span<astl_state_properties_t> output_states,
+auto PopulateResidencyStateNames(const astl::IMetric* metric, std::span<astl_state_props_t> output_states,
                                  uint32_t* state_count) noexcept -> astl_status_code {
   const auto* residency_metric = dynamic_cast<const astl::ResidencyMetric*>(metric);
   if (!residency_metric) {
@@ -657,21 +750,21 @@ auto PopulateResidencyStateNames(const astl::IMetric* metric, std::span<astl_sta
     if (index >= output_states.size()) {
       break;
     }
-    output_states[index]._size        = sizeof(astl_state_properties_t);
-    output_states[index]._name        = astl::GetInternedString(state_config.state_name);
-    output_states[index]._description = astl::GetInternedString(state_config.state_description);
+    output_states[index].size        = sizeof(astl_state_props_t);
+    output_states[index].name        = astl::GetInternedString(state_config.state_name);
+    output_states[index].description = astl::GetInternedString(state_config.state_description);
     // cppcheck-suppress unreadVariable
-    output_states[index]._value = {};  // Zero-initialize unused field for residency metrics
+    output_states[index].value = {};  // Zero-initialize unused field for residency metrics
     ++index;
   }
 
   if (inferred_state.has_value() && index < output_states.size()) {
-    output_states[index]._size = sizeof(astl_state_properties_t);
+    output_states[index].size = sizeof(astl_state_props_t);
     // cppcheck-suppress unreadVariable
-    output_states[index]._name        = astl::GetInternedString(inferred_state->name);
-    output_states[index]._description = astl::GetInternedString(inferred_state->description);
+    output_states[index].name        = astl::GetInternedString(inferred_state->name);
+    output_states[index].description = astl::GetInternedString(inferred_state->description);
     // cppcheck-suppress unreadVariable
-    output_states[index]._value = {};  // Zero-initialize unused field for residency metrics
+    output_states[index].value = {};  // Zero-initialize unused field for residency metrics
     ++index;
   }
 
@@ -681,9 +774,16 @@ auto PopulateResidencyStateNames(const astl::IMetric* metric, std::span<astl_sta
 
 }  // namespace
 
-auto astlGetMetricStatesOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                 astl_state_properties_t* states, uint32_t* state_count) noexcept -> astl_status_code {
+auto astlGetMetricStatesOnTarget(const astl_get_metric_states_on_target_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  const auto* metric_handle = params->metric_handle;
+  auto*       states        = params->states;
+  auto*       state_count   = params->state_count;
   if (!target_handle || !metric_handle || !states || !state_count || *state_count == 0) {
     ASTL_LOG_ERROR("astlGetMetricStatesOnTarget: Invalid argument(s)");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -709,36 +809,36 @@ auto astlGetMetricStatesOnTarget(astl_target_handle_t target_handle, astl_metric
   const auto* metric = *metric_or_error;
 
   // Get metric properties to determine the metric type
-  astl_metric_properties_t properties{};
-  properties._size = sizeof(astl_metric_properties_t);
+  astl_metric_props_t properties{};
+  properties.size  = sizeof(astl_metric_props_t);
   auto prop_status = metric->GetProperties(&properties);
   if (prop_status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("astlGetMetricStatesOnTarget: Failed to get metric properties");
     return prop_status;
   }
 
-  std::span<astl_state_properties_t> output_states{states, *state_count};
+  std::span<astl_state_props_t> output_states{states, *state_count};
 
   // Check struct size for versioning
   auto state_struct_size = GetFirstElementSizeField(output_states);
   if (!state_struct_size) {
     return state_struct_size.error();
   }
-  if (*state_struct_size != sizeof(astl_state_properties_t)) {
+  if (*state_struct_size != sizeof(astl_state_props_t)) {
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
 
   // Delegate to appropriate handler based on metric type
-  if (properties._metric_type == ASTL_METRIC_FINITE_SET_VALUE) {
+  if (properties.metric_type == ASTL_METRIC_FINITE_SET_VALUE) {
     return PopulateFiniteSetStateNames(metric, output_states, state_count);
   }
 
-  if (properties._metric_type == ASTL_METRIC_RESIDENCY) {
+  if (properties.metric_type == ASTL_METRIC_RESIDENCY) {
     return PopulateResidencyStateNames(metric, output_states, state_count);
   }
 
   ASTL_LOG_ERROR("astlGetMetricStatesOnTarget: Metric {} is neither a finite set nor residency metric",
-                 properties._name);
+                 properties.name);
   return ASTL_STATUS_NOT_SUPPORTED;
 }
 
@@ -746,9 +846,14 @@ auto astlGetMetricStatesOnTarget(astl_target_handle_t target_handle, astl_metric
  **********************              METRIC GROUPS             *********************
  **********************************************************************************/
 
-auto astlGetMetricGroupCount(astl_target_handle_t target_handle, uint32_t* metric_group_count) noexcept
-    -> astl_status_code {
+auto astlGetMetricGroupCount(const astl_get_metric_group_count_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle      = params->target_handle;
+  auto*       metric_group_count = params->metric_group_count;
   if (!target_handle) {
     ASTL_LOG_ERROR("astlGetMetricGroupCount: target_handle is null");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -787,18 +892,24 @@ auto astlGetMetricGroupCount(astl_target_handle_t target_handle, uint32_t* metri
   return ASTL_STATUS_SUCCESS;
 }
 
-auto astlGetMetricGroups(astl_target_handle_t target_handle, astl_metric_group_properties_t* metric_groups,
-                         uint32_t* metric_group_count) noexcept -> astl_status_code {
+auto astlGetMetricGroups(const astl_get_metric_groups_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle      = params->target_handle;
+  auto*       metric_groups      = params->metric_groups;
+  auto*       metric_group_count = params->metric_group_count;
   if (!target_handle || !metric_groups || !metric_group_count || *metric_group_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  auto metric_groups_properties = std::span<astl_metric_group_properties_t>{metric_groups, *metric_group_count};
+  auto metric_groups_properties = std::span<astl_metric_group_props_t>{metric_groups, *metric_group_count};
   *metric_group_count           = 0;  // in case there's an error to return
-  if (metric_groups_properties[0]._size < sizeof(astl_metric_group_properties_t)) {
+  if (metric_groups_properties[0].size < sizeof(astl_metric_group_props_t)) {
     return ASTL_STATUS_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION;
   }
-  if (metric_groups_properties[0]._size > sizeof(astl_metric_group_properties_t)) {
+  if (metric_groups_properties[0].size > sizeof(astl_metric_group_props_t)) {
     return ASTL_STATUS_NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION;
   }
   auto get_metric_manager_result = GetMetricManager();
@@ -832,9 +943,15 @@ auto astlGetMetricGroups(astl_target_handle_t target_handle, astl_metric_group_p
   return result;
 }
 
-auto astlGetMetricGroupMetrics(astl_target_handle_t target_handle, const astl_metric_group_properties_t* metric_group,
-                               astl_metric_properties_t* metrics) noexcept -> astl_status_code {
+auto astlGetMetricGroupMetrics(const astl_get_metric_group_metrics_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  const auto* metric_group  = params->metric_group;
+  auto*       metrics       = params->metrics;
   if (!target_handle) {
     ASTL_LOG_ERROR("astlGetMetricGroupMetrics: target_handle cannot be null");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -848,7 +965,7 @@ auto astlGetMetricGroupMetrics(astl_target_handle_t target_handle, const astl_me
     ASTL_LOG_ERROR("astlGetMetricGroupMetrics: metrics ptr cannot be null");
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (metric_group->_metric_count == 0) {
+  if (metric_group->metric_count == 0) {
     ASTL_LOG_ERROR("astlGetMetricGroupMetrics: _metric_count cannot be 0");
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -856,12 +973,12 @@ auto astlGetMetricGroupMetrics(astl_target_handle_t target_handle, const astl_me
   if (!get_metric_manager_result) {
     return get_metric_manager_result.error();
   }
-  auto*                               metric_manager = *get_metric_manager_result;
-  std::span<astl_metric_properties_t> metrics_properties{metrics, metric_group->_metric_count};
-  if (metrics_properties[0]._size < sizeof(astl_metric_properties_t)) {
+  auto*                          metric_manager = *get_metric_manager_result;
+  std::span<astl_metric_props_t> metrics_properties{metrics, metric_group->metric_count};
+  if (metrics_properties[0].size < sizeof(astl_metric_props_t)) {
     return ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION;
   }
-  if (metrics_properties[0]._size > sizeof(astl_metric_properties_t)) {
+  if (metrics_properties[0].size > sizeof(astl_metric_props_t)) {
     return ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION;
   }
 
@@ -898,11 +1015,17 @@ auto astlGetMetricGroupMetrics(astl_target_handle_t target_handle, const astl_me
  **********************************************************************************/
 
 /*** CONFIGURE COUNTERS ***/
-auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                target_handle,
-                                            const astl_collection_parameters_t* collection_params,
-                                            const astl_counter_handle_t*        counter_handles,
-                                            uint32_t counter_count) noexcept -> astl_status_code {
+auto astlConfigureCounterCollectionOnTarget(const astl_configure_counter_collection_on_target_params_t* params) noexcept
+    -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle     = params->target_handle;
+  const auto* collection_params = params->collection_params;
+  const auto* counter_handles   = params->counter_handles;
+  const auto  counter_count     = params->counter_count;
   if (!target_handle || !collection_params || !counter_handles || counter_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -929,11 +1052,15 @@ auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                
   if (counter_count > num_counters) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (sizeof(astl_collection_parameters_t) < collection_params->_size) {
+  if (sizeof(astl_collection_params_t) < collection_params->size) {
     return ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION;
   }
-  if (sizeof(astl_collection_parameters_t) > collection_params->_size) {
+  if (sizeof(astl_collection_params_t) > collection_params->size) {
     return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  const auto collection_flags_status = ValidateCollectionParamsFlags(collection_params);
+  if (collection_flags_status != ASTL_STATUS_SUCCESS) {
+    return collection_flags_status;
   }
   std::span<const astl_counter_handle_t> counter_handle_span{counter_handles, counter_count};
   auto const&                            orchestrator_or_error = astl::Orchestrator::GetInstance();
@@ -945,21 +1072,31 @@ auto astlConfigureCounterCollectionOnTarget(astl_target_handle_t                
   return orchestrator->ConfigureCounterCollection(target, collection_params, counter_handle_span);
 }
 
-auto astlConfigureCounterCollection(const astl_collection_parameters_t* collection_params,
-                                    const astl_counter_handle_t* counter_handles, uint32_t counter_count) noexcept
+auto astlConfigureCounterCollection(const astl_configure_counter_collection_params_t* params) noexcept
     -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* collection_params = params->collection_params;
+  const auto* counter_handles   = params->counter_handles;
+  const auto  counter_count     = params->counter_count;
   if (!collection_params || !counter_handles) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   if (counter_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (sizeof(astl_collection_parameters_t) < collection_params->_size) {
+  if (sizeof(astl_collection_params_t) < collection_params->size) {
     return ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION;
   }
-  if (sizeof(astl_collection_parameters_t) > collection_params->_size) {
+  if (sizeof(astl_collection_params_t) > collection_params->size) {
     return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  const auto collection_flags_status = ValidateCollectionParamsFlags(collection_params);
+  if (collection_flags_status != ASTL_STATUS_SUCCESS) {
+    return collection_flags_status;
   }
 
   SwitchSystemInfoToHostCapture();
@@ -987,20 +1124,30 @@ auto astlConfigureCounterCollection(const astl_collection_parameters_t* collecti
 }
 
 /*** CONFIGURE METRICS ***/
-auto astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_handle,
-                                           astl_collection_parameters_t* collection_params,
-                                           astl_metric_handle_t* metric_handles, uint32_t metric_count) noexcept
+auto astlConfigureMetricCollectionOnTarget(const astl_configure_metric_collection_on_target_params_t* params) noexcept
     -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle     = params->target_handle;
+  const auto* collection_params = params->collection_params;
+  const auto* metric_handles    = params->metric_handles;
+  const auto  metric_count      = params->metric_count;
   // check input arguments for null and api version
-  if (!target_handle || !collection_params || !metric_handles || !metric_count) {
+  if (!target_handle || !collection_params || !metric_handles || metric_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (collection_params->_size < sizeof(astl_collection_parameters_t)) {
+  if (collection_params->size < sizeof(astl_collection_params_t)) {
     return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
   }
-  if (collection_params->_size > sizeof(astl_collection_parameters_t)) {
+  if (collection_params->size > sizeof(astl_collection_params_t)) {
     return ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  const auto collection_flags_status = ValidateCollectionParamsFlags(collection_params);
+  if (collection_flags_status != ASTL_STATUS_SUCCESS) {
+    return collection_flags_status;
   }
 
   SwitchSystemInfoToHostCapture();
@@ -1009,9 +1156,9 @@ auto astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_
   if (!get_target_result) {
     return get_target_result.error();
   }
-  const auto*                     target = *get_target_result;
-  std::span<astl_metric_handle_t> metric_handle_span{metric_handles, metric_count};
-  auto const&                     orchestrator_or_error = astl::Orchestrator::GetInstance();
+  const auto*                           target = *get_target_result;
+  std::span<const astl_metric_handle_t> metric_handle_span{metric_handles, metric_count};
+  auto const&                           orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
     return orchestrator_or_error.error();
   }
@@ -1019,25 +1166,34 @@ auto astlConfigureMetricCollectionOnTarget(astl_target_handle_t          target_
   return orchestrator->ConfigureMetricCollection(target, collection_params, metric_handle_span);
 }
 
-auto astlConfigureMetricCollection(astl_collection_parameters_t* collection_params,
-                                   astl_metric_handle_t* metric_handles, uint32_t metric_count) noexcept
+auto astlConfigureMetricCollection(const astl_configure_metric_collection_params_t* params) noexcept
     -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
   SwitchSystemInfoToHostCapture();
 
-  (void)collection_params;
-  (void)metric_handles;
-  (void)metric_count;
+  (void)params->collection_params;
+  (void)params->metric_handles;
+  (void)params->metric_count;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
 /*** CONFIGURE METRIC GROUPS ***/
-auto astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          target_handle,
-                                                astl_collection_parameters_t* collection_params,
-                                                astl_metric_group_handle_t*   metric_group_handles,
-                                                uint32_t metric_group_count) noexcept -> astl_status_code {
+auto astlConfigureMetricGroupCollectionOnTarget(
+    const astl_configure_metric_group_collection_on_target_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle        = params->target_handle;
+  const auto* collection_params    = params->collection_params;
+  const auto* metric_group_handles = params->metric_group_handles;
+  const auto  metric_group_count   = params->metric_group_count;
   // check input arguments
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -1047,6 +1203,16 @@ auto astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          ta
   }
   if (!metric_group_handles) {
     return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (collection_params->size < sizeof(astl_collection_params_t)) {
+    return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  if (collection_params->size > sizeof(astl_collection_params_t)) {
+    return ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  const auto collection_flags_status = ValidateCollectionParamsFlags(collection_params);
+  if (collection_flags_status != ASTL_STATUS_SUCCESS) {
+    return collection_flags_status;
   }
 
   SwitchSystemInfoToHostCapture();
@@ -1069,8 +1235,8 @@ auto astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          ta
   }
   const auto* target = *get_target_result;
   // for each group, push all its metrics into the metric_handles_vector
-  std::span<astl_metric_group_handle_t> metric_group_handle_span{metric_group_handles, metric_group_count};
-  std::vector<astl_metric_handle_t>     metric_handles_vector;
+  std::span<const astl_metric_group_handle_t> metric_group_handle_span{metric_group_handles, metric_group_count};
+  std::vector<astl_metric_handle_t>           metric_handles_vector;
 
   for (const auto& group_handle : metric_group_handle_span) {
     auto get_group_result = metric_manager->GetMetricsInGroup(group_handle);
@@ -1092,22 +1258,30 @@ auto astlConfigureMetricGroupCollectionOnTarget(astl_target_handle_t          ta
   return orchestrator->ConfigureMetricCollection(target, collection_params, metric_handle_span);
 }
 
-auto astlConfigureMetricGroupCollection(astl_collection_parameters_t* collection_params,
-                                        astl_metric_group_handle_t*   metric_group_handles,
-                                        uint32_t                      metric_group_count) noexcept -> astl_status_code {
+auto astlConfigureMetricGroupCollection(const astl_configure_metric_group_collection_params_t* params) noexcept
+    -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
   SwitchSystemInfoToHostCapture();
 
-  (void)collection_params;
-  (void)metric_group_handles;
-  (void)metric_group_count;
+  (void)params->collection_params;
+  (void)params->metric_group_handles;
+  (void)params->metric_group_count;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   // @todo(ASTL-181) implement this function
   return result;
 }
 
-auto astlReadImmediateOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
+auto astlReadImmediateOnTarget(const astl_read_immediate_on_target_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1125,9 +1299,13 @@ auto astlReadImmediateOnTarget(astl_target_handle_t target_handle) noexcept -> a
   return orchestrator->ReadImmediate(target);
 }
 
-auto astlReadImmediate() noexcept -> astl_status_code {
+auto astlReadImmediate(const astl_read_immediate_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-  auto const&                 orchestrator_or_error = astl::Orchestrator::GetInstance();
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
     return orchestrator_or_error.error();
   }
@@ -1143,8 +1321,13 @@ auto astlReadImmediate() noexcept -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
-auto astlStartCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
+auto astlStartCollectionOnTarget(const astl_start_collection_on_target_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1163,14 +1346,23 @@ auto astlStartCollectionOnTarget(astl_target_handle_t target_handle) noexcept ->
   return orchestrator->StartCollection(target);
 }
 
-auto astlStartCollection() noexcept -> astl_status_code {
+auto astlStartCollection(const astl_start_collection_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-  astl_status_code            result{ASTL_STATUS_NOT_IMPLEMENTED};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
-auto astlPauseCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
+auto astlPauseCollectionOnTarget(const astl_pause_collection_on_target_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1194,8 +1386,12 @@ auto astlPauseCollectionOnTarget(astl_target_handle_t target_handle) noexcept ->
   return status;
 }
 
-auto astlPauseCollection() noexcept -> astl_status_code {
+auto astlPauseCollection(const astl_pause_collection_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
   // Do not trigger lazy construction; require `Orchestrator::GetInstance()` to have run.
   if (!astl::Orchestrator::IsInitialized()) {
     return ASTL_STATUS_NOT_INITIALIZED;
@@ -1219,8 +1415,14 @@ auto astlPauseCollection() noexcept -> astl_status_code {
   return aggregate_status;
 }
 
-auto astlResumeCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
+auto astlResumeCollectionOnTarget(const astl_resume_collection_on_target_params_t* params) noexcept
+    -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1245,8 +1447,12 @@ auto astlResumeCollectionOnTarget(astl_target_handle_t target_handle) noexcept -
   return status;
 }
 
-auto astlResumeCollection() noexcept -> astl_status_code {
+auto astlResumeCollection(const astl_resume_collection_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
   if (!astl::Orchestrator::IsInitialized()) {
     return ASTL_STATUS_NOT_INITIALIZED;
   }
@@ -1269,8 +1475,13 @@ auto astlResumeCollection() noexcept -> astl_status_code {
   return aggregate_status;
 }
 
-auto astlStopCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> astl_status_code {
+auto astlStopCollectionOnTarget(const astl_stop_collection_on_target_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
   if (!target_handle) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1289,9 +1500,13 @@ auto astlStopCollectionOnTarget(astl_target_handle_t target_handle) noexcept -> 
   return orchestrator->StopCollection(target);
 }
 
-auto astlStopCollection() noexcept -> astl_status_code {
+auto astlStopCollection(const astl_stop_collection_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-  astl_status_code            result{ASTL_STATUS_NOT_IMPLEMENTED};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }
 
@@ -1301,14 +1516,14 @@ auto astlSaveCollection(const astl_save_params_t* params) noexcept -> astl_statu
   if (!params) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (params->_size != sizeof(astl_save_params_t)) {
+  if (params->size != sizeof(astl_save_params_t)) {
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
-  if (params->_flags != 0) {
+  if (params->flags != 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
-  if ((params->_output_file_path == nullptr) || std::string_view{params->_output_file_path}.empty()) {
+  if ((params->output_file_path == nullptr) || std::string_view{params->output_file_path}.empty()) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
@@ -1318,10 +1533,10 @@ auto astlSaveCollection(const astl_save_params_t* params) noexcept -> astl_statu
     return orchestrator_or_error.error();
   }
 
-  auto expanded_path = astl::ExpandFilePath(params->_output_file_path);
+  auto expanded_path = astl::ExpandFilePath(params->output_file_path);
   if (!expanded_path) {
     ASTL_LOG_ERROR("astlSaveCollection: invalid output_file_path '{}': {}",
-                   (params->_output_file_path ? params->_output_file_path : "<null>"), expanded_path.error());
+                   (params->output_file_path ? params->output_file_path : "<null>"), expanded_path.error());
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
@@ -1334,20 +1549,20 @@ auto astlLoadCollection(const astl_load_params_t* params) noexcept -> astl_statu
   if (!params) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (params->_size != sizeof(astl_load_params_t)) {
+  if (params->size != sizeof(astl_load_params_t)) {
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
-  if (params->_flags != 0) {
+  if (params->flags != 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if ((params->_input_file_path == nullptr) || std::string_view{params->_input_file_path}.empty()) {
+  if ((params->input_file_path == nullptr) || std::string_view{params->input_file_path}.empty()) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
-  auto expanded_path = astl::ExpandFilePath(params->_input_file_path);
+  auto expanded_path = astl::ExpandFilePath(params->input_file_path);
   if (!expanded_path) {
     ASTL_LOG_ERROR("astlLoadCollection: invalid input_file_path '{}': {}",
-                   (params->_input_file_path ? params->_input_file_path : "<null>"), expanded_path.error());
+                   (params->input_file_path ? params->input_file_path : "<null>"), expanded_path.error());
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
@@ -1362,14 +1577,21 @@ auto astlLoadCollection(const astl_load_params_t* params) noexcept -> astl_statu
     return orchestrator_or_error.error();
   }
 
-  (void)params->_chunk_size_bytes;  // reserved for future streaming loader
+  (void)params->chunk_size_bytes;  // reserved for future streaming loader
   return ASTL_STATUS_SUCCESS;
 }
 
 /*** COLLECTED COUNTER SAMPLES ***/
-auto astlGetCounterSampleCountOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
-                                       uint32_t* sample_count) noexcept -> astl_status_code {
+auto astlGetCounterSampleCountOnTarget(const astl_get_counter_sample_count_on_target_params_t* params) noexcept
+    -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle  = params->target_handle;
+  const auto* counter_handle = params->counter_handle;
+  auto*       sample_count   = params->sample_count;
   if (!target_handle || !counter_handle || !sample_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1402,10 +1624,17 @@ auto astlGetCounterSampleCountOnTarget(astl_target_handle_t target_handle, astl_
   return ASTL_STATUS_SUCCESS;
 }
 
-auto astlGetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
-                                   astl_counter_sample_t* samples, uint32_t* sample_count) noexcept
+auto astlGetCounterSamplesOnTarget(const astl_get_counter_samples_on_target_params_t* params) noexcept
     -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle  = params->target_handle;
+  const auto* counter_handle = params->counter_handle;
+  auto*       samples        = params->samples;
+  auto*       sample_count   = params->sample_count;
   if (!target_handle || !counter_handle || !samples || !sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1421,21 +1650,7 @@ auto astlGetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_coun
   }
   const auto* counter = *get_counter_result;
   // create this span before modifying input *sample_count
-  std::span<astl_counter_sample_t> samples_span{samples, *sample_count};
-  auto                             callers_sample_struct_size = GetFirstElementSizeField(samples_span);
-  if (!callers_sample_struct_size) {
-    return callers_sample_struct_size.error();
-  }
-  if (*callers_sample_struct_size < sizeof(astl_counter_sample_t)) {
-    ASTL_LOG_ERROR("astl_counter_sample_t struct too small: caller's size {}, expected size {}",
-                   *callers_sample_struct_size, sizeof(astl_counter_sample_t));
-    return ASTL_STATUS_OLD_COUNTER_SAMPLE_STRUCT_VERSION;
-  }
-  if (*callers_sample_struct_size > sizeof(astl_counter_sample_t)) {
-    ASTL_LOG_ERROR("astl_counter_sample_t struct too large: caller's size {}, expected size {}",
-                   *callers_sample_struct_size, sizeof(astl_counter_sample_t));
-    return ASTL_STATUS_NEW_COUNTER_SAMPLE_STRUCT_VERSION;
-  }
+  std::span<astl_sample_t> samples_span{samples, *sample_count};
 
   auto orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
@@ -1457,12 +1672,10 @@ auto astlGetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_coun
     return ASTL_STATUS_COUNTER_SAMPLES_BUFFER_TOO_SMALL;
   }
 
-  // helper lambda to convert a ProcessedSampledData into an astl_counter_sample_t
+  // helper lambda to convert a ProcessedSampledData into an astl_sample_t
   auto convert_to_counter_sample = [](const astl::ProcessedSampledData& processed_sample) {
     const auto union_value = processed_sample.value.ToAstlUnionValue().first;  // avoid constructing pair twice
-    return astl_counter_sample_t{._size      = sizeof(astl_counter_sample_t),
-                                 ._timestamp = processed_sample.timestamp.time_since_epoch().count(),
-                                 ._value     = union_value};
+    return astl_sample_t{.timestamp = processed_sample.timestamp.time_since_epoch().count(), .value = union_value};
   };
 
   // samples_span is at least large enough to accomodate sample_result because of above check.
@@ -1471,9 +1684,16 @@ auto astlGetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_coun
 }
 
 /*** COLLECTED METRIC SAMPLES ***/
-auto astlGetMetricSampleCountOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                      uint32_t* sample_count) noexcept -> astl_status_code {
+auto astlGetMetricSampleCountOnTarget(const astl_get_metric_sample_count_on_target_params_t* params) noexcept
+    -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  const auto* metric_handle = params->metric_handle;
+  auto*       sample_count  = params->sample_count;
   if (!target_handle || !metric_handle || !sample_count) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1506,9 +1726,17 @@ auto astlGetMetricSampleCountOnTarget(astl_target_handle_t target_handle, astl_m
   return ASTL_STATUS_SUCCESS;
 }
 
-auto astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                  astl_metric_sample_t* samples, uint32_t* sample_count) noexcept -> astl_status_code {
+auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params_t* params) noexcept
+    -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  const auto* metric_handle = params->metric_handle;
+  auto*       samples       = params->samples;
+  auto*       sample_count  = params->sample_count;
   if (!target_handle || !metric_handle || !samples || !sample_count || *sample_count == 0) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
@@ -1531,20 +1759,10 @@ auto astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metri
   }
   const auto& collected_samples = *collected_samples_or_error;
 
-  std::span<astl_metric_sample_t> output_samples{samples, *sample_count};
+  std::span<astl_sample_t> output_samples{samples, *sample_count};
   if (*sample_count < collected_samples.size()) {
     *sample_count = 0;
     return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
-  }
-  auto sample_struct_size = GetFirstElementSizeField(output_samples);
-  if (!sample_struct_size) {
-    return sample_struct_size.error();
-  }
-  if (*sample_struct_size < sizeof(astl_metric_sample_t)) {
-    return ASTL_STATUS_OLD_METRIC_SAMPLE_STRUCT_VERSION;
-  }
-  if (*sample_struct_size > sizeof(astl_metric_sample_t)) {
-    return ASTL_STATUS_NEW_METRIC_SAMPLE_STRUCT_VERSION;
   }
 
   auto get_output_manager_result = GetOutputManager();
@@ -1575,33 +1793,49 @@ auto astlGetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metri
  **********************          METRIC SUMMARY API         ************************
  **********************************************************************************/
 
-auto astlGetMetricStatisticsOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                     astl_metric_statistics_t* summary) noexcept -> astl_status_code {
+auto astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_params_t* params) noexcept
+    -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  const auto* metric_handle = params->metric_handle;
+  auto*       summary       = params->summary;
   if (!target_handle || !metric_handle || !summary) {
     ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Invalid argument(s)");
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
-  // Validate flags - must be 0 (reserved for future use)
-  if (summary->_flags != 0) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Invalid flags value: {} (must be 0)", summary->_flags);
-    return ASTL_STATUS_BAD_ARGUMENT;
-  }
-
   // Validate struct size for versioning
-  if (summary->_size != sizeof(astl_metric_statistics_t)) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Invalid summary struct size: {} (expected {})", summary->_size,
+  if (summary->size != sizeof(astl_metric_statistics_t)) {
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Invalid summary struct size: {} (expected {})", summary->size,
                    sizeof(astl_metric_statistics_t));
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
 
+  const uint32_t k_allowed_summary_flags =
+      (ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG | ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG);
+  const uint32_t request_flags = summary->flags;
+  if ((request_flags & ~k_allowed_summary_flags) != 0U) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if ((request_flags & ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG) != 0U &&
+      (request_flags & ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG) != 0U) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  const uint32_t selected_avg_mode = ((request_flags & ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG) != 0U)
+                                         ? ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG
+                                         : ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG;
+
   // Zero-initialise output fields so the struct contents are always deterministic,
   // regardless of whether the caller pre-initialised them.
-  summary->_min   = {};
-  summary->_max   = {};
-  summary->_avg   = {};
-  summary->_count = 0;
+  summary->flags = selected_avg_mode;
+  summary->min   = {};
+  summary->max   = {};
+  summary->avg   = {};
+  summary->count = 0;
 
   auto get_target_result = GetTargetFromHandle(target_handle);
   if (!get_target_result) {
@@ -1626,15 +1860,15 @@ auto astlGetMetricStatisticsOnTarget(astl_target_handle_t target_handle, astl_me
   astl::MinMaxAvgSummarizer summarizer;
 
   // Get metric properties to check if it's supported
-  astl_metric_properties_t metric_properties{};
-  metric_properties._size = sizeof(astl_metric_properties_t);
-  auto props_status       = metric->GetProperties(&metric_properties);
+  astl_metric_props_t metric_properties{};
+  metric_properties.size = sizeof(astl_metric_props_t);
+  auto props_status      = metric->GetProperties(&metric_properties);
   if (props_status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Failed to get metric properties");
     return props_status;
   }
 
-  if (!summarizer.IsSupported(metric_properties._value_type, metric_properties._metric_type)) {
+  if (!summarizer.IsSupported(metric_properties.value_type, metric_properties.metric_type)) {
     ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Metric type not supported by MinMaxAvgSummarizer");
     return ASTL_STATUS_NOT_SUPPORTED;
   }
@@ -1654,21 +1888,29 @@ auto astlGetMetricStatisticsOnTarget(astl_target_handle_t target_handle, astl_me
   }
 
   // Fill the output structure
-  summary->_count = min_max_avg_summary->count;
+  summary->count = min_max_avg_summary->count;
 
   // Handle min value
   if (min_max_avg_summary->min.has_value()) {
-    summary->_min = min_max_avg_summary->min->ToAstlUnionValue().first;
+    summary->min = min_max_avg_summary->min->ToAstlUnionValue().first;
   }
 
   // Handle max value
   if (min_max_avg_summary->max.has_value()) {
-    summary->_max = min_max_avg_summary->max->ToAstlUnionValue().first;
+    summary->max = min_max_avg_summary->max->ToAstlUnionValue().first;
   }
 
-  // Handle avg value
-  if (min_max_avg_summary->avg.has_value()) {
-    summary->_avg = min_max_avg_summary->avg->ToAstlUnionValue().first;
+  if (selected_avg_mode == ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG) {
+    auto time_weighted_avg = astl::ComputeTimeWeightedAverage(samples);
+    if (!time_weighted_avg.has_value()) {
+      return time_weighted_avg.error();
+    }
+    if (time_weighted_avg->has_value()) {
+      summary->avg = time_weighted_avg->value().ToAstlUnionValue().first;
+    }
+  } else if (min_max_avg_summary->avg.has_value()) {
+    // Regular arithmetic mean mode.
+    summary->avg = min_max_avg_summary->avg->ToAstlUnionValue().first;
   }
 
   return ASTL_STATUS_SUCCESS;
@@ -1695,16 +1937,16 @@ auto ComputeDiscreteHistogram(astl_target_handle_t target_handle, astl_metric_ha
   const auto* metric = *get_metric_result;
 
   // Check supported metric/value type
-  astl_metric_properties_t metric_properties{};
-  metric_properties._size = sizeof(astl_metric_properties_t);
-  auto props_status       = metric->GetProperties(&metric_properties);
+  astl_metric_props_t metric_properties{};
+  metric_properties.size = sizeof(astl_metric_props_t);
+  auto props_status      = metric->GetProperties(&metric_properties);
   if (props_status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("ComputeDiscreteHistogram: Failed to get metric properties");
     return std::unexpected(props_status);
   }
 
   astl::HistogramSummarizer summarizer;  // default constructor = discrete mode
-  if (!summarizer.IsSupported(metric_properties._value_type, metric_properties._metric_type)) {
+  if (!summarizer.IsSupported(metric_properties.value_type, metric_properties.metric_type)) {
     ASTL_LOG_ERROR("ComputeDiscreteHistogram: Metric type not supported by HistogramSummarizer");
     return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
   }
@@ -1731,9 +1973,16 @@ auto ComputeDiscreteHistogram(astl_target_handle_t target_handle, astl_metric_ha
 
 }  // namespace
 
-auto astlGetMetricDiscreteHistogramBinCountOnTarget(astl_target_handle_t target_handle,
-                                                    astl_metric_handle_t metric_handle, uint32_t* bin_count) noexcept
-    -> astl_status_code {
+auto astlGetMetricDiscreteHistogramBinCountOnTarget(
+    const astl_get_metric_discrete_histogram_bin_count_on_target_params_t* params) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  const auto* metric_handle = params->metric_handle;
+  auto*       bin_count     = params->bin_count;
   if (!target_handle || !metric_handle || !bin_count) {
     ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramBinCountOnTarget: Invalid argument(s)");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -1754,9 +2003,17 @@ auto astlGetMetricDiscreteHistogramBinCountOnTarget(astl_target_handle_t target_
   return ASTL_STATUS_SUCCESS;
 }
 
-auto astlGetMetricDiscreteHistogramOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                            astl_discrete_histogram_bin_t* bins, uint32_t* bin_count) noexcept
-    -> astl_status_code {
+auto astlGetMetricDiscreteHistogramOnTarget(
+    const astl_get_metric_discrete_histogram_on_target_params_t* params) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  const auto* metric_handle = params->metric_handle;
+  auto*       bins          = params->bins;
+  auto*       bin_count     = params->bin_count;
   if (!target_handle || !metric_handle || !bins || !bin_count) {
     ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramOnTarget: Invalid argument(s)");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -1770,9 +2027,9 @@ auto astlGetMetricDiscreteHistogramOnTarget(astl_target_handle_t target_handle, 
   std::span<astl_discrete_histogram_bin_t> bins_span{bins, *bin_count};
 
   // Validate struct size via the first element
-  if (bins_span[0]._size != sizeof(astl_discrete_histogram_bin_t)) {
+  if (bins_span[0].size != sizeof(astl_discrete_histogram_bin_t)) {
     ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramOnTarget: Invalid bin struct size: {} (expected {})",
-                   bins_span[0]._size, sizeof(astl_discrete_histogram_bin_t));
+                   bins_span[0].size, sizeof(astl_discrete_histogram_bin_t));
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
 
@@ -1797,9 +2054,9 @@ auto astlGetMetricDiscreteHistogramOnTarget(astl_target_handle_t target_handle, 
 
   // Fill the caller's array
   for (uint32_t i = 0; i < required_count; ++i) {
-    bins_span[i]._size  = sizeof(astl_discrete_histogram_bin_t);
-    bins_span[i]._value = internal_bins[i].value.ToAstlUnionValue().first;
-    bins_span[i]._count = static_cast<uint64_t>(internal_bins[i].count);
+    bins_span[i].size  = sizeof(astl_discrete_histogram_bin_t);
+    bins_span[i].value = internal_bins[i].value.ToAstlUnionValue().first;
+    bins_span[i].count = static_cast<uint64_t>(internal_bins[i].count);
   }
 
   *bin_count = required_count;

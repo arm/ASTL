@@ -33,7 +33,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Finite Set Metric", "[wrapper][MetricSt
   auto                                        mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t                        mock_target_handle = mock_target.get();
   auto*                                       mock_target_raw    = mock_target.get();
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target, Name()).RETURN("MockTarget");
 
   // Create finite set metric configuration with specific values
@@ -85,39 +85,68 @@ TEST_CASE("astlGetMetricStatesOnTarget - Finite Set Metric", "[wrapper][MetricSt
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   SECTION("Bad parameters") {
-    uint32_t                             state_count = 3;
-    std::vector<astl_state_properties_t> states(3);
-    states[0]._size = sizeof(astl_state_properties_t);
+    uint32_t                        state_count = 3;
+    std::vector<astl_state_props_t> states(3);
+    states[0].size = sizeof(astl_state_props_t);
 
-    REQUIRE(astlGetMetricStatesOnTarget(nullptr, nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, metric_handle, nullptr, nullptr) ==
-            ASTL_STATUS_BAD_ARGUMENT);
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, metric_handle, states.data(), nullptr) ==
-            ASTL_STATUS_BAD_ARGUMENT);
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0, .target_handle = nullptr,
+                       .metric_handle = nullptr, .states = nullptr, .state_count = nullptr);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
+    }
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = nullptr, .states = nullptr,
+                       .state_count = nullptr);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
+    }
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = nullptr,
+                       .state_count = nullptr);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
+    }
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
+                       .state_count = nullptr);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
+    }
 
     state_count = 0;
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, metric_handle, states.data(), &state_count) ==
-            ASTL_STATUS_BAD_ARGUMENT);
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
+                       .state_count = &state_count);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
+    }
   }
 
   SECTION("Buffer too small") {
-    uint32_t                             state_count = 2;  // Only space for 2, but metric has 3
-    std::vector<astl_state_properties_t> states(2);
-    states[0]._size = sizeof(astl_state_properties_t);
+    uint32_t                        state_count = 2;  // Only space for 2, but metric has 3
+    std::vector<astl_state_props_t> states(2);
+    states[0].size = sizeof(astl_state_props_t);
 
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, metric_handle, states.data(), &state_count) ==
-            ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL);
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
+                       .state_count = &state_count);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL);
+    }
     REQUIRE(state_count == 0);
   }
 
   SECTION("Valid request returns state names and values") {
-    uint32_t                             state_count = 3;
-    std::vector<astl_state_properties_t> states(3);
-    states[0]._size = sizeof(astl_state_properties_t);
+    uint32_t                        state_count = 3;
+    std::vector<astl_state_props_t> states(3);
+    states[0].size = sizeof(astl_state_props_t);
 
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, metric_handle, states.data(), &state_count) ==
-            ASTL_STATUS_SUCCESS);
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
+                       .state_count = &state_count);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_SUCCESS);
+    }
     REQUIRE(state_count == 3);
 
     // Verify that all states have both name and value populated
@@ -126,24 +155,24 @@ TEST_CASE("astlGetMetricStatesOnTarget - Finite Set Metric", "[wrapper][MetricSt
     bool found_sleep  = false;
 
     for (uint32_t i = 0; i < state_count; ++i) {
-      REQUIRE(states[i]._size == sizeof(astl_state_properties_t));
-      REQUIRE(states[i]._name != nullptr);
+      REQUIRE(states[i].size == sizeof(astl_state_props_t));
+      REQUIRE(states[i].name != nullptr);
 
-      std::string name(states[i]._name);
+      std::string name(states[i].name);
       if (name == "Idle") {
-        REQUIRE(states[i]._value.ui32 == 0);
-        REQUIRE(states[i]._description != nullptr);
-        REQUIRE(std::string(states[i]._description) == "CPU idle state");
+        REQUIRE(states[i].value.ui32 == 0);
+        REQUIRE(states[i].description != nullptr);
+        REQUIRE(std::string(states[i].description) == "CPU idle state");
         found_idle = true;
       } else if (name == "Active") {
-        REQUIRE(states[i]._value.ui32 == 1);
-        REQUIRE(states[i]._description != nullptr);
-        REQUIRE(std::string(states[i]._description) == "CPU active state");
+        REQUIRE(states[i].value.ui32 == 1);
+        REQUIRE(states[i].description != nullptr);
+        REQUIRE(std::string(states[i].description) == "CPU active state");
         found_active = true;
       } else if (name == "Sleep") {
-        REQUIRE(states[i]._value.ui32 == 2);
-        REQUIRE(states[i]._description != nullptr);
-        REQUIRE(std::string(states[i]._description) == "CPU sleep state");
+        REQUIRE(states[i].value.ui32 == 2);
+        REQUIRE(states[i].description != nullptr);
+        REQUIRE(std::string(states[i].description) == "CPU sleep state");
         found_sleep = true;
       }
     }
@@ -154,18 +183,26 @@ TEST_CASE("astlGetMetricStatesOnTarget - Finite Set Metric", "[wrapper][MetricSt
   }
 
   SECTION("Struct size validation") {
-    uint32_t                             state_count = 3;
-    std::vector<astl_state_properties_t> states(3);
+    uint32_t                        state_count = 3;
+    std::vector<astl_state_props_t> states(3);
 
     // Old struct version
-    states[0]._size = sizeof(astl_state_properties_t) - 1;
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, metric_handle, states.data(), &state_count) ==
-            ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    states[0].size = sizeof(astl_state_props_t) - 1;
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
+                       .state_count = &state_count);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    }
 
     // New struct version
-    states[0]._size = sizeof(astl_state_properties_t) + 1;
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, metric_handle, states.data(), &state_count) ==
-            ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    states[0].size = sizeof(astl_state_props_t) + 1;
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
+                       .state_count = &state_count);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    }
   }
 }
 
@@ -175,7 +212,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Residency Metric", "[wrapper][MetricSta
   auto                                        mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t                        mock_target_handle = mock_target.get();
   auto*                                       mock_target_raw    = mock_target.get();
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target, Name()).RETURN("MockTarget");
 
   // Create residency metric configuration
@@ -231,32 +268,36 @@ TEST_CASE("astlGetMetricStatesOnTarget - Residency Metric", "[wrapper][MetricSta
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   SECTION("Valid request returns state names in state_configs order") {
-    uint32_t                             state_count = 3;
-    std::vector<astl_state_properties_t> states(3);
-    states[0]._size = sizeof(astl_state_properties_t);
+    uint32_t                        state_count = 3;
+    std::vector<astl_state_props_t> states(3);
+    states[0].size = sizeof(astl_state_props_t);
 
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, metric_handle, states.data(), &state_count) ==
-            ASTL_STATUS_SUCCESS);
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
+                       .state_count = &state_count);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_SUCCESS);
+    }
     REQUIRE(state_count == 3);
 
     // Verify state names are in the same order as state_configs
-    REQUIRE(states[0]._size == sizeof(astl_state_properties_t));
-    REQUIRE(states[0]._name != nullptr);
-    REQUIRE(std::string(states[0]._name) == "C0");
-    REQUIRE(states[0]._description != nullptr);
-    REQUIRE(std::string(states[0]._description) == "CPU fully active");
+    REQUIRE(states[0].size == sizeof(astl_state_props_t));
+    REQUIRE(states[0].name != nullptr);
+    REQUIRE(std::string(states[0].name) == "C0");
+    REQUIRE(states[0].description != nullptr);
+    REQUIRE(std::string(states[0].description) == "CPU fully active");
 
-    REQUIRE(states[1]._size == sizeof(astl_state_properties_t));
-    REQUIRE(states[1]._name != nullptr);
-    REQUIRE(std::string(states[1]._name) == "C1");
-    REQUIRE(states[1]._description != nullptr);
-    REQUIRE(std::string(states[1]._description) == "CPU clock-gated idle state");
+    REQUIRE(states[1].size == sizeof(astl_state_props_t));
+    REQUIRE(states[1].name != nullptr);
+    REQUIRE(std::string(states[1].name) == "C1");
+    REQUIRE(states[1].description != nullptr);
+    REQUIRE(std::string(states[1].description) == "CPU clock-gated idle state");
 
-    REQUIRE(states[2]._size == sizeof(astl_state_properties_t));
-    REQUIRE(states[2]._name != nullptr);
-    REQUIRE(std::string(states[2]._name) == "C6");
-    REQUIRE(states[2]._description != nullptr);
-    REQUIRE(std::string(states[2]._description) == "CPU deep power-down");
+    REQUIRE(states[2].size == sizeof(astl_state_props_t));
+    REQUIRE(states[2].name != nullptr);
+    REQUIRE(std::string(states[2].name) == "C6");
+    REQUIRE(states[2].description != nullptr);
+    REQUIRE(std::string(states[2].description) == "CPU deep power-down");
   }
 }
 
@@ -267,7 +308,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Residency Metric with Inferred State",
   auto                                        mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t                        mock_target_handle = mock_target.get();
   auto*                                       mock_target_raw    = mock_target.get();
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target, Name()).RETURN("MockTarget");
 
   astl::ResidencyMetricConfig::StateToInfoMap state_info;
@@ -317,27 +358,31 @@ TEST_CASE("astlGetMetricStatesOnTarget - Residency Metric with Inferred State",
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   SECTION("Inferred state name and description are populated") {
-    uint32_t                             state_count = 3;  // C1 + C6 + inferred C0
-    std::vector<astl_state_properties_t> states(3);
-    states[0]._size = sizeof(astl_state_properties_t);
+    uint32_t                        state_count = 3;  // C1 + C6 + inferred C0
+    std::vector<astl_state_props_t> states(3);
+    states[0].size = sizeof(astl_state_props_t);
 
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, metric_handle, states.data(), &state_count) ==
-            ASTL_STATUS_SUCCESS);
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
+                       .state_count = &state_count);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_SUCCESS);
+    }
     REQUIRE(state_count == 3);
 
     // First two states are C1 and C6 (from state_configs order)
-    REQUIRE(std::string(states[0]._name) == "C1");
-    REQUIRE(states[0]._description != nullptr);
-    REQUIRE(std::string(states[0]._description) == "CPU clock-gated idle state");
+    REQUIRE(std::string(states[0].name) == "C1");
+    REQUIRE(states[0].description != nullptr);
+    REQUIRE(std::string(states[0].description) == "CPU clock-gated idle state");
 
-    REQUIRE(std::string(states[1]._name) == "C6");
-    REQUIRE(states[1]._description != nullptr);
-    REQUIRE(std::string(states[1]._description) == "CPU deep power-down");
+    REQUIRE(std::string(states[1].name) == "C6");
+    REQUIRE(states[1].description != nullptr);
+    REQUIRE(std::string(states[1].description) == "CPU deep power-down");
 
     // Last state is the inferred C0
-    REQUIRE(std::string(states[2]._name) == "C0");
-    REQUIRE(states[2]._description != nullptr);
-    REQUIRE(std::string(states[2]._description) == "CPU fully active (inferred)");
+    REQUIRE(std::string(states[2].name) == "C0");
+    REQUIRE(states[2].description != nullptr);
+    REQUIRE(std::string(states[2].description) == "CPU fully active (inferred)");
   }
 }
 
@@ -347,7 +392,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Unsupported Metric Type", "[wrapper][Me
   auto                                        mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t                        mock_target_handle = mock_target.get();
   auto*                                       mock_target_raw    = mock_target.get();
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->_handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target, Name()).RETURN("MockTarget");
 
   // Create a non-stateful metric (DELTA type)
@@ -355,9 +400,9 @@ TEST_CASE("astlGetMetricStatesOnTarget - Unsupported Metric Type", "[wrapper][Me
   auto* mock_metric_raw = mock_metric.get();
   ALLOW_CALL(*mock_metric, GetProperties(_))
       .SIDE_EFFECT({
-        _1->_size        = sizeof(astl_metric_properties_t);
-        _1->_metric_type = ASTL_METRIC_DELTA;  // Not a finite set or residency metric
-        _1->_name        = "DeltaMetric";
+        _1->size        = sizeof(astl_metric_props_t);
+        _1->metric_type = ASTL_METRIC_DELTA;  // Not a finite set or residency metric
+        _1->name        = "DeltaMetric";
       })
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -398,12 +443,16 @@ TEST_CASE("astlGetMetricStatesOnTarget - Unsupported Metric Type", "[wrapper][Me
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   SECTION("Unsupported metric type returns NOT_SUPPORTED") {
-    uint32_t                             state_count = 3;
-    std::vector<astl_state_properties_t> states(3);
-    states[0]._size = sizeof(astl_state_properties_t);
+    uint32_t                        state_count = 3;
+    std::vector<astl_state_props_t> states(3);
+    states[0].size = sizeof(astl_state_props_t);
 
-    REQUIRE(astlGetMetricStatesOnTarget(mock_target_handle, metric_handle, states.data(), &state_count) ==
-            ASTL_STATUS_NOT_SUPPORTED);
+    {
+      ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
+                       .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
+                       .state_count = &state_count);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_NOT_SUPPORTED);
+    }
   }
 }
 

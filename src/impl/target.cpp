@@ -19,14 +19,14 @@ Target::Target(std::string name, std::string description, CollectorType collecto
       _parent{parent},
       _uuid{std::move(uuid)} {}
 
-auto Target::GetProperties(astl_target_properties_t* target) const -> astl_status_code {
+auto Target::GetProperties(astl_target_props_t* target) const -> astl_status_code {
   if (!target) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  target->_handle      = this;
-  target->_name        = GetInternedString(_name);
-  target->_description = GetInternedString(_description);
-  target->_uuid        = _uuid.has_value() ? GetInternedString(*_uuid) : nullptr;
+  target->handle      = this;
+  target->name        = GetInternedString(_name);
+  target->description = GetInternedString(_description);
+  target->id          = _uuid.has_value() ? GetInternedString(*_uuid) : nullptr;
   return ASTL_STATUS_SUCCESS;
 }
 

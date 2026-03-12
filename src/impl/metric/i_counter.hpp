@@ -16,7 +16,7 @@
 namespace astl {
 
 /**
- * @brief Base class for counter types that return astl_counter_properties_t API information
+ * @brief Base class for counter types that return astl_counter_props_t API information
  *        All implementors of ICounter are also RawMetric implementors so that MetricManager
  *        can use both interfaces on its counters and still have test mocks for ICounter implementations
  */
@@ -30,13 +30,13 @@ struct ICounter : public virtual IMetric {
   ICounter(ICounter&&)                 = default;
   ICounter& operator=(ICounter&&)      = default;
 
-  // don't hide the base class GetProperties(astl_metric_properties_t overload)
+  // don't hide the base class GetProperties(astl_metric_props_t overload)
   using IMetric::GetProperties;
 
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    */
-  virtual auto GetProperties(astl_counter_properties_t* properties) const -> astl_status_code = 0;
+  virtual auto GetProperties(astl_counter_props_t* properties) const -> astl_status_code = 0;
 };
 
 /**

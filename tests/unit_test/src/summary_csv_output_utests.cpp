@@ -27,11 +27,11 @@ struct SummaryTestTarget : public astl::ITarget {
   astl::CollectorType collector_type{astl::CollectorType::SCMI};
   auto                GetCollectorType() const -> astl::CollectorType override { return collector_type; }
   auto                Name() const -> std::string const& override { return name; }
-  auto                GetProperties(astl_target_properties_t* props) const -> astl_status_code override {
+  auto                GetProperties(astl_target_props_t* props) const -> astl_status_code override {
     if (!props) {
       return ASTL_STATUS_BAD_ARGUMENT;
     }
-    props->_handle = this;
+    props->handle = this;
     return ASTL_STATUS_SUCCESS;
   }
 };
@@ -52,7 +52,7 @@ struct SummaryTestMetric : public astl::IMetric {
   void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
   void             Reset() override {}
   astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-  astl_status_code GetProperties(astl_metric_properties_t* props) const override {
+  astl_status_code GetProperties(astl_metric_props_t* props) const override {
     (void)props;
     return ASTL_STATUS_SUCCESS;
   }
@@ -367,6 +367,34 @@ TEST_CASE("MinMaxAvgSummarizer direct testing", "[csv_summary][summarizer]") {  
     REQUIRE(*summary.max == astl::AstlValue{10.0});
     REQUIRE(*summary.avg == astl::AstlValue{0.0});  // (-10-5+0+5+10)/5 = 0/5 = 0
     REQUIRE(summary.count == 5);
+  }
+}
+
+TEST_CASE("ComputeTimeWeightedAverage direct testing", "[csv_summary][summarizer][time_weighted_average]") {
+  SECTION("Left-hold weighting across uneven intervals") {
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{10.0}, astl::SampleTimestamp{std::chrono::microseconds{0}}  },
+        {astl::AstlValue{20.0}, astl::SampleTimestamp{std::chrono::microseconds{100}}},
+        {astl::AstlValue{30.0}, astl::SampleTimestamp{std::chrono::microseconds{400}}},
+    };
+
+    auto result = astl::ComputeTimeWeightedAverage(samples);
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    REQUIRE(result->value() == astl::AstlValue{17.5});
+  }
+
+  SECTION("Falls back to arithmetic mean when no positive intervals exist") {
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{10.0}, astl::SampleTimestamp{std::chrono::microseconds{100}}},
+        {astl::AstlValue{20.0}, astl::SampleTimestamp{std::chrono::microseconds{100}}},
+        {astl::AstlValue{30.0}, astl::SampleTimestamp{std::chrono::microseconds{100}}},
+    };
+
+    auto result = astl::ComputeTimeWeightedAverage(samples);
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    REQUIRE(result->value() == astl::AstlValue{20.0});
   }
 }
 

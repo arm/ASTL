@@ -30,7 +30,7 @@ currently supported output mechanisms (in-memory buffer, Perfetto trace, Interva
 
 The initial implementation focuses on the System Control and Management Interface (SCMI)
 specification through the Linux SCMI sysfs interface. It also has experimental support of
-hwmon telemetry through libsensor. It may eventually be expanded to add support for other
+hwmon telemetry through libsensors. It may eventually be expanded to add support for other
 interfaces such as: BIOS mailboxes, PCIe configuration spaces, direct register accesses,
 MMIO, OS provided data or other sources of data.
 
@@ -42,30 +42,28 @@ Python wrapper layer (Cython bindings + high-level utilities) is now available�
 
 ### Sharable
 
-- New or other tools at Arm can use it (not used yet)
-- Partners and external 3rd party tool developers can use it to access telemetry on Arm
-  platforms (not used yet)
+- New and existing tools at Arm can use it.
+- Partners and external third-party tool developers can use it to access telemetry on Arm platforms.
 
 ### Uniform
 
-- Telemetry collection through fixed predefined set of API (not defined yet)
+- Telemetry collection through a fixed, predefined API surface.
 
 ### Portable
 
-- Rebuild on Windows or other OS’s with same user API interface (not ported yet)
-- Wrap with python layer (not done yet)
+- Rebuild on Windows or other OSs with the same user API interface.
+- Python wrapper layer support.
 
 ### Extensible
 
-- Driver to driver context-switch based collection (not implemented yet)
-- SCMI specification extensions (not implemented yet)
-- New/other platform level telemetry access mechanisms (not implemented yet)
+- Driver-to-driver context-switch based collection.
+- SCMI specification extensions.
+- Additional platform-level telemetry access mechanisms.
 
 ### Reusable
 
-- Can be deployed on all new platforms: IOT, Automotive, Client, Data center, GPUs, NPUs. (not deployed yet)
-- Can be used by a telemetry collection tool or in an AI framework or directly to instrument a
-  workload (not used yet)
+- Can be deployed across IoT, automotive, client, data center, GPU, and NPU platforms.
+- Can be used by telemetry collection tools, AI frameworks, or directly to instrument workloads.
 
 ## High Level Architecture Diagram
 
@@ -101,7 +99,7 @@ Python wrapper layer (Cython bindings + high-level utilities) is now available�
 
 ASTL's `config` directory holds platform-specific metrics specifications
 and should be included in distributions of the binary library.
-ASTL looks for it in the following directories in prefered order:
+ASTL looks for it in the following directories in preferred order:
 
 1. Environment variable override: `ASTL_CONFIG_DIR`
 2. Under a user-specific application data dir, depending on OS
@@ -134,12 +132,14 @@ The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_
 ```cpp
 #include "astl/astl.h"          // core API
 
-#include "astl_telemetry.h"     // Function calls
+#include "astl/astl_telemetry.h"     // Function calls
 ```
 
 1. Mount the Sysfs interface:
 
+```bash
 mount -t stlmfs none /sys/fs/arm_telemetry/
+```
 
 2. Initialize ASTL
 
@@ -242,31 +242,52 @@ TinyExpr++ is compiled with `TE_UINT64` and `TE_BITWISE_OPERATORS`, providing ex
 3. Discover targets
 
 ```cpp
-status = astlGetTargetCount(&target_count);
+ASTL_INIT_STRUCT(astl_get_target_count_params_t, get_target_count_params,
+                 .flags = 0,
+                 .target_count = &target_count);
+status = astlGetTargetCount(&get_target_count_params);
 // allocate an array to hold the properties of each target
-ASTL_ALLOC_ARRAY(astl_target_properties_t, target_properties_buffer, target_count);
-status = astlGetTargets(target_properties_buffer, &target_count);
+ASTL_ALLOC_ARRAY(astl_target_props_t, target_properties_buffer, target_count);
+ASTL_INIT_STRUCT(astl_get_targets_params_t, get_targets_params,
+                 .flags = 0,
+                 .targets = target_properties_buffer,
+                 .target_count = &target_count);
+status = astlGetTargets(&get_targets_params);
 ...
 // using the first target
-astl_target_properties_t target_properties = target_properties_buffer[0];
+astl_target_props_t target_properties = target_properties_buffer[0];
 ```
 
 4. Configure collection
 
 ```cpp
 uint32_t metric_count{};
-astlGetMetricCount(target_properties._handle, &metric_count);
-std::vector<astl_metric_properties_t> metric_buffer(metric_count);
-metric_buffer[0]._size = sizeof(astl_metric_properties);
-status = astlGetMetrics(target_properties._handle, metric_buffer.data(), &metric_count);
+ASTL_INIT_STRUCT(astl_get_metric_count_params_t, get_metric_count_params,
+    .flags = 0,
+    .target_handle = target_properties.handle,
+    .metric_count = &metric_count);
+astlGetMetricCount(&get_metric_count_params);
+std::vector<astl_metric_props_t> metric_buffer(metric_count);
+metric_buffer[0].size = sizeof(astl_metric_props_t);
+ASTL_INIT_STRUCT(astl_get_metrics_params_t, get_metrics_params,
+    .flags = 0,
+    .target_handle = target_properties.handle,
+    .metrics = metric_buffer.data(),
+    .metric_count = &metric_count);
+status = astlGetMetrics(&get_metrics_params);
 
-ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params,
-    ._sampling_interval = 0,
-    ._collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
-    ._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD,
+ASTL_INIT_STRUCT(astl_collection_params_t, collection_params,
+    .flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
+    .sampling_interval = 0,
+    .collection_mode = ASTL_COLLECTION_MODE_IMMEDIATE,
 );
-status = astlConfigureMetricCollectionOnTarget(target_properties._handle, &collection_params,
-                                                &metric_buffer.front()._handle, metric_count);
+ASTL_INIT_STRUCT(astl_configure_metric_collection_on_target_params_t, configure_metric_params,
+    .flags = 0,
+    .target_handle = target_properties.handle,
+    .collection_params = &collection_params,
+    .metric_handles = &metric_buffer.front().handle,
+    .metric_count = metric_count);
+status = astlConfigureMetricCollectionOnTarget(&configure_metric_params);
 ```
 
 Alternatively, we can configure collection by metric groups
@@ -274,37 +295,67 @@ Alternatively, we can configure collection by metric groups
 ```cpp
 auto     CollectFirstGroup(astl_target_handle_t target) -> void {
 uint32_t metric_group_count{};
-auto     status = astlGetMetricGroupCount(target, &metric_group_count);
+ASTL_INIT_STRUCT(astl_get_metric_group_count_params_t, get_group_count_params,
+                 .flags = 0,
+                 .target_handle = target,
+                 .metric_group_count = &metric_group_count);
+auto status = astlGetMetricGroupCount(&get_group_count_params);
 
-std::vector<astl_metric_group_properties_t> metric_groups_properties(metric_group_count);
-metric_groups_properties[0]._size = sizeof(astl_metric_group_properties_t);
+std::vector<astl_metric_group_props_t> metric_groups_properties(metric_group_count);
+metric_groups_properties[0].size = sizeof(astl_metric_group_props_t);
 
 // retrieve the metric groups
-status = astlGetMetricGroups(target, metric_groups_properties.data(), &metric_group_count);
+ASTL_INIT_STRUCT(astl_get_metric_groups_params_t, get_groups_params,
+                 .flags = 0,
+                 .target_handle = target,
+                 .metric_groups = metric_groups_properties.data(),
+                 .metric_group_count = &metric_group_count);
+status = astlGetMetricGroups(&get_groups_params);
 
 // collect on the first group (you could instead look at the properties and filter by name)
-std::vector<astl_metric_group_handle_t> groups{metric_groups_properties[0]._handle};
+std::vector<astl_metric_group_handle_t> groups{metric_groups_properties[0].handle};
 const uint32_t groups_count = static_cast<uint32_t>(groups.size());
-ASTL_INIT_STRUCT(astl_collection_parameters_t, collection_params,
-                 ._sampling_interval = 100,
-                 ._collection_mode = ASTL_COLLECTION_MODE_IMMEDIATE,
-                 ._optimization = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD);
+ASTL_INIT_STRUCT(astl_collection_params_t, collection_params,
+                 .flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
+                 .sampling_interval = 100,
+                 .collection_mode = ASTL_COLLECTION_MODE_IMMEDIATE);
 
-status = astlConfigureMetricGroupCollectionOnTarget(target, &collection_params, groups.data(), groups_count);
+ASTL_INIT_STRUCT(astl_configure_metric_group_collection_on_target_params_t, configure_group_params,
+                 .flags = 0,
+                 .target_handle = target,
+                 .collection_params = &collection_params,
+                 .metric_group_handles = groups.data(),
+                 .metric_group_count = groups_count);
+status = astlConfigureMetricGroupCollectionOnTarget(&configure_group_params);
 }
 ```
 
 5. Start, read, and stop collection (with optional pause/resume)
 
 ```cpp
-status = astlStartCollectionOnTarget(target_properties._handle);
+ASTL_INIT_STRUCT(astl_start_collection_on_target_params_t, start_params,
+                 .flags = 0,
+                 .target_handle = target_properties.handle);
+status = astlStartCollectionOnTarget(&start_params);
 
 // Optional: temporarily suspend sampling
-status = astlPauseCollectionOnTarget(target_properties._handle);   // collection state: PAUSED
-status = astlResumeCollectionOnTarget(target_properties._handle);  // back to STARTED
+ASTL_INIT_STRUCT(astl_pause_collection_on_target_params_t, pause_params,
+                 .flags = 0,
+                 .target_handle = target_properties.handle);
+status = astlPauseCollectionOnTarget(&pause_params);   // collection state: PAUSED
+ASTL_INIT_STRUCT(astl_resume_collection_on_target_params_t, resume_params,
+                 .flags = 0,
+                 .target_handle = target_properties.handle);
+status = astlResumeCollectionOnTarget(&resume_params);  // back to STARTED
 
-status = astlReadImmediateOnTarget(target_properties._handle);     // only useful while STARTED
-status = astlStopCollectionOnTarget(target_properties._handle);    // final state: STOPPED
+ASTL_INIT_STRUCT(astl_read_immediate_on_target_params_t, immediate_params,
+                 .flags = 0,
+                 .target_handle = target_properties.handle);
+status = astlReadImmediateOnTarget(&immediate_params);     // only useful while STARTED
+ASTL_INIT_STRUCT(astl_stop_collection_on_target_params_t, stop_params,
+                 .flags = 0,
+                 .target_handle = target_properties.handle);
+status = astlStopCollectionOnTarget(&stop_params);    // final state: STOPPED
 ```
 
 6. Save or load a session (.astl)
@@ -314,7 +365,7 @@ post-processing/output generation.
 
 Key rules:
 
-- Always set the struct `_size` field to `sizeof(struct)`.
+- Always set the struct `size` field to `sizeof(struct)`.
 - `flags` must be `0` (reserved for future use).
 - Call `astlSaveCollection()` after stopping collection.
 - After `astlLoadCollection()`, collection control APIs are disabled; only post-processing/output generation is possible.
@@ -325,8 +376,8 @@ Key rules:
 #include "astl/astl_telemetry.h"
 
 ASTL_INIT_STRUCT(astl_save_params_t, params,
-                 ._output_file_path = "/tmp/session.astl",  // nullptr/empty => temp files only
-                 ._flags = 0);
+                 .output_file_path = "/tmp/session.astl",  // nullptr/empty => temp files only
+                 .flags = 0);
 
 astl_status_code rc = astlSaveCollection(&params);
 ```
@@ -337,9 +388,9 @@ astl_status_code rc = astlSaveCollection(&params);
 #include "astl/astl_telemetry.h"
 
 ASTL_INIT_STRUCT(astl_load_params_t, params,
-                 ._input_file_path = "/tmp/session.astl",
-                 ._chunk_size_bytes = 0,  // reserved; 0 uses default
-                 ._flags = 0);
+                 .input_file_path = "/tmp/session.astl",
+                 .chunk_size_bytes = 0,  // reserved; 0 uses default
+                 .flags = 0);
 
 astl_status_code rc = astlLoadCollection(&params);
 ```
@@ -355,23 +406,38 @@ After stopping collection, call `astlGetMetricStatisticsOnTarget` for any arithm
 the minimum, maximum, average, and sample count over all collected samples. See the
 [Metric Summary API](#metric-summary-api) section for full details.
 
-```cpp
-astl_metric_statistics_t summary{};       // zero-initialize
-summary._size  = sizeof(astl_metric_statistics_t);
-// summary._flags is already 0 from zero-initialization
+````c
+#include "astl/astl_telemetry.h"
+#include <inttypes.h>
+#include <stdio.h>
 
-astl_status_code rc = astlGetMetricStatisticsOnTarget(
-    target_properties._handle,
-    metric_buffer[0]._handle,
-    &summary);
+// Retrieve metric statistics (min/max/avg)
+```c
+// Retrieve metric statistics (min/max/avg)
+astl_target_props_t* target_properties = /* initialized from astlGetTargets */;
+astl_metric_props_t* metric_buffer = /* initialized from astlGetMetrics */;
+````
 
-if (rc == ASTL_STATUS_SUCCESS && summary._count > 0) {
-    // _avg is ALWAYS fp64 regardless of the metric's value type
-    printf("count=%" PRIu64 "  avg=%.2f\n", summary._count, summary._avg.fp64);
+astl_metric_statistics_t summary = {0}; // zero-initialize
+summary.size = sizeof(astl_metric_statistics_t);
+summary.flags = ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG;
+
+ASTL_INIT_STRUCT(astl_get_metric_statistics_on_target_params_t, get_metric_stats_params,
+.flags = 0,
+.target_handle = target_properties.handle,
+.metric_handle = metric_buffer[0].handle,
+.summary = &summary);
+astl_status_code rc = astlGetMetricStatisticsOnTarget(&get_metric_stats_params);
+
+if (rc == ASTL_STATUS_SUCCESS && summary.count > 0) {
+// avg is always fp64 — safe for all arithmetic metric types
+printf("count=%" PRIu64 " avg=%.2f\n",
+summary.count, summary.avg.fp64);
 }
-```
 
-9. Compute discrete histogram for a metric (post-collection)
+````
+
+9. Retrieve histogram bins for finite-set metrics (post-collection)
 
 For metrics that take a finite set of values (e.g. frequency steps, residency states),
 use the two-step `astlGetMetricDiscreteHistogramBinCountOnTarget` /
@@ -380,24 +446,34 @@ See the [Discrete Histogram API](#discrete-histogram-api) section for full detai
 
 ```cpp
 uint32_t bin_count = 0;
-astl_status_code rc = astlGetMetricDiscreteHistogramBinCountOnTarget(
-    target_properties._handle, metric_buffer[0]._handle, &bin_count);
+ASTL_INIT_STRUCT(astl_get_metric_discrete_histogram_bin_count_on_target_params_t,
+                 bin_count_params,
+                 .flags = 0,
+                 .target_handle = target_properties.handle,
+                 .metric_handle = metric_buffer[0].handle,
+                 .bin_count = &bin_count);
+astl_status_code rc = astlGetMetricDiscreteHistogramBinCountOnTarget(&bin_count_params);
 
 if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
     std::vector<astl_discrete_histogram_bin_t> bins(bin_count);
-    bins[0]._size = sizeof(astl_discrete_histogram_bin_t);
+    bins[0].size = sizeof(astl_discrete_histogram_bin_t);
 
-    rc = astlGetMetricDiscreteHistogramOnTarget(
-        target_properties._handle, metric_buffer[0]._handle,
-        bins.data(), &bin_count);
+    ASTL_INIT_STRUCT(astl_get_metric_discrete_histogram_on_target_params_t,
+                     histogram_params,
+                     .flags = 0,
+                     .target_handle = target_properties.handle,
+                     .metric_handle = metric_buffer[0].handle,
+                     .bins = bins.data(),
+                     .bin_count = &bin_count);
+    rc = astlGetMetricDiscreteHistogramOnTarget(&histogram_params);
 
     if (rc == ASTL_STATUS_SUCCESS) {
         for (uint32_t i = 0; i < bin_count; ++i)
             printf("value=%.0f  count=%u\n",
-                   (double)bins[i]._value.ui64, bins[i]._count);
+                   (double)bins[i].value.ui64, bins[i].count);
     }
 }
-```
+````
 
 10. Clean up allocated resources
 
@@ -409,9 +485,29 @@ Run `scripts/demo.sh` to run this flow. This sets up the mock driver and perform
 To run manually, start a mock server and execute `build/debug/bin/sample_test`. Use `--help`
 for usage details.
 
+## Metric Summary API
+
+`astlGetMetricStatisticsOnTarget` computes min/max/avg/count over all collected samples for a metric on a target.
+Call it after `astlStopCollectionOnTarget` or after `astlLoadCollection`.
+
+`astl_metric_statistics_t` fields:
+
+- `size`: Must be `sizeof(astl_metric_statistics_t)`.
+- `flags`: `ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG` or `ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG`.
+- `min` and `max`: Union members matching the metric's native value type.
+- `avg`: Always read `summary.avg.fp64`.
+- `count`: Number of samples included in the summary.
+
+Common status codes:
+
+- `ASTL_STATUS_SUCCESS`
+- `ASTL_STATUS_BAD_ARGUMENT`
+- `ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE`
+- `ASTL_STATUS_NOT_SUPPORTED`
+
 ## String Pointer Lifetimes and Ownership
 
-**Important:** The `astlGetMetricStatesOnTarget` API returns `const char*` pointers to state name strings (`astl_state_properties_t._name`). These pointers refer to internal storage owned by ASTL's metric and configuration objects.
+**Important:** The `astlGetMetricStatesOnTarget` API returns `const char*` pointers to state name strings (`astl_state_props_t.name`). These pointers refer to internal storage owned by ASTL's metric and configuration objects.
 
 ### Lifetime Guarantees
 
@@ -429,13 +525,13 @@ State name pointers are valid only for the current collection session:
 
   ```cpp
   // Safe: Copy the string for long-term storage across sessions
-  std::string state_name = states[i]._name;
+  std::string state_name = states[i].name;
 
   // Safe: Use within the same collection session
-  printf("State: %s\n", states[i]._name);
+  printf("State: %s\n", states[i].name);
 
   // UNSAFE: Storing pointer for use after reconfiguration
-  const char* saved_ptr = states[i]._name;  // ❌ Dangling pointer after reconfiguration
+  const char* saved_ptr = states[i].name;  // ❌ Dangling pointer after reconfiguration
   // ... reconfigure ASTL for next collection ...
   printf("State: %s\n", saved_ptr);  // ❌ Undefined behavior
   ```
@@ -456,68 +552,6 @@ node scripts/render_mermaid.js --all
 
 `system_end_to_end_sequence.mmd` remains as an overview referencing those phases.
 
-## Metric Summary API
-
-`astlGetMetricStatisticsOnTarget` computes a statistical summary (minimum, maximum, average, and
-sample count) over all samples collected for a given metric on a specific target. It is
-called after `astlStopCollectionOnTarget` (or after `astlLoadCollection`).
-
-Only arithmetic value types (integers and floats) are supported.
-
-### `astl_metric_statistics_t` Fields
-
-| Field    | Type           | Notes                                                                                                                             |
-| -------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `_size`  | `size_t`       | **Must** be set to `sizeof(astl_metric_statistics_t)` before the call.                                                            |
-| `_min`   | `astl_value_t` | Minimum sample value. Union member matches the metric's native value type.                                                        |
-| `_max`   | `astl_value_t` | Maximum sample value. Union member matches the metric's native value type.                                                        |
-| `_avg`   | `astl_value_t` | Average value. **Always `fp64`** — read via `summary._avg.fp64` regardless of the metric's value type, including integer metrics. |
-| `_count` | `uint64_t`     | Number of samples processed. When `_count == 0` the min/max/avg fields are zero and must not be interpreted.                      |
-| `_flags` | `uint32_t`     | Reserved. **Must be set to `0`**.                                                                                                 |
-
-> **Key contract:** `_avg` always stores a `double` (`fp64`) even for integer metrics.
-> `_min` and `_max` use the union member that matches the metric's native value type
-> (e.g. `uint64` for `ASTL_VALUE_UINT64` metrics).
-
-### Metric Summary Status Codes
-
-| Code                                   | Meaning                                                     |
-| -------------------------------------- | ----------------------------------------------------------- |
-| `ASTL_STATUS_SUCCESS`                  | Summary computed successfully.                              |
-| `ASTL_STATUS_BAD_ARGUMENT`             | A pointer argument is `NULL`, or `_flags != 0`.             |
-| `ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE` | `_size` does not equal `sizeof(astl_metric_statistics_t)`.  |
-| `ASTL_STATUS_NOT_SUPPORTED`            | The metric type or value type does not support min/max/avg. |
-
-### Example
-
-```c
-#include "astl/astl_telemetry.h"
-#include <inttypes.h>
-#include <stdio.h>
-
-astl_metric_statistics_t summary{};  // zero-initializes all fields
-summary._size = sizeof(astl_metric_statistics_t);
-// summary._flags is already 0; listed here for emphasis
-summary._flags = 0;
-
-astl_status_code rc = astlGetMetricStatisticsOnTarget(
-    target_handle, metric_handle, &summary);
-
-if (rc == ASTL_STATUS_SUCCESS) {
-    if (summary._count > 0) {
-        // _avg is always fp64 — safe for all arithmetic metric types
-        printf("count=%" PRIu64 "  avg=%.2f\n",
-               summary._count, summary._avg.fp64);
-    } else {
-        puts("no samples collected");
-    }
-} else if (rc == ASTL_STATUS_NOT_SUPPORTED) {
-    puts("metric type does not support min/max/avg");
-}
-```
-
----
-
 ## Discrete Histogram API
 
 `astlGetMetricDiscreteHistogramBinCountOnTarget` and `astlGetMetricDiscreteHistogramOnTarget` implement a
@@ -533,24 +567,35 @@ per unique value. Both functions are called after `astlStopCollectionOnTarget` (
 
 /* Step 1 – query the number of unique-value bins */
 uint32_t bin_count = 0;
-astl_status_code rc = astlGetMetricDiscreteHistogramBinCountOnTarget(
-    target_handle, metric_handle, &bin_count);
+ASTL_INIT_STRUCT(astl_get_metric_discrete_histogram_bin_count_on_target_params_t,
+                 bin_count_params,
+                 .flags = 0,
+                 .target_handle = target_handle,
+                 .metric_handle = metric_handle,
+                 .bin_count = &bin_count);
+astl_status_code rc = astlGetMetricDiscreteHistogramBinCountOnTarget(&bin_count_params);
 
 if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
     /* Step 2 – allocate and fill */
     astl_discrete_histogram_bin_t* bins =
         (astl_discrete_histogram_bin_t*)calloc(bin_count, sizeof(*bins));
     if (bins) {
-        bins[0]._size = sizeof(astl_discrete_histogram_bin_t);
+        bins[0].size = sizeof(astl_discrete_histogram_bin_t);
 
-        rc = astlGetMetricDiscreteHistogramOnTarget(
-            target_handle, metric_handle, bins, &bin_count);
+        ASTL_INIT_STRUCT(astl_get_metric_discrete_histogram_on_target_params_t,
+                         histogram_params,
+                         .flags = 0,
+                         .target_handle = target_handle,
+                         .metric_handle = metric_handle,
+                         .bins = bins,
+                         .bin_count = &bin_count);
+        rc = astlGetMetricDiscreteHistogramOnTarget(&histogram_params);
 
         if (rc == ASTL_STATUS_SUCCESS) {
             for (uint32_t i = 0; i < bin_count; ++i) {
-                /* _value union member matches the metric's native value type */
+                /* value union member matches the metric's native value type */
                 printf("value=%" PRIu64 "  count=%u\n",
-                       bins[i]._value.ui64, bins[i]._count);
+                       bins[i].value.ui64, bins[i].count);
             }
         }
         free(bins);
@@ -562,11 +607,11 @@ if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
 
 ### `astl_discrete_histogram_bin_t` Fields
 
-| Field    | Type           | Notes                                                                                      |
-| -------- | -------------- | ------------------------------------------------------------------------------------------ |
-| `_size`  | `size_t`       | **Must** be set to `sizeof(astl_discrete_histogram_bin_t)` on the first array element.     |
-| `_value` | `astl_value_t` | The exact sampled value for this bin. Union member matches the metric's native value type. |
-| `_count` | `uint64_t`     | Number of samples whose value exactly equals `_value`.                                     |
+| Field   | Type           | Notes                                                                                      |
+| ------- | -------------- | ------------------------------------------------------------------------------------------ |
+| `size`  | `size_t`       | **Must** be set to `sizeof(astl_discrete_histogram_bin_t)` on the first array element.     |
+| `value` | `astl_value_t` | The exact sampled value for this bin. Union member matches the metric's native value type. |
+| `count` | `uint64_t`     | Number of samples whose value exactly equals `value`.                                      |
 
 ### Discrete Histogram Status Codes
 
@@ -584,7 +629,7 @@ if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
 | --------------------------------------------- | -------------------------------------------------------------------------- |
 | `ASTL_STATUS_SUCCESS`                         | Bins filled successfully.                                                  |
 | `ASTL_STATUS_BAD_ARGUMENT`                    | A pointer argument is `NULL`, or `bin_count` is `0` on entry.              |
-| `ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE`        | `bins[0]._size` does not equal `sizeof(astl_discrete_histogram_bin_t)`.    |
+| `ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE`        | `bins[0].size` does not equal `sizeof(astl_discrete_histogram_bin_t)`.     |
 | `ASTL_STATUS_NOT_SUPPORTED`                   | Metric type not supported.                                                 |
 | `ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL` | Array capacity < required bin count; `bin_count` updated to required size. |
 
@@ -706,7 +751,8 @@ df = pd.read_csv("/tmp/astl_intervals.csv")
    - Header: `MetricName,Target,Min,Max,Average,SampleCount`.
    - Grouping: Rows are grouped by metric name internally; current implementation does not insert blank lines between groups (compact listing).
    - Value Handling:
-     - MinMaxAvg summary are are only produced when the metric is of type ASTL_METRIC_VALUE, ASTL_METRIC_DELTA or ASTL_METRIC_RATE
+     - Min/max/avg summary values are only produced when the metric is of type `ASTL_METRIC_VALUE`,
+       `ASTL_METRIC_DELTA`, or `ASTL_METRIC_RATE`.
      - If a metric produced only string samples (no numeric values), Min/Max/Average are `N/A`.
      - Numeric formatting matches the internal `to_string` representation (no forced scientific notation).
    - Empty collection yields an empty file (no header).
@@ -734,7 +780,7 @@ Histogram CSV Table
   `Target` – target name
   `Type` – `discrete` or `ranged` histogram type.
   `Value/Range` – numeric range. For `discrete`, the exact value.
-  Count` – number of samples falling in this bin.
+  `Count` – number of samples falling in this bin.
 
 - Header: `MetricName,Target,Type,Value/Range, Count`.
   Grouping: Rows are grouped by metric name internally; current implementation does not insert blank lines between groups (compact listing).
@@ -862,6 +908,18 @@ cd build && make lint
 
 Automatically generate class diagrams, function call graphs, and API reference docs:
 
+```sh
+cd build/debug && cmake --build . --target doxygen
+```
+
+Output will be at: `<ASTL>/doc/html/index.html`.
+
+Note: you need to install both doxygen and dot on your system:
+
+```sh
+sudo apt-get -y install doxygen graphviz
+```
+
 ## Experimental Python API and usage
 
 For Python usage (installation, quick start, streaming, diagnostics, derived metrics,
@@ -921,43 +979,33 @@ Add to `conf.py`:
 html_theme = 'sphinx_rtd_theme'
 ```
 
-and other documentation automatically from source.
-You don't need to build or run first, only configure.
-Output will be at: \<ASTL\>/doc/html/index.html
-
-```sh
-cd build/debug && cmake --build . --target doxygen
-```
-
-Note: you need to install both doxygen and dot on your system:
-
-```sh
-sudo apt-get -y install doxygen graphviz
-```
-
 ## Python Packaging Notes
 
-When publishing to PyPI or building wheels from an sdist in isolated environments, the Cython
-extension must compile against the ASTL public C headers. Because the top-level `include/` tree
-is not present inside an sdist extraction, a release process must first vendor those headers
-into `python/astl/include/astl`.
+Python packaging uses this include resolution order in `python/setup.py`:
 
-Refresh vendored headers (including generated `astl_version.h`) before building a release:
+1. Repository headers: `<repo>/include`
+2. Vendored fallback: `<repo>/python/astl/include`
+
+For local editable installs in this repo, vendoring is usually not required because `<repo>/include`
+exists. For sdist/wheel builds in isolated environments (where repo headers are unavailable), vendor
+headers first:
 
 ```bash
 python/scripts/vendor_headers.sh
 ```
 
-This script:
+What `vendor_headers.sh` does:
 
-1. Ensures a build directory exists (configuring CMake if needed) so `astl_version.h` is generated.
-2. Copies public headers (excluding the template `astl_version.h.in`) and the generated
-   `astl_version.h` into the Python package.
-3. Overwrites any existing vendored headers to keep them current.
+1. Ensures generated `astl_version.h` exists (configures/builds minimal targets if needed).
+2. Copies public ASTL headers into `<repo>/python/astl/include/astl`.
+3. Excludes internal `astl_test_hooks.h`.
+4. Overwrites previously vendored headers to keep them current.
 
-The `setup.py` logic will first look for the real repo `include/` path and fall back to the
-vendored copy when necessary. This guarantees `pip wheel astl-<version>.tar.gz` succeeds without
-the full repository.
+Optional:
+
+```bash
+python/scripts/vendor_headers.sh --build-dir build/debug
+```
 
 ## Design Diagrams
 

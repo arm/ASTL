@@ -13,9 +13,8 @@ Purpose:
 Mapping policy:
     * Unknown / unmapped status codes fall back to the raw ``ASTLError`` raised
         by the underlying binding layer (caller can still inspect the status code).
-    * New mappings are added in a backwards compatible way—callers written today
-        that catch ``ASTLError`` continue to function when more granular subclasses
-        arrive later.
+    * New mappings can be added over time while callers can still catch ``ASTLError``
+        for broad handling.
     * Naming avoids shadowing built-in Python exceptions (e.g. ``NotImplementedError``)
         by suffixing with ``ASTL`` when clarity beats brevity.
 """

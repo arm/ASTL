@@ -22,16 +22,16 @@ auto MetricGroup::FromApiHandle(astl_metric_group_handle_t handle) -> const Metr
 /**
  * @brief Fill in the given properties struct with this group's details.
  */
-auto MetricGroup::ToMetricGroupProperties(astl_metric_group_properties_t* properties) const -> astl_status_code {
+auto MetricGroup::ToMetricGroupProperties(astl_metric_group_props_t* properties) const -> astl_status_code {
   if (!properties) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  properties->_size         = sizeof(astl_metric_group_properties_t);
-  properties->_handle       = ToApiHandle();
-  properties->_name         = GetInternedString(name);
-  properties->_description  = GetInternedString(description);
-  properties->_metric_count = static_cast<uint32_t>(metrics.size());
-  properties->_metrics      = nullptr;  // user can subsequently allocate and then fill via astlGetMetricGroupMetrics
+  properties->size         = sizeof(astl_metric_group_props_t);
+  properties->handle       = ToApiHandle();
+  properties->name         = GetInternedString(name);
+  properties->description  = GetInternedString(description);
+  properties->metric_count = static_cast<uint32_t>(metrics.size());
+  properties->metrics      = nullptr;  // user can subsequently allocate and then fill via astlGetMetricGroupMetrics
   return ASTL_STATUS_SUCCESS;
 }
 

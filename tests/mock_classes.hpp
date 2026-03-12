@@ -43,7 +43,7 @@ struct MockTarget : public astl::ITarget {
 
   MAKE_MOCK0(GetCollectorType, auto()->astl::CollectorType, const override);
   MAKE_MOCK0(Name, auto()->std::string const&, const override);
-  MAKE_MOCK1(GetProperties, auto(astl_target_properties_t* target)->astl_status_code, const override);
+  MAKE_MOCK1(GetProperties, auto(astl_target_props_t* target)->astl_status_code, const override);
 };
 
 /**
@@ -57,7 +57,7 @@ struct MockOrchestrator {
   static constexpr bool trompeloeil_movable_mock = true;  // cppcheck-suppress unusedStructMember
 
   MAKE_MOCK3(ConfigureCounterCollection,
-             astl_status_code(const astl::ITarget* target, astl_collection_parameters_t const* const collection_params,
+             astl_status_code(const astl::ITarget* target, astl_collection_params_t const* const collection_params,
                               std::span<astl::ICounter*> counters));
 
   MAKE_MOCK1(ReadImmediate, astl_status_code(const astl::ITarget* target));
@@ -77,7 +77,7 @@ struct MockOrchestrator {
 struct MockCounter : public astl::ICounter {
   // clang-format off
   // ICounter functions
-  MAKE_MOCK1(GetProperties, auto(astl_counter_properties_t*) -> astl_status_code, const override);
+  MAKE_MOCK1(GetProperties, auto(astl_counter_props_t*) -> astl_status_code, const override);
 
   // IMetric functions, since ICounter extends it
   using expected_operation_sequence = std::expected<astl::OperationSequence, astl_status_code>;
@@ -91,7 +91,7 @@ struct MockCounter : public astl::ICounter {
   using samples_t = std::span<const astl::ProcessedSampledData>;
   MAKE_MOCK0(Reset, auto()->void, override);
   MAKE_MOCK0(Summarize, auto()->astl_status_code, override);
-  MAKE_MOCK1(GetProperties, auto(astl_metric_properties_t* properties)->astl_status_code, const override);
+  MAKE_MOCK1(GetProperties, auto(astl_metric_props_t* properties)->astl_status_code, const override);
   MAKE_MOCK0(Name, auto()->std::string const&, const override);
 
   // clang-format on
@@ -99,7 +99,7 @@ struct MockCounter : public astl::ICounter {
 
 struct MockCounterHandle : public astl::CounterHandle {
   // clang-format off
-  MAKE_MOCK1(GetProperties, auto(astl_counter_properties_t*) -> astl_status_code, const);
+  MAKE_MOCK1(GetProperties, auto(astl_counter_props_t*) -> astl_status_code, const);
 };
  
 
@@ -141,7 +141,7 @@ struct MockCollectorManager : public astl::ICollectorManager {
   MAKE_MOCK1(UnregisterRawSampleSink, astl_status_code(astl::IRawSampleSink* sink), override);
 
   MAKE_MOCK3(ConfigureCollectionOnTarget,
-             astl_status_code(const astl::ITarget* target, astl_collection_parameters_t const& collection_params,
+             astl_status_code(const astl::ITarget* target, astl_collection_params_t const& collection_params,
                               astl::CollectionOperations&& configuration),
              override);
 
@@ -229,7 +229,7 @@ struct MockMetric : public astl::IMetric {
   using samples_t = std::span<const astl::ProcessedSampledData>;
   MAKE_MOCK0(Reset, auto()->void, override);
   MAKE_MOCK0(Summarize, auto()->astl_status_code, override);
-  MAKE_MOCK1(GetProperties, auto(astl_metric_properties_t* properties)->astl_status_code, const override);
+  MAKE_MOCK1(GetProperties, auto(astl_metric_props_t* properties)->astl_status_code, const override);
   MAKE_MOCK0(Name, auto()->std::string const&, const override);
 };
 
@@ -251,7 +251,7 @@ struct MockMetricManager : public astl::IMetricManager {
   MAKE_MOCK1(GetAvailableCounters, auto (const astl::ITarget* target) 
       -> expected_counter_span, const override);
 
-  MAKE_MOCK2(GetCounterProperties, auto (astl_counter_handle_t counter, astl_counter_properties_t* properties) 
+  MAKE_MOCK2(GetCounterProperties, auto (astl_counter_handle_t counter, astl_counter_props_t* properties) 
       -> astl_status_code, const override);
 
   MAKE_MOCK2(GetCounterRequiredOperations, auto (std::span<const astl_counter_handle_t> counters,
@@ -289,7 +289,7 @@ struct MockMetricManager : public astl::IMetricManager {
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    */
-  MAKE_MOCK2(GetProperties, auto(const astl_metric_handle_t, astl_metric_properties_t*)->astl_status_code,
+  MAKE_MOCK2(GetProperties, auto(const astl_metric_handle_t, astl_metric_props_t*)->astl_status_code,
              const override);
 
   /*
@@ -321,7 +321,7 @@ struct MockMetricManager : public astl::IMetricManager {
   MAKE_MOCK1(GetMetricGroups, auto(const astl::ITarget* target)->expected_metric_groups_handles, const override);
 
   MAKE_MOCK2(GetMetricGroupProperties,
-             auto(astl_metric_group_handle_t group, astl_metric_group_properties_t* properties)->astl_status_code,
+             auto(astl_metric_group_handle_t group, astl_metric_group_props_t* properties)->astl_status_code,
              const override);
 
   MAKE_MOCK1(GetMetricsInGroup, auto(astl_metric_group_handle_t group)->expected_metric_interface, const override);
@@ -330,7 +330,7 @@ struct MockMetricManager : public astl::IMetricManager {
 
   // NOTE: The GetProcessedSamples(metric_handle, target) method was removed from IMetricManager.
   // Tests should obtain processed samples via Orchestrator::GetProcessedMetricSamples after sinking them with
-  // Orchestrator::SinkProcessedSamples. If legacy expectations are still present they should be updated.
+  // Orchestrator::SinkProcessedSamples.
 
   /*
    * @brief Perform a final summary or aggregation of all collected metric data.
@@ -348,7 +348,7 @@ struct MockOutputManager : public astl::IOutputManager {
   static constexpr bool trompeloeil_movable_mock = true;
 
   MAKE_MOCK2(CreateBufferOutput,
-             astl_status_code(std::span<astl_metric_sample_t> samples_buffer, uint32_t* buffer_sample_count), override);
+             astl_status_code(std::span<astl_sample_t> samples_buffer, uint32_t* buffer_sample_count), override);
   MAKE_MOCK0(DestroyBufferOutput, astl_status_code(), override);
   MAKE_MOCK4(OutputProcessedSamples,
              astl_status_code(const astl::ProcessedSamplesMap& processed_samples, astl::OutputType output_type,
@@ -378,11 +378,11 @@ class TestTargetBase : public astl::ITarget {  // NOLINT
       : name_(std::move(n)), collector_type_(type) {}
   auto GetCollectorType() const -> astl::CollectorType override { return collector_type_; }
   auto Name() const -> std::string const& override { return name_; }
-  auto GetProperties(astl_target_properties_t* props) const -> astl_status_code override {
+  auto GetProperties(astl_target_props_t* props) const -> astl_status_code override {
     if (!props) {
       return ASTL_STATUS_BAD_ARGUMENT;
     }
-    props->_handle = this;
+    props->handle = this;
     return ASTL_STATUS_SUCCESS;
   }
 
@@ -412,13 +412,13 @@ class TestMetricBase : public astl::IMetric {
   void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
   void             Reset() override {}
   astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-  astl_status_code GetProperties(astl_metric_properties_t* props) const override {
+  astl_status_code GetProperties(astl_metric_props_t* props) const override {
     if (!props) {
       return ASTL_STATUS_BAD_ARGUMENT;
     }
-    props->_handle = this;
-    props->_name   = name_.c_str();
-    props->_units  = units_;
+    props->handle = this;
+    props->name   = name_.c_str();
+    props->units  = units_;
     return ASTL_STATUS_SUCCESS;
   }
   auto             Name() const -> std::string const& override { return name_; }

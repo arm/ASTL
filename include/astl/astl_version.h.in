@@ -34,9 +34,9 @@ extern "C" {
 //clang-format on
 // Note: Do not add to or modify the version structure in future API versions
 typedef struct _astl_version_t {
-  uint32_t _major;
-  uint32_t _minor;
-  uint32_t _micro;
+  uint32_t major;
+  uint32_t minor;
+  uint32_t micro;
 } astl_version_t;
 
 /**

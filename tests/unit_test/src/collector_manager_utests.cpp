@@ -157,13 +157,13 @@ TEST_CASE("CollectorManager with no collectors", "collector_manager") {
   auto mock_target = std::make_unique<MockTarget>();
 
   SECTION("ConfigureCollectionOnTarget with no collectors") {
-    astl_collection_parameters_t collection_params{};
-    astl::CollectionOperations   operations{.operationsBeforeStart = {},
-                                            .operationsAtStart     = {},
-                                            .operationsOnSample    = {},
-                                            .operationsAtStop      = {},
-                                            .samplingInterval      = std::chrono::milliseconds{100},
-                                            .requirements = {astl::CollectorCapability{astl::CollectorType::SCMI}}};
+    astl_collection_params_t   collection_params{};
+    astl::CollectionOperations operations{.operationsBeforeStart = {},
+                                          .operationsAtStart     = {},
+                                          .operationsOnSample    = {},
+                                          .operationsAtStop      = {},
+                                          .samplingInterval      = std::chrono::milliseconds{100},
+                                          .requirements = {astl::CollectorCapability{astl::CollectorType::SCMI}}};
     REQUIRE(collector_manager.ConfigureCollectionOnTarget(mock_target.get(), collection_params,
                                                           std::move(operations)) == ASTL_STATUS_NO_TARGETS_FOUND);
   }
@@ -205,7 +205,7 @@ TEST_CASE("CollectorManager with no viable collectors", "collector_manager") {
   ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
   collectors_map[mock_target.get()].push_back(std::move(mock_collector));
   astl::CollectorManager collector_manager{std::move(collectors_map)};
-  auto res = collector_manager.ConfigureCollectionOnTarget(mock_target.get(), astl_collection_parameters_t{},
+  auto res = collector_manager.ConfigureCollectionOnTarget(mock_target.get(), astl_collection_params_t{},
                                                            std::move(operations));
   REQUIRE(res == ASTL_STATUS_INVALID_COLLECTION_MODE);
 }
@@ -234,7 +234,7 @@ TEST_CASE("CollectorManager with one viable collector", "collector_manager") {
                                         .operationsAtStop      = {},
                                         .samplingInterval      = std::chrono::milliseconds{100},
                                         .requirements = {astl::CollectorCapability{astl::CollectorType::SCMI}}};
-  auto res = collector_manager.ConfigureCollectionOnTarget(mock_target.get(), astl_collection_parameters_t{},
+  auto res = collector_manager.ConfigureCollectionOnTarget(mock_target.get(), astl_collection_params_t{},
                                                            std::move(operations));
   REQUIRE(res == ASTL_STATUS_SUCCESS);
 

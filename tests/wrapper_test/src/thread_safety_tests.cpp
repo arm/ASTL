@@ -29,7 +29,7 @@ template <typename T>
 auto AllocateAstlVector(size_t count) -> std::vector<T> {
   std::vector<T> objects{count};
   if (count > 0) {
-    objects[0]._size = sizeof(T);
+    objects[0].size = sizeof(T);
   }
   return objects;
 }
@@ -66,23 +66,23 @@ TEST_CASE("C interface supports mixed concurrent calls", "[wrapper][thread_safet
 
       for (int j = 0; j < k_iterations; ++j) {
         uint32_t target_count{kJunk};
-        if (astlGetTargetCount(&target_count) != ASTL_STATUS_SUCCESS || target_count != 0) {
+        if (GetTargetCount(&target_count) != ASTL_STATUS_SUCCESS || target_count != 0) {
           all_ok.store(false, std::memory_order_release);
           break;
         }
 
-        astl_platform_properties_t system_info{};
-        system_info._size = sizeof(astl_platform_properties_t);
-        if (astlGetSystemInfo(&system_info) != ASTL_STATUS_SUCCESS) {
+        astl_platform_props_t system_info{};
+        system_info.size = sizeof(astl_platform_props_t);
+        if (AstlGetSystemInfo(&system_info) != ASTL_STATUS_SUCCESS) {
           all_ok.store(false, std::memory_order_release);
           break;
         }
 
-        if (astlReadImmediateOnTarget(nullptr) != ASTL_STATUS_BAD_ARGUMENT ||
-            astlStartCollectionOnTarget(nullptr) != ASTL_STATUS_BAD_ARGUMENT ||
-            astlPauseCollectionOnTarget(nullptr) != ASTL_STATUS_BAD_ARGUMENT ||
-            astlResumeCollectionOnTarget(nullptr) != ASTL_STATUS_BAD_ARGUMENT ||
-            astlStopCollectionOnTarget(nullptr) != ASTL_STATUS_BAD_ARGUMENT) {
+        if (ReadImmediateOnTarget(static_cast<astl_target_handle_t>(nullptr)) != ASTL_STATUS_BAD_ARGUMENT ||
+            StartCollectionOnTarget(static_cast<astl_target_handle_t>(nullptr)) != ASTL_STATUS_BAD_ARGUMENT ||
+            PauseCollectionOnTarget(static_cast<astl_target_handle_t>(nullptr)) != ASTL_STATUS_BAD_ARGUMENT ||
+            ResumeCollectionOnTarget(static_cast<astl_target_handle_t>(nullptr)) != ASTL_STATUS_BAD_ARGUMENT ||
+            StopCollectionOnTarget(static_cast<astl_target_handle_t>(nullptr)) != ASTL_STATUS_BAD_ARGUMENT) {
           all_ok.store(false, std::memory_order_release);
           break;
         }
@@ -115,20 +115,20 @@ TEST_CASE("C interface supports valid-handle configure/start/stop interleavings"
                                                              std::move(metric_manager), std::move(output_manager), "");
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  auto     available_targets = AllocateAstlVector<astl_target_properties_t>(1);
+  auto     available_targets = AllocateAstlVector<astl_target_props_t>(1);
   uint32_t target_count{1};
-  REQUIRE(astlGetTargets(available_targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
+  REQUIRE(GetTargets(available_targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
   REQUIRE(target_count == 1);
-  const auto* valid_target = available_targets[0]._handle;
+  const auto* valid_target = available_targets[0].handle;
 
   int                   fake_counter_token  = 0;
   astl_counter_handle_t fake_counter_handle = &fake_counter_token;
 
-  astl_collection_parameters_t collection_params{};
-  collection_params._size              = sizeof(astl_collection_parameters_t);
-  collection_params._sampling_interval = 100;
-  collection_params._collection_mode   = ASTL_COLLECTION_MODE_SAMPLING;
-  collection_params._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD;
+  astl_collection_params_t collection_params{};
+  collection_params.size              = sizeof(astl_collection_params_t);
+  collection_params.sampling_interval = 100;
+  collection_params.collection_mode   = ASTL_COLLECTION_MODE_SAMPLING;
+  collection_params.flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD;
 
   constexpr int            k_thread_count = 6;
   constexpr int            k_iterations   = 200;
@@ -151,19 +151,19 @@ TEST_CASE("C interface supports valid-handle configure/start/stop interleavings"
         astl_status_code status = ASTL_STATUS_UNKNOWN_ERROR;
         switch ((thread_index + i) % 3) {
           case 0:
-            status = astlConfigureCounterCollectionOnTarget(valid_target, &collection_params, &fake_counter_handle, 1);
+            status = ConfigureCounterCollectionOnTarget(valid_target, &collection_params, &fake_counter_handle, 1);
             if (!is_allowed(status, {ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET, ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 1:
-            status = astlStartCollectionOnTarget(valid_target);
+            status = StartCollectionOnTarget(valid_target);
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           default:
-            status = astlStopCollectionOnTarget(valid_target);
+            status = StopCollectionOnTarget(valid_target);
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING})) {
               all_ok.store(false, std::memory_order_release);
             }
@@ -198,20 +198,20 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings", "[wrap
                                                              std::move(metric_manager), std::move(output_manager), "");
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  auto     available_targets = AllocateAstlVector<astl_target_properties_t>(1);
+  auto     available_targets = AllocateAstlVector<astl_target_props_t>(1);
   uint32_t target_count{1};
-  REQUIRE(astlGetTargets(available_targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
+  REQUIRE(GetTargets(available_targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
   REQUIRE(target_count == 1);
-  const auto* valid_target = available_targets[0]._handle;
+  const auto* valid_target = available_targets[0].handle;
 
   int                   fake_counter_token  = 0;
   astl_counter_handle_t fake_counter_handle = &fake_counter_token;
 
-  astl_collection_parameters_t collection_params{};
-  collection_params._size              = sizeof(astl_collection_parameters_t);
-  collection_params._sampling_interval = 100;
-  collection_params._collection_mode   = ASTL_COLLECTION_MODE_SAMPLING;
-  collection_params._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD;
+  astl_collection_params_t collection_params{};
+  collection_params.size              = sizeof(astl_collection_params_t);
+  collection_params.sampling_interval = 100;
+  collection_params.collection_mode   = ASTL_COLLECTION_MODE_SAMPLING;
+  collection_params.flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD;
 
   constexpr int            k_thread_count = 6;
   constexpr int            k_iterations   = 200;
@@ -234,33 +234,33 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings", "[wrap
         astl_status_code status = ASTL_STATUS_UNKNOWN_ERROR;
         switch ((thread_index + i) % 5) {
           case 0:
-            status = astlConfigureCounterCollectionOnTarget(valid_target, &collection_params, &fake_counter_handle, 1);
+            status = ConfigureCounterCollectionOnTarget(valid_target, &collection_params, &fake_counter_handle, 1);
             if (!is_allowed(status, {ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET, ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 1:
-            status = astlStartCollectionOnTarget(valid_target);
+            status = StartCollectionOnTarget(valid_target);
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 2:
-            status = astlPauseCollectionOnTarget(valid_target);
+            status = PauseCollectionOnTarget(valid_target);
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_COLLECTION_ALREADY_PAUSED,
                                      ASTL_STATUS_PAUSE_UNSUPPORTED, ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 3:
-            status = astlResumeCollectionOnTarget(valid_target);
+            status = ResumeCollectionOnTarget(valid_target);
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_COLLECTION_ALREADY_RUNNING,
                                      ASTL_STATUS_RESUME_UNSUPPORTED, ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           default:
-            status = astlStopCollectionOnTarget(valid_target);
+            status = StopCollectionOnTarget(valid_target);
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING})) {
               all_ok.store(false, std::memory_order_release);
             }
@@ -295,17 +295,17 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
                                                              std::move(metric_manager), std::move(output_manager), "");
   TestOrchestratorInjector injector(std::move(orchestrator));
 
-  auto     available_targets = AllocateAstlVector<astl_target_properties_t>(1);
+  auto     available_targets = AllocateAstlVector<astl_target_props_t>(1);
   uint32_t target_count{1};
-  REQUIRE(astlGetTargets(available_targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
+  REQUIRE(GetTargets(available_targets.data(), &target_count) == ASTL_STATUS_SUCCESS);
   REQUIRE(target_count == 1);
-  const auto* valid_target = available_targets[0]._handle;
+  const auto* valid_target = available_targets[0].handle;
 
-  astl_collection_parameters_t collection_params{};
-  collection_params._size              = sizeof(astl_collection_parameters_t);
-  collection_params._sampling_interval = 100;
-  collection_params._collection_mode   = ASTL_COLLECTION_MODE_SAMPLING;
-  collection_params._optimization      = ASTL_COLLECTION_OPTIMIZATION_OVERHEAD;
+  astl_collection_params_t collection_params{};
+  collection_params.size              = sizeof(astl_collection_params_t);
+  collection_params.sampling_interval = 100;
+  collection_params.collection_mode   = ASTL_COLLECTION_MODE_SAMPLING;
+  collection_params.flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD;
 
   constexpr int            k_thread_count = 8;
   constexpr int            k_iterations   = 220;
@@ -339,106 +339,104 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
         astl_status_code status = ASTL_STATUS_UNKNOWN_ERROR;
         switch ((thread_index + i) % 21) {
           case 0:
-            status = astlConfigureCounterCollectionOnTarget(valid_target, &collection_params, &fake_counter_handle, 1);
+            status = ConfigureCounterCollectionOnTarget(valid_target, &collection_params, &fake_counter_handle, 1);
             if (!is_allowed(status, {ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET, ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 1:
-            status = astlConfigureCounterCollection(&collection_params, &fake_counter_handle, 1);
+            status = ConfigureCounterCollection(&collection_params, &fake_counter_handle, 1);
             if (!is_allowed(status, {ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 2:
-            status = astlConfigureMetricCollectionOnTarget(valid_target, &collection_params, &fake_metric_handle, 1);
+            status = ConfigureMetricCollectionOnTarget(valid_target, &collection_params, &fake_metric_handle, 1);
             if (!is_allowed(status, {ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET, ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 3:
-            status = astlConfigureMetricCollection(&collection_params, &fake_metric_handle, 1);
+            status = ConfigureMetricCollection(&collection_params, &fake_metric_handle, 1);
             if (!is_allowed(status, {ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 4:
-            status =
-                astlConfigureMetricGroupCollectionOnTarget(valid_target, &collection_params, &null_group_handle, 1);
+            status = ConfigureMetricGroupCollectionOnTarget(valid_target, &collection_params, &null_group_handle, 1);
             if (!is_allowed(status, {ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 5:
-            status = astlConfigureMetricGroupCollection(&collection_params, &fake_group_handle, 1);
+            status = ConfigureMetricGroupCollection(&collection_params, &fake_group_handle, 1);
             if (!is_allowed(status, {ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 6:
-            status = astlStartCollectionOnTarget(valid_target);
+            status = StartCollectionOnTarget(valid_target);
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 7:
-            status = astlStartCollection();
+            status = StartCollection();
             if (!is_allowed(status, {ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 8:
-            status = astlPauseCollectionOnTarget(valid_target);
+            status = PauseCollectionOnTarget(valid_target);
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 9:
-            status = astlPauseCollection();
+            status = PauseCollection();
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_NOT_INITIALIZED,
                                      ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 10:
-            status = astlResumeCollectionOnTarget(valid_target);
+            status = ResumeCollectionOnTarget(valid_target);
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 11:
-            status = astlResumeCollection();
+            status = ResumeCollection();
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_NOT_INITIALIZED,
                                      ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 12:
-            status = astlStopCollectionOnTarget(valid_target);
+            status = StopCollectionOnTarget(valid_target);
             if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 13:
-            status = astlStopCollection();
+            status = StopCollection();
             if (!is_allowed(status, {ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 14: {
             uint32_t counter_sample_count = 0;
-            status = astlGetCounterSampleCountOnTarget(valid_target, null_counter_handle, &counter_sample_count);
+            status = GetCounterSampleCountOnTarget(valid_target, null_counter_handle, &counter_sample_count);
             if (!is_allowed(status, {ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           }
           case 15: {
-            uint32_t                             counter_sample_count = 1;
-            std::array<astl_counter_sample_t, 1> counter_samples{};
-            counter_samples[0]._size = sizeof(astl_counter_sample_t);
-            status = astlGetCounterSamplesOnTarget(valid_target, null_counter_handle, counter_samples.data(),
-                                                   &counter_sample_count);
+            uint32_t                     counter_sample_count = 1;
+            std::array<astl_sample_t, 1> counter_samples{};
+            status = GetCounterSamplesOnTarget(valid_target, null_counter_handle, counter_samples.data(),
+                                               &counter_sample_count);
             if (!is_allowed(status, {ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }
@@ -446,18 +444,17 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
           }
           case 16: {
             uint32_t metric_sample_count = 0;
-            status = astlGetMetricSampleCountOnTarget(valid_target, null_metric_handle, &metric_sample_count);
+            status = GetMetricSampleCountOnTarget(valid_target, null_metric_handle, &metric_sample_count);
             if (!is_allowed(status, {ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           }
           case 17: {
-            uint32_t                            metric_sample_count = 1;
-            std::array<astl_metric_sample_t, 1> metric_samples{};
-            metric_samples[0]._size = sizeof(astl_metric_sample_t);
-            status = astlGetMetricSamplesOnTarget(valid_target, null_metric_handle, metric_samples.data(),
-                                                  &metric_sample_count);
+            uint32_t                     metric_sample_count = 1;
+            std::array<astl_sample_t, 1> metric_samples{};
+            status =
+                GetMetricSamplesOnTarget(valid_target, null_metric_handle, metric_samples.data(), &metric_sample_count);
             if (!is_allowed(status, {ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }
@@ -465,7 +462,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
           }
           case 18: {
             uint32_t metric_group_count = 0;
-            status                      = astlGetMetricGroupCount(valid_target, &metric_group_count);
+            status                      = GetMetricGroupCount(valid_target, &metric_group_count);
             if (!is_allowed(status,
                             {ASTL_STATUS_SUCCESS, ASTL_STATUS_BAD_ARGUMENT, ASTL_STATUS_NO_METRIC_GROUPS_FOUND})) {
               all_ok.store(false, std::memory_order_release);
@@ -473,10 +470,10 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             break;
           }
           case 19: {
-            uint32_t                                      metric_group_count = 1;
-            std::array<astl_metric_group_properties_t, 1> group_props{};
-            group_props[0]._size = sizeof(astl_metric_group_properties_t);
-            status               = astlGetMetricGroups(valid_target, group_props.data(), &metric_group_count);
+            uint32_t                                 metric_group_count = 1;
+            std::array<astl_metric_group_props_t, 1> group_props{};
+            group_props[0].size = sizeof(astl_metric_group_props_t);
+            status              = GetMetricGroups(valid_target, group_props.data(), &metric_group_count);
             if (!is_allowed(status, {ASTL_STATUS_SUCCESS, ASTL_STATUS_BAD_ARGUMENT, ASTL_STATUS_NO_METRIC_GROUPS_FOUND,
                                      ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED,
                                      ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL})) {
@@ -485,13 +482,13 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             break;
           }
           default: {
-            astl_metric_group_properties_t group_props{};
-            group_props._size         = sizeof(astl_metric_group_properties_t);
-            group_props._metric_count = 1;
-            group_props._handle       = null_group_handle;
-            std::array<astl_metric_properties_t, 1> metrics{};
-            metrics[0]._size = sizeof(astl_metric_properties_t);
-            status           = astlGetMetricGroupMetrics(valid_target, &group_props, metrics.data());
+            astl_metric_group_props_t group_props{};
+            group_props.size         = sizeof(astl_metric_group_props_t);
+            group_props.metric_count = 1;
+            group_props.handle       = null_group_handle;
+            std::array<astl_metric_props_t, 1> metrics{};
+            metrics[0].size = sizeof(astl_metric_props_t);
+            status          = GetMetricGroupMetrics(valid_target, &group_props, metrics.data());
             if (!is_allowed(status, {ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }

@@ -102,7 +102,7 @@ class RawMetric : public virtual IMetric {
    * @param properties Non-null pointer to structure to populate.
    * @return ASTL_STATUS_SUCCESS or ASTL_STATUS_BAD_ARGUMENT.
    */
-  auto GetProperties(astl_metric_properties_t *properties) const -> astl_status_code override;
+  auto GetProperties(astl_metric_props_t *properties) const -> astl_status_code override;
 
   /**
    * @brief Retrieve the metric's name.

@@ -36,6 +36,15 @@ struct MinMaxAvgSummary {
 };
 
 /**
+ * @brief Compute a left-hold time-weighted average over processed samples.
+ *
+ * Uses each sample value until the next timestamp as the interval weight.
+ * Falls back to arithmetic mean when no positive time intervals are available.
+ */
+auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData> samples)
+    -> std::expected<std::optional<AstlValue>, astl_status_code>;
+
+/**
  * @brief Histogram bin data structure.
  */
 struct HistogramBin {

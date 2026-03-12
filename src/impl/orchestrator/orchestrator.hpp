@@ -183,7 +183,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
    *   - ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET: one of the given counters is not associated with the target
    */
-  auto ConfigureCounterCollection(const ITarget *target, const astl_collection_parameters_t *collection_params,
+  auto ConfigureCounterCollection(const ITarget *target, const astl_collection_params_t *collection_params,
                                   std::span<const astl_counter_handle_t> counters) -> astl_status_code;
 
   /**
@@ -198,7 +198,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
    *   - ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET: one of the given metrics is not associated with the target
    */
-  auto ConfigureMetricCollection(const ITarget *target, const astl_collection_parameters_t *collection_params,
+  auto ConfigureMetricCollection(const ITarget *target, const astl_collection_params_t *collection_params,
                                  std::span<const astl_metric_handle_t> metrics) -> astl_status_code;
 
   /**

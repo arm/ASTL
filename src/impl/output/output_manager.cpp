@@ -19,7 +19,7 @@
 
 namespace astl {
 
-auto OutputManager::CreateBufferOutput(std::span<astl_metric_sample_t> samples_buffer, uint32_t* buffer_sample_count)
+auto OutputManager::CreateBufferOutput(std::span<astl_sample_t> samples_buffer, uint32_t* buffer_sample_count)
     -> astl_status_code {
   if (samples_buffer.empty() || buffer_sample_count == nullptr) {
     ASTL_LOG_ERROR("CreateBufferOutput: invalid arguments (empty span or null count pointer)");

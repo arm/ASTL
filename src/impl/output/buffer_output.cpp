@@ -30,9 +30,8 @@ auto BufferOutput::WriteProcessedSamples(std::span<const ProcessedSampledData> s
   *_buffer_sample_count = 0;  // reset count before writing
   for (const auto& sample : samples) {
     const auto union_value                 = sample.value.ToAstlUnionValue().first;  // avoid constructing pair twice
-    _samples_buffer[*_buffer_sample_count] = {._size      = sizeof(astl_metric_sample_t),
-                                              ._timestamp = sample.timestamp.time_since_epoch().count(),
-                                              ._value     = union_value};
+    _samples_buffer[*_buffer_sample_count] = {.timestamp = sample.timestamp.time_since_epoch().count(),
+                                              .value     = union_value};
     ++(*_buffer_sample_count);
   }
 

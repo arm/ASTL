@@ -57,7 +57,7 @@ TEST_CASE("SensorsCollector::CollectOneSensor", "[sensors_collector]") {
       .requirements          = astl::CollectorCapability{astl::CollectorType::LIBSENSORS}};
   astl::CollectionConfiguration config{
       nullptr, std::move(collection_operations),
-      astl_collection_parameters_t{0, 0, ASTL_COLLECTION_MODE_IMMEDIATE, ASTL_COLLECTION_OPTIMIZATION_MEMORY}
+      astl_collection_params_t{0, ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY, 0, ASTL_COLLECTION_MODE_IMMEDIATE}
   };
 
   collector.ConfigureCollection(std::move(config));
@@ -79,7 +79,7 @@ TEST_CASE("LibsensorsCollector StopCollection in IMMEDIATE mode", "[libsensors_c
                                     .requirements = astl::CollectorCapability{astl::CollectorType::LIBSENSORS}};
   astl::CollectionConfiguration config{
       nullptr, std::move(ops),
-      astl_collection_parameters_t{0, 0, ASTL_COLLECTION_MODE_IMMEDIATE, ASTL_COLLECTION_OPTIMIZATION_MEMORY}
+      astl_collection_params_t{0, ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY, 0, ASTL_COLLECTION_MODE_IMMEDIATE}
   };
 
   collector.ConfigureCollection(std::move(config));
@@ -113,7 +113,7 @@ TEST_CASE("LibsensorsCollector StopCollection in SNAPSHOT mode", "[libsensors_co
                                     .requirements = astl::CollectorCapability{astl::CollectorType::LIBSENSORS}};
   astl::CollectionConfiguration config{
       nullptr, std::move(ops),
-      astl_collection_parameters_t{0, 0, ASTL_COLLECTION_MODE_SNAPSHOT, ASTL_COLLECTION_OPTIMIZATION_MEMORY}
+      astl_collection_params_t{0, ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY, 0, ASTL_COLLECTION_MODE_SNAPSHOT}
   };
 
   collector.ConfigureCollection(std::move(config));
@@ -136,7 +136,7 @@ TEST_CASE("LibsensorsCollector StopCollection in SAMPLING mode", "[libsensors_co
                                     .requirements = astl::CollectorCapability{astl::CollectorType::LIBSENSORS}};
   astl::CollectionConfiguration config{
       nullptr, std::move(ops),
-      astl_collection_parameters_t{0, 0, ASTL_COLLECTION_MODE_SAMPLING, ASTL_COLLECTION_OPTIMIZATION_MEMORY}
+      astl_collection_params_t{0, ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY, 0, ASTL_COLLECTION_MODE_SAMPLING}
   };
 
   collector.ConfigureCollection(std::move(config));
@@ -166,7 +166,7 @@ TEST_CASE("LibsensorsCollector Pause and Resume", "[libsensors_collector]") {
                                     .requirements = astl::CollectorCapability{astl::CollectorType::LIBSENSORS}};
   astl::CollectionConfiguration config{
       nullptr, std::move(ops),
-      astl_collection_parameters_t{0, 0, ASTL_COLLECTION_MODE_SAMPLING, ASTL_COLLECTION_OPTIMIZATION_MEMORY}
+      astl_collection_params_t{0, ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY, 0, ASTL_COLLECTION_MODE_SAMPLING}
   };
 
   collector.ConfigureCollection(std::move(config));
@@ -191,7 +191,7 @@ TEST_CASE("LibsensorsCollector StopCollection is idempotent", "[libsensors_colle
                                     .requirements = astl::CollectorCapability{astl::CollectorType::LIBSENSORS}};
   astl::CollectionConfiguration config{
       nullptr, std::move(ops),
-      astl_collection_parameters_t{0, 0, ASTL_COLLECTION_MODE_SAMPLING, ASTL_COLLECTION_OPTIMIZATION_MEMORY}
+      astl_collection_params_t{0, ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY, 0, ASTL_COLLECTION_MODE_SAMPLING}
   };
 
   collector.ConfigureCollection(std::move(config));

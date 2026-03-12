@@ -13,7 +13,6 @@ Experimental Cython-based bindings for the Arm SoC Telemetry Library
 
 Core:
 
-- `initialize(config_path: Optional[str]) -> None`
 - `version() -> (major, minor, micro, string)`
 - `Status` namespace with all status codes + `status_name(int)`
 
@@ -38,7 +37,7 @@ Collection Configuration (per target for now):
   CollectionParameters(
     sampling_interval=0,
     mode=CollectionMode.IMMEDIATE,
-    optimization=...
+    flags=...
   )
   ```
 
@@ -69,7 +68,7 @@ Samples:
 
   > **Note:** The underlying C API always stores the average as a `double` (`fp64`)
   > regardless of the metric's value type (including integer metrics). The Python
-  > wrapper reads `_avg.fp64` unconditionally and exposes it as a `float`.
+  > wrapper reads `avg.fp64` unconditionally and exposes it as a `float`.
 
 - `get_metric_discrete_histogram_on_target(target, metric) -> list[DiscreteHistogramBin]`
 
@@ -81,7 +80,7 @@ Samples:
 
 Entity object attributes (read-only):
 
-- Target: `name`, `description`, `_handle_ptr`
+- Target: `name`, `description`, `handle_ptr`
 - Counter: `name`, `description`, `min_sampling_interval`, `units`,
   `value_type`, `counter_type`, `formula`
 - Metric: `name`, `description`, `min_sampling_interval`, `units`,
@@ -127,9 +126,7 @@ See samples (now under the installed package tree for convenience):
 The `Session` context manager simplifies configure/start/stop and polling:
 
 ```python
-from astl import Session, get_targets, get_counters, initialize
-
-initialize(None)
+from astl import Session, get_targets, get_counters
 targets = get_targets()
 if targets:
  t = targets[0]
@@ -232,8 +229,6 @@ See `python/samples/astl_demo.py` for a minimal end-to-end flow, including
 
 ```python
 import astl
-
-astl.initialize(None)
 print("Version:", astl.version())
 
 targets = astl.get_targets()
@@ -260,12 +255,6 @@ else:
   for c in counters[:2]:
    samples = astl.get_counter_samples(t, c)
    print(c.name, samples[:3])
-```
-
-If you forget to call `initialize()` first, API calls will raise:
-
-```text
-ASTLError: NOT_INITIALIZED (call astl.initialize() before using this function)
 ```
 
 ## Notes

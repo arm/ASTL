@@ -24,14 +24,14 @@ struct ITarget {
   ITarget(ITarget&&)                 = default;
   ITarget& operator=(ITarget&&)      = default;
 
-  virtual auto GetProperties(astl_target_properties_t* target) const -> astl_status_code = 0;
-  virtual auto Name() const -> std::string const&                                        = 0;
+  virtual auto GetProperties(astl_target_props_t* target) const -> astl_status_code = 0;
+  virtual auto Name() const -> std::string const&                                   = 0;
 
   virtual auto GetCollectorType() const -> CollectorType = 0;
 };
 
 /**
- * @brief A partial implementation of the ITarget interface that holds data to fill a astl_target_properties_t struct
+ * @brief A partial implementation of the ITarget interface that holds data to fill a astl_target_props_t struct
  */
 class Target : public astl::ITarget {
  public:
@@ -44,7 +44,7 @@ class Target : public astl::ITarget {
   Target(Target&&)                 = default;
   Target& operator=(Target&&)      = default;
 
-  auto GetProperties(astl_target_properties_t* target) const -> astl_status_code override;
+  auto GetProperties(astl_target_props_t* target) const -> astl_status_code override;
   auto Name() const -> std::string const& override;
   auto GetCollectorType() const -> CollectorType override;
   auto GetParent() const -> const Target*;

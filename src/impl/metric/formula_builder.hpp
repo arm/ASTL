@@ -151,7 +151,7 @@ auto ComposeFormulas(AnyFormula first, AnyFormula second) -> AnyFormula;
 /**
  * @brief Render a formula into the public API formula text.
  *
- * This string is exposed through `astl_counter_properties_t::_formula` and is
+ * This string is exposed through `astl_counter_props_t::formula` and is
  * intended to stay parseable by TinyExpr UINT64 clients. For base-10 scaling,
  * powers of ten are emitted as integer literals (e.g. `* 1000`, `/ 1000`).
  * Multi-step pipelines are flattened into one composable TinyExpr expression.
