@@ -173,6 +173,33 @@ auto MinMaxAvgSummarizer::IsSupported(astl_value_type_t value_type, astl_metric_
          IsArithmeticValueType(value_type);
 }
 
+// TimeWeightedAvgSummarizer Implementation
+auto TimeWeightedAvgSummarizer::Summarize(std::span<const ProcessedSampledData> samples) const
+    -> std::expected<SummaryResult, astl_status_code> {
+  if (samples.empty()) {
+    ASTL_LOG_TRACE("TimeWeightedAvgSummarizer: No samples to summarize");
+    return TimeWeightedAvgSummary{std::nullopt, 0};
+  }
+
+  TimeWeightedAvgSummary summary{};
+  summary.count = samples.size();
+
+  auto result = ComputeTimeWeightedAverage(samples);
+  if (!result.has_value()) {
+    ASTL_LOG_ERROR("TimeWeightedAvgSummarizer: Failed to compute time-weighted average");
+    return std::unexpected(result.error());
+  }
+
+  summary.time_weighted_avg = result.value();
+  return summary;
+}
+
+auto TimeWeightedAvgSummarizer::IsSupported(astl_value_type_t value_type, astl_metric_type_t metric_type) const
+    -> bool {
+  return (metric_type == ASTL_METRIC_VALUE || metric_type == ASTL_METRIC_DELTA || metric_type == ASTL_METRIC_RATE) &&
+         IsArithmeticValueType(value_type);
+}
+
 // HistogramSummarizer Implementation
 auto HistogramSummarizer::Summarize(std::span<const ProcessedSampledData> samples) const
     -> std::expected<SummaryResult, astl_status_code> {

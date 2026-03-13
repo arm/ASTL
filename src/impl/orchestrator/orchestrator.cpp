@@ -527,6 +527,28 @@ auto Orchestrator::EmitSummaryCsvIfRequested() -> void {
   if (csv_path.empty()) {
     return;  // no-op if unset
   }
+
+  // Ensure _processed_samples is fully populated before emitting the summary.
+  // We must trigger that lazy rebuild for every known (target, metric) pair now,
+  // before acquiring _processed_samples_mtx and passing the map to the output
+  // writer — otherwise the summary CSV is written from an empty map.
+  if (_metric_manager && _topology_manager) {
+    for (const auto &target : _topology_manager->GetTargets()) {
+      auto handles_or_err = _metric_manager->GetAvailableMetrics(target.get());
+      if (!handles_or_err.has_value()) {
+        continue;
+      }
+      for (const auto &handle : handles_or_err.value()) {
+        auto metric_or_err = _metric_manager->GetMetricOnTarget(handle, target.get());
+        if (!metric_or_err.has_value()) {
+          continue;
+        }
+        // Side-effect: populates _processed_samples for this (metric, target) pair
+        (void)GetProcessedMetricSamples(metric_or_err.value(), target.get());
+      }
+    }
+  }
+
   // Acquire processed samples snapshot under lock to avoid race with late sample insertion.
   std::lock_guard processed_lock{_processed_samples_mtx};
   if (_processed_samples.empty()) {

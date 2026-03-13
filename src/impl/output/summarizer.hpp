@@ -23,7 +23,7 @@ struct ProcessedSampledData;
 /**
  * @brief Generic summary result that can hold different types of summary data.
  */
-using SummaryResult = std::variant<struct MinMaxAvgSummary, struct HistogramSummary>;
+using SummaryResult = std::variant<struct MinMaxAvgSummary, struct HistogramSummary, struct TimeWeightedAvgSummary>;
 
 /**
  * @brief Summary data for min/max/average statistics.
@@ -33,6 +33,14 @@ struct MinMaxAvgSummary {
   std::optional<AstlValue> max;       ///< Maximum value
   std::optional<AstlValue> avg;       ///< Average value
   std::size_t              count{0};  ///< Number of samples processed
+};
+
+/**
+ * @brief Summary data for time-weighted average statistics.
+ */
+struct TimeWeightedAvgSummary {
+  std::optional<AstlValue> time_weighted_avg;  ///< Time-weighted average value
+  std::size_t              count{0};           ///< Number of samples processed
 };
 
 /**
@@ -127,6 +135,22 @@ class MinMaxAvgSummarizer : public ISummarizer {
       -> std::expected<SummaryResult, astl_status_code> override;
 
   auto GetSummaryType() const -> std::string override { return "MinMaxAvg"; }
+
+  auto IsSupported(astl_value_type_t value_type, astl_metric_type_t metric_type) const -> bool override;
+};
+
+/**
+ * @brief Summarizer for time-weighted average statistics.
+ *
+ * Computes a left-hold time-weighted average using sample timestamps as interval weights.
+ * Falls back to arithmetic mean when no positive time intervals are available.
+ */
+class TimeWeightedAvgSummarizer : public ISummarizer {
+ public:
+  auto Summarize(std::span<const ProcessedSampledData> samples) const
+      -> std::expected<SummaryResult, astl_status_code> override;
+
+  auto GetSummaryType() const -> std::string override { return "TimeWeightedAvg"; }
 
   auto IsSupported(astl_value_type_t value_type, astl_metric_type_t metric_type) const -> bool override;
 };

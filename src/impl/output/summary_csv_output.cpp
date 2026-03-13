@@ -28,6 +28,9 @@ std::vector<std::unique_ptr<ISummarizer>> SummaryCsvOutput::CreateSummarizers() 
   // Add MinMaxAvg summarizer
   summarizers.push_back(std::make_unique<MinMaxAvgSummarizer>());
 
+  // Add time-weighted average summarizer
+  summarizers.push_back(std::make_unique<TimeWeightedAvgSummarizer>());
+
   // Add discrete histogram summarizer (each unique value gets its own bin)
   summarizers.push_back(std::make_unique<HistogramSummarizer>());
 
@@ -46,6 +49,53 @@ static auto GroupByMetricName(const std::vector<std::tuple<const ITarget*, const
   return summaries_by_name;
 }
 
+// Writes one CSV section: header row, column row, all entries grouped by metric name, trailing blank line.
+template <typename SummaryT, typename WriterFn>
+static auto WriteSection(std::ofstream& csv_file, const std::string& section_header, const std::string& column_header,
+                         const std::vector<std::tuple<const ITarget*, const IMetric*, SummaryT>>& entries,
+                         WriterFn                                                                 writer) -> void {
+  if (entries.empty()) {
+    return;
+  }
+  csv_file << section_header << "\n";
+  csv_file << column_header << "\n";
+  auto by_name = GroupByMetricName(entries);
+  for (const auto& [metric_name, metric_entries] : by_name) {
+    for (const auto& [target, metric, summary] : metric_entries) {
+      writer(csv_file, metric_name, target, summary);
+    }
+  }
+  csv_file << "\n";  // Blank line separator
+}
+
+// Partitioned view of a SummaryResult collection split by concrete type.
+struct PartitionedSummaries {
+  std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>       minmax;
+  std::vector<std::tuple<const ITarget*, const IMetric*, HistogramSummary>>       histogram;
+  std::vector<std::tuple<const ITarget*, const IMetric*, TimeWeightedAvgSummary>> twa;
+};
+
+// Dispatch each SummaryResult variant into the appropriate typed bucket.
+static auto PartitionSummaries(const std::vector<std::tuple<const ITarget*, const IMetric*, SummaryResult>>& summaries)
+    -> PartitionedSummaries {
+  PartitionedSummaries result;
+  for (const auto& [target, metric, summary] : summaries) {
+    std::visit(
+        [&](const auto& sum) {
+          using T = std::decay_t<decltype(sum)>;
+          if constexpr (std::is_same_v<T, MinMaxAvgSummary>) {
+            result.minmax.emplace_back(target, metric, sum);
+          } else if constexpr (std::is_same_v<T, HistogramSummary>) {
+            result.histogram.emplace_back(target, metric, sum);
+          } else if constexpr (std::is_same_v<T, TimeWeightedAvgSummary>) {
+            result.twa.emplace_back(target, metric, sum);
+          }
+        },
+        summary);
+  }
+  return result;
+}
+
 auto SummaryCsvOutput::WriteSummaries(
     const std::vector<std::tuple<const ITarget*, const IMetric*, SummaryResult>>& summaries) const -> astl_status_code {
   if (_path.empty()) {
@@ -61,49 +111,11 @@ auto SummaryCsvOutput::WriteSummaries(
 
   WriteSystemInfoCsvSection(csv_file);
 
-  // Separate summaries by type in the derived class (CSV-specific logic)
-  std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>> minmax_summaries;
-  std::vector<std::tuple<const ITarget*, const IMetric*, HistogramSummary>> histogram_summaries;
+  auto [minmax, histogram, twa] = PartitionSummaries(summaries);
 
-  for (const auto& [target, metric, summary] : summaries) {
-    std::visit(
-        [&](const auto& sum) {
-          using T = std::decay_t<decltype(sum)>;
-          if constexpr (std::is_same_v<T, MinMaxAvgSummary>) {
-            minmax_summaries.emplace_back(target, metric, sum);
-          } else if constexpr (std::is_same_v<T, HistogramSummary>) {
-            histogram_summaries.emplace_back(target, metric, sum);
-          }
-        },
-        summary);
-  }
-
-  // Write MinMaxAvg table
-  if (!minmax_summaries.empty()) {
-    csv_file << "Min/Max/Average Summary\n";
-    csv_file << "MetricName,Target,Min,Max,Average,Count\n";
-
-    auto minmax_by_name = GroupByMetricName(minmax_summaries);
-    for (const auto& [metric_name, metric_summaries] : minmax_by_name) {
-      for (const auto& [target, metric, summary] : metric_summaries) {
-        WriteMinMaxAvgEntry(csv_file, metric_name, target, summary);
-      }
-    }
-    csv_file << "\n";  // Blank line separator
-  }
-
-  // Write Histogram table
-  if (!histogram_summaries.empty()) {
-    csv_file << "Histogram Summary\n";
-    csv_file << "MetricName,Target,Type,Value/Range,Count\n";
-
-    auto histogram_by_name = GroupByMetricName(histogram_summaries);
-    for (const auto& [metric_name, metric_summaries] : histogram_by_name) {
-      for (const auto& [target, metric, summary] : metric_summaries) {
-        WriteHistogramEntry(csv_file, metric_name, target, summary);
-      }
-    }
-  }
+  WriteCombinedStatsSection(csv_file, minmax, twa);
+  WriteSection(csv_file, "Histogram Summary", "MetricName,Target,Type,Value/Range,Count", histogram,
+               WriteHistogramEntry);
 
   csv_file.close();
   if (csv_file.fail()) {
@@ -115,8 +127,33 @@ auto SummaryCsvOutput::WriteSummaries(
   return ASTL_STATUS_SUCCESS;
 }
 
-auto SummaryCsvOutput::WriteMinMaxAvgEntry(std::ofstream& csv_file, const std::string& metric_name,
-                                           const ITarget* target, const MinMaxAvgSummary& summary) -> void {
+auto SummaryCsvOutput::WriteCombinedStatsSection(
+    std::ofstream& csv_file, const std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>& minmax,
+    const std::vector<std::tuple<const ITarget*, const IMetric*, TimeWeightedAvgSummary>>& twa) -> void {
+  if (minmax.empty()) {
+    return;
+  }
+  // Build (metric_name, target_name) → time_weighted_avg lookup from TWA results
+  std::map<std::pair<std::string, std::string>, std::optional<AstlValue>> twa_lookup;
+  for (const auto& [target, metric, summary] : twa) {
+    twa_lookup[{metric->Name(), target->Name()}] = summary.time_weighted_avg;
+  }
+  csv_file << "Min/Max/Average Summary\n";
+  csv_file << "MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count\n";
+  const auto by_name = GroupByMetricName(minmax);
+  for (const auto& [metric_name, entries] : by_name) {
+    for (const auto& [target, metric, summary] : entries) {
+      auto       it     = twa_lookup.find({metric_name, target->Name()});
+      const auto tw_avg = (it != twa_lookup.end()) ? it->second : std::optional<AstlValue>{};
+      WriteCombinedStatsEntry(csv_file, metric_name, target, summary, tw_avg);
+    }
+  }
+  csv_file << "\n";  // Blank line separator
+}
+
+auto SummaryCsvOutput::WriteCombinedStatsEntry(std::ofstream& csv_file, const std::string& metric_name,
+                                               const ITarget* target, const MinMaxAvgSummary& summary,
+                                               const std::optional<AstlValue>& tw_avg) -> void {
   csv_file << metric_name << "," << target->Name() << ",";
 
   // Min value
@@ -127,6 +164,9 @@ auto SummaryCsvOutput::WriteMinMaxAvgEntry(std::ofstream& csv_file, const std::s
 
   // Average value
   csv_file << (summary.avg.has_value() ? to_string(summary.avg.value()) : "N/A") << ",";
+
+  // Time-weighted average value
+  csv_file << (tw_avg.has_value() ? to_string(tw_avg.value()) : "N/A") << ",";
 
   // Sample count
   csv_file << summary.count << "\n";

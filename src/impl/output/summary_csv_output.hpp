@@ -8,21 +8,23 @@
  *
  * Core behaviors:
  *  - Inherits from SummaryOutput to get summary computation functionality
- *  - Outputs CSV format: MetricName,Target,Min,Max,Average,SampleCount
+ *  - Produces two sections in a single CSV file:
+ *      1. Min/Max/Average Summary  – MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count
+ *      2. Histogram Summary        – MetricName,Target,Type,Value/Range,Count
+ *  - Sections are separated by a blank line; absent sections are omitted entirely
  *  - Environment variable `ASTL_CSV_OUTPUT_FILE` selects the output file path
  *  - Overwrites existing files (truncate mode) to ensure clean output
  *
- * Schema example:
- *   MetricName,Target,Min,Max,Average,SampleCount
- *   Temperature,Target1,20.1,35.7,27.84,150
- *   Temperature,Target2,18.5,33.2,25.91,148
- *   Voltage,Target1,3.25,3.35,3.30,150
+ * Schema example (Min/Max/Average section):
+ *   MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count
+ *   Temperature,Target1,20.1,35.7,27.84,25.3,150
  */
 #ifndef SUMMARY_CSV_OUTPUT_HPP_
 #define SUMMARY_CSV_OUTPUT_HPP_
 
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -81,19 +83,34 @@ class SummaryCsvOutput : public SummaryOutput {
 
   /**
    * @brief Create the default set of summarizers.
-   * @return Vector of default summarizers (MinMaxAvg, DiscreteHistogram, RangeHistogram)
+   * @return Vector of default summarizers (MinMaxAvg, TimeWeightedAvg, DiscreteHistogram)
    */
   static auto CreateSummarizers() -> std::vector<std::unique_ptr<ISummarizer>>;
 
   /**
-   * @brief Write a MinMaxAvg summary entry to the CSV file.
-   * @param csv_file The output stream to write to
-   * @param metric_name The name of the metric
-   * @param target The target this summary applies to
-   * @param summary The computed MinMaxAvg summary statistics
+   * @brief Write the combined Min/Max/Average + TimeWeightedAvg section to the CSV file.
+   *
+   * Builds a lookup from (metric_name, target_name) → time_weighted_avg using @p twa, then
+   * writes every MinMaxAvg entry with the corresponding TWA column ("N/A" when absent).
+   *
+   * @param csv_file  The output stream to write to
+   * @param minmax    MinMaxAvg summarizer results
+   * @param twa       TimeWeightedAvg summarizer results (may be empty)
    */
-  static auto WriteMinMaxAvgEntry(std::ofstream& csv_file, const std::string& metric_name, const ITarget* target,
-                                  const MinMaxAvgSummary& summary) -> void;
+  static auto WriteCombinedStatsSection(
+      std::ofstream& csv_file, const std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>& minmax,
+      const std::vector<std::tuple<const ITarget*, const IMetric*, TimeWeightedAvgSummary>>& twa) -> void;
+
+  /**
+   * @brief Write one combined stats row (Min,Max,Average,TimeWeightedAvg,Count).
+   * @param csv_file    The output stream to write to
+   * @param metric_name The name of the metric
+   * @param target      The target this summary applies to
+   * @param summary     The computed MinMaxAvg summary statistics
+   * @param tw_avg      The optional time-weighted average for this (metric, target) pair
+   */
+  static auto WriteCombinedStatsEntry(std::ofstream& csv_file, const std::string& metric_name, const ITarget* target,
+                                      const MinMaxAvgSummary& summary, const std::optional<AstlValue>& tw_avg) -> void;
 
   /**
    * @brief Write a Histogram summary entry to the CSV file.

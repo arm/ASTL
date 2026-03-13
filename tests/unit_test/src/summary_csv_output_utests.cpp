@@ -160,11 +160,11 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
     std::getline(file, line);
     REQUIRE(line == "Min/Max/Average Summary");
 
-    // Check MinMaxAvg column headers
+    // Check MinMaxAvg column headers (now includes TimeWeightedAvg)
     std::getline(file, line);
-    REQUIRE(line == "MetricName,Target,Min,Max,Average,Count");
+    REQUIRE(line == "MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count");
 
-    // Read MinMaxAvg data lines
+    // Read combined stats data lines
     std::vector<std::string> minmax_lines;
     while (std::getline(file, line) && !line.empty()) {
       minmax_lines.push_back(line);
@@ -181,12 +181,10 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
     std::getline(file, line);
     REQUIRE(line == "MetricName,Target,Type,Value/Range,Count");
 
-    // Read Histogram data lines (one line per bin)
+    // Read Histogram data lines (one line per bin), stop at blank separator
     std::vector<std::string> histogram_lines;
-    while (std::getline(file, line)) {
-      if (!line.empty()) {
-        histogram_lines.push_back(line);
-      }
+    while (std::getline(file, line) && !line.empty()) {
+      histogram_lines.push_back(line);
     }
 
     // Should have multiple histogram lines (one per unique value in each metric/target combination)
@@ -196,11 +194,15 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
 
     // Based on debug output, the actual order is Target2 first, then Target1
     // This is due to pointer address ordering in the map
-    REQUIRE(minmax_lines[0].find("Temperature,Target2,15,35,25,3") != std::string::npos);
-    REQUIRE(minmax_lines[1].find("Temperature,Target1,10,30,20,3") != std::string::npos);
-    REQUIRE(minmax_lines[2].find("Voltage,Target2,5,5.2,5.1") !=
+    // Format: MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count
+    // TWA: left-hold over 1μs equal intervals, so TWA uses first N-1 samples
+    // Temperature Target2: avg=25, TWA=(15+25)/2=20, Target1: avg=20, TWA=(10+20)/2=15
+    // Voltage Target2: avg≈5.1, TWA=(5.0+5.1)/2=5.05, Target1: avg≈3.4, TWA=(3.3+3.4)/2=3.35
+    REQUIRE(minmax_lines[0].find("Temperature,Target2,15,35,25,20,3") != std::string::npos);
+    REQUIRE(minmax_lines[1].find("Temperature,Target1,10,30,20,15,3") != std::string::npos);
+    REQUIRE(minmax_lines[2].find("Voltage,Target2,5,5.2,5.1,5.05") !=
             std::string::npos);  // Allow for floating point precision
-    REQUIRE(minmax_lines[3].find("Voltage,Target1,3.3,3.5,3.4,3") != std::string::npos);
+    REQUIRE(minmax_lines[3].find("Voltage,Target1,3.3,3.5,3.4,3.35") != std::string::npos);
   }
 
   SECTION("SUMMARY_CSV mode with empty data writes system info section") {
@@ -263,11 +265,11 @@ TEST_CASE("SummaryCsvOutput direct testing", "[csv_summary]") {  // NOLINT
     std::getline(file, line);
     REQUIRE(line == "Min/Max/Average Summary");
 
-    // Check MinMaxAvg column headers
+    // Check MinMaxAvg column headers (now includes TimeWeightedAvg)
     std::getline(file, line);
-    REQUIRE(line == "MetricName,Target,Min,Max,Average,Count");
+    REQUIRE(line == "MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count");
 
-    // Collect MinMaxAvg data lines
+    // Collect combined stats data lines
     std::vector<std::string> minmax_lines;
     while (std::getline(file, line) && !line.empty()) {
       minmax_lines.push_back(line);
@@ -282,12 +284,10 @@ TEST_CASE("SummaryCsvOutput direct testing", "[csv_summary]") {  // NOLINT
     std::getline(file, line);
     REQUIRE(line == "MetricName,Target,Type,Value/Range,Count");
 
-    // Collect Histogram data lines (one line per bin)
+    // Collect Histogram data lines (one line per bin), stop at blank separator
     std::vector<std::string> histogram_lines;
-    while (std::getline(file, line)) {
-      if (!line.empty()) {
-        histogram_lines.push_back(line);
-      }
+    while (std::getline(file, line) && !line.empty()) {
+      histogram_lines.push_back(line);
     }
     // Should have 12 histogram lines (3 unique values × 2 targets × 2 metrics)
     REQUIRE(histogram_lines.size() == 12);
@@ -367,6 +367,78 @@ TEST_CASE("MinMaxAvgSummarizer direct testing", "[csv_summary][summarizer]") {  
     REQUIRE(*summary.max == astl::AstlValue{10.0});
     REQUIRE(*summary.avg == astl::AstlValue{0.0});  // (-10-5+0+5+10)/5 = 0/5 = 0
     REQUIRE(summary.count == 5);
+  }
+}
+
+TEST_CASE("TimeWeightedAvgSummarizer direct testing", "[csv_summary][summarizer][time_weighted_average]") {  // NOLINT
+  astl::TimeWeightedAvgSummarizer summarizer;
+
+  SECTION("Empty samples returns empty summary") {
+    std::vector<astl::ProcessedSampledData> empty_samples;
+    auto                                    result = summarizer.Summarize(empty_samples);
+
+    REQUIRE(result.has_value());
+    REQUIRE(std::holds_alternative<astl::TimeWeightedAvgSummary>(result.value()));
+
+    auto summary = std::get<astl::TimeWeightedAvgSummary>(result.value());
+    REQUIRE_FALSE(summary.time_weighted_avg.has_value());
+    REQUIRE(summary.count == 0);
+  }
+
+  SECTION("Single sample falls back to arithmetic mean") {
+    auto samples = MakeSamplesWithValues({42.0});
+    auto result  = summarizer.Summarize(samples);
+
+    REQUIRE(result.has_value());
+    REQUIRE(std::holds_alternative<astl::TimeWeightedAvgSummary>(result.value()));
+
+    auto summary = std::get<astl::TimeWeightedAvgSummary>(result.value());
+    REQUIRE(summary.time_weighted_avg.has_value());
+    REQUIRE(summary.count == 1);
+    REQUIRE(*summary.time_weighted_avg == astl::AstlValue{42.0});
+  }
+
+  SECTION("Multiple samples with equal intervals") {
+    // MakeSamplesWithValues uses 1μs equal intervals: TWA uses first N-1 samples
+    // {10, 20, 30} at {100, 101, 102}μs → TWA = (10*1 + 20*1) / 2 = 15.0
+    auto samples = MakeSamplesWithValues({10.0, 20.0, 30.0});
+    auto result  = summarizer.Summarize(samples);
+
+    REQUIRE(result.has_value());
+    auto summary = std::get<astl::TimeWeightedAvgSummary>(result.value());
+    REQUIRE(summary.time_weighted_avg.has_value());
+    REQUIRE(summary.count == 3);
+    REQUIRE(*summary.time_weighted_avg == astl::AstlValue{15.0});
+  }
+
+  SECTION("Uneven intervals produce correctly weighted result") {
+    // Timestamps: 0, 100, 400 → intervals: 100μs, 300μs
+    // Values: 10, 20, 30 → TWA = (10*100 + 20*300) / 400 = 7000/400 = 17.5
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{10.0}, astl::SampleTimestamp{std::chrono::microseconds{0}}  },
+        {astl::AstlValue{20.0}, astl::SampleTimestamp{std::chrono::microseconds{100}}},
+        {astl::AstlValue{30.0}, astl::SampleTimestamp{std::chrono::microseconds{400}}},
+    };
+    auto result = summarizer.Summarize(samples);
+
+    REQUIRE(result.has_value());
+    auto summary = std::get<astl::TimeWeightedAvgSummary>(result.value());
+    REQUIRE(summary.time_weighted_avg.has_value());
+    REQUIRE(summary.count == 3);
+    REQUIRE(*summary.time_weighted_avg == astl::AstlValue{17.5});
+  }
+
+  SECTION("IsSupported returns true for arithmetic value/delta/rate metrics") {
+    REQUIRE(summarizer.IsSupported(ASTL_VALUE_FLOAT64, ASTL_METRIC_VALUE));
+    REQUIRE(summarizer.IsSupported(ASTL_VALUE_FLOAT32, ASTL_METRIC_DELTA));
+    REQUIRE(summarizer.IsSupported(ASTL_VALUE_UINT32, ASTL_METRIC_RATE));
+    REQUIRE(summarizer.IsSupported(ASTL_VALUE_UINT64, ASTL_METRIC_VALUE));
+  }
+
+  SECTION("IsSupported returns false for non-arithmetic or unsupported metric types") {
+    REQUIRE_FALSE(summarizer.IsSupported(ASTL_VALUE_BOOL8, ASTL_METRIC_VALUE));
+    REQUIRE_FALSE(summarizer.IsSupported(ASTL_VALUE_FLOAT64, ASTL_METRIC_RESIDENCY));
+    REQUIRE_FALSE(summarizer.IsSupported(ASTL_VALUE_FLOAT64, ASTL_METRIC_EVENT));
   }
 }
 

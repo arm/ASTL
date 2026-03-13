@@ -1805,6 +1805,66 @@ auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params
  **********************          METRIC SUMMARY API         ************************
  **********************************************************************************/
 
+namespace {
+
+// Runs MinMaxAvgSummarizer for the given samples and metric properties, then fills
+// summary->min, summary->max, summary->count, and (when fill_avg=true) summary->avg.
+auto ComputeAndFillMinMaxStats(std::span<const astl::ProcessedSampledData> samples,
+                               const astl_metric_props_t& metric_properties, bool fill_avg,
+                               astl_metric_statistics_t* summary) -> astl_status_code {
+  astl::MinMaxAvgSummarizer summarizer;
+  if (!summarizer.IsSupported(metric_properties.value_type, metric_properties.metric_type)) {
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Metric type not supported by MinMaxAvgSummarizer");
+    return ASTL_STATUS_NOT_SUPPORTED;
+  }
+
+  auto summary_result = summarizer.Summarize(samples);
+  if (!summary_result) {
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Failed to compute summary");
+    return summary_result.error();
+  }
+
+  const auto* minmax = std::get_if<astl::MinMaxAvgSummary>(&(*summary_result));
+  if (!minmax) {
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Unexpected summary type returned");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  summary->count = minmax->count;
+  if (minmax->min.has_value()) {
+    summary->min = minmax->min->ToAstlUnionValue().first;
+  }
+  if (minmax->max.has_value()) {
+    summary->max = minmax->max->ToAstlUnionValue().first;
+  }
+  if (fill_avg && minmax->avg.has_value()) {
+    summary->avg = minmax->avg->ToAstlUnionValue().first;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+// Runs TimeWeightedAvgSummarizer for the given samples and fills summary->avg.
+auto ComputeAndFillTimeWeightedAvg(std::span<const astl::ProcessedSampledData> samples,
+                                   astl_metric_statistics_t*                   summary) -> astl_status_code {
+  astl::TimeWeightedAvgSummarizer twa_summarizer;
+  auto                            twa_result = twa_summarizer.Summarize(samples);
+  if (!twa_result.has_value()) {
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Failed to compute time-weighted average");
+    return twa_result.error();
+  }
+  const auto* twa_summary = std::get_if<astl::TimeWeightedAvgSummary>(&(*twa_result));
+  if (!twa_summary) {
+    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Unexpected summary type returned for time-weighted average");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  if (twa_summary->time_weighted_avg.has_value()) {
+    summary->avg = twa_summary->time_weighted_avg->ToAstlUnionValue().first;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+}  // namespace
+
 auto astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_params_t* params) noexcept
     -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
@@ -1871,10 +1931,7 @@ auto astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_
   }
   auto samples = *samples_result;
 
-  // Create a MinMaxAvgSummarizer instance
-  astl::MinMaxAvgSummarizer summarizer;
-
-  // Get metric properties to check if it's supported
+  // Get metric properties (needed for IsSupported check in MinMaxAvgSummarizer)
   astl_metric_props_t metric_properties{};
   metric_properties.size = sizeof(astl_metric_props_t);
   auto props_status      = metric->GetProperties(&metric_properties);
@@ -1883,49 +1940,19 @@ auto astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_
     return props_status;
   }
 
-  if (!summarizer.IsSupported(metric_properties.value_type, metric_properties.metric_type)) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Metric type not supported by MinMaxAvgSummarizer");
-    return ASTL_STATUS_NOT_SUPPORTED;
+  const bool is_twa = (selected_avg_mode == ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG);
+
+  // Always compute min/max/count; fill avg only for regular-average mode.
+  auto minmax_status = ComputeAndFillMinMaxStats(samples, metric_properties, !is_twa, summary);
+  if (minmax_status != ASTL_STATUS_SUCCESS) {
+    return minmax_status;
   }
 
-  // Compute the summary
-  auto summary_result = summarizer.Summarize(samples);
-  if (!summary_result) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Failed to compute summary");
-    return summary_result.error();
-  }
-
-  // Extract the MinMaxAvgSummary from the variant
-  auto* min_max_avg_summary = std::get_if<astl::MinMaxAvgSummary>(&(*summary_result));
-  if (!min_max_avg_summary) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Unexpected summary type returned");
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-
-  // Fill the output structure
-  summary->count = min_max_avg_summary->count;
-
-  // Handle min value
-  if (min_max_avg_summary->min.has_value()) {
-    summary->min = min_max_avg_summary->min->ToAstlUnionValue().first;
-  }
-
-  // Handle max value
-  if (min_max_avg_summary->max.has_value()) {
-    summary->max = min_max_avg_summary->max->ToAstlUnionValue().first;
-  }
-
-  if (selected_avg_mode == ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG) {
-    auto time_weighted_avg = astl::ComputeTimeWeightedAverage(samples);
-    if (!time_weighted_avg.has_value()) {
-      return time_weighted_avg.error();
+  if (is_twa) {
+    auto twa_status = ComputeAndFillTimeWeightedAvg(samples, summary);
+    if (twa_status != ASTL_STATUS_SUCCESS) {
+      return twa_status;
     }
-    if (time_weighted_avg->has_value()) {
-      summary->avg = time_weighted_avg->value().ToAstlUnionValue().first;
-    }
-  } else if (min_max_avg_summary->avg.has_value()) {
-    // Regular arithmetic mean mode.
-    summary->avg = min_max_avg_summary->avg->ToAstlUnionValue().first;
   }
 
   return ASTL_STATUS_SUCCESS;
