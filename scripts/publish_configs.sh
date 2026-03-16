@@ -11,6 +11,9 @@ set -eu -o pipefail
 # 1. Filters out confidential content based on --confidential flag
 # 2. Excludes JSON files with document.confidential == true
 # 3. Removes JSON elements within files that have "confidential": true
+#
+# @TODO(ASTL-348) Properly render alias_table.json to filter out irrelevent/confidential IPs
+# @TODO(ASTL-351) Consider tradeoffs of .toml vs .json for the alias table
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
