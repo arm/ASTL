@@ -14,8 +14,11 @@
 #include "../../test_utilities.hpp"
 #include "astl/astl_errors.h"
 #include "capabilities.hpp"
+#include "metric/delta_metric.hpp"
+#include "metric/event_metric.hpp"
 #include "metric/finite_set_metric.hpp"
 #include "metric/metric_manager.hpp"
+#include "metric/rate_metric.hpp"
 #include "metric/sampled_value_metric.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "serdes/metrics.pb.h"
@@ -496,6 +499,31 @@ TEST_CASE("MetricHandle + FiniteSetMetric: protobuf round-trip", "[MetricHandle]
   REQUIRE(fs_after->Summarize() == ASTL_STATUS_SUCCESS);
 }
 
+TEST_CASE("Serialize(MetricHandle) covers null config and empty target map", "[MetricHandle][protobuf]") {
+  {
+    astl::MetricHandle handle;
+    std::stringstream  cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(astl::ProtobufSerDes::Serialize(handle, cache_stream) == ASTL_STATUS_INTERNAL_ERROR);
+  }
+
+  {
+    astl::MetricHandle handle;
+    handle.config = std::make_unique<astl::MetricConfig>("empty_metric", "empty", ASTL_UNITS_NONE, ASTL_VALUE_UINT64,
+                                                         ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
+                                                         astl::CollectorType::SCMI, astl::NullOperationBuilder{});
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(astl::ProtobufSerDes::Serialize(handle, cache_stream) == ASTL_STATUS_SUCCESS);
+  }
+}
+
+TEST_CASE("Serialize(IMetricManager) rejects non-concrete metric manager", "[MetricManager][protobuf]") {
+  MockMetricManager mock_metric_manager;
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+
+  REQUIRE(astl::ProtobufSerDes::Serialize(static_cast<const astl::IMetricManager&>(mock_metric_manager),
+                                          cache_stream) == ASTL_STATUS_BAD_ARGUMENT);
+}
+
 TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[MetricManager][protobuf]") {
   // Arrange: build a real MetricManager via Orchestrator and inject one metric
   const astl::ITarget* tgt = InstallSingleScmiTargetTlm0();
@@ -562,6 +590,89 @@ TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[Metric
   REQUIRE(rebuilt_it->second != nullptr);
 }
 
+TEST_CASE("Deserialize<vector<MetricHandle>> rejects malformed metric payloads", "[MetricHandle][protobuf]") {
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(
+      MakeTarget("tlm-0", "unit-test target", astl::CollectorType::SCMI, "0xCAFEBABECAFEBABECAFEBABEBEEF0000"));
+
+  SECTION("missing target ids") {
+    astl::protobuf::RawMetricVec proto_metrics;
+    auto*                        raw = proto_metrics.add_metrics();
+    raw->set_metric_id("test_metric");
+
+    auto* cfg = raw->mutable_config();
+    cfg->set_metric_name("test_metric");
+    cfg->set_description("unit-test metric");
+    cfg->set_units(static_cast<astl::protobuf::AstlUnits>(ASTL_UNITS_CELSIUS));
+    cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+    cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+    cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
+    cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
+    cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
+
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(proto_metrics.SerializeToOstream(&cache_stream));
+    cache_stream.seekg(0);
+
+    auto handles_or_err =
+        astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream, targets);
+    REQUIRE_FALSE(handles_or_err.has_value());
+    REQUIRE(handles_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  SECTION("unknown target id") {
+    astl::protobuf::RawMetricVec proto_metrics;
+    auto*                        raw = proto_metrics.add_metrics();
+    raw->set_metric_id("test_metric");
+    raw->add_target_ids("missing-target");
+
+    auto* cfg = raw->mutable_config();
+    cfg->set_metric_name("test_metric");
+    cfg->set_description("unit-test metric");
+    cfg->set_units(static_cast<astl::protobuf::AstlUnits>(ASTL_UNITS_CELSIUS));
+    cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+    cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+    cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
+    cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
+    cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
+
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(proto_metrics.SerializeToOstream(&cache_stream));
+    cache_stream.seekg(0);
+
+    auto handles_or_err =
+        astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream, targets);
+    REQUIRE_FALSE(handles_or_err.has_value());
+    REQUIRE(handles_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  SECTION("finite set metric missing finite set payload") {
+    astl::protobuf::RawMetricVec proto_metrics;
+    auto*                        raw = proto_metrics.add_metrics();
+    raw->set_metric_id("finite_metric");
+    raw->add_target_ids("tlm-0");
+
+    auto* cfg = raw->mutable_config();
+    cfg->set_metric_name("finite_metric");
+    cfg->set_description("unit-test finite metric");
+    cfg->set_units(static_cast<astl::protobuf::AstlUnits>(ASTL_UNITS_NONE));
+    cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+    cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+    cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_FINITE_SET_VALUE));
+    cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
+    cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
+
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(proto_metrics.SerializeToOstream(&cache_stream));
+    cache_stream.seekg(0);
+
+    auto handles_or_err =
+        astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream, targets);
+    REQUIRE_FALSE(handles_or_err.has_value());
+    REQUIRE(handles_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+}
+
 TEST_CASE("Deserialize<MetricManager> fails on invalid protobuf input", "[MetricManager][protobuf]") {
   std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
   cache_stream << "this is not a valid MetricManager protobuf";
@@ -613,4 +724,170 @@ TEST_CASE(
   REQUIRE(first_handle != nullptr);
   REQUIRE(first_handle->config != nullptr);
   REQUIRE(first_handle->config->InputValueType() == first_handle->config->ValueType());
+}
+
+TEST_CASE("Deserialize<MetricManager> rejects invalid operation map references", "[MetricManager][protobuf]") {
+  InstallSingleScmiTargetTlm0();
+  const auto& orch    = astl::Orchestrator::GetInstance()->get();
+  const auto& targets = orch->GetTargets();
+
+  SECTION("unknown metric id") {
+    auto proto_mgr = BuildValidMetricManagerProto();
+
+    auto* op_entry = proto_mgr.add_operation_to_metric_map();
+    op_entry->set_operation_id(42U);
+    op_entry->set_metric_id("missing_metric");
+    op_entry->set_target_id("tlm-0");
+
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+    cache_stream.seekg(0);
+
+    auto mgr_or_err = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+    REQUIRE_FALSE(mgr_or_err.has_value());
+    REQUIRE(mgr_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  SECTION("unknown target id for valid metric") {
+    auto proto_mgr = BuildValidMetricManagerProto();
+
+    auto* op_entry = proto_mgr.add_operation_to_metric_map();
+    op_entry->set_operation_id(42U);
+    op_entry->set_metric_id("test_metric");
+    op_entry->set_target_id("missing-target");
+
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+    cache_stream.seekg(0);
+
+    auto mgr_or_err = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+    REQUIRE_FALSE(mgr_or_err.has_value());
+    REQUIRE(mgr_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+}
+
+TEST_CASE("MetricHandle protobuf round-trips grouped metrics across supported concrete types",
+          "[MetricHandle][protobuf][roundtrip]") {
+  auto orch_expected = astl::Orchestrator::GetInstance();
+  REQUIRE(orch_expected.has_value());
+
+  auto* orch = orch_expected->get().get();
+  REQUIRE(orch != nullptr);
+
+  {
+    std::vector<std::unique_ptr<astl::ITarget>> targets;
+    targets.push_back(
+        MakeTarget("tlm-0", "unit-test target 0", astl::CollectorType::SCMI, "0xCAFEBABECAFEBABECAFEBABEBEEF0000"));
+    targets.push_back(
+        MakeTarget("tlm-1", "unit-test target 1", astl::CollectorType::SCMI, "0xCAFEBABECAFEBABECAFEBABEBEEF0001"));
+    REQUIRE(orch->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  }
+
+  const auto& targets = orch->GetTargets();
+  REQUIRE(targets.size() == 2);
+  const astl::ITarget* target0 = targets[0].get();
+  const astl::ITarget* target1 = targets[1].get();
+  REQUIRE(target0 != nullptr);
+  REQUIRE(target1 != nullptr);
+
+  SECTION("event metric preserves groups and both targets") {
+    astl::MetricHandle handle;
+    handle.config = std::make_unique<astl::MetricConfig>(
+        "event_metric", "event metric with groups", ASTL_UNITS_NONE, ASTL_VALUE_UNKNOWN, ASTL_CATEGORY_UNCATEGORIZED,
+        ASTL_METRIC_EVENT, std::vector<std::string>{"thermal", "lifecycle"}, astl::CollectorType::SCMI,
+        astl::NullOperationBuilder{}, astl::IdentityFormula{}, ASTL_VALUE_UNKNOWN);
+    auto* cfg = handle.config.get();
+
+    handle.target_to_metric_map.emplace(target0, std::make_unique<astl::EventMetric>(cfg, target0, nullptr));
+    handle.target_to_metric_map.emplace(target1, std::make_unique<astl::EventMetric>(cfg, target1, nullptr));
+
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(Serialize(handle, cache_stream) == ASTL_STATUS_SUCCESS);
+
+    cache_stream.seekg(0);
+    auto rebuilt_or_err = Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream, targets);
+    REQUIRE(rebuilt_or_err.has_value());
+    REQUIRE(rebuilt_or_err->size() == 1);
+
+    const auto& rebuilt = rebuilt_or_err->at(0);
+    REQUIRE(rebuilt->config != nullptr);
+    REQUIRE(rebuilt->config->MetricType() == ASTL_METRIC_EVENT);
+    REQUIRE(rebuilt->config->MetricGroups() == std::vector<std::string>{"thermal", "lifecycle"});
+    REQUIRE(rebuilt->target_to_metric_map.size() == 2);
+    REQUIRE(dynamic_cast<astl::EventMetric*>(rebuilt->target_to_metric_map.at(target0).get()) != nullptr);
+    REQUIRE(dynamic_cast<astl::EventMetric*>(rebuilt->target_to_metric_map.at(target1).get()) != nullptr);
+  }
+
+  SECTION("delta metric round-trips") {
+    astl::MetricHandle handle;
+    handle.config = std::make_unique<astl::MetricConfig>(
+        "delta_metric", "delta metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+        ASTL_METRIC_DELTA, astl::CollectorType::SCMI, astl::NullOperationBuilder{});
+    auto* cfg = handle.config.get();
+
+    handle.target_to_metric_map.emplace(target0, std::make_unique<astl::DeltaMetric>(cfg, target0, nullptr));
+    handle.target_to_metric_map.emplace(target1, std::make_unique<astl::DeltaMetric>(cfg, target1, nullptr));
+
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(Serialize(handle, cache_stream) == ASTL_STATUS_SUCCESS);
+
+    cache_stream.seekg(0);
+    auto rebuilt_or_err = Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream, targets);
+    REQUIRE(rebuilt_or_err.has_value());
+    REQUIRE(rebuilt_or_err->size() == 1);
+    REQUIRE(rebuilt_or_err->at(0)->config->MetricType() == ASTL_METRIC_DELTA);
+    REQUIRE(rebuilt_or_err->at(0)->target_to_metric_map.size() == 2);
+    REQUIRE(dynamic_cast<astl::DeltaMetric*>(rebuilt_or_err->at(0)->target_to_metric_map.at(target0).get()) != nullptr);
+    REQUIRE(dynamic_cast<astl::DeltaMetric*>(rebuilt_or_err->at(0)->target_to_metric_map.at(target1).get()) != nullptr);
+  }
+
+  SECTION("rate metric round-trips") {
+    astl::MetricHandle handle;
+    handle.config = std::make_unique<astl::MetricConfig>(
+        "rate_metric", "rate metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_RATE,
+        astl::CollectorType::SCMI, astl::NullOperationBuilder{});
+    auto* cfg = handle.config.get();
+
+    handle.target_to_metric_map.emplace(target0, std::make_unique<astl::RateMetric>(cfg, target0, nullptr));
+    handle.target_to_metric_map.emplace(target1, std::make_unique<astl::RateMetric>(cfg, target1, nullptr));
+
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(Serialize(handle, cache_stream) == ASTL_STATUS_SUCCESS);
+
+    cache_stream.seekg(0);
+    auto rebuilt_or_err = Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream, targets);
+    REQUIRE(rebuilt_or_err.has_value());
+    REQUIRE(rebuilt_or_err->size() == 1);
+    REQUIRE(rebuilt_or_err->at(0)->config->MetricType() == ASTL_METRIC_RATE);
+    REQUIRE(rebuilt_or_err->at(0)->target_to_metric_map.size() == 2);
+    REQUIRE(dynamic_cast<astl::RateMetric*>(rebuilt_or_err->at(0)->target_to_metric_map.at(target0).get()) != nullptr);
+    REQUIRE(dynamic_cast<astl::RateMetric*>(rebuilt_or_err->at(0)->target_to_metric_map.at(target1).get()) != nullptr);
+  }
+}
+
+TEST_CASE("Serialize(MetricHandle) rejects unsupported metric types", "[MetricHandle][protobuf]") {
+  auto orch_expected = astl::Orchestrator::GetInstance();
+  REQUIRE(orch_expected.has_value());
+  auto* orch = orch_expected->get().get();
+  REQUIRE(orch != nullptr);
+
+  {
+    std::vector<std::unique_ptr<astl::ITarget>> targets;
+    targets.push_back(
+        MakeTarget("tlm-0", "unit-test target", astl::CollectorType::SCMI, "0xCAFEBABECAFEBABECAFEBABEBEEF0000"));
+    REQUIRE(orch->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  }
+
+  const astl::ITarget* target = orch->GetTargets()[0].get();
+  REQUIRE(target != nullptr);
+
+  astl::MetricHandle handle;
+  handle.config = std::make_unique<astl::MetricConfig>(
+      "unknown_metric", "unsupported metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+      ASTL_METRIC_UNKNOWN, astl::CollectorType::SCMI, astl::NullOperationBuilder{});
+  handle.target_to_metric_map.emplace(target,
+                                      std::make_unique<astl::SampledValueMetric>(handle.config.get(), target, nullptr));
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(Serialize(handle, cache_stream) == ASTL_STATUS_INTERNAL_ERROR);
 }

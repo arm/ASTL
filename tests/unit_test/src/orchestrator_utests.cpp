@@ -283,6 +283,117 @@ TEST_CASE("Orchestrator-StopCollection", "[Orchestrator]") {
   REQUIRE(orchestrator.StopCollection(target_ptr.get()) == ASTL_STATUS_COLLECTION_ALREADY_STOPPED);
 }
 
+TEST_CASE("Orchestrator::ReadImmediate delegates to CollectorManager", "[Orchestrator]") {
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*collector_manager, ReadImmediateOnTarget(_)).RETURN(ASTL_STATUS_INTERNAL_ERROR);
+
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+
+  auto               output_manager = std::make_unique<MockOutputManager>();
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), "");
+
+  TestTargetBase target{"immediate-target"};
+  REQUIRE(orchestrator.ReadImmediate(&target) == ASTL_STATUS_INTERNAL_ERROR);
+}
+
+TEST_CASE("Orchestrator::GetProcessedMetricSamples validates inputs and uses fast path", "[Orchestrator]") {
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+
+  auto               output_manager = std::make_unique<MockOutputManager>();
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), "");
+
+  auto                                        target_uptr = std::make_unique<TestTargetBase>("processed-target");
+  auto*                                       target      = target_uptr.get();
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(target_uptr));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+
+  TestMetricBase                                metric{"processed-metric"};
+  const std::vector<astl::ProcessedSampledData> processed_samples{
+      {astl::AstlValue{uint64_t{9}}, astl::SampleTimestamp{}}
+  };
+
+  REQUIRE_FALSE(orchestrator.GetProcessedMetricSamples(nullptr, target).has_value());
+  REQUIRE_FALSE(orchestrator.GetProcessedMetricSamples(&metric, nullptr).has_value());
+
+  REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, processed_samples) == ASTL_STATUS_SUCCESS);
+
+  auto samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
+  REQUIRE(samples_or_err.has_value());
+  REQUIRE(samples_or_err->size() == 1);
+  REQUIRE(samples_or_err->front().value == astl::AstlValue{uint64_t{9}});
+}
+
+TEST_CASE("Orchestrator::GetProcessedMetricSamples returns empty when cache is absent", "[Orchestrator]") {
+  const auto      cache_dir = std::filesystem::temp_directory_path() / "astl_missing_processed_cache";
+  std::error_code remove_error_code;
+  std::filesystem::remove_all(cache_dir, remove_error_code);
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+
+  auto               output_manager = std::make_unique<MockOutputManager>();
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), cache_dir);
+
+  auto                                        target_uptr = std::make_unique<TestTargetBase>("missing-cache-target");
+  auto*                                       target      = target_uptr.get();
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(target_uptr));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+
+  TestMetricBase metric{"missing-cache-metric"};
+  auto           samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
+  REQUIRE(samples_or_err.has_value());
+  REQUIRE(samples_or_err->empty());
+}
+
+TEST_CASE("Orchestrator::LoadFromFile short-circuits when instance already exists", "[Orchestrator][cache]") {
+  namespace fs = std::filesystem;
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  auto output_manager = std::make_unique<MockOutputManager>();
+
+  auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                           std::move(metric_manager), std::move(output_manager), "");
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  const fs::path bogus_file = fs::temp_directory_path() / "already_initialized.astl";
+  const fs::path cache_dir  = fs::temp_directory_path() / "already_initialized_cache";
+
+  REQUIRE(astl::Orchestrator::LoadFromFile(bogus_file, cache_dir) == ASTL_STATUS_SUCCESS);
+}
+
 TEST_CASE("Orchestrator-SinkRawSamples empty span no-op", "[Orchestrator]") {
   auto topology_manager  = std::make_unique<MockTopologyManager>();
   auto collector_manager = std::make_unique<MockCollectorManager>();
@@ -357,10 +468,10 @@ TEST_CASE("Orchestrator-SinkRawSamples bulk growth then skip reserve", "[Orchest
 // Refactored: individual test cases for each emission scenario reduce cognitive complexity
 TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV only emission", "[Orchestrator][outputs]") {
   using trompeloeil::_;
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");      // clear PERFETTO
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");  // ensure clean slate before setting
-  auto path = std::filesystem::temp_directory_path() / "orch_intervalcsv_only.csv";
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, path.string()) == ASTL_STATUS_SUCCESS);
+  auto          path = std::filesystem::temp_directory_path() / "orch_intervalcsv_only.csv";
+  TempFileGuard interval_csv_guard(path);
+  EnvVarGuard   perfetto_guard{astl::EnvVar::ASTL_OUTPUT_PERFETTO, ""};
+  EnvVarGuard   interval_guard{astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, path.string()};
 
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -395,10 +506,10 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV only emission", "[Orchestrat
 
 TEST_CASE("Orchestrator-StopCollection PERFETTO only emission", "[Orchestrator][outputs]") {
   using trompeloeil::_;
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");  // clear INTERVAL_CSV
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");      // ensure clean slate before setting
-  auto path = std::filesystem::temp_directory_path() / "orch_perfetto_only.json";
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, path.string()) == ASTL_STATUS_SUCCESS);
+  auto          path = std::filesystem::temp_directory_path() / "orch_perfetto_only.json";
+  TempFileGuard perfetto_file_guard(path);
+  EnvVarGuard   interval_guard{astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, ""};
+  EnvVarGuard   perfetto_guard{astl::EnvVar::ASTL_OUTPUT_PERFETTO, path.string()};
 
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -433,12 +544,12 @@ TEST_CASE("Orchestrator-StopCollection PERFETTO only emission", "[Orchestrator][
 
 TEST_CASE("Orchestrator-StopCollection dual PERFETTO+INTERVAL_CSV ordered emission", "[Orchestrator][outputs]") {
   using trompeloeil::_;
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");  // clear both first
-  auto perf_path = std::filesystem::temp_directory_path() / "orch_both_perfetto.json";
-  auto csv_path  = std::filesystem::temp_directory_path() / "orch_both_intervalcsv.csv";
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, perf_path.string()) == ASTL_STATUS_SUCCESS);
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, csv_path.string()) == ASTL_STATUS_SUCCESS);
+  auto          perf_path = std::filesystem::temp_directory_path() / "orch_both_perfetto.json";
+  auto          csv_path  = std::filesystem::temp_directory_path() / "orch_both_intervalcsv.csv";
+  TempFileGuard perfetto_file_guard(perf_path);
+  TempFileGuard interval_csv_file_guard(csv_path);
+  EnvVarGuard   perfetto_guard{astl::EnvVar::ASTL_OUTPUT_PERFETTO, perf_path.string()};
+  EnvVarGuard   interval_guard{astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, csv_path.string()};
 
   trompeloeil::sequence seq;  // enforce ordering
 
@@ -479,11 +590,10 @@ TEST_CASE("Orchestrator-StopCollection dual PERFETTO+INTERVAL_CSV ordered emissi
 
 TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV idempotent emission", "[Orchestrator][outputs]") {
   using trompeloeil::_;
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");  // clear both first
-  auto csv_path = std::filesystem::temp_directory_path() / "orch_intervalcsv_idempotent.csv";
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, csv_path.string()) == ASTL_STATUS_SUCCESS);
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");  // clear PERFETTO
+  auto          csv_path = std::filesystem::temp_directory_path() / "orch_intervalcsv_idempotent.csv";
+  TempFileGuard interval_csv_file_guard(csv_path);
+  EnvVarGuard   perfetto_guard{astl::EnvVar::ASTL_OUTPUT_PERFETTO, ""};
+  EnvVarGuard   interval_guard{astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, csv_path.string()};
 
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -797,6 +907,111 @@ TEST_CASE("Orchestrator-StopDuringStartingReturnsInvalidStateTransition", "[Orch
   REQUIRE(*stop_during_start_result == ASTL_STATUS_INVALID_STATE_TRANSITION);
   // StartCollection correctly set the final state to STARTED.
   REQUIRE(orchestrator.GetTargetCollectionState(target).value() == State::STARTED);
+}
+
+TEST_CASE("Orchestrator::ConfigureMetricCollection preserves state on operation-build and collector failures",
+          "[Orchestrator][lifecycle]") {
+  using State                 = astl::Orchestrator::TargetCollectionState;
+  auto  topology_manager      = std::make_unique<MockTopologyManager>();
+  auto  collector_manager     = std::make_unique<MockCollectorManager>();
+  auto* collector_manager_raw = collector_manager.get();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto                              metric_manager       = std::make_unique<MockMetricManager>();
+  auto*                             metric_manager_raw   = metric_manager.get();
+  static int                        dummy_metric_storage = 0;
+  astl_metric_handle_t              metric_handle        = &dummy_metric_storage;
+  std::vector<astl_metric_handle_t> available_metrics{metric_handle};
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
+      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+
+  auto               output_manager = std::make_unique<MockOutputManager>();
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), "");
+
+  auto                 mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_handle = mock_target.get();
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string target_name = "configure_metric_failure_target";
+  ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(mock_target));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  auto* target = orchestrator.GetTargets()[0].get();
+
+  astl_collection_params_t params{};
+  params.size  = sizeof(params);
+  params.flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY;
+  std::array<astl_metric_handle_t, 1> metrics{metric_handle};
+
+  SECTION("GetRequiredOperations failure maps to INTERNAL_ERROR") {
+    REQUIRE_CALL(*metric_manager_raw, GetRequiredOperations(_, _)).RETURN(std::unexpected(ASTL_STATUS_BAD_ARGUMENT));
+
+    REQUIRE(orchestrator.ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_INTERNAL_ERROR);
+    REQUIRE(orchestrator.GetTargetCollectionState(target).value() == State::UNCONFIGURED);
+  }
+
+  SECTION("collector configuration failure is propagated") {
+    REQUIRE_CALL(*metric_manager_raw, GetRequiredOperations(_, _))
+        .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+            astl::CollectionOperations{
+                                       {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
+    });
+    REQUIRE_CALL(*collector_manager_raw, ConfigureCollectionOnTarget(_, _, _))
+        .RETURN(ASTL_STATUS_COLLECTION_ALREADY_RUNNING);
+
+    REQUIRE(orchestrator.ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_COLLECTION_ALREADY_RUNNING);
+    REQUIRE(orchestrator.GetTargetCollectionState(target).value() == State::UNCONFIGURED);
+  }
+}
+
+TEST_CASE("Orchestrator::ConfigureCounterCollection propagates collector errors", "[Orchestrator][lifecycle]") {
+  auto  topology_manager      = std::make_unique<MockTopologyManager>();
+  auto  collector_manager     = std::make_unique<MockCollectorManager>();
+  auto* collector_manager_raw = collector_manager.get();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto                               metric_manager        = std::make_unique<MockMetricManager>();
+  static int                         dummy_counter_storage = 0;
+  astl_counter_handle_t              counter_handle        = &dummy_counter_storage;
+  std::vector<astl_counter_handle_t> available_counters{counter_handle};
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
+      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+  ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
+      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+          astl::CollectionOperations{
+                                     {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
+  });
+  REQUIRE_CALL(*collector_manager_raw, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_BAD_ARGUMENT);
+
+  auto               output_manager = std::make_unique<MockOutputManager>();
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), "");
+
+  auto                 mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_handle = mock_target.get();
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string target_name = "configure_counter_failure_target";
+  ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(mock_target));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  auto* target = orchestrator.GetTargets()[0].get();
+
+  astl_collection_params_t params{};
+  params.size  = sizeof(params);
+  params.flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY;
+  std::array<astl_counter_handle_t, 1> counters{counter_handle};
+
+  REQUIRE(orchestrator.ConfigureCounterCollection(target, &params, counters) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
 /******************************************************************************

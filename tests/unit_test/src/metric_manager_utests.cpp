@@ -31,6 +31,7 @@ using astl::ProcessedSampledData;
 using astl::RawSampledData;
 using astl::ScmiTargetToDataEventIdMap;
 using astl::SystemCapability;
+using trompeloeil::_;
 
 constexpr size_t kJunk = 7;
 namespace astl {
@@ -1005,4 +1006,77 @@ TEST_CASE(
       bmc_groups, std::back_inserter(bmc_expected_groups),
       [](const astl_metric_group_handle_t group) { return astl::MetricGroup::FromApiHandle(group); });
   REQUIRE(bmc_expected_groups[0]->metrics.size() == 1);  // NIC only
+}
+
+TEST_CASE("MetricManager handle accessors reject invalid inputs and incomplete handles", "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+
+  astl_metric_props_t metric_props{};
+  REQUIRE(mgr.GetProperties(nullptr, &metric_props) == ASTL_STATUS_BAD_ARGUMENT);
+
+  astl::MetricHandle empty_handle;
+  empty_handle.config = std::make_unique<MetricConfig>(
+      "empty", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI, astl::NullOperationBuilder{});
+  REQUIRE(mgr.GetProperties(static_cast<astl_metric_handle_t>(&empty_handle), &metric_props) ==
+          ASTL_STATUS_INTERNAL_ERROR);
+
+  MockTarget  target;
+  std::string target_name{"AP0"};
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+
+  astl::MetricHandle null_metric_handle;
+  null_metric_handle.config = std::make_unique<MetricConfig>(
+      "broken", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+      ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+      astl::NullOperationBuilder{});
+  null_metric_handle.target_to_metric_map.emplace(&target, std::unique_ptr<IMetric>{});
+
+  auto metric_or_err = mgr.GetMetricOnTarget(static_cast<astl_metric_handle_t>(&null_metric_handle), &target);
+  REQUIRE_FALSE(metric_or_err.has_value());
+  REQUIRE(metric_or_err.error() == ASTL_STATUS_INTERNAL_ERROR);
+}
+
+TEST_CASE("MetricManager processed-sample sink edge cases", "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+
+  REQUIRE(mgr.RegisterProcessedSampleSink(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(mgr.UnregisterProcessedSampleSink(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+
+  MockProcessedSampleSink    failing_sink_a;
+  MockProcessedSampleSink    failing_sink_b;
+  MockTarget                 target;
+  TestMetric                 metric;
+  const ProcessedSampledData sample{astl::AstlValue{uint64_t{7}}, astl::SampleTimestamp{}};
+
+  REQUIRE(mgr.RegisterProcessedSampleSink(&failing_sink_a) == ASTL_STATUS_SUCCESS);
+  REQUIRE(mgr.RegisterProcessedSampleSink(&failing_sink_b) == ASTL_STATUS_SUCCESS);
+
+  REQUIRE_CALL(failing_sink_a, SinkProcessedSamples(&target, &metric, _)).RETURN(ASTL_STATUS_INTERNAL_ERROR);
+  REQUIRE_CALL(failing_sink_b, SinkProcessedSamples(&target, &metric, _)).RETURN(ASTL_STATUS_INTERNAL_ERROR);
+
+  REQUIRE(mgr.SinkProcessedSamples(&target, &metric, std::span<const ProcessedSampledData>{&sample, 1}) ==
+          ASTL_STATUS_INTERNAL_ERROR);
+
+  REQUIRE(mgr.UnregisterProcessedSampleSink(&failing_sink_a) == ASTL_STATUS_SUCCESS);
+  REQUIRE(mgr.UnregisterProcessedSampleSink(&failing_sink_b) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("MetricManager group lookup and metric ownership errors", "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  TestMetric    metric;
+
+  auto group_props_status = mgr.GetMetricGroupProperties(nullptr, nullptr);
+  REQUIRE(group_props_status == ASTL_STATUS_BAD_ARGUMENT);
+
+  auto metrics_in_group = mgr.GetMetricsInGroup(nullptr);
+  REQUIRE_FALSE(metrics_in_group.has_value());
+  REQUIRE(metrics_in_group.error() == ASTL_STATUS_BAD_ARGUMENT);
+
+  auto target_or_err = mgr.GetTargetForMetric(&metric);
+  REQUIRE_FALSE(target_or_err.has_value());
+  REQUIRE(target_or_err.error() == ASTL_STATUS_BAD_ARGUMENT);
 }

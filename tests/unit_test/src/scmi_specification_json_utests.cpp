@@ -288,6 +288,118 @@ TEST_CASE("GetMetricRegistersScmiData", "[ConfigManager]") {
   REQUIRE(scmi_metrics_definitions[3].de_id == 0x00034441);
 }
 
+TEST_CASE("FindSpecFileByUuid prefers the most specific matching UUID entry", "[ConfigManager]") {
+  std::string repo_meta_json = R"json(
+  {
+    "last_updated": "2026-03-16",
+    "uuid_mapping": {
+      "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000/8": {
+        "last_updated": "2026-03-16",
+        "description": "generic match",
+        "specification_file": "generic.json"
+      },
+      "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000/16": {
+        "last_updated": "2026-03-16",
+        "description": "specific match",
+        "specification_file": "specific.json"
+      }
+    }
+  }
+  )json";
+
+  auto repo_meta = json::parse(repo_meta_json).get<astl::scmi::spec::RepoMeta>();
+  auto uuid      = astl::scmi::spec::GetNormalizedUuid("CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000").value();
+
+  auto spec_file = astl::scmi::spec::FindSpecFileByUuid(repo_meta, uuid);
+
+  REQUIRE(spec_file.has_value());
+  REQUIRE(spec_file->specification_file == "specific.json");
+}
+
+TEST_CASE("FindMetricsFileElementByUuid returns nullopt when there is no matching platform entry", "[ConfigManager]") {
+  std::string platform_lookup_json = R"json(
+  {
+    "last_updated": "2026-03-16",
+    "scmi_uuid_mapping": {
+      "DEADBEEF-CAFE-BABE-CAFE-BABEBEEF0000": {
+        "last_updated": "2026-03-16",
+        "description": "other platform",
+        "metrics_file": "other.json"
+      }
+    }
+  }
+  )json";
+
+  auto platform_lookup = json::parse(platform_lookup_json).get<astl::metrics::spec::PlatformLookup>();
+  auto uuid            = astl::scmi::spec::GetNormalizedUuid("CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000").value();
+
+  auto metrics_file = astl::metrics::spec::FindMetricsFileElementByUuid(platform_lookup, uuid);
+
+  REQUIRE_FALSE(metrics_file.has_value());
+}
+
+TEST_CASE("GetMetricRegistersScmiData applies unit, component, and instance filters", "[ConfigManager]") {
+  std::string raw_scmi_spec = R"json(
+  {
+    "uuid": "1200/2",
+    "description": "Filter test spec",
+    "tdcf_instance_id": "[7:0]",
+    "chiplet_id": "[15:8]",
+    "size": 128,
+    "members": [
+      {
+        "count": 3,
+        "start_offset": 0,
+        "block_size": 24,
+        "metrics": {
+          "TEMP_PRESENT": {
+            "base_de_id": "0x00004441",
+            "name": "TEMP_PRESENT",
+            "component": "CPU",
+            "description": "Temperature",
+            "unit": "celsius",
+            "base10_unit_modifier": -3,
+            "rel_offset": "0x0000"
+          }
+        }
+      }
+    ]
+  }
+  )json";
+
+  auto scmi_specification = json::parse(raw_scmi_spec).get<astl::scmi::spec::ScmiSpecification>();
+
+  SECTION("component and instance filters narrow the matched metrics") {
+    astl::metrics::spec::MetricJsonDeclaration metric_declaration;
+    metric_declaration.description                      = "CPU temperature";
+    metric_declaration.metric_type                      = "value";
+    metric_declaration.unit                             = "C";
+    metric_declaration.collection.protocol              = "scmi";
+    metric_declaration.collection.register_name         = "TEMP_PRESENT";
+    metric_declaration.collection.scmi_component_filter = "CPU";
+    metric_declaration.collection.scmi_instance_filter  = "1";
+
+    auto matches = GetMetricRegistersScmiData(metric_declaration, scmi_specification);
+
+    REQUIRE(matches.size() == 1);
+    REQUIRE(matches[0].GetFullyQualifiedName() == "CPU.1.TEMP_PRESENT");
+    REQUIRE(matches[0].de_id == 0x00014441);
+  }
+
+  SECTION("unit mismatch filters out otherwise matching SCMI registers") {
+    astl::metrics::spec::MetricJsonDeclaration metric_declaration;
+    metric_declaration.description              = "CPU temperature";
+    metric_declaration.metric_type              = "value";
+    metric_declaration.unit                     = "W";
+    metric_declaration.collection.protocol      = "scmi";
+    metric_declaration.collection.register_name = "TEMP_PRESENT";
+
+    auto matches = GetMetricRegistersScmiData(metric_declaration, scmi_specification);
+
+    REQUIRE(matches.empty());
+  }
+}
+
 TEST_CASE("FindMatchingScmiRegistersForResidency rejects non-zero base10 modifiers", "[ConfigManager]") {
   std::string raw_scmi_spec = R"json(
   {

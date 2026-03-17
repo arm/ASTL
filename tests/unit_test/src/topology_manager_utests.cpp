@@ -4,12 +4,38 @@
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
+#include "../../test_utilities.hpp"
 #include "config/astl_configuration.hpp"
+#include "serdes/protobuf_serdes.hpp"
+#include "serdes/targets.pb.h"
 #include "target.hpp"
 #include "topology/scmi_topology_plugin.hpp"
+#include "topology/topology_builder.hpp"
+#include "topology/topology_manager.hpp"
 
 using trompeloeil::_;
 using trompeloeil::re;
+
+namespace fs = std::filesystem;
+
+namespace {
+
+void WriteSerializedTopologyCache(const fs::path& cache_dir) {
+  std::error_code ec;
+  fs::create_directories(cache_dir, ec);
+  REQUIRE(!ec);
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(
+      std::make_unique<astl::Target>("tlm-0", "unit-test target", astl::CollectorType::SCMI, nullptr, "1234"));
+  astl::TopologyManager topology_manager{std::move(targets)};
+
+  std::ofstream topology_file(cache_dir / astl::kTopologyManagerFileName, std::ios::binary | std::ios::out);
+  REQUIRE(topology_file.good());
+  REQUIRE(astl::ProtobufSerDes::Serialize(topology_manager, topology_file) == ASTL_STATUS_SUCCESS);
+}
+
+}  // namespace
 
 TEST_CASE("Topology::ScmiPlugin", "[TopologyManager]") {
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
@@ -44,4 +70,77 @@ TEST_CASE("Topology::ScmiPlugin", "[TopologyManager]") {
   REQUIRE(targets->size() == 2);
   REQUIRE((*targets)[0]->Name() == "tlm-0");
   REQUIRE((*targets)[1]->Name() == "tlm-1");
+}
+
+TEST_CASE("TopologyBuilder::BuildTopologyManager rejects load_file_path without cache dir", "[TopologyManager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration           = configuration_result.value();
+  configuration.load_file_path = "/tmp/unit_test_session.astl";
+
+  auto result = astl::BuildTopologyManager(configuration, std::nullopt);
+
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+}
+
+TEST_CASE("TopologyBuilder::BuildTopologyManagerFromASTLFile fails when topology file is missing",
+          "[TopologyManager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration           = configuration_result.value();
+  configuration.load_file_path = "/tmp/unit_test_session.astl";
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_topology_builder_missing_topology";
+  TempFileGuard  cache_guard(cache_dir);
+
+  auto result = astl::BuildTopologyManager(configuration, cache_dir);
+
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(result.error() == ASTL_STATUS_INTERNAL_ERROR);
+}
+
+TEST_CASE("TopologyBuilder::BuildTopologyManagerFromASTLFile fails on corrupt topology protobuf", "[TopologyManager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration           = configuration_result.value();
+  configuration.load_file_path = "/tmp/unit_test_session.astl";
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_topology_builder_corrupt_topology";
+  TempFileGuard  cache_guard(cache_dir);
+
+  std::error_code ec;
+  fs::create_directories(cache_dir, ec);
+  REQUIRE(!ec);
+  {
+    std::ofstream topology_file(cache_dir / astl::kTopologyManagerFileName, std::ios::out | std::ios::trunc);
+    REQUIRE(topology_file.good());
+    astl::protobuf::TargetList target_list;
+    target_list.add_targets();  // empty name should be rejected during topology rebuild
+    REQUIRE(target_list.SerializeToOstream(&topology_file));
+  }
+
+  auto result = astl::BuildTopologyManager(configuration, cache_dir);
+
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(result.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+}
+
+TEST_CASE("TopologyBuilder::BuildTopologyManagerFromASTLFile rebuilds a serialized topology manager",
+          "[TopologyManager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration           = configuration_result.value();
+  configuration.load_file_path = "/tmp/unit_test_session.astl";
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_topology_builder_valid_topology";
+  TempFileGuard  cache_guard(cache_dir);
+  WriteSerializedTopologyCache(cache_dir);
+
+  auto result = astl::BuildTopologyManager(configuration, cache_dir);
+
+  REQUIRE(result.has_value());
+  REQUIRE(result.value() != nullptr);
+  REQUIRE(result.value()->GetTargets().size() == 1);
+  REQUIRE(result.value()->GetTargets()[0]->Name() == "tlm-0");
 }

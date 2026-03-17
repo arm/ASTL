@@ -676,17 +676,67 @@ TEST_CASE("PerfettoOutput category inference fallback (unit-based)", "[perfetto_
   REQUIRE(content.find("\"cat\":\"\"") != std::string::npos);
 }
 
+TEST_CASE("PerfettoOutput reports not-ready writer for invalid path", "[perfetto_output]") {  // NOLINT
+  const auto missing_parent =
+      std::filesystem::temp_directory_path() / "astl_perfetto_missing" / "nested" / "trace.json";
+  std::error_code remove_error_code;
+  std::filesystem::remove_all(missing_parent.parent_path().parent_path(), remove_error_code);
+
+  astl::PerfettoOutput writer(missing_parent);
+  REQUIRE_FALSE(writer.Ready());
+
+  TestTargetBase            target{"BadPathTarget"};
+  TestMetricBase            metric{"BadPathMetric"};
+  astl::ProcessedSamplesMap processed;
+  processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(1), astl::SampleTimestamp{})};
+
+  REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_INTERNAL_ERROR);
+}
+
+TEST_CASE("PerfettoOutput category inference for remaining unit families", "[perfetto_output]") {  // NOLINT
+  TempFileGuard        tmp_guard{"astl_perfetto_category_remaining.json"};
+  astl::PerfettoOutput writer(tmp_guard.path);
+  REQUIRE(writer.Ready());
+
+  TestTargetBase              target{"CatExtra"};
+  astl::ProcessedSamplesMap   processed;
+  const astl::SampleTimestamp base_timestamp{};
+
+  std::vector<std::pair<TestMetricBase, std::string>> metrics;
+  metrics.emplace_back(TestMetricBase{"EnergyMetric", ASTL_UNITS_JOULES}, "\"cat\":\"Energy\"");
+  metrics.emplace_back(TestMetricBase{"CurrentMetric", ASTL_UNITS_AMPS}, "\"cat\":\"Current\"");
+  metrics.emplace_back(TestMetricBase{"BytesMetric", ASTL_UNITS_BYTES}, "\"cat\":\"Bytes\"");
+  metrics.emplace_back(TestMetricBase{"BandwidthMetric", ASTL_UNITS_MBYTESPERSEC}, "\"cat\":\"Bandwidth\"");
+  metrics.emplace_back(TestMetricBase{"TicksMetric", ASTL_UNITS_TICKS}, "\"cat\":\"Ticks\"");
+  metrics.emplace_back(TestMetricBase{"TimeMetric", ASTL_UNITS_SECONDS}, "\"cat\":\"Time\"");
+
+  uint64_t value = 10;
+  for (auto& [metric, expected_category] : metrics) {
+    processed[&target][&metric] = {MakeSample(value++, base_timestamp)};
+    (void)expected_category;
+  }
+
+  REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
+  std::ifstream input_stream(tmp_guard.path);
+  REQUIRE(input_stream.is_open());
+  std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
+
+  for (const auto& [metric, expected_category] : metrics) {
+    REQUIRE(content.find(expected_category) != std::string::npos);
+    REQUIRE(content.find(metric.Name()) != std::string::npos);
+  }
+}
+
 // New test: validate deferred Perfetto emission occurs only at StopCollection.
 TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[perfetto_output]") {  // NOLINT
   // Arrange: set environment variable to a temp file path and ensure it does not yet exist.
   TempFileGuard   tmp_guard{"astl_perfetto_deferred.json"};
   const auto&     perfetto_path = tmp_guard.path;
+  EnvVarGuard     perfetto_guard{astl::EnvVar::ASTL_OUTPUT_PERFETTO, perfetto_path.string()};
   std::error_code remove_error_code;
   std::filesystem::remove(perfetto_path, remove_error_code);
   // Guarantee clean start.
   REQUIRE_FALSE(std::filesystem::exists(perfetto_path));
-  // setenv returns 0 on success.
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, perfetto_path.string()) == ASTL_STATUS_SUCCESS);
 
   // Build minimal orchestrator with mocks + real OutputManager (for Perfetto path).
   auto topology_manager = std::make_unique<MockTopologyManager>();
@@ -743,19 +793,16 @@ TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[
   // Composite name sanitized (no spaces) "DeferredT.DeferredMetric" and value 123 present.
   REQUIRE(content.find("\"name\":\"DeferredT.DeferredMetric\"") != std::string::npos);
   REQUIRE(content.find("\"value\":123") != std::string::npos);
-
-  // Cleanup env var for isolation.
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");  // clear
 }
 
 // Negative path: env var set but no processed samples sunk; expect empty trace file body after StopCollection.
 TEST_CASE("PerfettoOutput deferred emission empty map", "[perfetto_output]") {  // NOLINT
   TempFileGuard   tmp_guard{"astl_perfetto_empty_deferred.json"};
   const auto&     perfetto_path = tmp_guard.path;
+  EnvVarGuard     perfetto_guard{astl::EnvVar::ASTL_OUTPUT_PERFETTO, perfetto_path.string()};
   std::error_code remove_error_code;
   std::filesystem::remove(perfetto_path, remove_error_code);
   REQUIRE_FALSE(std::filesystem::exists(perfetto_path));
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, perfetto_path.string()) == ASTL_STATUS_SUCCESS);
 
   auto                                        topology_manager = std::make_unique<MockTopologyManager>();
   auto                                        concrete_target  = std::make_unique<TestTargetBase>("EmptyDeferredT");
@@ -795,17 +842,17 @@ TEST_CASE("PerfettoOutput deferred emission empty map", "[perfetto_output]") {  
       (content.find("\"displayTimeUnit\":\"us\"") != std::string::npos &&
        content.find("\"ph\":\"C\"") == std::string::npos && content.find("\"ph\":\"I\"") == std::string::npos);
   REQUIRE(matches_variant);
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
 }
 
 // Env var unset: ensure no file is emitted after StopCollection even if samples exist.
 TEST_CASE("PerfettoOutput deferred emission env var unset", "[perfetto_output]") {  // NOLINT
-  auto            perfetto_path = std::filesystem::temp_directory_path() / "astl_perfetto_unset_env.json";
+  TempFileGuard   tmp_guard{"astl_perfetto_unset_env.json"};
+  const auto&     perfetto_path = tmp_guard.path;
   std::error_code remove_error_code;
   std::filesystem::remove(perfetto_path, remove_error_code);
   REQUIRE_FALSE(std::filesystem::exists(perfetto_path));
   // Explicitly ensure variable not set (ignore errors).
-  (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
+  EnvVarGuard perfetto_guard{astl::EnvVar::ASTL_OUTPUT_PERFETTO, ""};
 
   auto                                        topology_manager = std::make_unique<MockTopologyManager>();
   auto                                        concrete_target  = std::make_unique<TestTargetBase>("UnsetEnvT");

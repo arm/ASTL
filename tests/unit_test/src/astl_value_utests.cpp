@@ -314,6 +314,173 @@ TEST_CASE("AstlValue::ToAstlUnionValue", "[AstlValue]") {
   REQUIRE(astl_value.b8 == true);
 }
 
+TEST_CASE("AstlValue utility conversions and arithmetic edge cases", "[AstlValue]") {
+  SECTION("FromUnionPromoting widens integral and boolean inputs") {
+    REQUIRE(std::holds_alternative<uint64_t>(astl::AstlValue::FromUnionPromoting(ASTL_VALUE_UINT16)->value));
+    REQUIRE(std::holds_alternative<double>(astl::AstlValue::FromUnionPromoting(ASTL_VALUE_FLOAT32)->value));
+    REQUIRE(std::holds_alternative<uint64_t>(astl::AstlValue::FromUnionPromoting(ASTL_VALUE_BOOL8)->value));
+    REQUIRE(astl::AstlValue::FromUnionPromoting(ASTL_VALUE_UNKNOWN).error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  SECTION("Conversion helpers cover numeric and bool cases") {
+    std::string as_text;
+
+    const astl::AstlValue floating_value{12.5};
+    REQUIRE(floating_value.IsArithmetic());
+    REQUIRE(floating_value.ToStringValue(as_text));
+    REQUIRE(as_text == "12.500000");
+    REQUIRE(floating_value.ToDouble().value() == 12.5);
+    REQUIRE(floating_value.ToInt64().value() == 12);
+
+    const astl::AstlValue bool_value{true};
+    REQUIRE(bool_value.IsArithmetic());
+    REQUIRE(bool_value.ToStringValue(as_text));
+    REQUIRE(as_text == "true");
+    REQUIRE(bool_value.ToDouble().error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+    REQUIRE(bool_value.ToInt64().error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  SECTION("Add supports floating promotion and rejects mixed integral floating arithmetic") {
+    const auto floating_sum = astl::AstlValue::Add(astl::AstlValue{1.25F}, astl::AstlValue{2.75});
+    REQUIRE(floating_sum.has_value());
+    REQUIRE_THAT(std::get<double>(floating_sum->value), WithinAbs(4.0, 0.000001));
+
+    const auto bool_sum = astl::AstlValue::Add(astl::AstlValue{true}, astl::AstlValue{true});
+    REQUIRE(bool_sum.has_value());
+    REQUIRE(std::get<uint8_t>(bool_sum->value) == 2);
+
+    const auto invalid_sum = astl::AstlValue::Add(astl::AstlValue{uint8_t{7}}, astl::AstlValue{1.0F});
+    REQUIRE(invalid_sum.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  SECTION("Subtract detects unsigned underflow and supports floating subtraction") {
+    const auto underflow = astl::AstlValue::Subtract(astl::AstlValue{uint8_t{1}}, astl::AstlValue{uint8_t{2}});
+    REQUIRE(underflow.error() == ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
+
+    const auto difference = astl::AstlValue::Subtract(astl::AstlValue{2.5}, astl::AstlValue{0.5F});
+    REQUIRE(difference.has_value());
+    REQUIRE_THAT(std::get<double>(difference->value), WithinAbs(2.0, 0.000001));
+  }
+
+  SECTION("Divide handles boolean numerators and floating divisors") {
+    const auto half = astl::AstlValue::Divide(astl::AstlValue{true}, 2.0);
+    REQUIRE(half.has_value());
+    REQUIRE_THAT(std::get<double>(half->value), WithinAbs(0.5, 0.000001));
+  }
+}
+
+TEST_CASE("AstlValue cross-variant arithmetic matrix", "[AstlValue][matrix]") {
+  SECTION("Integral-family equality is numeric across all stored integral variants") {
+    const std::vector<astl::AstlValue> ones{
+        astl::AstlValue{uint8_t{1}},  astl::AstlValue{uint16_t{1}}, astl::AstlValue{uint32_t{1}},
+        astl::AstlValue{uint64_t{1}}, astl::AstlValue{true},
+    };
+
+    for (const auto& lhs : ones) {
+      for (const auto& rhs : ones) {
+        REQUIRE(lhs == rhs);
+      }
+    }
+
+    REQUIRE(astl::AstlValue{false} != astl::AstlValue{uint64_t{1}});
+    REQUIRE(astl::AstlValue{uint32_t{2}} != astl::AstlValue{uint8_t{1}});
+  }
+
+  SECTION("Integral-floating equality rejects all cross-family comparisons") {
+    const std::vector<astl::AstlValue> integrals{
+        astl::AstlValue{uint8_t{3}},  astl::AstlValue{uint16_t{3}}, astl::AstlValue{uint32_t{3}},
+        astl::AstlValue{uint64_t{3}}, astl::AstlValue{true},
+    };
+    const std::vector<astl::AstlValue> floating{
+        astl::AstlValue{3.0F},
+        astl::AstlValue{3.0},
+    };
+
+    for (const auto& lhs : integrals) {
+      for (const auto& rhs : floating) {
+        REQUIRE_FALSE(lhs == rhs);
+        REQUIRE_FALSE(rhs == lhs);
+      }
+    }
+  }
+
+  SECTION("Ordering remains numeric within families and deterministic across families") {
+    REQUIRE(astl::AstlValue{uint8_t{2}} < astl::AstlValue{uint64_t{3}});
+    REQUIRE(astl::AstlValue{false} < astl::AstlValue{uint16_t{1}});
+    REQUIRE(astl::AstlValue{float{2.25F}} < astl::AstlValue{double{2.5}});
+    REQUIRE(astl::AstlValue{double{7.5}} > astl::AstlValue{float{7.0F}});
+    REQUIRE(astl::AstlValue{uint32_t{99}} < astl::AstlValue{double{0.0}});
+    REQUIRE(astl::AstlValue{float{0.0F}} > astl::AstlValue{true});
+  }
+
+  SECTION("Add promotes to the wider arithmetic representation") {
+    const auto sum_u32_u8 = astl::AstlValue::Add(astl::AstlValue{uint32_t{9}}, astl::AstlValue{uint8_t{2}});
+    REQUIRE(sum_u32_u8.has_value());
+    REQUIRE(std::holds_alternative<uint32_t>(sum_u32_u8->value));
+    REQUIRE(std::get<uint32_t>(sum_u32_u8->value) == 11);
+
+    const auto sum_u64_bool = astl::AstlValue::Add(astl::AstlValue{uint64_t{9}}, astl::AstlValue{true});
+    REQUIRE(sum_u64_bool.has_value());
+    REQUIRE(std::holds_alternative<uint64_t>(sum_u64_bool->value));
+    REQUIRE(std::get<uint64_t>(sum_u64_bool->value) == 10);
+
+    const auto sum_f32_f32 = astl::AstlValue::Add(astl::AstlValue{1.5F}, astl::AstlValue{2.0F});
+    REQUIRE(sum_f32_f32.has_value());
+    REQUIRE(std::holds_alternative<float>(sum_f32_f32->value));
+    REQUIRE_THAT(std::get<float>(sum_f32_f32->value), WithinAbs(3.5F, 0.0001F));
+
+    const auto sum_f64_f32 = astl::AstlValue::Add(astl::AstlValue{1.5}, astl::AstlValue{2.0F});
+    REQUIRE(sum_f64_f32.has_value());
+    REQUIRE(std::holds_alternative<double>(sum_f64_f32->value));
+    REQUIRE_THAT(std::get<double>(sum_f64_f32->value), WithinAbs(3.5, 0.000001));
+  }
+
+  SECTION("Subtract promotes and preserves expected result types") {
+    const auto diff_u32_u8 = astl::AstlValue::Subtract(astl::AstlValue{uint32_t{9}}, astl::AstlValue{uint8_t{2}});
+    REQUIRE(diff_u32_u8.has_value());
+    REQUIRE(std::holds_alternative<uint32_t>(diff_u32_u8->value));
+    REQUIRE(std::get<uint32_t>(diff_u32_u8->value) == 7);
+
+    const auto diff_bool_bool = astl::AstlValue::Subtract(astl::AstlValue{true}, astl::AstlValue{false});
+    REQUIRE(diff_bool_bool.has_value());
+    REQUIRE(std::holds_alternative<bool>(diff_bool_bool->value));
+    REQUIRE(std::get<bool>(diff_bool_bool->value));
+
+    const auto diff_f64_f32 = astl::AstlValue::Subtract(astl::AstlValue{5.5}, astl::AstlValue{2.25F});
+    REQUIRE(diff_f64_f32.has_value());
+    REQUIRE(std::holds_alternative<double>(diff_f64_f32->value));
+    REQUIRE_THAT(std::get<double>(diff_f64_f32->value), WithinAbs(3.25, 0.000001));
+  }
+
+  SECTION("Divide instantiates integral and floating divisors for multiple stored types") {
+    const auto quarter = astl::AstlValue::Divide(astl::AstlValue{uint16_t{8}}, uint16_t{4});
+    REQUIRE(quarter.has_value());
+    REQUIRE(std::holds_alternative<uint16_t>(quarter->value));
+    REQUIRE(std::get<uint16_t>(quarter->value) == 2);
+
+    const auto float_half = astl::AstlValue::Divide(astl::AstlValue{float{9.0F}}, 2U);
+    REQUIRE(float_half.has_value());
+    REQUIRE(std::holds_alternative<float>(float_half->value));
+    REQUIRE_THAT(std::get<float>(float_half->value), WithinAbs(4.5F, 0.0001F));
+
+    const auto double_half = astl::AstlValue::Divide(astl::AstlValue{double{9.0}}, 2.0F);
+    REQUIRE(double_half.has_value());
+    REQUIRE(std::holds_alternative<float>(double_half->value));
+    REQUIRE_THAT(std::get<float>(double_half->value), WithinAbs(4.5F, 0.0001F));
+
+    const auto bool_div = astl::AstlValue::Divide(astl::AstlValue{true}, uint8_t{1});
+    REQUIRE(bool_div.has_value());
+    REQUIRE(std::holds_alternative<uint8_t>(bool_div->value));
+    REQUIRE(std::get<uint8_t>(bool_div->value) == 1);
+  }
+}
+
+TEST_CASE("AstlValue formatter specialization supports custom specs", "[AstlValue][format]") {
+  REQUIRE(std::format("{:08X}", astl::AstlValue{uint32_t{0x2A}}) == "0000002A");
+  REQUIRE(std::format("{:.2f}", astl::AstlValue{3.14159}) == "3.14");
+  REQUIRE(std::format("{}", astl::AstlValue{false}) == "false");
+}
+
 TEST_CASE("astl::to_string(AstlValue)", "[AstlValue]") {
   astl::AstlValue val{uint8_t{0x42}};
   REQUIRE(astl::to_string(val) == "66");  // use format with specifiers if you want to keep hex format

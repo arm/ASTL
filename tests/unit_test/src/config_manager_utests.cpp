@@ -31,6 +31,51 @@ astl::ScmiDataEventId GetDataEventId(const astl::ResidencyMetricConfig::StateInf
   return astl::ScmiDataEventId{0xFFFFFFFF};  // invalid id
 }
 
+auto MakeSingleRegisterScmiSpec(std::string register_name, std::string component = "AP", std::string unit = "")
+    -> astl::scmi::spec::ScmiSpecification {
+  astl::scmi::spec::DataEvent         metric_decl{.base_de_id           = 0x1a69,
+                                                  .name                 = register_name,
+                                                  .component            = std::move(component),
+                                                  .description          = "test register",
+                                                  .unit                 = std::move(unit),
+                                                  .base10_unit_modifier = 0,
+                                                  .rel_offset           = 0x00};
+  astl::scmi::spec::ScmiSpecification spec;
+  astl::scmi::spec::Member            member;
+  member.count        = 1;
+  member.start_offset = 0;
+  member.block_size   = 32;
+  member.metrics.emplace(register_name, std::move(metric_decl));
+  spec.members.push_back(std::move(member));
+  return spec;
+}
+
+auto MakeResidencyScmiSpec() -> astl::scmi::spec::ScmiSpecification {
+  astl::scmi::spec::ScmiSpecification spec;
+  spec.members = {
+      {.count        = 1,
+       .start_offset = 0,
+       .block_size   = 64,
+       .metrics      = {{"C1_RESIDENCY_COUNTER",
+                         {.base_de_id           = 0x1c71,
+                          .name                 = "C1_RESIDENCY_COUNTER",
+                          .component            = "AP",
+                          .description          = "C1 residency",
+                          .unit                 = "ticks",
+                          .base10_unit_modifier = 0,
+                          .rel_offset           = 0x00}},
+                        {"C3_RESIDENCY_COUNTER",
+                         {.base_de_id           = 0x1d82,
+                          .name                 = "C3_RESIDENCY_COUNTER",
+                          .component            = "AP",
+                          .description          = "C3 residency",
+                          .unit                 = "ticks",
+                          .base10_unit_modifier = 0,
+                          .rel_offset           = 0x10}}}}
+  };
+  return spec;
+}
+
 TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
   MockMetricManager mock_metric_manager;
 
@@ -378,6 +423,95 @@ TEST_CASE("CreateBasicMetricConfigs/CreateFiniteSetMetricConfigs lock formula-be
   }
 }
 
+TEST_CASE("CreateScmiMetricConfigs validates metric declarations and unsupported combinations",
+          "[ConfigManager][Validation]") {
+  astl::Target                      mock_target_tlm0("tlm-0", "dummy test target", astl::CollectorType::SCMI, nullptr);
+  std::vector<const astl::ITarget*> mock_scmi_targets{&mock_target_tlm0};
+
+  SECTION("Unknown metric type returns NOT_IMPLEMENTED") {
+    auto basic_spec = MakeSingleRegisterScmiSpec("TEMP_PRESENT", "AP", "celsius");
+
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description              = "Unknown metric type";
+    decl.metric_type              = "mystery";
+    decl.collection.protocol      = "scmi";
+    decl.collection.register_name = "TEMP_PRESENT";
+
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("Unknown Metric", decl, basic_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_NOT_IMPLEMENTED);
+  }
+
+  SECTION("Basic metric with unsupported collector returns NOT_IMPLEMENTED") {
+    auto basic_spec = MakeSingleRegisterScmiSpec("TEMP_PRESENT", "AP", "celsius");
+
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description              = "Libsensors metric";
+    decl.metric_type              = "value";
+    decl.collection.protocol      = "libsensors";
+    decl.collection.register_name = "TEMP_PRESENT";
+
+    auto result =
+        astl::metrics::spec::CreateScmiMetricConfigs("Libsensors Metric", decl, basic_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_NOT_IMPLEMENTED);
+  }
+
+  SECTION("Finite-set metric rejects duplicate values across labels") {
+    auto finite_spec = MakeSingleRegisterScmiSpec("P_STATE");
+
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description              = "Duplicate finite-set values";
+    decl.metric_type              = "finite_set";
+    decl.collection.protocol      = "scmi";
+    decl.collection.register_name = "P_STATE";
+    decl.finite_set_values        = std::map<std::string, nlohmann::json>{
+        {"P0", {{"value", 0}, {"description", "Performance state 0"}}},
+        {"P1", {{"value", 0}, {"description", "Duplicate value"}}    },
+    };
+
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("P-State", decl, finite_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Finite-set metric rejects unsupported JSON value types") {
+    auto finite_spec = MakeSingleRegisterScmiSpec("P_STATE");
+
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description              = "Bad finite-set value type";
+    decl.metric_type              = "finite_set";
+    decl.collection.protocol      = "scmi";
+    decl.collection.register_name = "P_STATE";
+    decl.finite_set_values        = std::map<std::string, nlohmann::json>{
+        {"P0", {{"value", "zero"}, {"description", "String value should fail"}}},
+    };
+
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("P-State", decl, finite_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Residency metric rejects states missing tick_frequency") {
+    auto residency_spec = MakeResidencyScmiSpec();
+
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description         = "CPU C-State residency";
+    decl.unit                = "seconds";
+    decl.metric_type         = "residency";
+    decl.collection.protocol = "scmi";
+    decl.inferred_state      = astl::ResidencyMetricConfig::InferredStateInfo{"Active", "CPU active state"};
+    decl.states              = std::map<std::string, nlohmann::json>{
+        {"C1", {{"register", "C1_RESIDENCY_COUNTER"}, {"description", "C1 idle state"}}                               },
+        {"C3", {{"register", "C3_RESIDENCY_COUNTER"}, {"tick_frequency", 1000000.0}, {"description", "C3 idle state"}}},
+    };
+
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("C-State", decl, residency_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+}
+
 // Basic path / configuration retrieval tests
 TEST_CASE("ConfigurationManager::GetAstlFilePath returns success", "[ConfigManager][Paths]") {
   auto result = astl::ConfigurationManager::GetAstlFilePath();
@@ -395,6 +529,21 @@ TEST_CASE("ConfigurationManager::GetConfiguration returns configuration", "[Conf
   REQUIRE(result);  // ensure config parsed
   auto config = result.value();
   (void)config;  // suppress unused variable warning; no further inspection per requirements
+}
+
+TEST_CASE("ConfigurationManager load-file override round-trips and clears", "[ConfigManager][Paths]") {
+  astl::ConfigurationManager::SetLoadFilePathOverride(std::nullopt);
+  REQUIRE_FALSE(astl::ConfigurationManager::GetLoadFilePathOverride().has_value());
+
+  const auto override_path = std::filesystem::path{"/tmp/test-session.astl"};
+  astl::ConfigurationManager::SetLoadFilePathOverride(override_path);
+
+  auto current_override = astl::ConfigurationManager::GetLoadFilePathOverride();
+  REQUIRE(current_override.has_value());
+  REQUIRE(current_override.value() == override_path);
+
+  astl::ConfigurationManager::SetLoadFilePathOverride(std::nullopt);
+  REQUIRE_FALSE(astl::ConfigurationManager::GetLoadFilePathOverride().has_value());
 }
 
 // ===================== Category Parsing Tests =====================

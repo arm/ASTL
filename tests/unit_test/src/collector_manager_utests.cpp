@@ -150,6 +150,44 @@ TEST_CASE("CollectorManager::BuildCollectorManager", "[collector_manager]") {
   REQUIRE(collector_manager.value()->ReportCollectionCapabilities().empty());
 }
 
+TEST_CASE("CollectorManager::BuildCollectorManager creates SCMI collectors for SCMI targets", "[collector_manager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration = configuration_result.value();
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  auto* target_0 = new astl::Target{"tlm-0", "test target 0", astl::CollectorType::SCMI, nullptr};
+  auto* target_1 = new astl::Target{"tlm-1", "test target 1", astl::CollectorType::SCMI, nullptr};
+  targets.emplace_back(target_0);
+  targets.emplace_back(target_1);
+
+  auto collector_manager = astl::BuildCollectorManager(targets, configuration);
+  REQUIRE(collector_manager.has_value());
+
+  auto capabilities_map = collector_manager.value()->ReportCollectionCapabilities();
+  REQUIRE(capabilities_map.size() == 2);
+  REQUIRE(capabilities_map.contains(target_0));
+  REQUIRE(capabilities_map.contains(target_1));
+  REQUIRE(capabilities_map.at(target_0).size() == 1);
+  REQUIRE(capabilities_map.at(target_1).size() == 1);
+  REQUIRE(capabilities_map.at(target_0).front().collector_type == astl::CollectorType::SCMI);
+  REQUIRE(capabilities_map.at(target_1).front().collector_type == astl::CollectorType::SCMI);
+}
+
+TEST_CASE("CollectorManager::BuildCollectorManager rejects unsupported collector types", "[collector_manager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration = configuration_result.value();
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::Target>("unsupported-target", "unsupported target",
+                                                   astl::CollectorType::UNKNOWN, nullptr));
+
+  auto collector_manager = astl::BuildCollectorManager(targets, configuration);
+  REQUIRE_FALSE(collector_manager.has_value());
+  REQUIRE(collector_manager.error() == ASTL_STATUS_NOT_SUPPORTED);
+}
+
 TEST_CASE("CollectorManager with no collectors", "collector_manager") {
   std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
   astl::CollectorManager collector_manager{std::move(collectors_map)};

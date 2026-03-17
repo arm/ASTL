@@ -145,6 +145,22 @@ TEST_CASE("OutputManager::OutputProcessedSamples error paths", "[output_manager]
 
   astl::ProcessedSamplesMap processed_samples;  // empty initially
 
+  SECTION("Buffer output must be created before buffer writes") {
+    astl::OutputManager uninitialized_mgr;
+    REQUIRE(uninitialized_mgr.OutputProcessedSamples(processed_samples, astl::OutputType::BUFFER, &target, &metric) ==
+            ASTL_STATUS_INTERNAL_ERROR);
+  }
+
+  SECTION("Null target is rejected for buffer writes") {
+    REQUIRE(mgr.OutputProcessedSamples(processed_samples, astl::OutputType::BUFFER, nullptr, &metric) ==
+            ASTL_STATUS_BAD_ARGUMENT);
+  }
+
+  SECTION("Null metric is rejected for buffer writes") {
+    REQUIRE(mgr.OutputProcessedSamples(processed_samples, astl::OutputType::BUFFER, &target, nullptr) ==
+            ASTL_STATUS_BAD_ARGUMENT);
+  }
+
   SECTION("Missing target in map") {
     REQUIRE(mgr.OutputProcessedSamples(processed_samples, astl::OutputType::BUFFER, &target, &metric) ==
             ASTL_STATUS_BAD_ARGUMENT);
@@ -194,10 +210,48 @@ TEST_CASE("OutputManager::EnsurePerfettoOutput and EnsureIntervalCsvOutput env v
           ASTL_STATUS_BAD_ARGUMENT);
 }
 
+TEST_CASE("OutputManager::OutputProcessedSamples SUMMARY_CSV env var and path handling",
+          "[output_manager][summarycsv]") {  // NOLINT
+  astl::OutputManager       mgr;
+  TinyTarget                target;
+  TinyMetric                metric;
+  astl::ProcessedSamplesMap processed;
+  processed[&target][&metric].push_back(astl::ProcessedSampledData{
+      astl::AstlValue{static_cast<uint64_t>(11)}, astl::SampleTimestamp{std::chrono::microseconds{111}}});
+  processed[&target][&metric].push_back(astl::ProcessedSampledData{
+      astl::AstlValue{static_cast<uint64_t>(14)}, astl::SampleTimestamp{std::chrono::microseconds{222}}});
+
+  SECTION("Missing ASTL_OUTPUT_SUMMARY_CSV returns BAD_ARGUMENT") {
+    EnvVarGuard summary_guard{astl::EnvVar::ASTL_OUTPUT_SUMMARY_CSV, ""};
+    REQUIRE(mgr.OutputProcessedSamples(processed, astl::OutputType::SUMMARY_CSV, nullptr, nullptr) ==
+            ASTL_STATUS_BAD_ARGUMENT);
+  }
+
+  SECTION("Unwritable summary CSV path returns FILE_ERROR") {
+    TempFileGuard output_dir{"om_summary_dir"};
+    REQUIRE(std::filesystem::create_directory(output_dir.path));
+    EnvVarGuard summary_guard{astl::EnvVar::ASTL_OUTPUT_SUMMARY_CSV, output_dir.path.string()};
+    REQUIRE(mgr.OutputProcessedSamples(processed, astl::OutputType::SUMMARY_CSV, nullptr, nullptr) ==
+            ASTL_STATUS_FILE_ERROR);
+  }
+
+  SECTION("Valid summary CSV path writes a summary file") {
+    TempFileGuard output_file{"om_summary_output.csv"};
+    EnvVarGuard   summary_guard{astl::EnvVar::ASTL_OUTPUT_SUMMARY_CSV, output_file.path.string()};
+    REQUIRE(mgr.OutputProcessedSamples(processed, astl::OutputType::SUMMARY_CSV, nullptr, nullptr) ==
+            ASTL_STATUS_SUCCESS);
+
+    std::ifstream ifs(output_file.path);
+    REQUIRE(ifs.is_open());
+    std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    REQUIRE(content.find("Min/Max/Average Summary") != std::string::npos);
+  }
+}
+
 TEST_CASE("OutputManager::EnsureIntervalCsvOutput success", "[output_manager][intervalcsv]") {  // NOLINT
   astl::OutputManager mgr;
   TempFileGuard       tmp_guard{"om_intervalcsv_success.csv"};
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
+  EnvVarGuard         interval_csv_guard{astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, tmp_guard.path.string()};
   // Empty processed map still results in writer creation success
   astl::ProcessedSamplesMap empty;
   REQUIRE(mgr.OutputProcessedSamples(empty, astl::OutputType::INTERVAL_CSV, nullptr, nullptr) == ASTL_STATUS_SUCCESS);
@@ -209,7 +263,7 @@ TEST_CASE("OutputManager::EnsureIntervalCsvOutput success", "[output_manager][in
 TEST_CASE("OutputManager::OutputProcessedSamples PERFETTO success", "[output_manager][perfetto]") {  // NOLINT
   astl::OutputManager mgr;
   TempFileGuard       tmp_guard{"om_perfetto_success.json"};
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO, tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
+  EnvVarGuard         perfetto_guard{astl::EnvVar::ASTL_OUTPUT_PERFETTO, tmp_guard.path.string()};
   // Build minimal processed samples map with one sample
   TinyTarget                target;
   TinyMetric                metric;
@@ -225,9 +279,9 @@ TEST_CASE("OutputManager::OutputProcessedSamples PERFETTO success", "[output_man
 
 TEST_CASE("OutputManager::OutputProcessedSamples INTERVAL_CSV success with sample",
           "[output_manager][intervalcsv]") {  // NOLINT
-  astl::OutputManager mgr;
-  TempFileGuard       tmp_guard{"om_intervalcsv_sample.csv"};
-  REQUIRE(astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, tmp_guard.path.string()) == ASTL_STATUS_SUCCESS);
+  astl::OutputManager       mgr;
+  TempFileGuard             tmp_guard{"om_intervalcsv_sample.csv"};
+  EnvVarGuard               interval_csv_guard{astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, tmp_guard.path.string()};
   TinyTarget                target;
   TinyMetric                metric;
   astl::ProcessedSamplesMap processed;

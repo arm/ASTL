@@ -147,6 +147,29 @@ TEST_CASE("astlGetSystemInfo", "[wrapper][SystemInfo][flags]") {
   }
 }
 
+TEST_CASE("astlGetSystemInfo accepts explicit loaded-session selector when cached platform info exists",
+          "[wrapper][SystemInfo][flags][loaded-session]") {
+  namespace fs = std::filesystem;
+
+  const fs::path cache_dir = fs::temp_directory_path() / "astl_wrapper_system_info_loaded_session";
+  TempFileGuard  cache_guard(cache_dir);
+
+  astl::ClearLoadedPlatformInfo();
+  REQUIRE(astl::SavePlatformInfoToCacheDir(cache_dir) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::LoadPlatformInfoFromCacheDir(cache_dir) == ASTL_STATUS_SUCCESS);
+
+  astl_platform_props_t system_info{};
+  system_info.size  = sizeof(system_info);
+  system_info.flags = ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION;
+  ASTL_INIT_STRUCT(astl_get_system_info_params_t, params, .flags = 0, .system_info = &system_info);
+
+  REQUIRE(astlGetSystemInfo(&params) == ASTL_STATUS_SUCCESS);
+  REQUIRE(system_info.flags == ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION);
+  REQUIRE(system_info.hostname != nullptr);
+
+  astl::ClearLoadedPlatformInfo();
+}
+
 TEST_CASE("astlGetTargetCount", "[Reports 0 targets correctly][wrapper]") {
   auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));
