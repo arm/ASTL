@@ -548,8 +548,10 @@ TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[Metric
                                                            tgt,        // const ITarget*
                                                            nullptr);   // IProcessedSampleSink*
   REQUIRE(metric != nullptr);
+  auto* metric_ptr = metric.get();
 
   astl::MetricManagerTestAccessor::InjectMetric(*metric_mgr, std::move(metric), std::move(cfg), tgt);
+  astl::MetricManagerTestAccessor::InjectOperation(*metric_mgr, tgt, 42U, metric_ptr);  // NOLINT
 
   // Act: serialize via the IMetricManager overload (dynamic_cast inside)
   std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
@@ -588,6 +590,10 @@ TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[Metric
   auto rebuilt_it = rebuilt_handle->target_to_metric_map.find(tgt);
   REQUIRE(rebuilt_it != rebuilt_handle->target_to_metric_map.end());
   REQUIRE(rebuilt_it->second != nullptr);
+
+  astl::RawSamplesMap samples_map;
+  samples_map[tgt] = {MakeSample(42U, AstlValue{uint64_t{99}}, 1000)};  // NOLINT
+  REQUIRE(rebuilt_mgr->ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
 }
 
 TEST_CASE("Deserialize<vector<MetricHandle>> rejects malformed metric payloads", "[MetricHandle][protobuf]") {
@@ -713,10 +719,7 @@ TEST_CASE(
   auto mgr = std::move(mgr_or_err.value());
   REQUIRE(mgr != nullptr);
 
-  // We can't see the internal maps directly here, but success implies:
-  //  - BuildCapabilities ran
-  //  - RebuildMetricHandles succeeded
-  //  - RebuildOperationMap succeeded
+  // Use the rebuilt routing map to prove the operation map is target-scoped and functional.
   auto metrics_or_err = mgr->GetAvailableMetrics(targets[0].get());
   REQUIRE(metrics_or_err.has_value());
   REQUIRE_FALSE(metrics_or_err->empty());
@@ -724,6 +727,40 @@ TEST_CASE(
   REQUIRE(first_handle != nullptr);
   REQUIRE(first_handle->config != nullptr);
   REQUIRE(first_handle->config->InputValueType() == first_handle->config->ValueType());
+
+  astl::RawSamplesMap samples_map;
+  samples_map[targets[0].get()] = {MakeSample(42U, AstlValue{uint64_t{77}}, 1000)};  // NOLINT
+  REQUIRE(mgr->ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("Deserialize<MetricManager> rebuilds metric groups without external metadata", "[MetricManager][protobuf]") {
+  InstallSingleScmiTargetTlm0();
+  const auto& orch    = astl::Orchestrator::GetInstance()->get();
+  const auto& targets = orch->GetTargets();
+
+  auto proto_mgr = BuildValidMetricManagerProto();
+  proto_mgr.mutable_metrics()->mutable_metrics(0)->mutable_config()->add_metric_groups("thermal");
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+  cache_stream.seekg(0);
+
+  auto mgr_or_err = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+  REQUIRE(mgr_or_err.has_value());
+
+  auto mgr = std::move(mgr_or_err.value());
+  REQUIRE(mgr != nullptr);
+  REQUIRE(mgr->GetMetricGroups().size() == 1);
+
+  auto target_groups = mgr->GetMetricGroups(targets[0].get());
+  REQUIRE(target_groups.has_value());
+  REQUIRE(target_groups->size() == 1);
+
+  astl_metric_group_props_t props{};
+  props.size = sizeof(astl_metric_group_props_t);
+  REQUIRE(mgr->GetMetricGroupProperties((*target_groups)[0], &props) == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::string{props.name} == "thermal");
+  REQUIRE(std::string{props.description} == "");
 }
 
 TEST_CASE("Deserialize<MetricManager> rejects invalid operation map references", "[MetricManager][protobuf]") {
@@ -766,6 +803,35 @@ TEST_CASE("Deserialize<MetricManager> rejects invalid operation map references",
   }
 }
 
+TEST_CASE("Deserialize<MetricManager> rejects duplicate metric ids", "[MetricManager][protobuf]") {
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(
+      MakeTarget("tlm-0", "unit-test target", astl::CollectorType::SCMI, "0xCAFEBABECAFEBABECAFEBABEBEEF0000"));
+
+  auto  proto_mgr        = BuildValidMetricManagerProto();
+  auto* duplicate_metric = proto_mgr.mutable_metrics()->add_metrics();
+  duplicate_metric->set_metric_id("test_metric");
+  duplicate_metric->add_target_ids("tlm-0");
+
+  auto* cfg = duplicate_metric->mutable_config();
+  cfg->set_metric_name("duplicate_test_metric");
+  cfg->set_description("duplicate unit-test metric");
+  cfg->set_units(static_cast<astl::protobuf::AstlUnits>(ASTL_UNITS_CELSIUS));
+  cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+  cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+  cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
+  cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
+  cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+  cache_stream.seekg(0);
+
+  auto mgr_or_err = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+  REQUIRE_FALSE(mgr_or_err.has_value());
+  REQUIRE(mgr_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+}
+
 TEST_CASE("MetricHandle protobuf round-trips grouped metrics across supported concrete types",
           "[MetricHandle][protobuf][roundtrip]") {
   auto orch_expected = astl::Orchestrator::GetInstance();
@@ -794,8 +860,8 @@ TEST_CASE("MetricHandle protobuf round-trips grouped metrics across supported co
     astl::MetricHandle handle;
     handle.config = std::make_unique<astl::MetricConfig>(
         "event_metric", "event metric with groups", ASTL_UNITS_NONE, ASTL_VALUE_UNKNOWN, ASTL_CATEGORY_UNCATEGORIZED,
-        ASTL_METRIC_EVENT, std::vector<std::string>{"thermal", "lifecycle"}, astl::CollectorType::SCMI,
-        astl::NullOperationBuilder{}, astl::IdentityFormula{}, ASTL_VALUE_UNKNOWN);
+        ASTL_METRIC_EVENT, astl::CollectorType::SCMI, astl::NullOperationBuilder{}, astl::IdentityFormula{},
+        ASTL_VALUE_UNKNOWN, std::vector<std::string>{"thermal", "lifecycle"});
     auto* cfg = handle.config.get();
 
     handle.target_to_metric_map.emplace(target0, std::make_unique<astl::EventMetric>(cfg, target0, nullptr));

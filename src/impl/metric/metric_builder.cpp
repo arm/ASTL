@@ -9,6 +9,7 @@
 
 #include "astl_logger.hpp"
 #include "config/astl_configuration.hpp"
+#include "config/metric_group_json_declaration.hpp"
 #include "config/metric_json_declaration.hpp"
 #include "config/scmi_platform_telemetry_spec.hpp"
 #include "libsensors/libsensors_metric_builder.hpp"
@@ -36,6 +37,8 @@ struct MetricAndCounterConfigurations {
   MetricConfigOnTargets counter_configurations;
 };
 
+using MetricGroupDescriptionMap = MetricManager::MetricGroupDescriptionMap;
+
 /** @brief helper function template to parse a given path as a given json structure type
  *
  * @param SpecType - template param specifying the type to try and parse to
@@ -57,6 +60,30 @@ inline auto TryParseJson(std::filesystem::path const& json_file_path) -> std::ex
     ASTL_LOG_ERROR("Unable to parse json file {}: {}", json_file_path.string(), e.what());
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
+}
+
+static auto LoadMetricGroupDescriptions(const AstlConfiguration& configuration)
+    -> std::expected<MetricGroupDescriptionMap, astl_status_code> {
+  const auto metric_group_catalog_path = configuration.groups_dir_path / "metric_groups.json";
+  if (!std::filesystem::exists(metric_group_catalog_path)) {
+    ASTL_LOG_WARNING(
+        "Metric group metadata config not found at {}. "
+        "Metrics declaring metric_groups will fail during registration.",
+        metric_group_catalog_path.string());
+    return MetricGroupDescriptionMap{};
+  }
+
+  auto declaration = TryParseJson<metrics::groups::spec::MetricGroupsDeclaration>(metric_group_catalog_path);
+  if (!declaration.has_value()) {
+    return std::unexpected(declaration.error());
+  }
+
+  MetricGroupDescriptionMap descriptions;
+  descriptions.reserve(declaration->metric_groups.size());
+  for (const auto& [group_name, group_declaration] : declaration->metric_groups) {
+    descriptions.emplace(group_name, group_declaration.description);
+  }
+  return descriptions;
 }
 
 /**
@@ -102,17 +129,18 @@ static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecificat
                                                 const std::vector<const ITarget*>&       applicable_targets)
     -> std::expected<MetricConfigOnTargets, astl_status_code> {
   MetricConfigOnTargets configurations_on_targets;
-  std::set<std::string> processed_counter_names;  // ensure we don't repeat counters, even if used in multiple metrics
-  // create counter MetricConfig objects for each underlying counter in the SCMI spec])
+  std::set<std::string> processed_counter_ids;  // ensure we don't repeat counters, even if used in multiple metrics
+  // create counter MetricConfig objects for each underlying counter in the SCMI spec
   for (const auto& [metric_name, metric_declaration] : metric_declarations.metrics) {
     auto metric_registers = scmi::spec::GetMetricRegistersScmiData(metric_declaration, scmi_specification);
     for (const auto& register_declaration : metric_registers) {
-      std::string counter_name = register_declaration.name + "_" + metric_name;
-      if (processed_counter_names.contains(counter_name)) {
+      const std::string counter_id   = register_declaration.GetFullyQualifiedName();
+      const std::string counter_name = register_declaration.name;
+      if (processed_counter_ids.contains(counter_id)) {
         // already processed this counter, skip it
         continue;
       }
-      processed_counter_names.insert(counter_name);
+      processed_counter_ids.insert(counter_id);
       std::string description = "Underlying counter for " + metric_name;
       // Normalize SCMI base10 metadata into formula-space so collectors remain raw-only.
       auto scaling_formula =
@@ -123,9 +151,9 @@ static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecificat
       const astl_value_type_t value_type = input_value_type;
 
       auto new_counter_config = std::make_unique<MetricConfig>(
-          std::move(counter_name), std::move(description), ASTL_UNITS_UNKNOWN, value_type, ASTL_CATEGORY_UNCATEGORIZED,
+          counter_name, std::move(description), ASTL_UNITS_UNKNOWN, value_type, ASTL_CATEGORY_UNCATEGORIZED,
           ASTL_METRIC_VALUE, CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id},
-          std::move(scaling_formula), input_value_type);
+          std::move(scaling_formula), input_value_type, std::vector<std::string>{}, counter_id);
 
       configurations_on_targets.emplace(std::move(new_counter_config), applicable_targets);
     }
@@ -384,7 +412,13 @@ auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, co
   std::vector<astl::SystemCapability> system_caps_list{system_capabilities};
   astl::Capabilities                  capabilities{std::move(collector_caps_list), std::move(system_caps_list)};
 
-  std::unique_ptr<astl::IMetricManager> metric_manager = std::make_unique<astl::MetricManager>(capabilities);
+  auto metric_group_descriptions = LoadMetricGroupDescriptions(configuration);
+  if (!metric_group_descriptions.has_value()) {
+    return std::unexpected(metric_group_descriptions.error());
+  }
+
+  std::unique_ptr<astl::IMetricManager> metric_manager =
+      std::make_unique<astl::MetricManager>(capabilities, std::move(metric_group_descriptions.value()));
 
   // handle any SCMI metrics and targets
   auto status = RegisterScmiMetrics(configuration, collector_type_to_targets_map, metric_manager.get());

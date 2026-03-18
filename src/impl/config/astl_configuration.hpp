@@ -34,6 +34,10 @@ struct AstlConfiguration {
    */
   std::filesystem::path metrics_dir_path;
 
+  /** @brief Path to the subdirectory containing ASTL metric-group definitions, derived from config_dir_path
+   */
+  std::filesystem::path groups_dir_path;
+
   /** @brief Path to the directory containing platform-specific SCMI specifications
    * derived from config_dir_path
    */

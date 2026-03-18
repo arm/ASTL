@@ -94,6 +94,11 @@ TEST_CASE("TopologyBuilder::BuildTopologyManagerFromASTLFile fails when topology
   const fs::path cache_dir = fs::temp_directory_path() / "astl_topology_builder_missing_topology";
   TempFileGuard  cache_guard(cache_dir);
 
+  std::error_code ec;
+  fs::remove_all(cache_dir, ec);
+  fs::create_directories(cache_dir, ec);
+  REQUIRE(!ec);
+
   auto result = astl::BuildTopologyManager(configuration, cache_dir);
 
   REQUIRE_FALSE(result.has_value());

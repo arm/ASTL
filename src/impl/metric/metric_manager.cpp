@@ -174,6 +174,16 @@ auto MetricManager::GetCounterRequiredOperations(std::span<const astl_counter_ha
 
   OperationSequence op_sequence;
 
+  if (target == nullptr) {
+    ASTL_LOG_ERROR("GetCounterRequiredOperations: target is null");
+    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
+  // Reject empty requests up front instead of falling through to collector_type.value() below.
+  if (counters.empty()) {
+    ASTL_LOG_ERROR("GetCounterRequiredOperations: no counters requested");
+    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
+
   std::optional<CollectorType> collector_type;
 
   for (const auto* counter_api_handle : counters) {
@@ -212,8 +222,8 @@ auto MetricManager::GetCounterRequiredOperations(std::span<const astl_counter_ha
     }
     auto counter_operations = std::move(operations_result.value());
     for (auto& operation : counter_operations) {
-      uint32_t operation_id                  = operation->GetId();
-      _operation_to_metric_map[operation_id] = counter;
+      uint32_t operation_id                                    = operation->GetId();
+      _target_to_operation_to_metric_map[target][operation_id] = counter;
       op_sequence.push_back(std::move(operation));
       ASTL_LOG_INFO("GetRequiredOperations: Added operation from Counter::GetOperations() for counter '{}'",
                     config->Name());
@@ -370,6 +380,14 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
                                    std::vector<const ITarget*> const& targets) -> astl_status_code {
   std::lock_guard<std::mutex> lock(_mutex);
   ASTL_LOG_TRACE("RegisterMetric {} on {} targets", metric_config ? metric_config->Name() : "<null>", targets.size());
+  if (!metric_config) {
+    ASTL_LOG_ERROR("RegisterMetric: Invalid metric config");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (IsMetricIdRegistered(metric_config->Id())) {
+    ASTL_LOG_ERROR("RegisterMetric: Duplicate metric id '{}'", metric_config->Id());
+    return ASTL_STATUS_BAD_CONFIGURATION;
+  }
   CollectorType collector_type = metric_config->GetCollectorType();
   if (!IsCollectorTypeSupported(collector_type)) {
     return astl_status_code::ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE;
@@ -465,6 +483,16 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
 
   OperationSequence op_sequence;
 
+  if (target == nullptr) {
+    ASTL_LOG_ERROR("GetRequiredOperations: target is null");
+    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
+  // Reject empty requests up front instead of falling through to collector_type.value() below.
+  if (metrics.empty()) {
+    ASTL_LOG_ERROR("GetRequiredOperations: no metrics requested");
+    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
+
   std::optional<CollectorType> collector_type;
 
   for (const auto* metric_api_handle : metrics) {
@@ -506,8 +534,8 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
     }
     auto metric_operations = std::move(operations_result.value());
     for (auto& operation : metric_operations) {
-      uint32_t operation_id                  = operation->GetId();
-      _operation_to_metric_map[operation_id] = metric;
+      uint32_t operation_id                                    = operation->GetId();
+      _target_to_operation_to_metric_map[target][operation_id] = metric;
       op_sequence.push_back(std::move(operation));
       ASTL_LOG_INFO("GetRequiredOperations: Added operation from IMetric::GetOperations() for metric '{}', op_id = {}",
                     config->Name(), operation_id);
@@ -528,12 +556,20 @@ auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status
   {
     std::lock_guard<std::mutex> lock(_mutex);
     for (const auto& [target, samples] : raw_samples) {
-      (void)target;
+      if (!target) {
+        ASTL_LOG_ERROR("ProcessRawSamples: Target is null");
+        return ASTL_STATUS_BAD_ARGUMENT;
+      }
+      const auto target_iter = _target_to_operation_to_metric_map.find(target);
+      if (target_iter == _target_to_operation_to_metric_map.end()) {
+        ASTL_LOG_ERROR("ProcessRawSamples: No operation routing registered for target '{}'", target->Name());
+        return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+      }
       for (const auto& sample : samples) {
-        // Find the metric handle corresponding to this operation ID
-        auto op_iter = _operation_to_metric_map.find(sample.operation_id);
-        if (op_iter == _operation_to_metric_map.end()) {
-          ASTL_LOG_ERROR("ProcessData: No metric associated with operation ID {}", sample.operation_id);
+        const auto op_iter = target_iter->second.find(sample.operation_id);
+        if (op_iter == target_iter->second.end() || op_iter->second == nullptr) {
+          ASTL_LOG_ERROR("ProcessRawSamples: No metric associated with operation ID {} on target '{}'",
+                         sample.operation_id, target->Name());
           return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
         }
         processing_queue.emplace_back(op_iter->second, sample);
@@ -554,6 +590,30 @@ auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status
   return ASTL_STATUS_SUCCESS;
 }
 
+auto MetricManager::ResetMetricsOnTarget(const ITarget* target) -> astl_status_code {
+  std::lock_guard<std::mutex> lock(_mutex);
+  if (target == nullptr) {
+    ASTL_LOG_ERROR("ResetMetricsOnTarget: target is null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  for (const auto& counter_handle : _counter_handles) {
+    auto counter_it = counter_handle->target_to_counter_map.find(target);
+    if (counter_it != counter_handle->target_to_counter_map.end() && counter_it->second) {
+      counter_it->second->Reset();
+    }
+  }
+
+  for (auto& metric_handle : _metric_handles) {
+    auto metric_it = metric_handle->target_to_metric_map.find(target);
+    if (metric_it != metric_handle->target_to_metric_map.end() && metric_it->second) {
+      metric_it->second->Reset();
+    }
+  }
+
+  return ASTL_STATUS_SUCCESS;
+}
+
 auto MetricManager::GetMetricGroups() const -> std::span<const astl_metric_group_handle_t> {
   std::lock_guard<std::mutex> lock(_mutex);
   return std::span<const astl_metric_group_handle_t>(_metric_group_api_handles);
@@ -562,14 +622,18 @@ auto MetricManager::GetMetricGroups() const -> std::span<const astl_metric_group
 auto MetricManager::GetMetricGroups(const ITarget* target) const
     -> std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
+  if (target == nullptr) {
+    ASTL_LOG_ERROR("GetMetricGroups: target is null");
+    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
   if (_target_to_metric_groups_map.empty()) {
     ASTL_LOG_WARNING("GetMetricGroups: No metric groups registered in manager");
     return std::span<const astl_metric_group_handle_t>{};
   }
   const auto target_iter = _target_to_metric_groups_map.find(target);
   if (target_iter == _target_to_metric_groups_map.end()) {
-    ASTL_LOG_ERROR("GetMetricGroups: unrecognized target ptr in map of size {}", _target_to_metric_groups_map.size());
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    // A valid target may legitimately expose zero metric groups.
+    return std::span<const astl_metric_group_handle_t>{};
   }
   std::span<const astl_metric_group_handle_t> handles_span(target_iter->second);
   return std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code>(std::in_place, handles_span);
@@ -602,7 +666,6 @@ auto MetricManager::GetMetricsInGroup(astl_metric_group_handle_t group) const
 
 auto MetricManager::SummarizeMetrics() -> astl_status_code {
   std::lock_guard<std::mutex> lock(_mutex);
-  _operation_to_metric_map.clear();  // release the memory tying operation IDs to metrics
   for (const auto& metric_details : _metric_handles) {
     for (auto& [target, metric] : metric_details->target_to_metric_map) {
       astl_status_code status = metric->Summarize();
@@ -623,7 +686,7 @@ auto MetricManager::RemoveAllMetrics() -> void {
   _metric_group_api_handles.clear();
   _target_to_metrics_map.clear();
   _target_to_metric_groups_map.clear();
-  _operation_to_metric_map.clear();
+  _target_to_operation_to_metric_map.clear();
 }
 
 auto MetricManager::IsCollectorTypeSupported(CollectorType required_collector_type) const -> bool {
@@ -632,6 +695,11 @@ auto MetricManager::IsCollectorTypeSupported(CollectorType required_collector_ty
   const std::vector<CollectorCapability>& collector_caps = _capabilities.GetCollectorCapability();
   return std::any_of(collector_caps.begin(), collector_caps.end(),
                      [&](const CollectorCapability& cap) { return cap.GetCollectorType() == required_collector_type; });
+}
+
+auto MetricManager::IsMetricIdRegistered(const std::string& metric_id) const -> bool {
+  return std::any_of(_metric_handles.begin(), _metric_handles.end(),
+                     [&](const auto& handle) { return handle && handle->config && handle->config->Id() == metric_id; });
 }
 
 /**
@@ -655,8 +723,17 @@ auto MetricManager::AddMetricToGroups(astl_metric_handle_t metric_handle, const 
         std::find_if(_metric_groups.begin(), _metric_groups.end(),
                      [&](const std::unique_ptr<MetricGroup>& group) { return group->name == group_name; });
     if (group_lookup == _metric_groups.end()) {
+      std::string group_description;
+      if (const auto description_iter = _metric_group_descriptions.find(group_name);
+          description_iter != _metric_group_descriptions.end()) {
+        group_description = description_iter->second;
+      } else {
+        ASTL_LOG_ERROR("AddMetricToGroups: Metric group '{}' is not defined in group metadata config", group_name);
+        return ASTL_STATUS_BAD_CONFIGURATION;
+      }
       // Create a new group
-      auto new_group = std::make_unique<MetricGroup>(group_name, "", std::vector<astl_metric_handle_t>{metric_handle});
+      auto new_group = std::make_unique<MetricGroup>(group_name, std::move(group_description),
+                                                     std::vector<astl_metric_handle_t>{metric_handle});
       group_handle   = new_group->ToApiHandle();
       // register the new group
       _metric_groups.push_back(std::move(new_group));

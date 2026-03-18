@@ -10,6 +10,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <unordered_set>
 #include <variant>
 
 #include "astl/astl.h"
@@ -196,6 +197,43 @@ auto GetFirstElementSizeField(Container const& elements) noexcept
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   return elements[kFirstElementIdx].size;
+}
+
+auto PopulateMetricGroupProperties(astl::IMetricManager* metric_manager, astl_metric_group_handle_t group,
+                                   astl_metric_group_props_t& properties) noexcept -> astl_status_code {
+  auto* caller_metric_buffer = properties.metrics;
+  auto  result               = metric_manager->GetMetricGroupProperties(group, &properties);
+  if (result != ASTL_STATUS_SUCCESS) {
+    return result;
+  }
+  // GetMetricGroupProperties() populates the outer struct and may overwrite the caller-owned nested
+  // metrics buffer pointer, so preserve and restore that pointer before optionally filling it here.
+  properties.metrics = caller_metric_buffer;
+  if (caller_metric_buffer == nullptr || properties.metric_count == 0) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  auto metrics_in_group = metric_manager->GetMetricsInGroup(group);
+  if (!metrics_in_group) {
+    return metrics_in_group.error();
+  }
+
+  std::span<astl_metric_props_t> metric_buffer{caller_metric_buffer, properties.metric_count};
+  if (metric_buffer[0].size < sizeof(astl_metric_props_t)) {
+    return ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION;
+  }
+  if (metric_buffer[0].size > sizeof(astl_metric_props_t)) {
+    return ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION;
+  }
+
+  for (size_t metric_idx = 0; metric_idx < metrics_in_group->size(); ++metric_idx) {
+    result = metric_manager->GetProperties((*metrics_in_group)[metric_idx], &metric_buffer[metric_idx]);
+    if (result != ASTL_STATUS_SUCCESS) {
+      return result;
+    }
+  }
+
+  return ASTL_STATUS_SUCCESS;
 }
 
 /***********************************************************************************
@@ -932,14 +970,15 @@ auto astlGetMetricGroups(const astl_get_metric_groups_params_t* params) noexcept
   }
   // for each metric group, copy its properties to the provided 'metric_groups' buffer
   for (size_t i = 0; i < std::min(groups_result->size(), metric_groups_properties.size()); ++i) {
-    auto result = metric_manager->GetMetricGroupProperties((*groups_result)[i], &metric_groups_properties[i]);
+    auto result = PopulateMetricGroupProperties(metric_manager, (*groups_result)[i], metric_groups_properties[i]);
     if (result != ASTL_STATUS_SUCCESS) {
       *metric_group_count = static_cast<uint32_t>(i);
       return result;
     }
   }
-  auto result = metric_groups_properties.size() > groups_result->size() ? ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED
-                                                                        : ASTL_STATUS_SUCCESS;
+  auto result         = metric_groups_properties.size() > groups_result->size() ? ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED
+                                                                                : ASTL_STATUS_SUCCESS;
+  *metric_group_count = static_cast<uint32_t>(groups_result->size());
   return result;
 }
 
@@ -983,7 +1022,7 @@ auto astlGetMetricGroupMetrics(const astl_get_metric_group_metrics_params_t* par
   }
 
   ASTL_LOG_TRACE("astlGetMetricGroupMetrics: getting metrics in group");
-  auto metrics_in_group = metric_manager->GetMetricsInGroup(metric_group);
+  auto metrics_in_group = metric_manager->GetMetricsInGroup(metric_group->handle);
   if (!metrics_in_group) {
     return metrics_in_group.error();
   }
@@ -1008,6 +1047,67 @@ auto astlGetMetricGroupMetrics(const astl_get_metric_group_metrics_params_t* par
                           });
   return metrics_properties.size() > metrics_in_group->size() ? ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED
                                                               : ASTL_STATUS_SUCCESS;
+}
+
+auto ExpandMetricGroupHandlesForTarget(astl::IMetricManager* metric_manager, const astl::ITarget* target,
+                                       std::span<const astl_metric_group_handle_t> requested_groups,
+                                       bool                                        fail_if_group_missing_on_target)
+    -> std::expected<std::vector<astl_metric_handle_t>, astl_status_code> {
+  if (!metric_manager) {
+    return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+  }
+
+  const auto                                     global_groups = metric_manager->GetMetricGroups();
+  std::unordered_set<astl_metric_group_handle_t> known_groups{global_groups.begin(), global_groups.end()};
+
+  std::unordered_set<astl_metric_group_handle_t> target_groups;
+  if (target != nullptr) {
+    auto target_groups_result = metric_manager->GetMetricGroups(target);
+    if (!target_groups_result) {
+      return std::unexpected{target_groups_result.error()};
+    }
+    target_groups.insert(target_groups_result->begin(), target_groups_result->end());
+  }
+
+  std::vector<astl_metric_handle_t>        metric_handles;
+  std::unordered_set<astl_metric_handle_t> seen_metric_handles;
+
+  for (const auto& group_handle : requested_groups) {
+    if (!known_groups.contains(group_handle)) {
+      return std::unexpected{ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE};
+    }
+    if (target != nullptr && !target_groups.contains(group_handle)) {
+      if (fail_if_group_missing_on_target) {
+        return std::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
+      }
+      continue;
+    }
+
+    auto group_metrics = metric_manager->GetMetricsInGroup(group_handle);
+    if (!group_metrics) {
+      return std::unexpected{group_metrics.error()};
+    }
+    if (metric_handles.capacity() < metric_handles.size() + group_metrics->size()) {
+      auto new_size = std::max(metric_handles.capacity() * 2, metric_handles.size() + group_metrics->size());
+      metric_handles.reserve(new_size);
+    }
+    std::copy_if(group_metrics->begin(), group_metrics->end(), std::back_inserter(metric_handles),
+                 [&](const auto& metric_handle) { return seen_metric_handles.insert(metric_handle).second; });
+  }
+
+  return metric_handles;
+}
+
+auto DeduplicateMetricHandles(std::span<const astl_metric_handle_t> metric_handles)
+    -> std::vector<astl_metric_handle_t> {
+  std::vector<astl_metric_handle_t>        deduplicated_handles;
+  std::unordered_set<astl_metric_handle_t> seen_metric_handles;
+  deduplicated_handles.reserve(metric_handles.size());
+
+  std::copy_if(metric_handles.begin(), metric_handles.end(), std::back_inserter(deduplicated_handles),
+               [&](const auto& metric_handle) { return seen_metric_handles.insert(metric_handle).second; });
+
+  return deduplicated_handles;
 }
 
 /***********************************************************************************
@@ -1156,8 +1256,9 @@ auto astlConfigureMetricCollectionOnTarget(const astl_configure_metric_collectio
   if (!get_target_result) {
     return get_target_result.error();
   }
-  const auto*                           target = *get_target_result;
-  std::span<const astl_metric_handle_t> metric_handle_span{metric_handles, metric_count};
+  const auto* target                      = *get_target_result;
+  auto        deduplicated_metric_handles = DeduplicateMetricHandles({metric_handles, metric_count});
+  std::span<const astl_metric_handle_t> metric_handle_span{deduplicated_metric_handles};
   auto const&                           orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
     return orchestrator_or_error.error();
@@ -1204,6 +1305,9 @@ auto astlConfigureMetricGroupCollectionOnTarget(
   if (!metric_group_handles) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+  if (metric_group_count == 0) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
   if (collection_params->size < sizeof(astl_collection_params_t)) {
     return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
   }
@@ -1233,26 +1337,14 @@ auto astlConfigureMetricGroupCollectionOnTarget(
   if (!get_target_result) {
     return get_target_result.error();
   }
-  const auto* target = *get_target_result;
-  // for each group, push all its metrics into the metric_handles_vector
+  const auto*                                 target = *get_target_result;
   std::span<const astl_metric_group_handle_t> metric_group_handle_span{metric_group_handles, metric_group_count};
-  std::vector<astl_metric_handle_t>           metric_handles_vector;
-
-  for (const auto& group_handle : metric_group_handle_span) {
-    auto get_group_result = metric_manager->GetMetricsInGroup(group_handle);
-    if (!get_group_result) {
-      return get_group_result.error();
-    }
-    // ensure we have enough capacity
-    if (metric_handles_vector.capacity() < metric_handles_vector.size() + get_group_result->size()) {
-      // at least geometric growth to avoid O(n^2) copies, but also enough for all the new metrics
-      auto new_size =
-          std::max(metric_handles_vector.capacity() * 2, metric_handles_vector.size() + get_group_result->size());
-      metric_handles_vector.reserve(new_size);
-    }
-
-    std::copy(std::begin(*get_group_result), std::end(*get_group_result), std::back_inserter(metric_handles_vector));
+  auto                                        metric_handles_or_error =
+      ExpandMetricGroupHandlesForTarget(metric_manager, target, metric_group_handle_span, true);
+  if (!metric_handles_or_error) {
+    return metric_handles_or_error.error();
   }
+  auto& metric_handles_vector = *metric_handles_or_error;
   // collect on all the metrics we gathered from the given groups
   std::span<const astl_metric_handle_t> metric_handle_span{metric_handles_vector};
   return orchestrator->ConfigureMetricCollection(target, collection_params, metric_handle_span);
@@ -1265,14 +1357,61 @@ auto astlConfigureMetricGroupCollection(const astl_configure_metric_group_collec
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
+  const auto* collection_params    = params->collection_params;
+  const auto* metric_group_handles = params->metric_group_handles;
+  const auto  metric_group_count   = params->metric_group_count;
+  if (!collection_params || !metric_group_handles || metric_group_count == 0) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (collection_params->size < sizeof(astl_collection_params_t)) {
+    return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  if (collection_params->size > sizeof(astl_collection_params_t)) {
+    return ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  const auto collection_flags_status = ValidateCollectionParamsFlags(collection_params);
+  if (collection_flags_status != ASTL_STATUS_SUCCESS) {
+    return collection_flags_status;
+  }
   SwitchSystemInfoToHostCapture();
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  const auto& orchestrator = orchestrator_or_error->get();
+  const auto& targets      = orchestrator->GetTargets();
+  if (targets.empty()) {
+    return ASTL_STATUS_NO_TARGETS_FOUND;
+  }
 
-  (void)params->collection_params;
-  (void)params->metric_group_handles;
-  (void)params->metric_group_count;
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  // @todo(ASTL-181) implement this function
-  return result;
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto*                                       metric_manager = *get_metric_manager_result;
+  std::span<const astl_metric_group_handle_t> metric_group_handle_span{metric_group_handles, metric_group_count};
+
+  bool any_target_configured = false;
+  for (const auto& target_ptr : targets) {
+    const auto* target = target_ptr.get();
+    auto        metric_handles_or_error =
+        ExpandMetricGroupHandlesForTarget(metric_manager, target, metric_group_handle_span, false);
+    if (!metric_handles_or_error) {
+      return metric_handles_or_error.error();
+    }
+    if (metric_handles_or_error->empty()) {
+      continue;
+    }
+
+    std::span<const astl_metric_handle_t> metric_handle_span{*metric_handles_or_error};
+    auto status = orchestrator->ConfigureMetricCollection(target, collection_params, metric_handle_span);
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+    any_target_configured = true;
+  }
+
+  return any_target_configured ? ASTL_STATUS_SUCCESS : ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET;
 }
 
 auto astlReadImmediateOnTarget(const astl_read_immediate_on_target_params_t* params) noexcept -> astl_status_code {

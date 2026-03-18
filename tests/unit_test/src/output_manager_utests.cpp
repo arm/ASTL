@@ -229,6 +229,7 @@ TEST_CASE("OutputManager::OutputProcessedSamples SUMMARY_CSV env var and path ha
 
   SECTION("Unwritable summary CSV path returns FILE_ERROR") {
     TempFileGuard output_dir{"om_summary_dir"};
+    std::filesystem::remove_all(output_dir.path);
     REQUIRE(std::filesystem::create_directory(output_dir.path));
     EnvVarGuard summary_guard{astl::EnvVar::ASTL_OUTPUT_SUMMARY_CSV, output_dir.path.string()};
     REQUIRE(mgr.OutputProcessedSamples(processed, astl::OutputType::SUMMARY_CSV, nullptr, nullptr) ==

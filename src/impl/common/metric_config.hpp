@@ -47,7 +47,7 @@ class MetricConfig {
 
   /**
    * @brief Construct a MetricConfig with the given parameters.
-   * @param name           Metric name.
+   * @param name           User-facing metric name.
    * @param description    Human-readable description of the metric.
    * @param units          Measurement units for the metric (e.g., Watts, Joules).
    * @param value_type     Data type of the metric value (e.g., uint32, float64).
@@ -55,49 +55,19 @@ class MetricConfig {
    * @param category       High-level domain category (e.g., Power, Temperature).
    * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
    * @param operation_builder The operation builder associated with this metric's collector type,
-   *                          including collector-specific parameters like data event id or libsensors chip
-   * @param formula        Formula for processing raw samples (ExpressionFormula or IdentityFormula)
-   *
-   * REFACTOR - Eliminate this function.
-   * We should just have one parameterized constructor with every parameter available.
-   * If we don't want to pass each value every time, we can use default parameters.
+   *                          including collector-specific parameters like data event id or libsensors chip.
+   * @param formula        Formula for processing raw samples (ExpressionFormula or IdentityFormula).
+   * @param input_value_type Raw collector sample type before metric-level processing.
+   * @param metric_groups  Optional group names this metric belongs to.
+   * @param metric_id      Optional stable internal identifier. Defaults to the metric name when omitted.
    */
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                         astl_value_type_t value_type, astl_category_t category, astl_metric_type_t metric_type,
                         CollectorType collector_type, AnyOperationBuilder operation_builder,
-                        AnyFormula formula = IdentityFormula{}, astl_value_type_t input_value_type = ASTL_VALUE_UNKNOWN)
-      : _metric_name(name),
-        _description(description),
-        _units(units),
-        _value_type(value_type),
-        // Default input type to the output type unless caller explicitly separates them.
-        _input_value_type(input_value_type == ASTL_VALUE_UNKNOWN ? value_type : input_value_type),
-        _metric_type(metric_type),
-        _category(category),
-        _collector_type(collector_type),
-        _operation_builder(std::move(operation_builder)),
-        _formula(std::move(formula)) {}
-
-  /**
-   * @brief Construct a MetricConfig with the given parameters.
-   * @param name           Metric name.
-   * @param description    Human-readable description of the metric.
-   * @param units          Measurement units for the metric (e.g., Watts, Joules).
-   * @param value_type     Data type of the metric value (e.g., uint32, float64).
-   * @param metric_type    Semantic type of the metric defined by ASTL design doc (e.g. value, delta, residency)
-   * @param category       High-level domain category (e.g., Power, Temperature).
-   * @param metric_groups  vector of strings representin the names of metric gropus this belongs to
-   * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
-   * @param operation_builder The operation builder associated with this metric's collector type,
-   *                          including collector-specific parameters like data event id or libsensors chip
-   * @param formula        Formula for processing raw samples (ExpressionFormula or IdentityFormula)
-   */
-  explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
-                        astl_value_type_t value_type, astl_category_t category, astl_metric_type_t metric_type,
-                        std::vector<std::string> metric_groups, CollectorType collector_type,
-                        AnyOperationBuilder operation_builder, AnyFormula formula = IdentityFormula{},
-                        astl_value_type_t input_value_type = ASTL_VALUE_UNKNOWN)
-      : _metric_name(name),
+                        AnyFormula formula = IdentityFormula{}, astl_value_type_t input_value_type = ASTL_VALUE_UNKNOWN,
+                        std::vector<std::string> metric_groups = {}, std::string metric_id = {})
+      : _metric_id(metric_id.empty() ? name : std::move(metric_id)),
+        _metric_name(name),
         _description(description),
         _units(units),
         _value_type(value_type),
@@ -119,11 +89,18 @@ class MetricConfig {
   MetricConfig &operator=(MetricConfig &&) = default;
 
   /**
-   * @brief Return the name of the metric.
+   * @brief Return the user-facing name of the metric.
    *
    * @return std::string The metric name.
    */
   const std::string &Name() const { return _metric_name; }
+  /**
+   * @brief Return the stable internal identifier of the metric.
+   *
+   * This may differ from Name() when the metric is presented with a friendly
+   * label but still needs a unique identifier for routing or serialization.
+   */
+  const std::string &Id() const { return _metric_id; }
   /**
    * @brief Return the description of the metric.
    *
@@ -178,8 +155,14 @@ class MetricConfig {
    */
   auto GetFormula() const -> const AnyFormula & { return _formula; }
 
+  /**
+   * @brief Override the user-facing name without changing the internal identifier.
+   */
+  auto SetName(std::string name) -> void { _metric_name = std::move(name); }
+
  private:
-  std::string       _metric_name;       // Metric name as specified in the configuration file
+  std::string       _metric_id;         // Stable internal metric identifier used for routing/serialization
+  std::string       _metric_name;       // User-facing metric label exposed via API properties
   std::string       _description;       // Human-readable description of the metric
   astl_units_t      _units;             // Measurement units for the metric (e.g., seconds, bytes)
   astl_value_type_t _value_type;        // Data type of the metric value (e.g., raw, processed)
@@ -239,11 +222,11 @@ class ResidencyMetricConfig final : public MetricConfig {
   explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
                                  CollectorType collector_type, StateToInfoMap state_info,
-                                 std::optional<InferredStateInfo> inferred_state   = std::nullopt,
-                                 AnyFormula                       formula          = IdentityFormula{},
-                                 astl_value_type_t                input_value_type = ASTL_VALUE_UNKNOWN)
+                                 std::optional<InferredStateInfo> inferred_state = std::nullopt,
+                                 AnyFormula                       formula        = IdentityFormula{},
+                                 astl_value_type_t input_value_type = ASTL_VALUE_UNKNOWN, std::string metric_id = {})
       : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
-                     NullOperationBuilder{}, std::move(formula), input_value_type),
+                     NullOperationBuilder{}, std::move(formula), input_value_type, {}, std::move(metric_id)),
         _state_info(std::move(state_info)),
         _inferred_state(std::move(inferred_state)) {}
 
@@ -309,10 +292,12 @@ class FiniteSetMetricConfig final : public MetricConfig {
                                  astl_value_type_t value_type, astl_metric_type_t metric_type, astl_category_t category,
                                  CollectorType collector_type, AnyOperationBuilder operation_builder,
                                  FiniteSet finite_set, ValueToInfoMap state_info,
-                                 AnyFormula        formula          = IdentityFormula{},
-                                 astl_value_type_t input_value_type = ASTL_VALUE_UNKNOWN)
+                                 AnyFormula               formula          = IdentityFormula{},
+                                 astl_value_type_t        input_value_type = ASTL_VALUE_UNKNOWN,
+                                 std::vector<std::string> metric_groups = {}, std::string metric_id = {})
       : MetricConfig(name, description, units, value_type, category, metric_type, collector_type,
-                     std::move(operation_builder), std::move(formula), input_value_type),
+                     std::move(operation_builder), std::move(formula), input_value_type, std::move(metric_groups),
+                     std::move(metric_id)),
         _finite_set(std::move(finite_set)),
         _state_info(std::move(state_info)) {}
 

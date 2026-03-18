@@ -198,6 +198,18 @@ struct IMetricManager {
   [[nodiscard]] virtual auto ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code = 0;
 
   /**
+   * @brief Reset all metric and counter instances associated with a target.
+   *
+   * This is primarily used before replaying cached raw samples back through the
+   * metric pipeline so stateful metrics (for example delta/rate metrics) do not
+   * retain stale "previous sample" state from an earlier processing pass.
+   *
+   * @param target Target whose metric state should be reset.
+   * @return ASTL_STATUS_SUCCESS on success, or ASTL_STATUS_BAD_ARGUMENT if target is null.
+   */
+  [[nodiscard]] virtual auto ResetMetricsOnTarget(const ITarget* target) -> astl_status_code = 0;
+
+  /**
    * @brief Accept processed samples from a metric implementation.
    *
    * This allows the metric manager (or another upstream component) to act as an aggregator

@@ -370,7 +370,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             break;
           case 5:
             status = ConfigureMetricGroupCollection(&collection_params, &fake_group_handle, 1);
-            if (!is_allowed(status, {ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;

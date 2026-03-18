@@ -269,15 +269,16 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
     auto metric_configs_on_targets = std::move(metric_configs_result.value());
     REQUIRE(metric_configs_on_targets.size() == 1);
 
-    std::unordered_map<std::string, astl::FiniteSetMetricConfig*> by_name;
+    std::unordered_map<std::string, astl::FiniteSetMetricConfig*> by_id;
     for (auto& cfg_ptr : metric_configs_on_targets) {
       auto* fs_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(cfg_ptr.first.get());
       REQUIRE(fs_cfg != nullptr);
-      by_name[fs_cfg->Name()] = fs_cfg;
+      REQUIRE(fs_cfg->Name() == "P-State");
+      by_id[fs_cfg->Id()] = fs_cfg;
     }
-    REQUIRE(by_name.contains("AP.0.P_STATE"));  // fully qualified with component.index.name
+    REQUIRE(by_id.contains("AP.0.P_STATE"));  // fully qualified with component.index.name
 
-    auto* ap0_cfg = by_name["AP.0.P_STATE"];
+    auto* ap0_cfg = by_id["AP.0.P_STATE"];
     REQUIRE(ap0_cfg->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
 
     // Expect 4 unique values
@@ -599,6 +600,8 @@ TEST_CASE("ParseConfiguration missing category defaults to unknown/UNCATEGORIZED
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
+  REQUIRE(metric_configs.begin()->first->Name() == "CPU Power");
+  REQUIRE(metric_configs.begin()->first->Id() == "AP.0.CPU_POWER");
   REQUIRE(metric_configs.begin()->first->Category() == ASTL_CATEGORY_UNCATEGORIZED);
 }
 

@@ -96,10 +96,14 @@ static auto RegisterSensorsFromChip(const astl::AstlConfiguration& configuration
 
     std::string description =
         std::string("Libsensors sensors ") + std::string(chip_name.data()) + " " + std::string(label);
+    std::string metric_id = std::string("libsensors::") + chip_name.data() +
+                            "::" + (feature->name != nullptr ? feature->name : "unknown") +
+                            "::" + std::to_string((*sub)->number);
 
     auto metric_config = std::make_unique<MetricConfig>(
         label, description, units, ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
-        CollectorType::LIBSENSORS, LibsensorsOperationBuilder{chip, (*sub)->number});
+        CollectorType::LIBSENSORS, LibsensorsOperationBuilder{chip, (*sub)->number}, IdentityFormula{},
+        ASTL_VALUE_UNKNOWN, std::vector<std::string>{}, std::move(metric_id));
 
     auto status = metric_manager->RegisterMetric(std::move(metric_config), libsensors_targets);
     if (ASTL_STATUS_SUCCESS != status) {

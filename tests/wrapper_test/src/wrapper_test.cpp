@@ -630,6 +630,7 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
   astl_metric_handle_t              junk_metric1 = static_cast<astl_metric_handle_t>(&junkval1);
   available_metrics.push_back(junk_metric0);
   available_metrics.push_back(junk_metric1);
+  auto* metric_manager_ptr = metric_manager.get();
 
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
 
@@ -715,6 +716,20 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
     REQUIRE_CALL(*collector_manager_ptr_for_require_calls, ConfigureCollectionOnTarget(_, _, _))
         .RETURN(ASTL_STATUS_SUCCESS);
     REQUIRE(ConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles.data(), 1) ==
+            ASTL_STATUS_SUCCESS);
+  }
+
+  SECTION("[valid input][wrapper][deduplicates repeated metric handles]") {
+    REQUIRE_CALL(*metric_manager_ptr, GetRequiredOperations(_, _))
+        .LR_WITH(_1.size() == 1)
+        .RETURN(astl::CollectionOperations{
+            {}, {}, {}, {}, std::chrono::milliseconds{100}, astl::CollectorCapability{astl::CollectorType::SCMI}});
+    REQUIRE_CALL(*collector_manager_ptr_for_require_calls, ConfigureCollectionOnTarget(_, _, _))
+        .RETURN(ASTL_STATUS_SUCCESS);
+
+    std::array<astl_metric_handle_t, 2> duplicate_metric_handles{metric_handles[0], metric_handles[0]};
+    REQUIRE(ConfigureMetricCollectionOnTarget(target_handle, &collection_params, duplicate_metric_handles.data(),
+                                              static_cast<uint32_t>(duplicate_metric_handles.size())) ==
             ASTL_STATUS_SUCCESS);
   }
 }

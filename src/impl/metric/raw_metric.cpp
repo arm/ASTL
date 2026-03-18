@@ -42,6 +42,8 @@ auto RawMetric::SetProcessedSampleSink(IProcessedSampleSink *processed_sample_si
 
 auto RawMetric::Name() const -> std::string const & { return _configuration->Name(); }
 
+auto RawMetric::Id() const -> std::string const & { return _configuration->Id(); }
+
 auto RawMetric::SinkProcessedSample(const ProcessedSampledData &processed_sample) -> astl_status_code {
   std::lock_guard lock(_metric_mutex);  // Ensure thread-safe access to the processed sample sink
 

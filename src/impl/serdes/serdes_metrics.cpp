@@ -65,7 +65,7 @@ static auto SerializeBasicMetric(const MetricConfig& metric_config, const ITarge
     ASTL_LOG_ERROR("SerializeBasicMetric: target is null for metric {}", metric_config.Name());
     return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
-  out.set_metric_id(metric_config.Name());
+  out.set_metric_id(metric_config.Id());
   out.add_target_ids(target->Name());
 
   auto cfg_or_err = SerializeBasicMetricConfig(metric_config);
@@ -123,7 +123,7 @@ static auto SerializeIMetric(const MetricConfig& metric_config, const ITarget* t
   }
 }
 
-static auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& proto_cfg)
+static auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& proto_cfg, const std::string& metric_id)
     -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code> {
   const std::string& name        = proto_cfg.metric_name();
   const std::string& description = proto_cfg.description();
@@ -137,17 +137,20 @@ static auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& pro
 
   if (proto_cfg.metric_groups_size() == 0) {
     auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, category, metric_type, collector,
-                                              NullOperationBuilder{}, IdentityFormula{}, input_value_type);
+                                              NullOperationBuilder{}, IdentityFormula{}, input_value_type,
+                                              std::vector<std::string>{}, metric_id);
     return cfg;
   }
 
   std::vector<std::string> groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
-  auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, category, metric_type, groups,
-                                            collector, NullOperationBuilder{}, IdentityFormula{}, input_value_type);
+  auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, category, metric_type, collector,
+                                            NullOperationBuilder{}, IdentityFormula{}, input_value_type,
+                                            std::move(groups), metric_id);
   return cfg;
 }
 
-static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig& proto_cfg)
+static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig& proto_cfg,
+                                             const std::string&                  metric_id)
     -> std::expected<std::unique_ptr<FiniteSetMetricConfig>, astl_status_code> {
   if (!proto_cfg.has_finite_set()) {
     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
@@ -157,12 +160,13 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   const std::string& name                 = proto_cfg.metric_name();
   const std::string& description          = proto_cfg.description();
 
-  const auto units            = static_cast<astl_units_t>(proto_cfg.units());
-  const auto value_type       = static_cast<astl_value_type_t>(proto_cfg.value_type());
-  const auto input_value_type = static_cast<astl_value_type_t>(proto_cfg.input_value_type());
-  const auto category         = static_cast<astl_category_t>(proto_cfg.category());
-  const auto metric_type      = static_cast<astl_metric_type_t>(proto_cfg.metric_type());
-  const auto collector        = static_cast<CollectorType>(proto_cfg.collector_type());
+  const auto               units            = static_cast<astl_units_t>(proto_cfg.units());
+  const auto               value_type       = static_cast<astl_value_type_t>(proto_cfg.value_type());
+  const auto               input_value_type = static_cast<astl_value_type_t>(proto_cfg.input_value_type());
+  const auto               category         = static_cast<astl_category_t>(proto_cfg.category());
+  const auto               metric_type      = static_cast<astl_metric_type_t>(proto_cfg.metric_type());
+  const auto               collector        = static_cast<CollectorType>(proto_cfg.collector_type());
+  std::vector<std::string> metric_groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
 
   FiniteSetMetricConfig::FiniteSet      finite_set;
   FiniteSetMetricConfig::ValueToInfoMap state_info;
@@ -178,15 +182,11 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
 
-  if (proto_cfg.metric_groups_size() > 0) {
-    ASTL_LOG_WARNING("DeserializeFiniteSetMetricConfig: Metric groups not implemented for FiniteSetMetricConfig {}",
-                     name);
-  }
-
   AnyFormula formula = IdentityFormula{};
   auto       cfg = std::make_unique<FiniteSetMetricConfig>(name, description, units, value_type, metric_type, category,
                                                            collector, NullOperationBuilder{}, std::move(finite_set),
-                                                           std::move(state_info), std::move(formula), input_value_type);
+                                                           std::move(state_info), std::move(formula), input_value_type,
+                                                           std::move(metric_groups), metric_id);
   return cfg;
 }
 
@@ -240,7 +240,7 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
     -> std::expected<MetricConfigAndResults, astl_status_code> {
   switch (metric_type) {
     case ASTL_METRIC_VALUE: {
-      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config());
+      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config(), raw.metric_id());
       if (!cfg_or_err) {
         ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
         return std::unexpected(cfg_or_err.error());
@@ -257,7 +257,7 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
     }
 
     case ASTL_METRIC_EVENT: {
-      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config());
+      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config(), raw.metric_id());
       if (!cfg_or_err) {
         ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
         return std::unexpected(cfg_or_err.error());
@@ -274,7 +274,7 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
     }
 
     case ASTL_METRIC_DELTA: {
-      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config());
+      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config(), raw.metric_id());
       if (!cfg_or_err) {
         ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
         return std::unexpected(cfg_or_err.error());
@@ -291,7 +291,7 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
     }
 
     case ASTL_METRIC_RATE: {
-      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config());
+      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config(), raw.metric_id());
       if (!cfg_or_err) {
         ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
         return std::unexpected(cfg_or_err.error());
@@ -308,7 +308,7 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
     }
 
     case ASTL_METRIC_FINITE_SET_VALUE: {
-      auto cfg_or_err = DeserializeFiniteSetMetricConfig(raw.config());
+      auto cfg_or_err = DeserializeFiniteSetMetricConfig(raw.config(), raw.metric_id());
       if (!cfg_or_err) {
         ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
         return std::unexpected(cfg_or_err.error());
@@ -447,32 +447,30 @@ auto SerializeMetricGroups(const std::vector<std::unique_ptr<MetricGroup>>& metr
   return ASTL_STATUS_SUCCESS;
 }
 
-auto SerializeOperationToMetricMap(const MetricManager::OperationToMetricMap& op_map,
-                                   const MetricManager& metric_manager, astl::protobuf::MetricManager& proto_mgr)
-    -> astl_status_code {
+auto SerializeOperationToMetricMap(const MetricManager::TargetOperationToMetricMap& target_to_op_map,
+                                   astl::protobuf::MetricManager&                   proto_mgr) -> astl_status_code {
   auto* proto_op_map = proto_mgr.mutable_operation_to_metric_map();
   proto_op_map->Clear();
 
-  for (const auto& [op_id, metric_ptr] : op_map) {
-    if (!metric_ptr) {
-      ASTL_LOG_ERROR("Serialize: null metric_ptr for op {}", op_id);
+  for (const auto& [target, op_map] : target_to_op_map) {
+    if (!target) {
+      ASTL_LOG_ERROR("Serialize: null target in operation routing map");
       return ASTL_STATUS_INTERNAL_ERROR;
     }
 
-    auto target_or = metric_manager.GetTargetForMetric(metric_ptr);
-    if (!target_or) {
-      ASTL_LOG_ERROR("Serialize: cannot find target for metric '{}' (op {})", metric_ptr->Name(), op_id);
-      return target_or.error();
+    for (const auto& [op_id, metric_ptr] : op_map) {
+      if (!metric_ptr) {
+        ASTL_LOG_ERROR("Serialize: null metric_ptr for op {} on target '{}'", op_id, target->Name());
+        return ASTL_STATUS_INTERNAL_ERROR;
+      }
+
+      ASTL_LOG_DEBUG("Serialize: adding op {} -> metric '{}' on target '{}'", op_id, metric_ptr->Id(), target->Name());
+
+      auto* entry = proto_op_map->Add();
+      entry->set_operation_id(op_id);
+      entry->set_metric_id(metric_ptr->Id());
+      entry->set_target_id(target->Name());
     }
-
-    const ITarget* target = *target_or;
-
-    ASTL_LOG_DEBUG("Serialize: adding op {} -> metric '{}' on target '{}'", op_id, metric_ptr->Name(), target->Name());
-
-    auto* entry = proto_op_map->Add();
-    entry->set_operation_id(op_id);
-    entry->set_metric_id(metric_ptr->Name());
-    entry->set_target_id(target->Name());
   }
 
   return ASTL_STATUS_SUCCESS;
@@ -549,7 +547,8 @@ struct RebuiltMetricHandles {
 static auto RebuildMetricHandles(const astl::protobuf::MetricManager&         proto_manager,
                                  const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<RebuiltMetricHandles, astl_status_code> {
-  RebuiltMetricHandles rebuilt_metric_handles;
+  RebuiltMetricHandles            rebuilt_metric_handles;
+  std::unordered_set<std::string> seen_metric_ids;
 
   const auto& proto_metrics_vec = proto_manager.metrics();
   rebuilt_metric_handles.metric_handles.reserve(static_cast<std::size_t>(proto_metrics_vec.metrics_size()));
@@ -565,6 +564,14 @@ static auto RebuildMetricHandles(const astl::protobuf::MetricManager&         pr
 
     auto          handle_unique_ptr = std::make_unique<MetricHandle>(std::move(*handle_or_err));
     MetricHandle* raw_handle        = handle_unique_ptr.get();
+    if (!raw_handle->config) {
+      ASTL_LOG_ERROR("Deserialize<MetricManager>: deserialized metric handle has null config");
+      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    }
+    if (!seen_metric_ids.insert(raw_handle->config->Id()).second) {
+      ASTL_LOG_ERROR("Deserialize<MetricManager>: duplicate metric_id '{}'", raw_handle->config->Id());
+      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    }
 
     // Populate target_to_metrics_map by retrieving all metric instances from each deserialized handle
     for (const auto& entry : raw_handle->target_to_metric_map) {
@@ -585,8 +592,8 @@ static auto RebuildMetricHandles(const astl::protobuf::MetricManager&         pr
 
 static auto RebuildOperationMap(const astl::protobuf::MetricManager&              proto_manager,
                                 const std::vector<std::unique_ptr<MetricHandle>>& metric_handles)
-    -> std::expected<MetricManager::OperationToMetricMap, astl_status_code> {
-  MetricManager::OperationToMetricMap operation_to_metric_map;
+    -> std::expected<MetricManager::TargetOperationToMetricMap, astl_status_code> {
+  MetricManager::TargetOperationToMetricMap target_to_operation_to_metric_map;
 
   for (const auto& entry : proto_manager.operation_to_metric_map()) {
     const uint32_t     op_id     = entry.operation_id();
@@ -596,7 +603,7 @@ static auto RebuildOperationMap(const astl::protobuf::MetricManager&            
     // 1) find the MetricHandle with this metric_id
     const auto handle_it =
         std::find_if(metric_handles.begin(), metric_handles.end(), [&](const std::unique_ptr<MetricHandle>& handle) {
-          return handle && handle->config && handle->config->Name() == metric_id;
+          return handle && handle->config && handle->config->Id() == metric_id;
         });
 
     if (handle_it == metric_handles.end()) {
@@ -619,15 +626,44 @@ static auto RebuildOperationMap(const astl::protobuf::MetricManager&            
       return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
 
-    IMetric* found_metric = target_it->second.get();
+    const ITarget* target       = target_it->first;
+    IMetric*       found_metric = target_it->second.get();
 
     ASTL_LOG_DEBUG("RebuildOperationMap: mapping operation id {} to metric '{}' on target '{}'", op_id, metric_id,
                    target_id);
 
-    operation_to_metric_map.emplace(op_id, found_metric);
+    auto& op_map = target_to_operation_to_metric_map[target];
+    if (!op_map.emplace(op_id, found_metric).second) {
+      ASTL_LOG_ERROR("Deserialize<MetricManager>: duplicate operation id {} on target '{}'", op_id, target_id);
+      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    }
   }
 
-  return operation_to_metric_map;
+  return target_to_operation_to_metric_map;
+}
+
+static auto RebuildMetricGroupDescriptions(const astl::protobuf::MetricManager& proto_manager,
+                                           const RebuiltMetricHandles&          rebuilt_metrics)
+    -> MetricManager::MetricGroupDescriptionMap {
+  MetricManager::MetricGroupDescriptionMap metric_group_descriptions;
+
+  for (const auto& proto_group : proto_manager.metric_groups()) {
+    metric_group_descriptions.emplace(proto_group.group_name(), proto_group.group_description());
+  }
+
+  // Older session files may serialize group membership on metrics without a separate top-level MetricGroup
+  // declaration. Preserve loadability by synthesizing empty descriptions for any such groups so
+  // AddMetricToGroups() can rebuild membership without depending on external config files.
+  for (const auto& handle_ptr : rebuilt_metrics.metric_handles) {
+    if (!handle_ptr || !handle_ptr->config) {
+      continue;
+    }
+    for (const auto& group_name : handle_ptr->config->MetricGroups()) {
+      metric_group_descriptions.try_emplace(group_name, "");
+    }
+  }
+
+  return metric_group_descriptions;
 }
 
 }  // namespace detail
@@ -702,9 +738,7 @@ auto Serialize(const MetricManager& metric_manager, std::ostream& output_stream)
   }
 
   ASTL_LOG_DEBUG("serialize: serializing operation to metric map");
-  auto op_status = detail::SerializeOperationToMetricMap(metric_manager._operation_to_metric_map,
-                                                         metric_manager,  // so helper can call GetTargetForMetric
-                                                         proto_mgr);
+  auto op_status = detail::SerializeOperationToMetricMap(metric_manager._target_to_operation_to_metric_map, proto_mgr);
 
   if (op_status != ASTL_STATUS_SUCCESS) {
     return op_status;
@@ -761,6 +795,7 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream&                  
 
   auto& rebuilt_metrics = *rebuilt_metrics_or_err;
   ASTL_LOG_DEBUG("Deserialize<MetricManager>: rebuilt {} metric handles", rebuilt_metrics.metric_handles.size());
+  metric_manager->_metric_group_descriptions = detail::RebuildMetricGroupDescriptions(proto_manager, rebuilt_metrics);
   metric_manager->_metric_handles.swap(rebuilt_metrics.metric_handles);
   metric_manager->_target_to_metrics_map.swap(rebuilt_metrics.target_to_metrics_map);
 
@@ -789,7 +824,7 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream&                  
   if (!op_map_or_err) {
     return std::unexpected(op_map_or_err.error());
   }
-  metric_manager->_operation_to_metric_map.swap(*op_map_or_err);
+  metric_manager->_target_to_operation_to_metric_map.swap(*op_map_or_err);
 
   // set all metric's processed sample sink to metric_manager
   for (const auto& handle_ptr : metric_manager->_metric_handles) {

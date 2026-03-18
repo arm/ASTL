@@ -92,6 +92,13 @@ struct IMetric {
    */
   virtual auto Name() const -> std::string const & = 0;
   /**
+   * @brief Retrieve the metric's stable internal identifier.
+   *
+   * Metrics that do not distinguish between user-facing names and internal
+   * identifiers can rely on this default implementation.
+   */
+  virtual auto Id() const -> std::string const & { return Name(); }
+  /**
    * @brief Forward a single processed sample produced by this metric to the currently configured sink.
    *
    * This function is the final hand-off point in the metric processing pipeline. Implementations

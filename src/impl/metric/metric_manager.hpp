@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -48,8 +49,10 @@ struct MetricHandle {
 class MetricManager : public IMetricManager, public IProcessedSampleSink {
   friend class MetricManagerTestAccessor;  // for unit test injection of mock metrics
  public:
-  using TargetToMetricsMap   = std::unordered_map<const ITarget*, std::vector<astl_metric_handle_t>>;
-  using OperationToMetricMap = std::unordered_map<uint32_t, IMetric*>;
+  using MetricGroupDescriptionMap  = std::unordered_map<std::string, std::string>;
+  using TargetToMetricsMap         = std::unordered_map<const ITarget*, std::vector<astl_metric_handle_t>>;
+  using OperationToMetricMap       = std::unordered_map<uint32_t, IMetric*>;
+  using TargetOperationToMetricMap = std::unordered_map<const ITarget*, OperationToMetricMap>;
 
   ~MetricManager() override = default;
 
@@ -60,7 +63,8 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   MetricManager(MetricManager&&)                 = delete;
   MetricManager& operator=(MetricManager&&)      = delete;
 
-  explicit MetricManager(const Capabilities& capabilities) : _capabilities(capabilities) {}
+  explicit MetricManager(const Capabilities& capabilities, MetricGroupDescriptionMap metric_group_descriptions = {})
+      : _capabilities(capabilities), _metric_group_descriptions(std::move(metric_group_descriptions)) {}
 
   /**
    * @brief Helper to look up a ICounter handle representing a counter for a specific target from a metric API handle
@@ -203,6 +207,14 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   auto ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code override;
 
   /**
+   * @brief Reset all metric/counter instances associated with a target.
+   *
+   * Stateful metrics such as delta/rate metrics retain previous-sample state.
+   * This helper clears that state before cached raw samples are replayed.
+   */
+  auto ResetMetricsOnTarget(const ITarget* target) -> astl_status_code override;
+
+  /**
    * @brief Return the metric groups registered in the manager.
    *
    * @return A span<astl_metric_group_handle_t> containing all registered metric groups, or an error.
@@ -299,6 +311,13 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   auto IsCollectorTypeSupported(CollectorType required_collector_type) const -> bool;
 
   /**
+   * @brief Check whether a metric with the given stable ID has already been registered.
+   * @param metric_id Candidate metric identifier.
+   * @return true if another registered metric already uses this ID.
+   */
+  auto IsMetricIdRegistered(const std::string& metric_id) const -> bool;
+
+  /**
    * @brief Helper for RegisterMetric to add metric to groups based on its config
    * @param metric_handle The metric handle to add to groups
    * @param metric_config The metric config used to determine group membership
@@ -326,7 +345,8 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   std::vector<std::unique_ptr<CounterHandle>> _counter_handles;
   // each Target supports multiple different counters
   std::unordered_map<const ITarget*, std::vector<astl_counter_handle_t>> _target_to_counters_map;
-  // note that since counters implement IMetric interface, their operations are mapped in _operation_to_metric_map.
+  // note that since counters implement IMetric, their operations are routed through
+  // _target_to_operation_to_metric_map just like regular metrics.
 
   // an API astl_metric_handle_t can represent one metric runnable on multiple targets
   // our internal representation of astl_metric_handle is `MetricHandle*`
@@ -340,8 +360,11 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   // each Target supports multiple different metric groups
   std::unordered_map<const ITarget*, std::vector<astl_metric_group_handle_t>> _target_to_metric_groups_map;
 
-  // Maps operation IDs to their corresponding metrics
-  OperationToMetricMap _operation_to_metric_map;
+  // Maps operation IDs to their corresponding metrics for each target.
+  TargetOperationToMetricMap _target_to_operation_to_metric_map;
+
+  // Optional metadata loaded from config/groups/metric_groups.json.
+  MetricGroupDescriptionMap _metric_group_descriptions;
 
   // The internal representation of metric groups
   // stored as unique_ptrs so that they're not invalidated when adding new entries,

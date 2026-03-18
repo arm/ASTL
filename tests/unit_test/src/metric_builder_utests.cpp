@@ -44,6 +44,7 @@ auto MakeConfigurationForTestRoot(const fs::path& config_root) -> astl::AstlConf
   auto configuration                   = configuration_result.value();
   configuration.config_dir_path        = config_root;
   configuration.metrics_dir_path       = config_root / "metrics";
+  configuration.groups_dir_path        = config_root / "groups";
   configuration.scmi_specification_dir = config_root / "scmi" / "public";
   return configuration;
 }
@@ -121,6 +122,14 @@ void WriteMinimalScmiFixture(const fs::path& config_root) {
         "register": "ENERGY_COUNTER",
         "protocol": "scmi"
       }
+    }
+  }
+})json");
+
+  WriteTextFile(config_root / "groups" / "metric_groups.json", R"json({
+  "metric_groups": {
+    "power": {
+      "description": "Unit test power metrics"
     }
   }
 })json");
@@ -284,6 +293,7 @@ TEST_CASE("MetricBuilder::BuildMetricManagerFromASTLFile fails when metric manag
   std::error_code ec;
   fs::create_directories(cache_dir, ec);
   REQUIRE(!ec);
+  fs::remove(cache_dir / astl::kMetricManagerFileName, ec);
 
   auto result = astl::BuildMetricManager(targets, configuration, cache_dir);
 
@@ -360,10 +370,57 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from tempora
   astl_metric_props_t metric_props{};
   metric_props.size = sizeof(astl_metric_props_t);
   REQUIRE(result.value()->GetProperties((*metrics_or_error)[0], &metric_props) == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string{metric_props.name} == "SOC.0.ENERGY_COUNTER");
+  REQUIRE(std::string{metric_props.name} == "SoC Power");
 
   astl_counter_props_t counter_props{};
   counter_props.size = sizeof(astl_counter_props_t);
   REQUIRE(result.value()->GetCounterProperties((*counters_or_error)[0], &counter_props) == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string{counter_props.name} == "ENERGY_COUNTER_SoC Power");
+  REQUIRE(std::string{counter_props.name} == "ENERGY_COUNTER");
+}
+
+TEST_CASE("MetricBuilder::BuildMetricManager loads metric group metadata without group confidential flag",
+          "[MetricBuilder]") {
+  const fs::path config_root = fs::temp_directory_path() / "astl_metric_builder_group_fixture";
+  TempFileGuard  config_guard(config_root);
+  WriteMinimalScmiFixture(config_root);
+
+  WriteTextFile(config_root / "metrics" / "unit" / "test_metrics.json", R"json({
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "SoC Power": {
+      "description": "Unit test SoC power metric",
+      "unit": "W",
+      "metric_type": "value",
+      "category": "POWER",
+      "metric_groups": ["power"],
+      "collection": {
+        "register": "ENERGY_COUNTER",
+        "protocol": "scmi"
+      }
+    }
+  }
+})json");
+
+  auto configuration = MakeConfigurationForTestRoot(config_root);
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::Target>("tlm-0", "unit-test target", astl::CollectorType::SCMI, nullptr,
+                                                   "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
+
+  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+
+  REQUIRE(result.has_value());
+  REQUIRE(result.value() != nullptr);
+
+  auto groups_or_error = result.value()->GetMetricGroups(targets[0].get());
+  REQUIRE(groups_or_error.has_value());
+  REQUIRE(groups_or_error->size() == 1);
+
+  astl_metric_group_props_t group_props{};
+  group_props.size = sizeof(astl_metric_group_props_t);
+  REQUIRE(result.value()->GetMetricGroupProperties((*groups_or_error)[0], &group_props) == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::string{group_props.name} == "power");
+  REQUIRE(std::string{group_props.description} == "Unit test power metrics");
 }

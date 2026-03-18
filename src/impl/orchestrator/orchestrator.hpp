@@ -135,6 +135,16 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   static auto ResetInstance() -> void;
 
   /**
+   * @brief Test-only helper to atomically swap the global singleton instance.
+   *
+   * This bypasses lazy construction and is intended for C++ test harnesses.
+   *
+   * @param new_instance Replacement singleton instance (may be null to clear).
+   * @return The previous singleton instance.
+   */
+  static auto SwapInstanceForTest(std::unique_ptr<Orchestrator> new_instance) -> std::unique_ptr<Orchestrator>;
+
+  /**
    * @brief Serialize the current orchestrator state into its cache directory.
    *
    * This writes the topology + metric manager protobuf files into the cache dir.
@@ -418,7 +428,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   std::unique_ptr<IOutputManager>    _output_manager;     // manages the output of processed samples
   RawSamplesMap                      _raw_samples;        // collected raw samples, organized by target
   mutable std::mutex                 _raw_samples_mtx;    // protect the _raw_samples container
-  ProcessedSamplesMap                _processed_samples;  // processed metric samples, organized by target and metric
+  mutable ProcessedSamplesMap        _processed_samples;  // processed metric samples, organized by target and metric
   mutable std::mutex                 _processed_samples_mtx;       // protect the _processed_samples container
   bool                               _perfetto_emitted{false};     // ensure single emission per collection lifecycle
   bool                               _intervalcsv_emitted{false};  // ensure single emission per collection lifecycle

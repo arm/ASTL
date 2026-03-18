@@ -201,7 +201,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   // SCMI collection remains uint64 on-wire; output value type may change after scaling.
   const auto input_value_type = ParseValueType(metric_declaration);
   for (const auto& scmi_metric_declaration : metric_registers) {
-    const auto&             metric_name          = scmi_metric_declaration.GetFullyQualifiedName();
+    const auto              metric_name          = std::string{metric_key_name};
     const auto              units                = scmi_metric_declaration.units;
     const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
     const astl_value_type_t value_type           = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
@@ -222,7 +222,8 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     auto new_metric_config = std::make_unique<FiniteSetMetricConfig>(
         metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE, category,
         collector_type.value(), std::move(operation_builder), std::move(finite_set_copy), std::move(info_copy),
-        std::move(composed_formula), input_value_type);
+        std::move(composed_formula), input_value_type, std::vector<std::string>{},
+        scmi_metric_declaration.GetFullyQualifiedName());
 
     metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
   }
@@ -326,7 +327,7 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     auto new_config = std::make_unique<ResidencyMetricConfig>(
         name, metric_declaration.description, ParseUnits(metric_declaration.unit.value_or("")), value_type,
         ASTL_METRIC_RESIDENCY, category, collector_type.value(), std::move(state_to_info_map_result.value()),
-        metric_declaration.inferred_state, std::move(formula_result.value()), input_value_type);
+        metric_declaration.inferred_state, std::move(formula_result.value()), input_value_type, name);
 
     metric_configs_on_targets.emplace(std::move(new_config), applicable_targets);
   }
@@ -381,9 +382,9 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
 
     auto metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
     auto new_metric_config = std::make_unique<MetricConfig>(
-        scmi_metric_declaration.GetFullyQualifiedName(), metric_declaration.description, units, value_type, category,
-        metric_type, std::move(metric_groups), collector_type.value(), std::move(operation_builder),
-        std::move(composed_formula), input_value_type);
+        std::string{metric_key_name}, metric_declaration.description, units, value_type, category, metric_type,
+        collector_type.value(), std::move(operation_builder), std::move(composed_formula), input_value_type,
+        std::move(metric_groups), scmi_metric_declaration.GetFullyQualifiedName());
     metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
   }
   return metric_configs_on_targets;

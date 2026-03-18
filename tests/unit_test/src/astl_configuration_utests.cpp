@@ -40,8 +40,10 @@ TEST_CASE("AstlConfiguration::CreateConfiguration uses valid ASTL_CONFIG_DIR ove
 }
 
 TEST_CASE("AstlConfiguration::CreateConfiguration rejects invalid ASTL_CONFIG_DIR override", "[AstlConfiguration]") {
-  const fs::path invalid_dir = fs::temp_directory_path() / "astl_missing_config_dir";
-  TempFileGuard  config_guard(invalid_dir);
+  const fs::path  invalid_dir = fs::temp_directory_path() / "astl_missing_config_dir";
+  TempFileGuard   config_guard(invalid_dir);
+  std::error_code ec;
+  fs::remove_all(invalid_dir, ec);
 
   EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, invalid_dir.string());
 

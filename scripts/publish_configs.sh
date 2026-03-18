@@ -191,6 +191,11 @@ if [[ -d "$CONFIG_DIR/metrics" ]]; then
 	copy_and_filter_json_files "$CONFIG_DIR/metrics" "$OUTPUT_DIR/metrics" "metrics"
 fi
 
+# Copy and filter metric-groups directory
+if [[ -d "$CONFIG_DIR/groups" ]]; then
+	copy_and_filter_json_files "$CONFIG_DIR/groups" "$OUTPUT_DIR/groups" "metric groups"
+fi
+
 # Set up SCMI directory structure
 echo ""
 echo "Setting up SCMI directory structure"

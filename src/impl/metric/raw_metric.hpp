@@ -108,6 +108,10 @@ class RawMetric : public virtual IMetric {
    * @brief Retrieve the metric's name.
    */
   auto Name() const -> std::string const & override;
+  /**
+   * @brief Retrieve the metric's stable internal identifier.
+   */
+  auto Id() const -> std::string const & override;
 
   /**
    * @brief Forward a single processed sample to the registered sink (if any).

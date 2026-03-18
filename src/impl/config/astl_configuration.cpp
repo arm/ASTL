@@ -161,6 +161,7 @@ AstlConfiguration::AstlConfiguration(std::filesystem::path const&               
     : scmi_sysfs_telemetry_root_path{scmi_sysfs_path},
       config_dir_path{config_dir_path},
       metrics_dir_path{config_dir_path / "metrics"},
+      groups_dir_path{config_dir_path / "groups"},
       scmi_specification_dir{config_dir_path / "scmi" / "public"},
       load_file_path{load_file_path} {}
 

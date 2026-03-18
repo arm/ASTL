@@ -311,6 +311,8 @@ struct MockMetricManager : public astl::IMetricManager {
    */
   MAKE_MOCK1(ProcessRawSamples, auto(astl::RawSamplesMap&)->astl_status_code, override);
 
+  MAKE_MOCK1(ResetMetricsOnTarget, auto(const astl::ITarget* target)->astl_status_code, override);
+
   MAKE_MOCK2(SinkProcessedSamples,
              auto(const astl::IMetric* metric, std::span<const astl::ProcessedSampledData> processed_samples)
                  ->astl_status_code,
@@ -447,9 +449,9 @@ class MetricManagerTestAccessor {
     mgr._target_to_metrics_map[target].push_back(metric_api_handle);
   }
 
-  static void InjectOperation(astl::MetricManager& mgr, OperationId op_id, IMetric* metric_handle) {
-    // In a real implementation, this would add the operation to the manager's internal state.
-    mgr._operation_to_metric_map[op_id] = metric_handle;
+  static void InjectOperation(astl::MetricManager& mgr, const astl::ITarget* target, OperationId op_id,
+                              IMetric* metric_handle) {
+    mgr._target_to_operation_to_metric_map[target][op_id] = metric_handle;
   }
 };
 }  // namespace astl

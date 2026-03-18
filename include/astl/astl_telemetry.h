@@ -530,12 +530,13 @@ typedef struct _astl_metric_group_props_t {
   uint32_t                   metric_count;  //!< The number of metrics in this metric group.
                                             //!< astlGetMetricGroupMetrics API uses this value to
                                             //!< determine the size of the metrics buffer that is passed in
-  astl_metric_props_t* metrics;             //!< Initially null, users can set this to an allocated buffer
-                                            //!< to hold the properties of all metrics in this metric group.
-                                            //!< Before calling astlGetMetricGroupMetrics API, users must allocate this
-                                            //!< to hold `metric_count` metrics.
-                                            //!< Also, be sure to set the size field of at least the first element in
-                                            //!< the array to sizeof(astl_metric_props_t) for ABI versioning
+  astl_metric_props_t* metrics;             //!< Optional caller-allocated buffer for the metrics in this group.
+                                            //!< If non-NULL on input to astlGetMetricGroups, ASTL will populate it
+                                            //!< directly using this group's `metric_count` entries.
+                                            //!< Otherwise, callers may leave it NULL and use
+                                            //!< astlGetMetricGroupMetrics later. In either case, set the size field of
+                                            //!< at least the first element to sizeof(astl_metric_props_t) for ABI
+                                            //!< versioning.
 } astl_metric_group_props_t;
 
 /** A parameter structure describes inputs and outputs for this API call.
@@ -760,6 +761,8 @@ typedef struct astl_configure_metric_group_collection_on_target_params_t {
 /**
  * @brief Configure a metric group collection for a specific target
  *
+ * If multiple selected groups contain the same metric, ASTL deduplicates that metric and collects it only once.
+ *
  * @param params Parameters for this call (see astl_configure_metric_group_collection_on_target_params_t).
  *
  * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
@@ -784,6 +787,10 @@ typedef struct astl_configure_metric_group_collection_params_t {
 /**
  * @brief Configure a metric group collection for all targets on which the specified metric groups can be
  * collected
+ *
+ * Each target is configured only with the subset of the requested groups that it supports. If multiple selected
+ * groups on a target contain the same metric, ASTL deduplicates that metric and collects it only once for that
+ * target.
  *
  * @param params Parameters for this call (see astl_configure_metric_group_collection_params_t).
  *

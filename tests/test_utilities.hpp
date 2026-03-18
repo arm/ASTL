@@ -75,20 +75,17 @@ class TestOrchestratorInjector {
    *
    * When this TestOrchestratorInjector is destroyed, it'll put the original orchestrator back
    */
-  explicit TestOrchestratorInjector(std::unique_ptr<astl::Orchestrator> test_orchestrator) {
-    astlInjectTestOrchestrator(test_orchestrator.release(), &_original_orchestrator);
-  }
+  explicit TestOrchestratorInjector(std::unique_ptr<astl::Orchestrator> test_orchestrator)
+      : _original_orchestrator(astl::Orchestrator::SwapInstanceForTest(std::move(test_orchestrator)).release()) {}
 
   /**
    * @brief swap the original orchestrator back into the library to resume use as normal
    */
   ~TestOrchestratorInjector() {
-    // swap back the original orchestrator, and retrieve the test orchestrator for clean up.
-    astl_test_orchestrator_t test_orchestrator_handle{nullptr};
-    astlInjectTestOrchestrator(_original_orchestrator, &test_orchestrator_handle);
-    // now clean up the `test_orchestrator` we received in this class's constructor
-    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
-    delete static_cast<astl::Orchestrator*>(test_orchestrator_handle);
+    // Swap back the original orchestrator. The returned unique_ptr owns the injected test orchestrator
+    // and is destroyed at end of statement, cleaning it up.
+    (void)astl::Orchestrator::SwapInstanceForTest(
+        std::unique_ptr<astl::Orchestrator>(static_cast<astl::Orchestrator*>(_original_orchestrator)));
   }
 
   // since we're managing a resource (an original orchestrator and test orchestrator),

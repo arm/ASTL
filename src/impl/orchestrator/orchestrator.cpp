@@ -145,6 +145,13 @@ auto Orchestrator::ResetInstance() -> void {
   instance_.reset();
 }
 
+auto Orchestrator::SwapInstanceForTest(std::unique_ptr<Orchestrator> new_instance) -> std::unique_ptr<Orchestrator> {
+  std::scoped_lock lock(GetMutex());
+  auto             original_instance = std::move(instance_);
+  instance_                          = std::move(new_instance);
+  return original_instance;
+}
+
 auto Orchestrator::GetMutex() -> std::mutex & {
   static std::mutex initialization_mutex;
   return initialization_mutex;
@@ -724,17 +731,29 @@ auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarge
   }
 
   if (!raw->empty()) {
+    // Rebuild processed samples from raw cache using a clean per-target metric state.
+    // This avoids replaying into delta/rate metrics that still hold an old "previous sample".
+    auto reset_status = _metric_manager->ResetMetricsOnTarget(target);
+    if (reset_status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(reset_status);
+    }
+
+    {
+      std::scoped_lock lock{_processed_samples_mtx};
+      _processed_samples.erase(target);
+    }
+
     // ProcessRawSamples sinks results back via SinkProcessedSamples() - don't hold the mutex here.
     RawSamplesMap raw_samples{
         {target, std::move(*raw)}
     };
 
-    if (auto status = _metric_manager->ProcessRawSamples(raw_samples); status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(status);
+    if (auto process_status = _metric_manager->ProcessRawSamples(raw_samples); process_status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(process_status);
     }
 
-    if (auto status = _metric_manager->SummarizeMetrics(); status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(status);
+    if (auto summarize_status = _metric_manager->SummarizeMetrics(); summarize_status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(summarize_status);
     }
   }
 
