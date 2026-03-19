@@ -67,8 +67,15 @@ for DEP in "$REPO_ROOT_DIR"/external/vcpkg/packages/*; do
 done
 
 # helpers
+CPP_FILE_PATTERN='\.(cpp|cc|cxx|c|h|hpp|hxx)$'
+SHELL_FILE_PATTERN='(^|/)(justfile|[^/]+\.sh)$'
+
+get_all_shell_lint_files() {
+	git ls-files '*.sh' 'justfile'
+}
+
 get_staged_files() {
-	git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|hxx)$' || true
+	git diff --cached --name-only --diff-filter=ACM | grep -E "${CPP_FILE_PATTERN}|${SHELL_FILE_PATTERN}" || true
 }
 
 get_diff_files() {
@@ -77,10 +84,38 @@ get_diff_files() {
 	BASE_REF="${BASE_REF:-main}"
 	CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 	HEAD_REF="${HEAD_REF:-${CURRENT_BRANCH}}"
-	git fetch origin "$BASE_REF" "$HEAD_REF"
+
+	resolve_commit_ref() {
+		local ref_name=$1
+		for candidate in "$ref_name" "origin/$ref_name"; do
+			if git rev-parse --verify --quiet "${candidate}^{commit}" >/dev/null; then
+				echo "$candidate"
+				return 0
+			fi
+		done
+		return 1
+	}
+
+	FETCH_HEAD_PATH=$(git rev-parse --git-path FETCH_HEAD)
+	FETCH_HEAD_DIR=$(dirname "$FETCH_HEAD_PATH")
+	if [ ! -w "$FETCH_HEAD_DIR" ]; then
+		echo "Skipping git fetch for lint diff selection: git metadata is read-only" >&2
+	elif ! git fetch origin "$BASE_REF" "$HEAD_REF" >/dev/null 2>&1; then
+		echo "Skipping git fetch for lint diff selection: unable to refresh refs" >&2
+	fi
+
+	BASE_DIFF_REF=$(resolve_commit_ref "$BASE_REF" || true)
+	HEAD_DIFF_REF=$(resolve_commit_ref "$HEAD_REF" || true)
+	if [ -z "$BASE_DIFF_REF" ] || [ -z "$HEAD_DIFF_REF" ]; then
+		echo "Unable to resolve PR diff refs; falling back to linting all source files" >&2
+		printf '%s\n' "${SOURCE_FILES[@]}"
+		get_all_shell_lint_files
+		return
+	fi
+
 	{
-		git diff origin/"$BASE_REF"...origin/"$HEAD_REF" --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|hxx)$' || true
-		git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c|h|hpp|hxx)$' || true
+		git diff "$BASE_DIFF_REF...$HEAD_DIFF_REF" --name-only --diff-filter=ACM | grep -E "${CPP_FILE_PATTERN}|${SHELL_FILE_PATTERN}" || true
+		git diff --cached --name-only --diff-filter=ACM | grep -E "${CPP_FILE_PATTERN}|${SHELL_FILE_PATTERN}" || true
 	} | sort -u
 }
 
@@ -107,6 +142,9 @@ pull-request)
 all)
 	# lint one translation unit at a time (assume headers are #included)
 	FILES=("${SOURCE_FILES[@]}")
+	while IFS= read -r LINE; do
+		FILES+=("$LINE")
+	done < <(get_all_shell_lint_files)
 	;;
 *)
 	echo "Unknown diff mode $2. Use 'pre-commit', 'all', or 'pull-request'"
@@ -120,9 +158,13 @@ esac
 ##  - C source/test files
 ##  - C-style header files (linted with different language standards)
 SOURCE_FILES_TO_LINT=()
+SOURCE_HEADERS_TO_LINT=()
 TEST_FILES_TO_LINT=()
+TEST_HEADERS_TO_LINT=()
 C_SOURCE_FILES_TO_LINT=()
 C_HEADERS_TO_LINT=()
+SHELL_FILES_TO_LINT=()
+JUSTFILES_TO_LINT=()
 for FILE in "${FILES[@]}"; do
 	if [[ ! -e $FILE ]]; then
 		echo "Skipping non-existent path from diff selection: $FILE"
@@ -134,6 +176,10 @@ for FILE in "${FILES[@]}"; do
 	elif [[ $FILE == *third_party/* ]]; then
 		# skip third-party vendored dependencies
 		continue
+	elif [[ $FILE == *justfile ]]; then
+		JUSTFILES_TO_LINT+=("$FILE")
+	elif [[ $FILE == *.sh ]]; then
+		SHELL_FILES_TO_LINT+=("$FILE")
 	elif [[ $FILE == *.h.in ]]; then
 		# skip files used to generate C code
 		continue
@@ -145,22 +191,115 @@ for FILE in "${FILES[@]}"; do
 	elif [[ $FILE == *.h ]]; then
 		C_HEADERS_TO_LINT+=("$FILE")
 	elif [[ $FILE == *tests/* || $FILE == *samples/* ]]; then
+		if [[ $FILE == *.hpp || $FILE == *.hxx ]]; then
+			TEST_HEADERS_TO_LINT+=("$FILE")
+		else
+			TEST_FILES_TO_LINT+=("$FILE")
+		fi
+	elif [[ $FILE == *.hpp || $FILE == *.hxx ]]; then
+		SOURCE_HEADERS_TO_LINT+=("$FILE")
+	elif [[ $FILE == *tests/* || $FILE == *samples/* ]]; then
 		TEST_FILES_TO_LINT+=("$FILE")
 	else
 		SOURCE_FILES_TO_LINT+=("$FILE")
 	fi
 done
+run_clang_tidy_batch() {
+	local label=$1
+	local checks=$2
+	local -n files_ref=$3
+
+	if [[ ${#files_ref[@]} -eq 0 ]]; then
+		return 0
+	fi
+
+	local jobs
+	jobs="${LINT_JOBS:-$(nproc)}"
+	echo "🧹 ${label} (parallel jobs: ${jobs})"
+
+	local clang_tidy_args=(
+		-p "${BUILD_DIR}"
+		-header-filter "^(?!.*(include/astl|${BUILD_DIR}/include/astl)).*"
+		--warnings-as-errors=*
+	)
+
+	if [[ -n ${checks} ]]; then
+		clang_tidy_args+=(-checks "${checks}")
+	fi
+
+	local extra_arg
+	for extra_arg in "${EXTRA_ARGS[@]}"; do
+		clang_tidy_args+=("-extra-arg=${extra_arg}")
+	done
+
+	local runner
+	runner=$(mktemp)
+	cat >"${runner}" <<'EOF'
+#!/usr/bin/env bash
+set -eu -o pipefail
+file="${!#}"
+set -- "${@:1:$(($# - 1))}"
+clang-tidy "$file" "$@"
+EOF
+	chmod +x "${runner}"
+
+	if ! printf '%s\0' "${files_ref[@]}" | xargs -0 -n 1 -P "${jobs}" "${runner}" \
+		"${clang_tidy_args[@]}" \
+		-- \
+		"${INCLUDE_PATHS[@]}" \
+		"${SYS_INCLUDE_PATHS[@]}"; then
+		rm -f "${runner}"
+		return 1
+	fi
+
+	rm -f "${runner}"
+}
+
+run_shell_lint() {
+	if [[ ${#SHELL_FILES_TO_LINT[@]} -eq 0 ]]; then
+		return 0
+	fi
+
+	if command -v shellcheck >/dev/null 2>&1; then
+		echo "🧹 Linting shell scripts with shellcheck"
+		shellcheck "${SHELL_FILES_TO_LINT[@]}"
+		return 0
+	fi
+
+	echo "🧹 Linting shell scripts with bash -n (shellcheck unavailable)"
+	local file
+	for file in "${SHELL_FILES_TO_LINT[@]}"; do
+		bash -n "$file"
+	done
+}
+
+run_justfile_lint() {
+	if [[ ${#JUSTFILES_TO_LINT[@]} -eq 0 ]]; then
+		return 0
+	fi
+
+	if ! command -v just >/dev/null 2>&1; then
+		echo "⚠️  Skipping justfile validation because 'just' is unavailable"
+		return 0
+	fi
+
+	echo "🧹 Validating justfile syntax"
+	local file
+	for file in "${JUSTFILES_TO_LINT[@]}"; do
+		just --justfile "$file" --dump >/dev/null
+	done
+}
 
 EXTRA_ARGS=()
 # exclude the C-level headers from this C++ lint - we'll do them as a separate step
-EXTRA_ARGS+=(--extra-arg=-std=c++23)
+EXTRA_ARGS+=(-std=c++23)
 # enable std::expected in clang-tidy
-EXTRA_ARGS+=(--extra-arg=-D__cpp_concepts=202002L)
+EXTRA_ARGS+=(-D__cpp_concepts=202002L)
 # set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_sysfs/CMakeLists.txt
-EXTRA_ARGS+=(--extra-arg=-DFUSE_USE_VERSION=316)
+EXTRA_ARGS+=(-DFUSE_USE_VERSION=316)
 # if on x86_64, disable mmx intrinsics for linting to avoid issues with some CI runners
 if [[ "$(uname -m)" == "x86_64" ]]; then
-	EXTRA_ARGS+=(--extra-arg=-mno-mmx --extra-arg=-mno-sse --extra-arg=-mno-sse2)
+	EXTRA_ARGS+=(-mno-mmx -mno-sse -mno-sse2)
 fi
 
 ## Check for presense of libsensors, to determine if we should bother linting
@@ -168,7 +307,7 @@ fi
 if echo '#include <sensors/sensors.h>
 int main(void){return 0;}' | gcc -xc - -o /dev/null 2>/dev/null; then
 	echo "libsensors header is available"
-	EXTRA_ARGS+=(--extra-arg=-DASTL_INCLUDE_LIBSENSORS)
+	EXTRA_ARGS+=(-DASTL_INCLUDE_LIBSENSORS)
 else
 	echo "libsensors header is unavailable"
 fi
@@ -182,27 +321,25 @@ else
 fi
 
 if [[ ${#SOURCE_FILES_TO_LINT[@]} -gt 0 ]]; then
-	echo "🧹 Linting C++ Sources"
-	clang-tidy \
-		"${SOURCE_FILES_TO_LINT[@]}" -p "${BUILD_DIR}" \
-		-header-filter="'^(?!.*(include/astl|$BUILD_DIR/include/astl)).*'" \
-		"${EXTRA_ARGS[@]}" \
-		--warnings-as-errors=* \
-		-- \
-		"${INCLUDE_PATHS[@]}" \
-		"${SYS_INCLUDE_PATHS[@]}"
+	run_clang_tidy_batch "Linting C++ sources" "" SOURCE_FILES_TO_LINT
+fi
+
+if [[ ${#SOURCE_HEADERS_TO_LINT[@]} -gt 0 ]]; then
+	run_clang_tidy_batch "Linting C++ headers" "" SOURCE_HEADERS_TO_LINT
 fi
 
 if [[ ${#TEST_FILES_TO_LINT[@]} -gt 0 ]]; then
-	echo "🧹 Linting test files sources"
-	clang-tidy \
-		"${TEST_FILES_TO_LINT[@]}" -p "${BUILD_DIR}" \
-		-header-filter="'^(?!.*(include/astl|$BUILD_DIR/include/astl)).*'" \
-		"${EXTRA_ARGS[@]}" \
-		-checks=-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers,-readability-function-cognitive-complexity \
-		-- \
-		"${INCLUDE_PATHS[@]}" \
-		"${SYS_INCLUDE_PATHS[@]}"
+	run_clang_tidy_batch \
+		"Linting test sources" \
+		"-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers,-readability-function-cognitive-complexity" \
+		TEST_FILES_TO_LINT
+fi
+
+if [[ ${#TEST_HEADERS_TO_LINT[@]} -gt 0 ]]; then
+	run_clang_tidy_batch \
+		"Linting test headers" \
+		"-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers,-readability-function-cognitive-complexity" \
+		TEST_HEADERS_TO_LINT
 fi
 
 if [[ ${#C_SOURCE_FILES_TO_LINT[@]} -gt 0 ]]; then
@@ -229,5 +366,8 @@ if [[ ${#C_HEADERS_TO_LINT[@]} -gt 0 ]]; then
 		"${INCLUDE_PATHS[@]}" \
 		"${SYS_INCLUDE_PATHS[@]}"
 fi
+
+run_shell_lint
+run_justfile_lint
 
 echo "✅ Linting completed successfully."

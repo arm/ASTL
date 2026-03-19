@@ -458,12 +458,12 @@ TEST_CASE("AstlValue cross-variant arithmetic matrix", "[AstlValue][matrix]") {
     REQUIRE(std::holds_alternative<uint16_t>(quarter->value));
     REQUIRE(std::get<uint16_t>(quarter->value) == 2);
 
-    const auto float_half = astl::AstlValue::Divide(astl::AstlValue{float{9.0F}}, 2U);
+    const auto float_half = astl::AstlValue::Divide(astl::AstlValue{9.0F}, 2U);
     REQUIRE(float_half.has_value());
     REQUIRE(std::holds_alternative<float>(float_half->value));
     REQUIRE_THAT(std::get<float>(float_half->value), WithinAbs(4.5F, 0.0001F));
 
-    const auto double_half = astl::AstlValue::Divide(astl::AstlValue{double{9.0}}, 2.0F);
+    const auto double_half = astl::AstlValue::Divide(astl::AstlValue{9.0}, 2.0F);
     REQUIRE(double_half.has_value());
     REQUIRE(std::holds_alternative<float>(double_half->value));
     REQUIRE_THAT(std::get<float>(double_half->value), WithinAbs(4.5F, 0.0001F));

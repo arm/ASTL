@@ -379,8 +379,8 @@ TEST_CASE("astlGetMetricGroupMetrics", "[MetricGroups][wrapper]") {
     REQUIRE(groups[1].metrics == group1_metric_bufs.data());
     REQUIRE(groups[0].metric_count == 2);
     REQUIRE(groups[1].metric_count == 1);
-    REQUIRE(std::string(groups[0].metrics[0].name) == "MockMetric");
-    REQUIRE(std::string(groups[1].metrics[0].name) == "MockMetric");
+    REQUIRE(std::string(groups[0].metrics->name) == "MockMetric");
+    REQUIRE(std::string(groups[1].metrics->name) == "MockMetric");
   }
 
   SECTION("astlGetMetricGroupMetrics returns metrics for a discovered group", "[MetricGroups][wrapper]") {
@@ -393,7 +393,7 @@ TEST_CASE("astlGetMetricGroupMetrics", "[MetricGroups][wrapper]") {
 
     auto metrics_buf = AllocateAstlVector<astl_metric_props_t>(groups[0].metric_count);
     ASTL_INIT_STRUCT(astl_get_metric_group_metrics_params_t, params, .flags = 0, .target_handle = mock_target_handle,
-                     .metric_group = &groups[0], .metrics = metrics_buf.data());
+                     .metric_group = groups.data(), .metrics = metrics_buf.data());
     REQUIRE(astlGetMetricGroupMetrics(&params) == ASTL_STATUS_SUCCESS);
     REQUIRE(std::string(metrics_buf[0].name) == "MockMetric");
   }
@@ -532,7 +532,8 @@ TEST_CASE("astlGetMetricGroupMetrics", "[MetricGroups][wrapper]") {
           .sampling_interval = 100,
           .collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
       };
-      astl_metric_group_handle_t fake_group_handle = reinterpret_cast<astl_metric_group_handle_t>(0x1234);
+      int                        fake_group_token  = 0;
+      astl_metric_group_handle_t fake_group_handle = &fake_group_token;
       ASTL_INIT_STRUCT(astl_configure_metric_group_collection_params_t, params, .flags = 0,
                        .collection_params = &collection_params, .metric_group_handles = &fake_group_handle,
                        .metric_group_count = 1);

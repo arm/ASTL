@@ -54,6 +54,16 @@ lint preset='debug':
     set -eu -o pipefail
     ./scripts/lint.sh build/{{preset}} pull-request
 
+lint-staged preset='debug':
+    #!/usr/bin/env bash
+    set -eu -o pipefail
+    ./scripts/lint.sh build/{{preset}} pre-commit
+
+lint-all preset='debug':
+    #!/usr/bin/env bash
+    set -eu -o pipefail
+    ./scripts/lint.sh build/{{preset}} all
+
 wrapper-coverage:
     #!/usr/bin/env bash
     set -eu -o pipefail

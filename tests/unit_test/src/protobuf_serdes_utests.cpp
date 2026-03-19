@@ -760,7 +760,7 @@ TEST_CASE("Deserialize<MetricManager> rebuilds metric groups without external me
   props.size = sizeof(astl_metric_group_props_t);
   REQUIRE(mgr->GetMetricGroupProperties((*target_groups)[0], &props) == ASTL_STATUS_SUCCESS);
   REQUIRE(std::string{props.name} == "thermal");
-  REQUIRE(std::string{props.description} == "");
+  REQUIRE(std::string{props.description}.empty());
 }
 
 TEST_CASE("Deserialize<MetricManager> rejects invalid operation map references", "[MetricManager][protobuf]") {

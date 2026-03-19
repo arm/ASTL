@@ -36,7 +36,7 @@ TEST_CASE("ProcessedSampledData get<T>() throws on wrong type", "[processed_samp
 struct RecordingSink : astl::IProcessedSampleSink {
   const astl::ITarget*                    lastTarget{nullptr};
   const astl::IMetric*                    lastMetric{nullptr};
-  std::vector<astl::ProcessedSampledData> received{};  // explicit default initialization for clarity
+  std::vector<astl::ProcessedSampledData> received;
   astl_status_code                        SinkProcessedSamples(const astl::ITarget* target, const astl::IMetric* metric,
                                                                std::span<const astl::ProcessedSampledData> samples) override {
     lastTarget = target;
