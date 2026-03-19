@@ -486,6 +486,23 @@ func StartCollection() error {
 	return checkStatus("astlStartCollection", C.astlStartCollection(&request))
 }
 
+func StartCollectionOnTargetPaused(target Target) error {
+	request := C.astl_start_collection_on_target_paused_params_t{
+		size:          C.size_t(C.sizeof_astl_start_collection_on_target_paused_params_t),
+		flags:         0,
+		target_handle: cTargetHandle(target),
+	}
+	return checkStatus("astlStartCollectionOnTargetPaused", C.astlStartCollectionOnTargetPaused(&request))
+}
+
+func StartCollectionPaused() error {
+	request := C.astl_start_collection_paused_params_t{
+		size:  C.size_t(C.sizeof_astl_start_collection_paused_params_t),
+		flags: 0,
+	}
+	return checkStatus("astlStartCollectionPaused", C.astlStartCollectionPaused(&request))
+}
+
 func PauseCollectionOnTarget(target Target) error {
 	request := C.astl_pause_collection_on_target_params_t{
 		size:          C.size_t(C.sizeof_astl_pause_collection_on_target_params_t),

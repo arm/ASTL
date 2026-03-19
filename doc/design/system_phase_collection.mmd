@@ -3,7 +3,7 @@
 %% SPDX-License-Identifier: Apache-2.0
 
 %% System Phase: Interval Collection & Immediate Read
-%% Focus: start, sampling loop, immediate read, pause/resume stubs
+%% Focus: start, paused start, sampling loop, immediate read, pause/resume
 sequenceDiagram
     autonumber
     participant User
@@ -19,6 +19,16 @@ sequenceDiagram
     CollectorManager-->>Orchestrator: status
     Orchestrator-->>API: status
 
+    opt Start directly into paused state
+        User->>API: astlStartCollectionOnTargetPaused(start_paused_params)
+        API->>Orchestrator: StartCollectionPaused(target)
+        Orchestrator->>CollectorManager: StartOnTarget()
+        CollectorManager-->>Orchestrator: status
+        Orchestrator->>CollectorManager: PauseOnTarget()
+        CollectorManager-->>Orchestrator: status
+        Orchestrator-->>API: state = PAUSED
+    end
+
     loop Sampling interval
     Collectors-->>CollectorManager: RawSampledData[]
     CollectorManager->>Orchestrator: SinkRawSamples()
@@ -33,10 +43,11 @@ sequenceDiagram
         Orchestrator->>Orchestrator: buffer raw samples
     end
 
-    User->>API: astlPauseCollectionOnTarget(pause_params)
-    API->>Orchestrator: PauseCollectionOnTarget(target)
-    Orchestrator-->>API: NOT_IMPLEMENTED
-
-    User->>API: astlResumeCollectionOnTarget(resume_params)
-    API->>Orchestrator: ResumeCollectionOnTarget(target)
-    Orchestrator-->>API: NOT_IMPLEMENTED
+    opt Pause/Resume (planned)
+        Note over User,Collectors: Pause/Resume functionality<br/>scheduled for future implementation<br/>(currently returns NOT_IMPLEMENTED)
+        User->>API: astlPauseCollectionOnTarget(pause_params)
+        API-->>User: ASTL_STATUS_NOT_IMPLEMENTED
+        
+        User->>API: astlResumeCollectionOnTarget(resume_params)
+        API-->>User: ASTL_STATUS_NOT_IMPLEMENTED
+    end

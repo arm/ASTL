@@ -225,6 +225,21 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   auto StartCollection(const ITarget *target) -> astl_status_code;
 
   /**
+   * @brief Apply the previously configured collection on the given target, then pause it before returning.
+   *
+   * This is equivalent to transitioning CONFIGURED -> STARTED -> PAUSED as one API operation.
+   *
+   * @param target The target with an active collection configuration
+   * @note ConfigureCounterCollection or similar should be called first
+   * @return error status code:
+   *   - ASTL_STATUS_SUCCESS: success
+   *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized
+   *   - ASTL_STATUS_PAUSE_UNSUPPORTED: underlying collector cannot pause after starting
+   *   - others: according to individual Collector implementations
+   */
+  auto StartCollectionPaused(const ITarget *target) -> astl_status_code;
+
+  /**
    * @brief Collect one sample of data on a target with an active configured collection
    *
    * @param target The target with an active collection configuration
@@ -372,6 +387,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
                             std::span<const ProcessedSampledData> processed_samples) -> astl_status_code override;
 
  private:
+  auto StartCollectionImpl(const ITarget *target, bool start_paused) -> astl_status_code;
+
   /**
    * @brief Emit a summary CSV file of all processed samples if requested via environment variable.
    *

@@ -402,6 +402,33 @@ cpdef configure_counters_on_target(Target target, params, list counters):
     finally:
         free(handles)
 
+cpdef configure_counters(params, list counters):
+    cdef astl_collection_params_t p
+    cdef astl_configure_counter_collection_params_t call_params
+    cdef int rc_cc
+    _fill_collection_params(params, &p)
+    cdef size_t n = len(counters)
+    if n == 0:
+        raise ValueError("counters list empty")
+    cdef size_t i
+    cdef const void** handles = <const void**>calloc(n, sizeof(const void*))
+    if handles == NULL:
+        raise MemoryError()
+    try:
+        for i in range(n):
+            handles[i] = <const void*>counters[i].handle_ptr
+        call_params.size = sizeof(astl_configure_counter_collection_params_t)
+
+        call_params.flags = 0
+        call_params.collection_params = &p
+        call_params.counter_handles = <const astl_counter_handle_t*>handles
+        call_params.counter_count = <uint32_t>n
+        rc_cc = astlConfigureCounterCollection(&call_params)
+        if rc_cc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET):
+            _check(rc_cc)
+    finally:
+        free(handles)
+
 cpdef configure_metrics_on_target(Target target, params, list metrics):
     cdef astl_collection_params_t p
     cdef astl_configure_metric_collection_on_target_params_t call_params
@@ -425,6 +452,33 @@ cpdef configure_metrics_on_target(Target target, params, list metrics):
         call_params.metric_handles = <const astl_metric_handle_t*>handles
         call_params.metric_count = <uint32_t>n
         rc_cm = astlConfigureMetricCollectionOnTarget(&call_params)
+        if rc_cm not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET):
+            _check(rc_cm)
+    finally:
+        free(handles)
+
+cpdef configure_metrics(params, list metrics):
+    cdef astl_collection_params_t p
+    cdef astl_configure_metric_collection_params_t call_params
+    cdef int rc_cm
+    _fill_collection_params(params, &p)
+    cdef size_t n = len(metrics)
+    if n == 0:
+        raise ValueError("metrics list empty")
+    cdef size_t i
+    cdef void** handles = <void**>calloc(n, sizeof(void*))
+    if handles == NULL:
+        raise MemoryError()
+    try:
+        for i in range(n):
+            handles[i] = <void*>metrics[i].handle_ptr
+        call_params.size = sizeof(astl_configure_metric_collection_params_t)
+
+        call_params.flags = 0
+        call_params.collection_params = &p
+        call_params.metric_handles = <const astl_metric_handle_t*>handles
+        call_params.metric_count = <uint32_t>n
+        rc_cm = astlConfigureMetricCollection(&call_params)
         if rc_cm not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET):
             _check(rc_cm)
     finally:
@@ -458,6 +512,33 @@ cpdef configure_metric_groups_on_target(Target target, params, list groups):
     finally:
         free(handles)
 
+cpdef configure_metric_groups(params, list groups):
+    cdef astl_collection_params_t p
+    cdef astl_configure_metric_group_collection_params_t call_params
+    cdef int rc_cg
+    _fill_collection_params(params, &p)
+    cdef size_t n = len(groups)
+    if n == 0:
+        raise ValueError("metric groups list empty")
+    cdef size_t i
+    cdef void** handles = <void**>calloc(n, sizeof(void*))
+    if handles == NULL:
+        raise MemoryError()
+    try:
+        for i in range(n):
+            handles[i] = <void*>groups[i].handle_ptr
+        call_params.size = sizeof(astl_configure_metric_group_collection_params_t)
+
+        call_params.flags = 0
+        call_params.collection_params = &p
+        call_params.metric_group_handles = <const astl_metric_group_handle_t*>handles
+        call_params.metric_group_count = <uint32_t>n
+        rc_cg = astlConfigureMetricGroupCollection(&call_params)
+        if rc_cg not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET):
+            _check(rc_cg)
+    finally:
+        free(handles)
+
 # --- Lifecycle ---
 cpdef start_collection(Target target=None):
     cdef int rc
@@ -474,6 +555,24 @@ cpdef start_collection(Target target=None):
         target_params.flags = 0
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlStartCollectionOnTarget(&target_params)
+    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED):
+        _check(rc)
+
+cpdef start_collection_paused(Target target=None):
+    cdef int rc
+    cdef astl_start_collection_paused_params_t params
+    cdef astl_start_collection_on_target_paused_params_t target_params
+    if target is None:
+        params.size = sizeof(astl_start_collection_paused_params_t)
+
+        params.flags = 0
+        rc = astlStartCollectionPaused(&params)
+    else:
+        target_params.size = sizeof(astl_start_collection_on_target_paused_params_t)
+
+        target_params.flags = 0
+        target_params.target_handle = <const void*>target.handle_ptr
+        rc = astlStartCollectionOnTargetPaused(&target_params)
     if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED):
         _check(rc)
 
@@ -602,6 +701,42 @@ cpdef read_immediate(Target target=None):
         _check(rc)
 
 # --- Sample retrieval ---
+
+cpdef list get_metric_group_metrics(Target target, MetricGroup group):
+    cdef uint32_t count = <uint32_t>group.metric_count
+    cdef size_t i
+    if count == 0:
+        return []
+
+    cdef astl_metric_group_props_t group_props
+    cdef astl_get_metric_group_metrics_params_t params
+    cdef astl_metric_props_t* arr = <astl_metric_props_t*>calloc(count, sizeof(astl_metric_props_t))
+    if arr == NULL:
+        raise MemoryError("Failed to allocate metric properties buffer")
+    arr[0].size = sizeof(astl_metric_props_t)
+    try:
+        group_props.size = sizeof(astl_metric_group_props_t)
+        group_props.handle = <const void*>group.handle_ptr
+        group_props.name = NULL
+        group_props.description = NULL
+        group_props.metric_count = count
+        group_props.metrics = NULL
+
+        params.size = sizeof(astl_get_metric_group_metrics_params_t)
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.metric_group = &group_props
+        params.metrics = arr
+        _check(astlGetMetricGroupMetrics(&params))
+
+        py_list = []
+        for i in range(count):
+            name = arr[i].name.decode() if arr[i].name != NULL else ""
+            desc = arr[i].description.decode() if arr[i].description != NULL else ""
+            py_list.append(Metric(name, desc, <size_t>arr[i].handle, arr[i].min_sampling_interval, arr[i].units, arr[i].value_type, arr[i].metric_type, arr[i].category))
+        return py_list
+    finally:
+        free(arr)
 
 cpdef list get_counter_samples(Target target, Counter counter):
     cdef uint32_t count = 0

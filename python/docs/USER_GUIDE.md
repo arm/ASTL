@@ -163,7 +163,8 @@ import astl
 t = astl.get_targets()[0]
 c = astl.get_counters(t)[0]
 astl.configure_basic_collection(t, counters=[c])
-astl.start_collection(t)
+astl.start_collection_paused(t)
+astl.resume_collection(t)
 astl.read_immediate(t)
 astl.stop_collection(t)
 

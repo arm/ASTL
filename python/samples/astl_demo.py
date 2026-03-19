@@ -89,7 +89,8 @@ def _configure_and_collect(target, counters, metrics):
         astl.configure_counters_on_target(target, params, to_collect_counters)
     if to_collect_metrics:
         astl.configure_metrics_on_target(target, params, to_collect_metrics)
-    astl.start_collection(target)
+    astl.start_collection_paused(target)
+    astl.resume_collection(target)
     astl.read_immediate(target)
     astl.stop_collection(target)
 

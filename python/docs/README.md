@@ -47,8 +47,10 @@ Collection Configuration (per target for now):
 
 Lifecycle (tolerates NOT_IMPLEMENTED by ignoring it):
 
-- `start_collection(target=None)` /
-  `pause_collection(...)` / `resume_collection(...)` /
+- `start_collection(target=None)` starts collection on the specified target, or
+  on all configured targets when `target is None`
+- `start_collection_paused(target=None)` starts collection and leaves it paused
+- `pause_collection(...)` / `resume_collection(...)` /
   `stop_collection(...)`
 - `read_immediate(target=None)`
 
@@ -249,7 +251,8 @@ else:
    mode=astl.CollectionMode.IMMEDIATE,
   )
   astl.configure_counters_on_target(t, params, counters[:2])
-  astl.start_collection(t)
+  astl.start_collection_paused(t)
+  astl.resume_collection(t)
   # In a real app you'd wait / sleep, then stop
   astl.stop_collection(t)
   for c in counters[:2]:

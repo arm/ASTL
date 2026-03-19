@@ -16,6 +16,7 @@ def test_lifecycle_no_exception():
 
     # Without explicit target
     astl.start_collection()
+    astl.start_collection_paused()
     astl.pause_collection()
     astl.resume_collection()
     astl.read_immediate()
@@ -25,8 +26,8 @@ def test_lifecycle_no_exception():
     if targets:
         t = targets[0]
         astl.start_collection(t)
+        astl.start_collection_paused(t)
         astl.pause_collection(t)
         astl.resume_collection(t)
         astl.read_immediate(t)
         astl.stop_collection(t)
-

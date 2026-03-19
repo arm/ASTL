@@ -342,6 +342,13 @@ cdef extern from "astl/astl_telemetry.h":
         const astl_counter_handle_t* counter_handles
         uint32_t counter_count
 
+    cdef struct astl_configure_counter_collection_params_t:
+        size_t size
+        uint32_t flags
+        const astl_collection_params_t* collection_params
+        const astl_counter_handle_t* counter_handles
+        uint32_t counter_count
+
     cdef struct astl_configure_metric_collection_on_target_params_t:
         size_t size
         uint32_t flags
@@ -350,10 +357,24 @@ cdef extern from "astl/astl_telemetry.h":
         const astl_metric_handle_t* metric_handles
         uint32_t metric_count
 
+    cdef struct astl_configure_metric_collection_params_t:
+        size_t size
+        uint32_t flags
+        const astl_collection_params_t* collection_params
+        const astl_metric_handle_t* metric_handles
+        uint32_t metric_count
+
     cdef struct astl_configure_metric_group_collection_on_target_params_t:
         size_t size
         uint32_t flags
         const void* target_handle
+        const astl_collection_params_t* collection_params
+        const astl_metric_group_handle_t* metric_group_handles
+        uint32_t metric_group_count
+
+    cdef struct astl_configure_metric_group_collection_params_t:
+        size_t size
+        uint32_t flags
         const astl_collection_params_t* collection_params
         const astl_metric_group_handle_t* metric_group_handles
         uint32_t metric_group_count
@@ -373,6 +394,15 @@ cdef extern from "astl/astl_telemetry.h":
         const void* target_handle
 
     cdef struct astl_start_collection_params_t:
+        size_t size
+        uint32_t flags
+
+    cdef struct astl_start_collection_on_target_paused_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+
+    cdef struct astl_start_collection_paused_params_t:
         size_t size
         uint32_t flags
 
@@ -425,8 +455,11 @@ cdef extern from "astl/astl_telemetry.h":
 
     # collection configuration
     int astlConfigureCounterCollectionOnTarget(const astl_configure_counter_collection_on_target_params_t* params)
+    int astlConfigureCounterCollection(const astl_configure_counter_collection_params_t* params)
     int astlConfigureMetricCollectionOnTarget(const astl_configure_metric_collection_on_target_params_t* params)
+    int astlConfigureMetricCollection(const astl_configure_metric_collection_params_t* params)
     int astlConfigureMetricGroupCollectionOnTarget(const astl_configure_metric_group_collection_on_target_params_t* params)
+    int astlConfigureMetricGroupCollection(const astl_configure_metric_group_collection_params_t* params)
 
     # immediate read
     int astlReadImmediateOnTarget(const astl_read_immediate_on_target_params_t* params)
@@ -435,6 +468,8 @@ cdef extern from "astl/astl_telemetry.h":
     # lifecycle control
     int astlStartCollectionOnTarget(const astl_start_collection_on_target_params_t* params)
     int astlStartCollection(const astl_start_collection_params_t* params)
+    int astlStartCollectionOnTargetPaused(const astl_start_collection_on_target_paused_params_t* params)
+    int astlStartCollectionPaused(const astl_start_collection_paused_params_t* params)
     int astlPauseCollectionOnTarget(const astl_pause_collection_on_target_params_t* params)
     int astlPauseCollection(const astl_pause_collection_params_t* params)
     int astlResumeCollectionOnTarget(const astl_resume_collection_on_target_params_t* params)

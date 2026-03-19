@@ -42,18 +42,26 @@ sequenceDiagram
 
     rect rgb(255,245,230)
     Note over User,CollectorManager: Collection & Immediate Read (phase 3)
-    User->>API: astlStartCollectionOnTarget(start_params)
-    API->>Orchestrator: StartCollectionOnTarget(target)
-    Orchestrator->>CollectorManager: StartOnTarget(target)
-    loop Sampling
-    CollectorManager-->>Orchestrator: Raw samples
-        Orchestrator->>Orchestrator: buffer
+    alt Start configured targets
+        User->>API: astlStartCollection(start_params)
+        API->>Orchestrator: StartCollection(configured targets)
+        Orchestrator->>CollectorManager: StartOnTarget(target)
+        loop Sampling
+            CollectorManager-->>Orchestrator: Raw samples
+            Orchestrator->>Orchestrator: buffer
+        end
+    else Start paused on one target
+        User->>API: astlStartCollectionOnTargetPaused(start_paused_params)
+        API->>Orchestrator: StartCollectionPaused(target)
+        Orchestrator->>CollectorManager: StartOnTarget(target)
+        Orchestrator->>CollectorManager: PauseOnTarget(target)
+        Orchestrator-->>API: target state = PAUSED
     end
-    alt Immediate read
+    opt Immediate read
         User->>API: astlReadImmediateOnTarget(immediate_params)
         API->>Orchestrator: ReadImmediateOnTarget(target)
-    Orchestrator->>CollectorManager: ReadImmediateOnTarget(target)
-    CollectorManager-->>Orchestrator: Raw sample
+        Orchestrator->>CollectorManager: ReadImmediateOnTarget(target)
+        CollectorManager-->>Orchestrator: Raw sample
         Orchestrator->>Orchestrator: buffer
     end
     end
@@ -87,4 +95,4 @@ sequenceDiagram
         Orchestrator-->>API: error codes (invalid handle, unsupported metric, invalid mode)
     end
 
-    Note over Orchestrator,MetricManager: Deferred processing model (work at Stop)
+    Note over Orchestrator,MetricManager: Deferred processing model, work happens at StopCollection

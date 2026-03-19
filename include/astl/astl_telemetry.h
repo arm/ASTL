@@ -868,6 +868,45 @@ ASTL_API astl_status_code astlStartCollection(const astl_start_collection_params
 
 /** A parameter structure describes inputs and outputs for this API call.
  */
+typedef struct astl_start_collection_on_target_paused_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_start_collection_on_target_paused_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle to start and leave paused.
+} astl_start_collection_on_target_paused_params_t;
+
+/**
+ * @brief Start telemetry collection on a specific target and immediately leave it paused
+ *
+ * Collection setup/start is performed, but sampling is paused before the call returns.
+ *
+ * @param params Parameters for this call (see astl_start_collection_on_target_paused_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
+ */
+ASTL_API astl_status_code
+astlStartCollectionOnTargetPaused(const astl_start_collection_on_target_paused_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_start_collection_paused_params_t {
+  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_start_collection_paused_params_t).
+  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
+} astl_start_collection_paused_params_t;
+
+/**
+ * @brief Start telemetry collection on all configured targets and immediately leave it paused
+ *
+ * Collection setup/start is performed, but sampling is paused before the call returns.
+ *
+ * @param params Parameters for this call (see astl_start_collection_paused_params_t).
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
+ */
+ASTL_API astl_status_code astlStartCollectionPaused(const astl_start_collection_paused_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
 typedef struct astl_pause_collection_on_target_params_t {
   size_t size;                         //!< Size of this struct for versioning; set size to
                                        //!< sizeof(astl_pause_collection_on_target_params_t).

@@ -334,7 +334,7 @@ status = astlConfigureMetricGroupCollectionOnTarget(&configure_group_params);
 }
 ```
 
-5. Start, read, and stop collection (with optional pause/resume)
+5. Start, read, and stop collection (including paused start)
 
 ```cpp
 ASTL_INIT_STRUCT(astl_start_collection_on_target_params_t, start_params,
@@ -342,7 +342,20 @@ ASTL_INIT_STRUCT(astl_start_collection_on_target_params_t, start_params,
                  .target_handle = target_properties.handle);
 status = astlStartCollectionOnTarget(&start_params);
 
-// Optional: temporarily suspend sampling
+ASTL_INIT_STRUCT(astl_start_collection_on_target_paused_params_t, start_paused_params,
+                 .flags = 0,
+                 .target_handle = target_properties.handle);
+status = astlStartCollectionOnTargetPaused(&start_paused_params);  // final state after call: PAUSED
+
+ASTL_INIT_STRUCT(astl_start_collection_paused_params_t, start_all_paused_params,
+                 .flags = 0);
+status = astlStartCollectionPaused(&start_all_paused_params);  // all CONFIGURED targets -> PAUSED
+
+ASTL_INIT_STRUCT(astl_start_collection_params_t, start_all_params,
+                 .flags = 0);
+status = astlStartCollection(&start_all_params);  // all CONFIGURED targets -> STARTED
+
+// Optional: temporarily suspend sampling after a normal start
 ASTL_INIT_STRUCT(astl_pause_collection_on_target_params_t, pause_params,
                  .flags = 0,
                  .target_handle = target_properties.handle);

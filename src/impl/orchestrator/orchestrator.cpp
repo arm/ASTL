@@ -283,7 +283,7 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_c
   return status;
 }
 
-auto Orchestrator::StartCollection(const ITarget *target) -> astl_status_code {
+auto Orchestrator::StartCollectionImpl(const ITarget *target, bool start_paused) -> astl_status_code {
   if (!_collector_manager) {
     ASTL_LOG_ERROR("Orchestrator::StartCollection called with null CollectorManager");
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -319,17 +319,68 @@ auto Orchestrator::StartCollection(const ITarget *target) -> astl_status_code {
   std::unique_lock lock{_raw_samples_mtx};
   _raw_samples[target].clear();
   lock.unlock();  // in case _collector_manager runs operations on Start that try to sink samples to us
-  const auto status = _collector_manager->StartOnTarget(target);
-  {
+  const auto start_status = _collector_manager->StartOnTarget(target);
+  if (start_status != ASTL_STATUS_SUCCESS) {
     // Re-acquire lock and guard against a concurrent StopCollection that may have already
     // transitioned us out of STARTING while StartOnTarget() was in flight.
     std::lock_guard state_lock(_collection_state_mutex);
     auto            it = _target_collection_states.find(target);
     if (it != _target_collection_states.end() && it->second == TargetCollectionState::STARTING) {
-      it->second = (status != ASTL_STATUS_SUCCESS) ? TargetCollectionState::CONFIGURED : TargetCollectionState::STARTED;
+      it->second = TargetCollectionState::CONFIGURED;
+    }
+    return start_status;
+  }
+
+  if (!start_paused) {
+    std::lock_guard state_lock(_collection_state_mutex);
+    auto            it = _target_collection_states.find(target);
+    if (it != _target_collection_states.end() && it->second == TargetCollectionState::STARTING) {
+      it->second = TargetCollectionState::STARTED;
+    }
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  auto pause_status = _collector_manager->PauseOnTarget(target);
+  if (pause_status == ASTL_STATUS_SUCCESS) {
+    std::lock_guard state_lock(_collection_state_mutex);
+    auto            it = _target_collection_states.find(target);
+    if (it != _target_collection_states.end() && it->second == TargetCollectionState::STARTING) {
+      it->second = TargetCollectionState::PAUSED;
+    }
+    _target_pause_timestamps[target] = std::chrono::steady_clock::now();
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  const auto rollback_status = _collector_manager->StopOnTarget(target);
+  {
+    std::lock_guard raw_samples_lock(_raw_samples_mtx);
+    _raw_samples[target].clear();
+  }
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    auto            it = _target_collection_states.find(target);
+    if (it != _target_collection_states.end() && it->second == TargetCollectionState::STARTING) {
+      it->second =
+          (rollback_status == ASTL_STATUS_SUCCESS) ? TargetCollectionState::CONFIGURED : TargetCollectionState::STARTED;
     }
   }
-  return status;
+  if (rollback_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to roll back collection start after pause request failed: {}",
+                   astlStatusString(rollback_status));
+    return rollback_status;
+  }
+  if (pause_status == ASTL_STATUS_NOT_IMPLEMENTED) {
+    return ASTL_STATUS_PAUSE_UNSUPPORTED;
+  }
+  return pause_status;
+}
+
+auto Orchestrator::StartCollection(const ITarget *target) -> astl_status_code {
+  return StartCollectionImpl(target, false);
+}
+
+auto Orchestrator::StartCollectionPaused(const ITarget *target) -> astl_status_code {
+  return StartCollectionImpl(target, true);
 }
 
 auto Orchestrator::ReadImmediate(const ITarget *target) -> astl_status_code {

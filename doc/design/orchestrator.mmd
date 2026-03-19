@@ -2,12 +2,10 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
----
-title: ASTL Orchestrator
-description: High-level class relationships (targets, counters, metrics, collectors, managers, orchestrator entry points)
-updated: 2025-09-25
-source: impl headers + implementation files
----
+%% title: ASTL Orchestrator
+%% description: High-level class relationships (targets, counters, metrics, collectors, managers, orchestrator entry points)
+%% updated: 2026-03-18
+%% source: impl headers + implementation files
 %% Regenerate with:
 %%   node scripts/render_mermaid.js doc/design/orchestrator.mmd doc/design/orchestrator.svg
 %% (Keep only one Mermaid diagram type per file to avoid parser errors.)
@@ -196,6 +194,11 @@ namespace AstlCore{
         +GetTargetCount()
         +GetTargets()
         +ConfigureCollection(ITarget, ImmediateMetric)
+        +StartCollection(ITarget)
+        +StartCollectionPaused(ITarget)
+        +PauseCollection(ITarget)
+        +ResumeCollection(ITarget)
+        +StopCollection(ITarget)
     }
 
     class IOutputManager{

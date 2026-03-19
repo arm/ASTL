@@ -189,6 +189,16 @@ inline auto StartCollection() -> astl_status_code {
   return astlStartCollection(&params);
 }
 
+inline auto StartCollectionOnTargetPaused(astl_target_handle_t target_handle) -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_start_collection_on_target_paused_params_t, params, .flags = 0, .target_handle = target_handle);
+  return astlStartCollectionOnTargetPaused(&params);
+}
+
+inline auto StartCollectionPaused() -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_start_collection_paused_params_t, params, .flags = 0);
+  return astlStartCollectionPaused(&params);
+}
+
 inline auto PauseCollectionOnTarget(astl_target_handle_t target_handle) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_pause_collection_on_target_params_t, params, .flags = 0, .target_handle = target_handle);
   return astlPauseCollectionOnTarget(&params);

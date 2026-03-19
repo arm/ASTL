@@ -86,11 +86,12 @@ def validate_wrapper_entry(
     wrapper_name: str,
     wrapper: dict[str, str] | None,
     exists_fn,
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     errors: list[str] = []
+    warnings: list[str] = []
     if wrapper is None:
         errors.append(f"{c_function}: missing {wrapper_name} coverage entry.")
-        return errors
+        return errors, warnings
 
     mode = wrapper.get("mode")
     if mode == "wrapped":
@@ -100,16 +101,20 @@ def validate_wrapper_entry(
         elif not exists_fn(symbol):
             errors.append(f"{c_function}: expected {wrapper_name} wrapper symbol '{symbol}' was not found.")
     elif mode == "skipped":
-        if not wrapper.get("reason"):
+        reason = wrapper.get("reason", "")
+        if not reason:
             errors.append(f"{c_function}: {wrapper_name} skipped entry is missing a reason.")
+        else:
+            warnings.append(f"{c_function}: {wrapper_name} skipped: {reason}")
     else:
         errors.append(f"{c_function}: {wrapper_name} has unsupported mode '{mode}'.")
 
-    return errors
+    return errors, warnings
 
 
-def validate_function_mapping(c_functions: list[str], mapping: dict[str, dict[str, dict[str, str]]]) -> list[str]:
+def validate_function_mapping(c_functions: list[str], mapping: dict[str, dict[str, dict[str, str]]]) -> tuple[list[str], list[str]]:
     errors: list[str] = []
+    warnings: list[str] = []
     mapped = set(mapping)
     discovered = set(c_functions)
 
@@ -129,8 +134,15 @@ def validate_function_mapping(c_functions: list[str], mapping: dict[str, dict[st
 
     for c_function in sorted(discovered & mapped):
         for wrapper_name, exists_fn in (("python", python_function_exists), ("go", go_function_exists)):
-            errors.extend(validate_wrapper_entry(c_function, wrapper_name, mapping[c_function].get(wrapper_name), exists_fn))
-    return errors
+            entry_errors, entry_warnings = validate_wrapper_entry(
+                c_function,
+                wrapper_name,
+                mapping[c_function].get(wrapper_name),
+                exists_fn,
+            )
+            errors.extend(entry_errors)
+            warnings.extend(entry_warnings)
+    return errors, warnings
 
 
 def validate_status_coverage() -> list[str]:
@@ -161,11 +173,17 @@ def validate_status_coverage() -> list[str]:
 
 def main() -> int:
     errors: list[str] = []
+    warnings: list[str] = []
     c_functions = extract_c_functions()
     mapping = load_mapping()
 
-    errors.extend(validate_function_mapping(c_functions, mapping))
+    mapping_errors, mapping_warnings = validate_function_mapping(c_functions, mapping)
+    errors.extend(mapping_errors)
+    warnings.extend(mapping_warnings)
     errors.extend(validate_status_coverage())
+
+    for warning in warnings:
+        print(f"Wrapper coverage warning: {warning}")
 
     if errors:
         print("Wrapper coverage check failed:", file=sys.stderr)

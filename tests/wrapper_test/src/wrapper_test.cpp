@@ -959,8 +959,158 @@ TEST_CASE("astlStartCollectionOnTarget", "[unimplemented for now][wrapper]") {
   REQUIRE(StartCollectionOnTarget(invalid_target_handle) == ASTL_STATUS_INVALID_TARGET_HANDLE);
 }
 
-TEST_CASE("astlStartCollection", "[unimplemented for now][wrapper]") {
-  REQUIRE(StartCollection() == ASTL_STATUS_NOT_IMPLEMENTED);
+TEST_CASE("astlStartCollection", "[wrapper]") {
+  auto  topology_manager  = std::make_unique<MockTopologyManager>();
+  auto  collector_manager = std::make_unique<MockCollectorManager>();
+  auto* collector_mgr     = collector_manager.get();
+  ALLOW_CALL(*collector_mgr, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_mgr, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_mgr, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto  metric_manager = std::make_unique<MockMetricManager>();
+  auto* metric_mgr     = metric_manager.get();
+  ALLOW_CALL(*metric_mgr, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_mgr, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_mgr, RemoveAllMetrics());
+  static int                        dummy_metric_storage = 0;
+  astl_metric_handle_t              metric_handle        = &dummy_metric_storage;
+  std::vector<astl_metric_handle_t> available_metrics{metric_handle};
+  ALLOW_CALL(*metric_mgr, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
+  ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
+      .RETURN(astl::CollectionOperations{
+          {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+
+  auto output_manager = std::make_unique<MockOutputManager>();
+  auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                             std::move(metric_manager), std::move(output_manager), "");
+
+  auto                 mock_target_1        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_1_handle = mock_target_1.get();
+  ALLOW_CALL(*mock_target_1, GetProperties(_))
+      .SIDE_EFFECT(_1->handle = mock_target_1_handle)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string target_1_name = "start_all_target_1";
+  ALLOW_CALL(*mock_target_1, Name()).RETURN(target_1_name);
+
+  auto                 mock_target_2        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_2_handle = mock_target_2.get();
+  ALLOW_CALL(*mock_target_2, GetProperties(_))
+      .SIDE_EFFECT(_1->handle = mock_target_2_handle)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string target_2_name = "start_all_target_2";
+  ALLOW_CALL(*mock_target_2, Name()).RETURN(target_2_name);
+
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target_1));
+  mock_targets.push_back(std::move(mock_target_2));
+  REQUIRE(orchestrator->SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
+
+  auto*                               target_1 = orchestrator->GetTargets()[0].get();
+  astl_collection_params_t            params{.size              = sizeof(astl_collection_params_t),
+                                             .flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY,
+                                             .sampling_interval = 0,
+                                             .collection_mode   = ASTL_COLLECTION_MODE_SAMPLING};
+  std::array<astl_metric_handle_t, 1> metrics{metric_handle};
+  REQUIRE(orchestrator->ConfigureMetricCollection(target_1, &params, metrics) == ASTL_STATUS_SUCCESS);
+
+  REQUIRE_CALL(*collector_mgr, StartOnTarget(target_1)).RETURN(ASTL_STATUS_SUCCESS);
+
+  TestOrchestratorInjector injector(std::move(orchestrator));
+  REQUIRE(StartCollection() == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("astlStartCollectionOnTargetPaused", "[wrapper]") {
+  // mock 2 targets
+  auto                 mock_target_1        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_1_handle = mock_target_1.get();
+  ALLOW_CALL(*mock_target_1, GetProperties(_))
+      .SIDE_EFFECT(_1->handle = mock_target_1_handle)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  auto                 mock_target_2        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_2_handle = mock_target_2.get();
+  ALLOW_CALL(*mock_target_2, GetProperties(_))
+      .SIDE_EFFECT(_1->handle = mock_target_2_handle)
+      .RETURN(ASTL_STATUS_INTERNAL_ERROR);
+
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target_1));
+  mock_targets.push_back(std::move(mock_target_2));
+
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
+  REQUIRE(orchestrator->SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  auto     targets      = AllocateAstlVector<astl_target_props_t>(kAFew);
+  uint32_t target_count = 2;
+  REQUIRE(GetTargets(targets.data(), &target_count) ==
+          ASTL_STATUS_INTERNAL_ERROR);             // get target properties from our mock target fails
+  int                  junk                  = 1;  // not null, but not a valid handle to a target
+  astl_target_handle_t invalid_target_handle = static_cast<astl_target_handle_t>(&junk);
+
+  REQUIRE(StartCollectionOnTargetPaused(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(StartCollectionOnTargetPaused(invalid_target_handle) == ASTL_STATUS_INVALID_TARGET_HANDLE);
+}
+
+TEST_CASE("astlStartCollectionPaused", "[wrapper]") {
+  auto  topology_manager  = std::make_unique<MockTopologyManager>();
+  auto  collector_manager = std::make_unique<MockCollectorManager>();
+  auto* collector_mgr     = collector_manager.get();
+  ALLOW_CALL(*collector_mgr, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_mgr, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_mgr, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto  metric_manager = std::make_unique<MockMetricManager>();
+  auto* metric_mgr     = metric_manager.get();
+  ALLOW_CALL(*metric_mgr, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_mgr, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_mgr, RemoveAllMetrics());
+  static int                        dummy_metric_storage = 0;
+  astl_metric_handle_t              metric_handle        = &dummy_metric_storage;
+  std::vector<astl_metric_handle_t> available_metrics{metric_handle};
+  ALLOW_CALL(*metric_mgr, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
+  ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
+      .RETURN(astl::CollectionOperations{
+          {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+
+  auto output_manager = std::make_unique<MockOutputManager>();
+  auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                             std::move(metric_manager), std::move(output_manager), "");
+
+  auto                 mock_target_1        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_1_handle = mock_target_1.get();
+  ALLOW_CALL(*mock_target_1, GetProperties(_))
+      .SIDE_EFFECT(_1->handle = mock_target_1_handle)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string target_1_name = "start_all_paused_target_1";
+  ALLOW_CALL(*mock_target_1, Name()).RETURN(target_1_name);
+
+  auto                 mock_target_2        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_2_handle = mock_target_2.get();
+  ALLOW_CALL(*mock_target_2, GetProperties(_))
+      .SIDE_EFFECT(_1->handle = mock_target_2_handle)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string target_2_name = "start_all_paused_target_2";
+  ALLOW_CALL(*mock_target_2, Name()).RETURN(target_2_name);
+
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target_1));
+  mock_targets.push_back(std::move(mock_target_2));
+  REQUIRE(orchestrator->SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
+
+  auto*                               target_2 = orchestrator->GetTargets()[1].get();
+  astl_collection_params_t            params{.size              = sizeof(astl_collection_params_t),
+                                             .flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY,
+                                             .sampling_interval = 0,
+                                             .collection_mode   = ASTL_COLLECTION_MODE_SAMPLING};
+  std::array<astl_metric_handle_t, 1> metrics{metric_handle};
+  REQUIRE(orchestrator->ConfigureMetricCollection(target_2, &params, metrics) == ASTL_STATUS_SUCCESS);
+
+  REQUIRE_CALL(*collector_mgr, StartOnTarget(target_2)).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*collector_mgr, PauseOnTarget(target_2)).RETURN(ASTL_STATUS_SUCCESS);
+
+  TestOrchestratorInjector injector(std::move(orchestrator));
+  REQUIRE(StartCollectionPaused() == ASTL_STATUS_SUCCESS);
 }
 
 TEST_CASE("astlPauseCollectionOnTarget", "[wrapper]") {

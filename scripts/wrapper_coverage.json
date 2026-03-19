@@ -142,8 +142,8 @@
     },
     "astlGetMetricGroupMetrics": {
       "python": {
-        "mode": "skipped",
-        "reason": "Python wrapper does not yet expose a direct metric-group-expansion API."
+        "mode": "wrapped",
+        "symbol": "get_metric_group_metrics"
       },
       "go": {
         "mode": "wrapped",
@@ -162,8 +162,8 @@
     },
     "astlConfigureCounterCollection": {
       "python": {
-        "mode": "skipped",
-        "reason": "Python wrapper currently exposes only the target-scoped configuration helper."
+        "mode": "wrapped",
+        "symbol": "configure_counters"
       },
       "go": {
         "mode": "wrapped",
@@ -182,8 +182,8 @@
     },
     "astlConfigureMetricCollection": {
       "python": {
-        "mode": "skipped",
-        "reason": "Python wrapper currently exposes only the target-scoped configuration helper."
+        "mode": "wrapped",
+        "symbol": "configure_metrics"
       },
       "go": {
         "mode": "wrapped",
@@ -202,8 +202,8 @@
     },
     "astlConfigureMetricGroupCollection": {
       "python": {
-        "mode": "skipped",
-        "reason": "Python wrapper currently exposes only the target-scoped configuration helper."
+        "mode": "wrapped",
+        "symbol": "configure_metric_groups"
       },
       "go": {
         "mode": "wrapped",
@@ -240,6 +240,16 @@
         "symbol": "StartCollectionOnTarget"
       }
     },
+    "astlStartCollectionOnTargetPaused": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "start_collection_paused"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "StartCollectionOnTargetPaused"
+      }
+    },
     "astlStartCollection": {
       "python": {
         "mode": "wrapped",
@@ -248,6 +258,16 @@
       "go": {
         "mode": "wrapped",
         "symbol": "StartCollection"
+      }
+    },
+    "astlStartCollectionPaused": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "start_collection_paused"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "StartCollectionPaused"
       }
     },
     "astlPauseCollectionOnTarget": {

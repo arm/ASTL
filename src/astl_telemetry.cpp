@@ -91,6 +91,35 @@ auto GetCApiMutex() noexcept -> std::mutex& {
   return c_api_mutex;
 }
 
+auto GetConfiguredTargets(astl::Orchestrator& orchestrator) noexcept -> std::vector<const astl::ITarget*> {
+  std::vector<const astl::ITarget*> configured_targets;
+  const auto                        target_states = orchestrator.GetAllTargetCollectionStates();
+  for (const auto& target : orchestrator.GetTargets()) {
+    auto state_it = target_states.find(target.get());
+    if (state_it != target_states.end() && state_it->second == astl::Orchestrator::TargetCollectionState::CONFIGURED) {
+      configured_targets.push_back(target.get());
+    }
+  }
+  return configured_targets;
+}
+
+auto StartConfiguredTargets(astl::Orchestrator& orchestrator, bool start_paused) noexcept -> astl_status_code {
+  const auto configured_targets = GetConfiguredTargets(orchestrator);
+  if (configured_targets.empty()) {
+    return ASTL_STATUS_COLLECTION_NOT_CONFIGURED;
+  }
+
+  astl_status_code aggregate_status = ASTL_STATUS_SUCCESS;
+  for (const auto* target : configured_targets) {
+    const auto status =
+        start_paused ? orchestrator.StartCollectionPaused(target) : orchestrator.StartCollection(target);
+    if (status != ASTL_STATUS_SUCCESS && aggregate_status == ASTL_STATUS_SUCCESS) {
+      aggregate_status = status;
+    }
+  }
+  return aggregate_status;
+}
+
 auto GetCounterFromHandle(astl_counter_handle_t counter_handle, const astl::ITarget* target) noexcept
     -> std::expected<const astl::IMetric*, astl_status_code> {
   auto const& orchestrator = astl::Orchestrator::GetInstance();
@@ -1491,8 +1520,52 @@ auto astlStartCollection(const astl_start_collection_params_t* params) noexcept 
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  return result;
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  const auto& orchestrator = orchestrator_or_error->get();
+  return StartConfiguredTargets(*orchestrator, false);
+}
+
+auto astlStartCollectionOnTargetPaused(const astl_start_collection_on_target_paused_params_t* params) noexcept
+    -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle = params->target_handle;
+  if (!target_handle) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  auto result = GetTargetFromHandle(target_handle);
+  if (!result) {
+    return result.error();
+  }
+
+  const auto* target                = *result;
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  const auto& orchestrator = orchestrator_or_error->get();
+  return orchestrator->StartCollectionPaused(target);
+}
+
+auto astlStartCollectionPaused(const astl_start_collection_paused_params_t* params) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return orchestrator_or_error.error();
+  }
+  const auto& orchestrator = orchestrator_or_error->get();
+  return StartConfiguredTargets(*orchestrator, true);
 }
 
 auto astlPauseCollectionOnTarget(const astl_pause_collection_on_target_params_t* params) noexcept -> astl_status_code {

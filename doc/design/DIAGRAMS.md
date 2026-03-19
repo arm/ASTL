@@ -23,7 +23,7 @@ The rendering is deterministic and handled by a custom Node.js script that ensur
 | System (overview) | End-to-end system phases overview    | `system_end_to_end_sequence.mmd`      | `system_end_to_end_sequence.svg`      | High-level API ↔ internal components, references phase diagrams below.            |
 | System Phase 1    | Initialization & discovery           | `system_phase_init_discovery.mmd`     | `system_phase_init_discovery.svg`     | Init managers, build topology, enumerate targets & metrics.                        |
 | System Phase 2    | Metric configuration                 | `system_phase_metric_config.mmd`      | `system_phase_metric_config.svg`      | Derive operations, configure collectors, error branch.                             |
-| System Phase 3    | Interval collection & immediate read | `system_phase_collection.mmd`         | `system_phase_collection.svg`         | Start, sampling loop, immediate read, pause/resume placeholders.                   |
+| System Phase 3    | Interval collection & immediate read | `system_phase_collection.mmd`         | `system_phase_collection.svg`         | Start, paused start, sampling loop, immediate read, pause/resume flow.             |
 | System Phase 4    | Stop & deferred processing           | `system_phase_stop_processing.mmd`    | `system_phase_stop_processing.svg`    | Process raw → processed, summaries, deferred model emphasis.                       |
 | System Phase 5    | Retrieval & shutdown                 | `system_phase_retrieval_shutdown.mmd` | `system_phase_retrieval_shutdown.svg` | Retrieval APIs, teardown, representative errors.                                   |
 
