@@ -38,6 +38,10 @@ The library has a C-interface for the API and a C++ implementation. A comprehens
 Python wrapper layer (Cython bindings + high-level utilities) is now available—refer to the
 **[Python User Guide](python/docs/USER_GUIDE.md)**.
 
+An experimental native Go wrapper is also available under
+**[Go/](Go/README.md)** for Go programs that want to call the ASTL C API
+through cgo.
+
 ## Key Goals and Properties
 
 ### Sharable

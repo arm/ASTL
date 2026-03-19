@@ -89,6 +89,9 @@ jobs:
       - name: 🧹 Check Formatting
         run: ${{ github.workspace }}/scripts/check_format.sh
 
+      - name: 🧹 Check Wrapper Coverage
+        run: python3 ${{ github.workspace }}/scripts/check_wrapper_coverage.py
+
       - name: 🧹 Lint with cppcheck
         run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
 

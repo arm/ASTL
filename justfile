@@ -54,6 +54,11 @@ lint preset='debug':
     set -eu -o pipefail
     ./scripts/lint.sh build/{{preset}} pull-request
 
+wrapper-coverage:
+    #!/usr/bin/env bash
+    set -eu -o pipefail
+    python3 ./scripts/check_wrapper_coverage.py
+
 license-lint:
     #!/user/bin/env bash
     set -eu -o pipefail

@@ -64,6 +64,8 @@ python/astl/astl_configuration.json
 
 # Kernel Module Compile Results
 *.mod*
+!Go/go.mod
+!Go/go.sum
 *.cmd
 .tmp_versions/
 modules.order
