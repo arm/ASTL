@@ -9,6 +9,7 @@
 #include <magic_enum/magic_enum.hpp>
 #include <random>
 #include <string>
+#include <string_view>
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
@@ -228,6 +229,38 @@ inline auto ParseUnits(std::string_view units_str) -> astl_units_t {
     return ASTL_UNITS_MHERTZ;
   }
   return ASTL_UNITS_UNKNOWN;
+}
+
+// For user-facing labels, the switch is the better fit than magic_enum as it allows for
+// more control over the formatting of the returned string
+inline auto UnitsToString(astl_units_t units) -> std::string_view {
+  switch (units) {
+    case ASTL_UNITS_NONE:
+      return "None";
+    case ASTL_UNITS_TICKS:
+      return "Ticks";
+    case ASTL_UNITS_SECONDS:
+      return "Seconds";
+    case ASTL_UNITS_CELSIUS:
+      return "Celsius";
+    case ASTL_UNITS_JOULES:
+      return "Joules";
+    case ASTL_UNITS_WATTS:
+      return "Watts";
+    case ASTL_UNITS_VOLTS:
+      return "Volts";
+    case ASTL_UNITS_AMPS:
+      return "Amps";
+    case ASTL_UNITS_BYTES:
+      return "Bytes";
+    case ASTL_UNITS_MBYTESPERSEC:
+      return "MB/s";
+    case ASTL_UNITS_MHERTZ:
+      return "MHz";
+    case ASTL_UNITS_UNKNOWN:
+      return "Unknown";
+  }
+  return "Unknown";
 }
 
 inline auto ParseMetricType(std::string const& metric_type_str) -> astl_metric_type_t {

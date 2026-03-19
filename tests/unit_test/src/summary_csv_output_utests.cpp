@@ -25,9 +25,11 @@ namespace {
 struct SummaryTestTarget : public astl::ITarget {
   std::string         name{"T0"};
   astl::CollectorType collector_type{astl::CollectorType::SCMI};
-  auto                GetCollectorType() const -> astl::CollectorType override { return collector_type; }
-  auto                Name() const -> std::string const& override { return name; }
-  auto                GetProperties(astl_target_props_t* props) const -> astl_status_code override {
+  SummaryTestTarget() = default;
+  SummaryTestTarget(std::string target_name) : name(std::move(target_name)) {}
+  auto GetCollectorType() const -> astl::CollectorType override { return collector_type; }
+  auto Name() const -> std::string const& override { return name; }
+  auto GetProperties(astl_target_props_t* props) const -> astl_status_code override {
     if (!props) {
       return ASTL_STATUS_BAD_ARGUMENT;
     }
@@ -37,8 +39,13 @@ struct SummaryTestTarget : public astl::ITarget {
 };
 
 struct SummaryTestMetric : public astl::IMetric {
-  std::string name{"M0"};
-  bool        CheckCapabilities(const astl::Capabilities& caps) const override {
+  std::string  name{"M0"};
+  std::string  description{"Test metric description"};
+  astl_units_t units{ASTL_UNITS_UNKNOWN};
+  SummaryTestMetric() = default;
+  SummaryTestMetric(std::string metric_name, std::string metric_description, astl_units_t metric_units)
+      : name(std::move(metric_name)), description(std::move(metric_description)), units(metric_units) {}
+  bool CheckCapabilities(const astl::Capabilities& caps) const override {
     (void)caps;
     return true;
   }
@@ -53,7 +60,12 @@ struct SummaryTestMetric : public astl::IMetric {
   void             Reset() override {}
   astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
   astl_status_code GetProperties(astl_metric_props_t* props) const override {
-    (void)props;
+    if (!props) {
+      return ASTL_STATUS_BAD_ARGUMENT;
+    }
+    props->name        = name.c_str();
+    props->description = description.c_str();
+    props->units       = units;
     return ASTL_STATUS_SUCCESS;
   }
   auto             Name() const -> std::string const& override { return name; }
@@ -77,13 +89,11 @@ std::vector<astl::ProcessedSampledData> MakeSamplesWithValues(const std::vector<
 // Helper to create processed samples map with multiple targets and metrics
 astl::ProcessedSamplesMap CreateTestProcessedSamplesMap() {
   // Create targets in a vector to ensure predictable order
-  static std::vector<SummaryTestTarget> targets(2);
-  static std::vector<SummaryTestMetric> metrics(2);
-
-  targets[0].name = "Target1";
-  targets[1].name = "Target2";
-  metrics[0].name = "Temperature";
-  metrics[1].name = "Voltage";
+  static std::vector<SummaryTestTarget> targets{{"Target1"}, {"Target2"}};
+  static std::vector<SummaryTestMetric> metrics{
+      {"Temperature", "Board temperature", ASTL_UNITS_CELSIUS},
+      {"Voltage",     "Rail voltage",      ASTL_UNITS_VOLTS  },
+  };
 
   astl::ProcessedSamplesMap processed_samples;
 
@@ -160,49 +170,52 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
     std::getline(file, line);
     REQUIRE(line == "Min/Max/Average Summary");
 
-    // Check MinMaxAvg column headers (now includes TimeWeightedAvg)
     std::getline(file, line);
-    REQUIRE(line == "MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count");
-
-    // Read combined stats data lines
-    std::vector<std::string> minmax_lines;
-    while (std::getline(file, line) && !line.empty()) {
-      minmax_lines.push_back(line);
-    }
-
-    // Should have 4 lines (2 metrics × 2 targets)
-    REQUIRE(minmax_lines.size() == 4);
+    REQUIRE(line == "Metric: Temperature - Board temperature (Celsius)");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Min,Max,Average,TimeWeightedAvg,Count");
+    std::getline(file, line);
+    REQUIRE(line.find("Target1,10,30,20,15,3") != std::string::npos);
+    std::getline(file, line);
+    REQUIRE(line.find("Target2,15,35,25,20,3") != std::string::npos);
+    std::getline(file, line);
+    REQUIRE(line.empty());
+    std::getline(file, line);
+    REQUIRE(line == "Metric: Voltage - Rail voltage (Volts)");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Min,Max,Average,TimeWeightedAvg,Count");
+    std::getline(file, line);
+    REQUIRE(line.find("Target1,3.3,3.5,3.4,3.35") != std::string::npos);
+    std::getline(file, line);
+    REQUIRE(line.find("Target2,5,5.2,5.1,5.05") != std::string::npos);
+    std::getline(file, line);
+    REQUIRE(line.empty());
 
     // Check Histogram section header
     std::getline(file, line);
     REQUIRE(line == "Histogram Summary");
 
-    // Check Histogram column headers
     std::getline(file, line);
-    REQUIRE(line == "MetricName,Target,Type,Value/Range,Count");
+    REQUIRE(line == "Metric: Temperature - Board temperature (Celsius)");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Type,Value/Range,Count");
 
-    // Read Histogram data lines (one line per bin), stop at blank separator
-    std::vector<std::string> histogram_lines;
+    std::vector<std::string> temperature_histogram_lines;
     while (std::getline(file, line) && !line.empty()) {
-      histogram_lines.push_back(line);
+      temperature_histogram_lines.push_back(line);
     }
+    REQUIRE(temperature_histogram_lines.size() == 6);
 
-    // Should have multiple histogram lines (one per unique value in each metric/target combination)
-    // Temperature has 3 unique values per target, Voltage has 3 unique values per target
-    // Total: (3 + 3 + 3 + 3) = 12 lines
-    REQUIRE(histogram_lines.size() == 12);
+    std::getline(file, line);
+    REQUIRE(line == "Metric: Voltage - Rail voltage (Volts)");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Type,Value/Range,Count");
 
-    // Based on debug output, the actual order is Target2 first, then Target1
-    // This is due to pointer address ordering in the map
-    // Format: MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count
-    // TWA: left-hold over 1μs equal intervals, so TWA uses first N-1 samples
-    // Temperature Target2: avg=25, TWA=(15+25)/2=20, Target1: avg=20, TWA=(10+20)/2=15
-    // Voltage Target2: avg≈5.1, TWA=(5.0+5.1)/2=5.05, Target1: avg≈3.4, TWA=(3.3+3.4)/2=3.35
-    REQUIRE(minmax_lines[0].find("Temperature,Target2,15,35,25,20,3") != std::string::npos);
-    REQUIRE(minmax_lines[1].find("Temperature,Target1,10,30,20,15,3") != std::string::npos);
-    REQUIRE(minmax_lines[2].find("Voltage,Target2,5,5.2,5.1,5.05") !=
-            std::string::npos);  // Allow for floating point precision
-    REQUIRE(minmax_lines[3].find("Voltage,Target1,3.3,3.5,3.4,3.35") != std::string::npos);
+    std::vector<std::string> voltage_histogram_lines;
+    while (std::getline(file, line) && !line.empty()) {
+      voltage_histogram_lines.push_back(line);
+    }
+    REQUIRE(voltage_histogram_lines.size() == 6);
   }
 
   SECTION("SUMMARY_CSV mode with empty data writes system info section") {
@@ -265,32 +278,51 @@ TEST_CASE("SummaryCsvOutput direct testing", "[csv_summary]") {  // NOLINT
     std::getline(file, line);
     REQUIRE(line == "Min/Max/Average Summary");
 
-    // Check MinMaxAvg column headers (now includes TimeWeightedAvg)
     std::getline(file, line);
-    REQUIRE(line == "MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count");
+    REQUIRE(line == "Metric: Temperature - Board temperature (Celsius)");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Min,Max,Average,TimeWeightedAvg,Count");
+    std::getline(file, line);
+    REQUIRE(line.find("Target1,10,30,20,15,3") != std::string::npos);
+    std::getline(file, line);
+    REQUIRE(line.find("Target2,15,35,25,20,3") != std::string::npos);
+    std::getline(file, line);
+    REQUIRE(line.empty());
 
-    // Collect combined stats data lines
-    std::vector<std::string> minmax_lines;
-    while (std::getline(file, line) && !line.empty()) {
-      minmax_lines.push_back(line);
-    }
-    REQUIRE(minmax_lines.size() == 4);  // 2 metrics × 2 targets
+    std::getline(file, line);
+    REQUIRE(line == "Metric: Voltage - Rail voltage (Volts)");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Min,Max,Average,TimeWeightedAvg,Count");
+    std::getline(file, line);
+    REQUIRE(line.find("Target1,3.3,3.5,3.4,3.35") != std::string::npos);
+    std::getline(file, line);
+    REQUIRE(line.find("Target2,5,5.2,5.1,5.05") != std::string::npos);
+    std::getline(file, line);
+    REQUIRE(line.empty());
 
     // Check Histogram section header
     std::getline(file, line);
     REQUIRE(line == "Histogram Summary");
 
-    // Check Histogram column headers
     std::getline(file, line);
-    REQUIRE(line == "MetricName,Target,Type,Value/Range,Count");
-
-    // Collect Histogram data lines (one line per bin), stop at blank separator
-    std::vector<std::string> histogram_lines;
+    REQUIRE(line == "Metric: Temperature - Board temperature (Celsius)");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Type,Value/Range,Count");
+    size_t temperature_histogram_count = 0;
     while (std::getline(file, line) && !line.empty()) {
-      histogram_lines.push_back(line);
+      ++temperature_histogram_count;
     }
-    // Should have 12 histogram lines (3 unique values × 2 targets × 2 metrics)
-    REQUIRE(histogram_lines.size() == 12);
+    REQUIRE(temperature_histogram_count == 6);
+
+    std::getline(file, line);
+    REQUIRE(line == "Metric: Voltage - Rail voltage (Volts)");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Type,Value/Range,Count");
+    size_t voltage_histogram_count = 0;
+    while (std::getline(file, line) && !line.empty()) {
+      ++voltage_histogram_count;
+    }
+    REQUIRE(voltage_histogram_count == 6);
   }
 
   SECTION("SummaryCsvOutput with empty path") {

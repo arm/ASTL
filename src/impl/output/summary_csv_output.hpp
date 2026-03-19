@@ -9,15 +9,16 @@
  * Core behaviors:
  *  - Inherits from SummaryOutput to get summary computation functionality
  *  - Produces two sections in a single CSV file:
- *      1. Min/Max/Average Summary  – MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count
- *      2. Histogram Summary        – MetricName,Target,Type,Value/Range,Count
+ *      1. Min/Max/Average Summary  – one table per metric with Target,Min,Max,Average,TimeWeightedAvg,Count rows
+ *      2. Histogram Summary        – one table per metric with Target,Type,Value/Range,Count rows
  *  - Sections are separated by a blank line; absent sections are omitted entirely
  *  - Environment variable `ASTL_CSV_OUTPUT_FILE` selects the output file path
  *  - Overwrites existing files (truncate mode) to ensure clean output
  *
  * Schema example (Min/Max/Average section):
- *   MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count
- *   Temperature,Target1,20.1,35.7,27.84,25.3,150
+ *   Metric: Temperature
+ *   Target,Min,Max,Average,TimeWeightedAvg,Count
+ *   Target1,20.1,35.7,27.84,25.3,150
  */
 #ifndef SUMMARY_CSV_OUTPUT_HPP_
 #define SUMMARY_CSV_OUTPUT_HPP_
@@ -69,8 +70,8 @@ class SummaryCsvOutput : public SummaryOutput {
    * @brief Write summary statistics to CSV file.
    *
    * Implements the WriteSummaries method from SummaryOutput to write
-   * the computed summaries in CSV format. Groups summaries by metric name
-   * for organized CSV output.
+   * the computed summaries in CSV format. Groups summaries into one table per
+   * metric so multi-target collections remain easy to read.
    *
    * @param summaries Vector of (target, metric, summary) tuples for all computed summaries
    * @return astl_status_code Success, file error, or internal error

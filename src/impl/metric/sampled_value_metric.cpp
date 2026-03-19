@@ -106,7 +106,7 @@ auto SampledValueMetric::Summarize() -> astl_status_code {
   // Only one numeric type is valid for a given metric instance.
   std::lock_guard<std::mutex> lock(_samples_mutex);
   if (_processed_samples.empty()) {
-    _summary_logger.LogInfo("No samples to summarize.");
+    _summary_logger.LogInfo("No samples to summarize.\n");
     return ASTL_STATUS_SUCCESS;
   }
   auto average = AstlValue::Divide(_sum_sample_value, _processed_samples.size());

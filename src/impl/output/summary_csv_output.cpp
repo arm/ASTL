@@ -4,6 +4,7 @@
 
 #include "summary_csv_output.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <map>
 #include <optional>
@@ -16,6 +17,27 @@
 #include "csv_system_info.hpp"
 
 namespace astl {
+
+namespace {
+
+auto WriteMetricHeader(std::ofstream& csv_file, const std::string& metric_name, const IMetric* metric) -> void {
+  astl_metric_props_t props{};
+  props.size           = sizeof(astl_metric_props_t);
+  const bool has_props = metric != nullptr && metric->GetProperties(&props) == ASTL_STATUS_SUCCESS;
+
+  csv_file << "Metric: " << metric_name;
+  if (has_props && props.description != nullptr && !std::string_view{props.description}.empty()) {
+    csv_file << " - " << props.description;
+  }
+  if (has_props) {
+    csv_file << " (" << UnitsToString(props.units) << ")";
+  } else {
+    csv_file << " (Unknown)";
+  }
+  csv_file << "\n";
+}
+
+}  // namespace
 
 // TODO(https://jira.arm.com/browse/ASTL-211): Use ASTL::FileInterface instead of std::filesystem for file operations.
 SummaryCsvOutput::SummaryCsvOutput(std::filesystem::path path)
@@ -49,7 +71,15 @@ static auto GroupByMetricName(const std::vector<std::tuple<const ITarget*, const
   return summaries_by_name;
 }
 
-// Writes one CSV section: header row, column row, all entries grouped by metric name, trailing blank line.
+template <typename SummaryT>
+static auto SortMetricEntriesByTargetName(std::vector<std::tuple<const ITarget*, const IMetric*, SummaryT>>& entries)
+    -> void {
+  std::ranges::sort(entries, [](const auto& left, const auto& right) {
+    return std::get<0>(left)->Name() < std::get<0>(right)->Name();
+  });
+}
+
+// Writes one CSV section with one table per metric and target-oriented rows.
 template <typename SummaryT, typename WriterFn>
 static auto WriteSection(std::ofstream& csv_file, const std::string& section_header, const std::string& column_header,
                          const std::vector<std::tuple<const ITarget*, const IMetric*, SummaryT>>& entries,
@@ -58,14 +88,16 @@ static auto WriteSection(std::ofstream& csv_file, const std::string& section_hea
     return;
   }
   csv_file << section_header << "\n";
-  csv_file << column_header << "\n";
   auto by_name = GroupByMetricName(entries);
-  for (const auto& [metric_name, metric_entries] : by_name) {
+  for (auto& [metric_name, metric_entries] : by_name) {
+    SortMetricEntriesByTargetName(metric_entries);
+    WriteMetricHeader(csv_file, metric_name, std::get<1>(metric_entries.front()));
+    csv_file << column_header << "\n";
     for (const auto& [target, metric, summary] : metric_entries) {
       writer(csv_file, metric_name, target, summary);
     }
+    csv_file << "\n";
   }
-  csv_file << "\n";  // Blank line separator
 }
 
 // Partitioned view of a SummaryResult collection split by concrete type.
@@ -114,8 +146,7 @@ auto SummaryCsvOutput::WriteSummaries(
   auto [minmax, histogram, twa] = PartitionSummaries(summaries);
 
   WriteCombinedStatsSection(csv_file, minmax, twa);
-  WriteSection(csv_file, "Histogram Summary", "MetricName,Target,Type,Value/Range,Count", histogram,
-               WriteHistogramEntry);
+  WriteSection(csv_file, "Histogram Summary", "Target,Type,Value/Range,Count", histogram, WriteHistogramEntry);
 
   csv_file.close();
   if (csv_file.fail()) {
@@ -139,22 +170,25 @@ auto SummaryCsvOutput::WriteCombinedStatsSection(
     twa_lookup[{metric->Name(), target->Name()}] = summary.time_weighted_avg;
   }
   csv_file << "Min/Max/Average Summary\n";
-  csv_file << "MetricName,Target,Min,Max,Average,TimeWeightedAvg,Count\n";
-  const auto by_name = GroupByMetricName(minmax);
-  for (const auto& [metric_name, entries] : by_name) {
+  auto by_name = GroupByMetricName(minmax);
+  for (auto& [metric_name, entries] : by_name) {
+    SortMetricEntriesByTargetName(entries);
+    WriteMetricHeader(csv_file, metric_name, std::get<1>(entries.front()));
+    csv_file << "Target,Min,Max,Average,TimeWeightedAvg,Count\n";
     for (const auto& [target, metric, summary] : entries) {
       auto       it     = twa_lookup.find({metric_name, target->Name()});
       const auto tw_avg = (it != twa_lookup.end()) ? it->second : std::optional<AstlValue>{};
       WriteCombinedStatsEntry(csv_file, metric_name, target, summary, tw_avg);
     }
+    csv_file << "\n";
   }
-  csv_file << "\n";  // Blank line separator
 }
 
 auto SummaryCsvOutput::WriteCombinedStatsEntry(std::ofstream& csv_file, const std::string& metric_name,
                                                const ITarget* target, const MinMaxAvgSummary& summary,
                                                const std::optional<AstlValue>& tw_avg) -> void {
-  csv_file << metric_name << "," << target->Name() << ",";
+  (void)metric_name;
+  csv_file << target->Name() << ",";
 
   // Min value
   csv_file << (summary.min.has_value() ? to_string(summary.min.value()) : "N/A") << ",";
@@ -174,9 +208,10 @@ auto SummaryCsvOutput::WriteCombinedStatsEntry(std::ofstream& csv_file, const st
 
 auto SummaryCsvOutput::WriteHistogramEntry(std::ofstream& csv_file, const std::string& metric_name,
                                            const ITarget* target, const HistogramSummary& summary) -> void {
+  (void)metric_name;
   // Write one row per bin
   for (const auto& bin : summary.bins) {
-    csv_file << metric_name << "," << target->Name() << ",";
+    csv_file << target->Name() << ",";
 
     // Type column (Discrete or Range)
     csv_file << (summary.is_discrete ? "Discrete" : "Range") << ",";
