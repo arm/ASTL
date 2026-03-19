@@ -117,9 +117,11 @@ esac
 ## split files into
 ##  - C++ source and header files,
 ##  - C++ test files (which have more lax linter rules)
+##  - C source/test files
 ##  - C-style header files (linted with different language standards)
 SOURCE_FILES_TO_LINT=()
 TEST_FILES_TO_LINT=()
+C_SOURCE_FILES_TO_LINT=()
 C_HEADERS_TO_LINT=()
 for FILE in "${FILES[@]}"; do
 	if [[ ! -e $FILE ]]; then
@@ -138,6 +140,8 @@ for FILE in "${FILES[@]}"; do
 	elif [[ $FILE == *tools/mock_sysfs* && "$(uname -s)" != "Linux" ]]; then
 		# mock_sysfs code only compiles on Linux, so skip these files if on other OS
 		continue
+	elif [[ $FILE == *.c ]]; then
+		C_SOURCE_FILES_TO_LINT+=("$FILE")
 	elif [[ $FILE == *.h ]]; then
 		C_HEADERS_TO_LINT+=("$FILE")
 	elif [[ $FILE == *tests/* || $FILE == *samples/* ]]; then
@@ -196,6 +200,17 @@ if [[ ${#TEST_FILES_TO_LINT[@]} -gt 0 ]]; then
 		-header-filter="'^(?!.*(include/astl|$BUILD_DIR/include/astl)).*'" \
 		"${EXTRA_ARGS[@]}" \
 		-checks=-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers,-readability-function-cognitive-complexity \
+		-- \
+		"${INCLUDE_PATHS[@]}" \
+		"${SYS_INCLUDE_PATHS[@]}"
+fi
+
+if [[ ${#C_SOURCE_FILES_TO_LINT[@]} -gt 0 ]]; then
+	echo "🧹 Linting C sources"
+	clang-tidy \
+		"${C_SOURCE_FILES_TO_LINT[@]}" -p "${BUILD_DIR}" \
+		--warnings-as-errors=* \
+		-checks=-cppcoreguidelines-* \
 		-- \
 		"${INCLUDE_PATHS[@]}" \
 		"${SYS_INCLUDE_PATHS[@]}"

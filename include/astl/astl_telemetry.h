@@ -24,8 +24,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 
-#include "astl/astl.h"
+#include "astl/astl_errors.h"
 
 #if defined(__cplusplus)
 extern "C" {
@@ -37,12 +38,13 @@ extern "C" {
 
 /**
  * @brief macro to declare a struct of type `type` with name `var` and initialize all fields,
- *        including the size field for API versioning
+ *        including the size field for API versioning.
+ *
+ * Compatible with both C and C++.
  * @example
  * `ASTL_INIT_STRUCT(astl_get_system_info_params_t, params, .flags = 0, .system_info = &platform_info)`
  */
-#define ASTL_INIT_STRUCT(type, var, ...) \
-  type var { .size = sizeof(type) __VA_OPT__(, ) __VA_ARGS__ }
+#define ASTL_INIT_STRUCT(type, var, ...) type var = {.size = sizeof(type), __VA_ARGS__}
 
 /**
  * @brief macro to declare and 0-initialize a `count`-length array of structs of type `type` named `var`
@@ -184,6 +186,7 @@ ASTL_API astl_status_code astlGetTargets(const astl_get_targets_params_t* params
  * while collecting telemetry like liters or kilograms for example
  */
 typedef enum _astl_units_t {
+  ASTL_UNITS_UNKNOWN = -1,      //!< Unknown units
   ASTL_UNITS_NONE    = 0,       //!< No units
   ASTL_UNITS_TICKS   = 1,       //!< Clock ticks for time metric calculation
   ASTL_UNITS_SECONDS = 2,       //!< Time (ticks converted to time). For calculated metric
@@ -197,22 +200,19 @@ typedef enum _astl_units_t {
   ASTL_UNITS_MBYTESPERSEC = 9,  //!< Bandwidth in MB/s. For calculated metrics but hardware may
                                 //!< already be doing the calculation, not ideal but possible
   ASTL_UNITS_MHERTZ = 10,       //!< Frequency readings in MHz
-
-  ASTL_UNITS_UNKNOWN = 0xFFFFFFFF,  //!< Unknown units
 } astl_units_t;
 
 /** Generic value types we expect to use.
  */
 typedef enum _astl_value_type_t {
-  ASTL_VALUE_UINT8   = 0,  //!< Unsigned 8bit integer (char)
-  ASTL_VALUE_UINT16  = 1,  //!< Unsigned 16bit integer (short)
-  ASTL_VALUE_UINT32  = 2,  //!< Unsigned 32bit integer
-  ASTL_VALUE_UINT64  = 3,  //!< Unsigned 64bit integer (long)
-  ASTL_VALUE_FLOAT32 = 6,  //!< 32bit float
-  ASTL_VALUE_FLOAT64 = 7,  //!< 64bit float (double)
-  ASTL_VALUE_BOOL8   = 8,  //!< 8bit boolean
-
-  ASTL_VALUE_UNKNOWN = 0xFFFFFFFF,  //!< Unknown
+  ASTL_VALUE_UNKNOWN = -1,  //!< Unknown
+  ASTL_VALUE_UINT8   = 0,   //!< Unsigned 8bit integer (char)
+  ASTL_VALUE_UINT16  = 1,   //!< Unsigned 16bit integer (short)
+  ASTL_VALUE_UINT32  = 2,   //!< Unsigned 32bit integer
+  ASTL_VALUE_UINT64  = 3,   //!< Unsigned 64bit integer (long)
+  ASTL_VALUE_FLOAT32 = 6,   //!< 32bit float
+  ASTL_VALUE_FLOAT64 = 7,   //!< 64bit float (double)
+  ASTL_VALUE_BOOL8   = 8,   //!< 8bit boolean
 } astl_value_type_t;
 
 /** Value container. Processing of an astl_value_t should be based on astl_value_type_t
@@ -256,13 +256,12 @@ typedef struct _astl_sample_t {
  * processed data
  */
 typedef enum _astl_counter_type_t {
-  ASTL_COUNTER_TYPE_VALUE = 0,  //!< Point in time value. Example: temperature
-  ASTL_COUNTER_TYPE_COUNT = 1,  //!< Free running count. Example: Bytes transferred, joules,
-                                //!< time residency
-  ASTL_COUNTER_TYPE_EVENT = 2,  //!< Point in time event. Example: Wakeup. Events are traced and
-                                //!< cannot be controlled with sampling or immediate reads
-
-  ASTL_COUNTER_TYPE_UNKNOWN = 0xFFFFFFFF,  //!< Unknown
+  ASTL_COUNTER_TYPE_UNKNOWN = -1,  //!< Unknown
+  ASTL_COUNTER_TYPE_VALUE   = 0,   //!< Point in time value. Example: temperature
+  ASTL_COUNTER_TYPE_COUNT   = 1,   //!< Free running count. Example: Bytes transferred, joules,
+                                   //!< time residency
+  ASTL_COUNTER_TYPE_EVENT = 2,     //!< Point in time event. Example: Wakeup. Events are traced and
+                                   //!< cannot be controlled with sampling or immediate reads
 } astl_counter_type_t;
 
 /** A counter properties structure describes a counter
@@ -342,29 +341,29 @@ typedef const void* astl_metric_handle_t;  //!< Abstraction of a metric handle
 /** The type of the metric. The type helps decide how to further process, summarize and display metric data
  */
 typedef enum _astl_metric_type_t {
-  ASTL_METRIC_VALUE            = 0,  //!< Single value in a point in time. Example: Temperature
-  ASTL_METRIC_FINITE_SET_VALUE = 1,  //!< Single value from a fixed set of possible values in a
-                                     //!< point in time. Idle vs Active
-  ASTL_METRIC_EVENT = 2,             //!< non-value event in a point in time. Ex: A wakeup event. Events are
-                                     //!< traced and cannot be controlled with sampling or immediate reads
-  ASTL_METRIC_DELTA = 3,             //!< diff in value when the counter is of type COUNT.
-                                     //!< Example: Dropped packets, energy
-  ASTL_METRIC_RESIDENCY = 4,         //!< diff in value when the counter is of type time. Ex: Time spent in
-                                     //!< a specific power state
-  ASTL_METRIC_RATE = 5,              //!< same as DELTA but over time. Example: Bandwidth as MB/s or
-                                     //!< Power as energy/s
-  ASTL_METRIC_UNKNOWN = 0xFFFFFFFF,  //!< Unknown
+  ASTL_METRIC_UNKNOWN          = -1,  //!< Unknown
+  ASTL_METRIC_VALUE            = 0,   //!< Single value in a point in time. Example: Temperature
+  ASTL_METRIC_FINITE_SET_VALUE = 1,   //!< Single value from a fixed set of possible values in a
+                                      //!< point in time. Idle vs Active
+  ASTL_METRIC_EVENT = 2,              //!< non-value event in a point in time. Ex: A wakeup event. Events are
+                                      //!< traced and cannot be controlled with sampling or immediate reads
+  ASTL_METRIC_DELTA = 3,              //!< diff in value when the counter is of type COUNT.
+                                      //!< Example: Dropped packets, energy
+  ASTL_METRIC_RESIDENCY = 4,          //!< diff in value when the counter is of type time. Ex: Time spent in
+                                      //!< a specific power state
+  ASTL_METRIC_RATE = 5,               //!< same as DELTA but over time. Example: Bandwidth as MB/s or
+                                      //!< Power as energy/s
 } astl_metric_type_t;
 
 /** High-level category of a metric/counter. Derived from configuration JSON "category" string. */
 typedef enum _astl_category_t {
-  ASTL_CATEGORY_COUNT         = 0,          //!< Count-based metrics (monotonic counters, event counts)
-  ASTL_CATEGORY_TEMPERATURE   = 1,          //!< Thermal metrics (temperature sensors)
-  ASTL_CATEGORY_POWER         = 2,          //!< Power metrics (instantaneous or accumulated energy rate)
-  ASTL_CATEGORY_FREQUENCY     = 3,          //!< Frequency metrics (clock rates)
-  ASTL_CATEGORY_VOLTAGE       = 4,          //!< Voltage metrics
-  ASTL_CATEGORY_CURRENT       = 5,          //!< Current metrics (amperage)
-  ASTL_CATEGORY_UNCATEGORIZED = 0xFFFFFFFF  //!< Unknown or unmapped category
+  ASTL_CATEGORY_UNCATEGORIZED = -1,  //!< Unknown or unmapped category
+  ASTL_CATEGORY_COUNT         = 0,   //!< Count-based metrics (monotonic counters, event counts)
+  ASTL_CATEGORY_TEMPERATURE   = 1,   //!< Thermal metrics (temperature sensors)
+  ASTL_CATEGORY_POWER         = 2,   //!< Power metrics (instantaneous or accumulated energy rate)
+  ASTL_CATEGORY_FREQUENCY     = 3,   //!< Frequency metrics (clock rates)
+  ASTL_CATEGORY_VOLTAGE       = 4,   //!< Voltage metrics
+  ASTL_CATEGORY_CURRENT       = 5,   //!< Current metrics (amperage)
 } astl_category_t;
 
 /** A metric properties structure describes a metric

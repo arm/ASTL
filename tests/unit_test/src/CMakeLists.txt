@@ -72,3 +72,17 @@ include(Catch)
 # unit tests will be run with ASTL_CONFIG_DIR set to the config directory in the build tree
 catch_discover_tests(unit_test ADD_TAGS_AS_LABELS PROPERTIES ENVIRONMENT
                      "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")
+
+add_executable(pure_c_header_smoke pure_c_header_smoke.c)
+set_target_properties(
+  pure_c_header_smoke
+  PROPERTIES C_STANDARD 99
+             C_STANDARD_REQUIRED ON
+             C_EXTENSIONS OFF)
+target_include_directories(pure_c_header_smoke PRIVATE "${CMAKE_SOURCE_DIR}/include")
+if(MSVC)
+  target_compile_options(pure_c_header_smoke PRIVATE /WX /W4)
+elseif(CMAKE_C_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
+  target_compile_options(pure_c_header_smoke PRIVATE -Werror -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME pure_c_header_smoke COMMAND pure_c_header_smoke)

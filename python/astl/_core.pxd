@@ -126,7 +126,7 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_UNITS_MBYTESPERSEC
         ASTL_UNITS_MHERTZ
         ASTL_UNITS_UNKNOWN
-    ctypedef unsigned int astl_units_t
+    ctypedef int astl_units_t
 
     # Value types
     cdef enum _astl_value_type_t:
@@ -138,7 +138,7 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_VALUE_FLOAT64
         ASTL_VALUE_BOOL8
         ASTL_VALUE_UNKNOWN
-    ctypedef unsigned int astl_value_type_t
+    ctypedef int astl_value_type_t
 
     cdef struct _astl_value_t:
         uint8_t ui8
@@ -157,7 +157,7 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_COUNTER_TYPE_COUNT
         ASTL_COUNTER_TYPE_EVENT
         ASTL_COUNTER_TYPE_UNKNOWN
-    ctypedef unsigned int astl_counter_type_t
+    ctypedef int astl_counter_type_t
 
     cdef struct _astl_counter_props_t:
         size_t size
@@ -181,7 +181,7 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_METRIC_RESIDENCY
         ASTL_METRIC_RATE
         ASTL_METRIC_UNKNOWN
-    ctypedef unsigned int astl_metric_type_t
+    ctypedef int astl_metric_type_t
 
     cdef enum _astl_category_t:
         ASTL_CATEGORY_COUNT
@@ -191,7 +191,7 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_CATEGORY_VOLTAGE
         ASTL_CATEGORY_CURRENT
         ASTL_CATEGORY_UNCATEGORIZED
-    ctypedef unsigned int astl_category_t
+    ctypedef int astl_category_t
 
     cdef struct _astl_metric_props_t:
         size_t size

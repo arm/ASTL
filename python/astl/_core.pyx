@@ -47,9 +47,9 @@ cdef class Counter:
     cdef public object description
     cdef public size_t handle_ptr
     cdef public object min_sampling_interval
-    cdef public unsigned int units
-    cdef public unsigned int value_type
-    cdef public unsigned int counter_type
+    cdef public int units
+    cdef public int value_type
+    cdef public int counter_type
     cdef public object formula
     def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, counter_type: int, formula: str):
         self.name = name
@@ -68,10 +68,10 @@ cdef class Metric:
     cdef public object description
     cdef public size_t handle_ptr
     cdef public object min_sampling_interval
-    cdef public unsigned int units
-    cdef public unsigned int value_type
-    cdef public unsigned int metric_type
-    cdef public unsigned int category
+    cdef public int units
+    cdef public int value_type
+    cdef public int metric_type
+    cdef public int category
     def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, metric_type: int, category: int):
         self.name = name
         self.description = description

@@ -27,6 +27,7 @@ extern "C" {
  * TODO (https://jira.arm.com/browse/ASTL-98) - Create separate list for internal error codes.
  */
 typedef enum _astl_status_code {
+  ASTL_STATUS_UNKNOWN_ERROR                        = -1,   //!< Unknown error
   ASTL_STATUS_SUCCESS                              = 0,    //!< Success
   ASTL_STATUS_BAD_ARGUMENT                         = 1,    //!< Bad argument passed to function
   ASTL_STATUS_BAD_CONFIGURATION                    = 2,    //!< Generic bad configuration error code
@@ -126,8 +127,6 @@ typedef enum _astl_status_code {
 
   ASTL_STATUS_INTERNAL_ERROR = 127,  //!< Internal failure
   // Do not define status codes higher than 127 due to stringify limitations
-
-  ASTL_STATUS_UNKNOWN_ERROR = 0xFFFFFFFF,  //!< Unknown error
 } astl_status_code;
 
 /**

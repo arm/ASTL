@@ -139,6 +139,9 @@ The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_
 #include "astl/astl_telemetry.h"     // Function calls
 ```
 
+`astl_telemetry.h` is self-contained for pure C consumers as well. The helper macros
+`ASTL_INIT_STRUCT`, `ASTL_ALLOC_ARRAY`, and `ASTL_FREE_ARRAY` are intended to work in both C and C++ translation units.
+
 1. Mount the Sysfs interface:
 
 ```bash
