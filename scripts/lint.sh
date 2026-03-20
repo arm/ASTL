@@ -108,7 +108,7 @@ get_diff_files() {
 	HEAD_DIFF_REF=$(resolve_commit_ref "$HEAD_REF" || true)
 	if [ -z "$BASE_DIFF_REF" ] || [ -z "$HEAD_DIFF_REF" ]; then
 		echo "Unable to resolve PR diff refs; falling back to linting all source files" >&2
-		printf '%s\n' "${SOURCE_FILES[@]}"
+		printf '%s\n' "${SOURCE_FILES[@]+"${SOURCE_FILES[@]}"}"
 		get_all_shell_lint_files
 		return
 	fi
@@ -141,7 +141,7 @@ pull-request)
 	;;
 all)
 	# lint one translation unit at a time (assume headers are #included)
-	FILES=("${SOURCE_FILES[@]}")
+	FILES=("${SOURCE_FILES[@]+"${SOURCE_FILES[@]}"}")
 	while IFS= read -r LINE; do
 		FILES+=("$LINE")
 	done < <(get_all_shell_lint_files)
@@ -165,7 +165,8 @@ C_SOURCE_FILES_TO_LINT=()
 C_HEADERS_TO_LINT=()
 SHELL_FILES_TO_LINT=()
 JUSTFILES_TO_LINT=()
-for FILE in "${FILES[@]}"; do
+# Bash 3.2 treats empty-array expansions as unbound with `set -u`, so guard them explicitly.
+for FILE in "${FILES[@]+"${FILES[@]}"}"; do
 	if [[ ! -e $FILE ]]; then
 		echo "Skipping non-existent path from diff selection: $FILE"
 		continue
@@ -207,14 +208,29 @@ done
 run_clang_tidy_batch() {
 	local label=$1
 	local checks=$2
-	local -n files_ref=$3
+	local files_var=$3
 
-	if [[ ${#files_ref[@]} -eq 0 ]]; then
+	if [[ ! $files_var =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+		echo "Invalid file array name: ${files_var}" >&2
+		return 1
+	fi
+
+	eval "set -- \"\${${files_var}[@]+\"\${${files_var}[@]}\"}\""
+	if [[ $# -eq 0 ]]; then
 		return 0
 	fi
 
 	local jobs
-	jobs="${LINT_JOBS:-$(nproc)}"
+	jobs="${LINT_JOBS:-}"
+	if [[ -z ${jobs} ]]; then
+		if command -v nproc >/dev/null 2>&1; then
+			jobs="$(nproc)"
+		elif [[ "$(uname -s)" == "Darwin" ]] && command -v sysctl >/dev/null 2>&1; then
+			jobs="$(sysctl -n hw.ncpu 2>/dev/null || echo 1)"
+		else
+			jobs=1
+		fi
+	fi
 	echo "🧹 ${label} (parallel jobs: ${jobs})"
 
 	local clang_tidy_args=(
@@ -228,12 +244,12 @@ run_clang_tidy_batch() {
 	fi
 
 	local extra_arg
-	for extra_arg in "${EXTRA_ARGS[@]}"; do
+	for extra_arg in "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"; do
 		clang_tidy_args+=("-extra-arg=${extra_arg}")
 	done
 
 	local runner
-	runner=$(mktemp)
+	runner=$(mktemp "${TMPDIR:-/tmp}/clang_tidy_runner.XXXXXX")
 	cat >"${runner}" <<'EOF'
 #!/usr/bin/env bash
 set -eu -o pipefail
@@ -243,11 +259,11 @@ clang-tidy "$file" "$@"
 EOF
 	chmod +x "${runner}"
 
-	if ! printf '%s\0' "${files_ref[@]}" | xargs -0 -n 1 -P "${jobs}" "${runner}" \
-		"${clang_tidy_args[@]}" \
+	if ! printf '%s\0' "$@" | xargs -0 -n 1 -P "${jobs}" "${runner}" \
+		"${clang_tidy_args[@]+"${clang_tidy_args[@]}"}" \
 		-- \
-		"${INCLUDE_PATHS[@]}" \
-		"${SYS_INCLUDE_PATHS[@]}"; then
+		"${INCLUDE_PATHS[@]+"${INCLUDE_PATHS[@]}"}" \
+		"${SYS_INCLUDE_PATHS[@]+"${SYS_INCLUDE_PATHS[@]}"}"; then
 		rm -f "${runner}"
 		return 1
 	fi
@@ -262,13 +278,13 @@ run_shell_lint() {
 
 	if command -v shellcheck >/dev/null 2>&1; then
 		echo "🧹 Linting shell scripts with shellcheck"
-		shellcheck "${SHELL_FILES_TO_LINT[@]}"
+		shellcheck "${SHELL_FILES_TO_LINT[@]+"${SHELL_FILES_TO_LINT[@]}"}"
 		return 0
 	fi
 
 	echo "🧹 Linting shell scripts with bash -n (shellcheck unavailable)"
 	local file
-	for file in "${SHELL_FILES_TO_LINT[@]}"; do
+	for file in "${SHELL_FILES_TO_LINT[@]+"${SHELL_FILES_TO_LINT[@]}"}"; do
 		bash -n "$file"
 	done
 }
@@ -285,7 +301,7 @@ run_justfile_lint() {
 
 	echo "🧹 Validating justfile syntax"
 	local file
-	for file in "${JUSTFILES_TO_LINT[@]}"; do
+	for file in "${JUSTFILES_TO_LINT[@]+"${JUSTFILES_TO_LINT[@]}"}"; do
 		just --justfile "$file" --dump >/dev/null
 	done
 }
@@ -345,12 +361,12 @@ fi
 if [[ ${#C_SOURCE_FILES_TO_LINT[@]} -gt 0 ]]; then
 	echo "🧹 Linting C sources"
 	clang-tidy \
-		"${C_SOURCE_FILES_TO_LINT[@]}" -p "${BUILD_DIR}" \
+		"${C_SOURCE_FILES_TO_LINT[@]+"${C_SOURCE_FILES_TO_LINT[@]}"}" -p "${BUILD_DIR}" \
 		--warnings-as-errors=* \
 		-checks=-cppcoreguidelines-* \
 		-- \
-		"${INCLUDE_PATHS[@]}" \
-		"${SYS_INCLUDE_PATHS[@]}"
+		"${INCLUDE_PATHS[@]+"${INCLUDE_PATHS[@]}"}" \
+		"${SYS_INCLUDE_PATHS[@]+"${SYS_INCLUDE_PATHS[@]}"}"
 fi
 
 # create a temporary C file to include all the C headers. This will cause clang-tidy to evaluate them as C headers
@@ -358,13 +374,13 @@ fi
 if [[ ${#C_HEADERS_TO_LINT[@]} -gt 0 ]]; then
 	echo "🧹 Linting C Headers"
 	clang-tidy -header-filter="^(.*(include|$BUILD_DIR/include)).*" \
-		"${C_HEADERS_TO_LINT[@]:-}" \
+		"${C_HEADERS_TO_LINT[@]+"${C_HEADERS_TO_LINT[@]}"}" \
 		-p "${BUILD_DIR}" \
 		--warnings-as-errors=* \
 		-checks=-cppcoreguidelines-macro-to-enum \
 		-- \
-		"${INCLUDE_PATHS[@]}" \
-		"${SYS_INCLUDE_PATHS[@]}"
+		"${INCLUDE_PATHS[@]+"${INCLUDE_PATHS[@]}"}" \
+		"${SYS_INCLUDE_PATHS[@]+"${SYS_INCLUDE_PATHS[@]}"}"
 fi
 
 run_shell_lint

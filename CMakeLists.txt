@@ -112,8 +112,7 @@ message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
 # Need exact match with Clang to avoid matching "AppleClang"
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   # Workaround for std::expected not available in clang 18 and earlier, use gcc's libstdc++
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-stdlib=libstdc++>
-                      $<$<COMPILE_LANGUAGE:CXX>:-D__cpp_concepts=202002>
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-stdlib=libstdc++> $<$<COMPILE_LANGUAGE:CXX>:-D__cpp_concepts=202002>
                       $<$<COMPILE_LANGUAGE:CXX>:-Wno-builtin-macro-redefined>)
 
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 18)
