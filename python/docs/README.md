@@ -59,6 +59,13 @@ Session save/load:
 - `save_collection(output_file_path: Optional[str] = None)`
 - `load_collection(input_file_path: str, chunk_size_bytes: int = 0)`
 
+Post-collection processing:
+
+- `crop_samples(start_ts=0, end_ts=0)` — currently returns `NotImplementedErrorASTL`; the API
+  surface is declared and will permanently discard samples outside the given window for all targets
+  once implemented.
+- `crop_samples_on_target(target, start_ts=0, end_ts=0)` — currently returns `NotImplementedErrorASTL`.
+
 Samples:
 
 - `get_counter_samples(target, counter) -> list[(timestamp, value)]`
@@ -154,6 +161,31 @@ astl.save_collection("/tmp/session.astl")
 # Load a previously saved archive for post-processing
 astl.load_collection("/tmp/session.astl")
 ```
+
+## Crop Samples (Post-Collection)
+
+After stopping collection (or after `load_collection`), permanently trim the dataset to a
+time window of interest. This is useful when a loaded `.astl` archive contains more data than
+needed, or to reduce memory before running summary / histogram APIs.
+
+```python
+import astl
+
+# Crop all targets: keep only samples in [2_000_000_000, 5_000_000_000] ns
+astl.crop_samples(start_ts=2_000_000_000, end_ts=5_000_000_000)
+
+# Crop a single target (not yet implemented, raises NotImplementedErrorASTL)
+t = astl.get_targets()[0]
+astl.crop_samples_on_target(t, start_ts=2_000_000_000, end_ts=5_000_000_000)
+```
+
+Key rules:
+
+- Must be called **after** `stop_collection`. Calling while any target is STARTED or PAUSED raises
+  `ASTLError` (`COLLECTION_NOT_STOPPED`).
+- The operation is **irreversible** — call `load_collection` again to recover discarded samples.
+- `start_ts = 0` means no lower bound; `end_ts = 0` means no upper bound.
+- Timestamps use the same `CLOCK_MONOTONIC_RAW` nanosecond clock as all other ASTL APIs.
 
 ## Diagnostics
 

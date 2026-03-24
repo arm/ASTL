@@ -284,4 +284,29 @@ inline auto GetMetricDiscreteHistogramOnTarget(astl_target_handle_t target_handl
   return astlGetMetricDiscreteHistogramOnTarget(&params);
 }
 
+/// Calls astlCropSamplesOnTarget with a single [start_ts, end_ts] removal window.
+inline auto CropSamplesOnTarget(astl_target_handle_t target_handle, uint64_t start_ts = 0, uint64_t end_ts = 0)
+    -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_crop_window_t, window, .flags = 0, .start_ts = start_ts, .end_ts = end_ts);
+  ASTL_INIT_STRUCT(astl_crop_samples_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
+                   .windows = &window, .window_count = 1);
+  return astlCropSamplesOnTarget(&params);
+}
+
+/// Calls astlCropMetricSamplesOnTarget with a single [start_ts, end_ts] retention window.
+inline auto CropMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
+                                      uint64_t start_ts = 0, uint64_t end_ts = 0) -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_crop_window_t, window, .flags = 0, .start_ts = start_ts, .end_ts = end_ts);
+  ASTL_INIT_STRUCT(astl_crop_metric_samples_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
+                   .metric_handle = metric_handle, .windows = &window, .window_count = 1);
+  return astlCropMetricSamplesOnTarget(&params);
+}
+
+/// Calls astlCropSamples with a single [start_ts, end_ts] removal window.
+inline auto CropSamples(uint64_t start_ts = 0, uint64_t end_ts = 0) -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_crop_window_t, window, .flags = 0, .start_ts = start_ts, .end_ts = end_ts);
+  ASTL_INIT_STRUCT(astl_crop_samples_params_t, params, .flags = 0, .windows = &window, .window_count = 1);
+  return astlCropSamples(&params);
+}
+
 #endif  // TEST_INCLUDES_HPP_

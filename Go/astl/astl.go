@@ -579,6 +579,76 @@ func LoadCollection(path string, chunkSizeBytes uint64) error {
 	return checkStatus("astlLoadCollection", C.astlLoadCollection(&request))
 }
 
+// CropWindow defines an inclusive time range of samples to retain for CropSamples,
+// CropSamplesOnTarget, and CropMetricSamplesOnTarget. Samples whose timestamp falls within
+// [StartTS, EndTS] are kept; all others are discarded.
+// Timestamps are CLOCK_MONOTONIC_RAW nanoseconds on Linux.
+// A zero StartTS means no lower bound on the retained range; a zero EndTS means no upper bound.
+type CropWindow struct {
+	StartTS uint64
+	EndTS   uint64
+}
+
+// CropSamplesOnTarget permanently retains samples for the specified target whose timestamps
+// fall within the supplied time window, discarding all others. Collection must be stopped before calling this function.
+// The operation is irreversible; reload the session to recover the original data.
+func CropSamplesOnTarget(target Target, window CropWindow) error {
+	cWindow := C.astl_crop_window_t{
+		size:     C.size_t(C.sizeof_astl_crop_window_t),
+		flags:    0,
+		start_ts: C.uint64_t(window.StartTS),
+		end_ts:   C.uint64_t(window.EndTS),
+	}
+	request := C.astl_crop_samples_on_target_params_t{
+		size:          C.size_t(C.sizeof_astl_crop_samples_on_target_params_t),
+		flags:         0,
+		target_handle: cTargetHandle(target),
+		windows:       &cWindow,
+		window_count:  1,
+	}
+	return checkStatus("astlCropSamplesOnTarget", C.astlCropSamplesOnTarget(&request))
+}
+
+// CropMetricSamplesOnTarget permanently retains samples for the specified metric on the specified
+// target whose timestamps fall within the supplied time window, discarding all others. Collection must be stopped
+// before calling this function. The operation is irreversible; reload the session to recover the original data.
+func CropMetricSamplesOnTarget(target Target, metric Metric, window CropWindow) error {
+	cWindow := C.astl_crop_window_t{
+		size:     C.size_t(C.sizeof_astl_crop_window_t),
+		flags:    0,
+		start_ts: C.uint64_t(window.StartTS),
+		end_ts:   C.uint64_t(window.EndTS),
+	}
+	request := C.astl_crop_metric_samples_on_target_params_t{
+		size:          C.size_t(C.sizeof_astl_crop_metric_samples_on_target_params_t),
+		flags:         0,
+		target_handle: cTargetHandle(target),
+		metric_handle: cMetricHandle(metric),
+		windows:       &cWindow,
+		window_count:  1,
+	}
+	return checkStatus("astlCropMetricSamplesOnTarget", C.astlCropMetricSamplesOnTarget(&request))
+}
+
+// CropSamples permanently retains samples across all targets whose timestamps fall within
+// the supplied time window, discarding all others. Collection must be stopped before calling this function.
+// The operation is irreversible; reload the session to recover the original data.
+func CropSamples(window CropWindow) error {
+	cWindow := C.astl_crop_window_t{
+		size:     C.size_t(C.sizeof_astl_crop_window_t),
+		flags:    0,
+		start_ts: C.uint64_t(window.StartTS),
+		end_ts:   C.uint64_t(window.EndTS),
+	}
+	request := C.astl_crop_samples_params_t{
+		size:         C.size_t(C.sizeof_astl_crop_samples_params_t),
+		flags:        0,
+		windows:      &cWindow,
+		window_count: 1,
+	}
+	return checkStatus("astlCropSamples", C.astlCropSamples(&request))
+}
+
 func GetCounterSamples(target Target, counter Counter, filter SampleFilter) ([]Sample, error) {
 	count, releaseCount, err := allocUint32("GetCounterSamples")
 	if err != nil {

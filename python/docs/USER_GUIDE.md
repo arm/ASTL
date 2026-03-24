@@ -23,6 +23,7 @@ SPDX-License-Identifier: Apache-2.0
 | Public Facade   | `astl`             | Re-exports curated API surface           | `start_collection`, `pause_collection`,               |
 |                 |                    |                                          | `resume_collection`, `stop_collection`, enums         |
 | Session SerDes  | `astl`             | Save/load `.astl` sessions via C API     | `save_collection`, `load_collection`                  |
+| Post-Collection | `astl`             | Permanent dataset trimming               | `crop_samples`, `crop_samples_on_target`              |
 | Streaming       | `astl.streaming`   | Iterative (sync & async) polling helpers | `poll_counter_once`, `poll_metric_once`,              |
 |                 |                    |                                          | `stream_counter`, `stream_metric`                     |
 | Session         | `astl.session`     | Lifecycle context management             | `Session` (context manager)                           |
@@ -123,7 +124,8 @@ Call order (typical):
 3. Read / stream / analyze
 4. `pause_collection` / `resume_collection` as needed
 5. `stop_collection`
-6. (optional) `save_collection` to persist a `.astl` archive
+6. (optional) `crop_samples` to permanently trim the in-memory dataset to a time window
+7. (optional) `save_collection` to persist a `.astl` archive
 
 Note that initialization of ASTL's internal state is done automatically
 
@@ -179,6 +181,57 @@ Errors from the underlying C API are surfaced as `ASTLError` (or mapped subclass
 
 For a runnable end-to-end example, see `python/samples/astl_demo.py`, which now
 demonstrates a save/load round-trip after collection.
+
+---
+
+## Crop Samples API
+
+After stopping collection (or after `load_collection`), permanently reduce the dataset to only
+samples whose timestamp falls within a single time window.
+
+```python
+import astl
+
+# Both functions currently raise NotImplementedErrorASTL
+# The API surface is declared; implementation is pending.
+astl.crop_samples(start_ts=2_000_000_000, end_ts=5_000_000_000)
+
+# No lower bound
+astl.crop_samples(end_ts=5_000_000_000)
+
+# Per-target variant
+t = astl.get_targets()[0]
+astl.crop_samples_on_target(t, start_ts=2_000_000_000, end_ts=5_000_000_000)
+```
+
+### Parameters
+
+| Argument   | Type     | Default | Meaning                                                                                              |
+| ---------- | -------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| `target`   | `Target` | —       | _(on-target variant only)_ Target to crop.                                                           |
+| `start_ts` | `int`    | `0`     | Inclusive window start in nanoseconds (`CLOCK_MONOTONIC_RAW`). `0` = no lower bound.                 |
+| `end_ts`   | `int`    | `0`     | Inclusive window end in nanoseconds. `0` = no upper bound. Must be `>= start_ts` when both non-zero. |
+
+### Behaviour
+
+> **Note:** Both `crop_samples` and `crop_samples_on_target` currently raise `NotImplementedErrorASTL`.
+> The API surface and struct layout are stable; full implementation is pending.
+
+- **Scope** — `crop_samples` applies to every configured target and every collected
+  counter/metric. `crop_samples_on_target` is scoped to a single target.
+- **Irreversible** — call `load_collection` to recover discarded samples.
+- **Collection must be stopped** — will raise `ASTLError` (`COLLECTION_NOT_STOPPED`) if any target
+  is still in STARTED or PAUSED state once implemented.
+- **Post-crop APIs** — all subsequent calls to `get_counter_samples`, `get_metric_samples`,
+  `get_metric_statistics_on_target`, and `get_metric_discrete_histogram_on_target` will operate on
+  the cropped dataset once implemented.
+
+### Error Handling
+
+| Condition                                         | Exception                                       |
+| ------------------------------------------------- | ----------------------------------------------- |
+| `crop_samples` or `crop_samples_on_target` called | `NotImplementedErrorASTL` (not yet implemented) |
+| `start_ts > end_ts` (both non-zero)               | `BadArgumentError` (once implemented)           |
 
 ---
 

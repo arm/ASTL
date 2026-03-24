@@ -681,6 +681,87 @@ cpdef load_collection(input_file_path, chunk_size_bytes: int = 0):
 
     _check(astlLoadCollection(&params))
 
+cpdef crop_samples_on_target(Target target, uint64_t start_ts=0, uint64_t end_ts=0):
+    """Permanently retain samples for a specific target that fall within the given time window, discarding all others.
+
+    Samples whose timestamp falls within [start_ts, end_ts] are kept; all others are discarded.
+    Collection must be stopped before calling this function.
+    The operation is irreversible; reload the session to recover the original data.
+
+    Args:
+        target: The target whose samples should be retained.
+        start_ts: Inclusive retention-window start (CLOCK_MONOTONIC_RAW nanoseconds on Linux).
+                  0 for no lower bound on the retained range.
+        end_ts:   Inclusive retention-window end (CLOCK_MONOTONIC_RAW nanoseconds on Linux).
+                  0 for no upper bound on the retained range. Must be >= start_ts when both are non-zero.
+    """
+    cdef astl_crop_window_t window
+    cdef astl_crop_samples_on_target_params_t params
+    window.size = sizeof(astl_crop_window_t)
+    window.flags = 0
+    window.start_ts = start_ts
+    window.end_ts = end_ts
+    params.size = sizeof(astl_crop_samples_on_target_params_t)
+    params.flags = 0
+    params.target_handle = <const void*>target.handle_ptr
+    params.windows = &window
+    params.window_count = 1
+    _check(astlCropSamplesOnTarget(&params))
+
+cpdef crop_metric_samples_on_target(Target target, Metric metric, uint64_t start_ts=0, uint64_t end_ts=0):
+    """Permanently retain samples for a specific metric on a specific target that fall within the given time window, discarding all others.
+
+    Samples whose timestamp falls within [start_ts, end_ts] are kept; all others are discarded.
+    Collection must be stopped before calling this function.
+    The operation is irreversible; reload the session to recover the original data.
+
+    Args:
+        target: The target whose samples should be retained.
+        metric: The metric whose samples should be retained.
+        start_ts: Inclusive retention-window start (CLOCK_MONOTONIC_RAW nanoseconds on Linux).
+                  0 for no lower bound on the retained range.
+        end_ts:   Inclusive retention-window end (CLOCK_MONOTONIC_RAW nanoseconds on Linux).
+                  0 for no upper bound on the retained range. Must be >= start_ts when both are non-zero.
+    """
+    cdef astl_crop_window_t window
+    cdef astl_crop_metric_samples_on_target_params_t params
+    window.size = sizeof(astl_crop_window_t)
+    window.flags = 0
+    window.start_ts = start_ts
+    window.end_ts = end_ts
+    params.size = sizeof(astl_crop_metric_samples_on_target_params_t)
+    params.flags = 0
+    params.target_handle = <const void*>target.handle_ptr
+    params.metric_handle = <const void*>metric.handle_ptr
+    params.windows = &window
+    params.window_count = 1
+    _check(astlCropMetricSamplesOnTarget(&params))
+
+cpdef crop_samples(uint64_t start_ts=0, uint64_t end_ts=0):
+    """Permanently retain samples across all targets that fall within the given time window, discarding all others.
+
+    Samples whose timestamp falls within [start_ts, end_ts] are kept; all others are discarded.
+    Collection must be stopped before calling this function.
+    The operation is irreversible; reload the session to recover the original data.
+
+    Args:
+        start_ts: Inclusive retention-window start (CLOCK_MONOTONIC_RAW nanoseconds on Linux).
+                  0 for no lower bound on the retained range.
+        end_ts:   Inclusive retention-window end (CLOCK_MONOTONIC_RAW nanoseconds on Linux).
+                  0 for no upper bound on the retained range. Must be >= start_ts when both are non-zero.
+    """
+    cdef astl_crop_window_t window
+    cdef astl_crop_samples_params_t params
+    window.size = sizeof(astl_crop_window_t)
+    window.flags = 0
+    window.start_ts = start_ts
+    window.end_ts = end_ts
+    params.size = sizeof(astl_crop_samples_params_t)
+    params.flags = 0
+    params.windows = &window
+    params.window_count = 1
+    _check(astlCropSamples(&params))
+
 cpdef read_immediate(Target target=None):
     cdef int rc
     cdef astl_read_immediate_params_t params

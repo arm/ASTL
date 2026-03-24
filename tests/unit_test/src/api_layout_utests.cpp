@@ -357,6 +357,33 @@ static_assert(sizeof(astl_get_metric_discrete_histogram_on_target_params_t) ==
               StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t,
                                astl_discrete_histogram_bin_t*, uint32_t*, uint64_t, uint64_t>());
 
+// Crop window and crop params structs
+static_assert(IsStdLayout<astl_crop_window_t>());
+static_assert(offsetof(astl_crop_window_t, size) == 0);
+static_assert(offsetof(astl_crop_window_t, flags) == kFlagsOffset);
+static_assert(sizeof(astl_crop_window_t) == StructLayoutSize<size_t, uint32_t, uint64_t, uint64_t>());
+
+static_assert(IsStdLayout<astl_crop_samples_on_target_params_t>());
+static_assert(offsetof(astl_crop_samples_on_target_params_t, size) == 0);
+static_assert(offsetof(astl_crop_samples_on_target_params_t, flags) == kFlagsOffset);
+static_assert(offsetof(astl_crop_samples_on_target_params_t, target_handle) == kFirstPtrOffset);
+static_assert(sizeof(astl_crop_samples_on_target_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, const astl_crop_window_t*, uint32_t>());
+
+static_assert(IsStdLayout<astl_crop_metric_samples_on_target_params_t>());
+static_assert(offsetof(astl_crop_metric_samples_on_target_params_t, size) == 0);
+static_assert(offsetof(astl_crop_metric_samples_on_target_params_t, flags) == kFlagsOffset);
+static_assert(offsetof(astl_crop_metric_samples_on_target_params_t, target_handle) == kFirstPtrOffset);
+static_assert(sizeof(astl_crop_metric_samples_on_target_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, const astl_crop_window_t*,
+                               uint32_t>());
+
+static_assert(IsStdLayout<astl_crop_samples_params_t>());
+static_assert(offsetof(astl_crop_samples_params_t, size) == 0);
+static_assert(offsetof(astl_crop_samples_params_t, flags) == kFlagsOffset);
+static_assert(sizeof(astl_crop_samples_params_t) ==
+              StructLayoutSize<size_t, uint32_t, const astl_crop_window_t*, uint32_t>());
+
 }  // namespace
 
 TEST_CASE("Public C API struct layout guards compile", "[unit][api][abi]") { SUCCEED(); }

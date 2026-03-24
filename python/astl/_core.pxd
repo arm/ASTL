@@ -579,3 +579,35 @@ cdef extern from "astl/astl_telemetry.h":
 
     int astlGetMetricDiscreteHistogramBinCountOnTarget(const astl_get_metric_discrete_histogram_bin_count_on_target_params_t* params)
     int astlGetMetricDiscreteHistogramOnTarget(const astl_get_metric_discrete_histogram_on_target_params_t* params)
+
+    # crop samples
+    cdef struct astl_crop_window_t:
+        size_t size
+        uint32_t flags
+        uint64_t start_ts
+        uint64_t end_ts
+
+    cdef struct astl_crop_samples_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const astl_crop_window_t* windows
+        uint32_t window_count
+
+    cdef struct astl_crop_samples_params_t:
+        size_t size
+        uint32_t flags
+        const astl_crop_window_t* windows
+        uint32_t window_count
+
+    cdef struct astl_crop_metric_samples_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* metric_handle
+        const astl_crop_window_t* windows
+        uint32_t window_count
+
+    int astlCropSamplesOnTarget(const astl_crop_samples_on_target_params_t* params)
+    int astlCropMetricSamplesOnTarget(const astl_crop_metric_samples_on_target_params_t* params)
+    int astlCropSamples(const astl_crop_samples_params_t* params)

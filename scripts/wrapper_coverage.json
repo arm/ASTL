@@ -419,6 +419,36 @@
         "mode": "wrapped",
         "symbol": "GetMetricDiscreteHistogramOnTarget"
       }
+    },
+    "astlCropSamples": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "crop_samples"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "CropSamples"
+      }
+    },
+    "astlCropSamplesOnTarget": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "crop_samples_on_target"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "CropSamplesOnTarget"
+      }
+    },
+    "astlCropMetricSamplesOnTarget": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "crop_metric_samples_on_target"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "CropMetricSamplesOnTarget"
+      }
     }
   }
 }

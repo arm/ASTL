@@ -2322,3 +2322,92 @@ auto astlGetMetricDiscreteHistogramOnTarget(
   *bin_count = required_count;
   return ASTL_STATUS_SUCCESS;
 }
+
+/***********************************************************************************
+ **********************     POST-COLLECTION PROCESSING      ************************
+ **********************************************************************************/
+
+namespace {
+
+/// Validate the caller-supplied windows array shared by both crop APIs.
+auto ValidateCropWindows(const astl_crop_window_t* windows, uint32_t window_count) noexcept -> astl_status_code {
+  if (windows == nullptr) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (window_count == 0) {
+    ASTL_LOG_ERROR("astlCropSamples: window_count must be >= 1");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  std::span<const astl_crop_window_t> windows_span{windows, window_count};
+  if (windows_span.front().size != sizeof(astl_crop_window_t)) {
+    return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
+  }
+
+  uint32_t window_index = 0;
+  for (const auto& window : windows_span) {
+    if (window.flags != 0U) {
+      ASTL_LOG_ERROR("astlCropSamples: windows[{}].flags must be 0", window_index);
+      return ASTL_STATUS_BAD_ARGUMENT;
+    }
+    if (window.start_ts != 0 && window.end_ts != 0 && window.start_ts > window.end_ts) {
+      ASTL_LOG_ERROR("astlCropSamples: windows[{}] has start_ts ({}) > end_ts ({})", window_index, window.start_ts,
+                     window.end_ts);
+      return ASTL_STATUS_BAD_ARGUMENT;
+    }
+    ++window_index;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+}  // namespace
+
+auto astlCropSamplesOnTarget(const astl_crop_samples_on_target_params_t* params) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  if (!params->target_handle) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  const auto windows_status = ValidateCropWindows(params->windows, params->window_count);
+  if (windows_status != ASTL_STATUS_SUCCESS) {
+    return windows_status;
+  }
+  return ASTL_STATUS_NOT_IMPLEMENTED;
+}
+
+auto astlCropMetricSamplesOnTarget(const astl_crop_metric_samples_on_target_params_t* params) noexcept
+    -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  if (!params->target_handle || !params->metric_handle) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  const auto windows_status = ValidateCropWindows(params->windows, params->window_count);
+  if (windows_status != ASTL_STATUS_SUCCESS) {
+    return windows_status;
+  }
+
+  return ASTL_STATUS_NOT_IMPLEMENTED;
+}
+
+auto astlCropSamples(const astl_crop_samples_params_t* params) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+
+  const auto windows_status = ValidateCropWindows(params->windows, params->window_count);
+  if (windows_status != ASTL_STATUS_SUCCESS) {
+    return windows_status;
+  }
+
+  return ASTL_STATUS_NOT_IMPLEMENTED;
+}
