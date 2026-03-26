@@ -86,6 +86,7 @@ jobs:
           cmake_preset: ${{ matrix.cmake_preset }}
           c_compiler: ${{ matrix.c_compiler }}
           cpp_compiler: ${{ matrix.cpp_compiler }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       # ===== TEST STEPS =====
       - name: 🐹 Setup Go

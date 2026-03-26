@@ -18,6 +18,9 @@ inputs:
   cpp_compiler:
     description: 'C++ compiler'
     required: true
+  github_token:
+    description: 'GitHub token used by actions inside this composite action'
+    required: true
 
 runs:
   using: "composite"
@@ -51,7 +54,7 @@ runs:
       id: vcpkg-cache
       uses: TAServers/vcpkg-cache@v3
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ inputs.github_token }}
 
     - name: ⤵️ VCPKG - Install Dependencies
       uses: lukka/run-vcpkg@v11
