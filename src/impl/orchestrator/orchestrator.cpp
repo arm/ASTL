@@ -232,6 +232,11 @@ auto Orchestrator::ConfigureCounterCollection(const ITarget *target, const astl_
     ASTL_LOG_ERROR("Failed to configure collection on target: {}", astlStatusString(status));
     return status;
   }
+  status = ResetTargetCollectionArtifacts(target);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to reset collection artifacts on target {}: {}", target->Name(), astlStatusString(status));
+    return status;
+  }
   return status;
 }
 
@@ -276,11 +281,48 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_c
     ASTL_LOG_ERROR("Failed to configure collection on target: {}", astlStatusString(status));
     return status;
   }
+  status = ResetTargetCollectionArtifacts(target);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to reset collection artifacts on target {}: {}", target->Name(), astlStatusString(status));
+    return status;
+  }
   {
     std::lock_guard state_lock(_collection_state_mutex);
     _target_collection_states[target] = TargetCollectionState::CONFIGURED;
   }
   return status;
+}
+
+auto Orchestrator::ResetTargetCollectionArtifacts(const ITarget *target) -> astl_status_code {
+  if (!target) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  {
+    std::lock_guard raw_lock(_raw_samples_mtx);
+    _raw_samples.erase(target);
+  }
+  {
+    std::lock_guard processed_lock(_processed_samples_mtx);
+    _processed_samples.erase(target);
+  }
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    _target_pause_timestamps.erase(target);
+    _target_resume_timestamps.erase(target);
+  }
+
+  _perfetto_emitted    = false;
+  _intervalcsv_emitted = false;
+
+  std::error_code remove_error;
+  fs::remove(_cache_dir / (target->Name() + kAstlFileExtension), remove_error);
+  if (remove_error) {
+    ASTL_LOG_ERROR("Failed to remove cached samples for target {}: {}", target->Name(), remove_error.message());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  return ASTL_STATUS_SUCCESS;
 }
 
 auto Orchestrator::StartCollectionImpl(const ITarget *target, bool start_paused) -> astl_status_code {

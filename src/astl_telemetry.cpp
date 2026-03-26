@@ -1066,7 +1066,7 @@ auto astlGetMetricGroupMetrics(const astl_get_metric_group_metrics_params_t* par
   }
   // for each metric in the group, copy its properties into the provided `metrics` buffer
   size_t idx = 0;
-  std::ranges::for_each_n(metrics_in_group->begin(), static_cast<std::ptrdiff_t>(metrics_properties.size()),
+  std::ranges::for_each_n(metrics_in_group->begin(), static_cast<std::ptrdiff_t>(metrics_in_group->size()),
                           [&idx, metric_manager, &metrics_properties](const auto& metric_handle) {
                             auto status = metric_manager->GetProperties(metric_handle, &metrics_properties[idx]);
                             if (status != ASTL_STATUS_SUCCESS) {

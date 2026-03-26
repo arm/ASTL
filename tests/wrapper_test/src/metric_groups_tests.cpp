@@ -207,7 +207,8 @@ TEST_CASE("astlGetMetricGroupMetrics", "[MetricGroups][wrapper]") {
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   auto                                        mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t                        mock_target_handle = mock_target.get();
-  ALLOW_CALL(*mock_target, Name()).RETURN("MockTarget");
+  const std::string                           mock_target_name{"MockTarget"};
+  ALLOW_CALL(*mock_target, Name()).RETURN(mock_target_name);
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
   mock_targets.push_back(std::move(mock_target));
 
@@ -218,10 +219,10 @@ TEST_CASE("astlGetMetricGroupMetrics", "[MetricGroups][wrapper]") {
   auto* metric_manager_ptr = metric_manager.get();
 
   // duplicate metric in the group, but that's fine for this test.
-  std::vector<astl_metric_handle_t>     available_metrics{mock_metric_ptr, mock_metric_ptr};
-  std::span<const astl_metric_handle_t> available_metrics_span{available_metrics.data(), available_metrics.size()};
+  std::vector<astl_metric_handle_t> available_metrics{mock_metric_ptr, mock_metric_ptr};
   auto group0 = std::make_unique<astl::MetricGroup>("Group0", "Description0", std::move(available_metrics));
-  auto group1 =
+  std::span<const astl_metric_handle_t> available_metrics_span{group0->metrics.data(), group0->metrics.size()};
+  auto                                  group1 =
       std::make_unique<astl::MetricGroup>("Group1", "Description1", std::vector<astl_metric_handle_t>{mock_metric_ptr});
   astl_metric_group_handle_t              group0_handle = group0->ToApiHandle();
   astl_metric_group_handle_t              group1_handle = group1->ToApiHandle();

@@ -648,6 +648,36 @@ TEST_CASE("MetricManager::SummarizeMetrics returns error for a TestMetric", "[Me
   REQUIRE(mgr.SummarizeMetrics() == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 }
 
+TEST_CASE("MetricManager::SummarizeMetrics preserves operation mappings for later raw-sample processing",
+          "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto  owner_metric = std::make_unique<TestMetric>();
+  auto* metric_ptr   = owner_metric.get();
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric),
+      std::make_unique<MetricConfig>("metric_after_summarize", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, 7, metric_ptr);
+
+  REQUIRE(mgr.SummarizeMetrics() == ASTL_STATUS_SUCCESS);
+
+  astl::AstlValue                   value{uint64_t{42}};
+  std::vector<astl::RawSampledData> samples{
+      astl::RawSampledData{7, value}
+  };
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = samples;
+
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric_ptr->received.size() == 1);
+}
+
 TEST_CASE("MetricManager::RegisterMetric succeeds with ResidencyMetricConfig", "[MetricManager][Residency]") {
   Capabilities  caps = MakeCaps(CollectorType::SCMI);
   MetricManager mgr(caps);

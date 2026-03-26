@@ -425,6 +425,15 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   auto EmitIntervalCsvIfRequested() -> void;
 
   /**
+   * @brief Clear per-target cached collection artifacts before a fresh collection lifecycle.
+   *
+   * This drops any in-memory raw / processed samples and removes the target's on-disk raw
+   * sample cache file so subsequent reads do not replay stale samples from an earlier
+   * configuration.
+   */
+  auto ResetTargetCollectionArtifacts(const ITarget *target) -> astl_status_code;
+
+  /**
    * @brief Global singleton initialization mutex.
    *
    * Guards `instance_` construction/teardown paths used by InitializeInstance/GetInstance/ResetInstance.
