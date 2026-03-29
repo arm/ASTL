@@ -659,6 +659,125 @@ TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManag
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
   REQUIRE(metric_configs.begin()->first->Category() == ASTL_CATEGORY_TEMPERATURE);
+  REQUIRE(metric_configs.begin()->first->Description() == "Temperature in Celsius");
+}
+
+TEST_CASE("CreateScmiMetricConfigs falls back to generated description when JSON description is empty",
+          "[ConfigManager][Category]") {
+  astl::metrics::spec::MetricJsonDeclaration metric_declaration;
+  metric_declaration.description              = "";
+  metric_declaration.metric_type              = "value";
+  metric_declaration.category                 = "TEMPERATURE";
+  metric_declaration.collection.protocol      = "scmi";
+  metric_declaration.collection.register_name = "SOC_TEMP";
+
+  astl::scmi::spec::ScmiSpecification spec;
+  spec.members = {
+      {.count        = 1,
+       .start_offset = 0,
+       .block_size   = 32,
+       .metrics      = {{"SOC_TEMP",
+                         {.base_de_id           = 0xdcba,
+                          .name                 = "SOC_TEMP",
+                          .component            = "AP",
+                          .description          = "SoC Temp",
+                          .unit                 = "C",
+                          .base10_unit_modifier = 0,
+                          .rel_offset           = 0x00}}}}
+  };
+
+  std::vector<const astl::ITarget*> targets;
+  astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
+  targets.push_back(&test_target);
+
+  auto metric_configs_result =
+      astl::metrics::spec::CreateScmiMetricConfigs("SoC Temperature", metric_declaration, spec, targets);
+  REQUIRE(metric_configs_result);
+  auto metric_configs = std::move(metric_configs_result.value());
+  REQUIRE_FALSE(metric_configs.empty());
+  REQUIRE(metric_configs.begin()->first->Description() == "Temperature reading for AP.0.SOC_TEMP");
+}
+
+TEST_CASE("CreateScmiMetricConfigs maps Count units to ASTL_UNITS_COUNT", "[ConfigManager][Units]") {
+  astl::metrics::spec::MetricJsonDeclaration metric_declaration;
+  metric_declaration.description              = "Number of thermal throttling events";
+  metric_declaration.metric_type              = "delta";
+  metric_declaration.category                 = "COUNT";
+  metric_declaration.collection.protocol      = "scmi";
+  metric_declaration.collection.register_name = "THROTTLE_EVENTS";
+
+  astl::scmi::spec::ScmiSpecification spec;
+  spec.members = {
+      {.count        = 1,
+       .start_offset = 0,
+       .block_size   = 32,
+       .metrics      = {{"THROTTLE_EVENTS",
+                         {.base_de_id           = 0x8C3D,
+                          .name                 = "THROTTLE_EVENTS",
+                          .component            = "CORE",
+                          .description          = "Mock sysfs cpu 1 throttle events",
+                          .unit                 = "Count",
+                          .base10_unit_modifier = 0,
+                          .rel_offset           = 0x00}}}}
+  };
+
+  std::vector<const astl::ITarget*> targets;
+  astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
+  targets.push_back(&test_target);
+
+  auto metric_configs_result =
+      astl::metrics::spec::CreateScmiMetricConfigs("Throttle Counts", metric_declaration, spec, targets);
+  REQUIRE(metric_configs_result);
+  auto metric_configs = std::move(metric_configs_result.value());
+  REQUIRE_FALSE(metric_configs.empty());
+  REQUIRE(metric_configs.begin()->first->Units() == ASTL_UNITS_COUNT);
+}
+
+TEST_CASE("CreateScmiMetricConfigs allows output-unit override with formula", "[ConfigManager][Units]") {
+  astl::metrics::spec::MetricJsonDeclaration metric_declaration;
+  metric_declaration.description              = "Frequency reading for FREQUENCY_PRESENT";
+  metric_declaration.unit                     = "MHz";
+  metric_declaration.formula                  = nlohmann::json("value / 1000");
+  metric_declaration.metric_type              = "value";
+  metric_declaration.category                 = "FREQUENCY";
+  metric_declaration.collection.protocol      = "scmi";
+  metric_declaration.collection.register_name = "FREQUENCY_PRESENT";
+
+  astl::scmi::spec::ScmiSpecification spec;
+  spec.members = {
+      {.count        = 1,
+       .start_offset = 0,
+       .block_size   = 32,
+       .metrics      = {{"FREQUENCY_PRESENT",
+                         {.base_de_id           = 0x0120,
+                          .name                 = "FREQUENCY_PRESENT",
+                          .component            = "CORE",
+                          .description          = "Instantaneous operational frequency",
+                          .unit                 = "Hz",
+                          .base10_unit_modifier = 0,
+                          .rel_offset           = 0x00}}}}
+  };
+
+  std::vector<const astl::ITarget*> targets;
+  astl::Target                      test_target("tlm-0", "test target", astl::CollectorType::SCMI, nullptr);
+  targets.push_back(&test_target);
+
+  auto metric_configs_result =
+      astl::metrics::spec::CreateScmiMetricConfigs("FREQUENCY_PRESENT", metric_declaration, spec, targets);
+  REQUIRE(metric_configs_result);
+  auto metric_configs = std::move(metric_configs_result.value());
+  REQUIRE(metric_configs.size() == 1);
+
+  auto* cfg = metric_configs.begin()->first.get();
+  REQUIRE(cfg != nullptr);
+  REQUIRE(cfg->Units() == ASTL_UNITS_MHERTZ);
+  REQUIRE(cfg->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(cfg->InputValueType() == ASTL_VALUE_UINT64);
+
+  auto applied = astl::ApplyFormula(cfg->GetFormula(), astl::AstlValue{uint64_t{1000}});
+  REQUIRE(applied.has_value());
+  REQUIRE(std::holds_alternative<uint64_t>(applied->value));
+  REQUIRE(std::get<uint64_t>(applied->value) == 1);
 }
 
 TEST_CASE("ParseConfiguration invalid category string maps to UNCATEGORIZED", "[ConfigManager][Category]") {

@@ -18,8 +18,9 @@ enum AstlUnits {
   ASTL_UNITS_BYTES        = 8;
   ASTL_UNITS_MBYTESPERSEC = 9;
   ASTL_UNITS_MHERTZ       = 10;
-  // C unknown = 0xFFFFFFFF - handle that in conversion code.
-  ASTL_UNITS_UNKNOWN_PROTO = 11;
+  ASTL_UNITS_RPM          = 11;
+  ASTL_UNITS_COUNT        = 12;
+  ASTL_UNITS_UNKNOWN_PROTO = 0xFF;
 }
 
 enum AstlValueType {
@@ -30,7 +31,7 @@ enum AstlValueType {
   ASTL_VALUE_FLOAT32 = 6;
   ASTL_VALUE_FLOAT64 = 7;
   ASTL_VALUE_BOOL8   = 8;
-  ASTL_VALUE_UNKNOWN_PROTO = 10;
+  ASTL_VALUE_UNKNOWN_PROTO = 0xFF;
 }
 
 enum AstlMetricType {
@@ -40,21 +41,23 @@ enum AstlMetricType {
   ASTL_METRIC_DELTA            = 3;
   ASTL_METRIC_RESIDENCY        = 4;
   ASTL_METRIC_RATE             = 5;
-  ASTL_METRIC_UNKNOWN_PROTO    = 6;
+  ASTL_METRIC_UNKNOWN_PROTO    = 0xFF;
 }
 
 enum AstlCategory {
-  ASTL_CATEGORY_COUNT               = 0;
-  ASTL_CATEGORY_TEMPERATURE         = 1;
-  ASTL_CATEGORY_POWER               = 2;
-  ASTL_CATEGORY_FREQUENCY           = 3;
-  ASTL_CATEGORY_VOLTAGE             = 4;
-  ASTL_CATEGORY_CURRENT             = 5;
-  ASTL_CATEGORY_UNCATEGORIZED_PROTO = 6;
+  ASTL_CATEGORY_COUNT         = 0;
+  ASTL_CATEGORY_TEMPERATURE   = 1;
+  ASTL_CATEGORY_POWER         = 2;
+  ASTL_CATEGORY_FREQUENCY     = 3;
+  ASTL_CATEGORY_VOLTAGE       = 4;
+  ASTL_CATEGORY_CURRENT       = 5;
+  ASTL_CATEGORY_BANDWIDTH     = 6;
+  ASTL_CATEGORY_FAN_SPEED     = 7;
+  ASTL_CATEGORY_UNCATEGORIZED_PROTO = 0xFF;
 }
 
 enum CollectorType {
-  COLLECTOR_TYPE_UNKNOWN     = 0;
+  COLLECTOR_TYPE_UNKNOWN = 0;
   COLLECTOR_TYPE_SCMI        = 1;
   COLLECTOR_TYPE_LIBSENSORS  = 2;
   COLLECTOR_TYPE_MMIO        = 3;

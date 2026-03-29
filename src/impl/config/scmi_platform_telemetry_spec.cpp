@@ -23,11 +23,12 @@ namespace astl::scmi::spec {
  * @brief Helper to determine if the given units from the metric declaration/selection and the
  * SCMI spec match, returning the resolved units if so.
  *
- * If both are specified, and they don't match, this returns a std::nullopt, meaning this
- * specified scmi metric doesn't match the requested metric and should be skipped
+ * If both are specified and differ, an explicit metric formula allows the declaration to override
+ * the output units while still matching the SCMI source register.
  */
-inline auto GetUnitsIfCompatible(std::string_view metric_unit, std::string_view spec_unit)
-    -> std::optional<astl_units_t> {
+inline auto GetUnitsIfCompatible(metrics::spec::MetricJsonDeclaration const& metric_declaration,
+                                 std::string_view                            spec_unit) -> std::optional<astl_units_t> {
+  const auto metric_unit = metric_declaration.unit.value_or("");
   // if either unit is empty, we consider it a match (no restriction), so use the other.
   if (metric_unit.empty()) {
     return ParseUnits(spec_unit);
@@ -35,10 +36,17 @@ inline auto GetUnitsIfCompatible(std::string_view metric_unit, std::string_view 
   if (spec_unit.empty()) {
     return ParseUnits(metric_unit);
   }
-  // both units are specified - they must match.
+  // both units are specified - they must match unless an explicit declaration formula
+  // declares that the metric output unit intentionally differs from the SCMI source unit.
   auto parsed_metric_units = ParseUnits(metric_unit);
   auto parsed_spec_units   = ParseUnits(spec_unit);
-  return parsed_metric_units == parsed_spec_units ? std::optional{parsed_metric_units} : std::nullopt;
+  if (parsed_metric_units == parsed_spec_units) {
+    return parsed_metric_units;
+  }
+  if (metric_declaration.formula.has_value()) {
+    return parsed_metric_units;
+  }
+  return std::nullopt;
 }
 
 /**
@@ -66,7 +74,7 @@ static auto AddMetricInstancesIfScmiElementMatches(metrics::spec::MetricJsonDecl
     return;  // metric's specified component filter doesn't match this scmi register, move along.
   }
   // if the metric declaration and the scmi spec both specify units, they must match
-  auto units = GetUnitsIfCompatible(metric_declaration.unit.value_or(""), scmi_spec_layout_member.unit);
+  auto units = GetUnitsIfCompatible(metric_declaration, scmi_spec_layout_member.unit);
   if (units == std::nullopt) {
     return;  // metric's specified unit doesn't match this scmi register, move along.
   }

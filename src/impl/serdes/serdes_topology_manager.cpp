@@ -19,7 +19,9 @@ static auto SerializeTarget(const ITarget& target, astl::protobuf::Target* proto
   if (props.description != nullptr) {
     proto_target->set_description(props.description);
   }
-  proto_target->set_collector_type(static_cast<astl::protobuf::CollectorType>(target.GetCollectorType()));
+  proto_target->set_collector_type(target.GetCollectorType() == CollectorType::UNKNOWN
+                                       ? astl::protobuf::COLLECTOR_TYPE_UNKNOWN
+                                       : static_cast<astl::protobuf::CollectorType>(target.GetCollectorType()));
 
   // Parent currently unused -> skip _parent_handle
   if (props.id != nullptr) {
@@ -77,7 +79,9 @@ auto Deserialize<std::unique_ptr<ITopologyManager>>(std::istream& input_stream)
       return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
     const std::string& description = proto_target.description();
-    const auto         collector   = static_cast<CollectorType>(proto_target.collector_type());
+    const auto         collector   = proto_target.collector_type() == astl::protobuf::COLLECTOR_TYPE_UNKNOWN
+                                         ? CollectorType::UNKNOWN
+                                         : static_cast<CollectorType>(proto_target.collector_type());
 
     std::optional<std::string> id{std::nullopt};
     if (!proto_target.id().empty()) {

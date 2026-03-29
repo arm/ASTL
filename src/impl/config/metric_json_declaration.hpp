@@ -122,8 +122,8 @@ struct MetricJsonDeclaration {
 
   std::string description;  //!< Description of the metric
 
-  //!< Unit of measurement for the metric.  Could be defined in the SCMI spec json instead, in which case this acts as a
-  //!< filter.
+  //!< Unit of measurement for the metric. Could be defined in the SCMI spec json instead, in which case this acts as a
+  //!< filter or output-unit override when used with an explicit formula.
   std::optional<std::string> unit;
 
   //!< Type of metric (e.g., value, delta, rate)

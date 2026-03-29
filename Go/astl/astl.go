@@ -132,6 +132,8 @@ const (
 	UnitsBytes        Units = 8
 	UnitsMBytesPerSec Units = 9
 	UnitsMHz          Units = 10
+	UnitsRPM          Units = 11
+	UnitsCount        Units = 12
 	UnitsUnknown      Units = 0xFFFFFFFF
 )
 
@@ -178,6 +180,8 @@ const (
 	CategoryFrequency     Category = 3
 	CategoryVoltage       Category = 4
 	CategoryCurrent       Category = 5
+	CategoryBandwidth     Category = 6
+	CategoryFanSpeed      Category = 7
 	CategoryUncategorized Category = 0xFFFFFFFF
 )
 

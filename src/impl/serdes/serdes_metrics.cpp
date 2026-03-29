@@ -43,17 +43,28 @@ static auto SerializeBasicMetricConfig(const MetricConfig& config)
 
   out.set_metric_name(config.Name());
   out.set_description(config.Description());
-  out.set_units(static_cast<astl::protobuf::AstlUnits>(config.Units()));
-  out.set_value_type(static_cast<astl::protobuf::AstlValueType>(config.ValueType()));
-  out.set_input_value_type(static_cast<astl::protobuf::AstlValueType>(config.InputValueType()));
-  out.set_metric_type(static_cast<astl::protobuf::AstlMetricType>(config.MetricType()));
-  out.set_category(static_cast<astl::protobuf::AstlCategory>(config.Category()));
+  out.set_units(config.Units() == ASTL_UNITS_UNKNOWN ? astl::protobuf::ASTL_UNITS_UNKNOWN_PROTO
+                                                     : static_cast<astl::protobuf::AstlUnits>(config.Units()));
+  out.set_value_type(config.ValueType() == ASTL_VALUE_UNKNOWN
+                         ? astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
+                         : static_cast<astl::protobuf::AstlValueType>(config.ValueType()));
+  out.set_input_value_type(config.InputValueType() == ASTL_VALUE_UNKNOWN
+                               ? astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
+                               : static_cast<astl::protobuf::AstlValueType>(config.InputValueType()));
+  out.set_metric_type(config.MetricType() == ASTL_METRIC_UNKNOWN
+                          ? astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
+                          : static_cast<astl::protobuf::AstlMetricType>(config.MetricType()));
+  out.set_category(config.Category() == ASTL_CATEGORY_UNCATEGORIZED
+                       ? astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO
+                       : static_cast<astl::protobuf::AstlCategory>(config.Category()));
 
   for (const auto& group : config.MetricGroups()) {
     out.add_metric_groups(group);
   }
 
-  out.set_collector_type(static_cast<astl::protobuf::CollectorType>(config.GetCollectorType()));
+  out.set_collector_type(config.GetCollectorType() == CollectorType::UNKNOWN
+                             ? astl::protobuf::COLLECTOR_TYPE_UNKNOWN
+                             : static_cast<astl::protobuf::CollectorType>(config.GetCollectorType()));
 
   return out;
 }
@@ -128,12 +139,24 @@ static auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& pro
   const std::string& name        = proto_cfg.metric_name();
   const std::string& description = proto_cfg.description();
 
-  const auto units            = static_cast<astl_units_t>(proto_cfg.units());
-  const auto value_type       = static_cast<astl_value_type_t>(proto_cfg.value_type());
-  const auto input_value_type = static_cast<astl_value_type_t>(proto_cfg.input_value_type());
-  const auto category         = static_cast<astl_category_t>(proto_cfg.category());
-  const auto metric_type      = static_cast<astl_metric_type_t>(proto_cfg.metric_type());
-  const auto collector        = static_cast<CollectorType>(proto_cfg.collector_type());
+  const auto units            = proto_cfg.units() == astl::protobuf::ASTL_UNITS_UNKNOWN_PROTO
+                                    ? ASTL_UNITS_UNKNOWN
+                                    : static_cast<astl_units_t>(proto_cfg.units());
+  const auto value_type       = proto_cfg.value_type() == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
+                                    ? ASTL_VALUE_UNKNOWN
+                                    : static_cast<astl_value_type_t>(proto_cfg.value_type());
+  const auto input_value_type = proto_cfg.input_value_type() == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
+                                    ? ASTL_VALUE_UNKNOWN
+                                    : static_cast<astl_value_type_t>(proto_cfg.input_value_type());
+  const auto category         = proto_cfg.category() == astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO
+                                    ? ASTL_CATEGORY_UNCATEGORIZED
+                                    : static_cast<astl_category_t>(proto_cfg.category());
+  const auto metric_type      = proto_cfg.metric_type() == astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
+                                    ? ASTL_METRIC_UNKNOWN
+                                    : static_cast<astl_metric_type_t>(proto_cfg.metric_type());
+  const auto collector        = proto_cfg.collector_type() == astl::protobuf::COLLECTOR_TYPE_UNKNOWN
+                                    ? CollectorType::UNKNOWN
+                                    : static_cast<CollectorType>(proto_cfg.collector_type());
 
   if (proto_cfg.metric_groups_size() == 0) {
     auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, category, metric_type, collector,
@@ -160,12 +183,24 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   const std::string& name                 = proto_cfg.metric_name();
   const std::string& description          = proto_cfg.description();
 
-  const auto               units            = static_cast<astl_units_t>(proto_cfg.units());
-  const auto               value_type       = static_cast<astl_value_type_t>(proto_cfg.value_type());
-  const auto               input_value_type = static_cast<astl_value_type_t>(proto_cfg.input_value_type());
-  const auto               category         = static_cast<astl_category_t>(proto_cfg.category());
-  const auto               metric_type      = static_cast<astl_metric_type_t>(proto_cfg.metric_type());
-  const auto               collector        = static_cast<CollectorType>(proto_cfg.collector_type());
+  const auto               units            = proto_cfg.units() == astl::protobuf::ASTL_UNITS_UNKNOWN_PROTO
+                                                  ? ASTL_UNITS_UNKNOWN
+                                                  : static_cast<astl_units_t>(proto_cfg.units());
+  const auto               value_type       = proto_cfg.value_type() == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
+                                                  ? ASTL_VALUE_UNKNOWN
+                                                  : static_cast<astl_value_type_t>(proto_cfg.value_type());
+  const auto               input_value_type = proto_cfg.input_value_type() == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
+                                                  ? ASTL_VALUE_UNKNOWN
+                                                  : static_cast<astl_value_type_t>(proto_cfg.input_value_type());
+  const auto               category         = proto_cfg.category() == astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO
+                                                  ? ASTL_CATEGORY_UNCATEGORIZED
+                                                  : static_cast<astl_category_t>(proto_cfg.category());
+  const auto               metric_type      = proto_cfg.metric_type() == astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
+                                                  ? ASTL_METRIC_UNKNOWN
+                                                  : static_cast<astl_metric_type_t>(proto_cfg.metric_type());
+  const auto               collector        = proto_cfg.collector_type() == astl::protobuf::COLLECTOR_TYPE_UNKNOWN
+                                                  ? CollectorType::UNKNOWN
+                                                  : static_cast<CollectorType>(proto_cfg.collector_type());
   std::vector<std::string> metric_groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
 
   FiniteSetMetricConfig::FiniteSet      finite_set;
@@ -404,7 +439,9 @@ static auto SerializeHandleToRawMetricVec(const MetricHandle& handle)
 
 auto SerializeCollectorCapabilities(const astl::Capabilities& caps, astl::protobuf::MetricManager& proto_mgr) -> void {
   for (const auto& cap : caps._collector_capabilities) {
-    proto_mgr.add_capabilities(static_cast<astl::protobuf::CollectorType>(cap.collector_type));
+    proto_mgr.add_capabilities(cap.collector_type == CollectorType::UNKNOWN
+                                   ? astl::protobuf::COLLECTOR_TYPE_UNKNOWN
+                                   : static_cast<astl::protobuf::CollectorType>(cap.collector_type));
   }
 }
 
@@ -483,7 +520,9 @@ static auto DeserializeMetricHandle(const astl::protobuf::RawMetric&            
 
   const auto& raw_cfg     = raw.config();
   const auto& metric_name = raw_cfg.metric_name();
-  const auto  metric_type = static_cast<astl_metric_type_t>(raw_cfg.metric_type());
+  const auto  metric_type = raw_cfg.metric_type() == astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
+                                ? ASTL_METRIC_UNKNOWN
+                                : static_cast<astl_metric_type_t>(raw_cfg.metric_type());
 
   auto cfg_and_results_or_err = DeserializeMetricForType(metric_type, raw, targets);
   if (!cfg_and_results_or_err) {
@@ -522,7 +561,8 @@ static auto BuildCapabilities(const astl::protobuf::MetricManager& proto_manager
 
   for (int i = 0; i < proto_manager.capabilities_size(); ++i) {
     auto proto_cap      = proto_manager.capabilities(i);
-    auto collector_type = static_cast<CollectorType>(proto_cap);
+    auto collector_type = proto_cap == astl::protobuf::COLLECTOR_TYPE_UNKNOWN ? CollectorType::UNKNOWN
+                                                                              : static_cast<CollectorType>(proto_cap);
 
     if (collector_type == CollectorType::UNKNOWN) {
       ASTL_LOG_ERROR("Deserialize<MetricManager>: Skipping UNKNOWN collector type");

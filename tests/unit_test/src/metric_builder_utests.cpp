@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <ranges>
+#include <string>
 #include <vector>
 
 #include "../../mock_classes.hpp"
@@ -263,6 +265,40 @@ TEST_CASE("MetricBuilder::BuildMetricManagerFromASTLFile with nonexistent path",
   auto result = astl::BuildMetricManager(targets, configuration, nonexistent_cache);
 
   REQUIRE_FALSE(result.has_value());
+}
+
+TEST_CASE("MetricBuilder::BuildMetricManager uses JSON descriptions for SCMI counters", "[MetricBuilder]") {
+  const fs::path config_root = fs::temp_directory_path() / "astl_metric_builder_json_descriptions";
+  TempFileGuard  config_guard(config_root);
+  WriteMinimalScmiFixture(config_root);
+
+  auto configuration = MakeConfigurationForTestRoot(config_root);
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  auto scmi_target = std::make_unique<astl::Target>("scmi_tlm-0", "test target", astl::CollectorType::SCMI, nullptr,
+                                                    "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
+  const auto* target_ptr = scmi_target.get();
+  targets.push_back(std::move(scmi_target));
+
+  auto metric_manager_or_error = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  REQUIRE(metric_manager_or_error.has_value());
+
+  auto& metric_manager    = *metric_manager_or_error.value();
+  auto  counters_or_error = metric_manager.GetAvailableCounters(target_ptr);
+  REQUIRE(counters_or_error.has_value());
+  REQUIRE_FALSE(counters_or_error->empty());
+
+  std::vector<std::string> counter_descriptions;
+  for (const auto* const counter : *counters_or_error) {
+    astl_counter_props_t properties{};
+    properties.size = sizeof(astl_counter_props_t);
+    REQUIRE(metric_manager.GetCounterProperties(counter, &properties) == ASTL_STATUS_SUCCESS);
+    REQUIRE(properties.description != nullptr);
+    counter_descriptions.emplace_back(properties.description);
+  }
+
+  REQUIRE(std::ranges::find(counter_descriptions, "Unit test SoC power metric") != counter_descriptions.end());
+  REQUIRE(std::ranges::find(counter_descriptions, "Unit test energy counter") == counter_descriptions.end());
 }
 
 TEST_CASE("MetricBuilder::BuildMetricManager rejects load_file_path without cache dir", "[MetricBuilder]") {

@@ -184,13 +184,15 @@ cdef extern from "astl/astl_telemetry.h":
     ctypedef int astl_metric_type_t
 
     cdef enum _astl_category_t:
+        ASTL_CATEGORY_UNCATEGORIZED
         ASTL_CATEGORY_COUNT
         ASTL_CATEGORY_TEMPERATURE
         ASTL_CATEGORY_POWER
         ASTL_CATEGORY_FREQUENCY
         ASTL_CATEGORY_VOLTAGE
         ASTL_CATEGORY_CURRENT
-        ASTL_CATEGORY_UNCATEGORIZED
+        ASTL_CATEGORY_BANDWIDTH
+        ASTL_CATEGORY_FAN_SPEED
     ctypedef int astl_category_t
 
     cdef struct _astl_metric_props_t:

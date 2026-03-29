@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -19,6 +20,14 @@
 #include "astl/astl_telemetry.h"
 
 namespace {
+auto NormalizeScmiTargetName(std::string_view target_name) -> std::string_view {
+  constexpr std::string_view k_scmi_target_prefix = "scmi_";
+  if (target_name.starts_with(k_scmi_target_prefix)) {
+    return target_name.substr(k_scmi_target_prefix.size());
+  }
+  return target_name;
+}
+
 auto ValueToString(const astl_value_t& value, astl_value_type_t type) -> std::string {
   switch (type) {
     case ASTL_VALUE_UINT8:
@@ -216,20 +225,28 @@ auto GetTargetByName(std::string const& target_name, std::vector<astl_target_pro
   std::cout << "astlGetTargets Status: " << astlStatusString(status) << '\n';
 
   if (target_count > 0 && (status == ASTL_STATUS_SUCCESS || status == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED)) {
-    std::ranges::for_each(
-        target_properties_buffer, [&target_properties, target_name](const auto& target_properties_entry) {
-          std::cout << "Target info:" << '\n';
-          std::cout << "  Name:        " << (target_properties_entry.name ? target_properties_entry.name : "<null>")
-                    << '\n';
-          std::cout << "  Description: "
-                    << (target_properties_entry.description ? target_properties_entry.description : "<null>") << '\n';
-          std::cout << "compare to target_name:" << target_name << '\n';
-          if (target_properties_entry.name && target_properties_entry.name == target_name) {
-            std::cout << "  --> Selected target\n";
-            target_properties = target_properties_entry;
-          }
-        });
-    return ASTL_STATUS_SUCCESS;
+    const auto normalized_target_name = NormalizeScmiTargetName(target_name);
+    bool       found_match            = false;
+    for (const auto& target_properties_entry : target_properties_buffer) {
+      std::cout << "Target info:" << '\n';
+      std::cout << "  Name:        " << (target_properties_entry.name ? target_properties_entry.name : "<null>")
+                << '\n';
+      std::cout << "  Description: "
+                << (target_properties_entry.description ? target_properties_entry.description : "<null>") << '\n';
+      std::cout << "compare to target_name:" << target_name << '\n';
+      if (!target_properties_entry.name) {
+        continue;
+      }
+
+      const auto normalized_discovered_name = NormalizeScmiTargetName(target_properties_entry.name);
+      if (normalized_discovered_name == normalized_target_name) {
+        std::cout << "  --> Selected target\n";
+        target_properties = target_properties_entry;
+        found_match       = true;
+        break;
+      }
+    }
+    return found_match ? ASTL_STATUS_SUCCESS : ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
 
   std::cerr << "Failed to get target info.\n";

@@ -125,13 +125,15 @@ cdef class MetricState:
 
 class Category:
     """Namespace of ASTL category codes (mirrors astl_category_t enum)."""
+    UNCATEGORIZED = ASTL_CATEGORY_UNCATEGORIZED
     COUNT = ASTL_CATEGORY_COUNT
     TEMPERATURE = ASTL_CATEGORY_TEMPERATURE
     POWER = ASTL_CATEGORY_POWER
     FREQUENCY = ASTL_CATEGORY_FREQUENCY
     VOLTAGE = ASTL_CATEGORY_VOLTAGE
     CURRENT = ASTL_CATEGORY_CURRENT
-    UNCATEGORIZED = ASTL_CATEGORY_UNCATEGORIZED
+    BANDWIDTH = ASTL_CATEGORY_BANDWIDTH
+    FAN_SPEED = ASTL_CATEGORY_FAN_SPEED
 
 class Status:
     """Namespace of ASTL status codes (mirrors astl_status_code enum)."""

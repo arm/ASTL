@@ -175,6 +175,9 @@ inline auto ParseCategory(std::string const& category_str) -> astl_category_t {
   if (category_str_lower == "count") {
     return ASTL_CATEGORY_COUNT;
   }
+  if (category_str_lower == "fan_speed" || category_str_lower == "fan speed" || category_str_lower == "fanspeed") {
+    return ASTL_CATEGORY_FAN_SPEED;
+  }
   if (category_str_lower == "temperature") {
     return ASTL_CATEGORY_TEMPERATURE;
   }
@@ -189,6 +192,9 @@ inline auto ParseCategory(std::string const& category_str) -> astl_category_t {
   }
   if (category_str_lower == "current") {
     return ASTL_CATEGORY_CURRENT;
+  }
+  if (category_str_lower == "bandwidth") {
+    return ASTL_CATEGORY_BANDWIDTH;
   }
   return ASTL_CATEGORY_UNCATEGORIZED;
 }
@@ -228,6 +234,12 @@ inline auto ParseUnits(std::string_view units_str) -> astl_units_t {
   if (unit_str_lower == "mhz") {
     return ASTL_UNITS_MHERTZ;
   }
+  if (unit_str_lower == "rpm") {
+    return ASTL_UNITS_RPM;
+  }
+  if (unit_str_lower == "count" || unit_str_lower == "counts") {
+    return ASTL_UNITS_COUNT;
+  }
   return ASTL_UNITS_UNKNOWN;
 }
 
@@ -257,6 +269,10 @@ inline auto UnitsToString(astl_units_t units) -> std::string_view {
       return "MB/s";
     case ASTL_UNITS_MHERTZ:
       return "MHz";
+    case ASTL_UNITS_RPM:
+      return "RPM";
+    case ASTL_UNITS_COUNT:
+      return "Count";
     case ASTL_UNITS_UNKNOWN:
       return "Unknown";
   }

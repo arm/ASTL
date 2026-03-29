@@ -2,8 +2,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <filesystem>
+#include <fstream>
+
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
+#include "../../test_utilities.hpp"
 #include "collector/collector_builder.hpp"
 #include "collector/collector_manager.hpp"
 
@@ -172,6 +176,57 @@ TEST_CASE("CollectorManager::BuildCollectorManager creates SCMI collectors for S
   REQUIRE(capabilities_map.at(target_1).size() == 1);
   REQUIRE(capabilities_map.at(target_0).front().collector_type == astl::CollectorType::SCMI);
   REQUIRE(capabilities_map.at(target_1).front().collector_type == astl::CollectorType::SCMI);
+}
+
+TEST_CASE("CollectorManager::BuildCollectorManager maps prefixed SCMI target names to sysfs subdirectories",
+          "[collector_manager]") {
+  namespace fs = std::filesystem;
+
+  const fs::path telemetry_root = fs::temp_directory_path() / "astl_collector_manager_scmi_prefixed_target";
+  TempFileGuard  cleanup(telemetry_root);
+
+  std::error_code ec;
+  fs::create_directories(telemetry_root / "tlm-0", ec);
+  REQUIRE_FALSE(ec);
+
+  {
+    std::ofstream de_impl_version(telemetry_root / "tlm-0" / "de_implementation_version", std::ios::trunc);
+    REQUIRE(de_impl_version.good());
+    de_impl_version << "0.0.0";
+  }
+  {
+    std::ofstream version_file(telemetry_root / "tlm-0" / "version", std::ios::trunc);
+    REQUIRE(version_file.good());
+    version_file << "0.0.1";
+  }
+  {
+    std::ofstream tlm_enable(telemetry_root / "tlm-0" / "tlm_enable", std::ios::trunc);
+    REQUIRE(tlm_enable.good());
+    tlm_enable << "0";
+  }
+
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration                           = configuration_result.value();
+  configuration.scmi_sysfs_telemetry_root_path = telemetry_root;
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  auto* target = new astl::Target{"scmi_tlm-0", "discovered test target", astl::CollectorType::SCMI, nullptr};
+  targets.emplace_back(target);
+
+  auto collector_manager = astl::BuildCollectorManager(targets, configuration);
+  REQUIRE(collector_manager.has_value());
+
+  astl_collection_params_t collection_params{
+      .size              = sizeof(astl_collection_params_t),
+      .flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
+      .sampling_interval = 0,
+      .collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+  };
+  astl::CollectionOperations operations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
+
+  REQUIRE(collector_manager.value()->ConfigureCollectionOnTarget(target, collection_params, std::move(operations)) ==
+          ASTL_STATUS_SUCCESS);
 }
 
 TEST_CASE("CollectorManager::BuildCollectorManager rejects unsupported collector types", "[collector_manager]") {

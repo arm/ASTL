@@ -50,13 +50,15 @@ class CollectionMode:  # minimal enum-like stub
     SNAPSHOT: int
 
 class Category:
+    UNCATEGORIZED: int
     COUNT: int
     TEMPERATURE: int
     POWER: int
     FREQUENCY: int
     VOLTAGE: int
     CURRENT: int
-    UNCATEGORIZED: int
+    BANDWIDTH: int
+    FAN_SPEED: int
 
 class Status:
     SUCCESS: int

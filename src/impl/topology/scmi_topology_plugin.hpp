@@ -21,8 +21,12 @@ namespace ScmiTopologyPlugin {
 
 namespace detail {
 
+static auto BuildTargetName(const std::string& telemetry_subdirectory) -> std::string {
+  return "scmi_" + telemetry_subdirectory;
+}
+
 /**
- * @brief Returns a Target (e.g. named "tlm-0") accessible via SCMI from the given subdirectory scmi_telemetry
+ * @brief Returns a Target (e.g. named "scmi_tlm-0") accessible via SCMI from the given subdirectory scmi_telemetry
  *
  * @param scmi_sysfs_file_interface a FileInterface implementation (or mock) to use to explore the SCMI targets
  * @param telemetry_subdirectory A string representing the subdirectory under which to look for SCMI targets (e.g.
@@ -76,8 +80,9 @@ auto DetectTarget(FileInterfaceType const& scmi_sysfs_file_interface, std::strin
   const auto uuid = uuid_result.value();
   ASTL_LOG_INFO("ScmiTopologyPlugin::ScanForTargets: Successfully detected SCMI/SysFS target with UUID {}",
                 uuid.normalized_value);
-  auto target_ptr = std::make_unique<Target>(telemetry_subdirectory, "Target discovered via SCMI", CollectorType::SCMI,
-                                             nullptr, uuid.normalized_value);
+  const auto target_name = BuildTargetName(telemetry_subdirectory);
+  auto target_ptr = std::make_unique<Target>(target_name, "Target discovered via SCMI", CollectorType::SCMI, nullptr,
+                                             uuid.normalized_value);
   return target_ptr;
 }
 

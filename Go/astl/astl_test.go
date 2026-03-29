@@ -29,3 +29,25 @@ func TestGetTargets(t *testing.T) {
 		t.Log("no targets discovered on this host")
 	}
 }
+
+func TestEnumAlignment(t *testing.T) {
+	if UnitsRPM != 11 {
+		t.Fatalf("UnitsRPM = %d, want 11", UnitsRPM)
+	}
+	if UnitsCount != 12 {
+		t.Fatalf("UnitsCount = %d, want 12", UnitsCount)
+	}
+	if UnitsUnknown != 0xFFFFFFFF {
+		t.Fatalf("UnitsUnknown = %#x, want 0xFFFFFFFF", UnitsUnknown)
+	}
+
+	if CategoryBandwidth != 6 {
+		t.Fatalf("CategoryBandwidth = %d, want 6", CategoryBandwidth)
+	}
+	if CategoryFanSpeed != 7 {
+		t.Fatalf("CategoryFanSpeed = %d, want 7", CategoryFanSpeed)
+	}
+	if CategoryUncategorized != 0xFFFFFFFF {
+		t.Fatalf("CategoryUncategorized = %#x, want 0xFFFFFFFF", CategoryUncategorized)
+	}
+}

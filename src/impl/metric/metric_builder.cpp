@@ -20,6 +20,10 @@ namespace astl {
 
 namespace fs = std::filesystem;
 
+static auto BuildDefaultCounterDescription(std::string_view metric_name) -> std::string {
+  return "Underlying counter for " + std::string{metric_name};
+}
+
 /** @brief Holds info specific to one UUID-identified target _type_ on this platform,
  * including all detected targets with a matching UUID */
 struct ScmiUuidSpecificationInfo {
@@ -141,7 +145,8 @@ static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecificat
         continue;
       }
       processed_counter_ids.insert(counter_id);
-      std::string description = "Underlying counter for " + metric_name;
+      std::string description = metric_declaration.description.empty() ? BuildDefaultCounterDescription(metric_name)
+                                                                       : metric_declaration.description;
       // Normalize SCMI base10 metadata into formula-space so collectors remain raw-only.
       auto scaling_formula =
           metrics::spec::BuildScalingFormulaFromBase10Modifier(register_declaration.base10_unit_modifier);

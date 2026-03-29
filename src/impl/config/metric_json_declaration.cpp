@@ -64,6 +64,37 @@ auto ParseScmiOutputValueType(astl_value_type_t input_value_type, int32_t base10
   return input_value_type;
 }
 
+static auto BuildScmiMetricDescription(std::string_view metric_name, astl_category_t category) -> std::string {
+  switch (category) {
+    case ASTL_CATEGORY_TEMPERATURE:
+      return std::string{"Temperature reading for "} + std::string{metric_name};
+    case ASTL_CATEGORY_POWER:
+      return std::string{"Power reading for "} + std::string{metric_name};
+    case ASTL_CATEGORY_FREQUENCY:
+      return std::string{"Frequency reading for "} + std::string{metric_name};
+    case ASTL_CATEGORY_VOLTAGE:
+      return std::string{"Voltage reading for "} + std::string{metric_name};
+    case ASTL_CATEGORY_CURRENT:
+      return std::string{"Current reading for "} + std::string{metric_name};
+    case ASTL_CATEGORY_BANDWIDTH:
+      return std::string{"Bandwidth reading for "} + std::string{metric_name};
+    case ASTL_CATEGORY_FAN_SPEED:
+      return std::string{"Fan speed reading for "} + std::string{metric_name};
+    case ASTL_CATEGORY_COUNT:
+      return std::string{"Counter reading for "} + std::string{metric_name};
+    default:
+      return std::string{"Reading for "} + std::string{metric_name};
+  }
+}
+
+static auto ResolveScmiMetricDescription(const MetricJsonDeclaration& metric_declaration, std::string_view metric_name,
+                                         astl_category_t category) -> std::string {
+  if (!metric_declaration.description.empty()) {
+    return metric_declaration.description;
+  }
+  return BuildScmiMetricDescription(metric_name, category);
+}
+
 auto BuildScalingFormulaFromBase10Modifier(int32_t base10_unit_modifier) -> AnyFormula {
   // Convert protocol metadata (base10 exponent) into a protocol-agnostic formula step.
   if (base10_unit_modifier == 0) {
@@ -215,7 +246,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     if (!formula_result.has_value()) {
       return std::unexpected(formula_result.error());
     }
-    // Apply user formula first, then protocol-derived scaling uniformly in the formula pipeline.
+    // Apply user formula first, then protocol-derived scaling.
     auto composed_formula =
         ComposeFormulas(std::move(formula_result.value()), BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
 
@@ -370,21 +401,22 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
     const auto              units                = scmi_metric_declaration.units;
     const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
     ScmiOperationBuilder    operation_builder{scmi_metric_declaration.de_id};
-    const astl_value_type_t value_type = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
+    const astl_value_type_t value_type    = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
+    const auto              resolved_name = scmi_metric_declaration.GetFullyQualifiedName();
 
     auto formula_result = BuildFormula(metric_declaration.formula);
     if (!formula_result.has_value()) {
       return std::unexpected(formula_result.error());
     }
-    // Apply user formula first, then protocol-derived scaling uniformly in the formula pipeline.
+    // Apply user formula first, then protocol-derived scaling.
     auto composed_formula =
         ComposeFormulas(std::move(formula_result.value()), BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
 
     auto metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
     auto new_metric_config = std::make_unique<MetricConfig>(
-        std::string{metric_key_name}, metric_declaration.description, units, value_type, category, metric_type,
-        collector_type.value(), std::move(operation_builder), std::move(composed_formula), input_value_type,
-        std::move(metric_groups), scmi_metric_declaration.GetFullyQualifiedName());
+        std::string{metric_key_name}, ResolveScmiMetricDescription(metric_declaration, resolved_name, category), units,
+        value_type, category, metric_type, collector_type.value(), std::move(operation_builder),
+        std::move(composed_formula), input_value_type, std::move(metric_groups), resolved_name);
     metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
   }
   return metric_configs_on_targets;

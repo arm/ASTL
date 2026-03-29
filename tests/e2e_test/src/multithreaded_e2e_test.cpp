@@ -29,7 +29,7 @@ namespace astl_test {
  * operations from separate threads in a coordinated sequence.
  *
  * Test Flow:
- * 1. Thread 1: Configures metric collection parameters on target "tlm-0"
+ * 1. Thread 1: Configures metric collection parameters on target "scmi_tlm-0"
  * 2. Thread 2: Waits for configure to complete, then starts collection
  * 3. Thread 3: Waits for start to complete, collects data for 300ms, then stops
  * 4. Main thread: Retrieves and validates collected samples
@@ -45,7 +45,7 @@ void TestMultiThreadedEndToEnd() {
   INFO("Multi-Threaded E2E with MockSysfs");
 
   astl_target_props_t target_properties{};
-  REQUIRE(GetTargetByName("tlm-0", target_properties));
+  REQUIRE(GetTargetByName("scmi_tlm-0", target_properties));
 
   std::vector<astl_metric_handle_t> metric_handles;
   std::vector<std::string>          metric_names;
@@ -169,7 +169,7 @@ void TestMultipleConfigureAfterStart() {
   INFO("Multiple Configure After Start Collection");
 
   astl_target_props_t target_properties{};
-  REQUIRE(GetTargetByName("tlm-0", target_properties));
+  REQUIRE(GetTargetByName("scmi_tlm-0", target_properties));
 
   std::vector<astl_metric_handle_t> metric_handles;
   std::vector<std::string>          metric_names;

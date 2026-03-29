@@ -68,8 +68,8 @@ TEST_CASE("Topology::ScmiPlugin", "[TopologyManager]") {
       astl::ScmiTopologyPlugin::detail::ScanForTargetsOnFileInterface(configuration, std::move(mock_file_interface));
   REQUIRE(targets.has_value());
   REQUIRE(targets->size() == 2);
-  REQUIRE((*targets)[0]->Name() == "tlm-0");
-  REQUIRE((*targets)[1]->Name() == "tlm-1");
+  REQUIRE((*targets)[0]->Name() == "scmi_tlm-0");
+  REQUIRE((*targets)[1]->Name() == "scmi_tlm-1");
 }
 
 TEST_CASE("TopologyBuilder::BuildTopologyManager rejects load_file_path without cache dir", "[TopologyManager]") {

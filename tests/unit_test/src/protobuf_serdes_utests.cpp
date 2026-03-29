@@ -92,7 +92,7 @@ astl::protobuf::MetricManager BuildValidMetricManagerProto() {
   cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
   cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
   cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
-  cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
+  cfg->set_category(astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO);
   cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
 
   return proto_mgr;
@@ -204,6 +204,81 @@ TEST_CASE("Deserialize errors on operation_id overflow") {
 }
 // NOLINTEND(readability-magic-numbers)
 
+TEST_CASE("Metric protobuf category mapping preserves uncategorized and new categories", "[MetricHandle][protobuf]") {
+  const auto* target = InstallSingleScmiTargetTlm0();
+  REQUIRE(target != nullptr);
+
+  SECTION("serialize uses distinct protobuf enums for uncategorized and bandwidth") {
+    const auto serialize_category = [target](std::string name, std::string description, astl_units_t units,
+                                             astl_category_t category) {
+      astl::MetricHandle handle;
+      handle.config = std::make_unique<astl::MetricConfig>(std::move(name), std::move(description), units,
+                                                           ASTL_VALUE_UINT64, category, ASTL_METRIC_VALUE,
+                                                           astl::CollectorType::SCMI, astl::NullOperationBuilder{});
+      auto metric   = std::make_unique<astl::SampledValueMetric>(handle.config.get(), target, nullptr);
+      handle.target_to_metric_map.emplace(target, std::move(metric));
+
+      std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+      REQUIRE(Serialize(handle, cache_stream) == ASTL_STATUS_SUCCESS);
+      cache_stream.seekg(0);
+
+      astl::protobuf::RawMetricVec proto_metrics;
+      REQUIRE(proto_metrics.ParseFromIstream(&cache_stream));
+      REQUIRE(proto_metrics.metrics_size() == 1);
+      return proto_metrics.metrics(0).config().category();
+    };
+
+    REQUIRE(serialize_category("uncategorized_metric", "uncategorized metric", ASTL_UNITS_NONE,
+                               ASTL_CATEGORY_UNCATEGORIZED) == astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO);
+    REQUIRE(serialize_category("bandwidth_metric", "bandwidth metric", ASTL_UNITS_MBYTESPERSEC,
+                               ASTL_CATEGORY_BANDWIDTH) == astl::protobuf::ASTL_CATEGORY_BANDWIDTH);
+  }
+
+  SECTION("deserialize maps protobuf uncategorized and bandwidth back to distinct C categories") {
+    const auto& orch    = astl::Orchestrator::GetInstance()->get();
+    const auto& targets = orch->GetTargets();
+
+    astl::protobuf::RawMetricVec proto_metrics;
+
+    auto* uncategorized_raw = proto_metrics.add_metrics();
+    uncategorized_raw->set_metric_id("uncategorized_metric");
+    uncategorized_raw->add_target_ids("tlm-0");
+    auto* uncategorized_cfg = uncategorized_raw->mutable_config();
+    uncategorized_cfg->set_metric_name("uncategorized_metric");
+    uncategorized_cfg->set_description("uncategorized metric");
+    uncategorized_cfg->set_units(static_cast<astl::protobuf::AstlUnits>(ASTL_UNITS_NONE));
+    uncategorized_cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+    uncategorized_cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+    uncategorized_cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
+    uncategorized_cfg->set_category(astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO);
+    uncategorized_cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
+
+    auto* bandwidth_raw = proto_metrics.add_metrics();
+    bandwidth_raw->set_metric_id("bandwidth_metric");
+    bandwidth_raw->add_target_ids("tlm-0");
+    auto* bandwidth_cfg = bandwidth_raw->mutable_config();
+    bandwidth_cfg->set_metric_name("bandwidth_metric");
+    bandwidth_cfg->set_description("bandwidth metric");
+    bandwidth_cfg->set_units(static_cast<astl::protobuf::AstlUnits>(ASTL_UNITS_MBYTESPERSEC));
+    bandwidth_cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+    bandwidth_cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+    bandwidth_cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
+    bandwidth_cfg->set_category(astl::protobuf::ASTL_CATEGORY_BANDWIDTH);
+    bandwidth_cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
+
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(proto_metrics.SerializeToOstream(&cache_stream));
+    cache_stream.seekg(0);
+
+    auto handles_or_err =
+        astl::ProtobufSerDes::Deserialize<std::vector<std::unique_ptr<astl::MetricHandle>>>(cache_stream, targets);
+    REQUIRE(handles_or_err.has_value());
+    REQUIRE(handles_or_err->size() == 2);
+    REQUIRE(handles_or_err->at(0)->config->Category() == ASTL_CATEGORY_UNCATEGORIZED);
+    REQUIRE(handles_or_err->at(1)->config->Category() == ASTL_CATEGORY_BANDWIDTH);
+  }
+}
+
 TEST_CASE("Deserialize fails with corrupt data") {
   std::stringstream str_stream(std::ios::in | std::ios::out | std::ios::binary);
   str_stream << "not a protobuf";
@@ -217,9 +292,9 @@ TEST_CASE("Deserialize fails with corrupt data") {
 TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager>> round-trip") {
   // Build a topology with two targets
   std::vector<std::unique_ptr<astl::ITarget>> vec;
-  vec.push_back(MakeTarget("tlm-1", "Target discovered via SCMI", astl::CollectorType::SCMI,
+  vec.push_back(MakeTarget("scmi_tlm-1", "Target discovered via SCMI", astl::CollectorType::SCMI,
                            std::string{"0xCAFEBABECAFEBABECAFEBABEBEEF0000"}));
-  vec.push_back(MakeTarget("tlm-0", "Target discovered via SCMI", astl::CollectorType::SCMI,
+  vec.push_back(MakeTarget("scmi_tlm-0", "Target discovered via SCMI", astl::CollectorType::SCMI,
                            std::string{"0xCAFEBABECAFEBABECAFEBABEBEEF0000"}));
 
   astl::TopologyManager topology_manager(std::move(vec));
@@ -243,7 +318,7 @@ TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager
   // Check first target properties
   {
     const auto& target_0 = *targets[0];
-    REQUIRE(target_0.Name() == "tlm-1");
+    REQUIRE(target_0.Name() == "scmi_tlm-1");
     REQUIRE(target_0.GetCollectorType() == astl::CollectorType::SCMI);
 
     astl_target_props_t props{};
@@ -255,7 +330,7 @@ TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager
   // Check second target properties
   {
     const auto& target_1 = *targets[1];
-    REQUIRE(target_1.Name() == "tlm-0");
+    REQUIRE(target_1.Name() == "scmi_tlm-0");
     REQUIRE(target_1.GetCollectorType() == astl::CollectorType::SCMI);
 
     astl_target_props_t props{};
@@ -613,7 +688,7 @@ TEST_CASE("Deserialize<vector<MetricHandle>> rejects malformed metric payloads",
     cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
     cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
     cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
-    cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
+    cfg->set_category(astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO);
     cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
 
     std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
@@ -639,7 +714,7 @@ TEST_CASE("Deserialize<vector<MetricHandle>> rejects malformed metric payloads",
     cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
     cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
     cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
-    cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
+    cfg->set_category(astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO);
     cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
 
     std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
@@ -665,7 +740,7 @@ TEST_CASE("Deserialize<vector<MetricHandle>> rejects malformed metric payloads",
     cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
     cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
     cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_FINITE_SET_VALUE));
-    cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
+    cfg->set_category(astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO);
     cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
 
     std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
@@ -820,7 +895,7 @@ TEST_CASE("Deserialize<MetricManager> rejects duplicate metric ids", "[MetricMan
   cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
   cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
   cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
-  cfg->set_category(static_cast<astl::protobuf::AstlCategory>(ASTL_CATEGORY_UNCATEGORIZED));
+  cfg->set_category(astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO);
   cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
 
   std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);

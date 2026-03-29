@@ -200,6 +200,8 @@ typedef enum _astl_units_t {
   ASTL_UNITS_MBYTESPERSEC = 9,  //!< Bandwidth in MB/s. For calculated metrics but hardware may
                                 //!< already be doing the calculation, not ideal but possible
   ASTL_UNITS_MHERTZ = 10,       //!< Frequency readings in MHz
+  ASTL_UNITS_RPM    = 11,       //!< Fan speed in revolutions per minute
+  ASTL_UNITS_COUNT  = 12,       //!< Count of events or occurrences
 } astl_units_t;
 
 /** Generic value types we expect to use.
@@ -364,6 +366,8 @@ typedef enum _astl_category_t {
   ASTL_CATEGORY_FREQUENCY     = 3,   //!< Frequency metrics (clock rates)
   ASTL_CATEGORY_VOLTAGE       = 4,   //!< Voltage metrics
   ASTL_CATEGORY_CURRENT       = 5,   //!< Current metrics (amperage)
+  ASTL_CATEGORY_BANDWIDTH     = 6,   //!< Bandwidth metrics (data transfer rates)
+  ASTL_CATEGORY_FAN_SPEED     = 7,   //!< Fan speed metrics (RPM)
 } astl_category_t;
 
 /** A metric properties structure describes a metric
