@@ -99,6 +99,11 @@ class Counter : public RawMetric, public virtual ICounter {
   auto Name() const -> std::string const & override { return RawMetric::Name(); };
 
   /**
+   * @brief Retrieve the Counter's identifier.
+   */
+  auto Id() const -> std::string const & override { return RawMetric::Id(); };
+
+  /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
    */
   auto GetProperties(astl_counter_props_t *properties) const -> astl_status_code override;
