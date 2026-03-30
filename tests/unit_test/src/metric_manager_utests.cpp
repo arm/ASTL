@@ -466,6 +466,9 @@ TEST_CASE("MetricManager::ProcessData processes different metrics for different 
 }
 
 TEST_CASE("MetricManager::ProcessData stops on error and does not process further samples", "[MetricManager]") {
+  // After sorting, samples for the same metric are grouped together.
+  // Give metric_ptr2 two samples: it fails on the first one, so the second must not be delivered.
+  // This verifies the stop-on-error contract independent of which metric is processed first.
   Capabilities  caps = MakeCaps(CollectorType::SCMI);
   MetricManager mgr(caps);
   MockTarget    target;
@@ -490,17 +493,20 @@ TEST_CASE("MetricManager::ProcessData stops on error and does not process furthe
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, 1, metric_ptr1);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, 2, metric_ptr2);
 
+  // metric_ptr2 has two samples; because it always returns an error, only the first is processed.
   astl::AstlValue                   val1{uint64_t{1}};
   astl::AstlValue                   val2{uint64_t{2}};
   astl::RawSampledData              sample1(1, val1);
   astl::RawSampledData              sample2(2, val2);
-  astl::RawSampledData              sample3(1, val1);
+  astl::RawSampledData              sample3(2, val2);  // second sample for metric_ptr2
   std::vector<astl::RawSampledData> samples{sample1, sample2, sample3};
   astl::RawSamplesMap               samples_map;
   samples_map[&target] = samples;
   REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
-  REQUIRE(metric_ptr1->received.size() == 1);
+  // The failing metric is always called exactly once before processing halts.
   REQUIRE(metric_ptr2->received.size() == 1);
+  // The total number of samples delivered must be fewer than the 3 submitted.
+  REQUIRE(metric_ptr1->received.size() + metric_ptr2->received.size() < 3);
 }
 
 TEST_CASE("MetricManager::ProcessData routes same operation id independently per target", "[MetricManager]") {
@@ -1361,4 +1367,172 @@ TEST_CASE("MetricManager group lookup and metric ownership errors", "[MetricMana
   auto target_or_err = mgr.GetTargetForMetric(&metric);
   REQUIRE_FALSE(target_or_err.has_value());
   REQUIRE(target_or_err.error() == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+// ---------------------------------------------------------------------------
+// Monotonicity tests: ProcessRawSamples must deliver samples to each metric
+// in non-decreasing timestamp order, regardless of input ordering.
+// ---------------------------------------------------------------------------
+
+namespace {
+/// Helper: build a SampleTimestamp from an explicit microsecond count.
+auto MakeTs(uint64_t micros) -> astl::SampleTimestamp {
+  return astl::SampleTimestamp(astl::SampleMicroseconds(micros));
+}
+}  // namespace
+
+TEST_CASE("MetricManager::ProcessRawSamples delivers already-sorted timestamps in order",
+          "[MetricManager][monotonicity]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto           owner  = std::make_unique<TestMetric>();
+  TestMetric*    metric = owner.get();
+  constexpr auto op_id  = astl::OperationId{1};
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner),
+      std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
+
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{10}}, MakeTs(100)),
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{20}}, MakeTs(200)),
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{30}}, MakeTs(300)),
+  };
+
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->received.size() == 3);
+  REQUIRE(metric->received[0].timestamp <= metric->received[1].timestamp);
+  REQUIRE(metric->received[1].timestamp <= metric->received[2].timestamp);
+  // values should also arrive in ascending timestamp order
+  REQUIRE(metric->received[0].get<uint64_t>() == 10);
+  REQUIRE(metric->received[1].get<uint64_t>() == 20);
+  REQUIRE(metric->received[2].get<uint64_t>() == 30);
+}
+
+TEST_CASE("MetricManager::ProcessRawSamples sorts out-of-order timestamps for a single metric",
+          "[MetricManager][monotonicity]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto           owner  = std::make_unique<TestMetric>();
+  TestMetric*    metric = owner.get();
+  constexpr auto op_id  = astl::OperationId{2};
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner),
+      std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
+
+  // Supply samples with timestamps deliberately out of order: 300, 100, 200
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{300}}, MakeTs(300)),
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{100}}, MakeTs(100)),
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{200}}, MakeTs(200)),
+  };
+
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->received.size() == 3);
+  // After sorting, the metric must see timestamps in non-decreasing order
+  REQUIRE(metric->received[0].timestamp <= metric->received[1].timestamp);
+  REQUIRE(metric->received[1].timestamp <= metric->received[2].timestamp);
+  // The values associated with each timestamp should also be in sorted order
+  REQUIRE(metric->received[0].get<uint64_t>() == 100);
+  REQUIRE(metric->received[1].get<uint64_t>() == 200);
+  REQUIRE(metric->received[2].get<uint64_t>() == 300);
+}
+
+TEST_CASE("MetricManager::ProcessRawSamples sorts each metric's samples independently when two metrics are interleaved",
+          "[MetricManager][monotonicity]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto           owner1  = std::make_unique<TestMetric>();
+  auto           owner2  = std::make_unique<TestMetric>();
+  TestMetric*    metric1 = owner1.get();
+  TestMetric*    metric2 = owner2.get();
+  constexpr auto op1     = astl::OperationId{1};
+  constexpr auto op2     = astl::OperationId{2};
+
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner1),
+      std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner2),
+      std::make_unique<MetricConfig>("m2", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op1, metric1);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op2, metric2);
+
+  // Interleave samples for both metrics with out-of-order timestamps within each group:
+  //   metric1: ts 500, ts 100, ts 300  →  sorted: 100, 300, 500
+  //   metric2: ts 400, ts 200          →  sorted: 200, 400
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = {
+      astl::RawSampledData(op1, astl::AstlValue{uint64_t{11}}, MakeTs(500)),
+      astl::RawSampledData(op2, astl::AstlValue{uint64_t{21}}, MakeTs(400)),
+      astl::RawSampledData(op1, astl::AstlValue{uint64_t{12}}, MakeTs(100)),
+      astl::RawSampledData(op2, astl::AstlValue{uint64_t{22}}, MakeTs(200)),
+      astl::RawSampledData(op1, astl::AstlValue{uint64_t{13}}, MakeTs(300)),
+  };
+
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+
+  REQUIRE(metric1->received.size() == 3);
+  REQUIRE(metric1->received[0].timestamp <= metric1->received[1].timestamp);
+  REQUIRE(metric1->received[1].timestamp <= metric1->received[2].timestamp);
+  REQUIRE(metric1->received[0].get<uint64_t>() == 12);  // ts 100
+  REQUIRE(metric1->received[1].get<uint64_t>() == 13);  // ts 300
+  REQUIRE(metric1->received[2].get<uint64_t>() == 11);  // ts 500
+
+  REQUIRE(metric2->received.size() == 2);
+  REQUIRE(metric2->received[0].timestamp <= metric2->received[1].timestamp);
+  REQUIRE(metric2->received[0].get<uint64_t>() == 22);  // ts 200
+  REQUIRE(metric2->received[1].get<uint64_t>() == 21);  // ts 400
+}
+
+TEST_CASE("MetricManager::ProcessRawSamples accepts samples with equal timestamps", "[MetricManager][monotonicity]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto           owner  = std::make_unique<TestMetric>();
+  TestMetric*    metric = owner.get();
+  constexpr auto op_id  = astl::OperationId{3};
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner),
+      std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
+
+  // All samples share the same timestamp – must be delivered without error
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{1}}, MakeTs(50)),
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{2}}, MakeTs(50)),
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{3}}, MakeTs(50)),
+  };
+
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->received.size() == 3);
+  // Equal timestamps satisfy the non-decreasing invariant
+  REQUIRE(metric->received[0].timestamp == metric->received[1].timestamp);
+  REQUIRE(metric->received[1].timestamp == metric->received[2].timestamp);
 }

@@ -4,7 +4,9 @@
 
 #include "metric_manager.hpp"
 
+#include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <string>
 
 #include "astl/astl_errors.h"
@@ -577,9 +579,17 @@ auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status
     }
   }
 
+  // Sort samples so that each metric receives its samples in non-decreasing timestamp order.
+  // Primary key: metric pointer (groups all samples for the same metric together).
+  // Secondary key: timestamp (ascending within each group).
+  std::sort(processing_queue.begin(), processing_queue.end(), [](const auto& lhs, const auto& rhs) {
+    if (lhs.first != rhs.first) {
+      return std::less<IMetric*>{}(lhs.first, rhs.first);
+    }
+    return lhs.second.timestamp < rhs.second.timestamp;
+  });
+
   for (const auto& [metric_handle, sample] : processing_queue) {
-    // Process the sample and propagate errors
-    // TODO (https://jira.arm.com/browse/ASTL-130): MetricManager needs to ensure Monotonicity in timestamp.
     astl_status_code status = metric_handle->ReceiveRawSample(sample);
     if (status != ASTL_STATUS_SUCCESS) {
       ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} with status {}", sample.operation_id,
