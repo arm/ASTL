@@ -23,8 +23,10 @@ namespace astl {
  */
 class LibsensorsTarget : public astl::Target {
  public:
-  LibsensorsTarget(std::string name, std::string description, std::shared_ptr<SensorsApi> libsensors_api)
+  LibsensorsTarget(std::string name, std::string description, std::string chip_name,
+                   std::shared_ptr<SensorsApi> libsensors_api)
       : astl::Target(std::move(name), std::move(description), CollectorType::LIBSENSORS),
+        _chip_name{std::move(chip_name)},
         _libsensors_api{std::move(libsensors_api)} {}
 
   ~LibsensorsTarget() override                         = default;
@@ -33,9 +35,11 @@ class LibsensorsTarget : public astl::Target {
   LibsensorsTarget(LibsensorsTarget&&)                 = default;
   LibsensorsTarget& operator=(LibsensorsTarget&&)      = default;
 
+  auto ChipName() const -> std::string const& { return _chip_name; }
   auto ShareApi() const -> std::shared_ptr<SensorsApi> { return _libsensors_api; }
 
  private:
+  std::string                 _chip_name;
   std::shared_ptr<SensorsApi> _libsensors_api;
 };
 #endif  // defined(ASTL_INCLUDE_LIBSENSORS)

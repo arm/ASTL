@@ -403,6 +403,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
     ScmiOperationBuilder    operation_builder{scmi_metric_declaration.de_id};
     const astl_value_type_t value_type    = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
     const auto              resolved_name = scmi_metric_declaration.GetFullyQualifiedName();
+    const auto              description   = ResolveScmiMetricDescription(metric_declaration, resolved_name, category);
 
     auto formula_result = BuildFormula(metric_declaration.formula);
     if (!formula_result.has_value()) {
@@ -413,10 +414,10 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
         ComposeFormulas(std::move(formula_result.value()), BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
 
     auto metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
-    auto new_metric_config = std::make_unique<MetricConfig>(
-        std::string{metric_key_name}, ResolveScmiMetricDescription(metric_declaration, resolved_name, category), units,
-        value_type, category, metric_type, collector_type.value(), std::move(operation_builder),
-        std::move(composed_formula), input_value_type, std::move(metric_groups), resolved_name);
+    auto new_metric_config = std::make_unique<MetricConfig>(std::string{metric_key_name}, description, units,
+                                                            value_type, category, metric_type, collector_type.value(),
+                                                            std::move(operation_builder), std::move(composed_formula),
+                                                            input_value_type, std::move(metric_groups), resolved_name);
     metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
   }
   return metric_configs_on_targets;

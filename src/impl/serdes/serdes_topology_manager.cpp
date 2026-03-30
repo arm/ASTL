@@ -2,11 +2,29 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <string_view>
+
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/targets.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
+#include "topology/scmi_target.hpp"
 #include "topology/topology_manager.hpp"
 
 namespace astl::ProtobufSerDes {
+
+namespace {
+
+auto TryInferLegacyScmiSysfsSubdirectory(const std::string& name) -> std::optional<std::string> {
+  constexpr std::string_view k_scmi_target_prefix = "scmi_";
+  if (std::string_view{name}.starts_with(k_scmi_target_prefix)) {
+    return name.substr(k_scmi_target_prefix.size());
+  }
+  if (!name.empty()) {
+    return name;
+  }
+  return std::nullopt;
+}
+
+}  // namespace
 
 static auto SerializeTarget(const ITarget& target, astl::protobuf::Target* proto_target) -> astl_status_code {
   astl_target_props_t props{};
@@ -26,6 +44,11 @@ static auto SerializeTarget(const ITarget& target, astl::protobuf::Target* proto
   // Parent currently unused -> skip _parent_handle
   if (props.id != nullptr) {
     proto_target->set_id(props.id);
+  }
+  if (target.GetCollectorType() == CollectorType::SCMI) {
+    if (const auto* scmi_target = dynamic_cast<const ScmiTarget*>(&target)) {
+      proto_target->set_scmi_sysfs_subdirectory(scmi_target->TelemetrySubdirectory());
+    }
   }
 
   return ASTL_STATUS_SUCCESS;
@@ -88,7 +111,19 @@ auto Deserialize<std::unique_ptr<ITopologyManager>>(std::istream& input_stream)
       id = proto_target.id();
     }
 
-    auto target = std::make_unique<Target>(name, description, collector, nullptr, id);
+    std::unique_ptr<ITarget> target;
+    if (collector == CollectorType::SCMI) {
+      auto scmi_sysfs_subdirectory = proto_target.has_scmi_sysfs_subdirectory()
+                                         ? std::optional<std::string>{proto_target.scmi_sysfs_subdirectory()}
+                                         : TryInferLegacyScmiSysfsSubdirectory(name);
+      if (scmi_sysfs_subdirectory.has_value()) {
+        target =
+            std::make_unique<ScmiTarget>(name, description, std::move(scmi_sysfs_subdirectory.value()), nullptr, id);
+      }
+    }
+    if (!target) {
+      target = std::make_unique<Target>(name, description, collector, nullptr, id);
+    }
 
     targets.push_back(std::move(target));
   }

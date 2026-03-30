@@ -25,6 +25,8 @@ namespace LibsensorsTopologyPlugin {
 namespace detail {
 
 #ifdef ASTL_INCLUDE_LIBSENSORS
+static auto BuildTargetName(const std::string& chip_name) -> std::string { return "libsensors_" + chip_name; }
+
 /**
  * @brief Returns a list of targets accessible via lm-sensors on this platform
  *
@@ -79,11 +81,13 @@ auto ScanForTargetsWithLibsensors(const AstlConfiguration&    configuration,
         ASTL_LOG_DEBUG("  Found other sensor type {}: {}", feature->type, feature->name);
       }
     }
-    // if we find any chips with features, create a target for them.
-    // continue scanning for more chips, only so we can log their features for now.
-    if (sensor_feature_count > 0 && targets.empty()) {
+    // Create a separate target for each detected chip with at least one feature.
+    if (sensor_feature_count > 0) {
+      const std::string chip_name_string = chip_name.data();
+      const std::string target_name      = BuildTargetName(chip_name_string);
       targets.push_back(std::make_unique<LibsensorsTarget>(
-          "libsensors", "Collection of sensors from libsensors library", sensors_api));
+          target_name, "Collection of sensors from libsensors chip " + chip_name_string, chip_name_string,
+          sensors_api));
     }
   }
   return targets;

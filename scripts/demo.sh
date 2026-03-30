@@ -10,15 +10,15 @@ set -euo pipefail
 # Locate the project root (ASTL_ROOT)  #
 ########################################
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ASTL_ROOT="$(dirname "$SCRIPT_DIR")"
-echo "ASTL_ROOT = $ASTL_ROOT"
+ASTL_ROOT="$(dirname "${SCRIPT_DIR}")"
+echo "ASTL_ROOT = ${ASTL_ROOT}"
 
 ########################################
 # Launch MockSysfs (FUSE) demo         #
 ########################################
-export ASTL_MOCKSYSFS_TLM_JSON_PATH="$ASTL_ROOT/tools/mock_sysfs/config/tlm.json"
-echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = $ASTL_MOCKSYSFS_TLM_JSON_PATH"
-MOCK_SYSFS="$ASTL_ROOT/build/debug/bin/MockSysfs"
+export ASTL_MOCKSYSFS_TLM_JSON_PATH="${ASTL_ROOT}/tools/mock_sysfs/config/tlm.json"
+echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = ${ASTL_MOCKSYSFS_TLM_JSON_PATH}"
+MOCK_SYSFS="${ASTL_ROOT}/build/debug/bin/MockSysfs"
 MOUNT_POINT=~/tmp/fuse
 
 # Constants for startup detection
@@ -26,13 +26,13 @@ TIMEOUT=30
 PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 
 # Basic sanity checks
-[[ -x $MOCK_SYSFS ]] ||
+[[ -x ${MOCK_SYSFS} ]] ||
 	{
-		echo "❌ MockSysfs not found or not executable at $MOCK_SYSFS" >&2
+		echo "❌ MockSysfs not found or not executable at ${MOCK_SYSFS}" >&2
 		exit 1
 	}
 
-TELEMETRY_ROOT="$MOUNT_POINT/arm_telemetry"
+TELEMETRY_ROOT="${MOUNT_POINT}/arm_telemetry"
 
 # Default mode duration and interval
 # Default to interval mode with 10 seconds duration and 500ms interval
@@ -43,6 +43,7 @@ DURATION=10
 INTERVAL=500
 SAVE_PATH=""
 LOAD_PATH=""
+TARGET_NAME="${SCMI_TLM_CHIP_TARGET:-scmi_tlm-0}"
 
 # Parse command-line arguments for mode, interval, and duration (using '=' syntax)
 while [[ $# -gt 0 ]]; do
@@ -78,15 +79,15 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-mkdir -p "$TELEMETRY_ROOT"
+mkdir -p "${TELEMETRY_ROOT}"
 
-LOG_DIR="$ASTL_ROOT"
-SYSFS_LOG="$LOG_DIR/sysfs.log"
+LOG_DIR="${ASTL_ROOT}"
+SYSFS_LOG="${LOG_DIR}/sysfs.log"
 
-echo "Logs Directory = $LOG_DIR"
+echo "Logs Directory = ${LOG_DIR}"
 
 echo "🚀 Launching MockSysfs..."
-"$MOCK_SYSFS" -f -s "$MOUNT_POINT" &>"$SYSFS_LOG" &
+"${MOCK_SYSFS}" -f -s "${MOUNT_POINT}" &>"${SYSFS_LOG}" &
 SYSFS_PID=$!
 
 # Note, if not mocksysfs, use
@@ -95,9 +96,9 @@ SYSFS_PID=$!
 
 # Always clean up on exit
 cleanup() {
-	echo "🛑 Stopping MockSysfs (PID=$SYSFS_PID)..."
-	kill -SIGTERM "$SYSFS_PID" 2>/dev/null || true
-	wait "$SYSFS_PID" 2>/dev/null || true
+	echo "🛑 Stopping MockSysfs (PID=${SYSFS_PID})..."
+	kill -SIGTERM "${SYSFS_PID}" 2>/dev/null || true
+	wait "${SYSFS_PID}" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -105,24 +106,24 @@ trap cleanup EXIT
 # Helper: wait for GUID in the log     #
 ########################################
 wait_for() {
-	local file=$1 desc=$2 pattern=$3
-	echo "⏱️  Waiting (up to ${TIMEOUT}s) for '$pattern' in $desc..."
-	timeout "$TIMEOUT" bash -c \
-		"stdbuf -oL tail -n +0 -F '$file' | grep -m1 -F '$pattern'" ||
+	local file=${1} desc=${2} pattern=${3}
+	echo "⏱️  Waiting (up to ${TIMEOUT}s) for '${pattern}' in ${desc}..."
+	timeout "${TIMEOUT}" bash -c \
+		"stdbuf -oL tail -n +0 -F '${file}' | grep -m1 -F '${pattern}'" ||
 		{
 			echo '❌ Timeout waiting for MockSysfs' >&2
 			exit 1
 		}
-	echo "✅ Detected '$pattern' in $desc"
+	echo "✅ Detected '${pattern}' in ${desc}"
 }
 
-wait_for "$SYSFS_LOG" "MockSysfs startup log" "$PATTERN_READY"
-echo "✅ MockSysfs mounted at $MOUNT_POINT"
+wait_for "${SYSFS_LOG}" "MockSysfs startup log" "${PATTERN_READY}"
+echo "✅ MockSysfs mounted at ${MOUNT_POINT}"
 
 ###############################################################
 # Copy metrics + scmi spec config/ directory to build directory #
 ###############################################################
-./scripts/publish_configs.sh -o "$ASTL_ROOT/build/debug/lib/config" --confidential --mocksysfs
+./scripts/publish_configs.sh -o "${ASTL_ROOT}/build/debug/lib/config" --confidential --mocksysfs
 
 ###############
 # Demo action #
@@ -131,69 +132,69 @@ echo "✅ MockSysfs mounted at $MOUNT_POINT"
 ### delete tmp/*.astl files if they exist to avoid interference with old samples
 rm -f tmp/*.astl
 
-SAMPLE_TEST_BIN="$ASTL_ROOT/build/debug/bin/sample_test"
-if [[ ! -x $SAMPLE_TEST_BIN ]]; then
-	echo "❌ Error: sample_test binary not found or not executable at $SAMPLE_TEST_BIN" >&2
+SAMPLE_TEST_BIN="${ASTL_ROOT}/build/debug/bin/sample_test"
+if [[ ! -x ${SAMPLE_TEST_BIN} ]]; then
+	echo "❌ Error: sample_test binary not found or not executable at ${SAMPLE_TEST_BIN}" >&2
 	exit 1
 fi
 
 # Run sample_test in selected mode
-if [[ $MODE == "immediate" ]]; then
+if [[ ${MODE} == "immediate" ]]; then
 	echo "🚀 Running sample_test with --immediate"
 	RUN_ARGS=(--immediate)
 else
 	echo "🚀 Running sample_test with --interval for ${DURATION}s"
-	RUN_ARGS=(--interval="$INTERVAL" --duration="$DURATION")
+	RUN_ARGS=(--interval="${INTERVAL}" --duration="${DURATION}")
 fi
 
-if [[ -n $GROUP ]]; then
-	echo "🚀 Using metric group: $GROUP"
-	RUN_ARGS+=(--group="$GROUP")
+if [[ -n ${GROUP} ]]; then
+	echo "🚀 Using metric group: ${GROUP}"
+	RUN_ARGS+=(--group="${GROUP}")
 fi
 
-if [[ -n $SAVE_PATH ]]; then
-	echo "💾 Will save session to: $SAVE_PATH"
-	RUN_ARGS+=(--save="$SAVE_PATH")
+if [[ -n ${SAVE_PATH} ]]; then
+	echo "💾 Will save session to: ${SAVE_PATH}"
+	RUN_ARGS+=(--save="${SAVE_PATH}")
 fi
 
 # force ASTL to use our mocksysfs mount point for the SCMI sysfs rather than the default /sys/fs/arm_telemetry
-export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="$TELEMETRY_ROOT"
+export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="${TELEMETRY_ROOT}"
 
 # Set CSV output file for summary data
-export ASTL_OUTPUT_SUMMARY_CSV="$LOG_DIR/astl_summary.csv"
-echo "CSV output will be written to: $ASTL_OUTPUT_SUMMARY_CSV"
+export ASTL_OUTPUT_SUMMARY_CSV="${LOG_DIR}/astl_summary.csv"
+echo "CSV output will be written to: ${ASTL_OUTPUT_SUMMARY_CSV}"
 
-export ASTL_OUTPUT_SUMMARY_CSV="$LOG_DIR/astl_summary.csv"
-echo "CSV output will be written to: $ASTL_OUTPUT_SUMMARY_CSV"
+export ASTL_OUTPUT_SUMMARY_CSV="${LOG_DIR}/astl_summary.csv"
+echo "CSV output will be written to: ${ASTL_OUTPUT_SUMMARY_CSV}"
 
 echo "🚀 Executing sample_test"
-echo "$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --target="tlm-0"
-"$SAMPLE_TEST_BIN" "${RUN_ARGS[@]}" --target="tlm-0"
+echo "${SAMPLE_TEST_BIN}" "${RUN_ARGS[@]}" --target="${TARGET_NAME}"
+"${SAMPLE_TEST_BIN}" "${RUN_ARGS[@]}" --target="${TARGET_NAME}"
 ERR=$?
-if [[ $ERR -ne 0 ]]; then
-	echo "❌ Error: $SAMPLE_TEST_BIN returned a non-zero return code $ERR" >&2
-	exit $ERR
+if [[ ${ERR} -ne 0 ]]; then
+	echo "❌ Error: ${SAMPLE_TEST_BIN} returned a non-zero return code ${ERR}" >&2
+	exit "${ERR}"
 fi
 
 # If a save path was provided (or a load path given directly), demonstrate loading the saved session
-if [[ -n $LOAD_PATH ]]; then
-	echo "📂 Loading session from: $LOAD_PATH"
-	echo "$SAMPLE_TEST_BIN" --load="$LOAD_PATH" --target="tlm-0"
-	"$SAMPLE_TEST_BIN" --load="$LOAD_PATH" --target="tlm-0"
+if [[ -n ${LOAD_PATH} ]]; then
+	echo "📂 Loading session from: ${LOAD_PATH}"
+	echo "${SAMPLE_TEST_BIN}" --load="${LOAD_PATH}" --target="${TARGET_NAME}"
+	"${SAMPLE_TEST_BIN}" --load="${LOAD_PATH}" --target="${TARGET_NAME}"
 	LOAD_ERR=$?
-	if [[ $LOAD_ERR -ne 0 ]]; then
-		echo "❌ Error: sample_test --load returned non-zero code $LOAD_ERR" >&2
-		exit $LOAD_ERR
+	if [[ ${LOAD_ERR} -ne 0 ]]; then
+		echo "❌ Error: sample_test --load returned non-zero code ${LOAD_ERR}" >&2
+		exit "${LOAD_ERR}"
 	fi
-	echo "✅ Session loaded successfully from $LOAD_PATH"
-elif [[ -n $SAVE_PATH ]]; then
-	echo "📂 Re-loading saved session from: $SAVE_PATH"
-	echo "$SAMPLE_TEST_BIN" --load="$SAVE_PATH" --target="tlm-0"
-	"$SAMPLE_TEST_BIN" --load="$SAVE_PATH" --target="tlm-0"
+	echo "✅ Session loaded successfully from ${LOAD_PATH}"
+elif [[ -n ${SAVE_PATH} ]]; then
+	echo "📂 Re-loading saved session from: ${SAVE_PATH}"
+	echo "${SAMPLE_TEST_BIN}" --load="${SAVE_PATH}" --target="${TARGET_NAME}"
+	"${SAMPLE_TEST_BIN}" --load="${SAVE_PATH}" --target="${TARGET_NAME}"
 	LOAD_ERR=$?
-	if [[ $LOAD_ERR -ne 0 ]]; then
-		echo "❌ Error: sample_test --load returned non-zero code $LOAD_ERR" >&2
-		exit $LOAD_ERR
+	if [[ ${LOAD_ERR} -ne 0 ]]; then
+		echo "❌ Error: sample_test --load returned non-zero code ${LOAD_ERR}" >&2
+		exit "${LOAD_ERR}"
 	fi
 	echo "✅ Session round-trip (save → load) succeeded"
 fi

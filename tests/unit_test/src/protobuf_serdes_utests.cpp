@@ -26,6 +26,7 @@
 #include "serdes/raw_samples.pb.h"  // AUTO-GENERATED RawSampleBatch
 #include "serdes/targets.pb.h"      // AUTO-GENERATED Target
 #include "topology/i_topology_manager.hpp"
+#include "topology/scmi_target.hpp"
 #include "topology/topology_manager.hpp"
 
 namespace fs = std::filesystem;
@@ -292,10 +293,10 @@ TEST_CASE("Deserialize fails with corrupt data") {
 TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager>> round-trip") {
   // Build a topology with two targets
   std::vector<std::unique_ptr<astl::ITarget>> vec;
-  vec.push_back(MakeTarget("scmi_tlm-1", "Target discovered via SCMI", astl::CollectorType::SCMI,
-                           std::string{"0xCAFEBABECAFEBABECAFEBABEBEEF0000"}));
-  vec.push_back(MakeTarget("scmi_tlm-0", "Target discovered via SCMI", astl::CollectorType::SCMI,
-                           std::string{"0xCAFEBABECAFEBABECAFEBABEBEEF0000"}));
+  vec.push_back(std::make_unique<astl::ScmiTarget>("socket 1 telemetry", "Target discovered via SCMI", "tlm-1", nullptr,
+                                                   std::string{"0xCAFEBABECAFEBABECAFEBABEBEEF0000"}));
+  vec.push_back(std::make_unique<astl::ScmiTarget>("socket 0 telemetry", "Target discovered via SCMI", "tlm-0", nullptr,
+                                                   std::string{"0xCAFEBABECAFEBABECAFEBABEBEEF0000"}));
 
   astl::TopologyManager topology_manager(std::move(vec));
 
@@ -318,8 +319,11 @@ TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager
   // Check first target properties
   {
     const auto& target_0 = *targets[0];
-    REQUIRE(target_0.Name() == "scmi_tlm-1");
+    REQUIRE(target_0.Name() == "socket 1 telemetry");
     REQUIRE(target_0.GetCollectorType() == astl::CollectorType::SCMI);
+    const auto* scmi_target_0 = dynamic_cast<const astl::ScmiTarget*>(&target_0);
+    REQUIRE(scmi_target_0 != nullptr);
+    REQUIRE(scmi_target_0->TelemetrySubdirectory() == "tlm-1");
 
     astl_target_props_t props{};
     REQUIRE(target_0.GetProperties(&props) == ASTL_STATUS_SUCCESS);
@@ -330,8 +334,11 @@ TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager
   // Check second target properties
   {
     const auto& target_1 = *targets[1];
-    REQUIRE(target_1.Name() == "scmi_tlm-0");
+    REQUIRE(target_1.Name() == "socket 0 telemetry");
     REQUIRE(target_1.GetCollectorType() == astl::CollectorType::SCMI);
+    const auto* scmi_target_1 = dynamic_cast<const astl::ScmiTarget*>(&target_1);
+    REQUIRE(scmi_target_1 != nullptr);
+    REQUIRE(scmi_target_1->TelemetrySubdirectory() == "tlm-0");
 
     astl_target_props_t props{};
     REQUIRE(target_1.GetProperties(&props) == ASTL_STATUS_SUCCESS);

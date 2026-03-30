@@ -14,6 +14,7 @@ message Target {
   CollectorType collector_type = 3;
   optional uint32 parent_id = 4;
   optional string id = 5;
+  optional string scmi_sysfs_subdirectory = 6;
 }
 
 message TargetList {

@@ -10,6 +10,7 @@
 #include "../../test_utilities.hpp"
 #include "collector/collector_builder.hpp"
 #include "collector/collector_manager.hpp"
+#include "topology/scmi_target.hpp"
 
 TEST_CASE("CollectorManager::RegisterRawSampleSink", "[collector_manager]") {
   // create a collector manager with an empty map of target-collector
@@ -160,8 +161,8 @@ TEST_CASE("CollectorManager::BuildCollectorManager creates SCMI collectors for S
   auto configuration = configuration_result.value();
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  auto* target_0 = new astl::Target{"tlm-0", "test target 0", astl::CollectorType::SCMI, nullptr};
-  auto* target_1 = new astl::Target{"tlm-1", "test target 1", astl::CollectorType::SCMI, nullptr};
+  auto* target_0 = new astl::ScmiTarget{"scmi_tlm-0", "test target 0", "tlm-0", nullptr};
+  auto* target_1 = new astl::ScmiTarget{"scmi_tlm-1", "test target 1", "tlm-1", nullptr};
   targets.emplace_back(target_0);
   targets.emplace_back(target_1);
 
@@ -178,55 +179,38 @@ TEST_CASE("CollectorManager::BuildCollectorManager creates SCMI collectors for S
   REQUIRE(capabilities_map.at(target_1).front().collector_type == astl::CollectorType::SCMI);
 }
 
-TEST_CASE("CollectorManager::BuildCollectorManager maps prefixed SCMI target names to sysfs subdirectories",
+TEST_CASE("CollectorManager::BuildCollectorManager uses SCMI target metadata for sysfs subdirectories",
           "[collector_manager]") {
-  namespace fs = std::filesystem;
-
-  const fs::path telemetry_root = fs::temp_directory_path() / "astl_collector_manager_scmi_prefixed_target";
-  TempFileGuard  cleanup(telemetry_root);
-
-  std::error_code ec;
-  fs::create_directories(telemetry_root / "tlm-0", ec);
-  REQUIRE_FALSE(ec);
-
-  {
-    std::ofstream de_impl_version(telemetry_root / "tlm-0" / "de_implementation_version", std::ios::trunc);
-    REQUIRE(de_impl_version.good());
-    de_impl_version << "0.0.0";
-  }
-  {
-    std::ofstream version_file(telemetry_root / "tlm-0" / "version", std::ios::trunc);
-    REQUIRE(version_file.good());
-    version_file << "0.0.1";
-  }
-  {
-    std::ofstream tlm_enable(telemetry_root / "tlm-0" / "tlm_enable", std::ios::trunc);
-    REQUIRE(tlm_enable.good());
-    tlm_enable << "0";
-  }
-
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
-  auto configuration                           = configuration_result.value();
-  configuration.scmi_sysfs_telemetry_root_path = telemetry_root;
+  auto configuration = configuration_result.value();
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  auto* target = new astl::Target{"scmi_tlm-0", "discovered test target", astl::CollectorType::SCMI, nullptr};
+  auto* target = new astl::ScmiTarget{"package0 power telemetry", "discovered test target", "tlm-0", nullptr};
   targets.emplace_back(target);
 
   auto collector_manager = astl::BuildCollectorManager(targets, configuration);
   REQUIRE(collector_manager.has_value());
+  auto capabilities_map = collector_manager.value()->ReportCollectionCapabilities();
+  REQUIRE(capabilities_map.size() == 1);
+  REQUIRE(capabilities_map.contains(target));
+  REQUIRE(capabilities_map.at(target).size() == 1);
+  REQUIRE(capabilities_map.at(target).front().collector_type == astl::CollectorType::SCMI);
+}
 
-  astl_collection_params_t collection_params{
-      .size              = sizeof(astl_collection_params_t),
-      .flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
-      .sampling_interval = 0,
-      .collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
-  };
-  astl::CollectionOperations operations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
+TEST_CASE("CollectorManager::BuildCollectorManager rejects SCMI targets without SCMI-specific metadata",
+          "[collector_manager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration = configuration_result.value();
 
-  REQUIRE(collector_manager.value()->ConfigureCollectionOnTarget(target, collection_params, std::move(operations)) ==
-          ASTL_STATUS_SUCCESS);
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  auto* target = new astl::Target{"tlm-0", "serialized test target", astl::CollectorType::SCMI, nullptr};
+  targets.emplace_back(target);
+
+  auto collector_manager = astl::BuildCollectorManager(targets, configuration);
+  REQUIRE_FALSE(collector_manager.has_value());
+  REQUIRE(collector_manager.error() == ASTL_STATUS_BAD_CONFIGURATION);
 }
 
 TEST_CASE("CollectorManager::BuildCollectorManager rejects unsupported collector types", "[collector_manager]") {

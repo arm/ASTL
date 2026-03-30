@@ -15,24 +15,11 @@
 #  include "libsensors/libsensors_collector.hpp"
 #  include "libsensors/libsensors_target.hpp"
 #endif
-#include "common/scmi/scmi_constants.hpp"
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
+#include "topology/scmi_target.hpp"
 
 namespace astl {
-
-namespace {
-
-auto GetScmiTelemetrySubdirectory(const ITarget& target) -> std::string {
-  constexpr std::string_view k_scmi_target_prefix = "scmi_";
-  const auto&                target_name          = target.Name();
-  if (target_name.starts_with(k_scmi_target_prefix)) {
-    return target_name.substr(k_scmi_target_prefix.size());
-  }
-  return target_name;
-}
-
-}  // namespace
 
 /**
  * @brief Builds collectors for the given targets based on the provided configuration.
@@ -52,8 +39,14 @@ auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
 
   for (const auto& cur_target : targets) {
     if (cur_target->GetCollectorType() == CollectorType::SCMI) {
-      std::filesystem::path scmi_target_path = scmi_sysfs_root_path / GetScmiTelemetrySubdirectory(*cur_target);
-      astl::FileInterface   scmi_target_file_interface{scmi_target_path};
+      const auto* scmi_target = dynamic_cast<const astl::ScmiTarget*>(cur_target.get());
+      if (scmi_target == nullptr) {
+        ASTL_LOG_ERROR("BuildCollectorManager: SCMI target {} is missing SCMI-specific metadata", cur_target->Name());
+        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      }
+
+      std::filesystem::path             scmi_target_path = scmi_sysfs_root_path / scmi_target->TelemetrySubdirectory();
+      astl::FileInterface               scmi_target_file_interface{scmi_target_path};
       std::unique_ptr<astl::ICollector> scmi_collector =
           std::make_unique<ScmiCollector>(std::move(scmi_target_file_interface));
       std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;

@@ -2,7 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
+#include <array>
 #include <expected>
+#include <string_view>
 #include <vector>
 
 #include "../../mock_classes.hpp"
@@ -14,6 +17,30 @@
 using namespace std::chrono_literals;
 
 using trompeloeil::_;
+
+namespace {
+
+struct MutableCStringFactory {
+  template <typename Array>
+  constexpr auto operator()(const Array& text) const {
+    return std::to_array(text);
+  }
+};
+
+constexpr auto kMakeMutableCString = MutableCStringFactory{};
+
+auto CopyChipName(char* buffer, size_t buffer_size, std::string_view name) -> void {
+  REQUIRE(buffer != nullptr);
+  REQUIRE(buffer_size > 0U);
+  std::fill_n(buffer, buffer_size, '\0');
+  if (buffer_size == 1U) {
+    return;
+  }
+  const auto copy_size = std::min(name.size(), buffer_size - 1U);
+  std::copy_n(name.data(), copy_size, buffer);
+}
+
+}  // namespace
 
 TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") {
   MockSensorsApiTestHarness harness;
@@ -31,8 +58,7 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
 
   // allow calls to sensors_snprintf_chip_name to succeed
   ALLOW_CALL(*mock_libsensors, sensors_snprintf_chip_name(_, _, _))
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-      .SIDE_EFFECT(std::snprintf(_1, _2, "%s-%d-%d", chip1.prefix, chip1.bus.type, chip1.bus.nr))
+      .SIDE_EFFECT(CopyChipName(_1, _2, "snsr-1-2"))
       .RETURN(0);
 
   // we have one chip with several features
@@ -46,49 +72,47 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 0)  // first call, index=0
       .RETURN([]() -> sensors_feature* {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-        static char*           temp1_name   = const_cast<char*>("temp1");
+        static auto            temp1_name   = kMakeMutableCString("temp1");
         static sensors_feature feature_temp = {
-            .name = temp1_name, .number = 1, .type = SENSORS_FEATURE_TEMP, .first_subfeature = 0, .padding1 = 0};
+            .name = temp1_name.data(), .number = 1, .type = SENSORS_FEATURE_TEMP, .first_subfeature = 0, .padding1 = 0};
         return &feature_temp;
       }());
   REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 1)  // second call, index=1
       .RETURN([]() -> sensors_feature* {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-        static char*           fan1_name   = const_cast<char*>("fan1");
+        static auto            fan1_name   = kMakeMutableCString("fan1");
         static sensors_feature feature_fan = {
-            .name = fan1_name, .number = 2, .type = SENSORS_FEATURE_FAN, .first_subfeature = 0, .padding1 = 0};
+            .name = fan1_name.data(), .number = 2, .type = SENSORS_FEATURE_FAN, .first_subfeature = 0, .padding1 = 0};
         return &feature_fan;
       }());
   REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 2)  // third call, index=2, for voltage
       .RETURN([]() -> sensors_feature* {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-        static char*           in1_name   = const_cast<char*>("in1");
+        static auto            in1_name   = kMakeMutableCString("in1");
         static sensors_feature feature_in = {
-            .name = in1_name, .number = 3, .type = SENSORS_FEATURE_IN, .first_subfeature = 0, .padding1 = 0};
+            .name = in1_name.data(), .number = 3, .type = SENSORS_FEATURE_IN, .first_subfeature = 0, .padding1 = 0};
         return &feature_in;
       }());
   REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 3)  // fourth call, index=3, for power
       .RETURN([]() -> sensors_feature* {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-        static char*           power1_name   = const_cast<char*>("power1");
-        static sensors_feature feature_power = {
-            .name = power1_name, .number = 4, .type = SENSORS_FEATURE_POWER, .first_subfeature = 0, .padding1 = 0};
+        static auto            power1_name   = kMakeMutableCString("power1");
+        static sensors_feature feature_power = {.name             = power1_name.data(),
+                                                .number           = 4,
+                                                .type             = SENSORS_FEATURE_POWER,
+                                                .first_subfeature = 0,
+                                                .padding1         = 0};
         return &feature_power;
       }());
   REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 4)  // fifth call, index=4, for humidity
       .RETURN([]() -> sensors_feature* {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-        static char*           humidity1_name   = const_cast<char*>("humidity1");
-        static sensors_feature feature_humidity = {.name             = humidity1_name,
+        static auto            humidity1_name   = kMakeMutableCString("humidity1");
+        static sensors_feature feature_humidity = {.name             = humidity1_name.data(),
                                                    .number           = 5,
                                                    .type             = SENSORS_FEATURE_HUMIDITY,
                                                    .first_subfeature = 0,
@@ -99,10 +123,9 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
       .IN_SEQUENCE(sequence)
       .SIDE_EFFECT(*_2 = 5)  // sixth call, index=5, for VID
       .RETURN([]() -> sensors_feature* {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-        static char*           vid1_name   = const_cast<char*>("vid1");
+        static auto            vid1_name   = kMakeMutableCString("vid1");
         static sensors_feature feature_vid = {
-            .name = vid1_name, .number = 6, .type = SENSORS_FEATURE_VID, .first_subfeature = 0, .padding1 = 0};
+            .name = vid1_name.data(), .number = 6, .type = SENSORS_FEATURE_VID, .first_subfeature = 0, .padding1 = 0};
         return &feature_vid;
       }());
   REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
@@ -123,4 +146,78 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets", "[libsensors_collector]") 
   // make assertions on the results
   REQUIRE(result.has_value());
   REQUIRE(result->size() == 1);
+  REQUIRE(result->at(0)->Name() == "libsensors_snsr-1-2");
+}
+
+TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets creates one target per chip", "[libsensors_collector]") {
+  MockSensorsApiTestHarness harness;
+  auto&                     mock_libsensors = harness.mock_libsensors;
+
+  ALLOW_CALL(*mock_libsensors, sensors_init(_)).RETURN(0);
+  ALLOW_CALL(*mock_libsensors, sensors_cleanup());
+
+  std::string       chip1_prefix = "snsr";
+  sensors_bus_id    chip1_bus    = {.type = 1, .nr = 2};
+  std::string       chip1_path   = "/test/chip1";
+  sensors_chip_name chip1 = {.prefix = chip1_prefix.data(), .bus = chip1_bus, .addr = 0x1, .path = chip1_path.data()};
+
+  std::string       chip2_prefix = "snsr";
+  sensors_bus_id    chip2_bus    = {.type = 1, .nr = 3};
+  std::string       chip2_path   = "/test/chip2";
+  sensors_chip_name chip2 = {.prefix = chip2_prefix.data(), .bus = chip2_bus, .addr = 0x2, .path = chip2_path.data()};
+
+  trompeloeil::sequence sequence;
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(*_2 = 0)
+      .RETURN(&chip1);
+  REQUIRE_CALL(*mock_libsensors, sensors_snprintf_chip_name(_, _, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(CopyChipName(_1, _2, "snsr-1-2"))
+      .RETURN(0);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(*_2 = 0)
+      .RETURN([]() -> sensors_feature* {
+        static auto            temp1_name   = kMakeMutableCString("temp1");
+        static sensors_feature feature_temp = {
+            .name = temp1_name.data(), .number = 1, .type = SENSORS_FEATURE_TEMP, .first_subfeature = 0, .padding1 = 0};
+        return &feature_temp;
+      }());
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _)).IN_SEQUENCE(sequence).SIDE_EFFECT(*_2 = 1).RETURN(nullptr);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(*_2 = 1)
+      .RETURN(&chip2);
+  REQUIRE_CALL(*mock_libsensors, sensors_snprintf_chip_name(_, _, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(CopyChipName(_1, _2, "snsr-1-3"))
+      .RETURN(0);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(*_2 = 0)
+      .RETURN([]() -> sensors_feature* {
+        static auto            power1_name   = kMakeMutableCString("power1");
+        static sensors_feature feature_power = {.name             = power1_name.data(),
+                                                .number           = 1,
+                                                .type             = SENSORS_FEATURE_POWER,
+                                                .first_subfeature = 0,
+                                                .padding1         = 0};
+        return &feature_power;
+      }());
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _)).IN_SEQUENCE(sequence).SIDE_EFFECT(*_2 = 1).RETURN(nullptr);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(*_2 = 2)
+      .RETURN(nullptr);
+
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto& configuration = configuration_result.value();
+  auto  result = astl::LibsensorsTopologyPlugin::detail::ScanForTargetsWithLibsensors(configuration, harness.api);
+
+  REQUIRE(result.has_value());
+  REQUIRE(result->size() == 2);
+  REQUIRE(result->at(0)->Name() == "libsensors_snsr-1-2");
+  REQUIRE(result->at(1)->Name() == "libsensors_snsr-1-3");
 }

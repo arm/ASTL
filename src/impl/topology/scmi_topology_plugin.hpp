@@ -14,6 +14,7 @@
 #include "common/scmi/scmi_constants.hpp"
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
+#include "topology/scmi_target.hpp"
 
 namespace astl {
 
@@ -81,8 +82,8 @@ auto DetectTarget(FileInterfaceType const& scmi_sysfs_file_interface, std::strin
   ASTL_LOG_INFO("ScmiTopologyPlugin::ScanForTargets: Successfully detected SCMI/SysFS target with UUID {}",
                 uuid.normalized_value);
   const auto target_name = BuildTargetName(telemetry_subdirectory);
-  auto target_ptr = std::make_unique<Target>(target_name, "Target discovered via SCMI", CollectorType::SCMI, nullptr,
-                                             uuid.normalized_value);
+  auto target_ptr = std::make_unique<ScmiTarget>(target_name, "Target discovered via SCMI", telemetry_subdirectory,
+                                                 nullptr, uuid.normalized_value);
   return target_ptr;
 }
 

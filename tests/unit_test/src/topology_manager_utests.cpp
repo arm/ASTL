@@ -9,6 +9,7 @@
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/targets.pb.h"
 #include "target.hpp"
+#include "topology/scmi_target.hpp"
 #include "topology/scmi_topology_plugin.hpp"
 #include "topology/topology_builder.hpp"
 #include "topology/topology_manager.hpp"
@@ -27,7 +28,7 @@ void WriteSerializedTopologyCache(const fs::path& cache_dir) {
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.push_back(
-      std::make_unique<astl::Target>("tlm-0", "unit-test target", astl::CollectorType::SCMI, nullptr, "1234"));
+      std::make_unique<astl::ScmiTarget>("package0 telemetry", "unit-test target", "tlm-0", nullptr, "1234"));
   astl::TopologyManager topology_manager{std::move(targets)};
 
   std::ofstream topology_file(cache_dir / astl::kTopologyManagerFileName, std::ios::binary | std::ios::out);
@@ -70,6 +71,10 @@ TEST_CASE("Topology::ScmiPlugin", "[TopologyManager]") {
   REQUIRE(targets->size() == 2);
   REQUIRE((*targets)[0]->Name() == "scmi_tlm-0");
   REQUIRE((*targets)[1]->Name() == "scmi_tlm-1");
+  REQUIRE(dynamic_cast<astl::ScmiTarget*>((*targets)[0].get()) != nullptr);
+  REQUIRE(dynamic_cast<astl::ScmiTarget*>((*targets)[1].get()) != nullptr);
+  REQUIRE(dynamic_cast<astl::ScmiTarget*>((*targets)[0].get())->TelemetrySubdirectory() == "tlm-0");
+  REQUIRE(dynamic_cast<astl::ScmiTarget*>((*targets)[1].get())->TelemetrySubdirectory() == "tlm-1");
 }
 
 TEST_CASE("TopologyBuilder::BuildTopologyManager rejects load_file_path without cache dir", "[TopologyManager]") {
@@ -147,5 +152,8 @@ TEST_CASE("TopologyBuilder::BuildTopologyManagerFromASTLFile rebuilds a serializ
   REQUIRE(result.has_value());
   REQUIRE(result.value() != nullptr);
   REQUIRE(result.value()->GetTargets().size() == 1);
-  REQUIRE(result.value()->GetTargets()[0]->Name() == "tlm-0");
+  REQUIRE(result.value()->GetTargets()[0]->Name() == "package0 telemetry");
+  const auto* scmi_target = dynamic_cast<const astl::ScmiTarget*>(result.value()->GetTargets()[0].get());
+  REQUIRE(scmi_target != nullptr);
+  REQUIRE(scmi_target->TelemetrySubdirectory() == "tlm-0");
 }
