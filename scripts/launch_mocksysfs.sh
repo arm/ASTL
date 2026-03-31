@@ -19,7 +19,28 @@ echo "ASTL_ROOT = $ASTL_ROOT"
 export ASTL_MOCKSYSFS_TLM_JSON_PATH="$ASTL_ROOT/tools/mock_sysfs/config/tlm.json"
 echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = $ASTL_MOCKSYSFS_TLM_JSON_PATH"
 MOCK_SYSFS="$ASTL_ROOT/build/debug/bin/MockSysfs"
+
+# Allow optional arguments to override MOUNT_POINT and SYSFS_LOG
 MOUNT_POINT=~/tmp/fuse
+SYSFS_LOG="$ASTL_ROOT/sysfs.log"
+if [[ $# -gt 2 ]]; then
+	echo "❌ Usage: $(basename "$0") [MOUNT_POINT] [SYSFS_LOG]" >&2
+	exit 1
+fi
+if [[ $# -ge 1 ]]; then
+	MOUNT_POINT="$1"
+	if [[ ! -d $MOUNT_POINT ]]; then
+		echo "📁 Mount point '$MOUNT_POINT' does not exist, creating it..."
+		mkdir "$MOUNT_POINT" || {
+			echo "❌ Failed to create mount point '$MOUNT_POINT'" >&2
+			exit 1
+		}
+	fi
+fi
+if [[ $# -eq 2 ]]; then
+	SYSFS_LOG="$2"
+fi
+echo "Logs Directory = $SYSFS_LOG"
 
 # Constants for startup detection
 TIMEOUT=30
@@ -35,10 +56,6 @@ PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 TELEMETRY_ROOT="$MOUNT_POINT/arm_telemetry"
 mkdir -p "$TELEMETRY_ROOT"
 
-LOG_DIR="$ASTL_ROOT"
-SYSFS_LOG="$LOG_DIR/sysfs.log"
-echo "Logs Directory = $LOG_DIR"
-
 echo "🚀 Launching MockSysfs..."
 "$MOCK_SYSFS" -f -s "$MOUNT_POINT" &>"$SYSFS_LOG" &
 SYSFS_PID=$!
@@ -51,7 +68,8 @@ find "$MOUNT_POINT"
 
 # Always clean up on exit
 cleanup() {
-	echo "🛑 To stop MockSysfs (PID=$SYSFS_PID)..."
+	# Other scripts parse the "To stop MockSysfs..." line, so avoid changing it if possible
+	echo "🧵 To stop MockSysfs (PID=$SYSFS_PID)..."
 	echo "kill -SIGTERM $SYSFS_PID 2>/dev/null || true"
 }
 trap cleanup EXIT
