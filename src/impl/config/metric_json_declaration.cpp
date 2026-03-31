@@ -5,6 +5,7 @@
 #include "config/metric_json_declaration.hpp"
 
 #include <cstdint>
+#include <expected>
 #include <format>
 #include <nlohmann/json.hpp>
 #include <optional>

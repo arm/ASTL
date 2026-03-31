@@ -1,0 +1,19 @@
+{
+  "_comment": "Metrics definitions for libsensors target libsensors_chip-6-1",
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "CPU_power": {
+      "description": "Configured power reading for CPU power",
+      "unit": "watts",
+      "metric_type": "value",
+      "category": "POWER",
+      "collection": {
+        "register": "CPU power",
+        "protocol": "libsensors"
+      },
+      "formula": "value / 1000"
+    }
+  }
+}

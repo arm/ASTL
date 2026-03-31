@@ -1,0 +1,48 @@
+{
+  "_comment": "Metrics definitions for libsensors target libsensors_chip-7-1",
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "Composite": {
+      "description": "Temperature reading for Composite",
+      "unit": "celsius",
+      "metric_type": "value",
+      "category": "TEMPERATURE",
+      "collection": {
+        "register": "Composite",
+        "protocol": "libsensors"
+      }
+    },
+    "Composite_thermal_limit_low": {
+      "description": "Low thermal limit for Composite",
+      "unit": "celsius",
+      "metric_type": "value",
+      "category": "TEMPERATURE",
+      "collection": {
+        "register": "Composite thermal_limit_low",
+        "protocol": "libsensors"
+      }
+    },
+    "Composite_thermal_limit_high": {
+      "description": "High thermal limit for Composite",
+      "unit": "celsius",
+      "metric_type": "value",
+      "category": "TEMPERATURE",
+      "collection": {
+        "register": "Composite thermal_limit_high",
+        "protocol": "libsensors"
+      }
+    },
+    "Composite_thermal_limit_critical": {
+      "description": "Critical thermal limit for Composite",
+      "unit": "celsius",
+      "metric_type": "value",
+      "category": "TEMPERATURE",
+      "collection": {
+        "register": "Composite thermal_limit_critical",
+        "protocol": "libsensors"
+      }
+    }
+  }
+}

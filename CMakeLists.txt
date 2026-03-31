@@ -90,6 +90,8 @@ endif()
 if(UNIX AND NOT APPLE)
   set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib")
   set(CMAKE_BUILD_RPATH "$ORIGIN;$ORIGIN/../lib")
+  # Avoid a separate install-time relink step, which some Ninja/CMake environments reject.
+  set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
 endif()
 
 # Add ASTL_DEBUG macro for all targets
