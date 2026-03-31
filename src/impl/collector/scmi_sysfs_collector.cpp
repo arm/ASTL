@@ -59,16 +59,17 @@ auto ParseDataEventValueWithTimestamp(std::string_view data_read)
     return std::unexpected{parse_result.error()};
   }
   auto [timestamp, remaining_text] = parse_result.value();
-  // skip past any whitespace between timestamp and value
+  // the timestamp + value are of the form "<timestamp> <value>" OR "<timestamp>: <value",
+  // depending on the driver version, so skip past any whitespace or ':' between timestamp and value
+  const auto should_skip = [](unsigned char character) { return std::isspace(character) || character == ':'; };
   // prefer non-pointer auto here since the iterator type of string_view isn't always char* depending on platform
   // NOLINTNEXTLINE(readability-qualified-auto)
-  const auto non_ws_it =
-      std::ranges::find_if_not(remaining_text, [](unsigned char maybe_space) { return std::isspace(maybe_space); });
-  if (non_ws_it == std::end(remaining_text)) {
+  const auto value_it = std::ranges::find_if_not(remaining_text, should_skip);
+  if (value_it == std::end(remaining_text)) {
     ASTL_LOG_ERROR("No value found after timestamp in data read: {}", data_read);
     return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
-  remaining_text = remaining_text.substr(static_cast<size_t>(non_ws_it - remaining_text.begin()));
+  remaining_text = remaining_text.substr(static_cast<size_t>(value_it - remaining_text.begin()));
 
   // now parse value
   auto value = ScmiDataEventValue::FromString(remaining_text);
