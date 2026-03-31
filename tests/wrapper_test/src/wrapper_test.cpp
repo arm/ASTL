@@ -1013,6 +1013,9 @@ TEST_CASE("astlStartCollection", "[wrapper]") {
   std::array<astl_metric_handle_t, 1> metrics{metric_handle};
   REQUIRE(orchestrator->ConfigureMetricCollection(target_1, &params, metrics) == ASTL_STATUS_SUCCESS);
 
+  ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
+      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+  ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
   REQUIRE_CALL(*collector_mgr, StartOnTarget(target_1)).RETURN(ASTL_STATUS_SUCCESS);
 
   TestOrchestratorInjector injector(std::move(orchestrator));
@@ -1106,6 +1109,9 @@ TEST_CASE("astlStartCollectionPaused", "[wrapper]") {
   std::array<astl_metric_handle_t, 1> metrics{metric_handle};
   REQUIRE(orchestrator->ConfigureMetricCollection(target_2, &params, metrics) == ASTL_STATUS_SUCCESS);
 
+  ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
+      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+  ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
   REQUIRE_CALL(*collector_mgr, StartOnTarget(target_2)).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*collector_mgr, PauseOnTarget(target_2)).RETURN(ASTL_STATUS_SUCCESS);
 
@@ -1401,9 +1407,12 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
     REQUIRE(orchestrator_raw != nullptr);
     std::vector<astl::ProcessedSampledData> samples;
     using std::chrono::microseconds;
-    samples.emplace_back(astl::AstlValue{uint64_t{1}}, astl::SampleTimestamp{microseconds{100}});
-    samples.emplace_back(astl::AstlValue{uint64_t{2}}, astl::SampleTimestamp{microseconds{101}});
-    samples.emplace_back(astl::AstlValue{uint64_t{3}}, astl::SampleTimestamp{microseconds{102}});
+    samples.emplace_back(astl::AstlValue{uint64_t{1}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}});
+    samples.emplace_back(astl::AstlValue{uint64_t{2}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{101}});
+    samples.emplace_back(astl::AstlValue{uint64_t{3}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{102}});
     // Inject samples into orchestrator's processed sample store
     REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, mock_metric_concrete, samples) ==
             ASTL_STATUS_SUCCESS);

@@ -104,8 +104,8 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with valid values", "[FiniteSetMetric]
   std::vector<uint64_t> sample_values = {0, 1, 1, 2, 0, 1, 2, 2, 2};
 
   for (size_t i = 0; i < sample_values.size(); ++i) {
-    astl::RawSampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
-    auto                 status = harness.metric.ReceiveRawSample(sample);
+    astl::NormalizedSampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
+    auto                        status = harness.metric.ReceiveRawSample(sample);
     REQUIRE(status == ASTL_STATUS_SUCCESS);
   }
 
@@ -136,8 +136,8 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with unknown values", "[FiniteSetMetri
   std::vector<uint64_t> sample_values = {0, 1, 5, 2, 10, 1, 0};  // 5 and 10 are unknown
 
   for (size_t i = 0; i < sample_values.size(); ++i) {
-    astl::RawSampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
-    auto                 status = harness.metric.ReceiveRawSample(sample);
+    astl::NormalizedSampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
+    auto                        status = harness.metric.ReceiveRawSample(sample);
     REQUIRE(status == ASTL_STATUS_SUCCESS);
   }
 
@@ -166,8 +166,8 @@ TEST_CASE("FiniteSetMetric: Reset functionality", "[FiniteSetMetric]") {
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // Add some samples
-  astl::RawSampledData sample1(1, astl::AstlValue{uint64_t{0}});
-  astl::RawSampledData sample2(2, astl::AstlValue{uint64_t{1}});
+  astl::NormalizedSampledData sample1(1, astl::AstlValue{uint64_t{0}});
+  astl::NormalizedSampledData sample2(2, astl::AstlValue{uint64_t{1}});
 
   harness.metric.ReceiveRawSample(sample1);
   harness.metric.ReceiveRawSample(sample2);
@@ -198,7 +198,7 @@ TEST_CASE("FiniteSetMetric: Summarize operation", "[FiniteSetMetric]") {
   std::vector<uint64_t> sample_values = {0, 1, 2, 1, 0};
 
   for (size_t i = 0; i < sample_values.size(); ++i) {
-    astl::RawSampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
+    astl::NormalizedSampledData sample(static_cast<uint16_t>(i), astl::AstlValue{sample_values[i]});
     harness.metric.ReceiveRawSample(sample);
   }
 
@@ -220,9 +220,9 @@ TEST_CASE("FiniteSetMetric: ReceiveSample with unsupported type", "[FiniteSetMet
   FiniteSetTestHarness harness{state_info};
 
   // Try to send a FLOAT32 value (which should be rejected by the base class, since harness is build with UINT64)
-  astl::AstlValue      val{float{40.0}};
-  astl::RawSampledData sample(1, val);
-  auto                 status = harness.metric.ReceiveRawSample(sample);
+  astl::AstlValue             val{float{40.0}};
+  astl::NormalizedSampledData sample(1, val);
+  auto                        status = harness.metric.ReceiveRawSample(sample);
   REQUIRE(status == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 }
 
@@ -248,10 +248,10 @@ TEST_CASE("FiniteSetMetric: Boolean values handling", "[FiniteSetMetric]") {
 
   astl::FiniteSetMetric metric(&config, nullptr, nullptr);
 
-  astl::RawSampledData sample1(1, astl::AstlValue{false});
-  astl::RawSampledData sample2(2, astl::AstlValue{true});
-  astl::RawSampledData sample3(3, astl::AstlValue{true});
-  astl::RawSampledData sample4(4, astl::AstlValue{uint64_t{2}});  // Not in finite set
+  astl::NormalizedSampledData sample1(1, astl::AstlValue{false});
+  astl::NormalizedSampledData sample2(2, astl::AstlValue{true});
+  astl::NormalizedSampledData sample3(3, astl::AstlValue{true});
+  astl::NormalizedSampledData sample4(4, astl::AstlValue{uint64_t{2}});  // Not in finite set
 
   REQUIRE(metric.ReceiveRawSample(sample1) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric.ReceiveRawSample(sample2) == ASTL_STATUS_SUCCESS);

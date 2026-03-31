@@ -513,6 +513,44 @@ auto SerializeOperationToMetricMap(const MetricManager::TargetOperationToMetricM
   return ASTL_STATUS_SUCCESS;
 }
 
+auto SerializeClockCorrelations(const ClockCorrelationMap& correlations, astl::protobuf::MetricManager& proto_mgr)
+    -> void {
+  auto* proto_list = proto_mgr.mutable_clock_correlations();
+  proto_list->Clear();
+
+  for (const auto& [op_id, corr] : correlations) {
+    auto* entry = proto_list->Add();
+    entry->set_operation_id(op_id);
+
+    auto* proto_corr = entry->mutable_correlation();
+    proto_corr->set_raw_monotonic_at_start_ns(corr.raw_monotonic_at_start.time_since_epoch().count());
+    proto_corr->set_native_at_start_ticks(corr.native_at_start);
+
+    auto* proto_ratio = proto_corr->mutable_ticks();
+    proto_ratio->set_num(corr.ticks.num);
+    proto_ratio->set_den(corr.ticks.den);
+  }
+}
+
+static auto DeserializeClockCorrelations(const astl::protobuf::MetricManager& proto_mgr) -> ClockCorrelationMap {
+  ClockCorrelationMap result;
+  result.reserve(static_cast<size_t>(proto_mgr.clock_correlations_size()));
+
+  for (const auto& entry : proto_mgr.clock_correlations()) {
+    const auto& proto_corr  = entry.correlation();
+    const auto& proto_ratio = proto_corr.ticks();
+
+    OperationClockCorrelation corr{
+        ProcessedSampleTimestamp{std::chrono::duration<int64_t, std::nano>{proto_corr.raw_monotonic_at_start_ns()}},
+        proto_corr.native_at_start_ticks(), NativeToMonotonicRawRatio{proto_ratio.num(),             proto_ratio.den()                                 }
+    };
+
+    result[entry.operation_id()] = corr;
+  }
+
+  return result;
+}
+
 static auto DeserializeMetricHandle(const astl::protobuf::RawMetric&             raw,
                                     const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<MetricHandle, astl_status_code> {
@@ -784,6 +822,9 @@ auto Serialize(const MetricManager& metric_manager, std::ostream& output_stream)
     return op_status;
   }
 
+  ASTL_LOG_DEBUG("serialize: serializing clock correlations ({} entries)", metric_manager._clock_correlations.size());
+  detail::SerializeClockCorrelations(metric_manager._clock_correlations, proto_mgr);
+
   if (!proto_mgr.SerializeToOstream(&output_stream)) {
     ASTL_LOG_ERROR("Serialize(MetricManager): Failed to serialize MetricManager to output stream");
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -865,6 +906,10 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream&                  
     return std::unexpected(op_map_or_err.error());
   }
   metric_manager->_target_to_operation_to_metric_map.swap(*op_map_or_err);
+
+  metric_manager->_clock_correlations = detail::DeserializeClockCorrelations(proto_manager);
+  ASTL_LOG_DEBUG("Deserialize<MetricManager>: restored {} clock correlations",
+                 metric_manager->_clock_correlations.size());
 
   // set all metric's processed sample sink to metric_manager
   for (const auto& handle_ptr : metric_manager->_metric_handles) {

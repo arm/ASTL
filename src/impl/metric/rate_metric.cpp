@@ -48,15 +48,15 @@ RateMetric::RateMetric(const MetricConfig* configuration, const ITarget* target,
   _interval_logger.LogInfo("Metric, Rate Value, Time Interval (us), Timestamp \n");
 }
 
-auto RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
+auto RateMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code {
   // Check if the sample's value type matches the metric's expected type
   auto type_check_result = CheckSampleValueType(raw_sample);
   if (type_check_result != ASTL_STATUS_SUCCESS) {
     return type_check_result;
   }
 
-  // Log the raw sample using the base class method
-  LogRawSample(raw_sample);
+  // Log the normalized sample using the base class method
+  LogNormalizedSample(raw_sample);
 
   // Apply formula if configured (masking, scaling, etc.)
   auto processed_value = ApplyFormula(raw_sample.value);
@@ -69,7 +69,7 @@ auto RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_stat
   // If this is the first sample, store it and return
   if (!_previous_sample.has_value()) {
     // Store the processed value for next rate calculation
-    _previous_sample = RawSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
+    _previous_sample = NormalizedSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
     return ASTL_STATUS_SUCCESS;
   }
 
@@ -81,8 +81,9 @@ auto RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_stat
     return delta_result.error();
   }
 
-  // Calculate time interval between samples
-  auto time_interval = raw_sample.timestamp - _previous_sample->timestamp;
+  // Calculate time interval between samples (nanoseconds → cast to microseconds for rate calculation)
+  auto time_interval_ns = raw_sample.timestamp - _previous_sample->timestamp;
+  auto time_interval    = std::chrono::duration_cast<std::chrono::microseconds>(time_interval_ns);
 
   // Prevent division by zero
   if (time_interval.count() == 0) {
@@ -114,7 +115,7 @@ auto RateMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_stat
   }
 
   // Store current processed sample as previous for next iteration
-  _previous_sample = RawSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
+  _previous_sample = NormalizedSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
 
   return ASTL_STATUS_SUCCESS;
 }

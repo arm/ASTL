@@ -99,7 +99,7 @@ auto ResidencyMetric::GetOperations() -> std::expected<OperationSequence, astl_s
   return operations_seq;
 }
 
-auto ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
+auto ResidencyMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code {
   // Find the state configuration for this sample's operation_id using fast map lookup
   auto config_it = _operation_id_to_config.find(raw_sample.operation_id);
   if (config_it == _operation_id_to_config.end()) {
@@ -121,8 +121,8 @@ auto ResidencyMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl
     return type_check_result;
   }
 
-  // Log the raw sample using the base class method
-  LogRawSample(raw_sample);
+  // Log the normalized sample using the base class method
+  LogNormalizedSample(raw_sample);
 
   const std::string& state_name = state_config->state_name;
 
@@ -299,7 +299,7 @@ auto ResidencyMetric::CalculatePercentage(std::chrono::microseconds time_in_stat
 
 auto ResidencyMetric::UpdateStateResidencyStatistics(const std::string&        state_name,
                                                      std::chrono::microseconds time_microseconds, double percentage,
-                                                     SampleTimestamp timestamp) -> astl_status_code {
+                                                     ProcessedSampleTimestamp timestamp) -> astl_status_code {
   // Convert time_microseconds to seconds as std::chrono::duration<double>
   std::chrono::duration<double> time_seconds_chrono = time_microseconds;
 
@@ -325,7 +325,8 @@ auto ResidencyMetric::UpdateStateResidencyStatistics(const std::string&        s
 }
 
 auto ResidencyMetric::CalculateInferredStateResidencyForInterval(std::chrono::microseconds sample_interval,
-                                                                 SampleTimestamp timestamp) -> astl_status_code {
+                                                                 ProcessedSampleTimestamp  timestamp)
+    -> astl_status_code {
   if (sample_interval.count() <= 0) {
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }

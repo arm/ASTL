@@ -18,8 +18,8 @@ namespace astl {
  * @brief Represents a single captured event with its timestamp.
  */
 struct EventData {
-  std::string     description;  ///< Event textual description/value
-  SampleTimestamp timestamp;    ///< Time when event occurred
+  std::string              description;  ///< Event textual description/value
+  ProcessedSampleTimestamp timestamp;    ///< Time when event occurred
 };
 
 /**
@@ -79,7 +79,7 @@ class EventMetric : public RawMetric {
    * @retval ASTL_STATUS_SUCCESS Event was successfully processed and recorded.
    * @retval ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE Sample does not contain a string convertible value.
    */
-  auto ReceiveRawSample(const RawSampledData& sample) -> astl_status_code override;
+  auto ReceiveRawSample(const NormalizedSampledData& sample) -> astl_status_code override;
 
   /**
    * @brief Summarize collected event data.
@@ -121,7 +121,7 @@ class EventMetric : public RawMetric {
    * @param sample The sample data containing the event information.
    * @return astl_status_code indicating success or validation failure.
    */
-  auto CheckAndStoreEvent(const RawSampledData& raw_sample) -> astl_status_code;
+  auto CheckAndStoreEvent(const NormalizedSampledData& raw_sample) -> astl_status_code;
 
   /**
    * @brief Initialize/reset internal data structures.

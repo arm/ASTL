@@ -14,6 +14,7 @@
 #include "collector/periodic_sampler.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
+#include "common/monotonic_raw_clock.hpp"
 #include "libsensors/libsensors_read_operation.hpp"
 #include "operation/operation.hpp"
 
@@ -175,6 +176,30 @@ auto LibsensorsCollector::ReadImmediate() -> astl_status_code {
 }
 
 /*
+ * @brief Snapshot CLOCK_MONOTONIC_RAW and steady_clock simultaneously for every sample operation.
+ *        All libsensors operations share steady_clock as their native clock, so one pair of
+ *        snapshots is sufficient and is mapped to every OperationId.
+ */
+auto LibsensorsCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> {
+  std::scoped_lock lock{_collection_mutex};
+  if (!_configuration.has_value()) {
+    ASTL_LOG_WARNING("LibsensorsCollector::GetNativeClockSnapshot called without configuration; returning empty map");
+    return {};
+  }
+  // Take both clock snapshots as close together as possible
+  const uint64_t native_now = static_cast<uint64_t>(
+      std::chrono::time_point_cast<SampleMicroseconds>(std::chrono::steady_clock::now()).time_since_epoch().count());
+  const auto raw_now = ClockMonotonicRaw::now();
+
+  ClockCorrelationMap result;
+  for (const auto& operation_ptr : _configuration->Operations().operationsOnSample) {
+    result[operation_ptr->GetId()] =
+        OperationClockCorrelation{raw_now, native_now, MakeTickRatio<SampleMicroseconds>()};
+  }
+  return result;
+}
+
+/*
  * @brief Casts a sequence of abstract operations and executes them.
  */
 auto LibsensorsCollector::ExecuteCollectionOperations(OperationSequence const& operations) -> astl_status_code {
@@ -197,7 +222,8 @@ auto LibsensorsCollector::ExecuteCollectionOperations(OperationSequence const& o
       return ASTL_STATUS_INTERNAL_ERROR;
     }
 
-    auto timestamp = std::chrono::time_point_cast<SampleTimestamp::duration>(SampleTimestamp::clock::now());
+    auto timestamp = static_cast<uint64_t>(
+        std::chrono::time_point_cast<SampleMicroseconds>(std::chrono::steady_clock::now()).time_since_epoch().count());
     collected_samples.emplace_back(operation_ptr->GetId(), AstlValue{measured_value}, timestamp);
   }
 

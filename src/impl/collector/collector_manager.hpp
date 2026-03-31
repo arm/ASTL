@@ -66,6 +66,14 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
 
   [[nodiscard]] auto StartOnTarget(const ITarget* target) -> astl_status_code override;
 
+  /**
+   * @brief Delegate GetNativeClockSnapshot to the configured collector for the given target.
+   *
+   * Returns std::unexpected with ASTL_STATUS_INVALID_TARGET_HANDLE if no collector is registered.
+   */
+  [[nodiscard]] auto GetNativeClockSnapshot(const ITarget* target)
+      -> std::expected<ClockCorrelationMap, astl_status_code> override;
+
   [[nodiscard]] auto PauseOnTarget(const ITarget* target) -> astl_status_code override;
 
   [[nodiscard]] auto ResumeOnTarget(const ITarget* target) -> astl_status_code override;

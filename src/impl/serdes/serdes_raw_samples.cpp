@@ -32,7 +32,7 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
   for (const auto& sample : samples) {
     auto* proto_sample = batch.add_samples();
     proto_sample->set_operation_id(sample.operation_id);
-    proto_sample->set_timestamp_us(sample.timestamp.time_since_epoch().count());
+    proto_sample->set_timestamp_us(sample.raw_tick);
     astl::protobuf::AstlValue* proto_value = proto_sample->mutable_value();
     try {
       std::visit([&](const auto& val) { detail::SetOneOf(*proto_value, val); }, sample.value.value);
@@ -85,8 +85,7 @@ auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
       const OperationId op_id = static_cast<OperationId>(op_id64);
 
       RawSampledData sample{op_id, std::move(*value_or)};
-      const auto     micros = std::chrono::microseconds{proto_sample.timestamp_us()};
-      sample.timestamp      = SampleTimestamp{std::chrono::duration_cast<SampleTimestamp::duration>(micros)};
+      sample.raw_tick = proto_sample.timestamp_us();
 
       result.emplace_back(std::move(sample));
     }

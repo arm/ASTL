@@ -21,15 +21,15 @@ DeltaMetric::DeltaMetric(const MetricConfig* configuration, const ITarget* targe
   _delta_summary_logger.LogInfo("Metric, Description, Units, Delta Value \n");
 }
 
-auto DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
+auto DeltaMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code {
   // Check if the sample's value type matches the metric's expected type
   auto type_check_result = CheckSampleValueType(raw_sample);
   if (type_check_result != ASTL_STATUS_SUCCESS) {
     return type_check_result;
   }
 
-  // Log the raw sample using the base class method
-  LogRawSample(raw_sample);
+  // Log the normalized sample using the base class method
+  LogNormalizedSample(raw_sample);
 
   // Apply formula if configured (masking, scaling, etc.)
   auto processed_value = ApplyFormula(raw_sample.value);
@@ -42,7 +42,7 @@ auto DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_sta
   // If this is the first sample, store it and return
   if (!_previous_sample.has_value()) {
     // Store the processed value for next delta calculation
-    _previous_sample = RawSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
+    _previous_sample = NormalizedSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
     return ASTL_STATUS_SUCCESS;
   }
 
@@ -64,7 +64,7 @@ auto DeltaMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_sta
   }
 
   // Store current processed sample as previous for next iteration
-  _previous_sample = RawSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
+  _previous_sample = NormalizedSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
 
   return ASTL_STATUS_SUCCESS;
 }

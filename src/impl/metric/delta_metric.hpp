@@ -59,7 +59,7 @@ class DeltaMetric : public RawMetric {
    * @param sample A single sampled data point to be processed.
    * @return astl_status_code indicating success or failure.
    */
-  auto ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code override;
+  auto ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code override;
 
   /**
    * @brief Summarize collected delta data.
@@ -116,10 +116,10 @@ class DeltaMetric : public RawMetric {
 
   // NOLINTBEGIN - Disable clang-tidy checks for protected members - required by RateMetric class inherited from
   // DeltaMetric
-  std::optional<RawSampledData> _previous_sample;               // Previous sample for delta calculation
-  DeltaSummaryData              _delta_summary_data;            // Summary data for delta statistics
-  AstlValue                     _sum_delta_value{uint64_t{0}};  // Sum of delta values for average calculation
-  uint64_t                      _delta_count{0};                // Number of deltas processed
+  std::optional<NormalizedSampledData> _previous_sample;               // Previous sample for delta calculation
+  DeltaSummaryData                     _delta_summary_data;            // Summary data for delta statistics
+  AstlValue                            _sum_delta_value{uint64_t{0}};  // Sum of delta values for average calculation
+  uint64_t                             _delta_count{0};                // Number of deltas processed
 
   // NOLINTEND
  private:

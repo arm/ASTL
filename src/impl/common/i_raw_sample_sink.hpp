@@ -10,6 +10,7 @@
 
 #include "astl/astl.h"
 #include "astl_value.hpp"
+#include "common/monotonic_raw_clock.hpp"
 #include "operation/operation.hpp"
 #include "target.hpp"
 
@@ -21,7 +22,8 @@ namespace astl {
  * Raw samples are produced directly from hardware/firmware (e.g. SCMI reads) before any metric-level
  * interpretation such as delta, rate, or aggregation is applied. Each raw sample is tagged with the
  * `OperationId` that initiated its collection so the metric layer can dispatch it to the correct
- * `IMetric` instance.
+ * `IMetric` instance.  The `raw_tick` field holds the collector-native hardware clock tick count;
+ * MetricManager converts it to `CLOCK_MONOTONIC_RAW` nanoseconds before forwarding to metrics.
  *
  * Thread-safety: Once constructed the object is immutable and can be shared safely between threads
  * if the underlying `AstlValue` variant alternative is trivially copyable (the typical case).
@@ -31,33 +33,73 @@ struct RawSampledData {
   RawSampledData() = delete;
 
   /**
-   * @brief Construct a raw sample with current timestamp.
+   * @brief Construct a raw sample, capturing the current time as a microsecond tick fallback.
    * @param operation_id Identifier of the originating `Operation`.
    * @param value The captured raw value.
    */
-  explicit RawSampledData(OperationId operation_id, AstlValue value)
-      : operation_id{operation_id},
-        value{value},
-        timestamp{std::chrono::time_point_cast<SampleTimestamp::duration>(std::chrono::steady_clock::now())} {}
+  explicit RawSampledData(OperationId operation_id, AstlValue value) : operation_id{operation_id}, value{value} {}
 
   /**
-   * @brief Construct a raw sample with an explicit timestamp.
+   * @brief Construct a raw sample with an explicit collector-native hardware tick.
    * @param operation_id Identifier of the originating `Operation`.
    * @param value The captured raw value.
-   * @param timestamp Time the value was read from the source.
+   * @param raw_tick Collector-native hardware clock tick count.
    */
-  RawSampledData(OperationId operation_id, AstlValue value, SampleTimestamp timestamp)
-      : operation_id{operation_id}, value{value}, timestamp{timestamp} {}
+  RawSampledData(OperationId operation_id, AstlValue value, HwClockTicks raw_tick)
+      : operation_id{operation_id}, value{value}, raw_tick{raw_tick} {}
 
   /** @brief Identifier of the operation that produced this sample. */
   OperationId operation_id{kOperationIdInvalid};
   /** @brief Raw value captured (pre-metric processing). */
   AstlValue value;
-  /** @brief Timestamp of capture (steady clock, microsecond resolution). */
-  SampleTimestamp timestamp;
+  /** @brief Collector-native hardware clock tick count; converted to CLOCK_MONOTONIC_RAW ns by MetricManager. */
+  HwClockTicks raw_tick{0};
 
   /**
    * @brief Retrieve the stored raw value as a concrete type.
+   * @tparam T Exact variant alternative expected.
+   * @return Reference to stored value.
+   */
+  template <typename T>
+  const auto &get() const {
+    return std::get<T>(value.value);
+  }
+};
+
+/**
+ * @brief A raw sample after MetricManager has converted the collector-native tick to
+ *        a `CLOCK_MONOTONIC_RAW` timestamp.  This is the type received by all `IMetric`
+ *        implementations via `ReceiveRawSample`.
+ */
+struct NormalizedSampledData {
+  NormalizedSampledData() = delete;
+
+  /**
+   * @brief Construct a normalized sample with the current CLOCK_MONOTONIC_RAW timestamp.
+   * @param operation_id Identifier of the originating `Operation`.
+   * @param value The metric value.
+   */
+  explicit NormalizedSampledData(OperationId operation_id, AstlValue value)
+      : operation_id{operation_id}, value{value}, timestamp{ClockMonotonicRaw::now()} {}
+
+  /**
+   * @brief Construct a normalized sample with an explicit CLOCK_MONOTONIC_RAW timestamp.
+   * @param operation_id Identifier of the originating `Operation`.
+   * @param value The metric value.
+   * @param timestamp CLOCK_MONOTONIC_RAW time_point (nanosecond resolution).
+   */
+  NormalizedSampledData(OperationId operation_id, AstlValue value, ProcessedSampleTimestamp timestamp)
+      : operation_id{operation_id}, value{value}, timestamp{timestamp} {}
+
+  /** @brief Identifier of the operation that produced this sample. */
+  OperationId operation_id{kOperationIdInvalid};
+  /** @brief Metric value. */
+  AstlValue value;
+  /** @brief CLOCK_MONOTONIC_RAW timestamp (nanosecond resolution). */
+  ProcessedSampleTimestamp timestamp;
+
+  /**
+   * @brief Retrieve the stored value as a concrete type.
    * @tparam T Exact variant alternative expected.
    * @return Reference to stored value.
    */

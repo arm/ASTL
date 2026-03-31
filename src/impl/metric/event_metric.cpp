@@ -14,7 +14,7 @@ auto EventMetric::Initialize() -> void { _summary.counts.clear(); }
 
 auto EventMetric::Reset() -> void { Initialize(); }
 
-auto EventMetric::CheckAndStoreEvent(const RawSampledData& raw_sample) -> astl_status_code {
+auto EventMetric::CheckAndStoreEvent(const NormalizedSampledData& raw_sample) -> astl_status_code {
   // Convert value to string
   std::string event_str;
   if (!raw_sample.value.ToStringValue(event_str)) {
@@ -37,7 +37,7 @@ auto EventMetric::CheckAndStoreEvent(const RawSampledData& raw_sample) -> astl_s
   return ASTL_STATUS_SUCCESS;
 }
 
-auto EventMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
+auto EventMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code {
   return CheckAndStoreEvent(raw_sample);
 }
 

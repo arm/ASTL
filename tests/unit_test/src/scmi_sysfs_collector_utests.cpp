@@ -656,8 +656,8 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
   // this test_data increments the timestamps by 1000x. The collector should properly scale these timestamps based on
   // the tstamp_rate
   const std::vector<std::string> test_data{
-      "1000 100",  // First sample: timestamp=1000, value=100, tstamp_rate=4, so timestamp should be scaled to 250ms
-      "2000 200",  // Different timestamp: should be accepted. timestamp=2000, value=200, scaled to 500ms
+      "1000 100",  // First sample: raw tick=1000, value=100 (MetricManager normalises via 4kHz ratio to 250ms)
+      "2000 200",  // Different timestamp: should be accepted. raw tick=2000, value=200
       "3000 300", "4000 400", "5000 500"};
 
   REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/value"}, _))
@@ -679,9 +679,9 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // Track samples received by the sink
-  MockRawSampleSink                  mock_raw_sample_sink;
-  std::vector<astl::AstlValue>       received_samples;
-  std::vector<astl::SampleTimestamp> received_timestamps;
+  MockRawSampleSink            mock_raw_sample_sink;
+  std::vector<astl::AstlValue> received_samples;
+  std::vector<uint64_t>        received_timestamps;
 
   // We expect only 3 samples to be received (duplicate timestamps should be discarded)
   REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
@@ -689,7 +689,7 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
       .LR_SIDE_EFFECT((std::for_each(std::begin(_2), std::end(_2),
                                      [&received_samples, &received_timestamps](auto const& sample) {
                                        received_samples.push_back(sample.value);
-                                       received_timestamps.push_back(sample.timestamp);
+                                       received_timestamps.push_back(sample.raw_tick);
                                      })))
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -739,9 +739,8 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
       astl::AstlValue{uint64_t{0x400}}, astl::AstlValue{uint64_t{0x500}}};
   REQUIRE_THAT(received_samples, Catch::Matchers::Equals(expected_samples));
 
-  const std::vector<astl::SampleTimestamp> expected_timestamps{
-      astl::SampleTimestamp{250ms}, astl::SampleTimestamp{500ms}, astl::SampleTimestamp{750ms},
-      astl::SampleTimestamp{1000ms}, astl::SampleTimestamp{1250ms}};
+  // Raw tick values: normalization (÷ tstamp_rate, × 10⁶ ns) is applied by MetricManager, not the collector.
+  const std::vector<uint64_t> expected_timestamps{1000, 2000, 3000, 4000, 5000};
 
   REQUIRE_THAT(received_timestamps, Catch::Matchers::Equals(expected_timestamps));
 }

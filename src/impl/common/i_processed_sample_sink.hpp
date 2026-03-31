@@ -10,6 +10,7 @@
 
 #include "astl/astl.h"
 #include "astl_value.hpp"
+#include "common/monotonic_raw_clock.hpp"
 #include "metric/i_metric.hpp"
 #include "operation/operation.hpp"
 #include "target.hpp"
@@ -35,21 +36,19 @@ struct ProcessedSampledData {
    * @brief Construct a processed sample with the current timestamp.
    * @param value Metric value (must hold a variant alternative valid for the metric).
    */
-  explicit ProcessedSampledData(AstlValue value)
-      : value{value},
-        timestamp{std::chrono::time_point_cast<SampleTimestamp::duration>(std::chrono::steady_clock::now())} {}
+  explicit ProcessedSampledData(AstlValue value) : value{value}, timestamp{ClockMonotonicRaw::now()} {}
 
   /**
    * @brief Construct a processed sample with an explicit timestamp.
    * @param value Metric value.
    * @param timestamp Timestamp associated with when the value became valid.
    */
-  ProcessedSampledData(AstlValue value, SampleTimestamp timestamp) : value{value}, timestamp{timestamp} {}
+  ProcessedSampledData(AstlValue value, ProcessedSampleTimestamp timestamp) : value{value}, timestamp{timestamp} {}
 
   /** @brief The processed metric value. */
   AstlValue value;
-  /** @brief Time the sample was generated (steady clock, microsecond resolution). */
-  SampleTimestamp timestamp;
+  /** @brief Time the sample was generated (CLOCK_MONOTONIC_RAW, microsecond resolution). */
+  ProcessedSampleTimestamp timestamp;
 
   /**
    * @brief Retrieve the stored value as a concrete type.

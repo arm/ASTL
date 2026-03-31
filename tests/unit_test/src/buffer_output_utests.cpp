@@ -17,7 +17,7 @@ using trompeloeil::_;
 // Avoid polluting global namespace: explicitly qualify astl symbols below.
 namespace {
 // Helper to build a ProcessedSampledData with a concrete numeric value and deterministic timestamp
-astl::ProcessedSampledData MakeProcessedSample(uint64_t value, astl::SampleTimestamp timestamp) {
+astl::ProcessedSampledData MakeProcessedSample(uint64_t value, astl::ProcessedSampleTimestamp timestamp) {
   return astl::ProcessedSampledData{astl::AstlValue{value}, timestamp};
 }
 }  // namespace
@@ -30,11 +30,11 @@ TEST_CASE("BufferOutput writes exact capacity with success", "[buffer_output]") 
   astl::BufferOutput                  output(std::span<astl_sample_t>(backing), &sample_count_capacity);
 
   // Build three processed samples
-  const astl::SampleTimestamp             base_ts{};  // epoch
+  const astl::ProcessedSampleTimestamp    base_ts{};  // epoch
   std::vector<astl::ProcessedSampledData> samples;
   samples.emplace_back(MakeProcessedSample(11U, base_ts));
-  samples.emplace_back(MakeProcessedSample(22U, base_ts + astl::SampleTimestamp::duration{1}));
-  samples.emplace_back(MakeProcessedSample(33U, base_ts + astl::SampleTimestamp::duration{2}));
+  samples.emplace_back(MakeProcessedSample(22U, base_ts + astl::ProcessedSampleTimestamp::duration{1}));
+  samples.emplace_back(MakeProcessedSample(33U, base_ts + astl::ProcessedSampleTimestamp::duration{2}));
 
   // Act
   auto status = output.WriteProcessedSamples(std::span<const astl::ProcessedSampledData>(samples));
@@ -47,7 +47,7 @@ TEST_CASE("BufferOutput writes exact capacity with success", "[buffer_output]") 
 
   auto require_processed_sample_matches_metric_sample = [](const astl_sample_t&              metric_sample,
                                                            const astl::ProcessedSampledData& processed_sample) {
-    REQUIRE(metric_sample.timestamp == processed_sample.timestamp.time_since_epoch().count());
+    REQUIRE(metric_sample.timestamp == static_cast<uint64_t>(processed_sample.timestamp.time_since_epoch().count()));
     auto [sample_value, sample_value_type] = processed_sample.value.ToAstlUnionValue();
     (void)sample_value_type;
     REQUIRE(metric_sample.value.ui64 == sample_value.ui64);
@@ -66,9 +66,9 @@ TEST_CASE("BufferOutput returns BUFFER_LARGER_THAN_NEEDED when slack remains", "
   astl::BufferOutput                  output(std::span<astl_sample_t>(backing), &sample_count_capacity);
 
   std::vector<astl::ProcessedSampledData> samples;
-  const astl::SampleTimestamp             base_ts{};
+  const astl::ProcessedSampleTimestamp    base_ts{};
   samples.emplace_back(MakeProcessedSample(1U, base_ts));
-  samples.emplace_back(MakeProcessedSample(2U, base_ts + astl::SampleTimestamp::duration{10}));
+  samples.emplace_back(MakeProcessedSample(2U, base_ts + astl::ProcessedSampleTimestamp::duration{10}));
 
   // Act
   auto status = output.WriteProcessedSamples(std::span<const astl::ProcessedSampledData>(samples));
@@ -88,10 +88,10 @@ TEST_CASE("BufferOutput fails when provided capacity smaller than samples", "[bu
   astl::BufferOutput                  output(std::span<astl_sample_t>(backing), &sample_count_capacity);
 
   std::vector<astl::ProcessedSampledData> samples;
-  const astl::SampleTimestamp             base_ts{};
+  const astl::ProcessedSampleTimestamp    base_ts{};
   samples.emplace_back(MakeProcessedSample(10U, base_ts));
-  samples.emplace_back(MakeProcessedSample(20U, base_ts + astl::SampleTimestamp::duration{1}));
-  samples.emplace_back(MakeProcessedSample(30U, base_ts + astl::SampleTimestamp::duration{2}));
+  samples.emplace_back(MakeProcessedSample(20U, base_ts + astl::ProcessedSampleTimestamp::duration{1}));
+  samples.emplace_back(MakeProcessedSample(30U, base_ts + astl::ProcessedSampleTimestamp::duration{2}));
 
   // Act
   auto status = output.WriteProcessedSamples(std::span<const astl::ProcessedSampledData>(samples));
@@ -109,7 +109,7 @@ TEST_CASE("BufferOutput handles null count pointer (internal error)", "[buffer_o
   std::array<astl_sample_t, 2>            backing{};
   astl::BufferOutput                      output(std::span<astl_sample_t>(backing), nullptr);
   std::vector<astl::ProcessedSampledData> samples;
-  const astl::SampleTimestamp             sample_ts{};
+  const astl::ProcessedSampleTimestamp    sample_ts{};
   samples.emplace_back(MakeProcessedSample(5U, sample_ts));
 
   // Act

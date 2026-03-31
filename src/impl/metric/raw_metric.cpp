@@ -28,7 +28,7 @@ RawMetric::RawMetric(const MetricConfig *configuration, const ITarget *target,
 
   // Initialize logger header
   // TODO (ASTL-58): When the output manager is implemented raw_sample_logger will be part of the OutputManager.
-  _raw_sample_logger.LogInfo("Metric, Description, Units, Raw-Value, Timestamp \n");
+  _raw_sample_logger.LogInfo("Metric, Description, Units, Raw-Value, Timestamp(ns) \n");
 }
 
 /*
@@ -106,7 +106,7 @@ auto RawMetric::GetOperations() -> std::expected<OperationSequence, astl_status_
   return BuildOperations(_configuration->GetOperationBuilder(), _target);
 }
 
-auto RawMetric::CheckSampleValueType(const RawSampledData &raw_sample) const -> astl_status_code {
+auto RawMetric::CheckSampleValueType(const NormalizedSampledData &raw_sample) const -> astl_status_code {
   const auto sample_type = raw_sample.value.ToAstlUnionValue().second;
   // Validate against collector-facing raw input contract, not the post-formula output type.
   if (sample_type != _configuration->InputValueType()) {
@@ -117,12 +117,11 @@ auto RawMetric::CheckSampleValueType(const RawSampledData &raw_sample) const -> 
   return ASTL_STATUS_SUCCESS;
 }
 
-auto RawMetric::LogRawSample(const RawSampledData &raw_sample) -> void {
-  // LOG : Metric, Description, Units, Raw-Value, Timestamp
-  auto timestamp =
-      std::chrono::duration_cast<std::chrono::microseconds>(raw_sample.timestamp.time_since_epoch()).count();
+auto RawMetric::LogNormalizedSample(const NormalizedSampledData &sample) -> void {
+  // LOG : Metric, Description, Units, Raw-Value, Timestamp(ns)
+  auto timestamp = sample.timestamp.time_since_epoch().count();
   _raw_sample_logger.LogInfo("{}, {}, {}, {}, {} \n", _configuration->Name(), _configuration->Description(),
-                             _configuration->Units(), raw_sample.value, timestamp);
+                             _configuration->Units(), sample.value, timestamp);
 }
 
 auto RawMetric::ApplyFormula(const AstlValue &raw_value) const -> std::expected<AstlValue, astl_status_code> {

@@ -17,8 +17,8 @@
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
 #include "common/metric_config.hpp"
+#include "common/monotonic_raw_clock.hpp"
 #include "delta_metric.hpp"
-#include "operation/operation.hpp"
 
 namespace astl {
 
@@ -31,7 +31,7 @@ namespace astl {
 struct StateResidencyData {
   std::string                   state_name;    ///< Name of the power/system state
   std::chrono::duration<double> time_seconds;  ///< Converted time in seconds
-  SampleTimestamp               timestamp;     ///< Timestamp when calculated
+  ProcessedSampleTimestamp      timestamp;     ///< Timestamp when calculated
 };
 
 /**
@@ -113,7 +113,7 @@ class ResidencyMetric : public DeltaMetric {
    * @param sample A single sampled data point containing state counter value.
    * @return astl_status_code indicating success or failure.
    */
-  auto ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code override;
+  auto ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code override;
 
   /**
    * @brief Summarize collected residency data for all states.
@@ -215,7 +215,7 @@ class ResidencyMetric : public DeltaMetric {
    * @return astl_status_code indicating success or failure.
    */
   auto UpdateStateResidencyStatistics(const std::string& state_name, std::chrono::microseconds time_microseconds,
-                                      double percentage, SampleTimestamp timestampsamp) -> astl_status_code;
+                                      double percentage, ProcessedSampleTimestamp timestamp) -> astl_status_code;
 
   /**
    * @brief Calculate and update inferred state residency for a specific sample interval.
@@ -227,8 +227,8 @@ class ResidencyMetric : public DeltaMetric {
    * @param timestamp Timestamp for this sample.
    * @return astl_status_code indicating success or failure.
    */
-  auto CalculateInferredStateResidencyForInterval(std::chrono::microseconds sample_interval, SampleTimestamp timestamp)
-      -> astl_status_code;
+  auto CalculateInferredStateResidencyForInterval(std::chrono::microseconds sample_interval,
+                                                  ProcessedSampleTimestamp  timestamp) -> astl_status_code;
 
  private:
   // non-owned pointer to the configuration for this metric (owned by the MetricHandle)
@@ -238,10 +238,11 @@ class ResidencyMetric : public DeltaMetric {
   std::unordered_map<OperationId, const ResidencyMetricConfig::StateInfo*>
       _operation_id_to_config;  ///< Fast lookup map from operation_id to state config
   // First (smallest) operation id assigned (captures ordering baseline). Set when operations are built.
-  std::optional<OperationId>                                     _first_operation_id;
-  std::unordered_map<std::string, std::optional<RawSampledData>> _previous_samples;  ///< Previous samples per state
-  std::vector<StateResidencyData>                                _residency_data;    ///< All residency calculations
-  ResidencySummaryData                                           _summary_data;      ///< Summary statistics
+  std::optional<OperationId> _first_operation_id;
+  std::unordered_map<std::string, std::optional<NormalizedSampledData>>
+                                  _previous_samples;  ///< Previous samples per state
+  std::vector<StateResidencyData> _residency_data;    ///< All residency calculations
+  ResidencySummaryData            _summary_data;      ///< Summary statistics
 
   // Per-state running totals for summary calculation
   std::unordered_map<std::string, std::chrono::duration<double>> _state_time_totals;  ///< Running total time per state

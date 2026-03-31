@@ -13,6 +13,7 @@
 #include "astl/astl_errors.h"
 #include "collector/collection_operations.hpp"
 #include "common/astl_defines.hpp"
+#include "common/clock_correlation.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "common/metric_config.hpp"
 #include "operation/operation.hpp"
@@ -196,6 +197,17 @@ struct IMetricManager {
    * @param data A collection of raw sampled data points for the metrics to process
    */
   [[nodiscard]] virtual auto ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code = 0;
+
+  /**
+   * @brief Store per-operation clock correlation data used to normalize raw sample timestamps.
+   *
+   * Must be called once per collection start, after ConfigureCollection and before the first
+   * ProcessRawSamples call.  Existing entries for the same OperationIds are replaced so that
+   * re-starting collection always uses fresh anchors.
+   *
+   * @param correlations Map from OperationId to paired (CLOCK_MONOTONIC_RAW, native-clock) snapshots.
+   */
+  virtual auto SetClockCorrelations(const ClockCorrelationMap& correlations) -> void = 0;
 
   /**
    * @brief Reset all metric and counter instances associated with a target.

@@ -84,7 +84,7 @@ struct MockCounter : public astl::ICounter {
 
   MAKE_MOCK1(CheckCapabilities, auto(const astl::Capabilities& capabilities)->bool, const override);
   MAKE_MOCK0(GetOperations, auto()->expected_operation_sequence, override);
-  MAKE_MOCK1(ReceiveRawSample, auto(const astl::RawSampledData& raw_sample)->astl_status_code, override);
+  MAKE_MOCK1(ReceiveRawSample, auto(const astl::NormalizedSampledData& raw_sample)->astl_status_code, override);
   MAKE_MOCK1(SetProcessedSampleSink, auto(astl::IProcessedSampleSink* sink)->void, final);
   MAKE_MOCK1(SinkProcessedSample, auto(astl::ProcessedSampledData const& processed_sample)->astl_status_code, override);
 
@@ -146,6 +146,8 @@ struct MockCollectorManager : public astl::ICollectorManager {
              override);
 
   MAKE_MOCK1(StartOnTarget, astl_status_code(const astl::ITarget* target), override);
+  using ClockSnapshotRtype = std::expected<astl::ClockCorrelationMap, astl_status_code>;
+  MAKE_MOCK1(GetNativeClockSnapshot, ClockSnapshotRtype(const astl::ITarget* target), override);
   MAKE_MOCK1(PauseOnTarget, astl_status_code(const astl::ITarget* target), override);
   MAKE_MOCK1(ResumeOnTarget, astl_status_code(const astl::ITarget* target), override);
   MAKE_MOCK1(ReadImmediateOnTarget, astl_status_code(const astl::ITarget* target), override);
@@ -191,10 +193,12 @@ struct MockCollector : public astl::ICollector {
    */
   MAKE_MOCK0(StopCollection, astl_status_code(), override);
 
-  /*
-   * @brief Collect a single sample of all the configured metics.
-   */
+  /* @brief Collect a single sample of all the configured metrics. */
   MAKE_MOCK0(ReadImmediate, astl_status_code(), override);
+
+  /* @brief Take per-operation clock correlation snapshots for all configured sample operations. */
+  using ClockSnapshotRtype = std::expected<astl::ClockCorrelationMap, astl_status_code>;
+  MAKE_MOCK0(GetNativeClockSnapshot, ClockSnapshotRtype(), override);
 };
 
 struct MockRawSampleSink : public astl::IRawSampleSink {
@@ -222,7 +226,7 @@ struct MockMetric : public astl::IMetric {
 
   MAKE_MOCK1(CheckCapabilities, auto(const astl::Capabilities& capabilities)->bool, const override);
   MAKE_MOCK0(GetOperations, auto()->expected_operation_sequence, override);
-  MAKE_MOCK1(ReceiveRawSample, auto(const astl::RawSampledData& raw_sample)->astl_status_code, override);
+  MAKE_MOCK1(ReceiveRawSample, auto(const astl::NormalizedSampledData& raw_sample)->astl_status_code, override);
   MAKE_MOCK1(SetProcessedSampleSink, auto(astl::IProcessedSampleSink* sink)->void, final);
   MAKE_MOCK1(SinkProcessedSample, auto(astl::ProcessedSampledData const& processed_sample)->astl_status_code, override);
 
@@ -310,6 +314,8 @@ struct MockMetricManager : public astl::IMetricManager {
    * @return astl_status_code indicating success or failure of the processing operation.
    */
   MAKE_MOCK1(ProcessRawSamples, auto(astl::RawSamplesMap&)->astl_status_code, override);
+
+  MAKE_MOCK1(SetClockCorrelations, auto(const astl::ClockCorrelationMap& correlations)->void, override);
 
   MAKE_MOCK1(ResetMetricsOnTarget, auto(const astl::ITarget* target)->astl_status_code, override);
 
@@ -407,7 +413,7 @@ class TestMetricBase : public astl::IMetric {
   std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
     return astl::OperationSequence{};
   }
-  astl_status_code ReceiveRawSample(const astl::RawSampledData& raw) override {
+  astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& raw) override {
     (void)raw;
     return ASTL_STATUS_SUCCESS;
   }

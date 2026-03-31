@@ -19,7 +19,7 @@ namespace {
 // Reuse slim test doubles similar to those used in perfetto_output_utests.
 
 // Helper to make a processed sample (numeric) with deterministic timestamp
-astl::ProcessedSampledData MakeSample(double value, astl::SampleTimestamp timestamp) {
+astl::ProcessedSampledData MakeSample(double value, astl::ProcessedSampleTimestamp timestamp) {
   return astl::ProcessedSampledData{astl::AstlValue{static_cast<uint64_t>(value)}, timestamp};
 }
 }  // namespace
@@ -31,10 +31,10 @@ TEST_CASE("IntervalCsvOutput basic write", "[intervalcsv]") {  // NOLINT
   astl::IntervalCsvOutput writer(path);
   REQUIRE(writer.Ready());
   // build processed samples map with one metric and one sample
-  TestTargetBase              target{"Soc"};
-  TestMetricBase              metric{"Power", ASTL_UNITS_WATTS};
-  astl::ProcessedSamplesMap   processed;
-  const astl::SampleTimestamp base_timestamp{};  // epoch
+  TestTargetBase                       target{"Soc"};
+  TestMetricBase                       metric{"Power", ASTL_UNITS_WATTS};
+  astl::ProcessedSamplesMap            processed;
+  const astl::ProcessedSampleTimestamp base_timestamp{};  // epoch
   processed[&target][&metric].push_back(MakeSample(3.14, base_timestamp));
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream ifs(path);
@@ -52,13 +52,13 @@ TEST_CASE("IntervalCsvOutput category inference", "[intervalcsv]") {  // NOLINT
   TempFileGuard           tmp_guard{path};
   astl::IntervalCsvOutput writer(path);
   REQUIRE(writer.Ready());
-  TestTargetBase              tgt{"Soc"};
-  TestMetricBase              m_power{"SoC Power", ASTL_UNITS_WATTS};
-  TestMetricBase              m_temp{"SoC Temp", ASTL_UNITS_CELSIUS};
-  astl::ProcessedSamplesMap   processed;
-  const astl::SampleTimestamp base_timestamp{};
+  TestTargetBase                       tgt{"Soc"};
+  TestMetricBase                       m_power{"SoC Power", ASTL_UNITS_WATTS};
+  TestMetricBase                       m_temp{"SoC Temp", ASTL_UNITS_CELSIUS};
+  astl::ProcessedSamplesMap            processed;
+  const astl::ProcessedSampleTimestamp base_timestamp{};
   processed[&tgt][&m_power].push_back(MakeSample(10.0, base_timestamp));
-  processed[&tgt][&m_temp].push_back(MakeSample(55.0, base_timestamp + astl::SampleTimestamp::duration{5}));
+  processed[&tgt][&m_temp].push_back(MakeSample(55.0, base_timestamp + astl::ProcessedSampleTimestamp::duration{5}));
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream ifs(path);
   std::string   content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
@@ -92,12 +92,13 @@ TEST_CASE("IntervalCsvOutput aggregates same metric name across targets", "[inte
   TestTargetBase target_a{"SocA"};
   TestTargetBase target_b{"SocB"};
   // Two distinct metric objects with identical name
-  TestMetricBase              metric_a{"SharedMetric", ASTL_UNITS_WATTS};
-  TestMetricBase              metric_b{"SharedMetric", ASTL_UNITS_WATTS};
-  astl::ProcessedSamplesMap   processed;
-  const astl::SampleTimestamp base_timestamp{};
+  TestMetricBase                       metric_a{"SharedMetric", ASTL_UNITS_WATTS};
+  TestMetricBase                       metric_b{"SharedMetric", ASTL_UNITS_WATTS};
+  astl::ProcessedSamplesMap            processed;
+  const astl::ProcessedSampleTimestamp base_timestamp{};
   processed[&target_a][&metric_a].push_back(MakeSample(1.0, base_timestamp));
-  processed[&target_b][&metric_b].push_back(MakeSample(2.0, base_timestamp + astl::SampleTimestamp::duration{10}));
+  processed[&target_b][&metric_b].push_back(
+      MakeSample(2.0, base_timestamp + astl::ProcessedSampleTimestamp::duration{10}));
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream ifs(path);
   REQUIRE(ifs.is_open());
@@ -139,11 +140,11 @@ TEST_CASE("IntervalCsvOutput quotes description and sanitizes string samples", "
       return ASTL_STATUS_SUCCESS;
     }
   };
-  TestTargetBase              target{"Soc"};
-  StringMetric                metric{"Quoted", ASTL_UNITS_NONE};
-  astl::ProcessedSamplesMap   processed;
-  const astl::SampleTimestamp base_timestamp{};
-  astl::ProcessedSampledData  sample{astl::AstlValue{uint64_t{42}}, base_timestamp};
+  TestTargetBase                       target{"Soc"};
+  StringMetric                         metric{"Quoted", ASTL_UNITS_NONE};
+  astl::ProcessedSamplesMap            processed;
+  const astl::ProcessedSampleTimestamp base_timestamp{};
+  astl::ProcessedSampledData           sample{astl::AstlValue{uint64_t{42}}, base_timestamp};
   processed[&target][&metric].push_back(sample);
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream ifs(path);
@@ -161,12 +162,12 @@ TEST_CASE("IntervalCsvOutput orders metric groups alphabetically", "[intervalcsv
   TempFileGuard           tmp_guard{path};
   astl::IntervalCsvOutput writer(path);
   REQUIRE(writer.Ready());
-  TestTargetBase              tgt{"Soc"};
-  TestMetricBase              m_z{"Zeta", ASTL_UNITS_WATTS};
-  TestMetricBase              m_a{"Alpha", ASTL_UNITS_WATTS};
-  TestMetricBase              m_m{"Mid", ASTL_UNITS_WATTS};
-  astl::ProcessedSamplesMap   processed;
-  const astl::SampleTimestamp base_timestamp{};
+  TestTargetBase                       tgt{"Soc"};
+  TestMetricBase                       m_z{"Zeta", ASTL_UNITS_WATTS};
+  TestMetricBase                       m_a{"Alpha", ASTL_UNITS_WATTS};
+  TestMetricBase                       m_m{"Mid", ASTL_UNITS_WATTS};
+  astl::ProcessedSamplesMap            processed;
+  const astl::ProcessedSampleTimestamp base_timestamp{};
   processed[&tgt][&m_z].push_back(MakeSample(1.0, base_timestamp));
   processed[&tgt][&m_a].push_back(MakeSample(2.0, base_timestamp));
   processed[&tgt][&m_m].push_back(MakeSample(3.0, base_timestamp));

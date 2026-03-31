@@ -553,6 +553,13 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
   return operations;
 }
 
+auto MetricManager::SetClockCorrelations(const ClockCorrelationMap& correlations) -> void {
+  std::lock_guard<std::mutex> lock(_mutex);
+  for (const auto& [op_id, entry] : correlations) {
+    _clock_correlations.insert_or_assign(op_id, entry);
+  }
+}
+
 auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code {
   std::vector<std::pair<IMetric*, RawSampledData>> processing_queue;
   {
@@ -586,14 +593,30 @@ auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status
     if (lhs.first != rhs.first) {
       return std::less<IMetric*>{}(lhs.first, rhs.first);
     }
-    return lhs.second.timestamp < rhs.second.timestamp;
+    return lhs.second.raw_tick < rhs.second.raw_tick;
   });
 
   for (const auto& [metric_handle, sample] : processing_queue) {
-    astl_status_code status = metric_handle->ReceiveRawSample(sample);
+    // Normalize the collector-native raw_tick into the CLOCK_MONOTONIC_RAW domain using the
+    // per-operation correlation recorded at collection-start time.
+    ProcessedSampleTimestamp normalized_ts;
+    {
+      std::lock_guard<std::mutex> lock(_mutex);
+      const auto                  corr_it = _clock_correlations.find(sample.operation_id);
+      if (corr_it != _clock_correlations.end()) {
+        normalized_ts = NormalizeToCorrelatedRawTimestamp(sample.raw_tick, corr_it->second);
+      } else {
+        ASTL_LOG_WARNING(
+            "ProcessRawSamples: no clock correlation for operation ID {} on metric '{}'; timestamp not normalized",
+            sample.operation_id, metric_handle->Name());
+        return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+      }
+    }
+    NormalizedSampledData normalized_sample{sample.operation_id, sample.value, normalized_ts};
+    astl_status_code      status = metric_handle->ReceiveRawSample(normalized_sample);
     if (status != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} with status {}", sample.operation_id,
-                     astlStatusString(status));
+      ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} on metric '{}' with status {}",
+                     normalized_sample.operation_id, metric_handle->Name(), astlStatusString(status));
       return status;
     }
   }

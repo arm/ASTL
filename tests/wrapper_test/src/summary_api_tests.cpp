@@ -189,7 +189,8 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - uint64 samples", "[summary_api]") {
 
   SECTION("Single sample") {
     std::vector<astl::ProcessedSampledData> samples;
-    samples.emplace_back(astl::AstlValue{uint64_t{42}}, astl::SampleTimestamp{std::chrono::microseconds{100}});
+    samples.emplace_back(astl::AstlValue{uint64_t{42}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}});
 
     REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, mock_metric_raw, samples) == ASTL_STATUS_SUCCESS);
 
@@ -207,9 +208,12 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - uint64 samples", "[summary_api]") {
 
   SECTION("Multiple samples - verifies min, max, avg") {
     std::vector<astl::ProcessedSampledData> samples;
-    samples.emplace_back(astl::AstlValue{uint64_t{10}}, astl::SampleTimestamp{std::chrono::microseconds{100}});
-    samples.emplace_back(astl::AstlValue{uint64_t{20}}, astl::SampleTimestamp{std::chrono::microseconds{200}});
-    samples.emplace_back(astl::AstlValue{uint64_t{30}}, astl::SampleTimestamp{std::chrono::microseconds{300}});
+    samples.emplace_back(astl::AstlValue{uint64_t{10}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}});
+    samples.emplace_back(astl::AstlValue{uint64_t{20}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{200}});
+    samples.emplace_back(astl::AstlValue{uint64_t{30}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{300}});
 
     REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, mock_metric_raw, samples) == ASTL_STATUS_SUCCESS);
 
@@ -227,9 +231,12 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - uint64 samples", "[summary_api]") {
 
   SECTION("Time-weighted average mode") {
     std::vector<astl::ProcessedSampledData> samples;
-    samples.emplace_back(astl::AstlValue{uint64_t{10}}, astl::SampleTimestamp{std::chrono::microseconds{100}});
-    samples.emplace_back(astl::AstlValue{uint64_t{20}}, astl::SampleTimestamp{std::chrono::microseconds{200}});
-    samples.emplace_back(astl::AstlValue{uint64_t{30}}, astl::SampleTimestamp{std::chrono::microseconds{500}});
+    samples.emplace_back(astl::AstlValue{uint64_t{10}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}});
+    samples.emplace_back(astl::AstlValue{uint64_t{20}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{200}});
+    samples.emplace_back(astl::AstlValue{uint64_t{30}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{500}});
 
     REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, mock_metric_raw, samples) == ASTL_STATUS_SUCCESS);
 
@@ -295,10 +302,14 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - float64 samples", "[summary_api]") 
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   std::vector<astl::ProcessedSampledData> samples;
-  samples.emplace_back(astl::AstlValue{1.5}, astl::SampleTimestamp{std::chrono::microseconds{100}});
-  samples.emplace_back(astl::AstlValue{3.7}, astl::SampleTimestamp{std::chrono::microseconds{200}});
-  samples.emplace_back(astl::AstlValue{2.1}, astl::SampleTimestamp{std::chrono::microseconds{300}});
-  samples.emplace_back(astl::AstlValue{5.9}, astl::SampleTimestamp{std::chrono::microseconds{400}});
+  samples.emplace_back(astl::AstlValue{1.5},
+                       astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}});
+  samples.emplace_back(astl::AstlValue{3.7},
+                       astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{200}});
+  samples.emplace_back(astl::AstlValue{2.1},
+                       astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{300}});
+  samples.emplace_back(astl::AstlValue{5.9},
+                       astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{400}});
 
   REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, mock_metric_raw, samples) == ASTL_STATUS_SUCCESS);
 
@@ -363,7 +374,8 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - unsupported type returns NOT_SUPPOR
 
   // Inject a boolean sample so the sample store is not empty
   std::vector<astl::ProcessedSampledData> samples;
-  samples.emplace_back(astl::AstlValue{true}, astl::SampleTimestamp{std::chrono::microseconds{100}});
+  samples.emplace_back(astl::AstlValue{true},
+                       astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}});
   REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, mock_metric_raw, samples) == ASTL_STATUS_SUCCESS);
 
   astl_metric_statistics_t summary{};
@@ -583,12 +595,14 @@ TEST_CASE("astlGetMetricDiscreteHistogramOnTarget - uint64 samples, correct bins
   // Inject: values 10 (×3), 20 (×1), 30 (×2)  → 3 unique bins
   std::vector<astl::ProcessedSampledData> samples;
   for (int i = 0; i < 3; ++i) {
-    samples.emplace_back(astl::AstlValue{uint64_t{10}}, astl::SampleTimestamp{std::chrono::microseconds{i * 100}});
+    samples.emplace_back(astl::AstlValue{uint64_t{10}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{i * 100}});
   }
-  samples.emplace_back(astl::AstlValue{uint64_t{20}}, astl::SampleTimestamp{std::chrono::microseconds{400}});
+  samples.emplace_back(astl::AstlValue{uint64_t{20}},
+                       astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{400}});
   for (int i = 0; i < 2; ++i) {
     samples.emplace_back(astl::AstlValue{uint64_t{30}},
-                         astl::SampleTimestamp{std::chrono::microseconds{500 + (i * 100)}});
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{500 + (i * 100)}});
   }
   REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, mock_metric_raw, samples) == ASTL_STATUS_SUCCESS);
 
@@ -674,7 +688,8 @@ TEST_CASE("astlGetMetricDiscreteHistogramOnTarget - single unique value", "[hist
 
   std::vector<astl::ProcessedSampledData> samples;
   for (int i = 0; i < 5; ++i) {
-    samples.emplace_back(astl::AstlValue{uint64_t{42}}, astl::SampleTimestamp{std::chrono::microseconds{(i * 100)}});
+    samples.emplace_back(astl::AstlValue{uint64_t{42}},
+                         astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{(i * 100)}});
   }
   REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, mock_metric_raw, samples) == ASTL_STATUS_SUCCESS);
 

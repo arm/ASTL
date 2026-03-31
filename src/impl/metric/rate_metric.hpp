@@ -22,7 +22,7 @@ namespace astl {
  */
 struct RateData {
   double                    rate_value{0.0};   ///< The rate value (delta/time_interval)
-  SampleTimestamp           timestamp;         ///< Timestamp when the rate was calculated
+  ProcessedSampleTimestamp  timestamp;         ///< Timestamp when the rate was calculated
   std::chrono::microseconds time_interval{0};  ///< Time interval between samples in microseconds
 };
 
@@ -70,7 +70,7 @@ class RateMetric : public DeltaMetric {
    * @param sample A single sampled data point to be processed.
    * @return astl_status_code indicating success or failure.
    */
-  auto ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code override;
+  auto ReceiveRawSample(const NormalizedSampledData &raw_sample) -> astl_status_code override;
 
   /**
    * @brief Summarize collected rate data.

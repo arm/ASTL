@@ -14,7 +14,9 @@
 #include "astl/astl.h"
 #include "astl/astl_telemetry.h"
 #include "common/capabilities.hpp"
+#include "common/clock_correlation.hpp"
 #include "common/metric_config.hpp"
+#include "common/monotonic_raw_clock.hpp"
 #include "metric/i_metric.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/sampled_value_metric.hpp"
@@ -27,6 +29,7 @@ using astl::IMetric;
 using astl::IProcessedSampleSink;
 using astl::MetricConfig;
 using astl::MetricManager;
+using astl::NormalizedSampledData;
 using astl::OperationSequence;
 using astl::ProcessedSampledData;
 using astl::RawSampledData;
@@ -50,14 +53,14 @@ astl::ScmiDataEventId GetDataEventId(const astl::ResidencyMetricConfig::StateInf
 // This metric simply collects samples and stores them in a vector.
 // It can be configured to return a specific status code when processing samples.
 struct TestMetric : public IMetric {
-  astl_status_code                  lastStatus      = ASTL_STATUS_SUCCESS;
-  astl_status_code                  summarizeStatus = ASTL_STATUS_SUCCESS;
-  size_t                            resetCount      = 0;
-  std::vector<RawSampledData>       received;
-  std::vector<ProcessedSampledData> processed;
-  IProcessedSampleSink*             sink = nullptr;
+  astl_status_code                   lastStatus      = ASTL_STATUS_SUCCESS;
+  astl_status_code                   summarizeStatus = ASTL_STATUS_SUCCESS;
+  size_t                             resetCount      = 0;
+  std::vector<NormalizedSampledData> received;
+  std::vector<ProcessedSampledData>  processed;
+  IProcessedSampleSink*              sink = nullptr;
 
-  astl_status_code ReceiveRawSample(const RawSampledData& raw_sample) override {
+  astl_status_code ReceiveRawSample(const NormalizedSampledData& raw_sample) override {
     received.push_back(raw_sample);
     return lastStatus;
   }
@@ -108,6 +111,23 @@ static Capabilities MakeCaps(CollectorType collector_type) {
   std::vector<CollectorCapability> col_caps{CollectorCapability{collector_type}};
   std::vector<SystemCapability>    sys_caps{SystemCapability{}};
   return Capabilities{std::move(col_caps), std::move(sys_caps)};
+}
+
+/**
+ * @brief Build a ClockCorrelationMap with a zero-baseline entry for each requested operation ID.
+ *
+ * With raw_at_start=0 and native_at_start=0 the normalization formula reduces to:
+ *   normalized_raw_count = duration_cast<raw_ticks>(sample.ts.time_since_epoch()).count()
+ * so the sample timestamp is deterministically projected into the raw-clock domain. Useful for
+ * tests that only care about sample values, not about the exact translation.
+ */
+static astl::ClockCorrelationMap MakeZeroCorrelationMap(std::initializer_list<astl::OperationId> op_ids) {
+  astl::ClockCorrelationMap corr;
+  for (auto op_id : op_ids) {
+    corr[op_id] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}},
+                                                  uint64_t{0}, astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  }
+  return corr;
 }
 
 TEST_CASE("MetricManager::RegisterMetric succeeds when collector supported", "[MetricManager]") {
@@ -390,6 +410,7 @@ TEST_CASE("MetricManager::ProcessData processes valid sample and returns success
   std::vector<RawSampledData> samples{sample1};
   astl::RawSamplesMap         samples_map;
   samples_map[&target] = samples;
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({op_id}));
   REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric_ptr->received.size() == 1);
   REQUIRE(metric_ptr->received[0].get<uint64_t>() == 256);
@@ -419,7 +440,7 @@ TEST_CASE("MetricManager::ProcessData processes multiple samples for the same me
   std::vector<astl::RawSampledData> samples{sample1, sample2};
   astl::RawSamplesMap               samples_map;
   samples_map[&target] = samples;
-
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({op_id}));
   REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric_ptr->received.size() == 2);
   REQUIRE(metric_ptr->received[0].get<uint64_t>() == 100);
@@ -459,7 +480,7 @@ TEST_CASE("MetricManager::ProcessData processes different metrics for different 
   std::vector<astl::RawSampledData> samples{sample1, sample2, sample3, sample4};
   astl::RawSamplesMap               samples_map;
   samples_map[&target] = samples;
-
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({1, 2}));
   REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric_ptr1->received.size() == 2);
   REQUIRE(metric_ptr2->received.size() == 2);
@@ -502,6 +523,7 @@ TEST_CASE("MetricManager::ProcessData stops on error and does not process furthe
   std::vector<astl::RawSampledData> samples{sample1, sample2, sample3};
   astl::RawSamplesMap               samples_map;
   samples_map[&target] = samples;
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({1, 2}));
   REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   // The failing metric is always called exactly once before processing halts.
   REQUIRE(metric_ptr2->received.size() == 1);
@@ -540,7 +562,7 @@ TEST_CASE("MetricManager::ProcessData routes same operation id independently per
   astl::RawSamplesMap samples_map;
   samples_map[&target0] = {astl::RawSampledData(shared_op_id, astl::AstlValue{uint64_t{101}})};
   samples_map[&target1] = {astl::RawSampledData(shared_op_id, astl::AstlValue{uint64_t{202}})};
-
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({shared_op_id}));
   REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric_ptr0->received.size() == 1);
   REQUIRE(metric_ptr1->received.size() == 1);
@@ -575,6 +597,7 @@ TEST_CASE("MetricManager::SummarizeMetrics preserves routing for later target pr
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target0, 1, metric_ptr0);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target1, 2, metric_ptr1);
 
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({1, 2}));
   astl::RawSamplesMap target0_samples;
   target0_samples[&target0] = {astl::RawSampledData(1, astl::AstlValue{uint64_t{11}})};
   REQUIRE(mgr.ProcessRawSamples(target0_samples) == ASTL_STATUS_SUCCESS);
@@ -672,6 +695,12 @@ TEST_CASE("MetricManager::SummarizeMetrics preserves operation mappings for late
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, 7, metric_ptr);
 
   REQUIRE(mgr.SummarizeMetrics() == ASTL_STATUS_SUCCESS);
+
+  // Provide a clock correlation so ProcessRawSamples can normalise the raw_tick.
+  astl::ClockCorrelationMap corr;
+  corr[7] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}}, uint64_t{0},
+                                            astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  mgr.SetClockCorrelations(corr);
 
   astl::AstlValue                   value{uint64_t{42}};
   std::vector<astl::RawSampledData> samples{
@@ -1337,7 +1366,7 @@ TEST_CASE("MetricManager processed-sample sink edge cases", "[MetricManager]") {
   MockProcessedSampleSink    failing_sink_b;
   MockTarget                 target;
   TestMetric                 metric;
-  const ProcessedSampledData sample{astl::AstlValue{uint64_t{7}}, astl::SampleTimestamp{}};
+  const ProcessedSampledData sample{astl::AstlValue{uint64_t{7}}, astl::ProcessedSampleTimestamp{}};
 
   REQUIRE(mgr.RegisterProcessedSampleSink(&failing_sink_a) == ASTL_STATUS_SUCCESS);
   REQUIRE(mgr.RegisterProcessedSampleSink(&failing_sink_b) == ASTL_STATUS_SUCCESS);
@@ -1375,10 +1404,8 @@ TEST_CASE("MetricManager group lookup and metric ownership errors", "[MetricMana
 // ---------------------------------------------------------------------------
 
 namespace {
-/// Helper: build a SampleTimestamp from an explicit microsecond count.
-auto MakeTs(uint64_t micros) -> astl::SampleTimestamp {
-  return astl::SampleTimestamp(astl::SampleMicroseconds(micros));
-}
+/// Helper: build a raw collector tick value in microseconds.
+auto MakeTs(uint64_t micros) -> uint64_t { return micros; }
 }  // namespace
 
 TEST_CASE("MetricManager::ProcessRawSamples delivers already-sorted timestamps in order",
@@ -1397,6 +1424,7 @@ TEST_CASE("MetricManager::ProcessRawSamples delivers already-sorted timestamps i
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({op_id}));
 
   astl::RawSamplesMap samples_map;
   samples_map[&target] = {
@@ -1431,6 +1459,7 @@ TEST_CASE("MetricManager::ProcessRawSamples sorts out-of-order timestamps for a 
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({op_id}));
 
   // Supply samples with timestamps deliberately out of order: 300, 100, 200
   astl::RawSamplesMap samples_map;
@@ -1478,6 +1507,7 @@ TEST_CASE("MetricManager::ProcessRawSamples sorts each metric's samples independ
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op1, metric1);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op2, metric2);
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({op1, op2}));
 
   // Interleave samples for both metrics with out-of-order timestamps within each group:
   //   metric1: ts 500, ts 100, ts 300  →  sorted: 100, 300, 500
@@ -1521,6 +1551,7 @@ TEST_CASE("MetricManager::ProcessRawSamples accepts samples with equal timestamp
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({op_id}));
 
   // All samples share the same timestamp – must be delivered without error
   astl::RawSamplesMap samples_map;
@@ -1535,4 +1566,190 @@ TEST_CASE("MetricManager::ProcessRawSamples accepts samples with equal timestamp
   // Equal timestamps satisfy the non-decreasing invariant
   REQUIRE(metric->received[0].timestamp == metric->received[1].timestamp);
   REQUIRE(metric->received[1].timestamp == metric->received[2].timestamp);
+}
+
+// ---------------------------------------------------------------------------
+// Clock correlation tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("MetricManager::ProcessRawSamples fails when no clock correlation is set",
+          "[MetricManager][ClockCorrelation]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto              owner_metric = std::make_unique<TestMetric>();
+  TestMetric*       metric_ptr   = owner_metric.get();
+  astl::OperationId op_id        = 42;
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric),
+      std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric_ptr);
+
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = {astl::RawSampledData(op_id, astl::AstlValue{uint64_t{1}})};
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+  REQUIRE(metric_ptr->received.empty());
+}
+
+TEST_CASE("MetricManager::ProcessRawSamples normalizes timestamps using clock correlation",
+          "[MetricManager][ClockCorrelation]") {
+  // Normalization formula:
+  //   normalized_raw_count = raw_at_start.count() +
+  //                          duration_cast<raw_ticks>(sample.ts - native_at_start).count()
+  // Using raw_at_start=1000ns, native_at_start=500us, sample.ts=700us:
+  //   elapsed_native = 200us
+  //   elapsed_raw = 200000ns
+  //   normalized_raw = 201000ns
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto              owner_metric = std::make_unique<TestMetric>();
+  TestMetric*       metric_ptr   = owner_metric.get();
+  astl::OperationId op_id        = 10;
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric),
+      std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric_ptr);
+
+  astl::ClockCorrelationMap corr;
+  corr[op_id] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{1000}},
+                                                uint64_t{500}, astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  mgr.SetClockCorrelations(corr);
+
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{99}}, uint64_t{700}),
+  };
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric_ptr->received.size() == 1);
+  REQUIRE(metric_ptr->received[0].get<uint64_t>() == 99);
+  REQUIRE(metric_ptr->received[0].timestamp.time_since_epoch().count() == 201000);
+}
+
+TEST_CASE("MetricManager::SetClockCorrelations replaces an existing entry for the same OperationId",
+          "[MetricManager][ClockCorrelation]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto              owner_metric = std::make_unique<TestMetric>();
+  TestMetric*       metric_ptr   = owner_metric.get();
+  astl::OperationId op_id        = 20;
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric),
+      std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric_ptr);
+
+  // First correlation: raw=0ns, native=0us -> normalized_raw == duration_cast<ns>(sample.ts)
+  astl::ClockCorrelationMap corr_v1;
+  corr_v1[op_id] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}},
+                                                   uint64_t{0}, astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  mgr.SetClockCorrelations(corr_v1);
+
+  // Second correlation overrides: raw=2000ns, native=1000us
+  // -> normalized_raw = 2000ns + duration_cast<ns>(sample - 1000us)
+  astl::ClockCorrelationMap corr_v2;
+  corr_v2[op_id] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{2000}},
+                                                   uint64_t{1000}, astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  mgr.SetClockCorrelations(corr_v2);
+
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{7}}, uint64_t{1500}),
+  };
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric_ptr->received[0].timestamp.time_since_epoch().count() == 502000);
+}
+
+TEST_CASE("MetricManager::ProcessRawSamples uses independent correlations per OperationId",
+          "[MetricManager][ClockCorrelation]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto        owner_m1    = std::make_unique<TestMetric>();
+  auto        owner_m2    = std::make_unique<TestMetric>();
+  TestMetric* metric1_ptr = owner_m1.get();
+  TestMetric* metric2_ptr = owner_m2.get();
+
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_m1),
+      std::make_unique<MetricConfig>("metric1", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_m2),
+      std::make_unique<MetricConfig>("metric2", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, 30, metric1_ptr);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, 31, metric2_ptr);
+
+  // op 30: raw=100ns, native=50us  -> for sample.ts=80us:  normalized_raw = 100ns + 30000ns = 30100ns
+  // op 31: raw=200ns, native=100us -> for sample.ts=150us: normalized_raw = 200ns + 50000ns = 50200ns
+  astl::ClockCorrelationMap corr;
+  corr[30] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{100}},
+                                             uint64_t{50}, astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  corr[31] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{200}},
+                                             uint64_t{100}, astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  mgr.SetClockCorrelations(corr);
+
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = {
+      astl::RawSampledData(30, astl::AstlValue{uint64_t{1}}, uint64_t{80}),
+      astl::RawSampledData(31, astl::AstlValue{uint64_t{2}}, uint64_t{150}),
+  };
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric1_ptr->received.size() == 1);
+  REQUIRE(metric2_ptr->received.size() == 1);
+  REQUIRE(metric1_ptr->received[0].timestamp.time_since_epoch().count() == 30100);
+  REQUIRE(metric2_ptr->received[0].timestamp.time_since_epoch().count() == 50200);
+}
+
+TEST_CASE("MetricManager::ProcessRawSamples fails with missing correlation for one of two operations",
+          "[MetricManager][ClockCorrelation]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto           owner_metric = std::make_unique<TestMetric>();
+  TestMetric*    metric_ptr   = owner_metric.get();
+  constexpr auto good_op_id   = astl::OperationId{40};
+  constexpr auto bad_op_id    = astl::OperationId{41};
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric),
+      std::make_unique<MetricConfig>("metric", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, good_op_id, metric_ptr);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, bad_op_id, metric_ptr);
+
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({good_op_id}));
+
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = {
+      astl::RawSampledData(good_op_id, astl::AstlValue{uint64_t{1}}, MakeTs(100)),
+      astl::RawSampledData(bad_op_id, astl::AstlValue{uint64_t{2}}, MakeTs(200)),
+  };
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+  REQUIRE(metric_ptr->received.size() == 1);
+  REQUIRE(metric_ptr->received[0].get<uint64_t>() == 1);
+  REQUIRE(metric_ptr->received[0].timestamp.time_since_epoch().count() == 100000);
 }

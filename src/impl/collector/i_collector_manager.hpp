@@ -5,11 +5,13 @@
 #ifndef I_COLLECTOR_MANAGER_HPP_
 #define I_COLLECTOR_MANAGER_HPP_
 
+#include <expected>
 #include <unordered_map>
 
 #include "astl/astl.h"
 #include "collection_operations.hpp"
 #include "common/capabilities.hpp"
+#include "common/clock_correlation.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "target.hpp"
 
@@ -48,6 +50,19 @@ struct ICollectorManager {
 
   /* Start the configured collection for the given target */
   [[nodiscard]] virtual auto StartOnTarget(const ITarget* target) -> astl_status_code = 0;
+
+  /**
+   * @brief Take a paired per-operation clock snapshot for the configured collector on @p target.
+   *
+   * Returns a ClockCorrelationMap keyed by OperationId.  Each entry records a simultaneous
+   * CLOCK_MONOTONIC_RAW and collector-native-clock snapshot so that MetricManager can later
+   * translate raw timestamps to the common CLOCK_MONOTONIC_RAW reference.
+   *
+   * Must be called after ConfigureCollectionOnTarget and before StartOnTarget.
+   * Returns std::unexpected on I/O or parse failure.
+   */
+  [[nodiscard]] virtual auto GetNativeClockSnapshot(const ITarget* target)
+      -> std::expected<ClockCorrelationMap, astl_status_code> = 0;
 
   [[nodiscard]] virtual auto PauseOnTarget(const ITarget* target) -> astl_status_code = 0;
 

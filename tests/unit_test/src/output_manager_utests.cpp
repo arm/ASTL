@@ -23,8 +23,9 @@ std::vector<astl::ProcessedSampledData> MakeSamples(size_t n) {
   std::vector<astl::ProcessedSampledData> samples_vec;
   samples_vec.reserve(n);
   for (size_t i = 0; i < n; ++i) {
-    samples_vec.emplace_back(astl::AstlValue{static_cast<uint64_t>(i + 1)},
-                             astl::SampleTimestamp{std::chrono::microseconds{100 + static_cast<int>(i)}});
+    samples_vec.emplace_back(
+        astl::AstlValue{static_cast<uint64_t>(i + 1)},
+        astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100 + static_cast<int>(i)}});
   }
   return samples_vec;
 }
@@ -115,7 +116,7 @@ struct TinyMetric : public astl::IMetric {
   std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
     return astl::OperationSequence{};
   }
-  astl_status_code ReceiveRawSample(const astl::RawSampledData& sample) override {
+  astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& sample) override {
     (void)sample;
     return ASTL_STATUS_SUCCESS;
   }
@@ -216,10 +217,12 @@ TEST_CASE("OutputManager::OutputProcessedSamples SUMMARY_CSV env var and path ha
   TinyTarget                target;
   TinyMetric                metric;
   astl::ProcessedSamplesMap processed;
-  processed[&target][&metric].push_back(astl::ProcessedSampledData{
-      astl::AstlValue{static_cast<uint64_t>(11)}, astl::SampleTimestamp{std::chrono::microseconds{111}}});
-  processed[&target][&metric].push_back(astl::ProcessedSampledData{
-      astl::AstlValue{static_cast<uint64_t>(14)}, astl::SampleTimestamp{std::chrono::microseconds{222}}});
+  processed[&target][&metric].push_back(
+      astl::ProcessedSampledData{astl::AstlValue{static_cast<uint64_t>(11)},
+                                 astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{111}}});
+  processed[&target][&metric].push_back(
+      astl::ProcessedSampledData{astl::AstlValue{static_cast<uint64_t>(14)},
+                                 astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{222}}});
 
   SECTION("Missing ASTL_OUTPUT_SUMMARY_CSV returns BAD_ARGUMENT") {
     EnvVarGuard summary_guard{astl::EnvVar::ASTL_OUTPUT_SUMMARY_CSV, ""};
@@ -269,8 +272,9 @@ TEST_CASE("OutputManager::OutputProcessedSamples PERFETTO success", "[output_man
   TinyTarget                target;
   TinyMetric                metric;
   astl::ProcessedSamplesMap processed;
-  processed[&target][&metric].push_back(astl::ProcessedSampledData{
-      astl::AstlValue{static_cast<uint64_t>(42)}, astl::SampleTimestamp{std::chrono::microseconds{12345}}});
+  processed[&target][&metric].push_back(
+      astl::ProcessedSampledData{astl::AstlValue{static_cast<uint64_t>(42)},
+                                 astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{12345}}});
   REQUIRE(mgr.OutputProcessedSamples(processed, astl::OutputType::PERFETTO, nullptr, nullptr) == ASTL_STATUS_SUCCESS);
   std::ifstream ifs(tmp_guard.path);
   REQUIRE(ifs.is_open());
@@ -286,8 +290,9 @@ TEST_CASE("OutputManager::OutputProcessedSamples INTERVAL_CSV success with sampl
   TinyTarget                target;
   TinyMetric                metric;
   astl::ProcessedSamplesMap processed;
-  processed[&target][&metric].push_back(astl::ProcessedSampledData{
-      astl::AstlValue{static_cast<uint64_t>(7)}, astl::SampleTimestamp{std::chrono::microseconds{98765}}});
+  processed[&target][&metric].push_back(
+      astl::ProcessedSampledData{astl::AstlValue{static_cast<uint64_t>(7)},
+                                 astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{98765}}});
   REQUIRE(mgr.OutputProcessedSamples(processed, astl::OutputType::INTERVAL_CSV, nullptr, nullptr) ==
           ASTL_STATUS_SUCCESS);
   std::ifstream ifs(tmp_guard.path);

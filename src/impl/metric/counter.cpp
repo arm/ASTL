@@ -38,7 +38,7 @@ auto Counter::GetOperations() -> std::expected<OperationSequence, astl_status_co
   return BuildOperations(_configuration->GetOperationBuilder(), _target);
 }
 
-auto Counter::ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code {
+auto Counter::ReceiveRawSample(const NormalizedSampledData &raw_sample) -> astl_status_code {
   // if the counter has an expected value type, check that the sample matches it
   if (ASTL_VALUE_UNKNOWN != _configuration->InputValueType()) {
     auto type_check_result = CheckSampleValueType(raw_sample);
@@ -48,7 +48,7 @@ auto Counter::ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_
   }
 
   // Log the raw sample using the base class method
-  LogRawSample(raw_sample);
+  LogNormalizedSample(raw_sample);
   ProcessedSampledData processed_sample{raw_sample.value, raw_sample.timestamp};
   // fan-out to manager / external sinks
   SinkProcessedSample(processed_sample);

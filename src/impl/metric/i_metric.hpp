@@ -59,10 +59,10 @@ struct IMetric {
    * This method is called by the Metric Manager to send individual samples to the metric plugin.
    * The Metric Manager ensures that the raw samples are monotonically increasing in time.
    *
-   * @param sample The sample to process.
+   * @param sample The normalized sample (CLOCK_MONOTONIC_RAW timestamp, nanosecond resolution).
    * @return astl_status_code
    */
-  virtual auto ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code = 0;
+  virtual auto ReceiveRawSample(const NormalizedSampledData &raw_sample) -> astl_status_code = 0;
 
   /*
    * @brief Set the destination for where processed sampled data should be sent.

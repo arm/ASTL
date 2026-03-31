@@ -34,32 +34,27 @@ std::expected<fs::path, astl_status_code> GetDataEventDirPath(ScmiDataEventId da
   return fs::path{"des"} / std::format("0x{:04X}", data_event_id);
 }
 
-auto ParseScmiTimeStamp(std::string_view text, kilohertz tstamp_rate)
-    -> std::expected<std::pair<SampleTimestamp, std::string_view>, astl_status_code> {
-  if (tstamp_rate == 0) {
-    ASTL_LOG_ERROR("Timestamp rate cannot be 0 in ParseScmiTimeStamp");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-  uint64_t tstamp_ticks{0};
-  auto     parse_result = std::from_chars(text.data(), text.data() + text.size(), tstamp_ticks);
+auto ParseScmiTimeStamp(std::string_view text)
+    -> std::expected<std::pair<HwClockTicks, std::string_view>, astl_status_code> {
+  HwClockTicks tstamp_ticks{0};
+  auto         parse_result =
+      std::from_chars(text.data(), std::next(text.data(), static_cast<std::ptrdiff_t>(text.size())), tstamp_ticks);
   if (parse_result.ec != std::errc()) {
     ASTL_LOG_ERROR("Failed to parse timestamp from value file text: {} with error: {}", text,
                    std::make_error_code(parse_result.ec).message());
     return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
-  constexpr auto micros_per_milli = 1000ULL;
-  auto           time_since_boot =
-      std::chrono::microseconds{(tstamp_ticks * micros_per_milli) / static_cast<uint64_t>(tstamp_rate)};
   auto parsed_length           = static_cast<size_t>(parse_result.ptr - text.data());
   auto remaining_text_to_parse = text.substr(parsed_length);
-  return std::make_pair(SampleTimestamp{time_since_boot}, remaining_text_to_parse);
+  // Return raw hardware tick count; MetricManager applies the NativeToMonotonicRawRatio to convert to ns.
+  return std::make_pair(tstamp_ticks, remaining_text_to_parse);
 }
 
 // Expected format: "<timestamp> <value>"
-auto ParseDataEventValueWithTimestamp(std::string_view data_read, kilohertz tstamp_rate)
-    -> std::expected<std::pair<SampleTimestamp, ScmiDataEventValue>, astl_status_code> {
+auto ParseDataEventValueWithTimestamp(std::string_view data_read)
+    -> std::expected<std::pair<HwClockTicks, ScmiDataEventValue>, astl_status_code> {
   // timestamp is always provided, even though it may be 0. parse it.
-  const auto parse_result = ParseScmiTimeStamp(data_read, tstamp_rate);
+  const auto parse_result = ParseScmiTimeStamp(data_read);
   if (!parse_result) {
     return std::unexpected{parse_result.error()};
   }

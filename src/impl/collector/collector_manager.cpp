@@ -93,6 +93,22 @@ auto CollectorManager::StartOnTarget(const ITarget* target) -> astl_status_code 
   return status;
 }
 
+auto CollectorManager::GetNativeClockSnapshot(const ITarget* target)
+    -> std::expected<ClockCorrelationMap, astl_status_code> {
+  ICollector* selected_collector = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
+      selected_collector = collector->second.front().get();
+    }
+  }
+  if (!selected_collector) {
+    ASTL_LOG_WARNING("CollectorManager::GetNativeClockSnapshot: no collector found for target");
+    return std::unexpected{ASTL_STATUS_INVALID_TARGET_HANDLE};
+  }
+  return selected_collector->GetNativeClockSnapshot();
+}
+
 auto CollectorManager::PauseOnTarget(const ITarget* target) -> astl_status_code {
   ICollector* selected_collector = nullptr;
   {

@@ -78,6 +78,13 @@ class LibsensorsCollector : public ICollector {
    */
   astl_status_code ReadImmediate() override;
 
+  /**
+   * @brief Take a paired per-operation clock snapshot (CLOCK_MONOTONIC_RAW + steady_clock).
+   *        All libsensors operations share the same steady_clock source, so a single pair of
+   *        snapshots is applied to every OperationId in operationsOnSample.
+   */
+  std::expected<ClockCorrelationMap, astl_status_code> GetNativeClockSnapshot() override;
+
  private:
   // internal classes + enums
 

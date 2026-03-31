@@ -207,6 +207,13 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   auto ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code override;
 
   /**
+   * @brief Store per-operation clock correlation data used to normalize raw timestamps.
+   *
+   * Thread-safe; protected by _mutex.  Replaces any existing entry for the same OperationId.
+   */
+  auto SetClockCorrelations(const ClockCorrelationMap& correlations) -> void override;
+
+  /**
    * @brief Reset all metric/counter instances associated with a target.
    *
    * Stateful metrics such as delta/rate metrics retain previous-sample state.
@@ -376,6 +383,10 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
 
   // Coarse-grained mutex for all shared registries/maps used by API and ingestion paths.
   mutable std::mutex _mutex;
+
+  // Per-operation clock correlations set at collection-start time.
+  // Used by ProcessRawSamples to translate native-clock timestamps to CLOCK_MONOTONIC_RAW.
+  ClockCorrelationMap _clock_correlations;
 };
 
 }  // namespace astl

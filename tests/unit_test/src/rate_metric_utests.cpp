@@ -56,9 +56,9 @@ TEST_CASE("RateMetric: single sample - no rate calculated", "[RateMetric]") {
   astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   // First sample should not produce a rate
-  astl::AstlValue      val1{uint64_t{100}};
-  astl::RawSampledData sample1(1, val1);
-  auto                 status1 = metric.ReceiveRawSample(sample1);
+  astl::AstlValue             val1{uint64_t{100}};
+  astl::NormalizedSampledData sample1(1, val1);
+  auto                        status1 = metric.ReceiveRawSample(sample1);
   REQUIRE(status1 == ASTL_STATUS_SUCCESS);
 
   // Verify no rate was calculated
@@ -73,18 +73,18 @@ TEST_CASE("RateMetric: two samples - rate calculated", "[RateMetric]") {
   MockSampleSink   sink;
   astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
-  using microseconds = std::chrono::microseconds;
+  using nanoseconds = std::chrono::nanoseconds;
 
   // First sample
-  astl::AstlValue      val1{uint64_t{100}};
-  astl::RawSampledData sample1(1, val1, astl::SampleTimestamp{microseconds{1000000}});  // t=1s
-  auto                 status1 = metric.ReceiveRawSample(sample1);
+  astl::AstlValue             val1{uint64_t{100}};
+  astl::NormalizedSampledData sample1(1, val1, astl::ProcessedSampleTimestamp{nanoseconds{1'000'000'000}});  // t=1s
+  auto                        status1 = metric.ReceiveRawSample(sample1);
   REQUIRE(status1 == ASTL_STATUS_SUCCESS);
 
   // Second sample - should produce rate (delta=50, time=1s = 50 units/second)
-  astl::AstlValue      val2{uint64_t{150}};
-  astl::RawSampledData sample2(2, val2, astl::SampleTimestamp{microseconds{2000000}});  // t=2s
-  auto                 status2 = metric.ReceiveRawSample(sample2);
+  astl::AstlValue             val2{uint64_t{150}};
+  astl::NormalizedSampledData sample2(2, val2, astl::ProcessedSampleTimestamp{nanoseconds{2'000'000'000}});  // t=2s
+  auto                        status2 = metric.ReceiveRawSample(sample2);
   REQUIRE(status2 == ASTL_STATUS_SUCCESS);
   // Verify rate was calculated
   auto summary = metric.GetRateSummaryData();
@@ -99,26 +99,26 @@ TEST_CASE("RateMetric: multiple samples - rate statistics", "[RateMetric]") {
   MockSampleSink   sink;
   astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
-  using microseconds = std::chrono::microseconds;
+  using nanoseconds = std::chrono::nanoseconds;
 
   // Sample 1: 100 joules at t=0
-  astl::AstlValue      val1{uint64_t{100}};
-  astl::RawSampledData sample1(1, val1, astl::SampleTimestamp{microseconds{0}});
+  astl::AstlValue             val1{uint64_t{100}};
+  astl::NormalizedSampledData sample1(1, val1, astl::ProcessedSampleTimestamp{nanoseconds{0}});
   metric.ReceiveRawSample(sample1);
 
   // Sample 2: 200 joules at t=1s (rate = 100 J/s)
-  astl::AstlValue      val2{uint64_t{200}};
-  astl::RawSampledData sample2(2, val2, astl::SampleTimestamp{microseconds{1000000}});
+  astl::AstlValue             val2{uint64_t{200}};
+  astl::NormalizedSampledData sample2(2, val2, astl::ProcessedSampleTimestamp{nanoseconds{1'000'000'000}});
   metric.ReceiveRawSample(sample2);
 
   // Sample 3: 250 joules at t=2s (rate = 50 J/s)
-  astl::AstlValue      val3{uint64_t{250}};
-  astl::RawSampledData sample3(3, val3, astl::SampleTimestamp{microseconds{2000000}});
+  astl::AstlValue             val3{uint64_t{250}};
+  astl::NormalizedSampledData sample3(3, val3, astl::ProcessedSampleTimestamp{nanoseconds{2'000'000'000}});
   metric.ReceiveRawSample(sample3);
 
   // Sample 4: 400 joules at t=3s (rate = 150 J/s)
-  astl::AstlValue      val4{uint64_t{400}};
-  astl::RawSampledData sample4(4, val4, astl::SampleTimestamp{microseconds{3000000}});
+  astl::AstlValue             val4{uint64_t{400}};
+  astl::NormalizedSampledData sample4(4, val4, astl::ProcessedSampleTimestamp{nanoseconds{3'000'000'000}});
   metric.ReceiveRawSample(sample4);
 
   // Verify statistics
@@ -147,17 +147,18 @@ TEST_CASE("RateMetric: zero time interval handling", "[RateMetric]") {
   MockSampleSink   sink;
   astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
-  using microseconds = std::chrono::microseconds;
+  using nanoseconds = std::chrono::nanoseconds;
 
   // First sample
-  astl::AstlValue      val1{uint64_t{100}};
-  astl::RawSampledData sample1(1, val1, astl::SampleTimestamp{microseconds{1000000}});
+  astl::AstlValue             val1{uint64_t{100}};
+  astl::NormalizedSampledData sample1(1, val1, astl::ProcessedSampleTimestamp{nanoseconds{1'000'000'000}});
   metric.ReceiveRawSample(sample1);
 
   // Second sample with same timestamp (zero time interval)
-  astl::AstlValue      val2{uint64_t{150}};
-  astl::RawSampledData sample2(2, val2, astl::SampleTimestamp{microseconds{1000000}});  // Same timestamp
-  auto                 status = metric.ReceiveRawSample(sample2);
+  astl::AstlValue             val2{uint64_t{150}};
+  astl::NormalizedSampledData sample2(2, val2,
+                                      astl::ProcessedSampleTimestamp{nanoseconds{1'000'000'000}});  // Same timestamp
+  auto                        status = metric.ReceiveRawSample(sample2);
 
   // Should fail due to zero time interval
   REQUIRE(status == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
@@ -170,9 +171,9 @@ TEST_CASE("RateMetric: invalid sample type handling", "[RateMetric]") {
   astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
   // Try to send a sample with wrong type (uint32 instead of uint64)
-  astl::AstlValue      invalid_val{uint32_t{123}};
-  astl::RawSampledData invalid_sample(1, invalid_val);
-  auto                 status = metric.ReceiveRawSample(invalid_sample);
+  astl::AstlValue             invalid_val{uint32_t{123}};
+  astl::NormalizedSampledData invalid_sample(1, invalid_val);
+  auto                        status = metric.ReceiveRawSample(invalid_sample);
 
   // Should fail due to type mismatch
   REQUIRE(status == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
@@ -196,13 +197,14 @@ TEST_CASE("RateMetric: sink captures multiple rates", "[RateMetric]") {
   MockSampleSink   sink;
   astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
-  using microseconds = std::chrono::microseconds;
+  using nanoseconds = std::chrono::nanoseconds;
 
   // Add multiple samples to generate rates
   for (int i = 0; i < 5; ++i) {
-    astl::AstlValue      val{uint64_t{100 + (static_cast<uint64_t>(i) * 50)}};
-    astl::RawSampledData sample(static_cast<uint16_t>(i + 1), val,
-                                astl::SampleTimestamp{microseconds{static_cast<uint64_t>(i) * 1000000}});
+    astl::AstlValue             val{uint64_t{100 + (static_cast<uint64_t>(i) * 50)}};
+    astl::NormalizedSampledData sample(
+        static_cast<uint16_t>(i + 1), val,
+        astl::ProcessedSampleTimestamp{nanoseconds{static_cast<int64_t>(i) * 1'000'000'000}});
     metric.ReceiveRawSample(sample);
   }
 
@@ -222,16 +224,16 @@ TEST_CASE("RateMetric: edge case - very small time intervals", "[RateMetric]") {
   MockSampleSink   sink;
   astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
-  using microseconds = std::chrono::microseconds;
+  using nanoseconds = std::chrono::nanoseconds;
 
   // First sample
-  astl::AstlValue      val1{uint64_t{100}};
-  astl::RawSampledData sample1(1, val1, astl::SampleTimestamp{microseconds{1000000}});
+  astl::AstlValue             val1{uint64_t{100}};
+  astl::NormalizedSampledData sample1(1, val1, astl::ProcessedSampleTimestamp{nanoseconds{1'000'000'000}});
   metric.ReceiveRawSample(sample1);
 
   // Second sample with very small time difference (1 microsecond)
-  astl::AstlValue      val2{uint64_t{101}};
-  astl::RawSampledData sample2(2, val2, astl::SampleTimestamp{microseconds{1000001}});
+  astl::AstlValue             val2{uint64_t{101}};
+  astl::NormalizedSampledData sample2(2, val2, astl::ProcessedSampleTimestamp{nanoseconds{1'000'001'000}});
   metric.ReceiveRawSample(sample2);
 
   REQUIRE(sink.captured.size() == 1);
@@ -259,15 +261,15 @@ TEST_CASE("RateMetric: rate calculation and processed samples", "[RateMetric]") 
   MockSampleSink   sink;
   astl::RateMetric metric = GetRateMetricWithSink(&sink);
 
-  using microseconds = std::chrono::microseconds;
+  using nanoseconds = std::chrono::nanoseconds;
 
   // Add samples
-  astl::AstlValue      val1{uint64_t{100}};
-  astl::RawSampledData sample1(1, val1, astl::SampleTimestamp{microseconds{1000000}});
+  astl::AstlValue             val1{uint64_t{100}};
+  astl::NormalizedSampledData sample1(1, val1, astl::ProcessedSampleTimestamp{nanoseconds{1'000'000'000}});
   metric.ReceiveRawSample(sample1);
 
-  astl::AstlValue      val2{uint64_t{200}};
-  astl::RawSampledData sample2(2, val2, astl::SampleTimestamp{microseconds{2000000}});
+  astl::AstlValue             val2{uint64_t{200}};
+  astl::NormalizedSampledData sample2(2, val2, astl::ProcessedSampleTimestamp{nanoseconds{2'000'000'000}});
   metric.ReceiveRawSample(sample2);
 
   // Sample sink should have captured the rate values (not deltas)

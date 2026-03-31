@@ -43,7 +43,7 @@ namespace {
 
 RawSampledData MakeSample(OperationId operation_id, AstlValue value, int64_t ts_us) {
   RawSampledData sample{operation_id, std::move(value)};
-  sample.timestamp = SampleTimestamp{SampleTimestamp::duration{std::chrono::microseconds{ts_us}}};
+  sample.raw_tick = static_cast<uint64_t>(ts_us);
   return sample;
 }
 
@@ -123,7 +123,7 @@ TEST_CASE("Serialize/Deserialize round-trip for all supported scalar types") {
   REQUIRE(out.size() == input.size());
   for (size_t i = 0; i < input.size(); ++i) {
     REQUIRE(out[i].operation_id == input[i].operation_id);
-    REQUIRE(out[i].timestamp.time_since_epoch() == input[i].timestamp.time_since_epoch());
+    REQUIRE(out[i].raw_tick == input[i].raw_tick);
     REQUIRE(out[i].value == input[i].value);
   }
 }
@@ -673,6 +673,11 @@ TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[Metric
   REQUIRE(rebuilt_it != rebuilt_handle->target_to_metric_map.end());
   REQUIRE(rebuilt_it->second != nullptr);
 
+  astl::ClockCorrelationMap corr;
+  corr[42U] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}}, uint64_t{0},
+                                              astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  rebuilt_mgr->SetClockCorrelations(corr);
+
   astl::RawSamplesMap samples_map;
   samples_map[tgt] = {MakeSample(42U, AstlValue{uint64_t{99}}, 1000)};  // NOLINT
   REQUIRE(rebuilt_mgr->ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
@@ -809,6 +814,11 @@ TEST_CASE(
   REQUIRE(first_handle != nullptr);
   REQUIRE(first_handle->config != nullptr);
   REQUIRE(first_handle->config->InputValueType() == first_handle->config->ValueType());
+
+  astl::ClockCorrelationMap corr;
+  corr[42U] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}}, uint64_t{0},
+                                              astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  mgr->SetClockCorrelations(corr);
 
   astl::RawSamplesMap samples_map;
   samples_map[targets[0].get()] = {MakeSample(42U, AstlValue{uint64_t{77}}, 1000)};  // NOLINT

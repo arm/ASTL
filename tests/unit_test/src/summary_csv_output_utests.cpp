@@ -26,7 +26,7 @@ struct SummaryTestTarget : public astl::ITarget {
   std::string         name{"T0"};
   astl::CollectorType collector_type{astl::CollectorType::SCMI};
   SummaryTestTarget() = default;
-  SummaryTestTarget(std::string target_name) : name(std::move(target_name)) {}
+  explicit SummaryTestTarget(std::string target_name) : name(std::move(target_name)) {}
   auto GetCollectorType() const -> astl::CollectorType override { return collector_type; }
   auto Name() const -> std::string const& override { return name; }
   auto GetProperties(astl_target_props_t* props) const -> astl_status_code override {
@@ -52,7 +52,7 @@ struct SummaryTestMetric : public astl::IMetric {
   std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
     return astl::OperationSequence{};
   }
-  astl_status_code ReceiveRawSample(const astl::RawSampledData& sample) override {
+  astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& sample) override {
     (void)sample;
     return ASTL_STATUS_SUCCESS;
   }
@@ -80,8 +80,9 @@ std::vector<astl::ProcessedSampledData> MakeSamplesWithValues(const std::vector<
   std::vector<astl::ProcessedSampledData> samples_vec;
   samples_vec.reserve(values.size());
   for (size_t i = 0; i < values.size(); ++i) {
-    samples_vec.emplace_back(astl::AstlValue{values[i]},
-                             astl::SampleTimestamp{std::chrono::microseconds{100 + static_cast<int>(i)}});
+    samples_vec.emplace_back(
+        astl::AstlValue{values[i]},
+        astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100 + static_cast<int>(i)}});
   }
   return samples_vec;
 }
@@ -89,7 +90,7 @@ std::vector<astl::ProcessedSampledData> MakeSamplesWithValues(const std::vector<
 // Helper to create processed samples map with multiple targets and metrics
 astl::ProcessedSamplesMap CreateTestProcessedSamplesMap() {
   // Create targets in a vector to ensure predictable order
-  static std::vector<SummaryTestTarget> targets{{"Target1"}, {"Target2"}};
+  static std::vector<SummaryTestTarget> targets{SummaryTestTarget{"Target1"}, SummaryTestTarget{"Target2"}};
   static std::vector<SummaryTestMetric> metrics{
       {"Temperature", "Board temperature", ASTL_UNITS_CELSIUS},
       {"Voltage",     "Rail voltage",      ASTL_UNITS_VOLTS  },
@@ -447,9 +448,9 @@ TEST_CASE("TimeWeightedAvgSummarizer direct testing", "[csv_summary][summarizer]
     // Timestamps: 0, 100, 400 → intervals: 100μs, 300μs
     // Values: 10, 20, 30 → TWA = (10*100 + 20*300) / 400 = 7000/400 = 17.5
     std::vector<astl::ProcessedSampledData> samples{
-        {astl::AstlValue{10.0}, astl::SampleTimestamp{std::chrono::microseconds{0}}  },
-        {astl::AstlValue{20.0}, astl::SampleTimestamp{std::chrono::microseconds{100}}},
-        {astl::AstlValue{30.0}, astl::SampleTimestamp{std::chrono::microseconds{400}}},
+        {astl::AstlValue{10.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{0}}  },
+        {astl::AstlValue{20.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}}},
+        {astl::AstlValue{30.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{400}}},
     };
     auto result = summarizer.Summarize(samples);
 
@@ -477,9 +478,9 @@ TEST_CASE("TimeWeightedAvgSummarizer direct testing", "[csv_summary][summarizer]
 TEST_CASE("ComputeTimeWeightedAverage direct testing", "[csv_summary][summarizer][time_weighted_average]") {
   SECTION("Left-hold weighting across uneven intervals") {
     std::vector<astl::ProcessedSampledData> samples{
-        {astl::AstlValue{10.0}, astl::SampleTimestamp{std::chrono::microseconds{0}}  },
-        {astl::AstlValue{20.0}, astl::SampleTimestamp{std::chrono::microseconds{100}}},
-        {astl::AstlValue{30.0}, astl::SampleTimestamp{std::chrono::microseconds{400}}},
+        {astl::AstlValue{10.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{0}}  },
+        {astl::AstlValue{20.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}}},
+        {astl::AstlValue{30.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{400}}},
     };
 
     auto result = astl::ComputeTimeWeightedAverage(samples);
@@ -490,9 +491,9 @@ TEST_CASE("ComputeTimeWeightedAverage direct testing", "[csv_summary][summarizer
 
   SECTION("Falls back to arithmetic mean when no positive intervals exist") {
     std::vector<astl::ProcessedSampledData> samples{
-        {astl::AstlValue{10.0}, astl::SampleTimestamp{std::chrono::microseconds{100}}},
-        {astl::AstlValue{20.0}, astl::SampleTimestamp{std::chrono::microseconds{100}}},
-        {astl::AstlValue{30.0}, astl::SampleTimestamp{std::chrono::microseconds{100}}},
+        {astl::AstlValue{10.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}}},
+        {astl::AstlValue{20.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}}},
+        {astl::AstlValue{30.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}}},
     };
 
     auto result = astl::ComputeTimeWeightedAverage(samples);

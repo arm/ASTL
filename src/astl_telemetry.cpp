@@ -1893,7 +1893,8 @@ auto astlGetCounterSamplesOnTarget(const astl_get_counter_samples_on_target_para
   // helper lambda to convert a ProcessedSampledData into an astl_sample_t
   auto convert_to_counter_sample = [](const astl::ProcessedSampledData& processed_sample) {
     const auto union_value = processed_sample.value.ToAstlUnionValue().first;  // avoid constructing pair twice
-    return astl_sample_t{.timestamp = processed_sample.timestamp.time_since_epoch().count(), .value = union_value};
+    return astl_sample_t{.timestamp = static_cast<uint64_t>(processed_sample.timestamp.time_since_epoch().count()),
+                         .value     = union_value};
   };
 
   // samples_span is at least large enough to accomodate sample_result because of above check.

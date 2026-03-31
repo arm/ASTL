@@ -24,7 +24,7 @@ using trompeloeil::_;
 
 namespace {
 // Deterministic timestamp base (epoch)
-astl::ProcessedSampledData MakeSample(uint64_t value, astl::SampleTimestamp timestamp) {
+astl::ProcessedSampledData MakeSample(uint64_t value, astl::ProcessedSampleTimestamp timestamp) {
   return astl::ProcessedSampledData{astl::AstlValue{value}, timestamp};
 }
 
@@ -41,10 +41,10 @@ TEST_CASE("PerfettoOutput basic write & JSON structure", "[perfetto_output]") { 
   TestMetricBase metric{"MM"};
 
   astl::ProcessedSamplesMap               processed;
-  const astl::SampleTimestamp             base_ts{};  // epoch
+  const astl::ProcessedSampleTimestamp    base_ts{};  // epoch
   std::vector<astl::ProcessedSampledData> samples;
   samples.emplace_back(MakeSample(42U, base_ts));
-  samples.emplace_back(MakeSample(100U, base_ts + astl::SampleTimestamp::duration{5}));
+  samples.emplace_back(MakeSample(100U, base_ts + astl::ProcessedSampleTimestamp::duration{5}));
   processed[&target][&metric] = samples;
 
   // Act
@@ -80,7 +80,7 @@ TEST_CASE("PerfettoOutput emits process and thread metadata", "[perfetto_output]
   TestTargetBase            target{"MetaTarget"};
   TestMetricBase            metric{"MetaMetric"};
   astl::ProcessedSamplesMap processed;
-  processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(42), astl::SampleTimestamp{})};
+  processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(42), astl::ProcessedSampleTimestamp{})};
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream input_stream(tmp_guard.path);
   REQUIRE(input_stream.is_open());
@@ -124,7 +124,7 @@ TEST_CASE("PerfettoOutput sanitizes target and metric names", "[perfetto_output]
   TestTargetBase                          target{"My Target \"Alpha\""};
   TestMetricBase                          metric{"Power Rate \"Watt\""};
   astl::ProcessedSamplesMap               processed;
-  const astl::SampleTimestamp             base_ts{};
+  const astl::ProcessedSampleTimestamp    base_ts{};
   std::vector<astl::ProcessedSampledData> samples;
   samples.emplace_back(MakeSample(7U, base_ts));
   processed[&target][&metric] = samples;
@@ -155,8 +155,8 @@ TEST_CASE("PerfettoOutput multiple targets & metrics event count", "[perfetto_ou
   astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
 
-  astl::ProcessedSamplesMap   processed;
-  const astl::SampleTimestamp base_ts{};
+  astl::ProcessedSamplesMap            processed;
+  const astl::ProcessedSampleTimestamp base_ts{};
   // Create 2 targets x 3 metrics each with 2 samples => 12 events expected.
   std::vector<std::unique_ptr<TestTargetBase>> targets;
   std::vector<std::unique_ptr<TestMetricBase>> metrics;
@@ -172,7 +172,7 @@ TEST_CASE("PerfettoOutput multiple targets & metrics event count", "[perfetto_ou
       std::vector<astl::ProcessedSampledData> samples;
       samples.emplace_back(MakeSample(static_cast<uint64_t>(10 + samples.size()), base_ts));
       samples.emplace_back(MakeSample(static_cast<uint64_t>(20 + samples.size()),
-                                      base_ts + astl::SampleTimestamp::duration{std::chrono::microseconds{
+                                      base_ts + astl::ProcessedSampleTimestamp::duration{std::chrono::microseconds{
                                                     1}}));  // NOLINT(readability-magic-numbers)
       processed[tgt.get()][met.get()] = samples;
     }
@@ -205,7 +205,7 @@ TEST_CASE("PerfettoOutput boolean event emits counter sample", "[perfetto_output
   TestTargetBase                          target{"TStr"};
   TestMetricBase                          metric{"StateMetric"};
   astl::ProcessedSamplesMap               processed;
-  const astl::SampleTimestamp             base_ts{};
+  const astl::ProcessedSampleTimestamp    base_ts{};
   std::vector<astl::ProcessedSampledData> samples;
   samples.emplace_back(astl::ProcessedSampledData{astl::AstlValue{true}, base_ts});
   processed[&target][&metric] = samples;
@@ -227,8 +227,8 @@ TEST_CASE("PerfettoOutput per-metric tid differentiation", "[perfetto_output]") 
   TestMetricBase metric_one{"M1"};
   TestMetricBase metric_two{"M2"};
 
-  astl::ProcessedSamplesMap   processed;
-  const astl::SampleTimestamp base_ts{};
+  astl::ProcessedSamplesMap            processed;
+  const astl::ProcessedSampleTimestamp base_ts{};
   processed[&target][&metric_one] =
       std::vector<astl::ProcessedSampledData>{MakeSample(static_cast<uint64_t>(1), base_ts)};
   processed[&target][&metric_two] =
@@ -286,7 +286,7 @@ TEST_CASE("PerfettoOutput pid/tid stability across multiple writes", "[perfetto_
   TestMetricBase metric_a{"MA"};
   TestMetricBase metric_b{"MB"};
 
-  const astl::SampleTimestamp base_ts{};
+  const astl::ProcessedSampleTimestamp base_ts{};
   // First write
   astl::ProcessedSamplesMap processed1;
   processed1[&target][&metric_a] =
@@ -295,9 +295,9 @@ TEST_CASE("PerfettoOutput pid/tid stability across multiple writes", "[perfetto_
   // Second write adds new metric mB and another sample for mA.
   astl::ProcessedSamplesMap processed2;
   processed2[&target][&metric_a] = std::vector<astl::ProcessedSampledData>{
-      MakeSample(static_cast<uint64_t>(11), base_ts + astl::SampleTimestamp::duration{1})};
+      MakeSample(static_cast<uint64_t>(11), base_ts + astl::ProcessedSampleTimestamp::duration{1})};
   processed2[&target][&metric_b] = std::vector<astl::ProcessedSampledData>{
-      MakeSample(static_cast<uint64_t>(12), base_ts + astl::SampleTimestamp::duration{2})};
+      MakeSample(static_cast<uint64_t>(12), base_ts + astl::ProcessedSampleTimestamp::duration{2})};
   REQUIRE(writer.WriteProcessedSamples(processed2) == ASTL_STATUS_SUCCESS);
 
   std::ifstream stability_stream(tmp_guard.path);
@@ -352,10 +352,10 @@ TEST_CASE("PerfettoOutput emits numeric sample event", "[perfetto_output]") {  /
   TempFileGuard        tmp_guard{"astl_perfetto_escape.json"};
   astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
-  TestTargetBase              target{"TEsc"};
-  TestMetricBase              metric{"EscMetric"};
-  const astl::SampleTimestamp base_ts{};
-  astl::ProcessedSamplesMap   processed;
+  TestTargetBase                       target{"TEsc"};
+  TestMetricBase                       metric{"EscMetric"};
+  const astl::ProcessedSampleTimestamp base_ts{};
+  astl::ProcessedSamplesMap            processed;
   processed[&target][&metric] = {
       astl::ProcessedSampledData{astl::AstlValue{static_cast<uint64_t>(7U)}, base_ts}
   };
@@ -377,7 +377,7 @@ TEST_CASE("PerfettoOutput skips null target and metric", "[perfetto_output]") { 
     TestMetricBase            metric{"ValidMetric"};
     // Insert nullptr target & metric entries to ensure skipping logic holds.
     processed[nullptr][&metric] =
-        std::vector<astl::ProcessedSampledData>{MakeSample(static_cast<uint64_t>(5), astl::SampleTimestamp{})};
+        std::vector<astl::ProcessedSampledData>{MakeSample(static_cast<uint64_t>(5), astl::ProcessedSampleTimestamp{})};
     // Removed invalid fake target pointer with nullptr metric to avoid undefined behavior.
 
     REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
@@ -426,7 +426,7 @@ TEST_CASE("PerfettoOutput category inference - power & temperature (unit-based)"
     std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
       return astl::OperationSequence{};
     }
-    astl_status_code ReceiveRawSample(const astl::RawSampledData& sample) override {
+    astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& sample) override {
       (void)sample;
       return ASTL_STATUS_SUCCESS;
     }
@@ -452,10 +452,10 @@ TEST_CASE("PerfettoOutput category inference - power & temperature (unit-based)"
     std::string  name_;
     astl_units_t units_{};  // default member init
   };
-  UnitMetric                  power_metric{"SoC Power", ASTL_UNITS_WATTS};
-  UnitMetric                  temp_metric{"Die Temperature", ASTL_UNITS_CELSIUS};
-  const astl::SampleTimestamp base_timestamp{};
-  astl::ProcessedSamplesMap   processed;
+  UnitMetric                           power_metric{"SoC Power", ASTL_UNITS_WATTS};
+  UnitMetric                           temp_metric{"Die Temperature", ASTL_UNITS_CELSIUS};
+  const astl::ProcessedSampleTimestamp base_timestamp{};
+  astl::ProcessedSamplesMap            processed;
   processed[&target][&power_metric] =
       std::vector<astl::ProcessedSampledData>{MakeSample(static_cast<uint64_t>(1), base_timestamp)};
   processed[&target][&temp_metric] =
@@ -483,7 +483,7 @@ TEST_CASE("PerfettoOutput category inference - frequency (unit-based)", "[perfet
     std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
       return astl::OperationSequence{};
     }
-    astl_status_code ReceiveRawSample(const astl::RawSampledData& raw_sample) override {
+    astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& raw_sample) override {
       (void)raw_sample;
       return ASTL_STATUS_SUCCESS;
     }
@@ -509,8 +509,8 @@ TEST_CASE("PerfettoOutput category inference - frequency (unit-based)", "[perfet
     std::string  name_;
     astl_units_t units_{};  // default member init
   } metric;
-  const astl::SampleTimestamp base_timestamp{};
-  astl::ProcessedSamplesMap   processed;
+  const astl::ProcessedSampleTimestamp base_timestamp{};
+  astl::ProcessedSamplesMap            processed;
   processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(1000), base_timestamp)};
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream input_stream(tmp_guard.path);
@@ -534,7 +534,7 @@ TEST_CASE("PerfettoOutput category inference - voltage (unit-based)", "[perfetto
     std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
       return astl::OperationSequence{};
     }
-    astl_status_code ReceiveRawSample(const astl::RawSampledData& raw_sample) override {
+    astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& raw_sample) override {
       (void)raw_sample;
       return ASTL_STATUS_SUCCESS;
     }
@@ -560,8 +560,8 @@ TEST_CASE("PerfettoOutput category inference - voltage (unit-based)", "[perfetto
     std::string  name_;
     astl_units_t units_{};  // default member init
   } metric;
-  const astl::SampleTimestamp base_timestamp{};
-  astl::ProcessedSamplesMap   processed;
+  const astl::ProcessedSampleTimestamp base_timestamp{};
+  astl::ProcessedSamplesMap            processed;
   processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(1200), base_timestamp)};
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
   std::ifstream input_stream(tmp_guard.path);
@@ -585,7 +585,7 @@ TEST_CASE("PerfettoOutput category inference - state (unit-based)", "[perfetto_o
     std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
       return astl::OperationSequence{};
     }
-    astl_status_code ReceiveRawSample(const astl::RawSampledData& raw_sample) override {
+    astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& raw_sample) override {
       (void)raw_sample;
       return ASTL_STATUS_SUCCESS;
     }
@@ -611,8 +611,8 @@ TEST_CASE("PerfettoOutput category inference - state (unit-based)", "[perfetto_o
     std::string  name_;
     astl_units_t units_{};  // default member init
   } metric;
-  const astl::SampleTimestamp base_timestamp{};
-  astl::ProcessedSamplesMap   processed;
+  const astl::ProcessedSampleTimestamp base_timestamp{};
+  astl::ProcessedSamplesMap            processed;
   processed[&target][&metric] = {
       astl::ProcessedSampledData{astl::AstlValue{true}, base_timestamp}
   };
@@ -638,7 +638,7 @@ TEST_CASE("PerfettoOutput category inference fallback (unit-based)", "[perfetto_
     std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
       return astl::OperationSequence{};
     }
-    astl_status_code ReceiveRawSample(const astl::RawSampledData& sample) override {
+    astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& sample) override {
       (void)sample;
       return ASTL_STATUS_SUCCESS;
     }
@@ -664,8 +664,8 @@ TEST_CASE("PerfettoOutput category inference fallback (unit-based)", "[perfetto_
     std::string  name_;
     astl_units_t units_{ASTL_UNITS_NONE};
   } metric;
-  const astl::SampleTimestamp base_timestamp{};
-  astl::ProcessedSamplesMap   processed;
+  const astl::ProcessedSampleTimestamp base_timestamp{};
+  astl::ProcessedSamplesMap            processed;
   processed[&target][&metric] =
       std::vector<astl::ProcessedSampledData>{MakeSample(static_cast<uint64_t>(5), base_timestamp)};
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
@@ -688,7 +688,7 @@ TEST_CASE("PerfettoOutput reports not-ready writer for invalid path", "[perfetto
   TestTargetBase            target{"BadPathTarget"};
   TestMetricBase            metric{"BadPathMetric"};
   astl::ProcessedSamplesMap processed;
-  processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(1), astl::SampleTimestamp{})};
+  processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(1), astl::ProcessedSampleTimestamp{})};
 
   REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_INTERNAL_ERROR);
 }
@@ -698,9 +698,9 @@ TEST_CASE("PerfettoOutput category inference for remaining unit families", "[per
   astl::PerfettoOutput writer(tmp_guard.path);
   REQUIRE(writer.Ready());
 
-  TestTargetBase              target{"CatExtra"};
-  astl::ProcessedSamplesMap   processed;
-  const astl::SampleTimestamp base_timestamp{};
+  TestTargetBase                       target{"CatExtra"};
+  astl::ProcessedSamplesMap            processed;
+  const astl::ProcessedSampleTimestamp base_timestamp{};
 
   std::vector<std::pair<TestMetricBase, std::string>> metrics;
   metrics.emplace_back(TestMetricBase{"EnergyMetric", ASTL_UNITS_JOULES}, "\"cat\":\"Energy\"");
@@ -770,7 +770,7 @@ TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[
 
   // Create a concrete metric and sink a processed sample prior to StopCollection.
   TestMetricBase                          metric{"DeferredMetric", ASTL_UNITS_WATTS};
-  const astl::SampleTimestamp             ts_base{};  // epoch
+  const astl::ProcessedSampleTimestamp    ts_base{};  // epoch
   std::vector<astl::ProcessedSampledData> processed_samples;
   processed_samples.emplace_back(MakeSample(static_cast<uint64_t>(123), ts_base));
   // Invoke sink to populate orchestrator's processed samples map.
@@ -879,7 +879,7 @@ TEST_CASE("PerfettoOutput deferred emission env var unset", "[perfetto_output]")
 
   // Sink one processed sample to show data exists but env var unset prevents emission.
   TestMetricBase                          metric{"UnsetMetric"};
-  const astl::SampleTimestamp             ts_base{};
+  const astl::ProcessedSampleTimestamp    ts_base{};
   std::vector<astl::ProcessedSampledData> processed_samples;
   processed_samples.emplace_back(MakeSample(static_cast<uint64_t>(777), ts_base));
   REQUIRE(orchestrator.SinkProcessedSamples(target_ptr, &metric,

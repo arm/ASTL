@@ -36,9 +36,9 @@ TEST_CASE("SampledValueMetric: construction & ReceiveRawSample single sample", "
   astl::SampledValueMetric metric = GetSampledValueMetricUINT64();
   // 2) Create a sample with a random value.
   // NOLINTNEXTLINE
-  astl::AstlValue      val1{uint64_t{40}};
-  astl::RawSampledData sample1(1, val1);
-  auto                 status1 = metric.ReceiveRawSample(sample1);
+  astl::AstlValue             val1{uint64_t{40}};
+  astl::NormalizedSampledData sample1(1, val1);
+  auto                        status1 = metric.ReceiveRawSample(sample1);
   REQUIRE(status1 == ASTL_STATUS_SUCCESS);
 }
 
@@ -47,9 +47,9 @@ TEST_CASE("SampledValueMetric & ReceiveRawSample with not supported type", "[Sam
   astl::SampledValueMetric metric = GetSampledValueMetricUINT32();
   // 2) Create a sample with a random value.
   // NOLINTNEXTLINE
-  astl::AstlValue      val1{uint64_t{40}};
-  astl::RawSampledData sample1(1, val1);
-  auto                 status1 = metric.ReceiveRawSample(sample1);
+  astl::AstlValue             val1{uint64_t{40}};
+  astl::NormalizedSampledData sample1(1, val1);
+  auto                        status1 = metric.ReceiveRawSample(sample1);
   REQUIRE(status1 == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 }
 
@@ -59,9 +59,9 @@ TEST_CASE("SampledValueMetric: GetSummaryData returns correct summary", "[Sample
   // NOLINTNEXTLINE
   std::vector<uint64_t> values = {10, 20, 30, 40};
   for (auto value : values) {
-    astl::AstlValue      sample_value{uint64_t{value}};
-    astl::RawSampledData sample(1, sample_value);
-    auto                 status = metric.ReceiveRawSample(sample);
+    astl::AstlValue             sample_value{uint64_t{value}};
+    astl::NormalizedSampledData sample(1, sample_value);
+    auto                        status = metric.ReceiveRawSample(sample);
     REQUIRE(status == ASTL_STATUS_SUCCESS);
   }
 

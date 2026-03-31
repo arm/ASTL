@@ -5,8 +5,11 @@
 #ifndef I_COLLECTOR_HPP_
 #define I_COLLECTOR_HPP_
 
+#include <expected>
+
 #include "collection_configuration.hpp"
 #include "common/capabilities.hpp"
+#include "common/clock_correlation.hpp"
 #include "common/i_raw_sample_sink.hpp"
 
 namespace astl {
@@ -63,6 +66,16 @@ struct ICollector {
    * @brief Stop the collection of data, performing any cleanup operations, stopping async tasks, etc.
    */
   virtual auto StopCollection() -> astl_status_code = 0;
+
+  /*
+   * @brief Take a paired snapshot of CLOCK_MONOTONIC_RAW and this collector's native clock for every
+   *        configured sample operation, returning a per-OperationId correlation map.
+   *
+   * Must be called after ConfigureCollection and before (or at) StartCollection so that all
+   * operations and their clock sources are known.  The implementation reads from the hardware
+   * counter (SCMI) or the host steady clock (libsensors) once per operation.
+   */
+  virtual auto GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> = 0;
 
   /*
    * @brief Collect a single sample of all the configured metics.

@@ -19,7 +19,7 @@ SampledValueMetric::SampledValueMetric(const MetricConfig* configuration, const 
   InitializeSamples();
 }
 
-auto SampledValueMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
+auto SampledValueMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code {
   // Check if the sample's value type matches the metric's expected type
   auto type_check_result = CheckSampleValueType(raw_sample);
   if (type_check_result != ASTL_STATUS_SUCCESS) {
@@ -27,7 +27,7 @@ auto SampledValueMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> a
   }
 
   // Log the raw sample using the base class method
-  LogRawSample(raw_sample);
+  LogNormalizedSample(raw_sample);
 
   // Apply formula if configured (masking, bit shifting, scaling, etc.)
   auto processed_value = ApplyFormula(raw_sample.value);

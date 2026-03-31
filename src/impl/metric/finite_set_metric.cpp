@@ -14,7 +14,7 @@ FiniteSetMetric::FiniteSetMetric(const FiniteSetMetricConfig* configuration, con
       _finite_set_configuration{configuration},
       _finite_set_summary{} {}
 
-auto FiniteSetMetric::ReceiveRawSample(const RawSampledData& raw_sample) -> astl_status_code {
+auto FiniteSetMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code {
   // First call the parent class to handle basic sample processing
   auto status = SampledValueMetric::ReceiveRawSample(raw_sample);
   if (status != ASTL_STATUS_SUCCESS) {
@@ -42,7 +42,7 @@ auto FiniteSetMetric::Summarize() -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
-auto FiniteSetMetric::UpdateFiniteSetStatistics(const RawSampledData& raw_sample) -> astl_status_code {
+auto FiniteSetMetric::UpdateFiniteSetStatistics(const NormalizedSampledData& raw_sample) -> astl_status_code {
   _finite_set_summary.total_samples++;
 
   // Check if the value exists in our finite set

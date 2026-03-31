@@ -361,6 +361,17 @@ auto Orchestrator::StartCollectionImpl(const ITarget *target, bool start_paused)
   std::unique_lock lock{_raw_samples_mtx};
   _raw_samples[target].clear();
   lock.unlock();  // in case _collector_manager runs operations on Start that try to sink samples to us
+
+  // Take per-operation clock correlation snapshots before StartOnTarget so that the native clock
+  // anchor is as close in time as possible to when the first samples will be produced.
+  // Each OperationId maps to its own (CLOCK_MONOTONIC_RAW, native-clock) pair to handle the case
+  // where different SCMI data events reference independent hardware timers.
+  auto clock_correlations = _collector_manager->GetNativeClockSnapshot(target);
+  if (!clock_correlations) {
+    return clock_correlations.error();
+  }
+  _metric_manager->SetClockCorrelations(*clock_correlations);
+
   const auto start_status = _collector_manager->StartOnTarget(target);
   if (start_status != ASTL_STATUS_SUCCESS) {
     // Re-acquire lock and guard against a concurrent StopCollection that may have already
@@ -710,9 +721,9 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
 
     // Preserve per-sample debug logging (separate pass keeps insertion branch-predictable / cache-friendly).
     for (const auto &sample : raw_samples) {
-      auto timestamp_ns = sample.timestamp.time_since_epoch().count();
+      auto timestamp_ns = sample.raw_tick;
       auto value        = sample.value;
-      ASTL_LOG_DEBUG("Raw Sample - timestamp (ns since epoch): {}, value: {}", timestamp_ns, value);
+      ASTL_LOG_DEBUG("Raw Sample - raw_tick: {}, value: {}", timestamp_ns, value);
     }
 
     if (!batch_samples.empty()) {

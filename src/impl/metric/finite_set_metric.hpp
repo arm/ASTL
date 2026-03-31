@@ -68,7 +68,7 @@ class FiniteSetMetric : public SampledValueMetric {
    * @param raw_sample A single raw sampled data point to be processed.
    * @return astl_status_code indicating success or failure.
    */
-  auto ReceiveRawSample(const RawSampledData &raw_sample) -> astl_status_code override;
+  auto ReceiveRawSample(const NormalizedSampledData &raw_sample) -> astl_status_code override;
 
   /**
    * @brief Reset the metric state, dropping all collected samples and counts.
@@ -118,7 +118,7 @@ class FiniteSetMetric : public SampledValueMetric {
 
  private:
   /** @brief Update finite set statistics for the received sample */
-  auto UpdateFiniteSetStatistics(const RawSampledData &raw_sample) -> astl_status_code;
+  auto UpdateFiniteSetStatistics(const NormalizedSampledData &raw_sample) -> astl_status_code;
 
   /** @brief Log detailed finite set summary information */
   void LogFiniteSetSummary();

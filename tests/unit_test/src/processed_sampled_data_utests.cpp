@@ -11,9 +11,9 @@
 // Avoid global namespace pollution; qualify astl symbols explicitly.
 
 TEST_CASE("ProcessedSampledData default timestamp constructor assigns near-now timestamp", "[processed_sample]") {
-  auto before = std::chrono::time_point_cast<astl::SampleTimestamp::duration>(std::chrono::steady_clock::now());
+  auto                       before = astl::ClockMonotonicRaw::now();
   astl::ProcessedSampledData sample{astl::AstlValue{uint64_t{42}}};
-  auto after = std::chrono::time_point_cast<astl::SampleTimestamp::duration>(std::chrono::steady_clock::now());
+  auto                       after = astl::ClockMonotonicRaw::now();
   REQUIRE(sample.value.IsArithmetic());
   REQUIRE(sample.get<uint64_t>() == 42);
   REQUIRE_FALSE(sample.timestamp < before);
@@ -21,8 +21,8 @@ TEST_CASE("ProcessedSampledData default timestamp constructor assigns near-now t
 }
 
 TEST_CASE("ProcessedSampledData explicit timestamp constructor preserves timestamp", "[processed_sample]") {
-  astl::SampleTimestamp      timestamp{astl::SampleTimestamp::duration{123456}};
-  astl::ProcessedSampledData sample{astl::AstlValue{uint32_t{7}}, timestamp};
+  astl::ProcessedSampleTimestamp timestamp{astl::ProcessedSampleTimestamp::duration{123456}};
+  astl::ProcessedSampledData     sample{astl::AstlValue{uint32_t{7}}, timestamp};
   REQUIRE(sample.get<uint32_t>() == 7);
   REQUIRE(sample.timestamp == timestamp);
 }
@@ -50,10 +50,11 @@ TEST_CASE("IProcessedSampleSink receives multiple samples (nullptr target/metric
           "[processed_sample][sink]") {
   RecordingSink                           sink;
   std::vector<astl::ProcessedSampledData> samples;
-  astl::SampleTimestamp                   base{astl::SampleTimestamp::duration{1000}};
+  astl::ProcessedSampleTimestamp          base{astl::ProcessedSampleTimestamp::duration{1000}};
   samples.emplace_back(astl::AstlValue{uint8_t{1}}, base);
-  samples.emplace_back(astl::AstlValue{uint8_t{2}},
-                       astl::SampleTimestamp{base.time_since_epoch() + astl::SampleTimestamp::duration{1}});
+  samples.emplace_back(
+      astl::AstlValue{uint8_t{2}},
+      astl::ProcessedSampleTimestamp{base.time_since_epoch() + astl::ProcessedSampleTimestamp::duration{1}});
   auto status = sink.SinkProcessedSamples(nullptr, nullptr, samples);
   REQUIRE(status == ASTL_STATUS_SUCCESS);
   REQUIRE(sink.received.size() == 2);
