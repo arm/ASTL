@@ -201,7 +201,8 @@ main() {
 		"$(resolve_install_root "$INSTALL_SCOPE" "samples")" \
 		"/usr/local/share/astl" \
 		"${XDG_DATA_HOME:-$HOME/.local/share}/astl"; do
-		rmdir "$directory" 2>/dev/null || true
+		rm -r "$directory" 2>/dev/null || true
+		log "Removed $directory"
 	done
 
 	log "ASTL uninstall completed for $INSTALL_SCOPE scope."
