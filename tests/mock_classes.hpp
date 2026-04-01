@@ -87,6 +87,7 @@ struct MockCounter : public astl::ICounter {
   MAKE_MOCK1(ReceiveRawSample, auto(const astl::NormalizedSampledData& raw_sample)->astl_status_code, override);
   MAKE_MOCK1(SetProcessedSampleSink, auto(astl::IProcessedSampleSink* sink)->void, final);
   MAKE_MOCK1(SinkProcessedSample, auto(astl::ProcessedSampledData const& processed_sample)->astl_status_code, override);
+  MAKE_MOCK1(ProcessPauseSample, auto(astl::ProcessedSampleTimestamp pause_timestamp)->astl_status_code, override);
 
   using samples_t = std::span<const astl::ProcessedSampledData>;
   MAKE_MOCK0(Reset, auto()->void, override);
@@ -229,6 +230,7 @@ struct MockMetric : public astl::IMetric {
   MAKE_MOCK1(ReceiveRawSample, auto(const astl::NormalizedSampledData& raw_sample)->astl_status_code, override);
   MAKE_MOCK1(SetProcessedSampleSink, auto(astl::IProcessedSampleSink* sink)->void, final);
   MAKE_MOCK1(SinkProcessedSample, auto(astl::ProcessedSampledData const& processed_sample)->astl_status_code, override);
+  MAKE_MOCK1(ProcessPauseSample, auto(astl::ProcessedSampleTimestamp pause_timestamp)->astl_status_code, override);
 
   using samples_t = std::span<const astl::ProcessedSampledData>;
   MAKE_MOCK0(Reset, auto()->void, override);
@@ -432,6 +434,10 @@ class TestMetricBase : public astl::IMetric {
   auto             Name() const -> std::string const& override { return name_; }
   astl_status_code SinkProcessedSample(const astl::ProcessedSampledData& processed) override {
     (void)processed;
+    return ASTL_STATUS_SUCCESS;
+  }
+  astl_status_code ProcessPauseSample(astl::ProcessedSampleTimestamp pause_timestamp) override {
+    (void)pause_timestamp;
     return ASTL_STATUS_SUCCESS;
   }
 

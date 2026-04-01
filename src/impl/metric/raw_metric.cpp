@@ -124,6 +124,12 @@ auto RawMetric::LogNormalizedSample(const NormalizedSampledData &sample) -> void
                              _configuration->Units(), sample.value, timestamp);
 }
 
+auto RawMetric::ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code {
+  ASTL_LOG_INFO("Metric {}: collection paused at {} ns", _configuration->Name(),
+                pause_timestamp.time_since_epoch().count());
+  return ASTL_STATUS_SUCCESS;
+}
+
 auto RawMetric::ApplyFormula(const AstlValue &raw_value) const -> std::expected<AstlValue, astl_status_code> {
   // Use the formula from configuration
   return astl::ApplyFormula(_configuration->GetFormula(), raw_value);

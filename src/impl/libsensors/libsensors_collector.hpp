@@ -115,6 +115,11 @@ class LibsensorsCollector : public ICollector {
   astl_status_code StartIntervalSampling();
 
   /*
+   * @brief Emit a reserved pause-marker sample for raw-sample consumers.
+   */
+  astl_status_code EmitPauseSample(ProcessedSampleTimestamp pause_timestamp);
+
+  /*
    * @brief Stop any background threads or async tasks that were started for interval sampling.
    */
   void StopIntervalSampling();

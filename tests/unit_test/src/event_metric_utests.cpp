@@ -34,7 +34,7 @@ class EventMetricTestFixture : public astl::EventMetric {
 
   // Helper method to inject events for testing
   astl_status_code InjectEvent(uint64_t event_value) {
-    astl::NormalizedSampledData sample(0, astl::AstlValue{event_value},
+    astl::NormalizedSampledData sample(_next_operation_id++, astl::AstlValue{event_value},
                                        CreateTimestamp(std::chrono::steady_clock::now()));
     return ReceiveRawSample(sample);
   }
@@ -43,6 +43,9 @@ class EventMetricTestFixture : public astl::EventMetric {
     return astl::ProcessedSampleTimestamp{
         std::chrono::duration_cast<astl::ProcessedSampleTimestamp::duration>(timePoint.time_since_epoch())};
   }
+
+ private:
+  astl::OperationId _next_operation_id{astl::kFirstAssignableOperationId};
 };
 
 // Helper function to extract event strings from processed samples
@@ -121,9 +124,10 @@ TEST_CASE("EventMetric: numeric sample type conversion", "[EventMetric]") {
 
   // Test acceptance and conversion of numeric samples to strings
   auto                        timestamp = EventMetricTestFixture::CreateTimestamp(std::chrono::steady_clock::now());
-  astl::NormalizedSampledData uint64_sample(0, astl::AstlValue{uint64_t{42}}, timestamp);
-  astl::NormalizedSampledData bool_sample(1, astl::AstlValue{true}, timestamp);
-  astl::NormalizedSampledData float_sample(2, astl::AstlValue{3.14F}, timestamp);
+  astl::NormalizedSampledData uint64_sample(astl::kFirstAssignableOperationId, astl::AstlValue{uint64_t{42}},
+                                            timestamp);
+  astl::NormalizedSampledData bool_sample(astl::kFirstAssignableOperationId + 1, astl::AstlValue{true}, timestamp);
+  astl::NormalizedSampledData float_sample(astl::kFirstAssignableOperationId + 2, astl::AstlValue{3.14F}, timestamp);
 
   // These should now succeed with automatic conversion
   REQUIRE(metric.ReceiveRawSample(uint64_sample) == ASTL_STATUS_SUCCESS);
@@ -186,8 +190,10 @@ TEST_CASE("EventMetric: event timestamp ordering", "[EventMetric]") {
   auto second_timestamp = EventMetricTestFixture::CreateTimestamp(start_time + 100ms);
 
   // Create samples with explicit timestamps
-  astl::NormalizedSampledData first_sample(0, astl::AstlValue{uint64_t{101}}, first_timestamp);
-  astl::NormalizedSampledData second_sample(0, astl::AstlValue{uint64_t{202}}, second_timestamp);
+  astl::NormalizedSampledData first_sample(astl::kFirstAssignableOperationId, astl::AstlValue{uint64_t{101}},
+                                           first_timestamp);
+  astl::NormalizedSampledData second_sample(astl::kFirstAssignableOperationId + 1, astl::AstlValue{uint64_t{202}},
+                                            second_timestamp);
 
   REQUIRE(metric.ReceiveRawSample(first_sample) == ASTL_STATUS_SUCCESS);
   REQUIRE(metric.ReceiveRawSample(second_sample) == ASTL_STATUS_SUCCESS);

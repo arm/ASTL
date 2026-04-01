@@ -744,3 +744,72 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
 
   REQUIRE_THAT(received_timestamps, Catch::Matchers::Equals(expected_timestamps));
 }
+
+TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[scmi_sysfs_collector]") {
+  MockFileInterface mock_file_interface;
+  ALLOW_CALL(mock_file_interface, IsValid(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, HasWritePermission(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, HasReadPermission(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"de_implementation_version"}, _))
+      .SIDE_EFFECT(_2 = "0.0.0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"version"}, _))
+      .SIDE_EFFECT(_2 = "0.0.1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  trompeloeil::sequence seq;
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"tlm_enable"}, "1"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "1"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x1234/tstamp_enable"}))
+      .IN_SEQUENCE(seq)
+      .RETURN(false);
+  REQUIRE_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x1234/tstamp_rate"}))
+      .IN_SEQUENCE(seq)
+      .RETURN(false);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "0"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  MockRawSampleSink mock_raw_sample_sink;
+  REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
+      .WITH(_2.size() == 1)
+      .WITH(_2[0].operation_id == astl::kPauseOperationId)
+      .WITH(std::get<uint64_t>(_2[0].value.value) == _2[0].raw_tick)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
+  collector.SetRawSampleSink(&mock_raw_sample_sink);
+
+  astl::OperationSequence operations_on_sample;
+  operations_on_sample.push_back(
+      std::make_unique<astl::ScmiReadOperation>(astl::ScmiDataEventId{0x1234}, astl::kilohertz{1}));
+
+  astl::CollectionOperations operations{.operationsBeforeStart{},
+                                        .operationsAtStart{},
+                                        .operationsOnSample{std::move(operations_on_sample)},
+                                        .operationsAtStop{},
+                                        .samplingInterval{},
+                                        .requirements{astl::CollectorCapability{astl::CollectorType::SCMI}}};
+  astl_collection_params_t   collection_params{
+        .size  = sizeof(astl_collection_params_t),
+        .flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
+
+        .sampling_interval = 0,
+
+        .collection_mode = ASTL_COLLECTION_MODE_IMMEDIATE,
+  };
+  astl::CollectionConfiguration configuration{nullptr, std::move(operations), collection_params};
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.PauseCollection());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
+}

@@ -105,7 +105,7 @@ auto LibsensorsCollector::PauseCollection() -> astl_status_code {
   } else {
     _periodic_sampler->Pause();
   }
-  return ASTL_STATUS_SUCCESS;
+  return EmitPauseSample(ClockMonotonicRaw::now());
 };
 
 /*
@@ -254,6 +254,19 @@ auto LibsensorsCollector::StartIntervalSampling() -> astl_status_code {
   auto interval     = std::chrono::milliseconds{_configuration.value().CollectionParams().sampling_interval};
   _periodic_sampler = std::make_unique<PeriodicSampler>(this, interval);
   return ASTL_STATUS_SUCCESS;
+}
+
+auto LibsensorsCollector::EmitPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code {
+  if (!_configuration.has_value()) {
+    ASTL_LOG_WARNING("Pause sample emission skipped because collector has no active configuration");
+    return ASTL_STATUS_SUCCESS;
+  }
+  if (_sample_sink == nullptr) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  auto pause_sample = RawSampledData::PauseMarker(pause_timestamp);
+  return _sample_sink->SinkRawSamples(_configuration->Target(), {&pause_sample, 1});
 }
 
 /*

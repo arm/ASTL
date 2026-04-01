@@ -447,6 +447,10 @@ TEST_CASE("PerfettoOutput category inference - power & temperature (unit-based)"
       (void)processed_sample;
       return ASTL_STATUS_SUCCESS;
     }
+    astl_status_code ProcessPauseSample(astl::ProcessedSampleTimestamp pause_timestamp) override {
+      (void)pause_timestamp;
+      return ASTL_STATUS_SUCCESS;
+    }
 
    private:
     std::string  name_;
@@ -504,6 +508,10 @@ TEST_CASE("PerfettoOutput category inference - frequency (unit-based)", "[perfet
       (void)processed_sample;
       return ASTL_STATUS_SUCCESS;
     }
+    astl_status_code ProcessPauseSample(astl::ProcessedSampleTimestamp pause_timestamp) override {
+      (void)pause_timestamp;
+      return ASTL_STATUS_SUCCESS;
+    }
 
    private:
     std::string  name_;
@@ -553,6 +561,10 @@ TEST_CASE("PerfettoOutput category inference - voltage (unit-based)", "[perfetto
     auto             Name() const -> std::string const& override { return name_; }
     astl_status_code SinkProcessedSample(const astl::ProcessedSampledData& processed_sample) override {
       (void)processed_sample;
+      return ASTL_STATUS_SUCCESS;
+    }
+    astl_status_code ProcessPauseSample(astl::ProcessedSampleTimestamp pause_timestamp) override {
+      (void)pause_timestamp;
       return ASTL_STATUS_SUCCESS;
     }
 
@@ -606,6 +618,10 @@ TEST_CASE("PerfettoOutput category inference - state (unit-based)", "[perfetto_o
       (void)processed_sample;
       return ASTL_STATUS_SUCCESS;
     }
+    astl_status_code ProcessPauseSample(astl::ProcessedSampleTimestamp pause_timestamp) override {
+      (void)pause_timestamp;
+      return ASTL_STATUS_SUCCESS;
+    }
 
    private:
     std::string  name_;
@@ -657,6 +673,10 @@ TEST_CASE("PerfettoOutput category inference fallback (unit-based)", "[perfetto_
     auto             Name() const -> std::string const& override { return name_; }
     astl_status_code SinkProcessedSample(const astl::ProcessedSampledData& processed_sample) override {
       (void)processed_sample;
+      return ASTL_STATUS_SUCCESS;
+    }
+    astl_status_code ProcessPauseSample(astl::ProcessedSampleTimestamp pause_timestamp) override {
+      (void)pause_timestamp;
       return ASTL_STATUS_SUCCESS;
     }
 

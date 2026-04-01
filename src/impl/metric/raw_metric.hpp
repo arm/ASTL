@@ -123,6 +123,17 @@ class RawMetric : public virtual IMetric {
    */
   auto SinkProcessedSample(const ProcessedSampledData &processed_sample) -> astl_status_code override;
 
+  /**
+   * @brief Log the pause event for this metric and return success.
+   *
+   * Overrides the no-op default in IMetric so that RawMetric (and all derived
+   * metric types) emit a diagnostic log entry whenever collection is paused.
+   *
+   * @param pause_timestamp CLOCK_MONOTONIC_RAW timestamp associated with the pause event.
+   * @return ASTL_STATUS_SUCCESS.
+   */
+  auto ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code override;
+
  protected:
   /**
    * @brief Validate that the sample's value type matches this metric's expected input type.

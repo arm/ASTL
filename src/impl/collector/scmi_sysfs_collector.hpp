@@ -169,6 +169,11 @@ class ScmiSysfsCollector : public ICollector {
   astl_status_code StartIntervalSampling();
 
   /*
+   * @brief Emit a reserved pause-marker sample for raw-sample consumers.
+   */
+  astl_status_code EmitPauseSample(ProcessedSampleTimestamp pause_timestamp);
+
+  /*
    * @brief Stop any background threads or async tasks that were started for interval sampling.
    */
   void StopIntervalSampling();
@@ -421,7 +426,8 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::PauseCollection() {
   } else {
     _periodic_sampler->Pause();
   }
-  return ASTL_STATUS_SUCCESS;
+  auto pause_timestamp = ClockMonotonicRaw::now();
+  return EmitPauseSample(pause_timestamp);
 };
 
 /*
@@ -810,6 +816,20 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StartIntervalSampling() {
   auto interval     = std::chrono::milliseconds{_configuration.value().CollectionParams().sampling_interval};
   _periodic_sampler = std::make_unique<PeriodicSampler>(this, interval);
   return ASTL_STATUS_SUCCESS;
+}
+
+template <typename FileInterfaceT>
+astl_status_code ScmiSysfsCollector<FileInterfaceT>::EmitPauseSample(ProcessedSampleTimestamp pause_timestamp) {
+  if (!_configuration.has_value()) {
+    ASTL_LOG_WARNING("Pause sample emission skipped because collector has no active configuration");
+    return ASTL_STATUS_SUCCESS;
+  }
+  if (_raw_sample_sink == nullptr) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  auto pause_sample = RawSampledData::PauseMarker(pause_timestamp);
+  return _raw_sample_sink->SinkRawSamples(_configuration->Target(), {&pause_sample, 1});
 }
 
 /*

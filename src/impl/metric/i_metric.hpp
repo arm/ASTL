@@ -137,6 +137,17 @@ struct IMetric {
    * @return astl_status_code See Error Handling section above.
    */
   virtual auto SinkProcessedSample(const ProcessedSampledData &processed_sample) -> astl_status_code = 0;
+
+  /**
+   * @brief Record that collection was paused for this metric without treating the pause marker as a raw sample.
+   *
+   * Pause markers are lifecycle events, not telemetry payloads. The default implementation simply logs the pause
+   * timestamp so derived metrics do not need to special-case pause markers in their normal sample path.
+   *
+   * @param pause_timestamp CLOCK_MONOTONIC_RAW timestamp associated with the pause event.
+   * @return ASTL_STATUS_SUCCESS unless an implementation chooses to surface a logging error.
+   */
+  virtual auto ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code = 0;
 };
 
 }  // namespace astl

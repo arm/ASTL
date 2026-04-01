@@ -73,6 +73,10 @@ struct SummaryTestMetric : public astl::IMetric {
     (void)processed_sample;
     return ASTL_STATUS_SUCCESS;
   }
+  astl_status_code ProcessPauseSample(astl::ProcessedSampleTimestamp pause_timestamp) override {
+    (void)pause_timestamp;
+    return ASTL_STATUS_SUCCESS;
+  }
 };
 
 // Helper to create test samples with specific values for summary testing

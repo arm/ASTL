@@ -22,8 +22,10 @@ namespace astl {
  * Raw samples are produced directly from hardware/firmware (e.g. SCMI reads) before any metric-level
  * interpretation such as delta, rate, or aggregation is applied. Each raw sample is tagged with the
  * `OperationId` that initiated its collection so the metric layer can dispatch it to the correct
- * `IMetric` instance.  The `raw_tick` field holds the collector-native hardware clock tick count;
- * MetricManager converts it to `CLOCK_MONOTONIC_RAW` nanoseconds before forwarding to metrics.
+ * `IMetric` instance.  The `raw_tick` field usually holds the collector-native hardware clock tick
+ * count; MetricManager converts it to `CLOCK_MONOTONIC_RAW` nanoseconds before forwarding to metrics.
+ * Reserved pause markers are the exception: they store an already-normalized `CLOCK_MONOTONIC_RAW`
+ * timestamp directly in both `raw_tick` and the raw value payload.
  *
  * Thread-safety: Once constructed the object is immutable and can be shared safely between threads
  * if the underlying `AstlValue` variant alternative is trivially copyable (the typical case).
@@ -47,6 +49,24 @@ struct RawSampledData {
    */
   RawSampledData(OperationId operation_id, AstlValue value, HwClockTicks raw_tick)
       : operation_id{operation_id}, value{value}, raw_tick{raw_tick} {}
+
+  /**
+   * @brief Construct a reserved pause-marker sample.
+   *
+   * The pause timestamp is stored in both `raw_tick` and the raw value payload so downstream
+   * consumers inspecting serialized raw samples can identify the pause boundary without any
+   * collector-specific clock correlation.
+   */
+  static auto PauseMarker(ProcessedSampleTimestamp pause_timestamp) -> RawSampledData {
+    const auto pause_tick = static_cast<uint64_t>(pause_timestamp.time_since_epoch().count());
+    return RawSampledData{kPauseOperationId, AstlValue{pause_tick}, pause_tick};
+  }
+
+  static constexpr auto IsPauseMarkerOperationId(OperationId operation_id) -> bool {
+    return operation_id == kPauseOperationId;
+  }
+
+  [[nodiscard]] auto IsPauseMarker() const -> bool { return IsPauseMarkerOperationId(operation_id); }
 
   /** @brief Identifier of the operation that produced this sample. */
   OperationId operation_id{kOperationIdInvalid};
@@ -90,6 +110,12 @@ struct NormalizedSampledData {
    */
   NormalizedSampledData(OperationId operation_id, AstlValue value, ProcessedSampleTimestamp timestamp)
       : operation_id{operation_id}, value{value}, timestamp{timestamp} {}
+
+  static constexpr auto IsPauseMarkerOperationId(OperationId operation_id) -> bool {
+    return operation_id == kPauseOperationId;
+  }
+
+  [[nodiscard]] auto IsPauseMarker() const -> bool { return IsPauseMarkerOperationId(operation_id); }
 
   /** @brief Identifier of the operation that produced this sample. */
   OperationId operation_id{kOperationIdInvalid};

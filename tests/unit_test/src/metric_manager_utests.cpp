@@ -53,12 +53,13 @@ astl::ScmiDataEventId GetDataEventId(const astl::ResidencyMetricConfig::StateInf
 // This metric simply collects samples and stores them in a vector.
 // It can be configured to return a specific status code when processing samples.
 struct TestMetric : public IMetric {
-  astl_status_code                   lastStatus      = ASTL_STATUS_SUCCESS;
-  astl_status_code                   summarizeStatus = ASTL_STATUS_SUCCESS;
-  size_t                             resetCount      = 0;
-  std::vector<NormalizedSampledData> received;
-  std::vector<ProcessedSampledData>  processed;
-  IProcessedSampleSink*              sink = nullptr;
+  astl_status_code                            lastStatus      = ASTL_STATUS_SUCCESS;
+  astl_status_code                            summarizeStatus = ASTL_STATUS_SUCCESS;
+  size_t                                      resetCount      = 0;
+  std::vector<NormalizedSampledData>          received;
+  std::vector<ProcessedSampledData>           processed;
+  std::vector<astl::ProcessedSampleTimestamp> pause_timestamps;
+  IProcessedSampleSink*                       sink = nullptr;
 
   astl_status_code ReceiveRawSample(const NormalizedSampledData& raw_sample) override {
     received.push_back(raw_sample);
@@ -83,10 +84,16 @@ struct TestMetric : public IMetric {
     return ASTL_STATUS_BAD_ARGUMENT;
   };
 
+  astl_status_code ProcessPauseSample(astl::ProcessedSampleTimestamp pause_timestamp) override {
+    pause_timestamps.push_back(pause_timestamp);
+    return ASTL_STATUS_SUCCESS;
+  }
+
   void Reset() override {
     ++resetCount;
     received.clear();
     processed.clear();
+    pause_timestamps.clear();
   }
 
   astl_status_code Summarize() override {
@@ -376,6 +383,8 @@ TEST_CASE("MetricManager::GetRequiredOperations correctly discriminates metrics 
     REQUIRE(scmi_op1 != nullptr);
     REQUIRE(scmi_op1->scmi_data_event_id == 0xBABE);
 
+    REQUIRE(base_op0->GetId() >= astl::kFirstAssignableOperationId);
+    REQUIRE(base_op1->GetId() >= astl::kFirstAssignableOperationId);
     REQUIRE(base_op0->GetId() != base_op1->GetId());
   }
 
@@ -445,6 +454,46 @@ TEST_CASE("MetricManager::ProcessData processes multiple samples for the same me
   REQUIRE(metric_ptr->received.size() == 2);
   REQUIRE(metric_ptr->received[0].get<uint64_t>() == 100);
   REQUIRE(metric_ptr->received[1].get<uint64_t>() == 200);
+}
+
+TEST_CASE("MetricManager::ProcessData routes reserved pause-marker samples to metric pause logging",
+          "[MetricManager]") {
+  Capabilities             caps = MakeCaps(CollectorType::SCMI);
+  MetricManager            mgr(caps);
+  MockTarget               target;
+  static const std::string target_name = "pause_target";
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+
+  auto        owner_metric1 = std::make_unique<TestMetric>();
+  auto        owner_metric2 = std::make_unique<TestMetric>();
+  TestMetric* metric_ptr1   = owner_metric1.get();
+  TestMetric* metric_ptr2   = owner_metric2.get();
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric1),
+      std::make_unique<MetricConfig>("pause_metric_1", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric2),
+      std::make_unique<MetricConfig>("pause_metric_2", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, 9, metric_ptr1);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, 10, metric_ptr2);
+
+  constexpr auto      pause_timestamp = astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{42}};
+  astl::RawSamplesMap samples_map;
+  samples_map[&target] = {astl::RawSampledData::PauseMarker(pause_timestamp)};
+
+  REQUIRE(mgr.ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric_ptr1->received.empty());
+  REQUIRE(metric_ptr2->received.empty());
+  REQUIRE(metric_ptr1->pause_timestamps == std::vector<astl::ProcessedSampleTimestamp>{pause_timestamp});
+  REQUIRE(metric_ptr2->pause_timestamps == std::vector<astl::ProcessedSampleTimestamp>{pause_timestamp});
 }
 
 TEST_CASE("MetricManager::ProcessData processes different metrics for different operations", "[MetricManager]") {

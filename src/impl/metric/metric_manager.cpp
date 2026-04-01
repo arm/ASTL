@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <unordered_set>
 
 #include "astl/astl_errors.h"
 #include "collector/collection_operations.hpp"
@@ -22,6 +23,82 @@
 #include "sampled_value_metric.hpp"
 
 namespace astl {
+namespace {
+
+using ProcessingQueueEntry = std::pair<IMetric*, NormalizedSampledData>;
+using ProcessingQueue      = std::vector<ProcessingQueueEntry>;
+
+auto EnqueuePauseMarkerSamples(const MetricManager::OperationToMetricMap& operation_to_metric_map,
+                               const RawSampledData& sample, ProcessingQueue& processing_queue) -> void {
+  const auto pause_ts =
+      ProcessedSampleTimestamp{std::chrono::duration<int64_t, std::nano>{static_cast<int64_t>(sample.raw_tick)}};
+  std::unordered_set<IMetric*> seen_metrics;
+  for (const auto& [operation_id, metric] : operation_to_metric_map) {
+    (void)operation_id;
+    if (metric != nullptr && seen_metrics.insert(metric).second) {
+      processing_queue.emplace_back(metric, NormalizedSampledData{sample.operation_id, sample.value, pause_ts});
+    }
+  }
+}
+
+auto EnqueueNormalizedSample(const MetricManager::OperationToMetricMap& operation_to_metric_map,
+                             const ClockCorrelationMap& clock_correlations, const ITarget* target,
+                             const RawSampledData& sample, ProcessingQueue& processing_queue) -> astl_status_code {
+  const auto op_iter = operation_to_metric_map.find(sample.operation_id);
+  if (op_iter == operation_to_metric_map.end() || op_iter->second == nullptr) {
+    ASTL_LOG_ERROR("ProcessRawSamples: No metric associated with operation ID {} on target '{}'", sample.operation_id,
+                   target->Name());
+    return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+  }
+
+  const auto corr_it = clock_correlations.find(sample.operation_id);
+  if (corr_it == clock_correlations.end()) {
+    ASTL_LOG_WARNING(
+        "ProcessRawSamples: no clock correlation for operation ID {} on metric '{}'; timestamp not "
+        "normalized",
+        sample.operation_id, op_iter->second->Name());
+    return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+  }
+
+  const auto normalized_ts = NormalizeToCorrelatedRawTimestamp(sample.raw_tick, corr_it->second);
+  processing_queue.emplace_back(op_iter->second,
+                                NormalizedSampledData{sample.operation_id, sample.value, normalized_ts});
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto EnqueueTargetSamples(const MetricManager::TargetOperationToMetricMap& target_to_operation_to_metric_map,
+                          const ClockCorrelationMap& clock_correlations, const ITarget* target,
+                          std::span<const RawSampledData> samples, ProcessingQueue& processing_queue)
+    -> astl_status_code {
+  if (!target) {
+    ASTL_LOG_ERROR("ProcessRawSamples: Target is null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  const auto target_iter = target_to_operation_to_metric_map.find(target);
+  if (target_iter == target_to_operation_to_metric_map.end()) {
+    ASTL_LOG_ERROR("ProcessRawSamples: No operation routing registered for target '{}'", target->Name());
+    return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+  }
+
+  for (const auto& sample : samples) {
+    if (sample.IsPauseMarker()) [[unlikely]] {
+      EnqueuePauseMarkerSamples(target_iter->second, sample, processing_queue);
+      continue;
+    }
+
+    const auto status =
+        EnqueueNormalizedSample(target_iter->second, clock_correlations, target, sample, processing_queue);
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+  }
+
+  return ASTL_STATUS_SUCCESS;
+}
+
+}  // namespace
+
 /**
  * @brief Helper to look up an ICounter handle representing a counter for a specific target from a metric API handle
  */
@@ -561,66 +638,49 @@ auto MetricManager::SetClockCorrelations(const ClockCorrelationMap& correlations
 }
 
 auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code {
-  std::vector<std::pair<IMetric*, RawSampledData>> processing_queue;
+  ProcessingQueue  processing_queue;
+  astl_status_code enqueue_status = ASTL_STATUS_SUCCESS;
   {
     std::lock_guard<std::mutex> lock(_mutex);
     for (const auto& [target, samples] : raw_samples) {
-      if (!target) {
-        ASTL_LOG_ERROR("ProcessRawSamples: Target is null");
-        return ASTL_STATUS_BAD_ARGUMENT;
-      }
-      const auto target_iter = _target_to_operation_to_metric_map.find(target);
-      if (target_iter == _target_to_operation_to_metric_map.end()) {
-        ASTL_LOG_ERROR("ProcessRawSamples: No operation routing registered for target '{}'", target->Name());
-        return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
-      }
-      for (const auto& sample : samples) {
-        const auto op_iter = target_iter->second.find(sample.operation_id);
-        if (op_iter == target_iter->second.end() || op_iter->second == nullptr) {
-          ASTL_LOG_ERROR("ProcessRawSamples: No metric associated with operation ID {} on target '{}'",
-                         sample.operation_id, target->Name());
-          return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
-        }
-        processing_queue.emplace_back(op_iter->second, sample);
+      const auto status = EnqueueTargetSamples(_target_to_operation_to_metric_map, _clock_correlations, target, samples,
+                                               processing_queue);
+      if (status != ASTL_STATUS_SUCCESS) {
+        enqueue_status = status;
+        break;
       }
     }
   }
 
-  // Sort samples so that each metric receives its samples in non-decreasing timestamp order.
+  // Sort samples so that each metric receives its samples in non-decreasing normalized timestamp order.
   // Primary key: metric pointer (groups all samples for the same metric together).
-  // Secondary key: timestamp (ascending within each group).
+  // Secondary key: normalized CLOCK_MONOTONIC_RAW timestamp (ascending within each group).
   std::sort(processing_queue.begin(), processing_queue.end(), [](const auto& lhs, const auto& rhs) {
     if (lhs.first != rhs.first) {
       return std::less<IMetric*>{}(lhs.first, rhs.first);
     }
-    return lhs.second.raw_tick < rhs.second.raw_tick;
+    return lhs.second.timestamp < rhs.second.timestamp;
   });
 
-  for (const auto& [metric_handle, sample] : processing_queue) {
-    // Normalize the collector-native raw_tick into the CLOCK_MONOTONIC_RAW domain using the
-    // per-operation correlation recorded at collection-start time.
-    ProcessedSampleTimestamp normalized_ts;
-    {
-      std::lock_guard<std::mutex> lock(_mutex);
-      const auto                  corr_it = _clock_correlations.find(sample.operation_id);
-      if (corr_it != _clock_correlations.end()) {
-        normalized_ts = NormalizeToCorrelatedRawTimestamp(sample.raw_tick, corr_it->second);
-      } else {
-        ASTL_LOG_WARNING(
-            "ProcessRawSamples: no clock correlation for operation ID {} on metric '{}'; timestamp not normalized",
-            sample.operation_id, metric_handle->Name());
-        return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
-      }
+  for (const auto& [metric_handle, normalized_sample] : processing_queue) {
+    astl_status_code status = ASTL_STATUS_SUCCESS;
+    if (normalized_sample.IsPauseMarker()) [[unlikely]] {
+      status = metric_handle->ProcessPauseSample(normalized_sample.timestamp);
+    } else {
+      status = metric_handle->ReceiveRawSample(normalized_sample);
     }
-    NormalizedSampledData normalized_sample{sample.operation_id, sample.value, normalized_ts};
-    astl_status_code      status = metric_handle->ReceiveRawSample(normalized_sample);
     if (status != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} on metric '{}' with status {}",
-                     normalized_sample.operation_id, metric_handle->Name(), astlStatusString(status));
+      if (normalized_sample.IsPauseMarker()) {
+        ASTL_LOG_ERROR("ProcessData: Failed to process pause sample on metric '{}' with status {}",
+                       metric_handle->Name(), astlStatusString(status));
+      } else {
+        ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} on metric '{}' with status {}",
+                       normalized_sample.operation_id, metric_handle->Name(), astlStatusString(status));
+      }
       return status;
     }
   }
-  return ASTL_STATUS_SUCCESS;
+  return enqueue_status;
 }
 
 auto MetricManager::ResetMetricsOnTarget(const ITarget* target) -> astl_status_code {

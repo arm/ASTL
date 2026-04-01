@@ -157,6 +157,11 @@ TEST_CASE("LibsensorsCollector Pause and Resume", "[libsensors_collector]") {
   astl::LibsensorsCollector collector{harness.api};
   MockRawSampleSink         sample_sink;
   collector.SetRawSampleSink(&sample_sink);
+  REQUIRE_CALL(sample_sink, SinkRawSamples(_, _))
+      .WITH(_2.size() == 1)
+      .WITH(_2[0].operation_id == astl::kPauseOperationId)
+      .WITH(std::get<uint64_t>(_2[0].value.value) == _2[0].raw_tick)
+      .RETURN(ASTL_STATUS_SUCCESS);
 
   astl::CollectionOperations    ops{.operationsBeforeStart = {},
                                     .operationsAtStart     = {},

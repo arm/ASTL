@@ -21,16 +21,19 @@ using SamplingInterval = std::chrono::duration<uint32_t, std::milli>;
 using SampleMicroseconds = std::chrono::duration<uint64_t, std::micro>;
 using SampleTimestamp    = std::chrono::time_point<std::chrono::steady_clock, SampleMicroseconds>;
 
-using OperationId                    = uint16_t;
-constexpr size_t kOperationIdInvalid = std::numeric_limits<OperationId>::max();
+using OperationId = uint16_t;
+constexpr OperationId kPauseOperationId{0};
+constexpr OperationId kFirstAssignableOperationId{kPauseOperationId + 1};
+constexpr size_t      kOperationIdInvalid = std::numeric_limits<OperationId>::max();
 
 /**
  * @brief Base class for concrete operations executed by collectors to enable or sample metrics.
  *
  * Each operation instance receives a monotonically increasing 16-bit identifier used to
- * correlate raw samples with higher-level metric processing. If the ID space is exhausted
- * (wraps to the sentinel invalid value) an exception is thrown because continued correlation
- * would no longer be reliable.
+ * correlate raw samples with higher-level metric processing. Operation ID 0 is reserved for
+ * collector-emitted pause markers, so assignable operation IDs begin at 1. If the ID space is
+ * exhausted (wraps to the sentinel invalid value) an exception is thrown because continued
+ * correlation would no longer be reliable.
  */
 class Operation {
  public:
@@ -62,7 +65,7 @@ class Operation {
    * @throws std::runtime_error if the counter reaches kOperationIdInvalid.
    */
   static OperationId GetNextOperationId() {
-    static std::atomic<OperationId> next_operation_id{0};
+    static std::atomic<OperationId> next_operation_id{kFirstAssignableOperationId};
     auto                            this_id = next_operation_id.fetch_add(1, std::memory_order_relaxed);
     if (this_id == kOperationIdInvalid) {
       ASTL_LOG_CRITICAL("ASTL has run out of unique OperationIds. This error is currently unrecoverable");

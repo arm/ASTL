@@ -448,7 +448,7 @@ TEST_CASE("Orchestrator-SinkRawSamples bulk growth then skip reserve", "[Orchest
 
   // First insertion triggers growth branch
   std::vector<astl::RawSampledData> batch1;
-  batch1.emplace_back(static_cast<astl::OperationId>(0), astl::AstlValue{uint64_t{42}});
+  batch1.emplace_back(astl::kFirstAssignableOperationId, astl::AstlValue{uint64_t{42}});
   REQUIRE(orchestrator.SinkRawSamples(target, batch1) == ASTL_STATUS_SUCCESS);
 
   // Second insertion fits existing capacity (skip reserve)
