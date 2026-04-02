@@ -617,7 +617,12 @@ cpdef start_collection(Target target=None):
         target_params.flags = 0
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlStartCollectionOnTarget(&target_params)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED):
+    if rc not in (
+        ASTL_STATUS_NOT_IMPLEMENTED,
+        ASTL_STATUS_BAD_CONFIGURATION,
+        ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
+        ASTL_STATUS_NOT_INITIALIZED,
+    ):
         _check(rc)
 
 cpdef start_collection_paused(Target target=None):
@@ -635,7 +640,12 @@ cpdef start_collection_paused(Target target=None):
         target_params.flags = 0
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlStartCollectionOnTargetPaused(&target_params)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED):
+    if rc not in (
+        ASTL_STATUS_NOT_IMPLEMENTED,
+        ASTL_STATUS_BAD_CONFIGURATION,
+        ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
+        ASTL_STATUS_NOT_INITIALIZED,
+    ):
         _check(rc)
 
 cpdef pause_collection(Target target=None):
@@ -653,7 +663,13 @@ cpdef pause_collection(Target target=None):
         target_params.flags = 0
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlPauseCollectionOnTarget(&target_params)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING):
+    if rc not in (
+        ASTL_STATUS_NOT_IMPLEMENTED,
+        ASTL_STATUS_BAD_CONFIGURATION,
+        ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
+        ASTL_STATUS_COLLECTION_NOT_RUNNING,
+        ASTL_STATUS_NOT_INITIALIZED,
+    ):
         _check(rc)
 
 cpdef resume_collection(Target target=None):
@@ -671,7 +687,13 @@ cpdef resume_collection(Target target=None):
         target_params.flags = 0
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlResumeCollectionOnTarget(&target_params)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_PAUSED):
+    if rc not in (
+        ASTL_STATUS_NOT_IMPLEMENTED,
+        ASTL_STATUS_BAD_CONFIGURATION,
+        ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
+        ASTL_STATUS_COLLECTION_NOT_PAUSED,
+        ASTL_STATUS_NOT_INITIALIZED,
+    ):
         _check(rc)
 
 cpdef stop_collection(Target target=None):
@@ -689,7 +711,13 @@ cpdef stop_collection(Target target=None):
         target_params.flags = 0
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlStopCollectionOnTarget(&target_params)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING):
+    if rc not in (
+        ASTL_STATUS_NOT_IMPLEMENTED,
+        ASTL_STATUS_BAD_CONFIGURATION,
+        ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
+        ASTL_STATUS_COLLECTION_NOT_RUNNING,
+        ASTL_STATUS_NOT_INITIALIZED,
+    ):
         _check(rc)
 
 cpdef save_collection(output_file_path=None):
@@ -839,8 +867,13 @@ cpdef read_immediate(Target target=None):
         target_params.flags = 0
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlReadImmediateOnTarget(&target_params)
-    # Treat NOT_IMPLEMENTED, BAD_CONFIGURATION, and COLLECTION_NOT_CONFIGURED as benign (mirrors lifecycle tolerance)
-    if rc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_BAD_CONFIGURATION, ASTL_STATUS_COLLECTION_NOT_CONFIGURED):
+    # Treat NOT_IMPLEMENTED, BAD_CONFIGURATION, COLLECTION_NOT_CONFIGURED, and NOT_INITIALIZED as benign
+    if rc not in (
+        ASTL_STATUS_NOT_IMPLEMENTED,
+        ASTL_STATUS_BAD_CONFIGURATION,
+        ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
+        ASTL_STATUS_NOT_INITIALIZED,
+    ):
         _check(rc)
 
 # --- Sample retrieval ---
@@ -1229,7 +1262,15 @@ cpdef list get_targets():
 
     count_params.flags = 0
     count_params.target_count = &count
-    _check(astlGetTargetCount(&count_params))
+    cdef int rc = astlGetTargetCount(&count_params)
+    if rc in (
+        ASTL_STATUS_NO_TARGETS_FOUND,
+        ASTL_STATUS_BAD_CONFIGURATION,
+        ASTL_STATUS_NOT_IMPLEMENTED,
+        ASTL_STATUS_NOT_INITIALIZED,
+    ):
+        return []
+    _check(rc)
     if count == 0:
         return []
     cdef astl_target_props_t* arr = <astl_target_props_t*>calloc(count, sizeof(astl_target_props_t))
@@ -1242,7 +1283,15 @@ cpdef list get_targets():
         params.flags = 0
         params.targets = arr
         params.target_count = &count
-        _check(astlGetTargets(&params))
+        rc = astlGetTargets(&params)
+        if rc in (
+            ASTL_STATUS_NO_TARGETS_FOUND,
+            ASTL_STATUS_BAD_CONFIGURATION,
+            ASTL_STATUS_NOT_IMPLEMENTED,
+            ASTL_STATUS_NOT_INITIALIZED,
+        ):
+            return []
+        _check(rc)
         py_list = []
         for i in range(count):
             name = arr[i].name.decode() if arr[i].name != NULL else ""

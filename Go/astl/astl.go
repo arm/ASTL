@@ -30,72 +30,72 @@ import (
 type Status uint32
 
 const (
-	StatusSuccess                               Status = 0
-	StatusBadArgument                           Status = 1
-	StatusBadConfiguration                      Status = 2
-	StatusInvalidTargetHandle                   Status = 3
-	StatusInvalidCounterHandle                  Status = 4
-	StatusInvalidMetricHandle                   Status = 5
-	StatusInvalidMetricGroupHandle              Status = 6
-	StatusNotImplemented                        Status = 7
-	StatusNotSupported                          Status = 8
-	StatusDeprecatedAPI                         Status = 9
-	StatusNoTargetsFound                        Status = 10
-	StatusOldTargetPropertiesStructVersion      Status = 11
-	StatusNewTargetPropertiesStructVersion      Status = 12
-	StatusNoCountersFound                       Status = 13
-	StatusOldCounterPropertiesStructVersion     Status = 14
-	StatusNewCounterPropertiesStructVersion     Status = 15
-	StatusOldCounterSampleStructVersion         Status = 16
-	StatusNewCounterSampleStructVersion         Status = 17
-	StatusNoMetricsFound                        Status = 18
-	StatusOldMetricPropertiesStructVersion      Status = 19
-	StatusNewMetricPropertiesStructVersion      Status = 20
-	StatusOldMetricSampleStructVersion          Status = 21
-	StatusNewMetricSampleStructVersion          Status = 22
-	StatusNoMetricGroupsFound                   Status = 23
-	StatusOldMetricGroupPropertiesStructVersion Status = 24
-	StatusNewMetricGroupPropertiesStructVersion Status = 25
-	StatusOldCollectionParametersStructVersion  Status = 26
-	StatusNewCollectionParametersStructVersion  Status = 27
-	StatusTargetPropertiesBufferTooSmall        Status = 28
-	StatusCounterPropertiesBufferTooSmall       Status = 29
-	StatusMetricPropertiesBufferTooSmall        Status = 30
-	StatusMetricGroupPropertiesBufferTooSmall   Status = 31
-	StatusCounterSamplesBufferTooSmall          Status = 32
-	StatusMetricSamplesBufferTooSmall           Status = 33
-	StatusMetricReceivedInvalidSample           Status = 34
-	StatusMetricOverflowDetected                Status = 35
-	StatusSamplingIntervalTooSmall              Status = 36
-	StatusSamplingIntervalTooLarge              Status = 37
-	StatusSamplingIntervalIgnored               Status = 38
-	StatusInvalidCollectionMode                 Status = 39
-	StatusInvalidCollectionOptimization         Status = 40
-	StatusCounterNotSupportedOnTarget           Status = 41
-	StatusMetricNotSupportedOnTarget            Status = 42
-	StatusMetricGroupNotSupportedOnTarget       Status = 43
-	StatusCollectionNotConfigured               Status = 44
-	StatusCollectionNotRunning                  Status = 45
-	StatusCollectionNotStopped                  Status = 46
-	StatusCollectionNotPaused                   Status = 47
-	StatusCollectionAlreadyRunning              Status = 48
-	StatusCollectionAlreadyStopped              Status = 49
-	StatusCollectionAlreadyPaused               Status = 50
-	StatusNoDataCollected                       Status = 51
-	StatusBufferLargerThanNeeded                Status = 52
-	StatusUnsupportedCollectorType              Status = 53
-	StatusFileOpenFailed                        Status = 54
-	StatusFileError                             Status = 55
-	StatusOutOfMemory                           Status = 56
-	StatusDivideByZero                          Status = 57
-	StatusInvalidValueType                      Status = 58
-	StatusIncompatibleStructSize                Status = 59
-	StatusNotInitialized                        Status = 60
-	StatusInvalidStateTransition                Status = 61
-	StatusPauseUnsupported                      Status = 62
-	StatusResumeUnsupported                     Status = 63
-	StatusInternalError                         Status = 127
-	StatusUnknownError                          Status = 0xFFFFFFFF
+	StatusSuccess                               Status = Status(C.ASTL_STATUS_SUCCESS)
+	StatusBadArgument                           Status = Status(C.ASTL_STATUS_BAD_ARGUMENT)
+	StatusBadConfiguration                      Status = Status(C.ASTL_STATUS_BAD_CONFIGURATION)
+	StatusInvalidTargetHandle                   Status = Status(C.ASTL_STATUS_INVALID_TARGET_HANDLE)
+	StatusInvalidCounterHandle                  Status = Status(C.ASTL_STATUS_INVALID_COUNTER_HANDLE)
+	StatusInvalidMetricHandle                   Status = Status(C.ASTL_STATUS_INVALID_METRIC_HANDLE)
+	StatusInvalidMetricGroupHandle              Status = Status(C.ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE)
+	StatusNotImplemented                        Status = Status(C.ASTL_STATUS_NOT_IMPLEMENTED)
+	StatusNotSupported                          Status = Status(C.ASTL_STATUS_NOT_SUPPORTED)
+	StatusDeprecatedAPI                         Status = Status(C.ASTL_STATUS_DEPRECATED_API)
+	StatusNoTargetsFound                        Status = Status(C.ASTL_STATUS_NO_TARGETS_FOUND)
+	StatusOldTargetPropertiesStructVersion      Status = Status(C.ASTL_STATUS_OLD_TARGET_PROPERTIES_STRUCT_VERSION)
+	StatusNewTargetPropertiesStructVersion      Status = Status(C.ASTL_STATUS_NEW_TARGET_PROPERTIES_STRUCT_VERSION)
+	StatusNoCountersFound                       Status = Status(C.ASTL_STATUS_NO_COUNTERS_FOUND)
+	StatusOldCounterPropertiesStructVersion     Status = Status(C.ASTL_STATUS_OLD_COUNTER_PROPERTIES_STRUCT_VERSION)
+	StatusNewCounterPropertiesStructVersion     Status = Status(C.ASTL_STATUS_NEW_COUNTER_PROPERTIES_STRUCT_VERSION)
+	StatusOldCounterSampleStructVersion         Status = Status(C.ASTL_STATUS_OLD_COUNTER_SAMPLE_STRUCT_VERSION)
+	StatusNewCounterSampleStructVersion         Status = Status(C.ASTL_STATUS_NEW_COUNTER_SAMPLE_STRUCT_VERSION)
+	StatusNoMetricsFound                        Status = Status(C.ASTL_STATUS_NO_METRICS_FOUND)
+	StatusOldMetricPropertiesStructVersion      Status = Status(C.ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION)
+	StatusNewMetricPropertiesStructVersion      Status = Status(C.ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION)
+	StatusOldMetricSampleStructVersion          Status = Status(C.ASTL_STATUS_OLD_METRIC_SAMPLE_STRUCT_VERSION)
+	StatusNewMetricSampleStructVersion          Status = Status(C.ASTL_STATUS_NEW_METRIC_SAMPLE_STRUCT_VERSION)
+	StatusNoMetricGroupsFound                   Status = Status(C.ASTL_STATUS_NO_METRIC_GROUPS_FOUND)
+	StatusOldMetricGroupPropertiesStructVersion Status = Status(C.ASTL_STATUS_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION)
+	StatusNewMetricGroupPropertiesStructVersion Status = Status(C.ASTL_STATUS_NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION)
+	StatusOldCollectionParametersStructVersion  Status = Status(C.ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION)
+	StatusNewCollectionParametersStructVersion  Status = Status(C.ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION)
+	StatusTargetPropertiesBufferTooSmall        Status = Status(C.ASTL_STATUS_TARGET_PROPERTIES_BUFFER_TOO_SMALL)
+	StatusCounterPropertiesBufferTooSmall       Status = Status(C.ASTL_STATUS_COUNTER_PROPERTIES_BUFFER_TOO_SMALL)
+	StatusMetricPropertiesBufferTooSmall        Status = Status(C.ASTL_STATUS_METRIC_PROPERTIES_BUFFER_TOO_SMALL)
+	StatusMetricGroupPropertiesBufferTooSmall   Status = Status(C.ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL)
+	StatusCounterSamplesBufferTooSmall          Status = Status(C.ASTL_STATUS_COUNTER_SAMPLES_BUFFER_TOO_SMALL)
+	StatusMetricSamplesBufferTooSmall           Status = Status(C.ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL)
+	StatusMetricReceivedInvalidSample           Status = Status(C.ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE)
+	StatusMetricOverflowDetected                Status = Status(C.ASTL_STATUS_METRIC_OVERFLOW_DETECTED)
+	StatusSamplingIntervalTooSmall              Status = Status(C.ASTL_STATUS_SAMPLING_INTERVAL_TOO_SMALL)
+	StatusSamplingIntervalTooLarge              Status = Status(C.ASTL_STATUS_SAMPLING_INTERVAL_TOO_LARGE)
+	StatusSamplingIntervalIgnored               Status = Status(C.ASTL_STATUS_SAMPLING_INTERVAL_IGNORED)
+	StatusInvalidCollectionMode                 Status = Status(C.ASTL_STATUS_INVALID_COLLECTION_MODE)
+	StatusInvalidCollectionOptimization         Status = Status(C.ASTL_STATUS_INVALID_COLLECTION_OPTIMIZATION)
+	StatusCounterNotSupportedOnTarget           Status = Status(C.ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET)
+	StatusMetricNotSupportedOnTarget            Status = Status(C.ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET)
+	StatusMetricGroupNotSupportedOnTarget       Status = Status(C.ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET)
+	StatusCollectionNotConfigured               Status = Status(C.ASTL_STATUS_COLLECTION_NOT_CONFIGURED)
+	StatusCollectionNotRunning                  Status = Status(C.ASTL_STATUS_COLLECTION_NOT_RUNNING)
+	StatusCollectionNotStopped                  Status = Status(C.ASTL_STATUS_COLLECTION_NOT_STOPPED)
+	StatusCollectionNotPaused                   Status = Status(C.ASTL_STATUS_COLLECTION_NOT_PAUSED)
+	StatusCollectionAlreadyRunning              Status = Status(C.ASTL_STATUS_COLLECTION_ALREADY_RUNNING)
+	StatusCollectionAlreadyStopped              Status = Status(C.ASTL_STATUS_COLLECTION_ALREADY_STOPPED)
+	StatusCollectionAlreadyPaused               Status = Status(C.ASTL_STATUS_COLLECTION_ALREADY_PAUSED)
+	StatusNoDataCollected                       Status = Status(C.ASTL_STATUS_NO_DATA_COLLECTED)
+	StatusBufferLargerThanNeeded                Status = Status(C.ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED)
+	StatusUnsupportedCollectorType              Status = Status(C.ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE)
+	StatusFileOpenFailed                        Status = Status(C.ASTL_STATUS_FILE_OPEN_FAILED)
+	StatusFileError                             Status = Status(C.ASTL_STATUS_FILE_ERROR)
+	StatusOutOfMemory                           Status = Status(C.ASTL_STATUS_OUT_OF_MEMORY)
+	StatusDivideByZero                          Status = Status(C.ASTL_STATUS_DIVIDE_BY_ZERO)
+	StatusInvalidValueType                      Status = Status(C.ASTL_STATUS_INVALID_VALUE_TYPE)
+	StatusIncompatibleStructSize                Status = Status(C.ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE)
+	StatusNotInitialized                        Status = Status(C.ASTL_STATUS_NOT_INITIALIZED)
+	StatusInvalidStateTransition                Status = Status(C.ASTL_STATUS_INVALID_STATE_TRANSITION)
+	StatusPauseUnsupported                      Status = Status(C.ASTL_STATUS_PAUSE_UNSUPPORTED)
+	StatusResumeUnsupported                     Status = Status(C.ASTL_STATUS_RESUME_UNSUPPORTED)
+	StatusInternalError                         Status = Status(C.ASTL_STATUS_INTERNAL_ERROR)
+	StatusUnknownError                          Status = ^Status(0)
 )
 
 func (s Status) String() string {
@@ -121,54 +121,55 @@ func (e Error) Error() string {
 type Units uint32
 
 const (
-	UnitsNone         Units = 0
-	UnitsTicks        Units = 1
-	UnitsSeconds      Units = 2
-	UnitsCelsius      Units = 3
-	UnitsJoules       Units = 4
-	UnitsWatts        Units = 5
-	UnitsVolts        Units = 6
-	UnitsAmps         Units = 7
-	UnitsBytes        Units = 8
-	UnitsMBytesPerSec Units = 9
-	UnitsMHz          Units = 10
-	UnitsRPM          Units = 11
-	UnitsCount        Units = 12
-	UnitsUnknown      Units = 0xFFFFFFFF
+	UnitsUnknown      Units = ^Units(0)
+	UnitsNone         Units = Units(C.ASTL_UNITS_NONE)
+	UnitsTicks        Units = Units(C.ASTL_UNITS_TICKS)
+	UnitsSeconds      Units = Units(C.ASTL_UNITS_SECONDS)
+	UnitsCelsius      Units = Units(C.ASTL_UNITS_CELSIUS)
+	UnitsJoules       Units = Units(C.ASTL_UNITS_JOULES)
+	UnitsWatts        Units = Units(C.ASTL_UNITS_WATTS)
+	UnitsVolts        Units = Units(C.ASTL_UNITS_VOLTS)
+	UnitsAmps         Units = Units(C.ASTL_UNITS_AMPS)
+	UnitsBytes        Units = Units(C.ASTL_UNITS_BYTES)
+	UnitsMBytesPerSec Units = Units(C.ASTL_UNITS_MBYTESPERSEC)
+	UnitsMHz          Units = Units(C.ASTL_UNITS_MHERTZ)
+	UnitsRPM          Units = Units(C.ASTL_UNITS_RPM)
+	UnitsCount        Units = Units(C.ASTL_UNITS_COUNT)
+	UnitsPercent      Units = Units(C.ASTL_UNITS_PERCENT)
 )
 
 type ValueType uint32
 
 const (
-	ValueUInt8   ValueType = 0
-	ValueUInt16  ValueType = 1
-	ValueUInt32  ValueType = 2
-	ValueUInt64  ValueType = 3
-	ValueFloat32 ValueType = 6
-	ValueFloat64 ValueType = 7
-	ValueBool8   ValueType = 8
-	ValueUnknown ValueType = 0xFFFFFFFF
+	ValueUnknown ValueType = ^ValueType(0)
+	ValueUInt8   ValueType = ValueType(C.ASTL_VALUE_UINT8)
+	ValueUInt16  ValueType = ValueType(C.ASTL_VALUE_UINT16)
+	ValueUInt32  ValueType = ValueType(C.ASTL_VALUE_UINT32)
+	ValueUInt64  ValueType = ValueType(C.ASTL_VALUE_UINT64)
+	ValueFloat32 ValueType = ValueType(C.ASTL_VALUE_FLOAT32)
+	ValueFloat64 ValueType = ValueType(C.ASTL_VALUE_FLOAT64)
+	ValueBool8   ValueType = ValueType(C.ASTL_VALUE_BOOL8)
 )
 
 type CounterType uint32
 
 const (
-	CounterTypeValue   CounterType = 0
-	CounterTypeCount   CounterType = 1
-	CounterTypeEvent   CounterType = 2
-	CounterTypeUnknown CounterType = 0xFFFFFFFF
+	CounterTypeUnknown CounterType = ^CounterType(0)
+	CounterTypeValue   CounterType = CounterType(C.ASTL_COUNTER_TYPE_VALUE)
+	CounterTypeCount   CounterType = CounterType(C.ASTL_COUNTER_TYPE_COUNT)
+	CounterTypeEvent   CounterType = CounterType(C.ASTL_COUNTER_TYPE_EVENT)
 )
 
 type MetricType uint32
 
 const (
-	MetricValue          MetricType = 0
-	MetricFiniteSetValue MetricType = 1
-	MetricEvent          MetricType = 2
-	MetricDelta          MetricType = 3
-	MetricResidency      MetricType = 4
-	MetricRate           MetricType = 5
-	MetricUnknown        MetricType = 0xFFFFFFFF
+	MetricUnknown        MetricType = ^MetricType(0)
+	MetricValue          MetricType = MetricType(C.ASTL_METRIC_VALUE)
+	MetricFiniteSetValue MetricType = MetricType(C.ASTL_METRIC_FINITE_SET_VALUE)
+	MetricEvent          MetricType = MetricType(C.ASTL_METRIC_EVENT)
+	MetricDelta          MetricType = MetricType(C.ASTL_METRIC_DELTA)
+	MetricResidency      MetricType = MetricType(C.ASTL_METRIC_RESIDENCY)
+	MetricRate           MetricType = MetricType(C.ASTL_METRIC_RATE)
 )
 
 type MetricIdentifier uint32
@@ -195,32 +196,32 @@ const (
 type CollectionMode uint32
 
 const (
-	CollectionModeSampling  CollectionMode = 0
-	CollectionModeImmediate CollectionMode = 1
-	CollectionModeSnapshot  CollectionMode = 2
+	CollectionModeSampling  CollectionMode = CollectionMode(C.ASTL_COLLECTION_MODE_SAMPLING)
+	CollectionModeImmediate CollectionMode = CollectionMode(C.ASTL_COLLECTION_MODE_IMMEDIATE)
+	CollectionModeSnapshot  CollectionMode = CollectionMode(C.ASTL_COLLECTION_MODE_SNAPSHOT)
 )
 
 type CollectionParameterFlags uint32
 
 const (
-	CollectionParameterFlagNone                 CollectionParameterFlags = 0
-	CollectionParameterFlagOptimizeOverhead     CollectionParameterFlags = 1 << 0
-	CollectionParameterFlagOptimizeMemory       CollectionParameterFlags = 1 << 1
-	CollectionParameterFlagOptimizeInterference CollectionParameterFlags = 1 << 2
+	CollectionParameterFlagNone                 CollectionParameterFlags = CollectionParameterFlags(C.ASTL_COLLECTION_PARAMETERS_FLAG_NONE)
+	CollectionParameterFlagOptimizeOverhead     CollectionParameterFlags = CollectionParameterFlags(C.ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD)
+	CollectionParameterFlagOptimizeMemory       CollectionParameterFlags = CollectionParameterFlags(C.ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY)
+	CollectionParameterFlagOptimizeInterference CollectionParameterFlags = CollectionParameterFlags(C.ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE)
 )
 
 type MetricStatisticsFlags uint32
 
 const (
-	MetricStatisticsFlagRegularAverage      MetricStatisticsFlags = 1 << 0
-	MetricStatisticsFlagTimeWeightedAverage MetricStatisticsFlags = 1 << 1
+	MetricStatisticsFlagRegularAverage      MetricStatisticsFlags = MetricStatisticsFlags(C.ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG)
+	MetricStatisticsFlagTimeWeightedAverage MetricStatisticsFlags = MetricStatisticsFlags(C.ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG)
 )
 
 type SystemInfoFlags uint32
 
 const (
-	SystemInfoFlagHost          SystemInfoFlags = 1 << 0
-	SystemInfoFlagLoadedSession SystemInfoFlags = 1 << 1
+	SystemInfoFlagHost          SystemInfoFlags = SystemInfoFlags(C.ASTL_SYSTEM_INFO_FLAG_HOST)
+	SystemInfoFlagLoadedSession SystemInfoFlags = SystemInfoFlags(C.ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION)
 )
 
 type Version struct {

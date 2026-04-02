@@ -184,7 +184,10 @@ For repetitive derived metric declarations, libsensors metrics also support an o
 `low`/`min`, `high`/`max`, `critical`/`crit`, `emergency`/`emerg`, `alarm`, and `beep`. Each nested object can override
 fields such as `description`. ASTL automatically expands those into sibling declaration entries (e.g.,
 `Composite_thermal_limit_high`, `Composite_thermal_limit_emergency`, `Composite_alarm`), preserving the base metric's
-units, formula, and metric groups. When metrics are discovered via lm-sensors or a fallback family file, unsupported or unavailable derived metric keys are silently skipped if the corresponding subfeature is not present on the current system. When an exact target file is used as an allowlist, ASTL instead emits a warning for each declared derived metric whose subfeature is not observed on the current system.
+units, formula, and metric groups. When metrics are discovered via lm-sensors or a fallback family file,
+unsupported or unavailable derived metric keys are silently skipped if the corresponding subfeature is not present
+on the current system. When an exact target file is used as an allowlist, ASTL instead emits a warning for each
+declared derived metric whose subfeature is not observed on the current system.
 
 Within the ASTL_CONFIG_DIR path, you can override definitions of metrics, which look like:
 
@@ -512,17 +515,14 @@ After stopping collection, call `astlGetMetricStatisticsOnTarget` for any arithm
 the minimum, maximum, average, and sample count over all collected samples. See the
 [Metric Summary API](#metric-summary-api) section for full details.
 
-````c
+```c
 #include "astl/astl_telemetry.h"
 #include <inttypes.h>
 #include <stdio.h>
 
 // Retrieve metric statistics (min/max/avg)
-```c
-// Retrieve metric statistics (min/max/avg)
 astl_target_props_t* target_properties = /* initialized from astlGetTargets */;
 astl_metric_props_t* metric_buffer = /* initialized from astlGetMetrics */;
-````
 
 astl_metric_statistics_t summary = {0}; // zero-initialize
 summary.size = sizeof(astl_metric_statistics_t);
@@ -541,7 +541,7 @@ printf("count=%" PRIu64 " avg=%.2f\n",
 summary.count, summary.avg.fp64);
 }
 
-````
+```
 
 10. Retrieve histogram bins for finite-set metrics (post-collection)
 
@@ -579,7 +579,7 @@ if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
                    (double)bins[i].value.ui64, bins[i].count);
     }
 }
-````
+```
 
 11. Clean up allocated resources
 

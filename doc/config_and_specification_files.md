@@ -75,6 +75,9 @@ we might see metrics with names like the table below:
 
 ```bash
 ./build/debug/bin/atx --help
+```
+
+```text
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐
 │       Metric Name      │                      Description              │  Units  │ Metric Type │
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐

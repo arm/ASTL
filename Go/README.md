@@ -23,27 +23,40 @@ from [`include/astl/`](../include/astl/).
 
 ## Prerequisites
 
-The Go package links against the ASTL shared library built from this repo. The
-current cgo setup expects the debug build layout:
+The Go package uses cgo and expects ASTL's public headers plus a built ASTL
+shared library to be available.
 
-- headers from `../include/`
-- generated headers from `../build/debug/include/`
-- library from `../build/debug/lib/libastl-0d.so`
-
-Build ASTL first from the repo root:
+For a repo-local debug build:
 
 ```bash
 just build
+export CGO_LDFLAGS="-L$PWD/build/debug/lib -Wl,-rpath,$PWD/build/debug/lib -lastl-0d"
+export LD_LIBRARY_PATH="$PWD/build/debug/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 ```
+
+The Go wrapper already adds repo-local ASTL header search paths via cgo, so
+only the linker path needs to be provided for the default in-repo workflow.
+
+For an installed ASTL, point cgo directly at the install prefix:
+
+````bash
+export CGO_CFLAGS="-I/path/to/prefix/include"
+```bash
+export CGO_LDFLAGS="-L/path/to/prefix/lib -Wl,-rpath,/path/to/prefix/lib -lastl-0d"
+````
+
+````
 
 ## Running Tests
 
 From the repo root:
 
 ```bash
+export CGO_LDFLAGS="-L$PWD/build/debug/lib -Wl,-rpath,$PWD/build/debug/lib -lastl-0d"
+export LD_LIBRARY_PATH="$PWD/build/debug/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 cd Go
 go test ./...
-```
+````
 
 A `go.mod` file is included in the `Go/` directory to enable module mode. Ensure
 you're using Go 1.11 or later, which supports modules by default.

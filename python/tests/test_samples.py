@@ -37,14 +37,21 @@ def test_sample_retrieval_graceful_empty():
         for pair in samples[:3]:
             assert isinstance(pair, tuple) and len(pair) == 2
         astl.stop_collection(t)
+        metrics = astl.get_metrics(t)
 
     if metrics:
         m = metrics[0]
         params = astl.CollectionParameters(sampling_interval=10, mode=astl.CollectionMode.IMMEDIATE)
-        astl.configure_metrics_on_target(t, params, [m])
-        astl.start_collection(t)
-        samples_m = astl.get_metric_samples(t, m)
-        assert isinstance(samples_m, list)
-        for pair in samples_m[:3]:
-            assert isinstance(pair, tuple) and len(pair) == 2
-        astl.stop_collection(t)
+        try:
+            astl.configure_metrics_on_target(t, params, [m])
+            astl.start_collection(t)
+            samples_m = astl.get_metric_samples(t, m)
+            assert isinstance(samples_m, list)
+            for pair in samples_m[:3]:
+                assert isinstance(pair, tuple) and len(pair) == 2
+        except astl.ASTLError as exc:
+            if exc.code == astl.Status.METRIC_NOT_SUPPORTED_ON_TARGET:
+                pytest.skip(f"Metric {m.name!r} is no longer supported on target {t.name!r}")
+            raise
+        finally:
+            astl.stop_collection(t)
