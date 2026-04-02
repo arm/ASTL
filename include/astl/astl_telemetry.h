@@ -199,9 +199,10 @@ typedef enum _astl_units_t {
   ASTL_UNITS_BYTES        = 8,  //!< Bytes transferred
   ASTL_UNITS_MBYTESPERSEC = 9,  //!< Bandwidth in MB/s. For calculated metrics but hardware may
                                 //!< already be doing the calculation, not ideal but possible
-  ASTL_UNITS_MHERTZ = 10,       //!< Frequency readings in MHz
-  ASTL_UNITS_RPM    = 11,       //!< Fan speed in revolutions per minute
-  ASTL_UNITS_COUNT  = 12,       //!< Count of events or occurrences
+  ASTL_UNITS_MHERTZ  = 10,      //!< Frequency readings in MHz
+  ASTL_UNITS_RPM     = 11,      //!< Fan speed in revolutions per minute
+  ASTL_UNITS_COUNT   = 12,      //!< Count of events or occurrences
+  ASTL_UNITS_PERCENT = 13,      //!< Percentage-style readings such as humidity
 } astl_units_t;
 
 /** Generic value types we expect to use.
@@ -357,18 +358,25 @@ typedef enum _astl_metric_type_t {
                                       //!< Power as energy/s
 } astl_metric_type_t;
 
-/** High-level category of a metric/counter. Derived from configuration JSON "category" string. */
-typedef enum _astl_category_t {
-  ASTL_CATEGORY_UNCATEGORIZED = -1,  //!< Unknown or unmapped category
-  ASTL_CATEGORY_COUNT         = 0,   //!< Count-based metrics (monotonic counters, event counts)
-  ASTL_CATEGORY_TEMPERATURE   = 1,   //!< Thermal metrics (temperature sensors)
-  ASTL_CATEGORY_POWER         = 2,   //!< Power metrics (instantaneous or accumulated energy rate)
-  ASTL_CATEGORY_FREQUENCY     = 3,   //!< Frequency metrics (clock rates)
-  ASTL_CATEGORY_VOLTAGE       = 4,   //!< Voltage metrics
-  ASTL_CATEGORY_CURRENT       = 5,   //!< Current metrics (amperage)
-  ASTL_CATEGORY_BANDWIDTH     = 6,   //!< Bandwidth metrics (data transfer rates)
-  ASTL_CATEGORY_FAN_SPEED     = 7,   //!< Fan speed metrics (RPM)
-} astl_category_t;
+/** High-level identifier of a metric/counter. Derived from configuration JSON "identifier" string. */
+typedef enum _astl_metric_identifier_t {
+  ASTL_METRIC_IDENTIFIER_UNKNOWN       = -1,  //!< Unknown or unmapped identifier
+  ASTL_METRIC_IDENTIFIER_COUNT         = 0,   //!< Count-based metrics (monotonic counters, event counts)
+  ASTL_METRIC_IDENTIFIER_TEMPERATURE   = 1,   //!< Thermal metrics (temperature sensors)
+  ASTL_METRIC_IDENTIFIER_THERMAL_LIMIT = 2,  //!< Thermal threshold or limit metrics (min/max/critical/emergency limits)
+  ASTL_METRIC_IDENTIFIER_THERMAL_THROTTLE = 3,   //!< Thermal throttling state or event metrics
+  ASTL_METRIC_IDENTIFIER_ENERGY           = 4,   //!< Energy metrics (joules)
+  ASTL_METRIC_IDENTIFIER_POWER            = 5,   //!< Power metrics (instantaneous or accumulated energy rate)
+  ASTL_METRIC_IDENTIFIER_POWER_LIMIT      = 6,   //!< Power threshold or limit metrics
+  ASTL_METRIC_IDENTIFIER_POWER_THROTTLE   = 7,   //!< Power throttling state or event metrics
+  ASTL_METRIC_IDENTIFIER_FREQUENCY        = 8,   //!< Frequency metrics (clock rates)
+  ASTL_METRIC_IDENTIFIER_VOLTAGE          = 9,   //!< Voltage metrics
+  ASTL_METRIC_IDENTIFIER_CURRENT          = 10,  //!< Current metrics (amperage)
+  ASTL_METRIC_IDENTIFIER_BANDWIDTH        = 11,  //!< Bandwidth metrics (data transfer rates)
+  ASTL_METRIC_IDENTIFIER_FAN_SPEED        = 12,  //!< Fan speed metrics (RPM)
+  ASTL_METRIC_IDENTIFIER_HUMIDITY         = 13,  //!< Humidity metrics (percent)
+  ASTL_METRIC_IDENTIFIER_STATUS           = 14,  //!< Boolean or status-style metrics (alarms, faults, enables)
+} astl_metric_identifier_t;
 
 /** A metric properties structure describes a metric
  */
@@ -386,7 +394,7 @@ typedef struct _astl_metric_props_t {
                                                //!< for interpreting the 64bit metric value
   astl_metric_type_t metric_type;              //!< The metric type. It is used for output formatting and
                                                //!< visualization
-  astl_category_t category;                    //!< High-level category such as POWER, TEMPERATURE etc.
+  astl_metric_identifier_t identifier;         //!< High-level identifier such as POWER, TEMPERATURE etc.
 } astl_metric_props_t;
 
 /** A parameter structure describes inputs and outputs for this API call.
@@ -527,32 +535,21 @@ typedef const void* astl_metric_group_handle_t;  //!< Abstraction of a metric gr
  */
 typedef struct _astl_metric_group_props_t {
   size_t size;  //!< Size of this struct for versioning; set size to sizeof(astl_metric_group_props_t).
-  astl_metric_group_handle_t handle;        //!< The handle of this metric group
-  const char*                name;          //!< The name of this metric group
-  const char*                description;   //!< The description of this metric group
-  uint32_t                   metric_count;  //!< The number of metrics in this metric group.
-                                            //!< astlGetMetricGroupMetrics API uses this value to
-                                            //!< determine the size of the metrics buffer that is passed in
-  astl_metric_props_t* metrics;             //!< Optional caller-allocated buffer for the metrics in this group.
-                                            //!< If non-NULL on input to astlGetMetricGroups, ASTL will populate it
-                                            //!< directly using this group's `metric_count` entries.
-                                            //!< Otherwise, callers may leave it NULL and use
-                                            //!< astlGetMetricGroupMetrics later. In either case, set the size field of
-                                            //!< at least the first element to sizeof(astl_metric_props_t) for ABI
-                                            //!< versioning.
+  astl_metric_group_handle_t handle;       //!< The handle of this metric group
+  const char*                name;         //!< The name of this metric group
+  const char*                description;  //!< The description of this metric group
 } astl_metric_group_props_t;
 
 /** A parameter structure describes inputs and outputs for this API call.
  */
 typedef struct astl_get_metric_group_count_params_t {
-  size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_metric_group_count_params_t).
-  uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
-  astl_target_handle_t target_handle;       //!< Target handle of interest from astl_target_props_t.
-  uint32_t*            metric_group_count;  //!< Output number of metric groups on target. Cannot be NULL.
+  size_t    size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_metric_group_count_params_t).
+  uint32_t  flags;  //!< Reserved for future flags (must be 0 for now).
+  uint32_t* metric_group_count;  //!< Output number of metric groups across all targets. Cannot be NULL.
 } astl_get_metric_group_count_params_t;
 
 /**
- * @brief Get the number of telemetry metric groups defined for the specified target
+ * @brief Get the number of telemetry metric groups defined across all targets
  *
  * @param params Parameters for this call (see astl_get_metric_group_count_params_t).
  *
@@ -565,14 +562,13 @@ ASTL_API astl_status_code astlGetMetricGroupCount(const astl_get_metric_group_co
 typedef struct astl_get_metric_groups_params_t {
   size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_metric_groups_params_t).
   uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
-  astl_target_handle_t       target_handle;  //!< Target handle of interest from astl_target_props_t.
   astl_metric_group_props_t* metric_groups;  //!< Caller-allocated metric-group array. Cannot be NULL;
                                              //!< set metric_groups[0].size to sizeof(astl_metric_group_props_t).
   uint32_t* metric_group_count;  //!< In: group-array capacity. Out: number of elements written. Cannot be NULL.
 } astl_get_metric_groups_params_t;
 
 /**
- * @brief Get properties of all metric groups defined for the specified target
+ * @brief Get properties of all metric groups defined across all targets
  *
  * @param params Parameters for this call (see astl_get_metric_groups_params_t).
  *
@@ -582,18 +578,79 @@ ASTL_API astl_status_code astlGetMetricGroups(const astl_get_metric_groups_param
 
 /** A parameter structure describes inputs and outputs for this API call.
  */
+typedef struct astl_get_metric_group_count_on_target_params_t {
+  size_t size;                              //!< Size of this struct for versioning; set size to
+                                            //!< sizeof(astl_get_metric_group_count_on_target_params_t).
+  uint32_t             flags;               //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;       //!< Target handle of interest from astl_target_props_t.
+  uint32_t*            metric_group_count;  //!< Output number of metric groups on target. Cannot be NULL.
+} astl_get_metric_group_count_on_target_params_t;
+
+/**
+ * @brief Get the number of telemetry metric groups defined for the specified target
+ *
+ * @param params Parameters for this call (see astl_get_metric_group_count_on_target_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
+ */
+ASTL_API astl_status_code astlGetMetricGroupCountOnTarget(const astl_get_metric_group_count_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_groups_on_target_params_t {
+  size_t size;  //!< Size of this struct for versioning; set size to sizeof(astl_get_metric_groups_on_target_params_t).
+  uint32_t                   flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t       target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_group_props_t* metric_groups;  //!< Caller-allocated metric-group array. Cannot be NULL;
+                                             //!< set metric_groups[0].size to sizeof(astl_metric_group_props_t).
+  uint32_t* metric_group_count;  //!< In: group-array capacity. Out: number of elements written. Cannot be NULL.
+} astl_get_metric_groups_on_target_params_t;
+
+/**
+ * @brief Get properties of all metric groups defined for the specified target
+ *
+ * @param params Parameters for this call (see astl_get_metric_groups_on_target_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
+ */
+ASTL_API astl_status_code astlGetMetricGroupsOnTarget(const astl_get_metric_groups_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_group_metric_count_params_t {
+  size_t size;                                     //!< Size of this struct for versioning; set size to
+                                                   //!< sizeof(astl_get_metric_group_metric_count_params_t).
+  uint32_t                   flags;                //!< Reserved for future flags (must be 0 for now).
+  astl_metric_group_handle_t metric_group_handle;  //!< Metric-group handle. Cannot be NULL.
+  uint32_t*                  metric_count;         //!< Output number of metrics in the group. Cannot be NULL.
+} astl_get_metric_group_metric_count_params_t;
+
+/**
+ * @brief Get the number of metrics that can be collected regardless of target that are part of the
+ * specified metric group
+ *
+ * @param params Parameters for this call (see astl_get_metric_group_metric_count_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
+ */
+ASTL_API astl_status_code astlGetMetricGroupMetricCount(const astl_get_metric_group_metric_count_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
 typedef struct astl_get_metric_group_metrics_params_t {
   size_t   size;   //!< Size of this struct for versioning; set size to sizeof(astl_get_metric_group_metrics_params_t).
   uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
-  astl_target_handle_t             target_handle;  //!< Target handle of interest from astl_target_props_t.
-  const astl_metric_group_props_t* metric_group;   //!< Metric-group descriptor. Cannot be NULL;
-                                                   //!< uses metric_group->metric_count and handle.
-  astl_metric_props_t* metrics;                    //!< Caller-allocated metric array. Cannot be NULL; set
-                                                   //!< metrics[0].size to sizeof(astl_metric_props_t).
+  astl_metric_group_handle_t metric_group_handle;  //!< Metric-group handle. Cannot be NULL.
+  astl_metric_props_t*       metrics;  //!< Caller-allocated metric array. Cannot be NULL; set metrics[0].size
+                                       //!< to sizeof(astl_metric_props_t).
+  uint32_t* metric_count;  //!< In: metric-array capacity. Out: number of metrics in the group. Cannot be NULL.
 } astl_get_metric_group_metrics_params_t;
 
 /**
- * @brief Get properties of all metrics that can be collected on the specified target that are part
+ * @brief Get properties of all metrics that can be collected regardless of target that are part
  * of the specified metric group
  *
  * @param params Parameters for this call (see astl_get_metric_group_metrics_params_t).
@@ -602,6 +659,53 @@ typedef struct astl_get_metric_group_metrics_params_t {
  */
 ASTL_API astl_status_code astlGetMetricGroupMetrics(const astl_get_metric_group_metrics_params_t* params)
     ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_group_metric_count_on_target_params_t {
+  size_t size;                                     //!< Size of this struct for versioning; set size to
+                                                   //!< sizeof(astl_get_metric_group_metric_count_on_target_params_t).
+  uint32_t                   flags;                //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t       target_handle;        //!< Target handle of interest from astl_target_props_t.
+  astl_metric_group_handle_t metric_group_handle;  //!< Metric-group handle. Cannot be NULL.
+  uint32_t*                  metric_count;         //!< Output number of metrics in the group on target. Cannot be NULL.
+} astl_get_metric_group_metric_count_on_target_params_t;
+
+/**
+ * @brief Get the number of metrics that can be collected on the specified target that are part of
+ * the specified metric group
+ *
+ * @param params Parameters for this call (see astl_get_metric_group_metric_count_on_target_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
+ */
+ASTL_API astl_status_code astlGetMetricGroupMetricCountOnTarget(
+    const astl_get_metric_group_metric_count_on_target_params_t* params) ASTL_API_NOEXCEPT;
+
+/** A parameter structure describes inputs and outputs for this API call.
+ */
+typedef struct astl_get_metric_group_metrics_on_target_params_t {
+  size_t size;                                     //!< Size of this struct for versioning; set size to
+                                                   //!< sizeof(astl_get_metric_group_metrics_on_target_params_t).
+  uint32_t                   flags;                //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t       target_handle;        //!< Target handle of interest from astl_target_props_t.
+  astl_metric_group_handle_t metric_group_handle;  //!< Metric-group handle. Cannot be NULL.
+  astl_metric_props_t*       metrics;  //!< Caller-allocated metric array. Cannot be NULL; set metrics[0].size
+                                       //!< to sizeof(astl_metric_props_t).
+  uint32_t*
+      metric_count;  //!< In: metric-array capacity. Out: number of metrics in the group on target. Cannot be NULL.
+} astl_get_metric_group_metrics_on_target_params_t;
+
+/**
+ * @brief Get properties of all metrics that can be collected on the specified target that are part
+ * of the specified metric group
+ *
+ * @param params Parameters for this call (see astl_get_metric_group_metrics_on_target_params_t).
+ *
+ * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
+ */
+ASTL_API astl_status_code
+astlGetMetricGroupMetricsOnTarget(const astl_get_metric_group_metrics_on_target_params_t* params) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************              COLLECTION                *********************

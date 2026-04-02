@@ -19,10 +19,10 @@ using trompeloeil::_;
 
 inline const std::vector<std::string> kDataEventIds = {"0x1234"};
 
-inline const astl::MetricConfig kTemperature{"SoC Temperature",           "SoC Temperature in Celsius",
-                                             ASTL_UNITS_CELSIUS,          ASTL_VALUE_UINT64,
-                                             ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
-                                             astl::CollectorType::SCMI,   astl::ScmiOperationBuilder{0x1234}};
+inline const astl::MetricConfig kTemperature{
+    "SoC Temperature",         "SoC Temperature in Celsius",      ASTL_UNITS_CELSIUS,
+    ASTL_VALUE_UINT64,         ASTL_METRIC_IDENTIFIER_UNKNOWN,    ASTL_METRIC_VALUE,
+    astl::CollectorType::SCMI, astl::ScmiOperationBuilder{0x1234}};
 
 astl::ScmiDataEventId GetDataEventId(const astl::ResidencyMetricConfig::StateInfo& state_info) {
   if (const auto* scmi_builder = std::get_if<astl::ScmiOperationBuilder>(&state_info.operation_builder)) {
@@ -84,9 +84,10 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
 
   SECTION("Register a valid metric config") {
     // Create a new metric config directly (cannot copy since ExpressionFormula is move-only)
-    auto metric_config = std::make_unique<astl::MetricConfig>(
-        "SoC Temperature", "SoC Temperature in Celsius", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64,
-        ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, astl::CollectorType::SCMI, astl::ScmiOperationBuilder{0x1234});
+    auto metric_config =
+        std::make_unique<astl::MetricConfig>("SoC Temperature", "SoC Temperature in Celsius", ASTL_UNITS_CELSIUS,
+                                             ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
+                                             astl::CollectorType::SCMI, astl::ScmiOperationBuilder{0x1234});
 
     REQUIRE(mock_metric_manager.RegisterMetric(std::move(metric_config), {}) == ASTL_STATUS_NOT_IMPLEMENTED);
   }
@@ -94,7 +95,7 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
   SECTION("Register an invalid metric config") {
     auto invalid_metric_config = std::make_unique<astl::MetricConfig>(
         "SoC Temperature", "SoC Temperature for abc xyz", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64,
-        ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, astl::CollectorType::MMIO, astl::NullOperationBuilder{});
+        ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE, astl::CollectorType::PROCFS, astl::NullOperationBuilder{});
 
     REQUIRE(mock_metric_manager.RegisterMetric(std::move(invalid_metric_config), {}) == ASTL_STATUS_NOT_IMPLEMENTED);
   }
@@ -351,7 +352,7 @@ TEST_CASE("CreateBasicMetricConfigs/CreateFiniteSetMetricConfigs lock formula-be
     astl::metrics::spec::MetricJsonDeclaration basic_decl;
     basic_decl.description              = "CPU Power";
     basic_decl.metric_type              = "value";
-    basic_decl.category                 = "POWER";
+    basic_decl.identifier               = "POWER";
     basic_decl.collection.protocol      = "scmi";
     basic_decl.collection.register_name = "POWER_COUNTER";
     basic_decl.formula                  = nlohmann::json("value + 1");
@@ -547,8 +548,8 @@ TEST_CASE("ConfigurationManager load-file override round-trips and clears", "[Co
   REQUIRE_FALSE(astl::ConfigurationManager::GetLoadFilePathOverride().has_value());
 }
 
-// ===================== Category Parsing Tests =====================
-TEST_CASE("ParseConfiguration missing category defaults to unknown/UNCATEGORIZED", "[ConfigManager][Category]") {
+// ===================== Identifier Parsing Tests =====================
+TEST_CASE("ParseConfiguration missing identifier defaults to unknown/UNKNOWN", "[ConfigManager][Identifier]") {
   // Test with metric declaration JSON that would be in a metrics file
   constexpr auto json_metrics_data = R"json(
   {
@@ -575,7 +576,7 @@ TEST_CASE("ParseConfiguration missing category defaults to unknown/UNCATEGORIZED
 
   astl::metrics::spec::MetricJsonDeclaration cpu_power_metric =
       metrics.at("CPU Power").get<astl::metrics::spec::MetricJsonDeclaration>();
-  REQUIRE(cpu_power_metric.category == "unknown");  // default string
+  REQUIRE(cpu_power_metric.identifier == "unknown");  // default string
 
   // Build a metric config to verify enum mapping
   astl::scmi::spec::ScmiSpecification spec;
@@ -602,10 +603,10 @@ TEST_CASE("ParseConfiguration missing category defaults to unknown/UNCATEGORIZED
   REQUIRE_FALSE(metric_configs.empty());
   REQUIRE(metric_configs.begin()->first->Name() == "CPU Power");
   REQUIRE(metric_configs.begin()->first->Id() == "AP.0.CPU_POWER");
-  REQUIRE(metric_configs.begin()->first->Category() == ASTL_CATEGORY_UNCATEGORIZED);
+  REQUIRE(metric_configs.begin()->first->Identifier() == ASTL_METRIC_IDENTIFIER_UNKNOWN);
 }
 
-TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManager][Category]") {
+TEST_CASE("ParseConfiguration valid identifier string maps to enum", "[ConfigManager][Identifier]") {
   // Test with metric declaration JSON that would be in a metrics file
   constexpr auto json_metrics_data = R"json(
   {
@@ -617,7 +618,7 @@ TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManag
       "SoC Temperature": {
         "description": "Temperature in Celsius",
         "metric_type": "value",
-        "category": "TEMPERATURE",
+        "identifier": "TEMPERATURE",
         "collection": {
           "protocol": "scmi",
           "register": "SOC_TEMP"
@@ -633,7 +634,7 @@ TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManag
 
   astl::metrics::spec::MetricJsonDeclaration soc_temp_metric =
       metrics.at("SoC Temperature").get<astl::metrics::spec::MetricJsonDeclaration>();
-  REQUIRE(soc_temp_metric.category == "TEMPERATURE");
+  REQUIRE(soc_temp_metric.identifier == "TEMPERATURE");
 
   // Build a metric config to verify enum mapping
   astl::scmi::spec::ScmiSpecification spec;
@@ -658,16 +659,16 @@ TEST_CASE("ParseConfiguration valid category string maps to enum", "[ConfigManag
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
-  REQUIRE(metric_configs.begin()->first->Category() == ASTL_CATEGORY_TEMPERATURE);
+  REQUIRE(metric_configs.begin()->first->Identifier() == ASTL_METRIC_IDENTIFIER_TEMPERATURE);
   REQUIRE(metric_configs.begin()->first->Description() == "Temperature in Celsius");
 }
 
 TEST_CASE("CreateScmiMetricConfigs falls back to generated description when JSON description is empty",
-          "[ConfigManager][Category]") {
+          "[ConfigManager][Identifier]") {
   astl::metrics::spec::MetricJsonDeclaration metric_declaration;
   metric_declaration.description              = "";
   metric_declaration.metric_type              = "value";
-  metric_declaration.category                 = "TEMPERATURE";
+  metric_declaration.identifier               = "TEMPERATURE";
   metric_declaration.collection.protocol      = "scmi";
   metric_declaration.collection.register_name = "SOC_TEMP";
 
@@ -702,7 +703,7 @@ TEST_CASE("CreateScmiMetricConfigs maps Count units to ASTL_UNITS_COUNT", "[Conf
   astl::metrics::spec::MetricJsonDeclaration metric_declaration;
   metric_declaration.description              = "Number of thermal throttling events";
   metric_declaration.metric_type              = "delta";
-  metric_declaration.category                 = "COUNT";
+  metric_declaration.identifier               = "COUNT";
   metric_declaration.collection.protocol      = "scmi";
   metric_declaration.collection.register_name = "THROTTLE_EVENTS";
 
@@ -733,13 +734,13 @@ TEST_CASE("CreateScmiMetricConfigs maps Count units to ASTL_UNITS_COUNT", "[Conf
   REQUIRE(metric_configs.begin()->first->Units() == ASTL_UNITS_COUNT);
 }
 
-TEST_CASE("CreateScmiMetricConfigs allows output-unit override with formula", "[ConfigManager][Units]") {
+TEST_CASE("CreateScmiMetricConfigs allows output-unit override with formula scaling", "[ConfigManager][Units]") {
   astl::metrics::spec::MetricJsonDeclaration metric_declaration;
   metric_declaration.description              = "Frequency reading for FREQUENCY_PRESENT";
   metric_declaration.unit                     = "MHz";
   metric_declaration.formula                  = nlohmann::json("value / 1000");
   metric_declaration.metric_type              = "value";
-  metric_declaration.category                 = "FREQUENCY";
+  metric_declaration.identifier               = "FREQUENCY";
   metric_declaration.collection.protocol      = "scmi";
   metric_declaration.collection.register_name = "FREQUENCY_PRESENT";
 
@@ -780,7 +781,7 @@ TEST_CASE("CreateScmiMetricConfigs allows output-unit override with formula", "[
   REQUIRE(std::get<uint64_t>(applied->value) == 1);
 }
 
-TEST_CASE("ParseConfiguration invalid category string maps to UNCATEGORIZED", "[ConfigManager][Category]") {
+TEST_CASE("ParseConfiguration invalid identifier string maps to UNKNOWN", "[ConfigManager][Identifier]") {
   // Test with metric declaration JSON that would be in a metrics file
   constexpr auto json_metrics_data = R"json(
   {
@@ -792,7 +793,7 @@ TEST_CASE("ParseConfiguration invalid category string maps to UNCATEGORIZED", "[
       "GPU Power": {
         "description": "GPU power consumption",
         "metric_type": "value",
-        "category": "THIS_IS_NOT_A_VALID_VALUE",
+        "identifier": "THIS_IS_NOT_A_VALID_VALUE",
         "collection": {
           "protocol": "scmi",
           "register": "GPU_POWER"
@@ -808,7 +809,7 @@ TEST_CASE("ParseConfiguration invalid category string maps to UNCATEGORIZED", "[
 
   astl::metrics::spec::MetricJsonDeclaration gpu_power_metric =
       metrics.at("GPU Power").get<astl::metrics::spec::MetricJsonDeclaration>();
-  REQUIRE(gpu_power_metric.category == "THIS_IS_NOT_A_VALID_VALUE");
+  REQUIRE(gpu_power_metric.identifier == "THIS_IS_NOT_A_VALID_VALUE");
 
   // Build a metric config to verify enum mapping
   astl::scmi::spec::ScmiSpecification spec;
@@ -833,5 +834,5 @@ TEST_CASE("ParseConfiguration invalid category string maps to UNCATEGORIZED", "[
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
-  REQUIRE(metric_configs.begin()->first->Category() == ASTL_CATEGORY_UNCATEGORIZED);
+  REQUIRE(metric_configs.begin()->first->Identifier() == ASTL_METRIC_IDENTIFIER_UNKNOWN);
 }

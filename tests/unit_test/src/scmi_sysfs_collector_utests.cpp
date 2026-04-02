@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <optional>
 #include <string_view>
 #include <system_error>
 #include <utility>
@@ -21,13 +20,13 @@
 #include "astl_utils.hpp"
 
 namespace astl::test_hooks {
-inline auto ScmiProcessLockTempDirectoryOverride() -> std::optional<std::filesystem::path>& {
-  static std::optional<std::filesystem::path> override_directory;
-  return override_directory;
-}
-
 inline auto ForceScmiProcessLockTempDirFailureEnabled() -> bool {
   return !astl::GetEnvVar(astl::EnvVar::ASTL_TEST_FORCE_SCMI_PROCESS_LOCK_TEMP_DIR_FAILURE).empty();
+}
+
+inline auto GetScmiProcessLockTempDirectoryOverrideStorage() -> std::filesystem::path& {
+  static std::filesystem::path override_path;
+  return override_path;
 }
 
 inline auto SetForceScmiProcessLockTempDirFailureEnabled(bool is_enabled) -> void {
@@ -35,8 +34,8 @@ inline auto SetForceScmiProcessLockTempDirFailureEnabled(bool is_enabled) -> voi
       astl::SetEnvVar(astl::EnvVar::ASTL_TEST_FORCE_SCMI_PROCESS_LOCK_TEMP_DIR_FAILURE, is_enabled ? "1" : ""));
 }
 
-inline auto SetScmiProcessLockTempDirectoryOverride(std::optional<std::filesystem::path> override_directory) -> void {
-  ScmiProcessLockTempDirectoryOverride() = std::move(override_directory);
+inline auto SetScmiProcessLockTempDirectoryOverride(std::filesystem::path override_path) -> void {
+  GetScmiProcessLockTempDirectoryOverrideStorage() = std::move(override_path);
 }
 
 inline auto GetScmiProcessLockTempDirectory(std::error_code& error_code) -> std::filesystem::path {
@@ -44,9 +43,10 @@ inline auto GetScmiProcessLockTempDirectory(std::error_code& error_code) -> std:
     error_code = std::make_error_code(std::errc::io_error);
     return {};
   }
-  if (const auto& override_directory = ScmiProcessLockTempDirectoryOverride(); override_directory.has_value()) {
+  const auto& override_path = GetScmiProcessLockTempDirectoryOverrideStorage();
+  if (!override_path.empty()) {
     error_code.clear();
-    return *override_directory;
+    return override_path;
   }
   return std::filesystem::temp_directory_path(error_code);
 }
@@ -93,23 +93,28 @@ auto WriteTextFileWithWorldRWX(const fs::path& path, std::string_view contents) 
   SetWorldRWXPermissions(path);
 }
 
-auto PrepareProcessLockTestPaths(const fs::path& base_path, const fs::path& process_lock_temp_dir,
-                                 const fs::path& process_lock_path) -> void {
+auto PrepareProcessLockTestPaths(const fs::path& base_path, const fs::path& process_lock_path) -> void {
+  const fs::path  process_lock_dir = process_lock_path.parent_path();
   std::error_code ec;
+  fs::remove(process_lock_path, ec);
+  // Only ignore "not found" errors during cleanup
+  REQUIRE((ec == std::errc{} || ec == std::errc::no_such_file_or_directory));
+  ec.clear();
+
   fs::remove_all(base_path, ec);
+  REQUIRE((ec == std::errc{} || ec == std::errc::no_such_file_or_directory));
+  ec.clear();
+
+  fs::remove_all(process_lock_dir, ec);
   REQUIRE((ec == std::errc{} || ec == std::errc::no_such_file_or_directory));
   ec.clear();
 
   fs::create_directories(base_path, ec);
   REQUIRE_FALSE(ec);
   SetWorldRWXPermissions(base_path);
-  fs::create_directories(process_lock_temp_dir, ec);
+  fs::create_directories(process_lock_dir, ec);
   REQUIRE_FALSE(ec);
-  SetWorldRWXPermissions(process_lock_temp_dir);
-  astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(process_lock_temp_dir);
-  fs::remove(process_lock_path, ec);
-  REQUIRE((ec == std::errc{} || ec == std::errc::no_such_file_or_directory));
-  ec.clear();
+  SetWorldRWXPermissions(process_lock_dir);
   WriteTextFileWithWorldRWX(base_path / "de_implementation_version", "0.0.0");
   WriteTextFileWithWorldRWX(base_path / "version", "0.0.1");
 }
@@ -161,11 +166,14 @@ TEST_CASE("ScmiSysfsCollector returns internal error when process-lock temp dir 
 TEST_CASE("ScmiSysfsCollector allows multiple collectors in one process", "[scmi_sysfs_collector][process_lock]") {
   namespace fs = std::filesystem;
 
-  const fs::path  base_path         = fs::temp_directory_path() / "astl_scmi_process_lock_test";
-  const fs::path  process_lock_dir  = base_path / "process_lock_dir";
-  const fs::path  process_lock_path = process_lock_dir / astl::scmi_detail::kScmiProcessLockFileName;
-  std::scope_exit reset_temp_dir([] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(std::nullopt); });
-  PrepareProcessLockTestPaths(base_path, process_lock_dir, process_lock_path);
+  const fs::path temp_root         = fs::temp_directory_path();
+  const fs::path base_path         = temp_root / "astl_scmi_process_lock_test";
+  const fs::path process_lock_dir  = temp_root / "astl_scmi_process_lock_test_lockdir";
+  const fs::path process_lock_path = process_lock_dir / std::string{astl::scmi_detail::kScmiProcessLockFileName};
+  PrepareProcessLockTestPaths(base_path, process_lock_path);
+  astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(process_lock_dir);
+  std::scope_exit reset_process_lock_dir_override(
+      [] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride({}); });
 
   auto make_operations = []() {
     return astl::CollectionOperations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
@@ -192,18 +200,21 @@ TEST_CASE("ScmiSysfsCollector allows multiple collectors in one process", "[scmi
 
   std::error_code ec;
   fs::remove_all(base_path, ec);
-  fs::remove(process_lock_path, ec);
+  fs::remove_all(process_lock_dir, ec);
 }
 
 #if defined(__linux__)
 TEST_CASE("ScmiSysfsCollector blocks configure from second process", "[scmi_sysfs_collector][process_lock]") {
   namespace fs = std::filesystem;
 
-  const fs::path  base_path         = fs::temp_directory_path() / "astl_scmi_process_lock_cross_process_test";
-  const fs::path  process_lock_dir  = base_path / "process_lock_dir";
-  const fs::path  process_lock_path = process_lock_dir / astl::scmi_detail::kScmiProcessLockFileName;
-  std::scope_exit reset_temp_dir([] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(std::nullopt); });
-  PrepareProcessLockTestPaths(base_path, process_lock_dir, process_lock_path);
+  const fs::path temp_root         = fs::temp_directory_path();
+  const fs::path base_path         = temp_root / "astl_scmi_process_lock_cross_process_test";
+  const fs::path process_lock_dir  = temp_root / "astl_scmi_process_lock_cross_process_test_lockdir";
+  const fs::path process_lock_path = process_lock_dir / std::string{astl::scmi_detail::kScmiProcessLockFileName};
+  PrepareProcessLockTestPaths(base_path, process_lock_path);
+  astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(process_lock_dir);
+  std::scope_exit reset_process_lock_dir_override(
+      [] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride({}); });
 
   auto make_operations = []() {
     return astl::CollectionOperations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
@@ -257,18 +268,21 @@ TEST_CASE("ScmiSysfsCollector blocks configure from second process", "[scmi_sysf
 
   std::error_code ec;
   fs::remove_all(base_path, ec);
-  fs::remove(process_lock_path, ec);
+  fs::remove_all(process_lock_dir, ec);
 }
 
 TEST_CASE("ScmiSysfsCollector releases process lock on destructor after configure only",
           "[scmi_sysfs_collector][process_lock]") {
   namespace fs = std::filesystem;
 
-  const fs::path  base_path         = fs::temp_directory_path() / "astl_scmi_process_lock_destructor_release_test";
-  const fs::path  process_lock_dir  = base_path / "process_lock_dir";
-  const fs::path  process_lock_path = process_lock_dir / astl::scmi_detail::kScmiProcessLockFileName;
-  std::scope_exit reset_temp_dir([] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(std::nullopt); });
-  PrepareProcessLockTestPaths(base_path, process_lock_dir, process_lock_path);
+  const fs::path temp_root         = fs::temp_directory_path();
+  const fs::path base_path         = temp_root / "astl_scmi_process_lock_destructor_release_test";
+  const fs::path process_lock_dir  = temp_root / "astl_scmi_process_lock_destructor_release_test_lockdir";
+  const fs::path process_lock_path = process_lock_dir / std::string{astl::scmi_detail::kScmiProcessLockFileName};
+  PrepareProcessLockTestPaths(base_path, process_lock_path);
+  astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(process_lock_dir);
+  std::scope_exit reset_process_lock_dir_override(
+      [] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride({}); });
 
   auto make_operations = []() {
     return astl::CollectionOperations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
@@ -304,18 +318,21 @@ TEST_CASE("ScmiSysfsCollector releases process lock on destructor after configur
 
   std::error_code ec;
   fs::remove_all(base_path, ec);
-  fs::remove(process_lock_path, ec);
+  fs::remove_all(process_lock_dir, ec);
 }
 #endif
 
 TEST_CASE("ScmiSysfsCollector releases process lock after stop", "[scmi_sysfs_collector][process_lock]") {
   namespace fs = std::filesystem;
 
-  const fs::path  base_path         = fs::temp_directory_path() / "astl_scmi_process_lock_release_test";
-  const fs::path  process_lock_dir  = base_path / "process_lock_dir";
-  const fs::path  process_lock_path = process_lock_dir / astl::scmi_detail::kScmiProcessLockFileName;
-  std::scope_exit reset_temp_dir([] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(std::nullopt); });
-  PrepareProcessLockTestPaths(base_path, process_lock_dir, process_lock_path);
+  const fs::path temp_root         = fs::temp_directory_path();
+  const fs::path base_path         = temp_root / "astl_scmi_process_lock_release_test";
+  const fs::path process_lock_dir  = temp_root / "astl_scmi_process_lock_release_test_lockdir";
+  const fs::path process_lock_path = process_lock_dir / std::string{astl::scmi_detail::kScmiProcessLockFileName};
+  PrepareProcessLockTestPaths(base_path, process_lock_path);
+  astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(process_lock_dir);
+  std::scope_exit reset_process_lock_dir_override(
+      [] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride({}); });
 
   auto make_operations = []() {
     return astl::CollectionOperations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
@@ -345,17 +362,20 @@ TEST_CASE("ScmiSysfsCollector releases process lock after stop", "[scmi_sysfs_co
 
   std::error_code ec;
   fs::remove_all(base_path, ec);
-  fs::remove(process_lock_path, ec);
+  fs::remove_all(process_lock_dir, ec);
 }
 
 TEST_CASE("ScmiSysfsCollector breaks stale process lock", "[scmi_sysfs_collector][process_lock]") {
   namespace fs = std::filesystem;
 
-  const fs::path  base_path         = fs::temp_directory_path() / "astl_scmi_process_lock_stale_test";
-  const fs::path  process_lock_dir  = base_path / "process_lock_dir";
-  const fs::path  process_lock_path = process_lock_dir / astl::scmi_detail::kScmiProcessLockFileName;
-  std::scope_exit reset_temp_dir([] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(std::nullopt); });
-  PrepareProcessLockTestPaths(base_path, process_lock_dir, process_lock_path);
+  const fs::path temp_root         = fs::temp_directory_path();
+  const fs::path base_path         = temp_root / "astl_scmi_process_lock_stale_test";
+  const fs::path process_lock_dir  = temp_root / "astl_scmi_process_lock_stale_test_lockdir";
+  const fs::path process_lock_path = process_lock_dir / std::string{astl::scmi_detail::kScmiProcessLockFileName};
+  PrepareProcessLockTestPaths(base_path, process_lock_path);
+  astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(process_lock_dir);
+  std::scope_exit reset_process_lock_dir_override(
+      [] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride({}); });
 
   {
     std::ofstream stale_lock(process_lock_path, std::ios::out | std::ios::trunc);
@@ -385,7 +405,7 @@ TEST_CASE("ScmiSysfsCollector breaks stale process lock", "[scmi_sysfs_collector
 
   std::error_code ec;
   fs::remove_all(base_path, ec);
-  fs::remove(process_lock_path, ec);
+  fs::remove_all(process_lock_dir, ec);
 }
 
 /* In this test we'll be enabling one SCMI data event, reading it, and then stopping the collection.

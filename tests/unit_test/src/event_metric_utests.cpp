@@ -16,7 +16,7 @@ static auto GetEventMetricConfig() -> const astl::MetricConfig* {
                                    "Unit test event metric",
                                    ASTL_UNITS_NONE,
                                    ASTL_VALUE_UNKNOWN,
-                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                    ASTL_METRIC_EVENT,
                                    astl::CollectorType::UNKNOWN,
                                    astl::NullOperationBuilder{}};

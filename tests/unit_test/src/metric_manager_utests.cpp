@@ -145,16 +145,16 @@ TEST_CASE("MetricManager::RegisterMetric succeeds when collector supported", "[M
   MetricManager mgr(caps);
 
   // 2) Build a MetricConfig whose collector type is SCMI
-  auto cfg =
-      std::make_unique<MetricConfig>("metricA",                             // name
-                                     "descr",                               // description
-                                     astl_units_t::ASTL_UNITS_CELSIUS,      // units
-                                     astl_value_type_t::ASTL_VALUE_UINT64,  // value type
-                                     ASTL_CATEGORY_UNCATEGORIZED,  // category (tests don't depend on category yet)
-                                     astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
-                                     CollectorType::SCMI,                    // collector type
-                                     astl::NullOperationBuilder{}            // operation builder
-      );
+  auto cfg = std::make_unique<MetricConfig>(
+      "metricA",                              // name
+      "descr",                                // description
+      astl_units_t::ASTL_UNITS_CELSIUS,       // units
+      astl_value_type_t::ASTL_VALUE_UINT64,   // value type
+      ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier (tests don't depend on identifier yet)
+      astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
+      CollectorType::SCMI,                    // collector type
+      astl::NullOperationBuilder{}            // operation builder
+  );
 
   MockTarget  target;
   std::string target_name{"AP0"};
@@ -169,10 +169,10 @@ TEST_CASE("MetricManager::RegisterMetric fails when collector unsupported", "[Me
   Capabilities  caps = MakeCaps(CollectorType::SCMI);
   MetricManager mgr(caps);
 
-  // 2) Build a MetricConfig whose collector type is MMIO - Not supported
+  // 2) Build a MetricConfig whose collector type is PROCFS - Not supported
   auto cfg = std::make_unique<MetricConfig>("metricB", "descr", astl_units_t::ASTL_UNITS_CELSIUS,
-                                            astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
-                                            astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::MMIO,
+                                            astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                            astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::PROCFS,
                                             astl::NullOperationBuilder{});
 
   astl_status_code status = mgr.RegisterMetric(std::move(cfg), {});
@@ -187,13 +187,13 @@ TEST_CASE("MetricManager::RegisterMetric rejects duplicate metric ids", "[Metric
   ALLOW_CALL(target, Name()).RETURN(target_name);
 
   auto cfg_a = std::make_unique<MetricConfig>("metricA", "descr", astl_units_t::ASTL_UNITS_CELSIUS,
-                                              astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                              astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                               astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                               astl::NullOperationBuilder{}, astl::IdentityFormula{}, ASTL_VALUE_UNKNOWN,
                                               std::vector<std::string>{}, "shared.metric.id");
 
   auto cfg_b = std::make_unique<MetricConfig>("metricB", "descr", astl_units_t::ASTL_UNITS_CELSIUS,
-                                              astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                              astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                               astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                               astl::NullOperationBuilder{}, astl::IdentityFormula{}, ASTL_VALUE_UNKNOWN,
                                               std::vector<std::string>{}, "shared.metric.id");
@@ -211,9 +211,10 @@ TEST_CASE("MetricManager::GetRequiredOperations succeeds with valid SCMI metric"
   ALLOW_CALL(*target, Name()).RETURN(target_name);
 
   astl::ScmiOperationBuilder op_builder{0x123};
-  auto                       cfg = std::make_unique<MetricConfig>(
-      "metricA", "descr", astl_units_t::ASTL_UNITS_CELSIUS, astl_value_type_t::ASTL_VALUE_UINT64,
-      ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI, std::move(op_builder));
+  auto                       cfg =
+      std::make_unique<MetricConfig>("metricA", "descr", astl_units_t::ASTL_UNITS_CELSIUS,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI, std::move(op_builder));
 
   REQUIRE(mgr.RegisterMetric(std::move(cfg), {target.get()}) == ASTL_STATUS_SUCCESS);
   // Retrieve the registered metrics
@@ -268,10 +269,11 @@ TEST_CASE("MetricManager::GetProperties exposes metric name", "[MetricManager]")
   std::string   target_name{"AP0"};
   ALLOW_CALL(target, Name()).RETURN(target_name);
 
-  auto cfg = std::make_unique<MetricConfig>(
-      "SoC Power", "desc", astl_units_t::ASTL_UNITS_WATTS, astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_CATEGORY_POWER,
-      astl_metric_type_t::ASTL_METRIC_RATE, CollectorType::SCMI, astl::NullOperationBuilder{}, astl::IdentityFormula{},
-      ASTL_VALUE_UNKNOWN, std::vector<std::string>{}, "SOC.0.ENERGY_COUNTER");
+  auto cfg = std::make_unique<MetricConfig>("SoC Power", "desc", astl_units_t::ASTL_UNITS_WATTS,
+                                            astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_METRIC_IDENTIFIER_POWER,
+                                            astl_metric_type_t::ASTL_METRIC_RATE, CollectorType::SCMI,
+                                            astl::NullOperationBuilder{}, astl::IdentityFormula{}, ASTL_VALUE_UNKNOWN,
+                                            std::vector<std::string>{}, "SOC.0.ENERGY_COUNTER");
 
   REQUIRE(mgr.RegisterMetric(std::move(cfg), {&target}) == ASTL_STATUS_SUCCESS);
   auto metrics = mgr.GetAvailableMetrics(&target);
@@ -292,19 +294,19 @@ TEST_CASE("MetricManager::GetRequiredOperations fails for non-SCMI metric", "[Me
                             "descr",
                             astl_units_t::ASTL_UNITS_CELSIUS,
                             astl_value_type_t::ASTL_VALUE_UINT64,
-                            ASTL_CATEGORY_UNCATEGORIZED,
+                            ASTL_METRIC_IDENTIFIER_UNKNOWN,
                             astl_metric_type_t::ASTL_METRIC_VALUE,
-                            CollectorType::MMIO,  // MMIO not supported by manager
+                            CollectorType::PROCFS,  // PROCFS not supported by manager
                             astl::NullOperationBuilder{}};
-  std::unique_ptr<astl::IMetric> owner_metric_mmio =
+  std::unique_ptr<astl::IMetric> owner_metric_procfs =
       std::make_unique<astl::SampledValueMetric>(&config, &target, nullptr);
 
   // Manually associate the metric pointer
   astl::MetricManagerTestAccessor::InjectMetric(
-      mgr, std::move(owner_metric_mmio),
+      mgr, std::move(owner_metric_procfs),
       std::make_unique<MetricConfig>("metricC", "descr", astl_units_t::ASTL_UNITS_CELSIUS,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
-                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::MMIO,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::PROCFS,
                                      astl::ScmiOperationBuilder{0x123}),
       &target);
 
@@ -325,27 +327,31 @@ TEST_CASE("MetricManager::GetRequiredOperations correctly discriminates metrics 
   auto        target0 = std::make_unique<MockTarget>();
   std::string target0_name{"AP0"};
   ALLOW_CALL(*target0, Name()).RETURN(target0_name);
+  ALLOW_CALL(*target0, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   auto        target1 = std::make_unique<MockTarget>();
   std::string target1_name{"AP1"};
   ALLOW_CALL(*target1, Name()).RETURN(target1_name);
+  ALLOW_CALL(*target1, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
 
   // Create 3 metric configs. One for each target, and one that can run on either target
   astl::ScmiMultiTargetOperationBuilder t0_builder{ScmiTargetToDataEventIdMap{{target0_name, {0x123}}}};
-  auto                                  cfg0 = std::make_unique<MetricConfig>(
-      "metric0", "description0", astl_units_t::ASTL_UNITS_CELSIUS, astl_value_type_t::ASTL_VALUE_UINT64,
-      ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI, std::move(t0_builder));
+  auto                                  cfg0 =
+      std::make_unique<MetricConfig>("metric0", "description0", astl_units_t::ASTL_UNITS_CELSIUS,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI, std::move(t0_builder));
 
   astl::ScmiMultiTargetOperationBuilder t1_builder{ScmiTargetToDataEventIdMap{{target1_name, {0x456}}}};
-  auto                                  cfg1 = std::make_unique<MetricConfig>(
-      "metric1", "description1", astl_units_t::ASTL_UNITS_WATTS, astl_value_type_t::ASTL_VALUE_UINT64,
-      ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI, std::move(t1_builder));
+  auto                                  cfg1 =
+      std::make_unique<MetricConfig>("metric1", "description1", astl_units_t::ASTL_UNITS_WATTS,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI, std::move(t1_builder));
 
   // metric01 can be collected on either target 0 or 1
   astl::ScmiMultiTargetOperationBuilder t0_t1_builder{
       ScmiTargetToDataEventIdMap{{target0_name, {0xACED}}, {target1_name, {0xBABE}}}
   };
   auto cfg01 = std::make_unique<MetricConfig>("metric01", "description1", astl_units_t::ASTL_UNITS_AMPS,
-                                              astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                              astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                               astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                               std::move(t0_t1_builder));
 
@@ -408,7 +414,7 @@ TEST_CASE("MetricManager::ProcessData processes valid sample and returns success
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("test", "desc", astl_units_t::ASTL_UNITS_NONE,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                      astl::NullOperationBuilder{}),
       &target);
@@ -436,7 +442,7 @@ TEST_CASE("MetricManager::ProcessData processes multiple samples for the same me
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("multi", "desc", astl_units_t::ASTL_UNITS_NONE,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                      astl::NullOperationBuilder{}),
       &target);
@@ -471,14 +477,14 @@ TEST_CASE("MetricManager::ProcessData routes reserved pause-marker samples to me
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric1),
       std::make_unique<MetricConfig>("pause_metric_1", "desc", astl_units_t::ASTL_UNITS_NONE,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                      astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric2),
       std::make_unique<MetricConfig>("pause_metric_2", "desc", astl_units_t::ASTL_UNITS_NONE,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                      astl::NullOperationBuilder{}),
       &target);
@@ -508,13 +514,13 @@ TEST_CASE("MetricManager::ProcessData processes different metrics for different 
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric1),
       std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric2),
       std::make_unique<MetricConfig>("m2", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, 1, metric_ptr1);
@@ -551,13 +557,13 @@ TEST_CASE("MetricManager::ProcessData stops on error and does not process furthe
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric1),
       std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric2),
       std::make_unique<MetricConfig>("m2", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, 1, metric_ptr1);
@@ -594,13 +600,13 @@ TEST_CASE("MetricManager::ProcessData routes same operation id independently per
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric0),
       std::make_unique<MetricConfig>("m0", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target0);
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric1),
       std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target1);
 
@@ -633,13 +639,13 @@ TEST_CASE("MetricManager::SummarizeMetrics preserves routing for later target pr
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric0),
       std::make_unique<MetricConfig>("m0", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target0);
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric1),
       std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target1);
 
@@ -674,13 +680,13 @@ TEST_CASE("MetricManager::ResetMetricsOnTarget resets only the requested target"
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric0),
       std::make_unique<MetricConfig>("m0", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target0);
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric1),
       std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target1);
 
@@ -698,7 +704,7 @@ TEST_CASE("MetricManager::SummarizeMetrics returns success for a TestMetric", "[
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("metricX", "descX", astl_units_t::ASTL_UNITS_NONE,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                      astl::NullOperationBuilder{}),
       &target);
@@ -718,7 +724,7 @@ TEST_CASE("MetricManager::SummarizeMetrics returns error for a TestMetric", "[Me
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("metric", "desc", astl_units_t::ASTL_UNITS_NONE,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                      astl::NullOperationBuilder{}),
       &target);
@@ -737,7 +743,7 @@ TEST_CASE("MetricManager::SummarizeMetrics preserves operation mappings for late
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("metric_after_summarize", "desc", astl_units_t::ASTL_UNITS_NONE,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                      astl::NullOperationBuilder{}),
       &target);
@@ -779,7 +785,7 @@ TEST_CASE("MetricManager::RegisterMetric succeeds with ResidencyMetricConfig", "
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "CPU_RESIDENCY", "CPU residency metric", astl_units_t::ASTL_UNITS_SECONDS, astl_value_type_t::ASTL_VALUE_FLOAT64,
-      astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_CATEGORY_UNCATEGORIZED, CollectorType::SCMI,
+      astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_METRIC_IDENTIFIER_UNKNOWN, CollectorType::SCMI,
       std::move(state_info), astl::ResidencyMetricConfig::InferredStateInfo{"ACTIVE", "CPU active state"});
 
   astl_status_code status = mgr.RegisterMetric(std::move(residency_config), {target.get()});
@@ -809,7 +815,7 @@ TEST_CASE("MetricManager::GetRequiredOperations with ResidencyMetricConfig creat
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "CPU_RESIDENCY", "CPU residency metric", astl_units_t::ASTL_UNITS_SECONDS, astl_value_type_t::ASTL_VALUE_FLOAT64,
-      astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_CATEGORY_UNCATEGORIZED, CollectorType::SCMI,
+      astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_METRIC_IDENTIFIER_UNKNOWN, CollectorType::SCMI,
       std::move(state_info), astl::ResidencyMetricConfig::InferredStateInfo{"ACTIVE", "CPU active state"});
 
   REQUIRE(mgr.RegisterMetric(std::move(residency_config), {target.get()}) == ASTL_STATUS_SUCCESS);
@@ -852,7 +858,7 @@ TEST_CASE("MetricManager::RegisterMetric fails with empty state info for Residen
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "EMPTY_RESIDENCY", "Residency metric with no states", astl_units_t::ASTL_UNITS_SECONDS,
-      astl_value_type_t::ASTL_VALUE_FLOAT64, astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_CATEGORY_UNCATEGORIZED,
+      astl_value_type_t::ASTL_VALUE_FLOAT64, astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_METRIC_IDENTIFIER_UNKNOWN,
       CollectorType::SCMI, std::move(empty_state_info),
       astl::ResidencyMetricConfig::InferredStateInfo{"ACTIVE", "CPU active state"});
 
@@ -872,7 +878,7 @@ TEST_CASE("MetricManager::ResidencyMetricConfig GetStateInfo accessor works corr
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "ACCESSOR_TEST_RESIDENCY", "Test state info accessor", astl_units_t::ASTL_UNITS_SECONDS,
-      astl_value_type_t::ASTL_VALUE_FLOAT64, astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_CATEGORY_UNCATEGORIZED,
+      astl_value_type_t::ASTL_VALUE_FLOAT64, astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_METRIC_IDENTIFIER_UNKNOWN,
       CollectorType::SCMI, std::move(state_info),
       astl::ResidencyMetricConfig::InferredStateInfo{"RUNNING", "CPU running state"});
 
@@ -911,7 +917,7 @@ TEST_CASE("MetricManager::GetCounterOnTarget with null args", "[MetricManager][C
   // Create and register a counter metric
   auto counter_config = std::make_unique<astl::MetricConfig>(
       "TestCounter", "A test counter metric", astl_units_t::ASTL_UNITS_BYTES, astl_value_type_t::ASTL_VALUE_UINT64,
-      ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI, astl::ScmiOperationBuilder{0x6001});
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE, CollectorType::SCMI, astl::ScmiOperationBuilder{0x6001});
   REQUIRE(mgr.RegisterCounter(std::move(counter_config), {target.get()}) == ASTL_STATUS_SUCCESS);
 
   auto avail_or_error = mgr.GetAvailableCounters(target.get());
@@ -950,7 +956,7 @@ TEST_CASE("MetricManager::GetCounterOnTarget with registered counter", "[MetricM
   // Create and register a counter metric
   auto counter_config = std::make_unique<astl::MetricConfig>(
       "TestCounter", "A test counter metric", astl_units_t::ASTL_UNITS_BYTES, astl_value_type_t::ASTL_VALUE_UINT64,
-      ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI, astl::ScmiOperationBuilder{0x6001});
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE, CollectorType::SCMI, astl::ScmiOperationBuilder{0x6001});
 
   REQUIRE(mgr.RegisterCounter(std::move(counter_config), {target.get()}) == ASTL_STATUS_SUCCESS);
 
@@ -1010,7 +1016,7 @@ TEST_CASE("MetricManager::GetCounterProperties exposes scaling formula", "[Metri
 
   auto counter_config = std::make_unique<astl::MetricConfig>(
       "ScaledCounter", "Counter with scaling", astl_units_t::ASTL_UNITS_WATTS, astl_value_type_t::ASTL_VALUE_FLOAT64,
-      ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI,
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE, CollectorType::SCMI,
       astl::ScmiOperationBuilder{
           0x6002
   },
@@ -1046,7 +1052,7 @@ TEST_CASE("MetricManager::GetCounterProperties exposes composed expression and s
 
   auto counter_config = std::make_unique<astl::MetricConfig>(
       "ComposedCounter", "Counter with expression and scaling", astl_units_t::ASTL_UNITS_WATTS,
-      astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI,
+      astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE, CollectorType::SCMI,
       astl::ScmiOperationBuilder{0x6003}, std::move(composed), astl_value_type_t::ASTL_VALUE_UINT64);
 
   REQUIRE(mgr.RegisterCounter(std::move(counter_config), {target.get()}) == ASTL_STATUS_SUCCESS);
@@ -1090,7 +1096,7 @@ TEST_CASE("MetricManager::GetCounterProperties keeps integer-literal scaling in 
 
   auto counter_config = std::make_unique<astl::MetricConfig>(
       "FallbackCounter", "Counter with multi-step pipeline", astl_units_t::ASTL_UNITS_WATTS,
-      astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE, CollectorType::SCMI,
+      astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE, CollectorType::SCMI,
       astl::ScmiOperationBuilder{0x6004}, std::move(pipeline_formula), astl_value_type_t::ASTL_VALUE_UINT64);
 
   REQUIRE(mgr.RegisterCounter(std::move(counter_config), {target.get()}) == ASTL_STATUS_SUCCESS);
@@ -1123,17 +1129,16 @@ TEST_CASE("MetricManager::RegisterMetric with no metrics means no groups!", "[Me
   ALLOW_CALL(target, Name()).RETURN(target_name);
 
   const auto& available_metrics = mgr.GetAvailableMetrics(&target);
-  if (available_metrics) {
-    REQUIRE(available_metrics->empty());
-  } else {
-    REQUIRE(available_metrics.error() == ASTL_STATUS_BAD_ARGUMENT);
-  }
+  REQUIRE(available_metrics.has_value());
+  REQUIRE(available_metrics->empty());
+
+  const auto& available_counters = mgr.GetAvailableCounters(&target);
+  REQUIRE(available_counters.has_value());
+  REQUIRE(available_counters->empty());
+
   const auto& available_groups = mgr.GetMetricGroups(&target);
-  if (available_groups) {
-    REQUIRE(available_groups->empty());
-  } else {
-    REQUIRE(available_groups.error() == ASTL_STATUS_BAD_ARGUMENT);
-  }
+  REQUIRE(available_groups.has_value());
+  REQUIRE(available_groups->empty());
 }
 
 TEST_CASE("MetricManager::RegisterMetric correctly identifies a metric group with one metric.",
@@ -1153,7 +1158,7 @@ TEST_CASE("MetricManager::RegisterMetric correctly identifies a metric group wit
                                               "descr",                                // description
                                               astl_units_t::ASTL_UNITS_CELSIUS,       // units
                                               astl_value_type_t::ASTL_VALUE_UINT64,   // value type
-                                              ASTL_CATEGORY_UNCATEGORIZED,            // category
+                                              ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier
                                               astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
                                               CollectorType::SCMI,                    // collector type
                                               astl::NullOperationBuilder{},           // data_event_ids
@@ -1164,7 +1169,7 @@ TEST_CASE("MetricManager::RegisterMetric correctly identifies a metric group wit
                                               "descr",                                // description
                                               astl_units_t::ASTL_UNITS_CELSIUS,       // units
                                               astl_value_type_t::ASTL_VALUE_UINT64,   // value type
-                                              ASTL_CATEGORY_UNCATEGORIZED,            // category
+                                              ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier
                                               astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
                                               CollectorType::SCMI,                    // collector type
                                               // no groups
@@ -1203,7 +1208,7 @@ TEST_CASE("MetricManager::GetMetricGroups returns empty for a valid target with 
                                                                 "descr",                                // description
                                                                 astl_units_t::ASTL_UNITS_CELSIUS,       // units
                                                                 astl_value_type_t::ASTL_VALUE_UINT64,   // value type
-                                                                ASTL_CATEGORY_UNCATEGORIZED,            // category
+                                                                ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier
                                                                 astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
                                                                 CollectorType::SCMI,           // collector type
                                                                 astl::NullOperationBuilder{},  // data_event_ids
@@ -1233,7 +1238,7 @@ TEST_CASE("MetricManager::RegisterMetric fails when metric group is undefined", 
                                                                 "descr",                                // description
                                                                 astl_units_t::ASTL_UNITS_CELSIUS,       // units
                                                                 astl_value_type_t::ASTL_VALUE_UINT64,   // value type
-                                                                ASTL_CATEGORY_UNCATEGORIZED,            // category
+                                                                ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier
                                                                 astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
                                                                 CollectorType::SCMI,           // collector type
                                                                 astl::NullOperationBuilder{},  // data_event_ids
@@ -1274,7 +1279,7 @@ TEST_CASE(
                                                "descr",                                // description
                                                astl_units_t::ASTL_UNITS_CELSIUS,       // units
                                                astl_value_type_t::ASTL_VALUE_UINT64,   // value type
-                                               ASTL_CATEGORY_UNCATEGORIZED,            // category
+                                               ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier
                                                astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
                                                CollectorType::SCMI,                    // collector type
                                                astl::NullOperationBuilder{},           // data_event_ids
@@ -1286,7 +1291,7 @@ TEST_CASE(
                                                      "descr",                                // description
                                                      astl_units_t::ASTL_UNITS_CELSIUS,       // units
                                                      astl_value_type_t::ASTL_VALUE_UINT64,   // value type
-                                                     ASTL_CATEGORY_UNCATEGORIZED,            // category
+                                                     ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier
                                                      astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
                                                      CollectorType::SCMI,                    // collector type
                                                      astl::NullOperationBuilder{},           // data_event_ids
@@ -1298,7 +1303,7 @@ TEST_CASE(
                                                          "descr",                                // description
                                                          astl_units_t::ASTL_UNITS_VOLTS,         // units
                                                          astl_value_type_t::ASTL_VALUE_UINT64,   // value type
-                                                         ASTL_CATEGORY_UNCATEGORIZED,            // category
+                                                         ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier
                                                          astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
                                                          CollectorType::SCMI,                    // collector type
                                                          // no groups
@@ -1310,7 +1315,7 @@ TEST_CASE(
                                                         "descr",                                // description
                                                         astl_units_t::ASTL_UNITS_VOLTS,         // units
                                                         astl_value_type_t::ASTL_VALUE_UINT64,   // value type
-                                                        ASTL_CATEGORY_UNCATEGORIZED,            // category
+                                                        ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier
                                                         astl_metric_type_t::ASTL_METRIC_VALUE,  // metric type
                                                         CollectorType::SCMI,                    // collector type
                                                         astl::NullOperationBuilder{},           // data_event_ids
@@ -1383,8 +1388,9 @@ TEST_CASE("MetricManager handle accessors reject invalid inputs and incomplete h
 
   astl::MetricHandle empty_handle;
   empty_handle.config = std::make_unique<MetricConfig>(
-      "empty", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
-      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI, astl::NullOperationBuilder{});
+      "empty", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+      astl::NullOperationBuilder{});
   REQUIRE(mgr.GetProperties(static_cast<astl_metric_handle_t>(&empty_handle), &metric_props) ==
           ASTL_STATUS_INTERNAL_ERROR);
 
@@ -1395,7 +1401,7 @@ TEST_CASE("MetricManager handle accessors reject invalid inputs and incomplete h
   astl::MetricHandle null_metric_handle;
   null_metric_handle.config = std::make_unique<MetricConfig>(
       "broken", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-      ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
       astl::NullOperationBuilder{});
   null_metric_handle.target_to_metric_map.emplace(&target, std::unique_ptr<IMetric>{});
 
@@ -1469,7 +1475,7 @@ TEST_CASE("MetricManager::ProcessRawSamples delivers already-sorted timestamps i
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner),
       std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
@@ -1504,7 +1510,7 @@ TEST_CASE("MetricManager::ProcessRawSamples sorts out-of-order timestamps for a 
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner),
       std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
@@ -1545,13 +1551,13 @@ TEST_CASE("MetricManager::ProcessRawSamples sorts each metric's samples independ
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner1),
       std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner2),
       std::make_unique<MetricConfig>("m2", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op1, metric1);
@@ -1596,7 +1602,7 @@ TEST_CASE("MetricManager::ProcessRawSamples accepts samples with equal timestamp
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner),
       std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
@@ -1633,7 +1639,7 @@ TEST_CASE("MetricManager::ProcessRawSamples fails when no clock correlation is s
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric_ptr);
@@ -1663,7 +1669,7 @@ TEST_CASE("MetricManager::ProcessRawSamples normalizes timestamps using clock co
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric_ptr);
@@ -1695,7 +1701,7 @@ TEST_CASE("MetricManager::SetClockCorrelations replaces an existing entry for th
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-                                     ASTL_CATEGORY_UNCATEGORIZED, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
                                      CollectorType::SCMI, astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric_ptr);
@@ -1735,14 +1741,14 @@ TEST_CASE("MetricManager::ProcessRawSamples uses independent correlations per Op
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_m1),
       std::make_unique<MetricConfig>("metric1", "desc", astl_units_t::ASTL_UNITS_NONE,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                      astl::NullOperationBuilder{}),
       &target);
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_m2),
       std::make_unique<MetricConfig>("metric2", "desc", astl_units_t::ASTL_UNITS_NONE,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                      astl::NullOperationBuilder{}),
       &target);
@@ -1783,7 +1789,7 @@ TEST_CASE("MetricManager::ProcessRawSamples fails with missing correlation for o
   astl::MetricManagerTestAccessor::InjectMetric(
       mgr, std::move(owner_metric),
       std::make_unique<MetricConfig>("metric", "desc", astl_units_t::ASTL_UNITS_NONE,
-                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
                                      astl::NullOperationBuilder{}),
       &target);

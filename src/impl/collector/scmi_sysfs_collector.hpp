@@ -777,7 +777,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(ScmiReadOperat
    */
   auto prev_timestamp_it = _previous_timestamps.find(operation.scmi_data_event_id);
   if (prev_timestamp_it != _previous_timestamps.end() && prev_timestamp_it->second == timestamp) {
-    ASTL_LOG_CRITICAL(
+    ASTL_LOG_WARNING(
         "ScmiSysfsCollector: discarding sample with duplicate timestamp for data event ID: {:04X}, timestamp: {}",
         operation.scmi_data_event_id, timestamp);
     return ASTL_STATUS_SUCCESS;  // Discard sample but return success

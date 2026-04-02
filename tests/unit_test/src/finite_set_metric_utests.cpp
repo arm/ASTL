@@ -30,10 +30,10 @@ struct FiniteSetTestHarness {
         mock_sink(std::make_unique<MockProcessedSampleSink>()),
         config{
             "test_metric", "Test finite set metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_FINITE_SET_VALUE,
-            ASTL_CATEGORY_UNCATEGORIZED, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{},
+            ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{},
             // values of state_info as std::set<astl::AstlValue>
             astl::FiniteSetMetricConfig::FiniteSet{std::ranges::begin(state_info | std::views::keys),
-                                                                                                  std::ranges::end(state_info | std::views::keys)},
+                                                                                                     std::ranges::end(state_info | std::views::keys)},
             state_info
   },
         metric(&config, mock_target.get(), mock_sink.get()) {
@@ -240,7 +240,7 @@ TEST_CASE("FiniteSetMetric: Boolean values handling", "[FiniteSetMetric]") {
                                      ASTL_UNITS_WATTS,
                                      ASTL_VALUE_BOOL8,
                                      ASTL_METRIC_FINITE_SET_VALUE,
-                                     ASTL_CATEGORY_UNCATEGORIZED,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                      astl::CollectorType::UNKNOWN,
                                      astl::NullOperationBuilder{},
                                      finite_set,

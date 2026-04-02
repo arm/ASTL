@@ -51,7 +51,7 @@ def _print_collection_entities(title: str, items: Sequence, formatter):
 def _enumerate_entities(target):
     counters = astl.get_counters(target)
     metrics = astl.get_metrics(target)
-    groups = astl.get_metric_groups(target)
+    groups = astl.get_metric_groups_on_target(target)
     _print_collection_entities(
         "Counters",
         counters,
@@ -65,7 +65,7 @@ def _enumerate_entities(target):
     _print_collection_entities(
         "Metric Groups",
         groups,
-        lambda g: f"{g.name} (metric_count={g.metric_count})",
+        lambda g: g.name,
     )
     return counters, metrics, groups
 

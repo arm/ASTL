@@ -23,8 +23,8 @@ namespace astl::scmi::spec {
  * @brief Helper to determine if the given units from the metric declaration/selection and the
  * SCMI spec match, returning the resolved units if so.
  *
- * If both are specified and differ, an explicit metric formula
- * allows the declaration to override the output units while still matching the SCMI source register.
+ * If both are specified and differ, an explicit metric-declaration formula allows the declaration
+ * to override the output units while still matching the SCMI source register.
  */
 inline auto GetUnitsIfCompatible(metrics::spec::MetricJsonDeclaration const& metric_declaration,
                                  std::string_view                            spec_unit) -> std::optional<astl_units_t> {
@@ -36,8 +36,7 @@ inline auto GetUnitsIfCompatible(metrics::spec::MetricJsonDeclaration const& met
   if (spec_unit.empty()) {
     return ParseUnits(metric_unit);
   }
-  // both units are specified - they must match unless an explicit declaration formula
-  // says the output unit intentionally differs from the source unit.
+  // both units are specified - they must match unless explicit declaration scaling
   // declares that the metric output unit intentionally differs from the SCMI source unit.
   auto parsed_metric_units = ParseUnits(metric_unit);
   auto parsed_spec_units   = ParseUnits(spec_unit);

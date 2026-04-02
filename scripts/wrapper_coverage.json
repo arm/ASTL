@@ -140,6 +140,26 @@
         "symbol": "GetMetricGroups"
       }
     },
+    "astlGetMetricGroupCountOnTarget": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "get_metric_groups_on_target"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "GetMetricGroupsOnTarget"
+      }
+    },
+    "astlGetMetricGroupsOnTarget": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "get_metric_groups_on_target"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "GetMetricGroupsOnTarget"
+      }
+    },
     "astlGetMetricGroupMetrics": {
       "python": {
         "mode": "wrapped",
@@ -148,6 +168,36 @@
       "go": {
         "mode": "wrapped",
         "symbol": "GetMetricGroupMetrics"
+      }
+    },
+    "astlGetMetricGroupMetricCount": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "get_metric_group_metric_count"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "GetMetricGroupMetricCount"
+      }
+    },
+    "astlGetMetricGroupMetricsOnTarget": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "get_metric_group_metrics_on_target"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "GetMetricGroupMetricsOnTarget"
+      }
+    },
+    "astlGetMetricGroupMetricCountOnTarget": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "get_metric_group_metric_count_on_target"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "GetMetricGroupMetricCountOnTarget"
       }
     },
     "astlConfigureCounterCollectionOnTarget": {

@@ -11,21 +11,6 @@
 
 namespace astl::ProtobufSerDes {
 
-namespace {
-
-auto TryInferLegacyScmiSysfsSubdirectory(const std::string& name) -> std::optional<std::string> {
-  constexpr std::string_view k_scmi_target_prefix = "scmi_";
-  if (std::string_view{name}.starts_with(k_scmi_target_prefix)) {
-    return name.substr(k_scmi_target_prefix.size());
-  }
-  if (!name.empty()) {
-    return name;
-  }
-  return std::nullopt;
-}
-
-}  // namespace
-
 static auto SerializeTarget(const ITarget& target, astl::protobuf::Target* proto_target) -> astl_status_code {
   astl_target_props_t props{};
   if (auto status = target.GetProperties(&props); status != ASTL_STATUS_SUCCESS) {
@@ -46,8 +31,9 @@ static auto SerializeTarget(const ITarget& target, astl::protobuf::Target* proto
     proto_target->set_id(props.id);
   }
   if (target.GetCollectorType() == CollectorType::SCMI) {
-    if (const auto* scmi_target = dynamic_cast<const ScmiTarget*>(&target)) {
-      proto_target->set_scmi_sysfs_subdirectory(scmi_target->TelemetrySubdirectory());
+    const auto telemetry_subdirectory = ScmiTarget::TelemetrySubdirectoryForTarget(target);
+    if (!telemetry_subdirectory.empty()) {
+      proto_target->set_scmi_sysfs_subdirectory(std::string{telemetry_subdirectory});
     }
   }
 
@@ -115,7 +101,13 @@ auto Deserialize<std::unique_ptr<ITopologyManager>>(std::istream& input_stream)
     if (collector == CollectorType::SCMI) {
       auto scmi_sysfs_subdirectory = proto_target.has_scmi_sysfs_subdirectory()
                                          ? std::optional<std::string>{proto_target.scmi_sysfs_subdirectory()}
-                                         : TryInferLegacyScmiSysfsSubdirectory(name);
+                                         : [&name]() -> std::optional<std::string> {
+        auto inferred = ScmiTarget::TryInferTelemetrySubdirectoryFromName(name);
+        if (!inferred.has_value()) {
+          return std::nullopt;
+        }
+        return std::string{*inferred};
+      }();
       if (scmi_sysfs_subdirectory.has_value()) {
         target =
             std::make_unique<ScmiTarget>(name, description, std::move(scmi_sysfs_subdirectory.value()), nullptr, id);

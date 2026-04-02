@@ -41,6 +41,8 @@ struct MockTarget : public astl::ITarget {
  public:
   static constexpr bool trompeloeil_movable_mock = true;  // cppcheck-suppress unusedStructMember
 
+  MockTarget() { ALLOW_CALL(*this, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN); }
+
   MAKE_MOCK0(GetCollectorType, auto()->astl::CollectorType, const override);
   MAKE_MOCK0(Name, auto()->std::string const&, const override);
   MAKE_MOCK1(GetProperties, auto(astl_target_props_t* target)->astl_status_code, const override);

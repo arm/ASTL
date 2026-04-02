@@ -23,7 +23,7 @@ namespace ScmiTopologyPlugin {
 namespace detail {
 
 static auto BuildTargetName(const std::string& telemetry_subdirectory) -> std::string {
-  return "scmi_" + telemetry_subdirectory;
+  return ScmiTarget::NameForTelemetrySubdirectory(telemetry_subdirectory);
 }
 
 /**
@@ -98,13 +98,20 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
     -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
   std::vector<std::unique_ptr<ITarget> > targets;
   (void)configuration;  // currently unused
-  if (!scmi_sysfs_file_interface.IsValid(scmi_sysfs_file_interface.GetBasePath())) {
-    ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: SCMI sysfs telemetry root path is not valid");
+  const auto telemetry_root_is_valid = scmi_sysfs_file_interface.IsValid(scmi_sysfs_file_interface.GetBasePath());
+  if (!telemetry_root_is_valid) {
+    ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to check SCMI sysfs telemetry root path");
+    return std::unexpected(telemetry_root_is_valid.error());
+  }
+  if (!*telemetry_root_is_valid) {
+    ASTL_LOG_WARNING(
+        "ScmiTopologyPlugin::ScanForTargets: SCMI sysfs telemetry root path does not exist; "
+        "skipping SCMI target discovery");
     return {};
   }
   auto telemetry_root_children = scmi_sysfs_file_interface.GetSubdirectories();
   if (!telemetry_root_children) {
-    ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to list children of SCMI sysfs telemetry root");
+    ASTL_LOG_WARNING("ScmiTopologyPlugin::ScanForTargets: Failed to list children of SCMI sysfs telemetry root");
     return {};
   }
 

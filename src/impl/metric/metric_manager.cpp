@@ -169,7 +169,7 @@ auto MetricManager::GetNumAvailableCounters(const ITarget* target) const -> size
   std::lock_guard<std::mutex> lock(_mutex);
   const auto                  target_iter = _target_to_counters_map.find(target);
   if (target_iter == _target_to_counters_map.end()) {
-    ASTL_LOG_ERROR("GetNumAvailableCounters: Target '{}' not found", target->Name());
+    // A valid target may legitimately expose zero counters.
     return 0;
   }
   return target_iter->second.size();
@@ -190,12 +190,8 @@ auto MetricManager::GetAvailableCounters(const ITarget* target) const
   std::lock_guard<std::mutex> lock(_mutex);
   const auto                  target_iter = _target_to_counters_map.find(target);
   if (target_iter == _target_to_counters_map.end()) {
-    std::string targets;
-    for (const auto& target_counters : _target_to_counters_map) {
-      targets.append(target_counters.first->Name() + ", ");
-    }
-    ASTL_LOG_ERROR("GetAvailableCounters: Target '{}' not found in '{}'.", target->Name(), targets);
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    // A valid target may legitimately expose zero counters.
+    return std::span<const astl_counter_handle_t>{};
   }
   std::span<const astl_counter_handle_t> handles_span(target_iter->second);
   return std::expected<std::span<const astl_metric_handle_t>, astl_status_code>(std::in_place, handles_span);
@@ -424,7 +420,7 @@ auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const 
   }
   auto target_iter = metric_details->target_to_metric_map.find(target);
   if (target_iter == metric_details->target_to_metric_map.end()) {
-    ASTL_LOG_ERROR("GetMetricOnTarget: Target '{}' not found for metric handle {}", target->Name(), metric_handle);
+    ASTL_LOG_DEBUG("GetMetricOnTarget: Target '{}' not found for metric handle {}", target->Name(), metric_handle);
     return std::unexpected{ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET};
   }
   if (!target_iter->second) {
@@ -505,7 +501,7 @@ auto MetricManager::GetNumAvailableMetrics(const ITarget* target) const -> size_
   std::lock_guard<std::mutex> lock(_mutex);
   const auto                  target_iter = _target_to_metrics_map.find(target);
   if (target_iter == _target_to_metrics_map.end()) {
-    ASTL_LOG_ERROR("GetNumAvailableMetrics: Target '{}' not found", target->Name());
+    // A valid target may legitimately expose zero metrics.
     return 0;
   }
   return target_iter->second.size();
@@ -516,12 +512,8 @@ auto MetricManager::GetAvailableMetrics(const ITarget* target) const
   std::lock_guard<std::mutex> lock(_mutex);
   const auto                  target_iter = _target_to_metrics_map.find(target);
   if (target_iter == _target_to_metrics_map.end()) {
-    std::string targets;
-    for (const auto& target_metrics : _target_to_metrics_map) {
-      targets.append(target_metrics.first->Name() + ", ");
-    }
-    ASTL_LOG_WARNING("GetAvailableMetrics: Target '{}' not found in '{}'.", target->Name(), targets);
-    return {};
+    // A valid target may legitimately expose zero metrics.
+    return std::span<const astl_metric_handle_t>{};
   }
   std::span<const astl_metric_handle_t> handles_span(target_iter->second);
   return std::expected<std::span<const astl_metric_handle_t>, astl_status_code>(std::in_place, handles_span);

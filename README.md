@@ -302,22 +302,22 @@ Alternatively, we can configure collection by metric groups
 ```cpp
 auto     CollectFirstGroup(astl_target_handle_t target) -> void {
 uint32_t metric_group_count{};
-ASTL_INIT_STRUCT(astl_get_metric_group_count_params_t, get_group_count_params,
+ASTL_INIT_STRUCT(astl_get_metric_group_count_on_target_params_t, get_group_count_params,
                  .flags = 0,
                  .target_handle = target,
                  .metric_group_count = &metric_group_count);
-auto status = astlGetMetricGroupCount(&get_group_count_params);
+auto status = astlGetMetricGroupCountOnTarget(&get_group_count_params);
 
 std::vector<astl_metric_group_props_t> metric_groups_properties(metric_group_count);
 metric_groups_properties[0].size = sizeof(astl_metric_group_props_t);
 
 // retrieve the metric groups
-ASTL_INIT_STRUCT(astl_get_metric_groups_params_t, get_groups_params,
+ASTL_INIT_STRUCT(astl_get_metric_groups_on_target_params_t, get_groups_params,
                  .flags = 0,
                  .target_handle = target,
                  .metric_groups = metric_groups_properties.data(),
                  .metric_group_count = &metric_group_count);
-status = astlGetMetricGroups(&get_groups_params);
+status = astlGetMetricGroupsOnTarget(&get_groups_params);
 
 // collect on the first group (you could instead look at the properties and filter by name)
 std::vector<astl_metric_group_handle_t> groups{metric_groups_properties[0].handle};
@@ -336,6 +336,13 @@ ASTL_INIT_STRUCT(astl_configure_metric_group_collection_on_target_params_t, conf
 status = astlConfigureMetricGroupCollectionOnTarget(&configure_group_params);
 }
 ```
+
+If you need the metrics that belong to a metric group regardless of target, first retrieve the
+global group descriptors with `astlGetMetricGroups(...)`, then call
+`astlGetMetricGroupMetricCount(...)` to size the buffer and `astlGetMetricGroupMetrics(...)` to
+fetch the metric properties. Use `astlGetMetricGroupMetricCountOnTarget(...)` plus
+`astlGetMetricGroupMetricsOnTarget(...)` when you need the group membership filtered to a specific
+target.
 
 5. Start, read, and stop collection (including paused start)
 

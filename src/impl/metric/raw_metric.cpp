@@ -74,7 +74,7 @@ auto RawMetric::GetProperties(astl_metric_props_t *properties) const -> astl_sta
   properties->units                 = _configuration->Units();
   properties->value_type            = _configuration->ValueType();
   properties->metric_type           = _configuration->MetricType();
-  properties->category              = _configuration->Category();
+  properties->identifier            = _configuration->Identifier();
 
   return ASTL_STATUS_SUCCESS;
 }

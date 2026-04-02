@@ -183,17 +183,24 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_METRIC_UNKNOWN
     ctypedef int astl_metric_type_t
 
-    cdef enum _astl_category_t:
-        ASTL_CATEGORY_UNCATEGORIZED
-        ASTL_CATEGORY_COUNT
-        ASTL_CATEGORY_TEMPERATURE
-        ASTL_CATEGORY_POWER
-        ASTL_CATEGORY_FREQUENCY
-        ASTL_CATEGORY_VOLTAGE
-        ASTL_CATEGORY_CURRENT
-        ASTL_CATEGORY_BANDWIDTH
-        ASTL_CATEGORY_FAN_SPEED
-    ctypedef int astl_category_t
+    cdef enum _astl_metric_identifier_t:
+        ASTL_METRIC_IDENTIFIER_COUNT
+        ASTL_METRIC_IDENTIFIER_TEMPERATURE
+        ASTL_METRIC_IDENTIFIER_THERMAL_LIMIT
+        ASTL_METRIC_IDENTIFIER_THERMAL_THROTTLE
+        ASTL_METRIC_IDENTIFIER_ENERGY
+        ASTL_METRIC_IDENTIFIER_POWER
+        ASTL_METRIC_IDENTIFIER_POWER_LIMIT
+        ASTL_METRIC_IDENTIFIER_POWER_THROTTLE
+        ASTL_METRIC_IDENTIFIER_FREQUENCY
+        ASTL_METRIC_IDENTIFIER_VOLTAGE
+        ASTL_METRIC_IDENTIFIER_CURRENT
+        ASTL_METRIC_IDENTIFIER_BANDWIDTH
+        ASTL_METRIC_IDENTIFIER_FAN_SPEED
+        ASTL_METRIC_IDENTIFIER_HUMIDITY
+        ASTL_METRIC_IDENTIFIER_STATUS
+        ASTL_METRIC_IDENTIFIER_UNKNOWN
+    ctypedef int astl_metric_identifier_t
 
     cdef struct _astl_metric_props_t:
         size_t size
@@ -204,7 +211,7 @@ cdef extern from "astl/astl_telemetry.h":
         astl_units_t units
         astl_value_type_t value_type
         astl_metric_type_t metric_type
-        astl_category_t category
+        astl_metric_identifier_t identifier
     ctypedef _astl_metric_props_t astl_metric_props_t
 
     # Metric Group
@@ -214,8 +221,6 @@ cdef extern from "astl/astl_telemetry.h":
         const void* handle
         const char* name
         const char* description
-        uint32_t metric_count
-        astl_metric_props_t* metrics
     ctypedef _astl_metric_group_props_t astl_metric_group_props_t
 
     # Metric state discovery
@@ -304,10 +309,21 @@ cdef extern from "astl/astl_telemetry.h":
     cdef struct astl_get_metric_group_count_params_t:
         size_t size
         uint32_t flags
+        uint32_t* metric_group_count
+
+    cdef struct astl_get_metric_group_count_on_target_params_t:
+        size_t size
+        uint32_t flags
         const void* target_handle
         uint32_t* metric_group_count
 
     cdef struct astl_get_metric_groups_params_t:
+        size_t size
+        uint32_t flags
+        astl_metric_group_props_t* metric_groups
+        uint32_t* metric_group_count
+
+    cdef struct astl_get_metric_groups_on_target_params_t:
         size_t size
         uint32_t flags
         const void* target_handle
@@ -317,9 +333,30 @@ cdef extern from "astl/astl_telemetry.h":
     cdef struct astl_get_metric_group_metrics_params_t:
         size_t size
         uint32_t flags
-        const void* target_handle
-        const astl_metric_group_props_t* metric_group
+        astl_metric_group_handle_t metric_group_handle
         astl_metric_props_t* metrics
+        uint32_t* metric_count
+
+    cdef struct astl_get_metric_group_metric_count_params_t:
+        size_t size
+        uint32_t flags
+        astl_metric_group_handle_t metric_group_handle
+        uint32_t* metric_count
+
+    cdef struct astl_get_metric_group_metrics_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        astl_metric_group_handle_t metric_group_handle
+        astl_metric_props_t* metrics
+        uint32_t* metric_count
+
+    cdef struct astl_get_metric_group_metric_count_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        astl_metric_group_handle_t metric_group_handle
+        uint32_t* metric_count
 
     cdef struct astl_get_metric_state_count_on_target_params_t:
         size_t size
@@ -450,8 +487,13 @@ cdef extern from "astl/astl_telemetry.h":
 
     # metric groups
     int astlGetMetricGroupCount(const astl_get_metric_group_count_params_t* params)
+    int astlGetMetricGroupCountOnTarget(const astl_get_metric_group_count_on_target_params_t* params)
     int astlGetMetricGroups(const astl_get_metric_groups_params_t* params)
+    int astlGetMetricGroupsOnTarget(const astl_get_metric_groups_on_target_params_t* params)
+    int astlGetMetricGroupMetricCount(const astl_get_metric_group_metric_count_params_t* params)
     int astlGetMetricGroupMetrics(const astl_get_metric_group_metrics_params_t* params)
+    int astlGetMetricGroupMetricCountOnTarget(const astl_get_metric_group_metric_count_on_target_params_t* params)
+    int astlGetMetricGroupMetricsOnTarget(const astl_get_metric_group_metrics_on_target_params_t* params)
     int astlGetMetricStateCountOnTarget(const astl_get_metric_state_count_on_target_params_t* params)
     int astlGetMetricStatesOnTarget(const astl_get_metric_states_on_target_params_t* params)
 

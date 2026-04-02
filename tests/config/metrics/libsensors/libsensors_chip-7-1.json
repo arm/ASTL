@@ -8,7 +8,7 @@
       "description": "Temperature reading for Composite",
       "unit": "celsius",
       "metric_type": "value",
-      "category": "TEMPERATURE",
+      "identifier": "TEMPERATURE",
       "collection": {
         "register": "Composite",
         "protocol": "libsensors"
@@ -18,7 +18,7 @@
       "description": "Low thermal limit for Composite",
       "unit": "celsius",
       "metric_type": "value",
-      "category": "TEMPERATURE",
+      "identifier": "THERMAL_LIMIT",
       "collection": {
         "register": "Composite thermal_limit_low",
         "protocol": "libsensors"
@@ -28,7 +28,7 @@
       "description": "High thermal limit for Composite",
       "unit": "celsius",
       "metric_type": "value",
-      "category": "TEMPERATURE",
+      "identifier": "THERMAL_LIMIT",
       "collection": {
         "register": "Composite thermal_limit_high",
         "protocol": "libsensors"
@@ -38,7 +38,7 @@
       "description": "Critical thermal limit for Composite",
       "unit": "celsius",
       "metric_type": "value",
-      "category": "TEMPERATURE",
+      "identifier": "THERMAL_LIMIT",
       "collection": {
         "register": "Composite thermal_limit_critical",
         "protocol": "libsensors"

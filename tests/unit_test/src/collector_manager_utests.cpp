@@ -69,7 +69,7 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
   auto mock_mmio_collector  = std::make_unique<MockCollector>();
 
   astl::CollectorCapability scmi_capabilities{astl::CollectorType::SCMI};
-  astl::CollectorCapability mmio_capabilities{astl::CollectorType::MMIO};
+  astl::CollectorCapability mmio_capabilities{astl::CollectorType::PROCFS};
 
   // when CollectorManager is instantiated, it should set itself as the raw sample sink for each collector
   ALLOW_CALL(*mock_scmi_collector, SetRawSampleSink(trompeloeil::_));
@@ -81,7 +81,7 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
   ALLOW_CALL(*mock_scmi_collector2, GetCapabilities()).RETURN(scmi_capabilities);
   ALLOW_CALL(*mock_mmio_collector, GetCapabilities()).RETURN(mmio_capabilities);
 
-  SECTION("Report capabilities for a single target with 2 SCMI and 1 MMIO collectors") {
+  SECTION("Report capabilities for a single target with 2 SCMI and 1 PROCFS collectors") {
     std::vector<std::unique_ptr<astl::ICollector>> collectors;
     collectors.push_back(std::move(mock_scmi_collector));
     collectors.push_back(std::move(mock_scmi_collector2));
@@ -95,7 +95,7 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
     REQUIRE(capabilities_map.contains(mock_target.get()));
     REQUIRE(capabilities_map[mock_target.get()].size() >= 2);  // maybe SCMI shows up twice, maybe only once.
     std::vector<astl::CollectorCapability> expected_capabilities = {
-        astl::CollectorCapability{astl::CollectorType::SCMI}, astl::CollectorCapability{astl::CollectorType::MMIO}};
+        astl::CollectorCapability{astl::CollectorType::SCMI}, astl::CollectorCapability{astl::CollectorType::PROCFS}};
     for (const auto expected_cap : expected_capabilities) {
       auto collector_type_it =
           std::find_if(capabilities_map[mock_target.get()].begin(), capabilities_map[mock_target.get()].end(),
@@ -106,7 +106,7 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
     }
   }
 
-  SECTION("Report capabilities for 2 targets - one with 1 MMIO, one with 2 SCMI") {
+  SECTION("Report capabilities for 2 targets - one with 1 PROCFS, one with 2 SCMI") {
     std::vector<std::unique_ptr<astl::ICollector>> collectors_t1;
     collectors_t1.push_back(std::move(mock_scmi_collector));   // cppcheck-suppress accessMoved
     collectors_t1.push_back(std::move(mock_scmi_collector2));  // cppcheck-suppress accessMoved
@@ -127,7 +127,7 @@ TEST_CASE("CollectorManager::ReportCollectionCapabilities", "[collector_manager]
     }
     REQUIRE(capabilities_map[mock_target2.get()].size() == 1);
     for (const auto& cap : capabilities_map[mock_target2.get()]) {
-      REQUIRE(cap.collector_type == astl::CollectorType::MMIO);
+      REQUIRE(cap.collector_type == astl::CollectorType::PROCFS);
     }
   }
 
@@ -198,7 +198,7 @@ TEST_CASE("CollectorManager::BuildCollectorManager uses SCMI target metadata for
   REQUIRE(capabilities_map.at(target).front().collector_type == astl::CollectorType::SCMI);
 }
 
-TEST_CASE("CollectorManager::BuildCollectorManager rejects SCMI targets without SCMI-specific metadata",
+TEST_CASE("CollectorManager::BuildCollectorManager accepts legacy SCMI targets without SCMI-specific metadata",
           "[collector_manager]") {
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
@@ -209,8 +209,13 @@ TEST_CASE("CollectorManager::BuildCollectorManager rejects SCMI targets without 
   targets.emplace_back(target);
 
   auto collector_manager = astl::BuildCollectorManager(targets, configuration);
-  REQUIRE_FALSE(collector_manager.has_value());
-  REQUIRE(collector_manager.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(collector_manager.has_value());
+
+  auto capabilities_map = collector_manager.value()->ReportCollectionCapabilities();
+  REQUIRE(capabilities_map.size() == 1);
+  REQUIRE(capabilities_map.contains(target));
+  REQUIRE(capabilities_map.at(target).size() == 1);
+  REQUIRE(capabilities_map.at(target).front().collector_type == astl::CollectorType::SCMI);
 }
 
 TEST_CASE("CollectorManager::BuildCollectorManager rejects unsupported collector types", "[collector_manager]") {
@@ -271,8 +276,8 @@ TEST_CASE("CollectorManager with no viable collectors", "collector_manager") {
 
   auto mock_target    = std::make_unique<MockTarget>();
   auto mock_collector = std::make_unique<MockCollector>();
-  REQUIRE_CALL(*mock_collector, GetCapabilities()).RETURN(astl::CollectorCapability{astl::CollectorType::MMIO});
-  // we require SCMI, but collector provides only MMIO, that's an error
+  REQUIRE_CALL(*mock_collector, GetCapabilities()).RETURN(astl::CollectorCapability{astl::CollectorType::PROCFS});
+  // we require SCMI, but collector provides only PROCFS, that's an error
   astl::CollectionOperations operations{.operationsBeforeStart = {},
                                         .operationsAtStart     = {},
                                         .operationsOnSample    = {},

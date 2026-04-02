@@ -54,7 +54,8 @@ auto ParseValueType(const MetricJsonDeclaration& metric_declaration) -> astl_val
   }
 }
 
-auto ParseScmiOutputValueType(astl_value_type_t input_value_type, int32_t base10_unit_modifier) -> astl_value_type_t {
+auto ParseScmiOutputValueType(astl_value_type_t input_value_type, int32_t base10_unit_modifier,
+                              bool has_formula = false) -> astl_value_type_t {
   if (input_value_type == ASTL_VALUE_UNKNOWN) {
     return ASTL_VALUE_UNKNOWN;
   }
@@ -62,38 +63,56 @@ auto ParseScmiOutputValueType(astl_value_type_t input_value_type, int32_t base10
   if (base10_unit_modifier != 0) {
     return ASTL_VALUE_FLOAT64;
   }
+  // ExpressionFormula preserves the input arithmetic type in TE_UINT64 mode, so
+  // a pure configured formula does not change SCMI output typing on its own.
+  (void)has_formula;
   return input_value_type;
 }
 
-static auto BuildScmiMetricDescription(std::string_view metric_name, astl_category_t category) -> std::string {
-  switch (category) {
-    case ASTL_CATEGORY_TEMPERATURE:
+static auto BuildScmiMetricDescription(std::string_view metric_name, astl_metric_identifier_t identifier)
+    -> std::string {
+  switch (identifier) {
+    case ASTL_METRIC_IDENTIFIER_TEMPERATURE:
       return std::string{"Temperature reading for "} + std::string{metric_name};
-    case ASTL_CATEGORY_POWER:
+    case ASTL_METRIC_IDENTIFIER_ENERGY:
+      return std::string{"Energy reading for "} + std::string{metric_name};
+    case ASTL_METRIC_IDENTIFIER_POWER:
       return std::string{"Power reading for "} + std::string{metric_name};
-    case ASTL_CATEGORY_FREQUENCY:
+    case ASTL_METRIC_IDENTIFIER_FREQUENCY:
       return std::string{"Frequency reading for "} + std::string{metric_name};
-    case ASTL_CATEGORY_VOLTAGE:
+    case ASTL_METRIC_IDENTIFIER_VOLTAGE:
       return std::string{"Voltage reading for "} + std::string{metric_name};
-    case ASTL_CATEGORY_CURRENT:
+    case ASTL_METRIC_IDENTIFIER_CURRENT:
       return std::string{"Current reading for "} + std::string{metric_name};
-    case ASTL_CATEGORY_BANDWIDTH:
+    case ASTL_METRIC_IDENTIFIER_BANDWIDTH:
       return std::string{"Bandwidth reading for "} + std::string{metric_name};
-    case ASTL_CATEGORY_FAN_SPEED:
+    case ASTL_METRIC_IDENTIFIER_FAN_SPEED:
       return std::string{"Fan speed reading for "} + std::string{metric_name};
-    case ASTL_CATEGORY_COUNT:
+    case ASTL_METRIC_IDENTIFIER_HUMIDITY:
+      return std::string{"Humidity reading for "} + std::string{metric_name};
+    case ASTL_METRIC_IDENTIFIER_THERMAL_LIMIT:
+      return std::string{"Thermal limit reading for "} + std::string{metric_name};
+    case ASTL_METRIC_IDENTIFIER_THERMAL_THROTTLE:
+      return std::string{"Thermal throttle reading for "} + std::string{metric_name};
+    case ASTL_METRIC_IDENTIFIER_STATUS:
+      return std::string{"Status reading for "} + std::string{metric_name};
+    case ASTL_METRIC_IDENTIFIER_COUNT:
       return std::string{"Counter reading for "} + std::string{metric_name};
+    case ASTL_METRIC_IDENTIFIER_POWER_LIMIT:
+      return std::string{"Power limit reading for "} + std::string{metric_name};
+    case ASTL_METRIC_IDENTIFIER_POWER_THROTTLE:
+      return std::string{"Power throttle reading for "} + std::string{metric_name};
     default:
       return std::string{"Reading for "} + std::string{metric_name};
   }
 }
 
 static auto ResolveScmiMetricDescription(const MetricJsonDeclaration& metric_declaration, std::string_view metric_name,
-                                         astl_category_t category) -> std::string {
+                                         astl_metric_identifier_t identifier) -> std::string {
   if (!metric_declaration.description.empty()) {
     return metric_declaration.description;
   }
-  return BuildScmiMetricDescription(metric_name, category);
+  return BuildScmiMetricDescription(metric_name, identifier);
 }
 
 auto BuildScalingFormulaFromBase10Modifier(int32_t base10_unit_modifier) -> AnyFormula {
@@ -229,15 +248,16 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
                 value_to_info.size(), finite_set.size());
 
   MetricConfigOnTargets metric_configs_on_targets;
-  const auto            category = ParseCategory(metric_declaration.category);
+  const auto            identifier = ParseMetricIdentifier(metric_declaration.identifier);
   // SCMI collection remains uint64 on-wire; output value type may change after scaling.
   const auto input_value_type = ParseValueType(metric_declaration);
   for (const auto& scmi_metric_declaration : metric_registers) {
     const auto              metric_name          = std::string{metric_key_name};
     const auto              units                = scmi_metric_declaration.units;
     const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
-    const astl_value_type_t value_type           = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
-    const auto&             de_id                = scmi_metric_declaration.de_id;
+    const astl_value_type_t value_type =
+        ParseScmiOutputValueType(input_value_type, base10_unit_modifier, metric_declaration.formula.has_value());
+    const auto& de_id = scmi_metric_declaration.de_id;
     // @todo(ASTL-186) - may need to handle different data event ids for different targets
     ScmiOperationBuilder operation_builder{de_id};
     auto                 finite_set_copy = finite_set;     // copy for this metric instance
@@ -252,7 +272,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
         ComposeFormulas(std::move(formula_result.value()), BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
 
     auto new_metric_config = std::make_unique<FiniteSetMetricConfig>(
-        metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE, category,
+        metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE, identifier,
         collector_type.value(), std::move(operation_builder), std::move(finite_set_copy), std::move(info_copy),
         std::move(composed_formula), input_value_type, std::vector<std::string>{},
         scmi_metric_declaration.GetFullyQualifiedName());
@@ -320,7 +340,7 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   MetricConfigOnTargets metric_configs_on_targets;
 
   // get some essential data from the metric_declaration
-  const auto category       = ParseCategory(metric_declaration.category);
+  const auto identifier     = ParseMetricIdentifier(metric_declaration.identifier);
   const auto collector_type = ParseCollectorType(metric_declaration);
   if (!collector_type || collector_type != CollectorType::SCMI) {
     ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection.protocol,
@@ -358,7 +378,7 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
 
     auto new_config = std::make_unique<ResidencyMetricConfig>(
         name, metric_declaration.description, ParseUnits(metric_declaration.unit.value_or("")), value_type,
-        ASTL_METRIC_RESIDENCY, category, collector_type.value(), std::move(state_to_info_map_result.value()),
+        ASTL_METRIC_RESIDENCY, identifier, collector_type.value(), std::move(state_to_info_map_result.value()),
         metric_declaration.inferred_state, std::move(formula_result.value()), input_value_type, name);
 
     metric_configs_on_targets.emplace(std::move(new_config), applicable_targets);
@@ -394,7 +414,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
     ASTL_LOG_INFO("No Data Event IDs found for metric {}", metric_key_name);
   }
   MetricConfigOnTargets metric_configs_on_targets;
-  const auto            category = ParseCategory(metric_declaration.category);
+  const auto            identifier = ParseMetricIdentifier(metric_declaration.identifier);
   // SCMI collection remains uint64 on-wire; output value type may change after scaling.
   const auto input_value_type = ParseValueType(metric_declaration);
 
@@ -402,9 +422,10 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
     const auto              units                = scmi_metric_declaration.units;
     const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
     ScmiOperationBuilder    operation_builder{scmi_metric_declaration.de_id};
-    const astl_value_type_t value_type    = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
-    const auto              resolved_name = scmi_metric_declaration.GetFullyQualifiedName();
-    const auto              description   = ResolveScmiMetricDescription(metric_declaration, resolved_name, category);
+    const astl_value_type_t value_type =
+        ParseScmiOutputValueType(input_value_type, base10_unit_modifier, metric_declaration.formula.has_value());
+    const auto resolved_name = scmi_metric_declaration.GetFullyQualifiedName();
+    const auto description   = ResolveScmiMetricDescription(metric_declaration, resolved_name, identifier);
 
     auto formula_result = BuildFormula(metric_declaration.formula);
     if (!formula_result.has_value()) {
@@ -416,7 +437,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
 
     auto metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
     auto new_metric_config = std::make_unique<MetricConfig>(std::string{metric_key_name}, description, units,
-                                                            value_type, category, metric_type, collector_type.value(),
+                                                            value_type, identifier, metric_type, collector_type.value(),
                                                             std::move(operation_builder), std::move(composed_formula),
                                                             input_value_type, std::move(metric_groups), resolved_name);
     metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);

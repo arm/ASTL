@@ -243,7 +243,14 @@ t = astl.get_targets()[0]
 print("Targets:", astl.get_targets())
 print("Counters:", astl.get_counters(t))
 print("Metrics:", astl.get_metrics(t))
-print("Metric Groups:", astl.get_metric_groups(t))
+print("Metric Groups:", astl.get_metric_groups())
+print("Metric Groups On Target:", astl.get_metric_groups_on_target(t))
+
+group = astl.get_metric_groups()[0]
+print("Group Member Count:", astl.get_metric_group_metric_count(group))
+print("Group Members:", astl.get_metric_group_metrics(group))
+print("Target-Scoped Group Member Count:", astl.get_metric_group_metric_count_on_target(t, group))
+print("Target-Scoped Group Members:", astl.get_metric_group_metrics_on_target(t, group))
 ```
 
 Returned collections are typically simple Python lists / dict-like structures derived from the C API.

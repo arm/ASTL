@@ -21,7 +21,12 @@ Discovery:
 - `get_targets() -> list[Target]`
 - `get_counters(target) -> list[Counter]`
 - `get_metrics(target) -> list[Metric]`
-- `get_metric_groups(target) -> list[MetricGroup]`
+- `get_metric_groups() -> list[MetricGroup]`
+- `get_metric_groups_on_target(target) -> list[MetricGroup]`
+- `get_metric_group_metric_count(group) -> int`
+- `get_metric_group_metrics(group) -> list[Metric]`
+- `get_metric_group_metric_count_on_target(target, group) -> int`
+- `get_metric_group_metrics_on_target(target, group) -> list[Metric]`
 - `get_metric_states_on_target(target, metric) -> list[MetricState]`
 
   Returns the named states for `FINITE_SET_VALUE` or `RESIDENCY` metrics.
@@ -93,8 +98,8 @@ Entity object attributes (read-only):
 - Counter: `name`, `description`, `min_sampling_interval`, `units`,
   `value_type`, `counter_type`, `formula`
 - Metric: `name`, `description`, `min_sampling_interval`, `units`,
-  `value_type`, `metric_type`, `category`
-- MetricGroup: `name`, `description`, `metric_count`
+  `value_type`, `metric_type`, `identifier`
+- MetricGroup: `name`, `description`
 - MetricState: `name`, `description`, `value`
 
 ## Build / Install (Editable)

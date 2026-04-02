@@ -5,11 +5,14 @@
 #ifndef INCLUDE_ASTL_LOGGER_HPP_
 #define INCLUDE_ASTL_LOGGER_HPP_
 
+#include <filesystem>
 #include <format>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <source_location>
 #include <string>
+#include <vector>
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE  // This needs to be defined before spdlog.h is included
 #define SPDLOG_USE_STD_FORMAT
@@ -242,10 +245,14 @@ class Logger {
    * The log file name, enabling logging to the console and setting the log level can be done through enviroment
    * variables.
    */
-  Logger() {
+  Logger() : _component_tag("ASTL") {
     const std::string& log_name        = GetEnvVar(astl::EnvVar::ASTL_LOG_NAME);
     bool               console_enabled = IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE);
     astl::LogLevel     log_level       = GetEnvVarLogLevel(astl::EnvVar::ASTL_LOG_LEVEL);
+    /* Normalize None/Unknown to Off for deterministic behavior */
+    if (log_level == astl::LogLevel::None || log_level == astl::LogLevel::Unknown) {
+      log_level = astl::LogLevel::Off;
+    }
     /* Initially, have all formatting cleared. This is useful for using the logger to write to output file instead of
      * logging warnings and errors etc. use SetDefaultFormatting() to set default formatting for instanciated logger
      * objects
@@ -269,11 +276,19 @@ class Logger {
    * environment variable.
    */
   explicit Logger(astl::LogLevel level, bool console, bool default_formatting,
-                  const std::string& log_name = std::string()) {
-    bool               console_enabled = console || IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE);
-    const std::string& var_file_name   = GetEnvVar(astl::EnvVar::ASTL_LOG_NAME);
-    astl::LogLevel     var_level       = GetEnvVarLogLevel(astl::EnvVar::ASTL_LOG_LEVEL);
-    InitializeLogger(var_level == astl::LogLevel::None ? level : var_level, console_enabled, default_formatting,
+                  const std::string& log_name = std::string(), const std::string& component_tag = std::string())
+      : _component_tag(component_tag), _log_name(log_name) {
+    const bool use_logging_env_overrides = default_formatting;
+    const bool console_enabled = console || (use_logging_env_overrides && IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE));
+    const std::string& var_file_name =
+        use_logging_env_overrides ? GetEnvVar(astl::EnvVar::ASTL_LOG_NAME) : std::string();
+    astl::LogLevel var_level =
+        use_logging_env_overrides ? GetEnvVarLogLevel(astl::EnvVar::ASTL_LOG_LEVEL) : astl::LogLevel::None;
+    /* Normalize None/Unknown to Off for deterministic behavior */
+    if (var_level == astl::LogLevel::None || var_level == astl::LogLevel::Unknown) {
+      var_level = astl::LogLevel::Off;
+    }
+    InitializeLogger(var_level == astl::LogLevel::Off ? level : var_level, console_enabled, default_formatting,
                      var_file_name.empty() ? log_name : var_file_name);
   }
 
@@ -283,9 +298,12 @@ class Logger {
    * @return static Logger instance
    */
   static Logger& GetInstance() noexcept {
-    static Logger logger_instance = Logger(kDefaultLogLevel, kDefaultLogConsole, kDefaultFormatting, kDefaultLogName);
+    static Logger logger_instance =
+        Logger(kDefaultLogLevel, kDefaultLogConsole, kDefaultFormatting, kDefaultLogName, "ASTL");
     return logger_instance;
   }
+
+  static auto FormatMessage(std::string message) -> std::string { return message; }
 
  private:
   /* @brief main logging function that invokes the spdlog logger log function
@@ -300,20 +318,23 @@ class Logger {
   template <typename... Args>
   void Log(astl::LogLevel log_level, const std::source_location& location, std::format_string<Args...> log_text,
            Args&&... args) {
+    if (!ShouldLog(log_level)) {
+      return;
+    }
     bool               source_loc_enabled = IsEnvVarSet(astl::EnvVar::ASTL_LOG_SOURCE_LOC);
     spdlog::source_loc spdlog_location;
     if (source_loc_enabled) {
       spdlog_location = {location.file_name(), static_cast<int>(location.line()), location.function_name()};
     }
     try {
-      auto formatted_text = std::format(log_text, std::forward<Args>(args)...);
-      _logger->log(spdlog_location, GetSpdLogLevel(log_level), std::move(formatted_text));
+      auto formatted_text = FormatMessage(std::format(log_text, std::forward<Args>(args)...));
+      EnsureLogger()->log(spdlog_location, GetSpdLogLevel(log_level), std::move(formatted_text));
     } catch (const std::format_error& e) {
       std::ostringstream oss;
       oss << "LOG FORMAT ERROR: " << e.what() << "\n"
           << "  Format string: \"" << log_text.get() << "\"\n"
           << "  Arguments: [" << detail::DumpArgs(std::forward<Args>(args)...) << "]\n";
-      _logger->log(spdlog_location, GetSpdLogLevel(log_level), oss.str());
+      EnsureLogger()->log(spdlog_location, GetSpdLogLevel(log_level), FormatMessage(oss.str()));
     }
   }
 
@@ -324,15 +345,18 @@ class Logger {
    */
   template <typename... Args>
   void Log(astl::LogLevel log_level, std::format_string<Args...> log_text, Args&&... args) {
+    if (!ShouldLog(log_level)) {
+      return;
+    }
     try {
-      auto formatted_text = std::format(log_text, std::forward<Args>(args)...);
-      _logger->log(GetSpdLogLevel(log_level), std::move(formatted_text));
+      auto formatted_text = FormatMessage(std::format(log_text, std::forward<Args>(args)...));
+      EnsureLogger()->log(GetSpdLogLevel(log_level), std::move(formatted_text));
     } catch (const std::format_error& e) {
       std::ostringstream oss;
       oss << "LOG FORMAT ERROR: " << e.what() << "\n"
           << "  Format string: \"" << log_text.get() << "\"\n"
           << "  Arguments: [" << detail::DumpArgs(std::forward<Args>(args)...) << "]\n";
-      _logger->log(GetSpdLogLevel(log_level), oss.str());
+      EnsureLogger()->log(GetSpdLogLevel(log_level), FormatMessage(oss.str()));
     }
   }
 
@@ -346,12 +370,15 @@ class Logger {
    * static
    */
   void Log(astl::LogLevel log_level, const std::source_location& location, std::string const& log_text) {
+    if (!ShouldLog(log_level)) {
+      return;
+    }
     bool               source_loc_enabled = IsEnvVarSet(astl::EnvVar::ASTL_LOG_SOURCE_LOC);
     spdlog::source_loc spdlog_location;
     if (source_loc_enabled) {
       spdlog_location = {location.file_name(), static_cast<int>(location.line()), location.function_name()};
     }
-    _logger->log(spdlog_location, GetSpdLogLevel(log_level), log_text);
+    EnsureLogger()->log(spdlog_location, GetSpdLogLevel(log_level), FormatMessage(log_text));
   }
 
   /* @brief logging function that invokes the spdlog logger log function without source location or formatting
@@ -359,7 +386,12 @@ class Logger {
    * @param log_level  The message severity
    * @param log_text   The text of the log message
    */
-  void Log(astl::LogLevel log_level, std::string const& log_text) { _logger->log(GetSpdLogLevel(log_level), log_text); }
+  void Log(astl::LogLevel log_level, std::string const& log_text) {
+    if (!ShouldLog(log_level)) {
+      return;
+    }
+    EnsureLogger()->log(GetSpdLogLevel(log_level), FormatMessage(log_text));
+  }
 
  public:
   // TODO(ASTL-73): Use default value std::source_location::current() in log functions
@@ -527,49 +559,75 @@ class Logger {
    */
   void InitializeLogger(astl::LogLevel level = astl::LogLevel::Off, bool console = false,
                         bool default_formatting = false, const std::string& log_name = std::string()) noexcept {
-    // If level is not off, console is false and log_name is not specified, then turn on console
-    bool log_console = console || (level != astl::LogLevel::Off && log_name.empty());
+    _default_formatting_enabled = default_formatting;
+    _configured_level           = level;
+    _console_enabled            = console;
+    _log_name                   = log_name;
+    _logger.reset();
+  }
 
-    // By default the logger is set to log to the console and is disabled
+  auto ShouldLog(astl::LogLevel log_level) const -> bool {
+    const auto configured_level = GetSpdLogLevel(_configured_level);
+    return configured_level != spdlog::level::off && GetSpdLogLevel(log_level) >= configured_level;
+  }
+
+  auto EnsureLogger() -> std::shared_ptr<spdlog::logger> {
+    std::lock_guard<std::mutex> lock(_logger_mutex);
+    if (_logger != nullptr) {
+      return _logger;
+    }
+
+    const bool log_console = _console_enabled || (_configured_level != astl::LogLevel::Off && _log_name.empty());
+
     auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     console_sink->set_level(spdlog::level::off);
 
-    spdlog::level::level_enum spdlog_level = GetSpdLogLevel(level);
-
+    const auto                    spdlog_level = GetSpdLogLevel(_configured_level);
     std::vector<spdlog::sink_ptr> sinks;
+    std::vector<std::string>      spdlog_initialization_errors;
 
-    std::vector<std::string> spdlog_initialization_errors;
-
-    // If log level is set by user, then either we want to log to the console, to the user specified file or to both
     if (spdlog_level != spdlog::level::off) {
-      /* create a console sink if we need to log to the console */
       if (log_console) {
-        console_sink->set_level(spdlog_level); /* console sink log level */
+        console_sink->set_level(spdlog_level);
         sinks.push_back(console_sink);
       }
 
-      /* create a file sink to log to the specified file */
-      if (!log_name.empty()) {
+      if (!_log_name.empty()) {
         try {
-          auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_name, true);
-          file_sink->set_level(spdlog_level); /* file sink log level */
+          const auto log_path = std::filesystem::path(_log_name);
+          if (!log_path.parent_path().empty()) {
+            std::error_code error_code;
+            std::filesystem::create_directories(log_path.parent_path(), error_code);
+            if (error_code) {
+              throw spdlog::spdlog_ex(std::format("failed to create log directory '{}': {}",
+                                                  log_path.parent_path().string(), error_code.message()));
+            }
+          }
+
+          // Formatted loggers append so multiple logger instances (for example ATX + ASTL) can share one file.
+          // Unformatted writer-style loggers truncate to keep generated output files fresh per run.
+          auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(_log_name, !_default_formatting_enabled);
+          file_sink->set_level(spdlog_level);
           sinks.push_back(file_sink);
         } catch (const spdlog::spdlog_ex& ex) {
           std::string msg =
-              "Logger initialization failed: could not create file sink for log file '" + log_name + "':" + ex.what();
+              "Logger initialization failed: could not create file sink for log file '" + _log_name + "':" + ex.what();
           spdlog_initialization_errors.push_back(std::move(msg));
         }
       }
-    } else { /* log level is off, set up the default console sink that is off */
+    }
+
+    if (sinks.empty()) {
       sinks.push_back(console_sink);
     }
+
     /* spdlog requires all loggers to have unique internal names. Using a random number as part of the name guarantees
      * all instances of Logger will will have uniquely named spdlog loggers */
     uint64_t random_number = astl::GetRandomNumber();
     _logger = std::make_shared<spdlog::logger>(std::format("astl_{:x}", random_number), sinks.begin(), sinks.end());
     _logger->set_level(spdlog_level);  // Set the logger log level
     _logger->flush_on(spdlog_level);   // Set level for flushing, the higher the level the more expensive flushing gets
-    default_formatting ? SetDefaultFormatting() : ClearFormatting();
+    _default_formatting_enabled ? SetDefaultFormatting() : ClearFormatting();
     try {
       spdlog::register_logger(_logger);
     } catch (const spdlog::spdlog_ex& ex) {
@@ -583,6 +641,7 @@ class Logger {
     for (const auto& error_msg : spdlog_initialization_errors) {
       std::cerr << "SPDLOG registration error: " << error_msg << "\n";
     }
+    return _logger;
   }
 
  public:
@@ -591,13 +650,28 @@ class Logger {
    * Message level with coloring in [:::-LEVEL-:::] format
    * if source location logging is enabled, then level is logged as[:::-LEVEL-:SOURCE:LINE:FUNCTION] format
    */
-  void SetDefaultFormatting() { _logger->set_pattern("[%H:%M:%S.%e.%f] [:::%^-%l-%$:%s:%#:%!] %v"); }
+  void SetDefaultFormatting() {
+    _default_formatting_enabled = true;
+    if (_logger == nullptr) {
+      return;
+    }
+    const std::string pattern_body = "[%H:%M:%S.%e.%f] [:::%^-%l-%$:%s:%#:%!] %v";
+    if (_component_tag.empty()) {
+      _logger->set_pattern(pattern_body);
+      return;
+    }
+    _logger->set_pattern(std::format("[{}] {}", _component_tag, pattern_body));
+  }
 
   /* @brief Removes all spdlog output formatting and preconfigured output patten
    * after the formatting is cleared, the text string is logged as is. Even return character is not added.
    * This is useful for logging already formatted text to an output file
    */
   void ClearFormatting() {
+    _default_formatting_enabled = false;
+    if (_logger == nullptr) {
+      return;
+    }
     auto formatter =
         std::make_unique<spdlog::pattern_formatter>("%v", spdlog::pattern_time_type::local, std::string(""));
     _logger->set_formatter(std::move(formatter));
@@ -605,6 +679,12 @@ class Logger {
 
  private:
   std::shared_ptr<spdlog::logger> _logger{nullptr};  //!< spdlog logger object with all formatting and sinks.
+  std::mutex                      _logger_mutex;
+  std::string                     _component_tag;
+  astl::LogLevel                  _configured_level{astl::LogLevel::Off};
+  bool                            _console_enabled{false};
+  std::string                     _log_name;
+  bool                            _default_formatting_enabled{false};
 };
 
 // NOLINTBEGIN

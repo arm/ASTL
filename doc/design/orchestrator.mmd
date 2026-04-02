@@ -312,7 +312,7 @@ class RateMetric{
 SamplerOperation --|> Operation
 
 %% any counter or metric has a set of strategies for creating operations to sample its data
-%% for instance, an SoC temperature metric might have two strategies for MMIO and for SCMI.
+%% for instance, an SoC temperature metric might have two strategies for PROCFS and for SCMI.
 %% Those strategies would hold the specific collector like ScmiCollector, and parameters like offsets
 CounterMetric "1" *-- "*" ISamplerStrategy: owns 
 

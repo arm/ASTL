@@ -176,6 +176,7 @@ TEST_CASE("Logger log level trace tests", "[trace]") {
 
   std::string line;
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogDebug should be able to log
@@ -183,30 +184,35 @@ TEST_CASE("Logger log level trace tests", "[trace]") {
   expected_string = "[:::-debug-:::] " + test_string + "1";
 
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogInfo should be able to log"
   logger->LogInfo(test_format, 2);  // NOLINT
   expected_string = "[:::-info-:::] " + test_string + "2";
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogWarning should be able to log
   logger->LogWarning(test_format, 3);  // NOLINT
   expected_string = "[:::-warning-:::] " + test_string + "3";
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogError should be able to log
   logger->LogError(test_format, 4);  // NOLINT
   expected_string = "[:::-error-:::] " + test_string + "4";
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogCritical should be able to log"
   logger->LogCritical(test_format, 5);  // NOLINT
   expected_string = "[:::-critical-:::] " + test_string + "5";
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // Write should be able to log runtime string with no formatting
@@ -241,40 +247,31 @@ TEST_CASE("Logger log level critical tests", "[critcal]") {
 
   // LogTrace should not be able to log
   logger->LogTrace(test_format, 0);  // NOLINT
-  scoped_test.OpenLog();
-  std::string line;
-  scoped_test.LogGetLine(line);
-  REQUIRE(line.empty());
+  REQUIRE_FALSE(std::filesystem::exists(logfile_name));
 
   // LogDebug should not be able to log
   logger->LogDebug(test_format, 1);  // NOLINT
-  scoped_test.RewindLog();
-  scoped_test.LogGetLine(line);
-  REQUIRE(line.empty());
+  REQUIRE_FALSE(std::filesystem::exists(logfile_name));
 
   // LogInfo should not be able to log
   logger->LogInfo(test_format, 2);  // NOLINT
-  scoped_test.RewindLog();
-  scoped_test.LogGetLine(line);
-  REQUIRE(line.empty());
+  REQUIRE_FALSE(std::filesystem::exists(logfile_name));
 
   // LogWarning should not be able to log
   logger->LogWarning(test_format, 3);  // NOLINT
-  scoped_test.RewindLog();
-  scoped_test.LogGetLine(line);
-  REQUIRE(line.empty());
+  REQUIRE_FALSE(std::filesystem::exists(logfile_name));
 
   // LogError should not be able to log
   logger->LogError(test_format, 4);  // NOLINT
-  scoped_test.RewindLog();
-  scoped_test.LogGetLine(line);
-  REQUIRE(line.empty());
+  REQUIRE_FALSE(std::filesystem::exists(logfile_name));
 
   // LogCritical should be able to log
   logger->LogCritical(test_format, 5);  // NOLINT
   std::string expected_string = "[:::-critical-:::] " + test_string + "5";
-  scoped_test.RewindLog();
+  scoped_test.OpenLog();
+  std::string line;
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // Write should be able to log with no formatting
@@ -317,6 +314,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
   scoped_test.OpenLog();
   std::string line;
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogDebug should be able to log
@@ -330,6 +328,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
       "[:::-debug-:" + file_name + ":" + std::to_string(line_number) + ":" + function_name + "] " + test_string + "1";
 
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogInfo should be able to log
@@ -343,6 +342,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
       "[:::-info-:" + file_name + ":" + std::to_string(line_number) + ":" + function_name + "] " + test_string + "2";
 
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogWarning should be able to log
@@ -356,6 +356,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
       "[:::-warning-:" + file_name + ":" + std::to_string(line_number) + ":" + function_name + "] " + test_string + "3";
 
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogError should be able to log
@@ -369,6 +370,7 @@ TEST_CASE("Logger with source location", "[src_loc]") {
       "[:::-error-:" + file_name + ":" + std::to_string(line_number) + ":" + function_name + "] " + test_string + "4";
 
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
 
   // LogCritical should be able to log
@@ -382,5 +384,114 @@ TEST_CASE("Logger with source location", "[src_loc]") {
                     test_string + "5";
 
   scoped_test.LogGetLine(line);
+  REQUIRE(line.rfind("[ASTL] ", 0) == 0);
   REQUIRE(line.find(expected_string) != std::string::npos);
+}
+
+TEST_CASE("Logger custom component tag", "[logger_component_tag]") {
+  const std::string logfile_name = "custom_component_tag_test.log";
+  EnvVarGuard       modified_logname_var(astl::EnvVar::ASTL_LOG_NAME, logfile_name);
+  EnvVarGuard       modified_loglevel_var(astl::EnvVar::ASTL_LOG_LEVEL, "info");
+  EnvVarGuard       modified_logconsole_var(astl::EnvVar::ASTL_LOG_CONSOLE, "0");
+  EnvVarGuard       modified_srcloc_var(astl::EnvVar::ASTL_LOG_SOURCE_LOC, "0");
+
+  astl::Logger logger(astl::LogLevel::Info, false, true, logfile_name, "ATX");
+  logger.LogInfo("Tagged message");
+
+  std::ifstream logfile(logfile_name);
+  REQUIRE(logfile.is_open());
+
+  std::string line;
+  REQUIRE(std::getline(logfile, line));
+  REQUIRE(line.rfind("[ATX] ", 0) == 0);
+  REQUIRE(line.find("[:::-info-:::] Tagged message") != std::string::npos);
+
+  logfile.close();
+  std::filesystem::remove(logfile_name);
+}
+
+TEST_CASE("Formatted loggers append to shared file", "[logger_append_shared_file]") {
+  const std::string logfile_name = "shared_component_tag_test.log";
+  EnvVarGuard       modified_logname_var(astl::EnvVar::ASTL_LOG_NAME, logfile_name);
+  EnvVarGuard       modified_loglevel_var(astl::EnvVar::ASTL_LOG_LEVEL, "info");
+  EnvVarGuard       modified_logconsole_var(astl::EnvVar::ASTL_LOG_CONSOLE, "0");
+  EnvVarGuard       modified_srcloc_var(astl::EnvVar::ASTL_LOG_SOURCE_LOC, "0");
+
+  {
+    astl::Logger astl_logger(astl::LogLevel::Info, false, true, logfile_name, "ASTL");
+    astl::Logger atx_logger(astl::LogLevel::Info, false, true, logfile_name, "ATX");
+    astl_logger.LogInfo("First message");
+    atx_logger.LogInfo("Second message");
+  }
+
+  std::ifstream logfile(logfile_name);
+  REQUIRE(logfile.is_open());
+
+  std::string contents((std::istreambuf_iterator<char>(logfile)), std::istreambuf_iterator<char>());
+  REQUIRE(contents.find("[ASTL]") != std::string::npos);
+  REQUIRE(contents.find("First message") != std::string::npos);
+  REQUIRE(contents.find("[ATX]") != std::string::npos);
+  REQUIRE(contents.find("Second message") != std::string::npos);
+
+  logfile.close();
+  std::filesystem::remove(logfile_name);
+}
+
+TEST_CASE("Formatted logger creates file only after an emitted message", "[logger_lazy_file_creation]") {
+  const std::string logfile_name = "lazy_component_tag_test.log";
+  EnvVarGuard       modified_logname_var(astl::EnvVar::ASTL_LOG_NAME, logfile_name);
+  EnvVarGuard       modified_loglevel_var(astl::EnvVar::ASTL_LOG_LEVEL, "critical");
+  EnvVarGuard       modified_logconsole_var(astl::EnvVar::ASTL_LOG_CONSOLE, "0");
+  EnvVarGuard       modified_srcloc_var(astl::EnvVar::ASTL_LOG_SOURCE_LOC, "0");
+
+  std::filesystem::remove(logfile_name);
+
+  astl::Logger logger(astl::LogLevel::Critical, false, true, logfile_name, "ASTL");
+  REQUIRE_FALSE(std::filesystem::exists(logfile_name));
+
+  logger.LogInfo("Filtered message");
+  REQUIRE_FALSE(std::filesystem::exists(logfile_name));
+
+  logger.LogCritical("Emitted message");
+  REQUIRE(std::filesystem::exists(logfile_name));
+
+  std::ifstream logfile(logfile_name);
+  REQUIRE(logfile.is_open());
+
+  std::string line;
+  REQUIRE(std::getline(logfile, line));
+  REQUIRE(line.find("Emitted message") != std::string::npos);
+
+  logfile.close();
+  std::filesystem::remove(logfile_name);
+}
+
+TEST_CASE("Unformatted writer logger ignores logging env file override", "[logger_writer_ignores_env]") {
+  const std::string env_logfile_name    = "shared_logging_destination.log";
+  const std::string writer_logfile_name = "writer_output_destination.log";
+  EnvVarGuard       modified_logname_var(astl::EnvVar::ASTL_LOG_NAME, env_logfile_name);
+  EnvVarGuard       modified_loglevel_var(astl::EnvVar::ASTL_LOG_LEVEL, "info");
+  EnvVarGuard       modified_logconsole_var(astl::EnvVar::ASTL_LOG_CONSOLE, "1");
+  EnvVarGuard       modified_srcloc_var(astl::EnvVar::ASTL_LOG_SOURCE_LOC, "1");
+
+  {
+    astl::Logger writer_logger(astl::LogLevel::Info, false, false, writer_logfile_name, "WRITER");
+    writer_logger.Write("writer line");
+  }
+
+  std::ifstream writer_log(writer_logfile_name);
+  REQUIRE(writer_log.is_open());
+  std::string writer_contents((std::istreambuf_iterator<char>(writer_log)), std::istreambuf_iterator<char>());
+  REQUIRE(writer_contents.find("writer line") != std::string::npos);
+  writer_log.close();
+
+  std::ifstream shared_log(env_logfile_name);
+  if (shared_log.is_open()) {
+    std::string shared_contents((std::istreambuf_iterator<char>(shared_log)), std::istreambuf_iterator<char>());
+    REQUIRE(shared_contents.find("writer line") == std::string::npos);
+    shared_log.close();
+  }
+
+  std::filesystem::remove(writer_logfile_name);
+  std::filesystem::remove(env_logfile_name);
 }

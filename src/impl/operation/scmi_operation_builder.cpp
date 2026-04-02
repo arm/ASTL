@@ -29,7 +29,12 @@ ScmiMultiTargetOperationBuilder::ScmiMultiTargetOperationBuilder(ScmiTargetToDat
 
 [[nodiscard]] auto ScmiMultiTargetOperationBuilder::BuildOperations(const ITarget* target) const
     -> std::expected<OperationSequence, astl_status_code> {
-  if (const auto iter = _data_event_ids.find(target->Name()); iter != _data_event_ids.end()) {
+  const auto stable_target_key = GetStableTargetKey(*target);
+  auto       iter              = _data_event_ids.find(stable_target_key);
+  if (iter == _data_event_ids.end()) {
+    iter = _data_event_ids.find(target->Name());
+  }
+  if (iter != _data_event_ids.end()) {
     OperationSequence seq;
     seq.reserve(iter->second.size());
     for (const auto& data_event_id : iter->second) {
@@ -41,7 +46,7 @@ ScmiMultiTargetOperationBuilder::ScmiMultiTargetOperationBuilder(ScmiTargetToDat
     }
     return seq;
   }
-  ASTL_LOG_ERROR("No Data Event IDs found for target {}", target->Name());
+  ASTL_LOG_ERROR("No Data Event IDs found for target {} (stable key: {})", target->Name(), stable_target_key);
   return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
 }
 

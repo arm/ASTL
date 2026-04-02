@@ -17,8 +17,10 @@ def test_empty_enumerations_do_not_error():
         t = targets[0]
         counters = astl.get_counters(t)
         metrics = astl.get_metrics(t)
-        groups = astl.get_metric_groups(t)
+        groups = astl.get_metric_groups_on_target(t)
+        all_groups = astl.get_metric_groups()
         # Types and list semantics
         assert isinstance(counters, list)
         assert isinstance(metrics, list)
         assert isinstance(groups, list)
+        assert isinstance(all_groups, list)

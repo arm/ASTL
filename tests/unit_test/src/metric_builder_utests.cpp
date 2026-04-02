@@ -69,7 +69,8 @@ void WriteMinimalScmiFixture(const fs::path& config_root) {
     "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000": {
       "last_updated": "2026-03-16",
       "description": "Unit test metric declarations",
-      "metrics_file": "unit/test_metrics.json"
+      "metrics_file": "unit/test_metrics.json",
+      "name": "{telemetry_subdirectory}"
     }
   }
 })json");
@@ -119,7 +120,7 @@ void WriteMinimalScmiFixture(const fs::path& config_root) {
       "description": "Unit test SoC power metric",
       "unit": "W",
       "metric_type": "value",
-      "category": "POWER",
+      "identifier": "POWER",
       "collection": {
         "register": "ENERGY_COUNTER",
         "protocol": "scmi"
@@ -150,7 +151,7 @@ void WriteSerializedMetricManagerCache(const fs::path& cache_dir, const astl::IT
 
   astl::MetricManager metric_manager{caps};
   auto                cfg = std::make_unique<astl::MetricConfig>("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS,
-                                                                 ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
+                                                                 ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
                                                                  astl::CollectorType::SCMI, astl::NullOperationBuilder{});
   REQUIRE(cfg != nullptr);
 
@@ -180,9 +181,10 @@ TEST_CASE("MetricBuilder::BuildMetricManager with empty targets", "[MetricBuilde
 TEST_CASE("MetricBuilder::BuildMetricManager with unknown collector type", "[MetricBuilder]") {
   std::vector<std::unique_ptr<astl::ITarget>> targets;
 
-  auto mock_target = std::make_unique<MockTarget>();
-  REQUIRE_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
-  ALLOW_CALL(*mock_target, Name()).RETURN("mock_target_unknown");
+  auto                     mock_target      = std::make_unique<MockTarget>();
+  static const std::string mock_target_name = "mock_target_unknown";
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
+  ALLOW_CALL(*mock_target, Name()).RETURN(mock_target_name);
 
   targets.push_back(std::move(mock_target));
 
@@ -196,9 +198,10 @@ TEST_CASE("MetricBuilder::BuildMetricManager with unknown collector type", "[Met
 TEST_CASE("MetricBuilder::BuildMetricManager with SCMI target but no config", "[MetricBuilder]") {
   std::vector<std::unique_ptr<astl::ITarget>> targets;
 
-  auto mock_target = std::make_unique<MockTarget>();
-  REQUIRE_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
-  ALLOW_CALL(*mock_target, Name()).RETURN("scmi_target_0");
+  auto                     mock_target      = std::make_unique<MockTarget>();
+  static const std::string mock_target_name = "scmi_target_0";
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+  ALLOW_CALL(*mock_target, Name()).RETURN(mock_target_name);
 
   targets.push_back(std::move(mock_target));
 
@@ -214,9 +217,10 @@ TEST_CASE("MetricBuilder::BuildMetricManager with SCMI target but no config", "[
 TEST_CASE("MetricBuilder::BuildMetricManager with libsensors target", "[MetricBuilder]") {
   std::vector<std::unique_ptr<astl::ITarget>> targets;
 
-  auto mock_target = std::make_unique<MockTarget>();
-  REQUIRE_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::LIBSENSORS);
-  ALLOW_CALL(*mock_target, Name()).RETURN("libsensors_target");
+  auto                     mock_target      = std::make_unique<MockTarget>();
+  static const std::string mock_target_name = "libsensors_target";
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::LIBSENSORS);
+  ALLOW_CALL(*mock_target, Name()).RETURN(mock_target_name);
 
   targets.push_back(std::move(mock_target));
 
@@ -232,13 +236,15 @@ TEST_CASE("MetricBuilder::BuildMetricManager with libsensors target", "[MetricBu
 TEST_CASE("MetricBuilder::BuildMetricManager with mixed collector types", "[MetricBuilder]") {
   std::vector<std::unique_ptr<astl::ITarget>> targets;
 
-  auto scmi_target = std::make_unique<MockTarget>();
-  REQUIRE_CALL(*scmi_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
-  ALLOW_CALL(*scmi_target, Name()).RETURN("scmi_0");
+  auto                     scmi_target      = std::make_unique<MockTarget>();
+  static const std::string scmi_target_name = "scmi_0";
+  ALLOW_CALL(*scmi_target, GetCollectorType()).RETURN(astl::CollectorType::SCMI);
+  ALLOW_CALL(*scmi_target, Name()).RETURN(scmi_target_name);
 
-  auto libsensors_target = std::make_unique<MockTarget>();
-  REQUIRE_CALL(*libsensors_target, GetCollectorType()).RETURN(astl::CollectorType::LIBSENSORS);
-  ALLOW_CALL(*libsensors_target, Name()).RETURN("libsensors_0");
+  auto                     libsensors_target      = std::make_unique<MockTarget>();
+  static const std::string libsensors_target_name = "libsensors_0";
+  ALLOW_CALL(*libsensors_target, GetCollectorType()).RETURN(astl::CollectorType::LIBSENSORS);
+  ALLOW_CALL(*libsensors_target, Name()).RETURN(libsensors_target_name);
 
   targets.push_back(std::move(scmi_target));
   targets.push_back(std::move(libsensors_target));
@@ -268,11 +274,15 @@ TEST_CASE("MetricBuilder::BuildMetricManagerFromASTLFile with nonexistent path",
 }
 
 TEST_CASE("MetricBuilder::BuildMetricManager uses JSON descriptions for SCMI counters", "[MetricBuilder]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration = configuration_result.value();
+
   const fs::path config_root = fs::temp_directory_path() / "astl_metric_builder_json_descriptions";
   TempFileGuard  config_guard(config_root);
   WriteMinimalScmiFixture(config_root);
 
-  auto configuration = MakeConfigurationForTestRoot(config_root);
+  configuration = MakeConfigurationForTestRoot(config_root);
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   auto scmi_target = std::make_unique<astl::Target>("scmi_tlm-0", "test target", astl::CollectorType::SCMI, nullptr,
@@ -298,7 +308,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager uses JSON descriptions for SCMI cou
   }
 
   REQUIRE(std::ranges::find(counter_descriptions, "Unit test SoC power metric") != counter_descriptions.end());
-  REQUIRE(std::ranges::find(counter_descriptions, "Unit test energy counter") == counter_descriptions.end());
+  REQUIRE(std::ranges::find(counter_descriptions, "Underlying counter for SoC Power") == counter_descriptions.end());
 }
 
 TEST_CASE("MetricBuilder::BuildMetricManager rejects load_file_path without cache dir", "[MetricBuilder]") {
@@ -414,6 +424,24 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from tempora
   REQUIRE(std::string{counter_props.name} == "ENERGY_COUNTER");
 }
 
+TEST_CASE("MetricBuilder::BuildMetricManager applies SCMI target name template from platform lookup",
+          "[MetricBuilder]") {
+  const fs::path config_root = fs::temp_directory_path() / "astl_metric_builder_scmi_target_name_fixture";
+  TempFileGuard  config_guard(config_root);
+  WriteMinimalScmiFixture(config_root);
+
+  auto configuration = MakeConfigurationForTestRoot(config_root);
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::Target>("scmi_tlm-0", "unit-test target", astl::CollectorType::SCMI, nullptr,
+                                                   "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
+
+  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+
+  REQUIRE(result.has_value());
+  REQUIRE(targets[0]->Name() == "tlm-0");
+}
+
 TEST_CASE("MetricBuilder::BuildMetricManager loads metric group metadata without group confidential flag",
           "[MetricBuilder]") {
   const fs::path config_root = fs::temp_directory_path() / "astl_metric_builder_group_fixture";
@@ -429,7 +457,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager loads metric group metadata without
       "description": "Unit test SoC power metric",
       "unit": "W",
       "metric_type": "value",
-      "category": "POWER",
+      "identifier": "POWER",
       "metric_groups": ["power"],
       "collection": {
         "register": "ENERGY_COUNTER",

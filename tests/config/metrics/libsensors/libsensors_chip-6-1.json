@@ -8,7 +8,7 @@
       "description": "Configured power reading for CPU power",
       "unit": "watts",
       "metric_type": "value",
-      "category": "POWER",
+      "identifier": "POWER",
       "collection": {
         "register": "CPU power",
         "protocol": "libsensors"

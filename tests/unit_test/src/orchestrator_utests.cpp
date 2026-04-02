@@ -2,9 +2,14 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
+#include <thread>
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
@@ -120,8 +125,11 @@ TEST_CASE("Orchestrator-Collection", "[Orchestrator]") {
 
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
+  const std::string    mock_target_name{"mock_target"};
+  ALLOW_CALL(*mock_target, Name()).RETURN(mock_target_name);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, GetProperties(_))
-      .SIDE_EFFECT(_1->handle = mock_target_handle; _1->name = "mock_target")
+      .SIDE_EFFECT(_1->handle = mock_target_handle; _1->name = mock_target_name.c_str())
       .RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
@@ -252,8 +260,11 @@ TEST_CASE("Orchestrator-StopCollection", "[Orchestrator]") {
   //  start up targets
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
+  const std::string    mock_target_name{"mock_target"};
+  ALLOW_CALL(*mock_target, Name()).RETURN(mock_target_name);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, GetProperties(_))
-      .SIDE_EFFECT(_1->handle = mock_target_handle; _1->name = "mock_target")
+      .SIDE_EFFECT(_1->handle = mock_target_handle; _1->name = mock_target_name.c_str())
       .RETURN(ASTL_STATUS_SUCCESS);
   static const std::string name = "mock_target";
   ALLOW_CALL(*mock_target, Name()).RETURN(name);
@@ -411,8 +422,11 @@ TEST_CASE("Orchestrator-SinkRawSamples empty span no-op", "[Orchestrator]") {
 
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
+  const std::string    mock_target_name{"mock_target"};
+  ALLOW_CALL(*mock_target, Name()).RETURN(mock_target_name);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, GetProperties(_))
-      .SIDE_EFFECT(_1->handle = mock_target_handle; _1->name = "mock_target")
+      .SIDE_EFFECT(_1->handle = mock_target_handle; _1->name = mock_target_name.c_str())
       .RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
@@ -438,8 +452,11 @@ TEST_CASE("Orchestrator-SinkRawSamples bulk growth then skip reserve", "[Orchest
 
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
+  const std::string    mock_target_name{"mock_target"};
+  ALLOW_CALL(*mock_target, Name()).RETURN(mock_target_name);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, GetProperties(_))
-      .SIDE_EFFECT(_1->handle = mock_target_handle; _1->name = "mock_target")
+      .SIDE_EFFECT(_1->handle = mock_target_handle; _1->name = mock_target_name.c_str())
       .RETURN(ASTL_STATUS_SUCCESS);
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target));
@@ -464,6 +481,48 @@ TEST_CASE("Orchestrator-SinkRawSamples bulk growth then skip reserve", "[Orchest
     batch3.emplace_back(static_cast<astl::OperationId>(i), astl::AstlValue{sample_value});
   }
   REQUIRE(orchestrator.SinkRawSamples(target, batch3) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("Orchestrator-SinkRawSamples serializes rollover batches using the stable target key",
+          "[Orchestrator][cache]") {
+  const std::filesystem::path cache_dir = std::filesystem::temp_directory_path() / "astl_sink_raw_samples_stable_key";
+  TempFileGuard               cache_guard(cache_dir);
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  auto output_manager = std::make_unique<MockOutputManager>();
+  auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
+                                           std::move(metric_manager), std::move(output_manager), cache_dir);
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::Target>("scmi-display-target", "", astl::CollectorType::SCMI, nullptr,
+                                                   std::nullopt, "tlm-0"));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  auto* target = orchestrator.GetTargets()[0].get();
+
+  std::vector<astl::RawSampledData> batch_at_threshold;
+  batch_at_threshold.reserve(1024);
+  for (int i = 0; i < 1024; ++i) {
+    batch_at_threshold.emplace_back(static_cast<astl::OperationId>(i), astl::AstlValue{static_cast<uint64_t>(i)});
+  }
+  REQUIRE(orchestrator.SinkRawSamples(target, batch_at_threshold) == ASTL_STATUS_SUCCESS);
+
+  std::vector<astl::RawSampledData> rollover_sample{
+      astl::RawSampledData{static_cast<astl::OperationId>(1024), astl::AstlValue{uint64_t{1024}}}
+  };
+  REQUIRE(orchestrator.SinkRawSamples(target, rollover_sample) == ASTL_STATUS_SUCCESS);
+
+  const std::filesystem::path stable_batch_file =
+      cache_dir / (astl::GetStableTargetKey(*target) + astl::kAstlFileExtension);
+  const std::filesystem::path display_name_file = cache_dir / "scmi-display-target.astl";
+  REQUIRE(std::filesystem::exists(stable_batch_file));
+  REQUIRE_FALSE(std::filesystem::exists(display_name_file));
 }
 
 // Refactored: individual test cases for each emission scenario reduce cognitive complexity
@@ -629,6 +688,77 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV idempotent emission", "[Orch
   REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
 }
 
+TEST_CASE("Orchestrator-StopCollection PERFETTO emission is synchronized across concurrent stops",
+          "[Orchestrator][outputs][threading]") {
+  auto          path = std::filesystem::temp_directory_path() / "orch_perfetto_concurrent.json";
+  TempFileGuard perfetto_file_guard(path);
+  EnvVarGuard   interval_guard{astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, ""};
+  EnvVarGuard   perfetto_guard{astl::EnvVar::ASTL_OUTPUT_PERFETTO, path.string()};
+
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
+
+  std::atomic<int>        stop_arrivals{0};
+  std::mutex              stop_mutex;
+  std::condition_variable stop_cv;
+  const auto              synchronize_stop_threads = [&stop_arrivals, &stop_mutex, &stop_cv] {
+    const auto       arrivals = stop_arrivals.fetch_add(1, std::memory_order_acq_rel) + 1;
+    std::unique_lock stop_lock(stop_mutex);
+    if (arrivals == 2) {
+      stop_cv.notify_all();
+    } else {
+      stop_cv.wait_for(stop_lock, std::chrono::seconds(1),
+                                    [&stop_arrivals] { return stop_arrivals.load(std::memory_order_acquire) >= 2; });
+    }
+  };
+  REQUIRE_CALL(*collector_manager, StopOnTarget(_))
+      .TIMES(2)
+      .LR_SIDE_EFFECT(synchronize_stop_threads())
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+
+  std::atomic<int> perfetto_output_calls{0};
+  auto             output_manager           = std::make_unique<MockOutputManager>();
+  const auto       record_perfetto_emission = [&perfetto_output_calls] {
+    perfetto_output_calls.fetch_add(1, std::memory_order_acq_rel);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  };
+  REQUIRE_CALL(*output_manager, OutputProcessedSamples(_, astl::OutputType::PERFETTO, _, _))
+      .TIMES(1)
+      .LR_SIDE_EFFECT(record_perfetto_emission())
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  auto                 topology_manager   = std::make_unique<MockTopologyManager>();
+  auto                 mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_handle = mock_target.get();
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string name = "mock_target";
+  ALLOW_CALL(*mock_target, Name()).RETURN(name);
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(mock_target));
+  REQUIRE(topology_manager->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), "");
+  auto*              target = orchestrator.GetTargets()[0].get();
+
+  std::array<astl_status_code, 2> stop_statuses{};
+  std::thread                     stop_thread_1([&] { stop_statuses[0] = orchestrator.StopCollection(target); });
+  std::thread                     stop_thread_2([&] { stop_statuses[1] = orchestrator.StopCollection(target); });
+  stop_thread_1.join();
+  stop_thread_2.join();
+
+  REQUIRE(stop_statuses[0] == ASTL_STATUS_SUCCESS);
+  REQUIRE(stop_statuses[1] == ASTL_STATUS_SUCCESS);
+  REQUIRE(perfetto_output_calls.load(std::memory_order_acquire) == 1);
+}
+
 TEST_CASE("Orchestrator-FullLifecyclePositive", "[Orchestrator][lifecycle]") {
   // Clear output env vars so that emission tests that ran before us don't pollute this test.
   (void)astl::SetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");
@@ -672,6 +802,7 @@ TEST_CASE("Orchestrator-FullLifecyclePositive", "[Orchestrator][lifecycle]") {
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   static const std::string target_name = "lifecycle_target";
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
   std::vector<std::unique_ptr<astl::ITarget>> targets;
@@ -730,6 +861,65 @@ TEST_CASE("Orchestrator-FullLifecyclePositive", "[Orchestrator][lifecycle]") {
   REQUIRE(orchestrator.StartCollection(target) == ASTL_STATUS_INVALID_STATE_TRANSITION);
 }
 
+TEST_CASE("Orchestrator-ConfigureCounterCollection transitions target to configured lifecycle",
+          "[Orchestrator][lifecycle]") {
+  using State            = astl::Orchestrator::TargetCollectionState;
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, StartOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
+      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+  ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
+
+  auto                               metric_manager        = std::make_unique<MockMetricManager>();
+  static int                         dummy_counter_storage = 0;
+  astl_counter_handle_t              counter_handle        = &dummy_counter_storage;
+  std::vector<astl_counter_handle_t> available_counters{counter_handle};
+
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
+  ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
+      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+  ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
+      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+          astl::CollectionOperations{
+                                     {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
+  });
+
+  auto               output_manager = std::make_unique<MockOutputManager>();
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), "");
+
+  auto                 mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t mock_target_handle = mock_target.get();
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
+  static const std::string target_name = "counter_lifecycle_target";
+  ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(mock_target));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  auto* target = orchestrator.GetTargets()[0].get();
+
+  astl_collection_params_t params{};
+  params.size  = sizeof(params);
+  params.flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY;
+  std::array<astl_counter_handle_t, 1> counters{counter_handle};
+  REQUIRE(orchestrator.ConfigureCounterCollection(target, &params, counters) == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator.GetTargetCollectionState(target).value() == State::CONFIGURED);
+
+  REQUIRE(orchestrator.StartCollection(target) == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator.GetTargetCollectionState(target).value() == State::STARTED);
+
+  REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator.GetTargetCollectionState(target).value() == State::STOPPED);
+}
 TEST_CASE("Orchestrator-ConfigureMetricCollection resets per-target cached artifacts", "[Orchestrator][lifecycle]") {
   namespace fs = std::filesystem;
 
@@ -766,13 +956,10 @@ TEST_CASE("Orchestrator-ConfigureMetricCollection resets per-target cached artif
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
                                   std::move(output_manager), cache_dir);
 
-  auto                     mock_target        = std::make_unique<MockTarget>();
-  astl_target_handle_t     mock_target_handle = mock_target.get();
-  static const std::string target_name        = "cached_target";
-  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
+  static const std::string target_name = "scmi-display-target";
+  auto* target_raw = new astl::Target(target_name, "", astl::CollectorType::SCMI, nullptr, std::nullopt, "tlm-0");
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::move(mock_target));
+  targets.emplace_back(target_raw);
   REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
   auto* target = orchestrator.GetTargets()[0].get();
 
@@ -780,7 +967,7 @@ TEST_CASE("Orchestrator-ConfigureMetricCollection resets per-target cached artif
   REQUIRE(orchestrator.SinkProcessedSamples(target, mock_metric_ptr, {&existing_sample, 1}) == ASTL_STATUS_SUCCESS);
 
   fs::create_directories(cache_dir);
-  const fs::path cached_sample_file = cache_dir / (target_name + astl::kAstlFileExtension);
+  const fs::path cached_sample_file = cache_dir / (astl::GetStableTargetKey(*target) + astl::kAstlFileExtension);
   std::ofstream  cached_file(cached_sample_file, std::ios::binary);
   REQUIRE(cached_file.good());
   cached_file << "stale";
@@ -840,6 +1027,7 @@ TEST_CASE("Orchestrator-StartCollectionPaused transitions directly to paused", "
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   static const std::string target_name = "paused_start_target";
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
   std::vector<std::unique_ptr<astl::ITarget>> targets;
@@ -896,6 +1084,7 @@ TEST_CASE("Orchestrator-StartCollectionPaused rolls back when pause is unsupport
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   static const std::string target_name = "paused_start_unsupported_target";
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
   std::vector<std::unique_ptr<astl::ITarget>> targets;
@@ -948,6 +1137,7 @@ TEST_CASE("Orchestrator-StartFailureDoesNotStickStartedState", "[Orchestrator][l
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   static const std::string target_name = "start_failure_target";
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
   std::vector<std::unique_ptr<astl::ITarget>> targets;
@@ -1015,6 +1205,7 @@ TEST_CASE("Orchestrator-StartSetsStartingStateDuringCollectorStart", "[Orchestra
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   static const std::string target_name = "start_in_progress_target";
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
   std::vector<std::unique_ptr<astl::ITarget>> targets;
@@ -1081,6 +1272,7 @@ TEST_CASE("Orchestrator-StopDuringStartingReturnsInvalidStateTransition", "[Orch
   auto                 mock_target        = std::make_unique<MockTarget>();
   astl_target_handle_t mock_target_handle = mock_target.get();
   ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   static const std::string target_name = "stop_during_starting_target";
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
   std::vector<std::unique_ptr<astl::ITarget>> targets;

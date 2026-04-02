@@ -44,6 +44,7 @@ static auto BuildTestOrchestrator(std::unique_ptr<MockTarget>        mock_target
       NAMED_ALLOW_CALL(*mock_metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
   expectations.push_back(NAMED_ALLOW_CALL(*mock_metric_manager, RemoveAllMetrics()));
   auto output_manager = std::make_unique<astl::OutputManager>();
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.push_back(std::move(mock_target));
@@ -138,6 +139,7 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - uint64 samples", "[summary_api]") {
         _1->name   = target_name.c_str();
       })
       .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
 
   // --- Set up metric config + handle ---
@@ -145,7 +147,7 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - uint64 samples", "[summary_api]") {
   data_event_ids["SummaryTarget"] = {0xABCD};
   astl::ScmiMultiTargetOperationBuilder op_builder{data_event_ids};
   auto                                  metric_config = std::make_unique<astl::MetricConfig>(
-      "TestMetric", "TestMetric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
+      "TestMetric", "TestMetric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
       astl::CollectorType::SCMI, std::move(op_builder));
 
   auto                                                                     mock_metric = std::make_unique<MockMetric>();
@@ -265,6 +267,7 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - float64 samples", "[summary_api]") 
         _1->name   = target_name.c_str();
       })
       .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
 
   // --- Set up metric ---
@@ -272,8 +275,8 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - float64 samples", "[summary_api]") 
   data_event_ids["FloatTarget"] = {0x1234};
   astl::ScmiMultiTargetOperationBuilder op_builder{data_event_ids};
   auto                                  metric_config = std::make_unique<astl::MetricConfig>(
-      "FloatMetric", "FloatMetric", ASTL_UNITS_NONE, ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
-      astl::CollectorType::SCMI, std::move(op_builder));
+      "FloatMetric", "FloatMetric", ASTL_UNITS_NONE, ASTL_VALUE_FLOAT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+      ASTL_METRIC_VALUE, astl::CollectorType::SCMI, std::move(op_builder));
 
   auto                                                                     mock_metric = std::make_unique<MockMetric>();
   auto*                                                                    mock_metric_raw = mock_metric.get();
@@ -336,6 +339,7 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - unsupported type returns NOT_SUPPOR
         _1->name   = target_name.c_str();
       })
       .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
 
   // --- Set up a metric that reports BOOL8 type (unsupported by MinMaxAvgSummarizer) ---
@@ -343,7 +347,7 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - unsupported type returns NOT_SUPPOR
   data_event_ids["BoolTarget"] = {0xBEEF};
   astl::ScmiMultiTargetOperationBuilder op_builder{data_event_ids};
   auto                                  metric_config = std::make_unique<astl::MetricConfig>(
-      "BoolMetric", "BoolMetric", ASTL_UNITS_NONE, ASTL_VALUE_BOOL8, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
+      "BoolMetric", "BoolMetric", ASTL_UNITS_NONE, ASTL_VALUE_BOOL8, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
       astl::CollectorType::SCMI, std::move(op_builder));
 
   auto                                                                     mock_metric = std::make_unique<MockMetric>();
@@ -506,13 +510,14 @@ TEST_CASE("astlGetMetricDiscreteHistogramBinCountOnTarget - no samples yields 0"
         _1->name   = target_name.c_str();
       })
       .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
 
   astl::ScmiTargetToDataEventIdMap data_event_ids;
   data_event_ids["HistTarget"] = {0xABCD};
   astl::ScmiMultiTargetOperationBuilder op_builder{data_event_ids};
   auto                                  metric_config = std::make_unique<astl::MetricConfig>(
-      "HistMetric", "HistMetric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
+      "HistMetric", "HistMetric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
       astl::CollectorType::SCMI, std::move(op_builder));
 
   auto                                                                     mock_metric = std::make_unique<MockMetric>();
@@ -557,14 +562,15 @@ TEST_CASE("astlGetMetricDiscreteHistogramOnTarget - uint64 samples, correct bins
         _1->name   = target_name.c_str();
       })
       .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
 
   astl::ScmiTargetToDataEventIdMap data_event_ids;
   data_event_ids["HistTarget2"] = {0xABCD};
   astl::ScmiMultiTargetOperationBuilder op_builder{data_event_ids};
   auto                                  metric_config = std::make_unique<astl::MetricConfig>(
-      "HistMetric2", "HistMetric2", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_VALUE,
-      astl::CollectorType::SCMI, std::move(op_builder));
+      "HistMetric2", "HistMetric2", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+      ASTL_METRIC_VALUE, astl::CollectorType::SCMI, std::move(op_builder));
 
   auto                                                                     mock_metric = std::make_unique<MockMetric>();
   auto*                                                                    mock_metric_raw = mock_metric.get();
@@ -651,13 +657,14 @@ TEST_CASE("astlGetMetricDiscreteHistogramOnTarget - single unique value", "[hist
         _1->name   = target_name.c_str();
       })
       .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
 
   astl::ScmiTargetToDataEventIdMap data_event_ids;
   data_event_ids["HistTarget3"] = {0xBEEF};
   astl::ScmiMultiTargetOperationBuilder op_builder{data_event_ids};
   auto                                  metric_config = std::make_unique<astl::MetricConfig>(
-      "SingleMetric", "SingleMetric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_CATEGORY_UNCATEGORIZED,
+      "SingleMetric", "SingleMetric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
       ASTL_METRIC_VALUE, astl::CollectorType::SCMI, std::move(op_builder));
 
   auto                                                                     mock_metric = std::make_unique<MockMetric>();
@@ -718,13 +725,14 @@ TEST_CASE("astlGetMetricDiscreteHistogramOnTarget - unsupported metric type retu
         _1->name   = target_name.c_str();
       })
       .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
   ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
 
   astl::ScmiTargetToDataEventIdMap data_event_ids;
   data_event_ids["HistTarget4"] = {0x1234};
   astl::ScmiMultiTargetOperationBuilder op_builder{data_event_ids};
   auto                                  metric_config = std::make_unique<astl::MetricConfig>(
-      "RateMetric", "RateMetric", ASTL_UNITS_NONE, ASTL_VALUE_FLOAT64, ASTL_CATEGORY_UNCATEGORIZED, ASTL_METRIC_RATE,
+      "RateMetric", "RateMetric", ASTL_UNITS_NONE, ASTL_VALUE_FLOAT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_RATE,
       astl::CollectorType::SCMI, std::move(op_builder));
 
   auto                                                                     mock_metric = std::make_unique<MockMetric>();

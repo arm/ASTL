@@ -41,13 +41,13 @@ func TestEnumAlignment(t *testing.T) {
 		t.Fatalf("UnitsUnknown = %#x, want 0xFFFFFFFF", UnitsUnknown)
 	}
 
-	if CategoryBandwidth != 6 {
-		t.Fatalf("CategoryBandwidth = %d, want 6", CategoryBandwidth)
+	if MetricIdentifierBandwidth != 11 {
+		t.Fatalf("MetricIdentifierBandwidth = %d, want 11", MetricIdentifierBandwidth)
 	}
-	if CategoryFanSpeed != 7 {
-		t.Fatalf("CategoryFanSpeed = %d, want 7", CategoryFanSpeed)
+	if MetricIdentifierFanSpeed != 12 {
+		t.Fatalf("MetricIdentifierFanSpeed = %d, want 12", MetricIdentifierFanSpeed)
 	}
-	if CategoryUncategorized != 0xFFFFFFFF {
-		t.Fatalf("CategoryUncategorized = %#x, want 0xFFFFFFFF", CategoryUncategorized)
+	if MetricIdentifierUnknown != 0xFFFFFFFF {
+		t.Fatalf("MetricIdentifierUnknown = %#x, want 0xFFFFFFFF", MetricIdentifierUnknown)
 	}
 }

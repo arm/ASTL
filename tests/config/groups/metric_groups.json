@@ -1,0 +1,60 @@
+{
+  "_comment": "Metric group definitions for test-only ASTL configs",
+
+  "metric_groups": {
+    "auxiliary": {
+      "description": "Unit test auxiliary metrics"
+    },
+    "bandwidth": {
+      "description": "Unit test bandwidth metrics"
+    },
+    "core": {
+      "description": "Unit test core metrics"
+    },
+    "cpu": {
+      "description": "Unit test CPU metrics"
+    },
+    "current": {
+      "description": "Unit test current metrics"
+    },
+    "fan": {
+      "description": "Unit test fan metrics"
+    },
+    "frequency": {
+      "description": "Unit test frequency metrics"
+    },
+    "gpu": {
+      "description": "Unit test GPU metrics"
+    },
+    "io": {
+      "description": "Unit test I/O metrics"
+    },
+    "nic": {
+      "description": "Unit test NIC metrics"
+    },
+    "nvme": {
+      "description": "Unit test NVMe metrics"
+    },
+    "performance": {
+      "description": "Unit test performance metrics"
+    },
+    "power": {
+      "description": "Unit test power metrics"
+    },
+    "soc": {
+      "description": "Unit test SoC metrics"
+    },
+    "thermal": {
+      "description": "Unit test thermal metrics"
+    },
+    "topology": {
+      "description": "Unit test topology metrics"
+    },
+    "throttling": {
+      "description": "Unit test throttling metrics"
+    },
+    "voltage": {
+      "description": "Unit test voltage metrics"
+    }
+  }
+}

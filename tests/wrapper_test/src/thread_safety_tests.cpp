@@ -462,7 +462,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
           }
           case 18: {
             uint32_t metric_group_count = 0;
-            status                      = GetMetricGroupCount(valid_target, &metric_group_count);
+            status                      = GetMetricGroupCountOnTarget(valid_target, &metric_group_count);
             if (!is_allowed(status,
                             {ASTL_STATUS_SUCCESS, ASTL_STATUS_BAD_ARGUMENT, ASTL_STATUS_NO_METRIC_GROUPS_FOUND})) {
               all_ok.store(false, std::memory_order_release);
@@ -473,7 +473,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             uint32_t                                 metric_group_count = 1;
             std::array<astl_metric_group_props_t, 1> group_props{};
             group_props[0].size = sizeof(astl_metric_group_props_t);
-            status              = GetMetricGroups(valid_target, group_props.data(), &metric_group_count);
+            status              = GetMetricGroupsOnTarget(valid_target, group_props.data(), &metric_group_count);
             if (!is_allowed(status, {ASTL_STATUS_SUCCESS, ASTL_STATUS_BAD_ARGUMENT, ASTL_STATUS_NO_METRIC_GROUPS_FOUND,
                                      ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED,
                                      ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL})) {
@@ -483,12 +483,12 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
           }
           default: {
             astl_metric_group_props_t group_props{};
-            group_props.size         = sizeof(astl_metric_group_props_t);
-            group_props.metric_count = 1;
-            group_props.handle       = null_group_handle;
+            group_props.size   = sizeof(astl_metric_group_props_t);
+            group_props.handle = null_group_handle;
             std::array<astl_metric_props_t, 1> metrics{};
-            metrics[0].size = sizeof(astl_metric_props_t);
-            status          = GetMetricGroupMetrics(valid_target, &group_props, metrics.data());
+            uint32_t                           metric_count = static_cast<uint32_t>(metrics.size());
+            metrics[0].size                                 = sizeof(astl_metric_props_t);
+            status = GetMetricGroupMetrics(group_props.handle, metrics.data(), &metric_count);
             if (!is_allowed(status, {ASTL_STATUS_BAD_ARGUMENT})) {
               all_ok.store(false, std::memory_order_release);
             }

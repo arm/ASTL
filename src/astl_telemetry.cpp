@@ -109,15 +109,29 @@ auto StartConfiguredTargets(astl::Orchestrator& orchestrator, bool start_paused)
     return ASTL_STATUS_COLLECTION_NOT_CONFIGURED;
   }
 
-  astl_status_code aggregate_status = ASTL_STATUS_SUCCESS;
+  std::vector<const astl::ITarget*> started_targets;
+  started_targets.reserve(configured_targets.size());
   for (const auto* target : configured_targets) {
     const auto status =
         start_paused ? orchestrator.StartCollectionPaused(target) : orchestrator.StartCollection(target);
-    if (status != ASTL_STATUS_SUCCESS && aggregate_status == ASTL_STATUS_SUCCESS) {
-      aggregate_status = status;
+    if (status != ASTL_STATUS_SUCCESS) {
+      astl_status_code rollback_status = ASTL_STATUS_SUCCESS;
+      for (auto it = started_targets.rbegin(); it != started_targets.rend(); ++it) {
+        const auto stop_status = orchestrator.RollbackStartedCollectionToConfigured(*it);
+        if (stop_status != ASTL_STATUS_SUCCESS && rollback_status == ASTL_STATUS_SUCCESS) {
+          rollback_status = stop_status;
+        }
+      }
+      if (rollback_status != ASTL_STATUS_SUCCESS) {
+        ASTL_LOG_ERROR("Failed to roll back prior target starts after aggregate start failure: {}",
+                       astlStatusString(rollback_status));
+        return rollback_status;
+      }
+      return status;
     }
+    started_targets.push_back(target);
   }
-  return aggregate_status;
+  return ASTL_STATUS_SUCCESS;
 }
 
 auto GetCounterFromHandle(astl_counter_handle_t counter_handle, const astl::ITarget* target) noexcept
@@ -230,24 +244,15 @@ auto GetFirstElementSizeField(Container const& elements) noexcept
 
 auto PopulateMetricGroupProperties(astl::IMetricManager* metric_manager, astl_metric_group_handle_t group,
                                    astl_metric_group_props_t& properties) noexcept -> astl_status_code {
-  auto* caller_metric_buffer = properties.metrics;
-  auto  result               = metric_manager->GetMetricGroupProperties(group, &properties);
-  if (result != ASTL_STATUS_SUCCESS) {
-    return result;
-  }
-  // GetMetricGroupProperties() populates the outer struct and may overwrite the caller-owned nested
-  // metrics buffer pointer, so preserve and restore that pointer before optionally filling it here.
-  properties.metrics = caller_metric_buffer;
-  if (caller_metric_buffer == nullptr || properties.metric_count == 0) {
+  return metric_manager->GetMetricGroupProperties(group, &properties);
+}
+
+auto PopulateMetricPropertiesForHandles(astl::IMetricManager*                 metric_manager,
+                                        std::span<const astl_metric_handle_t> metric_handles,
+                                        std::span<astl_metric_props_t> metric_buffer) noexcept -> astl_status_code {
+  if (metric_handles.empty()) {
     return ASTL_STATUS_SUCCESS;
   }
-
-  auto metrics_in_group = metric_manager->GetMetricsInGroup(group);
-  if (!metrics_in_group) {
-    return metrics_in_group.error();
-  }
-
-  std::span<astl_metric_props_t> metric_buffer{caller_metric_buffer, properties.metric_count};
   if (metric_buffer[0].size < sizeof(astl_metric_props_t)) {
     return ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION;
   }
@@ -255,14 +260,42 @@ auto PopulateMetricGroupProperties(astl::IMetricManager* metric_manager, astl_me
     return ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION;
   }
 
-  for (size_t metric_idx = 0; metric_idx < metrics_in_group->size(); ++metric_idx) {
-    result = metric_manager->GetProperties((*metrics_in_group)[metric_idx], &metric_buffer[metric_idx]);
+  for (size_t metric_idx = 0; metric_idx < metric_handles.size(); ++metric_idx) {
+    auto result = metric_manager->GetProperties(metric_handles[metric_idx], &metric_buffer[metric_idx]);
     if (result != ASTL_STATUS_SUCCESS) {
       return result;
     }
   }
 
   return ASTL_STATUS_SUCCESS;
+}
+
+auto GetMetricHandlesInGroupForTarget(astl::IMetricManager* metric_manager, astl_metric_group_handle_t group,
+                                      const astl::ITarget* target) noexcept
+    -> std::expected<std::vector<astl_metric_handle_t>, astl_status_code> {
+  if (metric_manager == nullptr || target == nullptr) {
+    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+  }
+
+  auto metrics_in_group = metric_manager->GetMetricsInGroup(group);
+  if (!metrics_in_group) {
+    return std::unexpected(metrics_in_group.error());
+  }
+
+  std::vector<astl_metric_handle_t> filtered_metrics;
+  filtered_metrics.reserve(metrics_in_group->size());
+  for (const auto* const metric_handle : *metrics_in_group) {
+    auto metric_on_target = metric_manager->GetMetricOnTarget(metric_handle, target);
+    if (metric_on_target) {
+      filtered_metrics.push_back(metric_handle);
+      continue;
+    }
+    if (metric_on_target.error() != ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET) {
+      return std::unexpected(metric_on_target.error());
+    }
+  }
+
+  return filtered_metrics;
 }
 
 /***********************************************************************************
@@ -919,12 +952,7 @@ auto astlGetMetricGroupCount(const astl_get_metric_group_count_params_t* params)
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  const auto* target_handle      = params->target_handle;
-  auto*       metric_group_count = params->metric_group_count;
-  if (!target_handle) {
-    ASTL_LOG_ERROR("astlGetMetricGroupCount: target_handle is null");
-    return ASTL_STATUS_BAD_ARGUMENT;
-  }
+  auto* metric_group_count = params->metric_group_count;
   if (!metric_group_count) {
     ASTL_LOG_ERROR("astlGetMetricGroupCount: metric_group_count is null");
     return ASTL_STATUS_BAD_ARGUMENT;
@@ -938,14 +966,51 @@ auto astlGetMetricGroupCount(const astl_get_metric_group_count_params_t* params)
   }
   auto* metric_manager = *get_metric_manager_result;
 
-  ASTL_LOG_TRACE("astlGetMetricGroupCount: getting target from handle");
+  ASTL_LOG_TRACE("astlGetMetricGroupCount: getting available metric groups");
+  const auto available_metric_groups = metric_manager->GetMetricGroups();
+  if (available_metric_groups.size() > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("metric_manager->GetMetricGroups reports absurdly large number of metric groups: {}",
+                   available_metric_groups.size());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  *metric_group_count = static_cast<uint32_t>(available_metric_groups.size());
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto astlGetMetricGroupCountOnTarget(const astl_get_metric_group_count_on_target_params_t* params) noexcept
+    -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* target_handle      = params->target_handle;
+  auto*       metric_group_count = params->metric_group_count;
+  if (!target_handle) {
+    ASTL_LOG_ERROR("astlGetMetricGroupCountOnTarget: target_handle is null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!metric_group_count) {
+    ASTL_LOG_ERROR("astlGetMetricGroupCountOnTarget: metric_group_count is null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  ASTL_LOG_TRACE("astlGetMetricGroupCountOnTarget: getting metric manager");
+  *metric_group_count            = 0;
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager = *get_metric_manager_result;
+
+  ASTL_LOG_TRACE("astlGetMetricGroupCountOnTarget: getting target from handle");
   auto get_target_result = GetTargetFromHandle(target_handle);
   if (!get_target_result) {
     return get_target_result.error();
   }
   const auto* target = *get_target_result;
 
-  ASTL_LOG_TRACE("astlGetMetricGroupCount: getting available metric groups");
+  ASTL_LOG_TRACE("astlGetMetricGroupCountOnTarget: getting available metric groups");
   const auto available_metric_groups = metric_manager->GetMetricGroups(target);
   if (!available_metric_groups) {
     return available_metric_groups.error();
@@ -959,7 +1024,7 @@ auto astlGetMetricGroupCount(const astl_get_metric_group_count_params_t* params)
   return ASTL_STATUS_SUCCESS;
 }
 
-auto astlGetMetricGroups(const astl_get_metric_groups_params_t* params) noexcept -> astl_status_code {
+auto astlGetMetricGroupsOnTarget(const astl_get_metric_groups_on_target_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   const auto                  params_status = ValidateApiParams(params);
   if (params_status != ASTL_STATUS_SUCCESS) {
@@ -972,7 +1037,7 @@ auto astlGetMetricGroups(const astl_get_metric_groups_params_t* params) noexcept
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   auto metric_groups_properties = std::span<astl_metric_group_props_t>{metric_groups, *metric_group_count};
-  *metric_group_count           = 0;  // in case there's an error to return
+  *metric_group_count           = 0;
   if (metric_groups_properties[0].size < sizeof(astl_metric_group_props_t)) {
     return ASTL_STATUS_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION;
   }
@@ -997,7 +1062,6 @@ auto astlGetMetricGroups(const astl_get_metric_groups_params_t* params) noexcept
   if (metric_groups_properties.size() < groups_result->size()) {
     return ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL;
   }
-  // for each metric group, copy its properties to the provided 'metric_groups' buffer
   for (size_t i = 0; i < std::min(groups_result->size(), metric_groups_properties.size()); ++i) {
     auto result = PopulateMetricGroupProperties(metric_manager, (*groups_result)[i], metric_groups_properties[i]);
     if (result != ASTL_STATUS_SUCCESS) {
@@ -1011,72 +1075,331 @@ auto astlGetMetricGroups(const astl_get_metric_groups_params_t* params) noexcept
   return result;
 }
 
+auto astlGetMetricGroups(const astl_get_metric_groups_params_t* params) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  auto* metric_groups      = params->metric_groups;
+  auto* metric_group_count = params->metric_group_count;
+  if (!metric_groups || !metric_group_count || *metric_group_count == 0) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  auto metric_groups_properties = std::span<astl_metric_group_props_t>{metric_groups, *metric_group_count};
+  *metric_group_count           = 0;
+  if (metric_groups_properties[0].size < sizeof(astl_metric_group_props_t)) {
+    return ASTL_STATUS_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION;
+  }
+  if (metric_groups_properties[0].size > sizeof(astl_metric_group_props_t)) {
+    return ASTL_STATUS_NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION;
+  }
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto*      metric_manager = *get_metric_manager_result;
+  const auto groups_result  = metric_manager->GetMetricGroups();
+  if (metric_groups_properties.size() < groups_result.size()) {
+    return ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL;
+  }
+  for (size_t i = 0; i < std::min(groups_result.size(), metric_groups_properties.size()); ++i) {
+    auto result = PopulateMetricGroupProperties(metric_manager, groups_result[i], metric_groups_properties[i]);
+    if (result != ASTL_STATUS_SUCCESS) {
+      *metric_group_count = static_cast<uint32_t>(i);
+      return result;
+    }
+  }
+  auto result         = metric_groups_properties.size() > groups_result.size() ? ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED
+                                                                               : ASTL_STATUS_SUCCESS;
+  *metric_group_count = static_cast<uint32_t>(groups_result.size());
+  return result;
+}
+
+auto astlGetMetricGroupMetricCount(const astl_get_metric_group_metric_count_params_t* params) noexcept
+    -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto* const metric_group_handle = params->metric_group_handle;
+  auto*             metric_count        = params->metric_count;
+  if (!metric_group_handle) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetricCount: metric_group_handle cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!metric_count) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetricCount: metric_count ptr cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager = *get_metric_manager_result;
+
+  auto metrics_in_group = metric_manager->GetMetricsInGroup(metric_group_handle);
+  if (!metrics_in_group) {
+    return metrics_in_group.error();
+  }
+  if (metrics_in_group->size() > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("GetMetricsInGroup reports absurdly large number of metrics: {}", metrics_in_group->size());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  *metric_count = static_cast<uint32_t>(metrics_in_group->size());
+  return ASTL_STATUS_SUCCESS;
+}
+
 auto astlGetMetricGroupMetrics(const astl_get_metric_group_metrics_params_t* params) noexcept -> astl_status_code {
   std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
   const auto                  params_status = ValidateApiParams(params);
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  const auto* target_handle = params->target_handle;
-  const auto* metric_group  = params->metric_group;
-  auto*       metrics       = params->metrics;
-  if (!target_handle) {
-    ASTL_LOG_ERROR("astlGetMetricGroupMetrics: target_handle cannot be null");
+  const auto* const metric_group_handle = params->metric_group_handle;
+  auto*             metrics             = params->metrics;
+  auto*             metric_count        = params->metric_count;
+  if (!metric_group_handle) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetrics: metric_group_handle cannot be null");
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  (void)target_handle;  // unused, since the metrics in a group don't actually depend on the group's target
-  if (!metric_group) {
-    ASTL_LOG_ERROR("astlGetMetricGroupMetrics: metric_group cannot be null");
+  if (!metric_count) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetrics: metric_count ptr cannot be null");
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   if (!metrics) {
     ASTL_LOG_ERROR("astlGetMetricGroupMetrics: metrics ptr cannot be null");
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  if (metric_group->metric_count == 0) {
-    ASTL_LOG_ERROR("astlGetMetricGroupMetrics: _metric_count cannot be 0");
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager = *get_metric_manager_result;
+
+  ASTL_LOG_TRACE("astlGetMetricGroupMetrics: getting metrics in group");
+  auto metrics_in_group = metric_manager->GetMetricsInGroup(metric_group_handle);
+  if (!metrics_in_group) {
+    return metrics_in_group.error();
+  }
+  if (metrics_in_group->size() > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("GetMetricsInGroup reports absurdly large number of metrics: {}", metrics_in_group->size());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto required_metric_count = static_cast<uint32_t>(metrics_in_group->size());
+  if (*metric_count == 0) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetrics: metric_count cannot be 0 when metrics ptr is non-null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  std::span<astl_metric_props_t> metrics_properties{metrics, *metric_count};
+  if (metrics_properties.size() < metrics_in_group->size()) {
+    *metric_count = required_metric_count;
+    return ASTL_STATUS_METRIC_PROPERTIES_BUFFER_TOO_SMALL;
+  }
+
+  auto status = PopulateMetricPropertiesForHandles(metric_manager, *metrics_in_group,
+                                                   metrics_properties.first(metrics_in_group->size()));
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  *metric_count = required_metric_count;
+  return metrics_properties.size() > metrics_in_group->size() ? ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED
+                                                              : ASTL_STATUS_SUCCESS;
+}
+
+auto astlGetMetricGroupMetricCountOnTarget(const astl_get_metric_group_metric_count_on_target_params_t* params) noexcept
+    -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto*       target_handle       = params->target_handle;
+  const auto* const metric_group_handle = params->metric_group_handle;
+  auto*             metric_count        = params->metric_count;
+  if (!target_handle) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetricCountOnTarget: target_handle cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!metric_group_handle) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetricCountOnTarget: metric_group_handle cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!metric_count) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetricCountOnTarget: metric_count ptr cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  auto get_metric_manager_result = GetMetricManager();
+  if (!get_metric_manager_result) {
+    return get_metric_manager_result.error();
+  }
+  auto* metric_manager    = *get_metric_manager_result;
+  auto  get_target_result = GetTargetFromHandle(target_handle);
+  if (!get_target_result) {
+    return get_target_result.error();
+  }
+  const auto* target = *get_target_result;
+
+  auto metrics_in_group = GetMetricHandlesInGroupForTarget(metric_manager, metric_group_handle, target);
+  if (!metrics_in_group) {
+    return metrics_in_group.error();
+  }
+  if (metrics_in_group->size() > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("GetMetricHandlesInGroupForTarget reports absurdly large number of metrics: {}",
+                   metrics_in_group->size());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  *metric_count = static_cast<uint32_t>(metrics_in_group->size());
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto astlGetMetricGroupMetricsOnTarget(const astl_get_metric_group_metrics_on_target_params_t* params) noexcept
+    -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  const auto*       target_handle       = params->target_handle;
+  const auto* const metric_group_handle = params->metric_group_handle;
+  auto*             metrics             = params->metrics;
+  auto*             metric_count        = params->metric_count;
+  if (!target_handle) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetricsOnTarget: target_handle cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!metric_group_handle) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetricsOnTarget: metric_group_handle cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!metric_count) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetricsOnTarget: metric_count ptr cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!metrics) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetricsOnTarget: metrics ptr cannot be null");
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   auto get_metric_manager_result = GetMetricManager();
   if (!get_metric_manager_result) {
     return get_metric_manager_result.error();
   }
-  auto*                          metric_manager = *get_metric_manager_result;
-  std::span<astl_metric_props_t> metrics_properties{metrics, metric_group->metric_count};
-  if (metrics_properties[0].size < sizeof(astl_metric_props_t)) {
-    return ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION;
+  auto* metric_manager    = *get_metric_manager_result;
+  auto  get_target_result = GetTargetFromHandle(target_handle);
+  if (!get_target_result) {
+    return get_target_result.error();
   }
-  if (metrics_properties[0].size > sizeof(astl_metric_props_t)) {
-    return ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION;
-  }
+  const auto* target = *get_target_result;
 
-  ASTL_LOG_TRACE("astlGetMetricGroupMetrics: getting metrics in group");
-  auto metrics_in_group = metric_manager->GetMetricsInGroup(metric_group->handle);
+  ASTL_LOG_TRACE("astlGetMetricGroupMetricsOnTarget: getting metrics in group");
+  auto metrics_in_group = GetMetricHandlesInGroupForTarget(metric_manager, metric_group_handle, target);
   if (!metrics_in_group) {
     return metrics_in_group.error();
   }
-
-  if (metrics_properties.size() < metrics_in_group->size()) {
-    return ASTL_STATUS_METRIC_PROPERTIES_BUFFER_TOO_SMALL;
-  }
   if (metrics_in_group->size() > std::numeric_limits<uint32_t>::max()) {
-    ASTL_LOG_ERROR("metric_manager->GetMetricsInGroup reports absurdly large number of metrics: {}",
+    ASTL_LOG_ERROR("GetMetricHandlesInGroupForTarget reports absurdly large number of metrics: {}",
                    metrics_in_group->size());
     return ASTL_STATUS_INTERNAL_ERROR;
   }
-  // for each metric in the group, copy its properties into the provided `metrics` buffer
-  size_t idx = 0;
-  std::ranges::for_each_n(metrics_in_group->begin(), static_cast<std::ptrdiff_t>(metrics_in_group->size()),
-                          [&idx, metric_manager, &metrics_properties](const auto& metric_handle) {
-                            auto status = metric_manager->GetProperties(metric_handle, &metrics_properties[idx]);
-                            if (status != ASTL_STATUS_SUCCESS) {
-                              ASTL_LOG_ERROR("Failed to get properties for metric {}: {}", metric_handle, status);
-                            }
-                            ++idx;
-                          });
+
+  const auto required_metric_count = static_cast<uint32_t>(metrics_in_group->size());
+  if (*metric_count == 0) {
+    ASTL_LOG_ERROR("astlGetMetricGroupMetricsOnTarget: metric_count cannot be 0 when metrics ptr is non-null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  std::span<astl_metric_props_t> metrics_properties{metrics, *metric_count};
+  if (metrics_properties.size() < metrics_in_group->size()) {
+    *metric_count = required_metric_count;
+    return ASTL_STATUS_METRIC_PROPERTIES_BUFFER_TOO_SMALL;
+  }
+
+  auto status = PopulateMetricPropertiesForHandles(metric_manager, *metrics_in_group,
+                                                   metrics_properties.first(metrics_in_group->size()));
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  *metric_count = required_metric_count;
   return metrics_properties.size() > metrics_in_group->size() ? ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED
                                                               : ASTL_STATUS_SUCCESS;
 }
+
+namespace {
+
+auto GetKnownMetricGroups(astl::IMetricManager* metric_manager) -> std::unordered_set<astl_metric_group_handle_t> {
+  const auto global_groups = metric_manager->GetMetricGroups();
+  return {global_groups.begin(), global_groups.end()};
+}
+
+auto GetTargetMetricGroups(astl::IMetricManager* metric_manager, const astl::ITarget* target)
+    -> std::expected<std::unordered_set<astl_metric_group_handle_t>, astl_status_code> {
+  std::unordered_set<astl_metric_group_handle_t> target_groups;
+  if (target == nullptr) {
+    return target_groups;
+  }
+
+  auto target_groups_result = metric_manager->GetMetricGroups(target);
+  if (!target_groups_result) {
+    return std::unexpected{target_groups_result.error()};
+  }
+  target_groups.insert(target_groups_result->begin(), target_groups_result->end());
+  return target_groups;
+}
+
+auto ValidateRequestedGroupOnTarget(astl_metric_group_handle_t group_handle, const astl::ITarget* target,
+                                    const std::unordered_set<astl_metric_group_handle_t>& known_groups,
+                                    const std::unordered_set<astl_metric_group_handle_t>& target_groups,
+                                    bool fail_if_group_missing_on_target) -> std::expected<bool, astl_status_code> {
+  if (!known_groups.contains(group_handle)) {
+    return std::unexpected{ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE};
+  }
+  if (target == nullptr || target_groups.contains(group_handle)) {
+    return true;
+  }
+  if (fail_if_group_missing_on_target) {
+    return std::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
+  }
+  return false;
+}
+
+auto GetMetricHandlesForGroup(astl::IMetricManager* metric_manager, const astl::ITarget* target,
+                              astl_metric_group_handle_t group_handle, bool fail_if_group_missing_on_target)
+    -> std::expected<std::vector<astl_metric_handle_t>, astl_status_code> {
+  if (target == nullptr) {
+    auto global_group_metrics = metric_manager->GetMetricsInGroup(group_handle);
+    if (!global_group_metrics) {
+      return std::unexpected{global_group_metrics.error()};
+    }
+    return std::vector<astl_metric_handle_t>{global_group_metrics->begin(), global_group_metrics->end()};
+  }
+
+  auto group_metrics = GetMetricHandlesInGroupForTarget(metric_manager, group_handle, target);
+  if (!group_metrics) {
+    return std::unexpected{group_metrics.error()};
+  }
+  if (group_metrics->empty() && fail_if_group_missing_on_target) {
+    return std::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
+  }
+  return group_metrics;
+}
+
+auto AppendUniqueMetricHandles(std::vector<astl_metric_handle_t>&        metric_handles,
+                               std::unordered_set<astl_metric_handle_t>& seen_metric_handles,
+                               std::span<const astl_metric_handle_t>     group_metrics) -> void {
+  if (metric_handles.capacity() < metric_handles.size() + group_metrics.size()) {
+    const auto new_size = std::max(metric_handles.capacity() * 2, metric_handles.size() + group_metrics.size());
+    metric_handles.reserve(new_size);
+  }
+  std::copy_if(group_metrics.begin(), group_metrics.end(), std::back_inserter(metric_handles),
+               [&](const auto& metric_handle) { return seen_metric_handles.insert(metric_handle).second; });
+}
+
+}  // namespace
 
 auto ExpandMetricGroupHandlesForTarget(astl::IMetricManager* metric_manager, const astl::ITarget* target,
                                        std::span<const astl_metric_group_handle_t> requested_groups,
@@ -1086,42 +1409,37 @@ auto ExpandMetricGroupHandlesForTarget(astl::IMetricManager* metric_manager, con
     return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
   }
 
-  const auto                                     global_groups = metric_manager->GetMetricGroups();
-  std::unordered_set<astl_metric_group_handle_t> known_groups{global_groups.begin(), global_groups.end()};
-
-  std::unordered_set<astl_metric_group_handle_t> target_groups;
-  if (target != nullptr) {
-    auto target_groups_result = metric_manager->GetMetricGroups(target);
-    if (!target_groups_result) {
-      return std::unexpected{target_groups_result.error()};
-    }
-    target_groups.insert(target_groups_result->begin(), target_groups_result->end());
+  const auto known_groups_or_error  = GetKnownMetricGroups(metric_manager);
+  auto       target_groups_or_error = GetTargetMetricGroups(metric_manager, target);
+  if (!target_groups_or_error) {
+    return std::unexpected{target_groups_or_error.error()};
   }
 
   std::vector<astl_metric_handle_t>        metric_handles;
   std::unordered_set<astl_metric_handle_t> seen_metric_handles;
+  const auto&                              known_groups  = known_groups_or_error;
+  const auto&                              target_groups = *target_groups_or_error;
 
   for (const auto& group_handle : requested_groups) {
-    if (!known_groups.contains(group_handle)) {
-      return std::unexpected{ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE};
+    auto requested_group_is_supported = ValidateRequestedGroupOnTarget(group_handle, target, known_groups,
+                                                                       target_groups, fail_if_group_missing_on_target);
+    if (!requested_group_is_supported) {
+      return std::unexpected{requested_group_is_supported.error()};
     }
-    if (target != nullptr && !target_groups.contains(group_handle)) {
-      if (fail_if_group_missing_on_target) {
-        return std::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
-      }
+    if (!*requested_group_is_supported) {
       continue;
     }
 
-    auto group_metrics = metric_manager->GetMetricsInGroup(group_handle);
+    auto group_metrics =
+        GetMetricHandlesForGroup(metric_manager, target, group_handle, fail_if_group_missing_on_target);
     if (!group_metrics) {
       return std::unexpected{group_metrics.error()};
     }
-    if (metric_handles.capacity() < metric_handles.size() + group_metrics->size()) {
-      auto new_size = std::max(metric_handles.capacity() * 2, metric_handles.size() + group_metrics->size());
-      metric_handles.reserve(new_size);
+    if (group_metrics->empty()) {
+      continue;
     }
-    std::copy_if(group_metrics->begin(), group_metrics->end(), std::back_inserter(metric_handles),
-                 [&](const auto& metric_handle) { return seen_metric_handles.insert(metric_handle).second; });
+
+    AppendUniqueMetricHandles(metric_handles, seen_metric_handles, *group_metrics);
   }
 
   return metric_handles;
@@ -1303,11 +1621,29 @@ auto astlConfigureMetricCollection(const astl_configure_metric_collection_params
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
+  const auto* collection_params = params->collection_params;
+  const auto* metric_handles    = params->metric_handles;
+  const auto  metric_count      = params->metric_count;
+  if (!collection_params || !metric_handles) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (metric_count == 0) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (sizeof(astl_collection_params_t) < collection_params->size) {
+    return ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  if (sizeof(astl_collection_params_t) > collection_params->size) {
+    return ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION;
+  }
+  const auto collection_flags_status = ValidateCollectionParamsFlags(collection_params);
+  if (collection_flags_status != ASTL_STATUS_SUCCESS) {
+    return collection_flags_status;
+  }
   SwitchSystemInfoToHostCapture();
 
-  (void)params->collection_params;
-  (void)params->metric_handles;
-  (void)params->metric_count;
+  (void)metric_handles;
+  (void)metric_count;
   astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
   return result;
 }

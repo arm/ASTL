@@ -200,10 +200,10 @@ auto PerfettoOutput::WriteProcessedSamples(const ProcessedSamplesMap& samples) -
 
 auto PerfettoOutput::DetermineCategory(astl_units_t units) -> std::string {
   switch (units) {
-    case ASTL_UNITS_WATTS:
-      return "Power";
     case ASTL_UNITS_JOULES:
       return "Energy";
+    case ASTL_UNITS_WATTS:
+      return "Power";
     case ASTL_UNITS_CELSIUS:
       return "Temperature";
     case ASTL_UNITS_MHERTZ:

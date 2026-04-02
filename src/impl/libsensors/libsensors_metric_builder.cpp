@@ -48,7 +48,7 @@ struct LibsensorsMetricRegistrationDetails {
   std::string              name;
   std::string              description;
   astl_units_t             units;
-  astl_category_t          category;
+  astl_metric_identifier_t identifier;
   astl_metric_type_t       metric_type;
   std::vector<std::string> metric_groups;
   AnyFormula               formula;
@@ -106,16 +106,16 @@ static auto GetOwnedSensorLabel(const sensors_chip_name* chip, const sensors_fea
   return OwnedSensorLabel{sensors_api->get_label(chip, feature), &std::free};
 }
 
-static auto BuildDefaultCategory(const DiscoveredSensorMetric& sensor) -> astl_category_t {
+static auto BuildDefaultIdentifier(const DiscoveredSensorMetric& sensor) -> astl_metric_identifier_t {
   switch (sensor.feature->type) {
     case SENSORS_FEATURE_TEMP:
-      return ASTL_CATEGORY_TEMPERATURE;
+      return ASTL_METRIC_IDENTIFIER_TEMPERATURE;
     case SENSORS_FEATURE_POWER:
-      return ASTL_CATEGORY_POWER;
+      return ASTL_METRIC_IDENTIFIER_POWER;
     case SENSORS_FEATURE_FAN:
-      return ASTL_CATEGORY_FAN_SPEED;
+      return ASTL_METRIC_IDENTIFIER_FAN_SPEED;
     default:
-      return ASTL_CATEGORY_UNCATEGORIZED;
+      return ASTL_METRIC_IDENTIFIER_UNKNOWN;
   }
 }
 
@@ -309,7 +309,7 @@ static auto ResolveMetricRegistrationDetails(
                                             .name          = final_metric_name,
                                             .description   = BuildMetricDescription(sensor),
                                             .units         = sensor.units,
-                                            .category      = BuildDefaultCategory(sensor),
+                                            .identifier    = BuildDefaultIdentifier(sensor),
                                             .metric_type   = ASTL_METRIC_VALUE,
                                             .metric_groups = {},
                                             .formula       = AnyFormula{IdentityFormula{}},
@@ -373,8 +373,8 @@ static auto ResolveMetricRegistrationDetails(
                                           .description =
               metric_declaration.description.empty() ? BuildMetricDescription(sensor) : metric_declaration.description,
                                           .units         = units,
-                                          .category      = metric_declaration.category.empty() ? BuildDefaultCategory(sensor)
-                                                               : ParseCategory(metric_declaration.category),
+                                          .identifier    = metric_declaration.identifier.empty() ? BuildDefaultIdentifier(sensor)
+                                                                 : ParseMetricIdentifier(metric_declaration.identifier),
                                           .metric_type   = metric_type,
                                           .metric_groups = metric_declaration.metric_groups.value_or(std::vector<std::string>{}),
                                           .formula       = std::move(formula_result.value()),
@@ -459,7 +459,7 @@ static auto RegisterSensorMetric(const DiscoveredSensorMetric&                  
   auto& details = details_or_error->value();
 
   auto metric_config = std::make_unique<MetricConfig>(
-      details.name, details.description, details.units, ASTL_VALUE_FLOAT64, details.category, details.metric_type,
+      details.name, details.description, details.units, ASTL_VALUE_FLOAT64, details.identifier, details.metric_type,
       CollectorType::LIBSENSORS, LibsensorsOperationBuilder{sensor.chip, sensor.subfeature->number},
       std::move(details.formula), ASTL_VALUE_FLOAT64, std::move(details.metric_groups));
 

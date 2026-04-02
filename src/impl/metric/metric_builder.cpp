@@ -2,9 +2,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <expected>
 #include <fstream>
 #include <memory>
+#include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "astl_logger.hpp"
@@ -15,6 +18,7 @@
 #include "libsensors/libsensors_metric_builder.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "metric/metric_manager.hpp"
+#include "topology/scmi_target.hpp"
 
 namespace astl {
 
@@ -22,6 +26,27 @@ namespace fs = std::filesystem;
 
 static auto BuildDefaultCounterDescription(std::string_view metric_name) -> std::string {
   return "Underlying counter for " + std::string{metric_name};
+}
+
+static auto ReplaceAll(std::string value, std::string_view needle, std::string_view replacement) -> std::string {
+  std::size_t position = 0;
+  while ((position = value.find(needle, position)) != std::string::npos) {
+    value.replace(position, needle.size(), replacement);
+    position += replacement.size();
+  }
+  return value;
+}
+
+static auto GetScmiTelemetrySubdirectory(const ITarget& target) -> std::string_view {
+  return ScmiTarget::TelemetrySubdirectoryForTarget(target);
+}
+
+static auto ResolveScmiTargetNameTemplate(std::string_view name_template, const ITarget& target) -> std::string {
+  auto resolved_name = std::string{name_template};
+  resolved_name      = ReplaceAll(std::move(resolved_name), "{target_name}", target.Name());
+  resolved_name =
+      ReplaceAll(std::move(resolved_name), "{telemetry_subdirectory}", GetScmiTelemetrySubdirectory(target));
+  return resolved_name;
 }
 
 /** @brief Holds info specific to one UUID-identified target _type_ on this platform,
@@ -60,7 +85,7 @@ inline auto TryParseJson(std::filesystem::path const& json_file_path) -> std::ex
   } catch (std::ifstream::failure const& e) {
     ASTL_LOG_ERROR("Unable to open json file {}: {}", json_file_path.string(), e.what());
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  } catch (nlohmann::json::exception const& e) {
+  } catch (std::exception const& e) {
     ASTL_LOG_ERROR("Unable to parse json file {}: {}", json_file_path.string(), e.what());
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
@@ -156,7 +181,7 @@ static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecificat
       const astl_value_type_t value_type = input_value_type;
 
       auto new_counter_config = std::make_unique<MetricConfig>(
-          counter_name, std::move(description), ASTL_UNITS_UNKNOWN, value_type, ASTL_CATEGORY_UNCATEGORIZED,
+          counter_name, std::move(description), ASTL_UNITS_UNKNOWN, value_type, ASTL_METRIC_IDENTIFIER_UNKNOWN,
           ASTL_METRIC_VALUE, CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id},
           std::move(scaling_formula), input_value_type, std::vector<std::string>{}, counter_id);
 
@@ -189,6 +214,61 @@ static auto GetUuidFromTarget(const ITarget* target) -> std::optional<scmi::spec
   }
   const auto uuid = *uuid_res;
   return uuid;
+}
+
+static auto ApplyConfiguredScmiTargetNames(const AstlConfiguration&                     configuration,
+                                           const std::vector<std::unique_ptr<ITarget>>& targets) -> astl_status_code {
+  const auto has_scmi_targets = std::ranges::any_of(
+      targets, [](const auto& target_ptr) { return target_ptr->GetCollectorType() == CollectorType::SCMI; });
+  if (!has_scmi_targets) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  const auto& platform_lookup_json_path = configuration.metrics_dir_path / "platform_lookup.json";
+  auto        platform_lookup           = TryParseJson<metrics::spec::PlatformLookup>(platform_lookup_json_path);
+  if (!platform_lookup.has_value()) {
+    return platform_lookup.error();
+  }
+
+  for (const auto& target_ptr : targets) {
+    if (target_ptr->GetCollectorType() != CollectorType::SCMI) {
+      continue;
+    }
+
+    auto* concrete_target = dynamic_cast<Target*>(target_ptr.get());
+    if (!concrete_target) {
+      ASTL_LOG_WARNING("SCMI target {} cannot be cast to concrete Target type", target_ptr->Name());
+      continue;
+    }
+
+    auto uuid = GetUuidFromTarget(concrete_target);
+    if (!uuid.has_value()) {
+      continue;
+    }
+
+    auto metric_file_element = FindMetricsFileElementByUuid(*platform_lookup, *uuid);
+    if (!metric_file_element.has_value() || !metric_file_element->name.has_value()) {
+      continue;
+    }
+
+    const auto configured_name = ResolveScmiTargetNameTemplate(*metric_file_element->name, *concrete_target);
+    if (configured_name.empty()) {
+      ASTL_LOG_ERROR("Configured SCMI target name resolved to an empty string for UUID {}", uuid->normalized_value);
+      return ASTL_STATUS_BAD_CONFIGURATION;
+    }
+    concrete_target->SetName(configured_name);
+  }
+
+  std::unordered_set<std::string> seen_names;
+  for (const auto& target_ptr : targets) {
+    const auto insert_result = seen_names.emplace(target_ptr->Name());
+    if (!insert_result.second) {
+      ASTL_LOG_ERROR("Configured target names must be unique; duplicate target name '{}'", target_ptr->Name());
+      return ASTL_STATUS_BAD_CONFIGURATION;
+    }
+  }
+
+  return ASTL_STATUS_SUCCESS;
 }
 
 /**
@@ -393,6 +473,11 @@ auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, co
       return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     return BuildMetricManagerFromASTLFile(targets, cache_dir_path.value());
+  }
+
+  auto rename_status = ApplyConfiguredScmiTargetNames(configuration, targets);
+  if (rename_status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(rename_status);
   }
 
   // arrange the targets by the collector type

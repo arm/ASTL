@@ -71,8 +71,8 @@ cdef class Metric:
     cdef public int units
     cdef public int value_type
     cdef public int metric_type
-    cdef public int category
-    def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, metric_type: int, category: int):
+    cdef public int identifier
+    def __init__(self, name: str, description: str, handle_ptr: int, min_interval: int, units: int, value_type: int, metric_type: int, identifier: int):
         self.name = name
         self.description = description
         self.handle_ptr = handle_ptr
@@ -80,22 +80,20 @@ cdef class Metric:
         self.units = units
         self.value_type = value_type
         self.metric_type = metric_type
-        self.category = category
+        self.identifier = identifier
     def __repr__(self):
-        return f"<Metric name={self.name!r} type={self.metric_type} units={self.units} category={self.category}>"
+        return f"<Metric name={self.name!r} type={self.metric_type} units={self.units} identifier={self.identifier}>"
 
 cdef class MetricGroup:
     cdef public object name
     cdef public object description
     cdef public size_t handle_ptr
-    cdef public object metric_count
-    def __init__(self, name: str, description: str, handle_ptr: int, metric_count: int):
+    def __init__(self, name: str, description: str, handle_ptr: int):
         self.name = name
         self.description = description
         self.handle_ptr = handle_ptr
-        self.metric_count = metric_count
     def __repr__(self):
-        return f"<MetricGroup name={self.name!r} metrics={self.metric_count}>"
+        return f"<MetricGroup name={self.name!r}>"
 
 cdef class MetricState:
     """A state or possible value for a discrete or residency metric.
@@ -123,17 +121,24 @@ cdef class MetricState:
     def __repr__(self):
         return f"<MetricState name={self.name!r} value={self.value!r}>"
 
-class Category:
-    """Namespace of ASTL category codes (mirrors astl_category_t enum)."""
-    UNCATEGORIZED = ASTL_CATEGORY_UNCATEGORIZED
-    COUNT = ASTL_CATEGORY_COUNT
-    TEMPERATURE = ASTL_CATEGORY_TEMPERATURE
-    POWER = ASTL_CATEGORY_POWER
-    FREQUENCY = ASTL_CATEGORY_FREQUENCY
-    VOLTAGE = ASTL_CATEGORY_VOLTAGE
-    CURRENT = ASTL_CATEGORY_CURRENT
-    BANDWIDTH = ASTL_CATEGORY_BANDWIDTH
-    FAN_SPEED = ASTL_CATEGORY_FAN_SPEED
+class MetricIdentifier:
+    """Namespace of ASTL identifier codes (mirrors astl_metric_identifier_t enum)."""
+    COUNT = ASTL_METRIC_IDENTIFIER_COUNT
+    TEMPERATURE = ASTL_METRIC_IDENTIFIER_TEMPERATURE
+    THERMAL_LIMIT = ASTL_METRIC_IDENTIFIER_THERMAL_LIMIT
+    THERMAL_THROTTLE = ASTL_METRIC_IDENTIFIER_THERMAL_THROTTLE
+    ENERGY = ASTL_METRIC_IDENTIFIER_ENERGY
+    POWER = ASTL_METRIC_IDENTIFIER_POWER
+    POWER_LIMIT = ASTL_METRIC_IDENTIFIER_POWER_LIMIT
+    POWER_THROTTLE = ASTL_METRIC_IDENTIFIER_POWER_THROTTLE
+    FREQUENCY = ASTL_METRIC_IDENTIFIER_FREQUENCY
+    VOLTAGE = ASTL_METRIC_IDENTIFIER_VOLTAGE
+    CURRENT = ASTL_METRIC_IDENTIFIER_CURRENT
+    BANDWIDTH = ASTL_METRIC_IDENTIFIER_BANDWIDTH
+    FAN_SPEED = ASTL_METRIC_IDENTIFIER_FAN_SPEED
+    HUMIDITY = ASTL_METRIC_IDENTIFIER_HUMIDITY
+    STATUS = ASTL_METRIC_IDENTIFIER_STATUS
+    UNKNOWN = ASTL_METRIC_IDENTIFIER_UNKNOWN
 
 class Status:
     """Namespace of ASTL status codes (mirrors astl_status_code enum)."""
@@ -308,19 +313,18 @@ cpdef list get_metrics(Target target):
         for i in range(count):
             name = arr[i].name.decode() if arr[i].name != NULL else ""
             desc = arr[i].description.decode() if arr[i].description != NULL else ""
-            py_list.append(Metric(name, desc, <size_t>arr[i].handle, arr[i].min_sampling_interval, arr[i].units, arr[i].value_type, arr[i].metric_type, arr[i].category))
+            py_list.append(Metric(name, desc, <size_t>arr[i].handle, arr[i].min_sampling_interval, arr[i].units, arr[i].value_type, arr[i].metric_type, arr[i].identifier))
         return py_list
     finally:
         free(arr)
 
-cpdef list get_metric_groups(Target target):
+cpdef list get_metric_groups():
     cdef uint32_t count = 0
     cdef astl_get_metric_group_count_params_t count_params
     cdef astl_get_metric_groups_params_t params
     count_params.size = sizeof(astl_get_metric_group_count_params_t)
 
     count_params.flags = 0
-    count_params.target_handle = <const void*>target.handle_ptr
     count_params.metric_group_count = &count
     cdef int rc = astlGetMetricGroupCount(&count_params)
     if rc in (ASTL_STATUS_NO_METRIC_GROUPS_FOUND, ASTL_STATUS_NOT_IMPLEMENTED):
@@ -336,7 +340,6 @@ cpdef list get_metric_groups(Target target):
         params.size = sizeof(astl_get_metric_groups_params_t)
 
         params.flags = 0
-        params.target_handle = <const void*>target.handle_ptr
         params.metric_groups = arr
         params.metric_group_count = &count
         rc = astlGetMetricGroups(&params)
@@ -347,10 +350,67 @@ cpdef list get_metric_groups(Target target):
         for i in range(count):
             name = arr[i].name.decode() if arr[i].name != NULL else ""
             desc = arr[i].description.decode() if arr[i].description != NULL else ""
-            py_list.append(MetricGroup(name, desc, <size_t>arr[i].handle, arr[i].metric_count))
+            py_list.append(MetricGroup(name, desc, <size_t>arr[i].handle))
         return py_list
     finally:
         free(arr)
+
+cpdef list get_metric_groups_on_target(Target target):
+    cdef uint32_t count = 0
+    cdef astl_get_metric_group_count_on_target_params_t count_params
+    cdef astl_get_metric_groups_on_target_params_t params
+    count_params.size = sizeof(astl_get_metric_group_count_on_target_params_t)
+
+    count_params.flags = 0
+    count_params.target_handle = <const void*>target.handle_ptr
+    count_params.metric_group_count = &count
+    cdef int rc = astlGetMetricGroupCountOnTarget(&count_params)
+    if rc in (ASTL_STATUS_NO_METRIC_GROUPS_FOUND, ASTL_STATUS_NOT_IMPLEMENTED):
+        return []
+    _check(rc)
+    if count == 0:
+        return []
+    cdef astl_metric_group_props_t* arr = <astl_metric_group_props_t*>calloc(count, sizeof(astl_metric_group_props_t))
+    if arr == NULL:
+        raise MemoryError("Failed to allocate metric group properties buffer")
+    arr[0].size = sizeof(astl_metric_group_props_t)
+    try:
+        params.size = sizeof(astl_get_metric_groups_on_target_params_t)
+
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.metric_groups = arr
+        params.metric_group_count = &count
+        rc = astlGetMetricGroupsOnTarget(&params)
+        if rc in (ASTL_STATUS_NO_METRIC_GROUPS_FOUND, ASTL_STATUS_NOT_IMPLEMENTED):
+            return []
+        _check(rc)
+        py_list = []
+        for i in range(count):
+            name = arr[i].name.decode() if arr[i].name != NULL else ""
+            desc = arr[i].description.decode() if arr[i].description != NULL else ""
+            py_list.append(MetricGroup(name, desc, <size_t>arr[i].handle))
+        return py_list
+    finally:
+        free(arr)
+
+cdef MetricGroup _resolve_global_metric_group(MetricGroup group):
+    cdef object candidate_obj
+    cdef MetricGroup candidate
+    for candidate_obj in get_metric_groups():
+        candidate = <MetricGroup>candidate_obj
+        if candidate.handle_ptr == group.handle_ptr:
+            return candidate
+    return group
+
+cdef MetricGroup _resolve_metric_group_on_target(Target target, MetricGroup group):
+    cdef object candidate_obj
+    cdef MetricGroup candidate
+    for candidate_obj in get_metric_groups_on_target(target):
+        candidate = <MetricGroup>candidate_obj
+        if candidate.handle_ptr == group.handle_ptr:
+            return candidate
+    return group
 
 class CollectionMode:
     SAMPLING = ASTL_COLLECTION_MODE_SAMPLING
@@ -785,38 +845,84 @@ cpdef read_immediate(Target target=None):
 
 # --- Sample retrieval ---
 
-cpdef list get_metric_group_metrics(Target target, MetricGroup group):
-    cdef uint32_t count = <uint32_t>group.metric_count
+cpdef int get_metric_group_metric_count(MetricGroup group):
+    cdef MetricGroup resolved_group = _resolve_global_metric_group(group)
+    cdef uint32_t count = 0
+    cdef astl_get_metric_group_metric_count_params_t params
+    params.size = sizeof(astl_get_metric_group_metric_count_params_t)
+    params.flags = 0
+    params.metric_group_handle = <const void*>resolved_group.handle_ptr
+    params.metric_count = &count
+    _check(astlGetMetricGroupMetricCount(&params))
+    return <int>count
+
+cpdef list get_metric_group_metrics(MetricGroup group):
+    cdef MetricGroup resolved_group = _resolve_global_metric_group(group)
+    cdef uint32_t count = <uint32_t>get_metric_group_metric_count(resolved_group)
     cdef size_t i
+    cdef astl_get_metric_group_metrics_params_t params
     if count == 0:
         return []
 
-    cdef astl_metric_group_props_t group_props
-    cdef astl_get_metric_group_metrics_params_t params
     cdef astl_metric_props_t* arr = <astl_metric_props_t*>calloc(count, sizeof(astl_metric_props_t))
     if arr == NULL:
         raise MemoryError("Failed to allocate metric properties buffer")
     arr[0].size = sizeof(astl_metric_props_t)
     try:
-        group_props.size = sizeof(astl_metric_group_props_t)
-        group_props.handle = <const void*>group.handle_ptr
-        group_props.name = NULL
-        group_props.description = NULL
-        group_props.metric_count = count
-        group_props.metrics = NULL
-
         params.size = sizeof(astl_get_metric_group_metrics_params_t)
         params.flags = 0
-        params.target_handle = <const void*>target.handle_ptr
-        params.metric_group = &group_props
+        params.metric_group_handle = <const void*>resolved_group.handle_ptr
         params.metrics = arr
+        params.metric_count = &count
         _check(astlGetMetricGroupMetrics(&params))
 
         py_list = []
         for i in range(count):
             name = arr[i].name.decode() if arr[i].name != NULL else ""
             desc = arr[i].description.decode() if arr[i].description != NULL else ""
-            py_list.append(Metric(name, desc, <size_t>arr[i].handle, arr[i].min_sampling_interval, arr[i].units, arr[i].value_type, arr[i].metric_type, arr[i].category))
+            py_list.append(Metric(name, desc, <size_t>arr[i].handle, arr[i].min_sampling_interval, arr[i].units, arr[i].value_type, arr[i].metric_type, arr[i].identifier))
+        return py_list
+    finally:
+        free(arr)
+
+cpdef int get_metric_group_metric_count_on_target(Target target, MetricGroup group):
+    cdef MetricGroup resolved_group = _resolve_metric_group_on_target(target, group)
+    cdef uint32_t count = 0
+    cdef astl_get_metric_group_metric_count_on_target_params_t params
+    params.size = sizeof(astl_get_metric_group_metric_count_on_target_params_t)
+    params.flags = 0
+    params.target_handle = <const void*>target.handle_ptr
+    params.metric_group_handle = <const void*>resolved_group.handle_ptr
+    params.metric_count = &count
+    _check(astlGetMetricGroupMetricCountOnTarget(&params))
+    return <int>count
+
+cpdef list get_metric_group_metrics_on_target(Target target, MetricGroup group):
+    cdef MetricGroup resolved_group = _resolve_metric_group_on_target(target, group)
+    cdef uint32_t count = <uint32_t>get_metric_group_metric_count_on_target(target, resolved_group)
+    cdef size_t i
+    cdef astl_get_metric_group_metrics_on_target_params_t params
+    if count == 0:
+        return []
+
+    cdef astl_metric_props_t* arr = <astl_metric_props_t*>calloc(count, sizeof(astl_metric_props_t))
+    if arr == NULL:
+        raise MemoryError("Failed to allocate metric properties buffer")
+    arr[0].size = sizeof(astl_metric_props_t)
+    try:
+        params.size = sizeof(astl_get_metric_group_metrics_on_target_params_t)
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.metric_group_handle = <const void*>resolved_group.handle_ptr
+        params.metrics = arr
+        params.metric_count = &count
+        _check(astlGetMetricGroupMetricsOnTarget(&params))
+
+        py_list = []
+        for i in range(count):
+            name = arr[i].name.decode() if arr[i].name != NULL else ""
+            desc = arr[i].description.decode() if arr[i].description != NULL else ""
+            py_list.append(Metric(name, desc, <size_t>arr[i].handle, arr[i].min_sampling_interval, arr[i].units, arr[i].value_type, arr[i].metric_type, arr[i].identifier))
         return py_list
     finally:
         free(arr)

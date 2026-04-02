@@ -5,6 +5,7 @@
 #ifndef ASTL_API_IMPL_HPP_
 #define ASTL_API_IMPL_HPP_
 
+#include <atomic>
 #include <functional>  // for std::reference_wrapper in expected return types
 #include <memory>
 #include <mutex>
@@ -240,6 +241,13 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   auto StartCollectionPaused(const ITarget *target) -> astl_status_code;
 
   /**
+   * @brief Internal rollback helper used to restore a successfully started target back to CONFIGURED.
+   *
+   * This stops collection without emitting final outputs or transitioning the target to STOPPED.
+   */
+  auto RollbackStartedCollectionToConfigured(const ITarget *target) -> astl_status_code;
+
+  /**
    * @brief Collect one sample of data on a target with an active configured collection
    *
    * @param target The target with an active collection configuration
@@ -424,6 +432,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    */
   auto EmitIntervalCsvIfRequested() -> void;
 
+  enum class FinalOutputEmissionState { NOT_EMITTED, EMITTING, EMITTED };
+
   /**
    * @brief Clear per-target cached collection artifacts before a fresh collection lifecycle.
    *
@@ -431,7 +441,11 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    * sample cache file so subsequent reads do not replay stale samples from an earlier
    * configuration.
    */
-  auto ResetTargetCollectionArtifacts(const ITarget *target) -> astl_status_code;
+  auto        ResetTargetCollectionArtifacts(const ITarget *target) -> astl_status_code;
+  auto        ResetFinalOutputEmissionState() -> void;
+  static auto TryBeginFinalOutputEmission(std::atomic<FinalOutputEmissionState> &emission_state) -> bool;
+  static auto FinishFinalOutputEmission(std::atomic<FinalOutputEmissionState> &emission_state, bool emission_succeeded)
+      -> void;
 
   /**
    * @brief Global singleton initialization mutex.
@@ -455,10 +469,11 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   RawSamplesMap                      _raw_samples;        // collected raw samples, organized by target
   mutable std::mutex                 _raw_samples_mtx;    // protect the _raw_samples container
   mutable ProcessedSamplesMap        _processed_samples;  // processed metric samples, organized by target and metric
-  mutable std::mutex                 _processed_samples_mtx;       // protect the _processed_samples container
-  bool                               _perfetto_emitted{false};     // ensure single emission per collection lifecycle
-  bool                               _intervalcsv_emitted{false};  // ensure single emission per collection lifecycle
-  std::filesystem::path              _cache_dir;  // temporary directory to save and load from ASTL file
+  mutable std::mutex                 _processed_samples_mtx;  // protect the _processed_samples container
+
+  std::atomic<FinalOutputEmissionState> _perfetto_emission_state{FinalOutputEmissionState::NOT_EMITTED};
+  std::atomic<FinalOutputEmissionState> _intervalcsv_emission_state{FinalOutputEmissionState::NOT_EMITTED};
+  std::filesystem::path                 _cache_dir;  // temporary directory to save and load from ASTL file
 };
 
 }  // namespace astl

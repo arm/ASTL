@@ -15,7 +15,7 @@ static const astl::MetricConfig* GetRateConfig() {
                                    "unit-test rate metric",
                                    ASTL_UNITS_JOULES,
                                    ASTL_VALUE_UINT64,
-                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                    ASTL_METRIC_RATE,
                                    astl::CollectorType::UNKNOWN,
                                    astl::NullOperationBuilder{}};

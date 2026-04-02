@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -70,6 +71,21 @@ auto UnitsToString(astl_units_t units) -> std::string {
     default:
       return "?";
   }
+}
+
+auto NormalizeTargetName(std::string_view target_name) -> std::string_view {
+  constexpr std::array<std::string_view, 3> k_known_prefixes = {"scmi-mocksysfs-", "scmi_", "scmi-"};
+  for (const auto prefix : k_known_prefixes) {
+    if (target_name.starts_with(prefix)) {
+      return target_name.substr(prefix.size());
+    }
+  }
+  return target_name;
+}
+
+auto TargetNamesMatch(std::string_view requested_name, std::string_view discovered_name) -> bool {
+  return requested_name == discovered_name ||
+         NormalizeTargetName(requested_name) == NormalizeTargetName(discovered_name);
 }
 
 }  // namespace
@@ -217,7 +233,9 @@ auto GetTargetByName(std::string const& target_name, std::vector<astl_target_pro
   std::cout << "astlGetTargets Status: " << astlStatusString(status) << '\n';
 
   if (target_count > 0 && (status == ASTL_STATUS_SUCCESS || status == ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED)) {
-    bool found_match = false;
+    const astl_target_props_t* exact_match      = nullptr;
+    const astl_target_props_t* normalized_match = nullptr;
+
     for (const auto& target_properties_entry : target_properties_buffer) {
       std::cout << "Target info:" << '\n';
       std::cout << "  Name:        " << (target_properties_entry.name ? target_properties_entry.name : "<null>")
@@ -225,18 +243,34 @@ auto GetTargetByName(std::string const& target_name, std::vector<astl_target_pro
       std::cout << "  Description: "
                 << (target_properties_entry.description ? target_properties_entry.description : "<null>") << '\n';
       std::cout << "compare to target_name:" << target_name << '\n';
+
       if (!target_properties_entry.name) {
         continue;
       }
 
-      if (target_properties_entry.name == target_name) {
-        std::cout << "  --> Selected target\n";
-        target_properties = target_properties_entry;
-        found_match       = true;
+      const std::string_view discovered_name{target_properties_entry.name};
+      if (discovered_name == target_name) {
+        exact_match = &target_properties_entry;
         break;
       }
+      if (!normalized_match && TargetNamesMatch(target_name, discovered_name)) {
+        normalized_match = &target_properties_entry;
+      }
     }
-    return found_match ? ASTL_STATUS_SUCCESS : ASTL_STATUS_INVALID_TARGET_HANDLE;
+
+    const auto* selected_target = exact_match ? exact_match : normalized_match;
+    if (!selected_target) {
+      std::cerr << "Requested target '" << target_name << "' was not found.\n";
+      return ASTL_STATUS_INVALID_TARGET_HANDLE;
+    }
+
+    target_properties = *selected_target;
+    std::cout << "  --> Selected target\n";
+    if (!exact_match) {
+      std::cout << "Matched requested target alias '" << target_name << "' to discovered target '"
+                << selected_target->name << "'\n";
+    }
+    return ASTL_STATUS_SUCCESS;
   }
 
   std::cerr << "Failed to get target info.\n";
@@ -353,14 +387,14 @@ auto GetMetrics(const astl_target_props_t& target_properties, std::vector<astl_m
 auto GetMetricsInGroup(const astl_target_props_t& target_properties, const std::string& group_name)
     -> std::expected<std::vector<astl_metric_props_t>, astl_status_code> {
   uint32_t metric_group_count{0};
-  ASTL_INIT_STRUCT(astl_get_metric_group_count_params_t, get_metric_group_count_params, .flags = 0,
+  ASTL_INIT_STRUCT(astl_get_metric_group_count_on_target_params_t, get_metric_group_count_params, .flags = 0,
                    .target_handle = target_properties.handle, .metric_group_count = &metric_group_count);
-  auto status = astlGetMetricGroupCount(&get_metric_group_count_params);
+  auto status = astlGetMetricGroupCountOnTarget(&get_metric_group_count_params);
   if (status != ASTL_STATUS_SUCCESS) {
-    std::cout << "astlGetMetricGroupCount Status: " << astlStatusString(status) << '\n';
+    std::cout << "astlGetMetricGroupCountOnTarget Status: " << astlStatusString(status) << '\n';
     return std::unexpected<astl_status_code>(status);
   }
-  std::cout << "astlGetMetricGroupCount: " << metric_group_count << '\n';
+  std::cout << "astlGetMetricGroupCountOnTarget: " << metric_group_count << '\n';
   if (metric_group_count == 0) {
     return std::vector<astl_metric_props_t>{};
   }
@@ -368,12 +402,12 @@ auto GetMetricsInGroup(const astl_target_props_t& target_properties, const std::
   metric_groups_properties[0].size = sizeof(astl_metric_group_props_t);
 
   // retrieve the metric groups
-  ASTL_INIT_STRUCT(astl_get_metric_groups_params_t, get_metric_groups_params, .flags = 0,
+  ASTL_INIT_STRUCT(astl_get_metric_groups_on_target_params_t, get_metric_groups_params, .flags = 0,
                    .target_handle = target_properties.handle, .metric_groups = metric_groups_properties.data(),
                    .metric_group_count = &metric_group_count);
-  status = astlGetMetricGroups(&get_metric_groups_params);
+  status = astlGetMetricGroupsOnTarget(&get_metric_groups_params);
   if (status != ASTL_STATUS_SUCCESS) {
-    std::cout << "astlGetMetricGroups Status: " << astlStatusString(status) << '\n';
+    std::cout << "astlGetMetricGroupsOnTarget Status: " << astlStatusString(status) << '\n';
     return std::unexpected<astl_status_code>(status);
   }
 
@@ -386,23 +420,32 @@ auto GetMetricsInGroup(const astl_target_props_t& target_properties, const std::
     std::cout << "Metric group '" << group_name << "' not found.\n";
     return std::vector<astl_metric_props_t>{};
   }
-  // allocate buffer for the group's metrics
-  std::vector<astl_metric_props_t> metrics_properties(metric_group->metric_count);
-  if (metric_group->metric_count > 0) {
-    metrics_properties[0].size = sizeof(astl_metric_props_t);
-  }
-  // _metrics member of metric_group_properties is a convenience - letting user allocate buffer
-  // for metrics, and associate it with the metric group.
-  metric_group->metrics = metrics_properties.data();
 
-  ASTL_INIT_STRUCT(astl_get_metric_group_metrics_params_t, get_metric_group_metrics_params, .flags = 0,
-                   .target_handle = target_properties.handle, .metric_group = &(*metric_group),
-                   .metrics = metric_group->metrics);
-  status = astlGetMetricGroupMetrics(&get_metric_group_metrics_params);
+  uint32_t metric_count = 0;
+  ASTL_INIT_STRUCT(astl_get_metric_group_metric_count_on_target_params_t, get_metric_group_metric_count_params,
+                   .flags = 0, .target_handle = target_properties.handle, .metric_group_handle = metric_group->handle,
+                   .metric_count = &metric_count);
+  status = astlGetMetricGroupMetricCountOnTarget(&get_metric_group_metric_count_params);
   if (status != ASTL_STATUS_SUCCESS) {
-    std::cout << "astlGetMetricGroupMetrics Status: " << astlStatusString(status) << '\n';
+    std::cout << "astlGetMetricGroupMetricCountOnTarget Status: " << astlStatusString(status) << '\n';
     return std::unexpected(status);
   }
+  if (metric_count == 0) {
+    return std::vector<astl_metric_props_t>{};
+  }
+
+  std::vector<astl_metric_props_t> metrics_properties(metric_count);
+  metrics_properties[0].size = sizeof(astl_metric_props_t);
+
+  ASTL_INIT_STRUCT(astl_get_metric_group_metrics_on_target_params_t, get_metric_group_metrics_params, .flags = 0,
+                   .target_handle = target_properties.handle, .metric_group_handle = metric_group->handle,
+                   .metrics = metrics_properties.data(), .metric_count = &metric_count);
+  status = astlGetMetricGroupMetricsOnTarget(&get_metric_group_metrics_params);
+  if (status != ASTL_STATUS_SUCCESS) {
+    std::cout << "astlGetMetricGroupMetricsOnTarget Status: " << astlStatusString(status) << '\n';
+    return std::unexpected(status);
+  }
+  metrics_properties.resize(metric_count);
   return metrics_properties;
 }
 
@@ -624,7 +667,7 @@ auto main(int argc, char* argv[]) -> int {
 
   // Get targets
   std::vector<astl_target_props_t> target_properties_buffer;
-  astl_target_props_t              target_properties;
+  astl_target_props_t              target_properties{};
   if (args.contains("target")) {
     status = GetTargetByName(args["target"], target_properties_buffer, target_properties);
   } else {

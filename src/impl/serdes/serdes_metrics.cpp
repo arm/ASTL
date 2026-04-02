@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <format>
+
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl_logger.hpp"
@@ -23,7 +25,7 @@ namespace detail {
  * @brief Serializes a MetricConfig into a protobuf representation.
  *
  * Converts a MetricConfig object into its corresponding protobuf message format,
- * including metric metadata (name, units, type, category) and associated metric groups.
+ * including metric metadata (name, units, type, identifier) and associated metric groups.
  *
  * @param config The MetricConfig to serialize.
  *
@@ -54,9 +56,9 @@ static auto SerializeBasicMetricConfig(const MetricConfig& config)
   out.set_metric_type(config.MetricType() == ASTL_METRIC_UNKNOWN
                           ? astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
                           : static_cast<astl::protobuf::AstlMetricType>(config.MetricType()));
-  out.set_category(config.Category() == ASTL_CATEGORY_UNCATEGORIZED
-                       ? astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO
-                       : static_cast<astl::protobuf::AstlCategory>(config.Category()));
+  out.set_identifier(config.Identifier() == ASTL_METRIC_IDENTIFIER_UNKNOWN
+                         ? astl::protobuf::ASTL_METRIC_IDENTIFIER_UNKNOWN_PROTO
+                         : static_cast<astl::protobuf::AstlMetricIdentifier>(config.Identifier()));
 
   for (const auto& group : config.MetricGroups()) {
     out.add_metric_groups(group);
@@ -148,9 +150,9 @@ static auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& pro
   const auto input_value_type = proto_cfg.input_value_type() == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
                                     ? ASTL_VALUE_UNKNOWN
                                     : static_cast<astl_value_type_t>(proto_cfg.input_value_type());
-  const auto category         = proto_cfg.category() == astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO
-                                    ? ASTL_CATEGORY_UNCATEGORIZED
-                                    : static_cast<astl_category_t>(proto_cfg.category());
+  const auto identifier       = proto_cfg.identifier() == astl::protobuf::ASTL_METRIC_IDENTIFIER_UNKNOWN_PROTO
+                                    ? ASTL_METRIC_IDENTIFIER_UNKNOWN
+                                    : static_cast<astl_metric_identifier_t>(proto_cfg.identifier());
   const auto metric_type      = proto_cfg.metric_type() == astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
                                     ? ASTL_METRIC_UNKNOWN
                                     : static_cast<astl_metric_type_t>(proto_cfg.metric_type());
@@ -159,14 +161,14 @@ static auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& pro
                                     : static_cast<CollectorType>(proto_cfg.collector_type());
 
   if (proto_cfg.metric_groups_size() == 0) {
-    auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, category, metric_type, collector,
+    auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, identifier, metric_type, collector,
                                               NullOperationBuilder{}, IdentityFormula{}, input_value_type,
                                               std::vector<std::string>{}, metric_id);
     return cfg;
   }
 
   std::vector<std::string> groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
-  auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, category, metric_type, collector,
+  auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, identifier, metric_type, collector,
                                             NullOperationBuilder{}, IdentityFormula{}, input_value_type,
                                             std::move(groups), metric_id);
   return cfg;
@@ -192,15 +194,15 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   const auto               input_value_type = proto_cfg.input_value_type() == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
                                                   ? ASTL_VALUE_UNKNOWN
                                                   : static_cast<astl_value_type_t>(proto_cfg.input_value_type());
-  const auto               category         = proto_cfg.category() == astl::protobuf::ASTL_CATEGORY_UNCATEGORIZED_PROTO
-                                                  ? ASTL_CATEGORY_UNCATEGORIZED
-                                                  : static_cast<astl_category_t>(proto_cfg.category());
-  const auto               metric_type      = proto_cfg.metric_type() == astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
-                                                  ? ASTL_METRIC_UNKNOWN
-                                                  : static_cast<astl_metric_type_t>(proto_cfg.metric_type());
-  const auto               collector        = proto_cfg.collector_type() == astl::protobuf::COLLECTOR_TYPE_UNKNOWN
-                                                  ? CollectorType::UNKNOWN
-                                                  : static_cast<CollectorType>(proto_cfg.collector_type());
+  const auto               identifier  = proto_cfg.identifier() == astl::protobuf::ASTL_METRIC_IDENTIFIER_UNKNOWN_PROTO
+                                             ? ASTL_METRIC_IDENTIFIER_UNKNOWN
+                                             : static_cast<astl_metric_identifier_t>(proto_cfg.identifier());
+  const auto               metric_type = proto_cfg.metric_type() == astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
+                                             ? ASTL_METRIC_UNKNOWN
+                                             : static_cast<astl_metric_type_t>(proto_cfg.metric_type());
+  const auto               collector   = proto_cfg.collector_type() == astl::protobuf::COLLECTOR_TYPE_UNKNOWN
+                                             ? CollectorType::UNKNOWN
+                                             : static_cast<CollectorType>(proto_cfg.collector_type());
   std::vector<std::string> metric_groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
 
   FiniteSetMetricConfig::FiniteSet      finite_set;
@@ -218,14 +220,17 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   }
 
   AnyFormula formula = IdentityFormula{};
-  auto       cfg = std::make_unique<FiniteSetMetricConfig>(name, description, units, value_type, metric_type, category,
-                                                           collector, NullOperationBuilder{}, std::move(finite_set),
-                                                           std::move(state_info), std::move(formula), input_value_type,
-                                                           std::move(metric_groups), metric_id);
+  auto cfg = std::make_unique<FiniteSetMetricConfig>(name, description, units, value_type, metric_type, identifier,
+                                                     collector, NullOperationBuilder{}, std::move(finite_set),
+                                                     std::move(state_info), std::move(formula), input_value_type,
+                                                     std::move(metric_groups), metric_id);
   return cfg;
 }
 
 struct MetricDeserializationResult {
+  MetricDeserializationResult(const ITarget* target_in, std::unique_ptr<IMetric> metric_in)
+      : target(target_in), metric(std::move(metric_in)) {}
+
   const ITarget*           target{};
   std::unique_ptr<IMetric> metric;
 };
@@ -261,10 +266,7 @@ static auto DeserializeBasicMetric(const astl::protobuf::RawMetric& raw, ConfigT
     const ITarget* target = it->get();
     auto           metric = std::make_unique<MetricT>(metric_config, target, nullptr);
 
-    result.push_back(MetricDeserializationResult{
-        target,
-        std::move(metric),
-    });
+    result.emplace_back(target, std::move(metric));
   }
 
   return result;
@@ -618,6 +620,10 @@ static auto BuildCapabilities(const astl::protobuf::MetricManager& proto_manager
 }
 
 struct RebuiltMetricHandles {
+  RebuiltMetricHandles(std::vector<std::unique_ptr<MetricHandle>> metric_handles_in,
+                       MetricManager::TargetToMetricsMap          target_to_metrics_map_in)
+      : metric_handles(std::move(metric_handles_in)), target_to_metrics_map(std::move(target_to_metrics_map_in)) {}
+
   std::vector<std::unique_ptr<MetricHandle>> metric_handles;
   MetricManager::TargetToMetricsMap          target_to_metrics_map;
 };
@@ -625,7 +631,7 @@ struct RebuiltMetricHandles {
 static auto RebuildMetricHandles(const astl::protobuf::MetricManager&         proto_manager,
                                  const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<RebuiltMetricHandles, astl_status_code> {
-  RebuiltMetricHandles            rebuilt_metric_handles;
+  RebuiltMetricHandles            rebuilt_metric_handles{{}, {}};
   std::unordered_set<std::string> seen_metric_ids;
 
   const auto& proto_metrics_vec = proto_manager.metrics();
@@ -723,10 +729,20 @@ static auto RebuildOperationMap(const astl::protobuf::MetricManager&            
 static auto RebuildMetricGroupDescriptions(const astl::protobuf::MetricManager& proto_manager,
                                            const RebuiltMetricHandles&          rebuilt_metrics)
     -> MetricManager::MetricGroupDescriptionMap {
+  const auto build_fallback_description = [](std::string_view group_name) -> std::string {
+    if (group_name.empty()) {
+      return "Metric group";
+    }
+    return std::format("Metrics in the '{}' group.", group_name);
+  };
+
   MetricManager::MetricGroupDescriptionMap metric_group_descriptions;
 
   for (const auto& proto_group : proto_manager.metric_groups()) {
-    metric_group_descriptions.emplace(proto_group.group_name(), proto_group.group_description());
+    const auto& description = proto_group.group_description();
+    metric_group_descriptions.emplace(
+        proto_group.group_name(),
+        description.empty() ? build_fallback_description(proto_group.group_name()) : description);
   }
 
   // Older session files may serialize group membership on metrics without a separate top-level MetricGroup
@@ -737,7 +753,10 @@ static auto RebuildMetricGroupDescriptions(const astl::protobuf::MetricManager& 
       continue;
     }
     for (const auto& group_name : handle_ptr->config->MetricGroups()) {
-      metric_group_descriptions.try_emplace(group_name, "");
+      auto [it, inserted] = metric_group_descriptions.try_emplace(group_name, build_fallback_description(group_name));
+      if (!inserted && it->second.empty()) {
+        it->second = build_fallback_description(group_name);
+      }
     }
   }
 

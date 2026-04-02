@@ -306,7 +306,7 @@ TEST_CASE("RegisterLibsensorsMetrics registers fan speed metrics", "[libsensors_
   REQUIRE(std::string(properties.front().name) == "chip-3-5_CPU_Fan");
   REQUIRE(std::string(properties.front().description) == "Fan speed reading for CPU_Fan");
   REQUIRE(properties.front().units == ASTL_UNITS_RPM);
-  REQUIRE(properties.front().category == ASTL_CATEGORY_FAN_SPEED);
+  REQUIRE(properties.front().identifier == ASTL_METRIC_IDENTIFIER_FAN_SPEED);
 }
 
 TEST_CASE("RegisterLibsensorsMetrics keeps sensors with zero values", "[libsensors_metric_builder]") {
@@ -446,7 +446,7 @@ TEST_CASE("RegisterLibsensorsMetrics uses per-target JSON declarations when avai
   REQUIRE(std::string(properties.front().name) == "chip-6-1_CPU_power");
   REQUIRE(std::string(properties.front().description) == "Configured power reading for CPU power");
   REQUIRE(properties.front().units == ASTL_UNITS_WATTS);
-  REQUIRE(properties.front().category == ASTL_CATEGORY_POWER);
+  REQUIRE(properties.front().identifier == ASTL_METRIC_IDENTIFIER_POWER);
 }
 
 TEST_CASE("RegisterLibsensorsMetrics applies configured formula scaling", "[libsensors_metric_builder]") {

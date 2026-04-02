@@ -49,7 +49,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Finite Set Metric", "[wrapper][MetricSt
 
   auto finite_set_config = std::make_unique<astl::FiniteSetMetricConfig>(
       "StateMetric", "Test state metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT32, ASTL_METRIC_FINITE_SET_VALUE,
-      ASTL_CATEGORY_UNCATEGORIZED, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}, std::move(finite_set),
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}, std::move(finite_set),
       std::move(state_info), astl::IdentityFormula{});
 
   // Create target-to-metric map and MetricHandle
@@ -226,7 +226,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Residency Metric", "[wrapper][MetricSta
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "CPUResidency", "CPU C-State residency", ASTL_UNITS_SECONDS, ASTL_VALUE_UINT64, ASTL_METRIC_RESIDENCY,
-      ASTL_CATEGORY_UNCATEGORIZED, astl::CollectorType::UNKNOWN, std::move(state_info), std::nullopt,
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::UNKNOWN, std::move(state_info), std::nullopt,
       astl::IdentityFormula{});
 
   std::vector<astl::ResidencyMetricConfig::StateInfo> state_configs;
@@ -319,7 +319,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Residency Metric with Inferred State",
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "CPUResidency", "CPU C-State residency", ASTL_UNITS_SECONDS, ASTL_VALUE_UINT64, ASTL_METRIC_RESIDENCY,
-      ASTL_CATEGORY_UNCATEGORIZED, astl::CollectorType::UNKNOWN, std::move(state_info),
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::UNKNOWN, std::move(state_info),
       astl::ResidencyMetricConfig::InferredStateInfo{"C0", "CPU fully active (inferred)"}, astl::IdentityFormula{});
 
   std::vector<astl::ResidencyMetricConfig::StateInfo> state_configs;
@@ -413,7 +413,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Unsupported Metric Type", "[wrapper][Me
   target_to_metric_map[mock_target_raw] = std::move(mock_metric);
 
   auto delta_config = std::make_unique<astl::MetricConfig>(
-      "DeltaMetric", "Test delta metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT32, ASTL_CATEGORY_UNCATEGORIZED,
+      "DeltaMetric", "Test delta metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT32, ASTL_METRIC_IDENTIFIER_UNKNOWN,
       ASTL_METRIC_DELTA, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{});
 
   auto metric_handle_obj =

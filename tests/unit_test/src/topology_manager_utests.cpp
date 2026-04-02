@@ -70,7 +70,11 @@ TEST_CASE("Topology::ScmiPlugin", "[TopologyManager]") {
   REQUIRE(targets.has_value());
   REQUIRE(targets->size() == 2);
   REQUIRE((*targets)[0]->Name() == "scmi_tlm-0");
+  REQUIRE((*targets)[0]->CollectorTargetPath().has_value());
+  REQUIRE(*(*targets)[0]->CollectorTargetPath() == "tlm-0");
   REQUIRE((*targets)[1]->Name() == "scmi_tlm-1");
+  REQUIRE((*targets)[1]->CollectorTargetPath().has_value());
+  REQUIRE(*(*targets)[1]->CollectorTargetPath() == "tlm-1");
   REQUIRE(dynamic_cast<astl::ScmiTarget*>((*targets)[0].get()) != nullptr);
   REQUIRE(dynamic_cast<astl::ScmiTarget*>((*targets)[1].get()) != nullptr);
   REQUIRE(dynamic_cast<astl::ScmiTarget*>((*targets)[0].get())->TelemetrySubdirectory() == "tlm-0");
@@ -155,5 +159,7 @@ TEST_CASE("TopologyBuilder::BuildTopologyManagerFromASTLFile rebuilds a serializ
   REQUIRE(result.value()->GetTargets()[0]->Name() == "package0 telemetry");
   const auto* scmi_target = dynamic_cast<const astl::ScmiTarget*>(result.value()->GetTargets()[0].get());
   REQUIRE(scmi_target != nullptr);
+  REQUIRE(result.value()->GetTargets()[0]->CollectorTargetPath().has_value());
+  REQUIRE(*result.value()->GetTargets()[0]->CollectorTargetPath() == "tlm-0");
   REQUIRE(scmi_target->TelemetrySubdirectory() == "tlm-0");
 }

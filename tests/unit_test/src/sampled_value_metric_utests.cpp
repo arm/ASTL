@@ -13,7 +13,7 @@ astl::SampledValueMetric GetSampledValueMetricUINT64() {
                                    "unit-test metric",
                                    ASTL_UNITS_CELSIUS,
                                    ASTL_VALUE_UINT64,
-                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                    ASTL_METRIC_VALUE,
                                    astl::CollectorType::UNKNOWN,
                                    astl::NullOperationBuilder{}};
@@ -24,7 +24,7 @@ astl::SampledValueMetric GetSampledValueMetricUINT32() {
                                    "unit-test metric",
                                    ASTL_UNITS_CELSIUS,
                                    ASTL_VALUE_UINT32,
-                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                    ASTL_METRIC_VALUE,
                                    astl::CollectorType::UNKNOWN,
                                    astl::NullOperationBuilder{}};

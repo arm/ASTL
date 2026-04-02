@@ -26,12 +26,10 @@ auto MetricGroup::ToMetricGroupProperties(astl_metric_group_props_t* properties)
   if (!properties) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-  properties->size         = sizeof(astl_metric_group_props_t);
-  properties->handle       = ToApiHandle();
-  properties->name         = GetInternedString(name);
-  properties->description  = GetInternedString(description);
-  properties->metric_count = static_cast<uint32_t>(metrics.size());
-  properties->metrics      = nullptr;  // user can subsequently allocate and then fill via astlGetMetricGroupMetrics
+  properties->size        = sizeof(astl_metric_group_props_t);
+  properties->handle      = ToApiHandle();
+  properties->name        = GetInternedString(name);
+  properties->description = GetInternedString(description);
   return ASTL_STATUS_SUCCESS;
 }
 

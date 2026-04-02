@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <memory>
-#include <string>
-#include <string_view>
 #include <vector>
 
 #include "astl_file_interface.hpp"
@@ -39,13 +37,8 @@ auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
 
   for (const auto& cur_target : targets) {
     if (cur_target->GetCollectorType() == CollectorType::SCMI) {
-      const auto* scmi_target = dynamic_cast<const astl::ScmiTarget*>(cur_target.get());
-      if (scmi_target == nullptr) {
-        ASTL_LOG_ERROR("BuildCollectorManager: SCMI target {} is missing SCMI-specific metadata", cur_target->Name());
-        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-      }
-
-      std::filesystem::path             scmi_target_path = scmi_sysfs_root_path / scmi_target->TelemetrySubdirectory();
+      std::filesystem::path scmi_target_path =
+          scmi_sysfs_root_path / ScmiTarget::TelemetrySubdirectoryForTarget(*cur_target);
       astl::FileInterface               scmi_target_file_interface{scmi_target_path};
       std::unique_ptr<astl::ICollector> scmi_collector =
           std::make_unique<ScmiCollector>(std::move(scmi_target_file_interface));

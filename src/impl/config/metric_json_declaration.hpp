@@ -30,15 +30,19 @@ namespace astl::metrics::spec {
 
 /** @brief A members of the `scmi_uuid_mapping` table in repometa.json */
 struct MetricsDeclarationFileElement {
-  std::string last_updated;
-  std::string description;
-  std::string metrics_file;
+  std::string                last_updated;
+  std::string                description;
+  std::string                metrics_file;
+  std::optional<std::string> name;
 };
 
 inline void from_json(const nlohmann::json& json_data, MetricsDeclarationFileElement& metrics_declaration_file) {
   json_data.at("last_updated").get_to(metrics_declaration_file.last_updated);
   json_data.at("description").get_to(metrics_declaration_file.description);
   json_data.at("metrics_file").get_to(metrics_declaration_file.metrics_file);
+  if (json_data.contains("name")) {
+    json_data.at("name").get_to(metrics_declaration_file.name);
+  }
 }
 
 /** @brief A single entry in the platform_lookup json.
@@ -117,20 +121,56 @@ inline void from_json(const nlohmann::json& json_data, MetricJsonCollectionSetti
   }
 }
 
+struct DerivedMetricJsonDeclaration {
+  std::optional<std::string>              description;
+  std::optional<std::string>              register_suffix;
+  std::optional<std::string>              unit;
+  std::optional<std::string>              identifier;
+  std::optional<std::string>              metric_type;
+  std::optional<std::vector<std::string>> metric_groups;
+};
+
+inline void from_json(const nlohmann::json& json_data, DerivedMetricJsonDeclaration& derived_metric) {
+  if (json_data.is_string()) {
+    derived_metric.description = json_data.get<std::string>();
+    return;
+  }
+  if (json_data.is_object()) {
+    if (json_data.contains("description")) {
+      json_data.at("description").get_to(derived_metric.description);
+    }
+    if (json_data.contains("register_suffix")) {
+      json_data.at("register_suffix").get_to(derived_metric.register_suffix);
+    }
+    if (json_data.contains("unit")) {
+      json_data.at("unit").get_to(derived_metric.unit);
+    }
+    if (json_data.contains("identifier")) {
+      json_data.at("identifier").get_to(derived_metric.identifier);
+    }
+    if (json_data.contains("metric_type")) {
+      json_data.at("metric_type").get_to(derived_metric.metric_type);
+    }
+    if (json_data.contains("metric_groups")) {
+      derived_metric.metric_groups = json_data.at("metric_groups").get<std::vector<std::string>>();
+    }
+  }
+}
+
 struct MetricJsonDeclaration {
   MetricJsonDeclaration() = default;
 
   std::string description;  //!< Description of the metric
 
   //!< Unit of measurement for the metric. Could be defined in the SCMI spec json instead, in which case this acts as a
-  //!< filter or output-unit override when used with an explicit formula.
+  //!< filter or output-unit override when paired with an explicit formula.
   std::optional<std::string> unit;
 
   //!< Type of metric (e.g., value, delta, rate)
   std::string metric_type;
 
   //!< Categories include things like Temperature, Power, Count, etc.
-  std::string category;
+  std::string identifier;
 
   //!< Groups this metric is associated with
   std::optional<std::vector<std::string>> metric_groups;
@@ -149,6 +189,9 @@ struct MetricJsonDeclaration {
   // Finite set specific fields
   // Map of label -> {"value": <numeric/bool>, "description": <string>}
   std::optional<std::map<std::string, nlohmann::json>> finite_set_values;  //!< Valid values for finite set metrics
+
+  // Libsensors-specific shorthand for auto-declaring derived metrics, such as thermal limits.
+  std::optional<std::map<std::string, DerivedMetricJsonDeclaration>> derived_metrics;
 };
 
 inline void from_json(const nlohmann::json& json_data, MetricJsonDeclaration& metric) {
@@ -157,10 +200,10 @@ inline void from_json(const nlohmann::json& json_data, MetricJsonDeclaration& me
     json_data.at("unit").get_to(metric.unit);
   }
   json_data.at("metric_type").get_to(metric.metric_type);
-  if (json_data.contains("category")) {
-    json_data.at("category").get_to(metric.category);
+  if (json_data.contains("identifier")) {
+    json_data.at("identifier").get_to(metric.identifier);
   } else {
-    metric.category = "unknown";  // default if absent
+    metric.identifier = "unknown";  // default if absent
   }
 
   json_data.at("collection").get_to(metric.collection);
@@ -191,6 +234,9 @@ inline void from_json(const nlohmann::json& json_data, MetricJsonDeclaration& me
   if (json_data.contains("finite_set_values")) {
     metric.finite_set_values = json_data["finite_set_values"].get<std::map<std::string, nlohmann::json>>();
   }
+  if (json_data.contains("derived_metrics")) {
+    metric.derived_metrics = json_data["derived_metrics"].get<std::map<std::string, DerivedMetricJsonDeclaration>>();
+  }
 }
 
 /**
@@ -216,11 +262,15 @@ inline void from_json(const nlohmann::json& json_data, MetricsDeclarationDocumen
 struct MetricsDeclaration {
   std::optional<MetricsDeclarationDocument>    document;
   std::map<std::string, MetricJsonDeclaration> metrics;
+  std::optional<std::string>                   extends;
 };
 
 inline void from_json(const nlohmann::json& json_data, MetricsDeclaration& metrics_declaration) {
   if (json_data.contains("document")) {
     json_data.at("document").get_to(metrics_declaration.document);
+  }
+  if (json_data.contains("extends")) {
+    json_data.at("extends").get_to(metrics_declaration.extends);
   }
   json_data.at("metrics").get_to(metrics_declaration.metrics);
 }

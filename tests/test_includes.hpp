@@ -92,24 +92,61 @@ inline auto GetMetricStatesOnTarget(astl_target_handle_t target_handle, astl_met
   return astlGetMetricStatesOnTarget(&params);
 }
 
-inline auto GetMetricGroupCount(astl_target_handle_t target_handle, uint32_t* metric_group_count) -> astl_status_code {
-  ASTL_INIT_STRUCT(astl_get_metric_group_count_params_t, params, .flags = 0, .target_handle = target_handle,
+inline auto GetMetricGroupCountOnTarget(astl_target_handle_t target_handle, uint32_t* metric_group_count)
+    -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_get_metric_group_count_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
                    .metric_group_count = metric_group_count);
+  return astlGetMetricGroupCountOnTarget(&params);
+}
+
+inline auto GetMetricGroupCount(uint32_t* metric_group_count) -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_get_metric_group_count_params_t, params, .flags = 0, .metric_group_count = metric_group_count);
   return astlGetMetricGroupCount(&params);
 }
 
-inline auto GetMetricGroups(astl_target_handle_t target_handle, astl_metric_group_props_t* metric_groups,
-                            uint32_t* metric_group_count) -> astl_status_code {
-  ASTL_INIT_STRUCT(astl_get_metric_groups_params_t, params, .flags = 0, .target_handle = target_handle,
+inline auto GetMetricGroupsOnTarget(astl_target_handle_t target_handle, astl_metric_group_props_t* metric_groups,
+                                    uint32_t* metric_group_count) -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_get_metric_groups_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
                    .metric_groups = metric_groups, .metric_group_count = metric_group_count);
+  return astlGetMetricGroupsOnTarget(&params);
+}
+
+inline auto GetMetricGroups(astl_metric_group_props_t* metric_groups, uint32_t* metric_group_count)
+    -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_get_metric_groups_params_t, params, .flags = 0, .metric_groups = metric_groups,
+                   .metric_group_count = metric_group_count);
   return astlGetMetricGroups(&params);
 }
 
-inline auto GetMetricGroupMetrics(astl_target_handle_t target_handle, const astl_metric_group_props_t* metric_group,
-                                  astl_metric_props_t* metrics) -> astl_status_code {
-  ASTL_INIT_STRUCT(astl_get_metric_group_metrics_params_t, params, .flags = 0, .target_handle = target_handle,
-                   .metric_group = metric_group, .metrics = metrics);
+inline auto GetMetricGroupMetricsOnTarget(astl_target_handle_t       target_handle,
+                                          astl_metric_group_handle_t metric_group_handle, astl_metric_props_t* metrics,
+                                          uint32_t* metric_count) -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_get_metric_group_metrics_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
+                   .metric_group_handle = metric_group_handle, .metrics = metrics, .metric_count = metric_count);
+  return astlGetMetricGroupMetricsOnTarget(&params);
+}
+
+inline auto GetMetricGroupMetricCountOnTarget(astl_target_handle_t       target_handle,
+                                              astl_metric_group_handle_t metric_group_handle, uint32_t* metric_count)
+    -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_get_metric_group_metric_count_on_target_params_t, params, .flags = 0,
+                   .target_handle = target_handle, .metric_group_handle = metric_group_handle,
+                   .metric_count = metric_count);
+  return astlGetMetricGroupMetricCountOnTarget(&params);
+}
+
+inline auto GetMetricGroupMetrics(astl_metric_group_handle_t metric_group_handle, astl_metric_props_t* metrics,
+                                  uint32_t* metric_count) -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_get_metric_group_metrics_params_t, params, .flags = 0,
+                   .metric_group_handle = metric_group_handle, .metrics = metrics, .metric_count = metric_count);
   return astlGetMetricGroupMetrics(&params);
+}
+
+inline auto GetMetricGroupMetricCount(astl_metric_group_handle_t metric_group_handle, uint32_t* metric_count)
+    -> astl_status_code {
+  ASTL_INIT_STRUCT(astl_get_metric_group_metric_count_params_t, params, .flags = 0,
+                   .metric_group_handle = metric_group_handle, .metric_count = metric_count);
+  return astlGetMetricGroupMetricCount(&params);
 }
 
 inline auto ConfigureCounterCollectionOnTarget(astl_target_handle_t            target_handle,

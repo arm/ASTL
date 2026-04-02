@@ -61,7 +61,7 @@ auto ParseDataEventValueWithTimestamp(std::string_view data_read)
   auto [timestamp, remaining_text] = parse_result.value();
   // the timestamp + value are of the form "<timestamp> <value>" OR "<timestamp>: <value",
   // depending on the driver version, so skip past any whitespace or ':' between timestamp and value
-  const auto should_skip = [](unsigned char character) { return std::isspace(character) || character == ':'; };
+  const auto should_skip = [](unsigned char character) { return std::isspace(character) != 0 || character == ':'; };
   // prefer non-pointer auto here since the iterator type of string_view isn't always char* depending on platform
   // NOLINTNEXTLINE(readability-qualified-auto)
   const auto value_it = std::ranges::find_if_not(remaining_text, should_skip);

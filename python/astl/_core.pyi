@@ -30,13 +30,12 @@ class Metric:
     units: int
     value_type: int
     metric_type: int
-    category: int
+    identifier: int
 
 class MetricGroup:
     name: str
     description: str
     handle_ptr: int
-    metric_count: int
 
 class CollectionParameters:
     sampling_interval: int
@@ -49,16 +48,23 @@ class CollectionMode:  # minimal enum-like stub
     SAMPLING: int
     SNAPSHOT: int
 
-class Category:
-    UNCATEGORIZED: int
+class MetricIdentifier:
     COUNT: int
     TEMPERATURE: int
+    THERMAL_LIMIT: int
+    THERMAL_THROTTLE: int
+    ENERGY: int
     POWER: int
+    POWER_LIMIT: int
+    POWER_THROTTLE: int
     FREQUENCY: int
     VOLTAGE: int
     CURRENT: int
     BANDWIDTH: int
     FAN_SPEED: int
+    HUMIDITY: int
+    STATUS: int
+    UNKNOWN: int
 
 class Status:
     SUCCESS: int
@@ -73,8 +79,12 @@ def get_counters(target: Target) -> List[Counter]: ...
 
 def get_metrics(target: Target) -> List[Metric]: ...
 
-def get_metric_groups(target: Target) -> List[MetricGroup]: ...
-def get_metric_group_metrics(target: Target, group: MetricGroup) -> List[Metric]: ...
+def get_metric_groups() -> List[MetricGroup]: ...
+def get_metric_groups_on_target(target: Target) -> List[MetricGroup]: ...
+def get_metric_group_metric_count(group: MetricGroup) -> int: ...
+def get_metric_group_metrics(group: MetricGroup) -> List[Metric]: ...
+def get_metric_group_metric_count_on_target(target: Target, group: MetricGroup) -> int: ...
+def get_metric_group_metrics_on_target(target: Target, group: MetricGroup) -> List[Metric]: ...
 
 # Configuration helpers
 def configure_counters(params: CollectionParameters, counters: List[Counter]) -> None: ...

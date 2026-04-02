@@ -237,6 +237,11 @@ auto Orchestrator::ConfigureCounterCollection(const ITarget *target, const astl_
     ASTL_LOG_ERROR("Failed to reset collection artifacts on target {}: {}", target->Name(), astlStatusString(status));
     return status;
   }
+  ResetFinalOutputEmissionState();
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    _target_collection_states[target] = TargetCollectionState::CONFIGURED;
+  }
   return status;
 }
 
@@ -286,6 +291,7 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_c
     ASTL_LOG_ERROR("Failed to reset collection artifacts on target {}: {}", target->Name(), astlStatusString(status));
     return status;
   }
+  ResetFinalOutputEmissionState();
   {
     std::lock_guard state_lock(_collection_state_mutex);
     _target_collection_states[target] = TargetCollectionState::CONFIGURED;
@@ -297,6 +303,7 @@ auto Orchestrator::ResetTargetCollectionArtifacts(const ITarget *target) -> astl
   if (!target) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+  const auto stable_target_key = GetStableTargetKey(*target);
 
   {
     std::lock_guard raw_lock(_raw_samples_mtx);
@@ -312,12 +319,9 @@ auto Orchestrator::ResetTargetCollectionArtifacts(const ITarget *target) -> astl
     _target_resume_timestamps.erase(target);
   }
 
-  _perfetto_emitted    = false;
-  _intervalcsv_emitted = false;
-
   std::error_code remove_error;
-  fs::remove(_cache_dir / (target->Name() + kAstlFileExtension), remove_error);
-  if (remove_error) {
+  fs::remove(_cache_dir / (stable_target_key + kAstlFileExtension), remove_error);
+  if (remove_error && remove_error != std::errc::no_such_file_or_directory) {
     ASTL_LOG_ERROR("Failed to remove cached samples for target {}: {}", target->Name(), remove_error.message());
     return ASTL_STATUS_INTERNAL_ERROR;
   }
@@ -325,6 +329,22 @@ auto Orchestrator::ResetTargetCollectionArtifacts(const ITarget *target) -> astl
   return ASTL_STATUS_SUCCESS;
 }
 
+auto Orchestrator::ResetFinalOutputEmissionState() -> void {
+  _perfetto_emission_state.store(FinalOutputEmissionState::NOT_EMITTED, std::memory_order_release);
+  _intervalcsv_emission_state.store(FinalOutputEmissionState::NOT_EMITTED, std::memory_order_release);
+}
+
+auto Orchestrator::TryBeginFinalOutputEmission(std::atomic<FinalOutputEmissionState> &emission_state) -> bool {
+  auto expected = FinalOutputEmissionState::NOT_EMITTED;
+  return emission_state.compare_exchange_strong(expected, FinalOutputEmissionState::EMITTING, std::memory_order_acq_rel,
+                                                std::memory_order_acquire);
+}
+
+auto Orchestrator::FinishFinalOutputEmission(std::atomic<FinalOutputEmissionState> &emission_state,
+                                             bool                                   emission_succeeded) -> void {
+  emission_state.store(emission_succeeded ? FinalOutputEmissionState::EMITTED : FinalOutputEmissionState::NOT_EMITTED,
+                       std::memory_order_release);
+}
 auto Orchestrator::StartCollectionImpl(const ITarget *target, bool start_paused) -> astl_status_code {
   if (!_collector_manager) {
     ASTL_LOG_ERROR("Orchestrator::StartCollection called with null CollectorManager");
@@ -434,6 +454,34 @@ auto Orchestrator::StartCollection(const ITarget *target) -> astl_status_code {
 
 auto Orchestrator::StartCollectionPaused(const ITarget *target) -> astl_status_code {
   return StartCollectionImpl(target, true);
+}
+
+auto Orchestrator::RollbackStartedCollectionToConfigured(const ITarget *target) -> astl_status_code {
+  if (!target) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!_collector_manager) {
+    ASTL_LOG_ERROR("Orchestrator::RollbackStartedCollectionToConfigured called with null CollectorManager");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto stop_status = _collector_manager->StopOnTarget(target);
+  if (stop_status != ASTL_STATUS_SUCCESS) {
+    return stop_status;
+  }
+
+  const auto reset_status = ResetTargetCollectionArtifacts(target);
+  if (reset_status != ASTL_STATUS_SUCCESS) {
+    return reset_status;
+  }
+  ResetFinalOutputEmissionState();
+
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    _target_collection_states[target] = TargetCollectionState::CONFIGURED;
+  }
+
+  return ASTL_STATUS_SUCCESS;
 }
 
 auto Orchestrator::ReadImmediate(const ITarget *target) -> astl_status_code {
@@ -550,17 +598,21 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
     return status;
   }
 
-  std::lock_guard lock{_raw_samples_mtx};
+  {
+    std::lock_guard lock{_raw_samples_mtx};
 
-  // serialize any remaining in-memory samples for this target into the batch file, then clear
-  auto iter = _raw_samples.find(target);
-  if (iter != _raw_samples.end() && !iter->second.empty()) {
-    auto res = astl::ProtobufSerDes::SerializeCurrentBatch(target->Name(), iter->second, _cache_dir);
-    if (res != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("Failed to serialize remaining samples for {}", target->Name());
-      return res;
+    // Serialize any remaining in-memory samples for this target into the batch file, then clear.
+    // Do not hold _raw_samples_mtx while emitting final reports; those paths may rebuild processed
+    // samples and otherwise do non-trivial work during stop/finalize.
+    auto iter = _raw_samples.find(target);
+    if (iter != _raw_samples.end() && !iter->second.empty()) {
+      auto res = astl::ProtobufSerDes::SerializeCurrentBatch(GetStableTargetKey(*target), iter->second, _cache_dir);
+      if (res != ASTL_STATUS_SUCCESS) {
+        ASTL_LOG_ERROR("Failed to serialize remaining samples for {}", target->Name());
+        return res;
+      }
+      iter->second.clear();
     }
-    iter->second.clear();
   }
 
   // if we've now stopped collection on all the targets, finalize metric processing and output
@@ -583,13 +635,16 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
 }
 
 auto Orchestrator::EmitPerfettoTraceIfRequested() -> void {
-  if (_perfetto_emitted) {  // already emitted for this collection lifecycle
+  if (!TryBeginFinalOutputEmission(_perfetto_emission_state)) {
     return;
   }
+
   std::string perfetto_path = astl::GetEnvVar(astl::EnvVar::ASTL_OUTPUT_PERFETTO);
   if (perfetto_path.empty()) {
+    FinishFinalOutputEmission(_perfetto_emission_state, false);
     return;  // no-op if unset
   }
+
   // Acquire processed samples snapshot under lock to avoid race with late sample insertion.
   std::lock_guard processed_lock{_processed_samples_mtx};
   if (_processed_samples.empty()) {
@@ -597,6 +652,7 @@ auto Orchestrator::EmitPerfettoTraceIfRequested() -> void {
   }
   if (!_output_manager) {
     ASTL_LOG_ERROR("EmitPerfettoTraceIfRequested: OutputManager unavailable");
+    FinishFinalOutputEmission(_perfetto_emission_state, false);
     return;
   }
   // Dispatch all processed samples via OutputManager using PERFETTO type.
@@ -604,32 +660,37 @@ auto Orchestrator::EmitPerfettoTraceIfRequested() -> void {
       _output_manager->OutputProcessedSamples(_processed_samples, OutputType::PERFETTO, nullptr, nullptr);
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("EmitPerfettoTraceIfRequested: failed to emit Perfetto trace (status={})", status);
+    FinishFinalOutputEmission(_perfetto_emission_state, false);
     return;
   }
-  _perfetto_emitted = true;
+  FinishFinalOutputEmission(_perfetto_emission_state, true);
   ASTL_LOG_INFO("Perfetto trace emission completed (env path='{}')", perfetto_path);
 }
 
 auto Orchestrator::EmitIntervalCsvIfRequested() -> void {
-  if (_intervalcsv_emitted) {
+  if (!TryBeginFinalOutputEmission(_intervalcsv_emission_state)) {
     return;
   }
+
   std::string csv_path = astl::GetEnvVar(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV);
   if (csv_path.empty()) {
+    FinishFinalOutputEmission(_intervalcsv_emission_state, false);
     return;  // nothing to do
   }
   std::lock_guard processed_lock{_processed_samples_mtx};
   if (!_output_manager) {
     ASTL_LOG_ERROR("EmitIntervalCsvIfRequested: OutputManager unavailable");
+    FinishFinalOutputEmission(_intervalcsv_emission_state, false);
     return;
   }
   astl_status_code status =
       _output_manager->OutputProcessedSamples(_processed_samples, OutputType::INTERVAL_CSV, nullptr, nullptr);
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("EmitIntervalCsvIfRequested: failed to emit interval CSV (status={})", status);
+    FinishFinalOutputEmission(_intervalcsv_emission_state, false);
     return;
   }
-  _intervalcsv_emitted = true;
+  FinishFinalOutputEmission(_intervalcsv_emission_state, true);
   ASTL_LOG_INFO("Interval CSV emission completed (env path='{}')", csv_path);
 }
 
@@ -692,6 +753,7 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
     return result;
   }
   ASTL_LOG_DEBUG("Received {} samples for target {}", raw_samples.size(), properties.name);
+  const auto stable_target_key = GetStableTargetKey(*target);
 
   if (!raw_samples.empty()) [[likely]] {
     std::vector<RawSampledData> batch_samples{};
@@ -727,7 +789,7 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
     }
 
     if (!batch_samples.empty()) {
-      auto res = astl::ProtobufSerDes::SerializeCurrentBatch(properties.name, batch_samples, _cache_dir);
+      auto res = astl::ProtobufSerDes::SerializeCurrentBatch(stable_target_key, batch_samples, _cache_dir);
       if (res != ASTL_STATUS_SUCCESS) {
         return res;
       }
@@ -815,10 +877,15 @@ auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarge
 
   // 2) Rebuild from tmp/<target>.astl (if it exists)
   // TODO(ASTL-224): Support batch processing. Currently we just hardcode tmp/ as the location.
-  const fs::path file_path = _cache_dir / (target->Name() + kAstlFileExtension);
+  const fs::path file_path = _cache_dir / (GetStableTargetKey(*target) + kAstlFileExtension);
 
   if (!fs::exists(fs::path(_cache_dir))) {
     ASTL_LOG_DEBUG("No cache directory exists; skipping raw sample deserialization for target {}", target->Name());
+    return {};
+  }
+
+  if (!fs::exists(file_path)) {
+    ASTL_LOG_INFO("No cached raw sample file exists for target {}; returning no samples", target->Name());
     return {};
   }
 

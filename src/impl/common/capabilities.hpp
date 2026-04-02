@@ -13,7 +13,7 @@
 
 namespace astl {
 
-enum class CollectorType { UNKNOWN, SCMI, LIBSENSORS, MMIO };
+enum class CollectorType { UNKNOWN, SCMI, LIBSENSORS, PROCFS };
 
 /**
  * @brief Attributes of a collector indicating what it's able to do.

@@ -65,7 +65,7 @@ static_assert(offsetof(astl_metric_props_t, size) == 0);
 static_assert(offsetof(astl_metric_props_t, handle) == AlignUp(sizeof(size_t), alignof(astl_metric_handle_t)));
 static_assert(sizeof(astl_metric_props_t) ==
               StructLayoutSize<size_t, astl_metric_handle_t, const char*, const char*, uint32_t, astl_units_t,
-                               astl_value_type_t, astl_metric_type_t, astl_category_t>());
+                               astl_value_type_t, astl_metric_type_t, astl_metric_identifier_t>());
 
 static_assert(IsStdLayout<astl_state_props_t>());
 static_assert(offsetof(astl_state_props_t, size) == 0);
@@ -75,9 +75,8 @@ static_assert(IsStdLayout<astl_metric_group_props_t>());
 static_assert(offsetof(astl_metric_group_props_t, size) == 0);
 static_assert(offsetof(astl_metric_group_props_t, handle) ==
               AlignUp(sizeof(size_t), alignof(astl_metric_group_handle_t)));
-static_assert(
-    sizeof(astl_metric_group_props_t) ==
-    StructLayoutSize<size_t, astl_metric_group_handle_t, const char*, const char*, uint32_t, astl_metric_props_t*>());
+static_assert(sizeof(astl_metric_group_props_t) ==
+              StructLayoutSize<size_t, astl_metric_group_handle_t, const char*, const char*>());
 
 static_assert(IsStdLayout<astl_collection_params_t>());
 static_assert(offsetof(astl_collection_params_t, size) == 0);
@@ -173,24 +172,58 @@ static_assert(
 static_assert(IsStdLayout<astl_get_metric_group_count_params_t>());
 static_assert(offsetof(astl_get_metric_group_count_params_t, size) == 0);
 static_assert(offsetof(astl_get_metric_group_count_params_t, flags) == kFlagsOffset);
-static_assert(offsetof(astl_get_metric_group_count_params_t, target_handle) == kFirstPtrOffset);
-static_assert(sizeof(astl_get_metric_group_count_params_t) ==
+static_assert(offsetof(astl_get_metric_group_count_params_t, metric_group_count) == kFirstPtrOffset);
+static_assert(sizeof(astl_get_metric_group_count_params_t) == StructLayoutSize<size_t, uint32_t, uint32_t*>());
+
+static_assert(IsStdLayout<astl_get_metric_group_count_on_target_params_t>());
+static_assert(offsetof(astl_get_metric_group_count_on_target_params_t, size) == 0);
+static_assert(offsetof(astl_get_metric_group_count_on_target_params_t, flags) == kFlagsOffset);
+static_assert(offsetof(astl_get_metric_group_count_on_target_params_t, target_handle) == kFirstPtrOffset);
+static_assert(sizeof(astl_get_metric_group_count_on_target_params_t) ==
               StructLayoutSize<size_t, uint32_t, astl_target_handle_t, uint32_t*>());
 
 static_assert(IsStdLayout<astl_get_metric_groups_params_t>());
 static_assert(offsetof(astl_get_metric_groups_params_t, size) == 0);
 static_assert(offsetof(astl_get_metric_groups_params_t, flags) == kFlagsOffset);
-static_assert(offsetof(astl_get_metric_groups_params_t, target_handle) == kFirstPtrOffset);
+static_assert(offsetof(astl_get_metric_groups_params_t, metric_groups) == kFirstPtrOffset);
 static_assert(sizeof(astl_get_metric_groups_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_metric_group_props_t*, uint32_t*>());
+
+static_assert(IsStdLayout<astl_get_metric_groups_on_target_params_t>());
+static_assert(offsetof(astl_get_metric_groups_on_target_params_t, size) == 0);
+static_assert(offsetof(astl_get_metric_groups_on_target_params_t, flags) == kFlagsOffset);
+static_assert(offsetof(astl_get_metric_groups_on_target_params_t, target_handle) == kFirstPtrOffset);
+static_assert(sizeof(astl_get_metric_groups_on_target_params_t) ==
               StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_group_props_t*, uint32_t*>());
 
 static_assert(IsStdLayout<astl_get_metric_group_metrics_params_t>());
 static_assert(offsetof(astl_get_metric_group_metrics_params_t, size) == 0);
 static_assert(offsetof(astl_get_metric_group_metrics_params_t, flags) == kFlagsOffset);
-static_assert(offsetof(astl_get_metric_group_metrics_params_t, target_handle) == kFirstPtrOffset);
-static_assert(
-    sizeof(astl_get_metric_group_metrics_params_t) ==
-    StructLayoutSize<size_t, uint32_t, astl_target_handle_t, const astl_metric_group_props_t*, astl_metric_props_t*>());
+static_assert(offsetof(astl_get_metric_group_metrics_params_t, metric_group_handle) == kFirstPtrOffset);
+static_assert(sizeof(astl_get_metric_group_metrics_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_metric_group_handle_t, astl_metric_props_t*, uint32_t*>());
+
+static_assert(IsStdLayout<astl_get_metric_group_metric_count_params_t>());
+static_assert(offsetof(astl_get_metric_group_metric_count_params_t, size) == 0);
+static_assert(offsetof(astl_get_metric_group_metric_count_params_t, flags) == kFlagsOffset);
+static_assert(offsetof(astl_get_metric_group_metric_count_params_t, metric_group_handle) == kFirstPtrOffset);
+static_assert(sizeof(astl_get_metric_group_metric_count_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_metric_group_handle_t, uint32_t*>());
+
+static_assert(IsStdLayout<astl_get_metric_group_metrics_on_target_params_t>());
+static_assert(offsetof(astl_get_metric_group_metrics_on_target_params_t, size) == 0);
+static_assert(offsetof(astl_get_metric_group_metrics_on_target_params_t, flags) == kFlagsOffset);
+static_assert(offsetof(astl_get_metric_group_metrics_on_target_params_t, target_handle) == kFirstPtrOffset);
+static_assert(sizeof(astl_get_metric_group_metrics_on_target_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_group_handle_t, astl_metric_props_t*,
+                               uint32_t*>());
+
+static_assert(IsStdLayout<astl_get_metric_group_metric_count_on_target_params_t>());
+static_assert(offsetof(astl_get_metric_group_metric_count_on_target_params_t, size) == 0);
+static_assert(offsetof(astl_get_metric_group_metric_count_on_target_params_t, flags) == kFlagsOffset);
+static_assert(offsetof(astl_get_metric_group_metric_count_on_target_params_t, target_handle) == kFirstPtrOffset);
+static_assert(sizeof(astl_get_metric_group_metric_count_on_target_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_group_handle_t, uint32_t*>());
 
 static_assert(IsStdLayout<astl_configure_counter_collection_on_target_params_t>());
 static_assert(offsetof(astl_configure_counter_collection_on_target_params_t, size) == 0);

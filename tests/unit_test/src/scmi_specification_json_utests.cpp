@@ -56,8 +56,8 @@ TEST_CASE("ScmiSpecification::NormalizeUUID", "[ConfigManager]") {
     REQUIRE(uuid_matcher != target_uuid);
   }
   SECTION("Empty string should fail") {
-    std::string raw_uuid = "";
-    auto        result   = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
+    std::string raw_uuid;
+    auto        result = astl::scmi::spec::GetNormalizedUuid(raw_uuid);
     REQUIRE(!result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
   }
@@ -261,7 +261,7 @@ TEST_CASE("GetMetricRegistersScmiData", "[ConfigManager]") {
       "CURRENT_TEMPERATURE": {
         "description": "Current Temperature in Celsius, In this example, PSS.5 has a broken temp sensor",
         "metric_type": "value",
-        "category": "TEMPERATURE",
+        "identifier": "TEMPERATURE",
         "metric_groups": [],
         "collection": {
           "register": "TEMP_PRESENT",
@@ -336,6 +336,31 @@ TEST_CASE("FindMetricsFileElementByUuid returns nullopt when there is no matchin
   auto metrics_file = astl::metrics::spec::FindMetricsFileElementByUuid(platform_lookup, uuid);
 
   REQUIRE_FALSE(metrics_file.has_value());
+}
+
+TEST_CASE("PlatformLookup parses optional SCMI target name template", "[ConfigManager]") {
+  std::string platform_lookup_json = R"json(
+  {
+    "last_updated": "2026-03-24",
+    "scmi_uuid_mapping": {
+      "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000/14": {
+        "last_updated": "2026-03-24",
+        "description": "test platform",
+        "metrics_file": "test.json",
+        "name": "{telemetry_subdirectory}"
+      }
+    }
+  }
+  )json";
+
+  auto platform_lookup = json::parse(platform_lookup_json).get<astl::metrics::spec::PlatformLookup>();
+  auto uuid            = astl::scmi::spec::GetNormalizedUuid("CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000").value();
+
+  auto metrics_file = astl::metrics::spec::FindMetricsFileElementByUuid(platform_lookup, uuid);
+
+  REQUIRE(metrics_file.has_value());
+  REQUIRE(metrics_file->name.has_value());
+  REQUIRE(*metrics_file->name == "{telemetry_subdirectory}");
 }
 
 TEST_CASE("GetMetricRegistersScmiData applies unit, component, and instance filters", "[ConfigManager]") {
@@ -436,7 +461,7 @@ TEST_CASE("FindMatchingScmiRegistersForResidency rejects non-zero base10 modifie
         "description": "CPU residency metric",
         "unit": "us",
         "metric_type": "residency",
-        "category": "COUNT",
+        "identifier": "COUNT",
         "collection": {
           "protocol": "scmi"
         },

@@ -33,7 +33,7 @@ message MetricConfig {
   AstlUnits       units         = 3;
   AstlValueType   value_type    = 4;
   AstlMetricType  metric_type   = 5;
-  AstlCategory    category      = 6;
+  AstlMetricIdentifier    identifier      = 6;
   repeated string metric_groups = 7;
   CollectorType collector_type  = 8;
   // Raw collector sample type before formula/scaling processing.

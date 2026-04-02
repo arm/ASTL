@@ -170,33 +170,59 @@ inline std::string ToLowerCopy(std::string_view str) {
   return out_str;
 }
 
-inline auto ParseCategory(std::string const& category_str) -> astl_category_t {
-  auto category_str_lower = ToLowerCopy(category_str);
-  if (category_str_lower == "count") {
-    return ASTL_CATEGORY_COUNT;
+inline auto ParseMetricIdentifier(std::string const& identifier_str) -> astl_metric_identifier_t {
+  auto identifier_str_lower = ToLowerCopy(identifier_str);
+  if (identifier_str_lower == "count") {
+    return ASTL_METRIC_IDENTIFIER_COUNT;
   }
-  if (category_str_lower == "fan_speed" || category_str_lower == "fan speed" || category_str_lower == "fanspeed") {
-    return ASTL_CATEGORY_FAN_SPEED;
+  if (identifier_str_lower == "fan_speed" || identifier_str_lower == "fan speed" ||
+      identifier_str_lower == "fanspeed") {
+    return ASTL_METRIC_IDENTIFIER_FAN_SPEED;
   }
-  if (category_str_lower == "temperature") {
-    return ASTL_CATEGORY_TEMPERATURE;
+  if (identifier_str_lower == "temperature") {
+    return ASTL_METRIC_IDENTIFIER_TEMPERATURE;
   }
-  if (category_str_lower == "power") {
-    return ASTL_CATEGORY_POWER;
+  if (identifier_str_lower == "thermal_throttle" || identifier_str_lower == "thermal throttle" ||
+      identifier_str_lower == "thermalthrottle") {
+    return ASTL_METRIC_IDENTIFIER_THERMAL_THROTTLE;
   }
-  if (category_str_lower == "frequency") {
-    return ASTL_CATEGORY_FREQUENCY;
+  if (identifier_str_lower == "energy") {
+    return ASTL_METRIC_IDENTIFIER_ENERGY;
   }
-  if (category_str_lower == "voltage") {
-    return ASTL_CATEGORY_VOLTAGE;
+  if (identifier_str_lower == "power") {
+    return ASTL_METRIC_IDENTIFIER_POWER;
   }
-  if (category_str_lower == "current") {
-    return ASTL_CATEGORY_CURRENT;
+  if (identifier_str_lower == "power_limit" || identifier_str_lower == "power limit" ||
+      identifier_str_lower == "powerlimit") {
+    return ASTL_METRIC_IDENTIFIER_POWER_LIMIT;
   }
-  if (category_str_lower == "bandwidth") {
-    return ASTL_CATEGORY_BANDWIDTH;
+  if (identifier_str_lower == "power_throttle" || identifier_str_lower == "power throttle" ||
+      identifier_str_lower == "powerthrottle") {
+    return ASTL_METRIC_IDENTIFIER_POWER_THROTTLE;
   }
-  return ASTL_CATEGORY_UNCATEGORIZED;
+  if (identifier_str_lower == "frequency") {
+    return ASTL_METRIC_IDENTIFIER_FREQUENCY;
+  }
+  if (identifier_str_lower == "voltage") {
+    return ASTL_METRIC_IDENTIFIER_VOLTAGE;
+  }
+  if (identifier_str_lower == "current") {
+    return ASTL_METRIC_IDENTIFIER_CURRENT;
+  }
+  if (identifier_str_lower == "bandwidth") {
+    return ASTL_METRIC_IDENTIFIER_BANDWIDTH;
+  }
+  if (identifier_str_lower == "humidity") {
+    return ASTL_METRIC_IDENTIFIER_HUMIDITY;
+  }
+  if (identifier_str_lower == "thermal_limit" || identifier_str_lower == "thermal limit" ||
+      identifier_str_lower == "thermallimit") {
+    return ASTL_METRIC_IDENTIFIER_THERMAL_LIMIT;
+  }
+  if (identifier_str_lower == "status" || identifier_str_lower == "state") {
+    return ASTL_METRIC_IDENTIFIER_STATUS;
+  }
+  return ASTL_METRIC_IDENTIFIER_UNKNOWN;
 }
 
 inline auto ParseUnits(std::string_view units_str) -> astl_units_t {
@@ -240,6 +266,9 @@ inline auto ParseUnits(std::string_view units_str) -> astl_units_t {
   if (unit_str_lower == "count" || unit_str_lower == "counts") {
     return ASTL_UNITS_COUNT;
   }
+  if (unit_str_lower == "%" || unit_str_lower == "percent" || unit_str_lower == "percentage") {
+    return ASTL_UNITS_PERCENT;
+  }
   return ASTL_UNITS_UNKNOWN;
 }
 
@@ -273,6 +302,8 @@ inline auto UnitsToString(astl_units_t units) -> std::string_view {
       return "RPM";
     case ASTL_UNITS_COUNT:
       return "Count";
+    case ASTL_UNITS_PERCENT:
+      return "Percent";
     case ASTL_UNITS_UNKNOWN:
       return "Unknown";
   }

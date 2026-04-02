@@ -17,7 +17,7 @@ static astl::MetricConfig* GetDeltaConfig() {
                                    "unit-test metric",
                                    ASTL_UNITS_CELSIUS,
                                    ASTL_VALUE_UINT64,
-                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                    ASTL_METRIC_DELTA,
                                    astl::CollectorType::UNKNOWN,
                                    astl::NullOperationBuilder{}};
@@ -29,7 +29,7 @@ static astl::MetricConfig* GetDeltaConfigUINT32() {
                                    "unit-test metric",
                                    ASTL_UNITS_CELSIUS,
                                    ASTL_VALUE_UINT32,
-                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                    ASTL_METRIC_DELTA,
                                    astl::CollectorType::UNKNOWN,
                                    astl::NullOperationBuilder{}};
@@ -41,7 +41,7 @@ static astl::MetricConfig* GetDeltaConfigFLOAT64() {
                                    "unit-test metric",
                                    ASTL_UNITS_CELSIUS,
                                    ASTL_VALUE_FLOAT64,
-                                   ASTL_CATEGORY_UNCATEGORIZED,
+                                   ASTL_METRIC_IDENTIFIER_UNKNOWN,
                                    ASTL_METRIC_DELTA,
                                    astl::CollectorType::UNKNOWN,
                                    astl::NullOperationBuilder{}};

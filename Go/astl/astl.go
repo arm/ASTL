@@ -171,18 +171,25 @@ const (
 	MetricUnknown        MetricType = 0xFFFFFFFF
 )
 
-type Category uint32
+type MetricIdentifier uint32
 
 const (
-	CategoryCount         Category = 0
-	CategoryTemperature   Category = 1
-	CategoryPower         Category = 2
-	CategoryFrequency     Category = 3
-	CategoryVoltage       Category = 4
-	CategoryCurrent       Category = 5
-	CategoryBandwidth     Category = 6
-	CategoryFanSpeed      Category = 7
-	CategoryUncategorized Category = 0xFFFFFFFF
+	MetricIdentifierUnknown         MetricIdentifier = ^MetricIdentifier(0)
+	MetricIdentifierCount           MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_COUNT)
+	MetricIdentifierTemperature     MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_TEMPERATURE)
+	MetricIdentifierThermalLimit    MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_THERMAL_LIMIT)
+	MetricIdentifierThermalThrottle MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_THERMAL_THROTTLE)
+	MetricIdentifierEnergy          MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_ENERGY)
+	MetricIdentifierPower           MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_POWER)
+	MetricIdentifierPowerLimit      MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_POWER_LIMIT)
+	MetricIdentifierPowerThrottle   MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_POWER_THROTTLE)
+	MetricIdentifierFrequency       MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_FREQUENCY)
+	MetricIdentifierVoltage         MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_VOLTAGE)
+	MetricIdentifierCurrent         MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_CURRENT)
+	MetricIdentifierBandwidth       MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_BANDWIDTH)
+	MetricIdentifierFanSpeed        MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_FAN_SPEED)
+	MetricIdentifierHumidity        MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_HUMIDITY)
+	MetricIdentifierStatus          MetricIdentifier = MetricIdentifier(C.ASTL_METRIC_IDENTIFIER_STATUS)
 )
 
 type CollectionMode uint32
@@ -262,15 +269,13 @@ type Metric struct {
 	Units               Units
 	ValueType           ValueType
 	MetricType          MetricType
-	Category            Category
+	Identifier          MetricIdentifier
 }
 
 type MetricGroup struct {
 	Handle      uintptr
 	Name        string
 	Description string
-	MetricCount uint32
-	Metrics     []Metric
 }
 
 type MetricState struct {
@@ -393,43 +398,111 @@ func GetMetrics(target Target) ([]Metric, error) {
 	return fetchTargetList(target, metricListQuery())
 }
 
-func GetMetricGroups(target Target) ([]MetricGroup, error) {
-	return fetchTargetList(target, metricGroupListQuery())
+func GetMetricGroups() ([]MetricGroup, error) {
+	return fetchList("GetMetricGroups", metricGroupListQuery())
 }
 
-func GetMetricGroupMetrics(target Target, group MetricGroup) ([]Metric, error) {
-	if group.MetricCount == 0 {
-		return []Metric{}, nil
+func GetMetricGroupsOnTarget(target Target) ([]MetricGroup, error) {
+	return fetchTargetList(target, metricGroupListQueryOnTarget())
+}
+
+func GetMetricGroupMetricCount(group MetricGroup) (uint32, error) {
+	group, err := resolveGlobalMetricGroup(group)
+	if err != nil {
+		return 0, err
 	}
+	return queryCount("GetMetricGroupMetricCount", "astlGetMetricGroupMetricCount", nil,
+		func(count *C.uint32_t) C.astl_status_code {
+			params := C.astl_get_metric_group_metric_count_params_t{
+				size:                C.size_t(C.sizeof_astl_get_metric_group_metric_count_params_t),
+				flags:               0,
+				metric_group_handle: cMetricGroupHandle(group),
+				metric_count:        count,
+			}
+			return C.astlGetMetricGroupMetricCount(&params)
+		})
+}
 
-	ptr := (*C.astl_metric_props_t)(C.calloc(C.size_t(group.MetricCount), C.size_t(C.sizeof_astl_metric_props_t)))
-	if ptr == nil {
-		return nil, Error{Op: "GetMetricGroupMetrics", Status: StatusOutOfMemory}
-	}
-	defer C.free(unsafe.Pointer(ptr))
-
-	metricsBuf := unsafe.Slice(ptr, int(group.MetricCount))
-	metricsBuf[0].size = C.size_t(C.sizeof_astl_metric_props_t)
-
-	groupProps, releaseGroupProps, err := allocMetricGroupProps(group)
+func GetMetricGroupMetrics(group MetricGroup) ([]Metric, error) {
+	group, err := resolveGlobalMetricGroup(group)
 	if err != nil {
 		return nil, err
 	}
-	defer releaseGroupProps()
-
-	params := C.astl_get_metric_group_metrics_params_t{
-		size:          C.size_t(C.sizeof_astl_get_metric_group_metrics_params_t),
-		flags:         0,
-		target_handle: cTargetHandle(target),
-		metric_group:  groupProps,
-		metrics:       ptr,
-	}
-
-	if err := checkStatus("astlGetMetricGroupMetrics", C.astlGetMetricGroupMetrics(&params)); err != nil {
+	count, err := queryCount("GetMetricGroupMetricCount", "astlGetMetricGroupMetricCount", nil,
+		func(count *C.uint32_t) C.astl_status_code {
+			params := C.astl_get_metric_group_metric_count_params_t{
+				size:                C.size_t(C.sizeof_astl_get_metric_group_metric_count_params_t),
+				flags:               0,
+				metric_group_handle: cMetricGroupHandle(group),
+				metric_count:        count,
+			}
+			return C.astlGetMetricGroupMetricCount(&params)
+		})
+	if err != nil {
 		return nil, err
 	}
+	return fetchMetricGroupMetrics("GetMetricGroupMetrics", "astlGetMetricGroupMetrics", count,
+		func(count *C.uint32_t, metrics *C.astl_metric_props_t) C.astl_status_code {
+			params := C.astl_get_metric_group_metrics_params_t{
+				size:                C.size_t(C.sizeof_astl_get_metric_group_metrics_params_t),
+				flags:               0,
+				metric_group_handle: cMetricGroupHandle(group),
+				metrics:             metrics,
+				metric_count:        count,
+			}
+			return C.astlGetMetricGroupMetrics(&params)
+		})
+}
 
-	return buildMetrics(metricsBuf), nil
+func GetMetricGroupMetricCountOnTarget(target Target, group MetricGroup) (uint32, error) {
+	group, err := resolveMetricGroupOnTarget(target, group)
+	if err != nil {
+		return 0, err
+	}
+	return queryCount("GetMetricGroupMetricCountOnTarget", "astlGetMetricGroupMetricCountOnTarget", nil,
+		func(count *C.uint32_t) C.astl_status_code {
+			params := C.astl_get_metric_group_metric_count_on_target_params_t{
+				size:                C.size_t(C.sizeof_astl_get_metric_group_metric_count_on_target_params_t),
+				flags:               0,
+				target_handle:       cTargetHandle(target),
+				metric_group_handle: cMetricGroupHandle(group),
+				metric_count:        count,
+			}
+			return C.astlGetMetricGroupMetricCountOnTarget(&params)
+		})
+}
+
+func GetMetricGroupMetricsOnTarget(target Target, group MetricGroup) ([]Metric, error) {
+	group, err := resolveMetricGroupOnTarget(target, group)
+	if err != nil {
+		return nil, err
+	}
+	count, err := queryCount("GetMetricGroupMetricCountOnTarget", "astlGetMetricGroupMetricCountOnTarget", nil,
+		func(count *C.uint32_t) C.astl_status_code {
+			params := C.astl_get_metric_group_metric_count_on_target_params_t{
+				size:                C.size_t(C.sizeof_astl_get_metric_group_metric_count_on_target_params_t),
+				flags:               0,
+				target_handle:       cTargetHandle(target),
+				metric_group_handle: cMetricGroupHandle(group),
+				metric_count:        count,
+			}
+			return C.astlGetMetricGroupMetricCountOnTarget(&params)
+		})
+	if err != nil {
+		return nil, err
+	}
+	return fetchMetricGroupMetrics("GetMetricGroupMetricsOnTarget", "astlGetMetricGroupMetricsOnTarget", count,
+		func(count *C.uint32_t, metrics *C.astl_metric_props_t) C.astl_status_code {
+			params := C.astl_get_metric_group_metrics_on_target_params_t{
+				size:                C.size_t(C.sizeof_astl_get_metric_group_metrics_on_target_params_t),
+				flags:               0,
+				target_handle:       cTargetHandle(target),
+				metric_group_handle: cMetricGroupHandle(group),
+				metrics:             metrics,
+				metric_count:        count,
+			}
+			return C.astlGetMetricGroupMetricsOnTarget(&params)
+		})
 }
 
 func ConfigureCountersOnTarget(target Target, params CollectionParameters, counters []Counter) error {
@@ -963,15 +1036,57 @@ func allocCollectionParams(op string, params CollectionParameters) (*C.astl_coll
 	return ptr, func() { C.free(unsafe.Pointer(ptr)) }, nil
 }
 
-func allocMetricGroupProps(group MetricGroup) (*C.astl_metric_group_props_t, func(), error) {
-	ptr := (*C.astl_metric_group_props_t)(C.calloc(1, C.size_t(C.sizeof_astl_metric_group_props_t)))
-	if ptr == nil {
-		return nil, nil, Error{Op: "GetMetricGroupMetrics", Status: StatusOutOfMemory}
+func fetchMetricGroupMetrics(op string, statusOp string, count uint32,
+	request func(*C.uint32_t, *C.astl_metric_props_t) C.astl_status_code) ([]Metric, error) {
+	if count == 0 {
+		return []Metric{}, nil
 	}
-	ptr.size = C.size_t(C.sizeof_astl_metric_group_props_t)
-	ptr.handle = cMetricGroupHandle(group)
-	ptr.metric_count = C.uint32_t(group.MetricCount)
-	return ptr, func() { C.free(unsafe.Pointer(ptr)) }, nil
+
+	countPtr, releaseCount, err := allocResultCount(op, count)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseCount()
+
+	ptr := (*C.astl_metric_props_t)(C.calloc(C.size_t(count), C.size_t(C.sizeof_astl_metric_props_t)))
+	if ptr == nil {
+		return nil, Error{Op: op, Status: StatusOutOfMemory}
+	}
+	defer C.free(unsafe.Pointer(ptr))
+
+	metricsBuf := unsafe.Slice(ptr, int(count))
+	metricsBuf[0].size = C.size_t(C.sizeof_astl_metric_props_t)
+
+	if err := checkStatus(statusOp, request(countPtr, ptr)); err != nil {
+		return nil, err
+	}
+	return buildMetrics(metricsBuf[:int(*countPtr)]), nil
+}
+
+func resolveGlobalMetricGroup(group MetricGroup) (MetricGroup, error) {
+	groups, err := GetMetricGroups()
+	if err != nil {
+		return group, err
+	}
+	for _, candidate := range groups {
+		if candidate.Handle == group.Handle {
+			return candidate, nil
+		}
+	}
+	return group, nil
+}
+
+func resolveMetricGroupOnTarget(target Target, group MetricGroup) (MetricGroup, error) {
+	groups, err := GetMetricGroupsOnTarget(target)
+	if err != nil {
+		return group, err
+	}
+	for _, candidate := range groups {
+		if candidate.Handle == group.Handle {
+			return candidate, nil
+		}
+	}
+	return group, nil
 }
 
 func allocMetricStatistics(flags MetricStatisticsFlags) (*C.astl_metric_statistics_t, func(), error) {
@@ -1374,10 +1489,25 @@ func metricListQuery() targetListQuery[C.astl_metric_props_t, Metric] {
 	}
 }
 
-func metricGroupListQuery() targetListQuery[C.astl_metric_group_props_t, MetricGroup] {
+func metricGroupListQueryOnTarget() targetListQuery[C.astl_metric_group_props_t, MetricGroup] {
 	tolerated := []Status{StatusNoMetricGroupsFound, StatusNotImplemented}
 	return targetListQuery[C.astl_metric_group_props_t, MetricGroup]{
 		op:             "GetMetricGroups",
+		countOp:        "astlGetMetricGroupCountOnTarget",
+		toleratedCount: tolerated,
+		fetchOp:        "astlGetMetricGroupsOnTarget",
+		toleratedFetch: tolerated,
+		elemSize:       C.size_t(C.sizeof_astl_metric_group_props_t),
+		init:           initMetricGroupProps,
+		query:          queryMetricGroupCountOnTarget,
+		fetch:          fetchMetricGroupsOnTarget,
+		build:          buildMetricGroups,
+	}
+}
+
+func metricGroupListQuery() listQuery[C.astl_metric_group_props_t, MetricGroup] {
+	tolerated := []Status{StatusNoMetricGroupsFound, StatusNotImplemented}
+	return listQuery[C.astl_metric_group_props_t, MetricGroup]{
 		countOp:        "astlGetMetricGroupCount",
 		toleratedCount: tolerated,
 		fetchOp:        "astlGetMetricGroups",
@@ -1469,25 +1599,44 @@ func initMetricGroupProps(items []C.astl_metric_group_props_t) {
 	items[0].size = C.size_t(C.sizeof_astl_metric_group_props_t)
 }
 
-func queryMetricGroupCount(targetHandle C.astl_target_handle_t, count *C.uint32_t) C.astl_status_code {
+func queryMetricGroupCount(count *C.uint32_t) C.astl_status_code {
 	params := C.astl_get_metric_group_count_params_t{
 		size:               C.size_t(C.sizeof_astl_get_metric_group_count_params_t),
 		flags:              0,
-		target_handle:      targetHandle,
 		metric_group_count: count,
 	}
 	return C.astlGetMetricGroupCount(&params)
 }
 
-func fetchMetricGroups(targetHandle C.astl_target_handle_t, items []C.astl_metric_group_props_t, count *C.uint32_t) C.astl_status_code {
+func queryMetricGroupCountOnTarget(targetHandle C.astl_target_handle_t, count *C.uint32_t) C.astl_status_code {
+	params := C.astl_get_metric_group_count_on_target_params_t{
+		size:               C.size_t(C.sizeof_astl_get_metric_group_count_on_target_params_t),
+		flags:              0,
+		target_handle:      targetHandle,
+		metric_group_count: count,
+	}
+	return C.astlGetMetricGroupCountOnTarget(&params)
+}
+
+func fetchMetricGroups(items []C.astl_metric_group_props_t, count *C.uint32_t) C.astl_status_code {
 	params := C.astl_get_metric_groups_params_t{
 		size:               C.size_t(C.sizeof_astl_get_metric_groups_params_t),
+		flags:              0,
+		metric_groups:      &items[0],
+		metric_group_count: count,
+	}
+	return C.astlGetMetricGroups(&params)
+}
+
+func fetchMetricGroupsOnTarget(targetHandle C.astl_target_handle_t, items []C.astl_metric_group_props_t, count *C.uint32_t) C.astl_status_code {
+	params := C.astl_get_metric_groups_on_target_params_t{
+		size:               C.size_t(C.sizeof_astl_get_metric_groups_on_target_params_t),
 		flags:              0,
 		target_handle:      targetHandle,
 		metric_groups:      &items[0],
 		metric_group_count: count,
 	}
-	return C.astlGetMetricGroups(&params)
+	return C.astlGetMetricGroupsOnTarget(&params)
 }
 
 func allocArray(op string, count uint32, elemSize C.size_t) (unsafe.Pointer, func(), error) {
@@ -1558,7 +1707,7 @@ func buildMetrics(items []C.astl_metric_props_t) []Metric {
 			Units:               Units(item.units),
 			ValueType:           ValueType(item.value_type),
 			MetricType:          MetricType(item.metric_type),
-			Category:            Category(item.category),
+			Identifier:          MetricIdentifier(item.identifier),
 		}
 	})
 }
@@ -1570,7 +1719,6 @@ func buildMetricGroups(items []C.astl_metric_group_props_t) []MetricGroup {
 			Handle:      uintptr(item.handle),
 			Name:        goString(item.name),
 			Description: goString(item.description),
-			MetricCount: uint32(item.metric_count),
 		})
 	}
 	return groups
