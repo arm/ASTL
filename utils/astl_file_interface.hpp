@@ -8,6 +8,7 @@
 #include <expected>
 #include <filesystem>
 #include <fstream>
+#include <unordered_map>
 
 #include "astl/astl_errors.h"
 #include "astl_logger.hpp"
@@ -137,12 +138,33 @@ class FileInterface {
    * @param opString Reference to a string where the file contents will be stored.
    * @return ASTL_STATUS_SUCCESS if the file is successfully read, or an error code otherwise.
    */
-  astl_status_code Read(const std::filesystem::path &path, std::string &opString) const {
-    std::ifstream file(Resolve(path));
+  astl_status_code Read(const std::filesystem::path &path, std::string &opString) {
+    const auto resolved_path   = Resolve(path);
+    auto [stream_it, inserted] = _read_streams.try_emplace(resolved_path);
+    if (inserted) {
+      stream_it->second.open(resolved_path);
+    }
+
+    auto &file = stream_it->second;
     if (!file.is_open()) {
+      _read_streams.erase(stream_it);
       return ASTL_STATUS_FILE_OPEN_FAILED;
     }
+
+    file.clear();
+    file.seekg(0, std::ios::beg);
+    if (!file.good()) {
+      file.close();
+      _read_streams.erase(stream_it);
+      return ASTL_STATUS_FILE_ERROR;
+    }
+
     opString.assign(std::istreambuf_iterator<char>(file), {});
+    if (file.bad()) {
+      file.close();
+      _read_streams.erase(stream_it);
+      return ASTL_STATUS_FILE_ERROR;
+    }
     return ASTL_STATUS_SUCCESS;
   }
 
@@ -152,8 +174,11 @@ class FileInterface {
    * @param value The string data to write into the file.
    * @return ASTL_STATUS_SUCCESS if the file is successfully written, or an error code otherwise.
    */
-  astl_status_code Write(const std::filesystem::path &path, const std::string_view value) const {
-    std::ofstream file(Resolve(path));
+  astl_status_code Write(const std::filesystem::path &path, const std::string_view value) {
+    const auto resolved_path = Resolve(path);
+    _read_streams.erase(resolved_path);
+
+    std::ofstream file(resolved_path);
     if (!file.is_open()) {
       return ASTL_STATUS_FILE_OPEN_FAILED;
     }
@@ -172,7 +197,8 @@ class FileInterface {
     return _basePath / path;
   }
 
-  std::filesystem::path _basePath;
+  std::filesystem::path                                    _basePath;
+  std::unordered_map<std::filesystem::path, std::ifstream> _read_streams;
 };
 
 }  // namespace astl

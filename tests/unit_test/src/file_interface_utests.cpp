@@ -101,6 +101,23 @@ TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") 
     REQUIRE(output == content);
   }
 
+  SECTION("Read() reuses cached stream across repeated reads") {
+    std::string output;
+    REQUIRE(sysfs.Read(file.Path(), output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == content);
+
+    output.clear();
+    REQUIRE(sysfs.Read(file.Path(), output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == content);
+
+    const auto *const updated_content = "updated_test";
+    REQUIRE(sysfs.Write(file.Path(), updated_content) == ASTL_STATUS_SUCCESS);
+
+    output.clear();
+    REQUIRE(sysfs.Read(file.Path(), output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == updated_content);
+  }
+
   SECTION("Read() test file read interface error code") {
 #ifndef _WIN32
     std::string    output;
@@ -189,6 +206,23 @@ TEST_CASE("FileInterface functionality with relative path", "[file_interface]") 
     std::string output;
     REQUIRE(sysfs.Read(rel_path, output) == ASTL_STATUS_SUCCESS);
     REQUIRE(output == content);
+  }
+
+  SECTION("Read() reuses cached stream across repeated reads") {
+    std::string output;
+    REQUIRE(sysfs.Read(rel_path, output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == content);
+
+    output.clear();
+    REQUIRE(sysfs.Read(rel_path, output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == content);
+
+    const auto *const new_content = "new_test";
+    REQUIRE(sysfs.Write(rel_path, new_content) == ASTL_STATUS_SUCCESS);
+
+    output.clear();
+    REQUIRE(sysfs.Read(rel_path, output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == new_content);
   }
 
   SECTION("Write() test file write interface") {
