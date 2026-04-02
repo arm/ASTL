@@ -32,7 +32,7 @@ The initial implementation focuses on the System Control and Management Interfac
 specification through the Linux SCMI sysfs interface. It also has experimental support of
 hwmon telemetry through libsensors. It may eventually be expanded to add support for other
 interfaces such as: BIOS mailboxes, PCIe configuration spaces, direct register accesses,
-MMIO, OS provided data or other sources of data.
+PROCFS, OS provided data or other sources of data.
 
 The library has a C-interface for the API and a C++ implementation. A comprehensive experimental
 Python wrapper layer (Cython bindings + high-level utilities) is now available—refer to the
@@ -163,6 +163,29 @@ export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="/sys/fs/arm_telemetry"
 export ASTL_CONFIG_DIR="/path/to/my_astl/config"
 ```
 
+For experimental `libsensors` targets, ASTL also looks for optional metric metadata files under
+`$ASTL_CONFIG_DIR/metrics/libsensors/` or the built-in `config/metrics/libsensors/` directory.
+ASTL first looks for an exact file matching the discovered target name and then falls back to progressively less
+specific chip-family files. For example, an `nvme-pci-40100` target will fall back to `libsensors_nvme-pci.json` if no
+exact override exists. This avoids relying on PCI addresses to predict which subfeatures a device exposes.
+If no file exists, ASTL discovers and registers all readable sensor metrics across all supported feature families.
+If an exact target file exists, it acts as an allowlist: only declared metrics are registered, and ASTL warns when a
+declared metric is not present on the current system. If a fallback family file exists, ASTL still uses lm-sensors
+enumeration to decide which metrics exist on the current machine and only uses the JSON file as a metadata overlay for
+matching sensors. Undeclared discovered sensors continue to register with default metadata in that fallback case.
+These declaration files can attach descriptions, metric groups, and formulas. Any explicit scaling should now be
+expressed directly in `formula`, for example `value / 1000`. To reduce duplication, a libsensors declaration file may
+also use a relative `"extends"` path to inherit from a shared template file. Child files override any top-level
+metadata and replace or add individual metrics by key.
+
+For repetitive derived metric declarations, libsensors metrics also support an optional
+`"derived_metrics"` object on a base metric. This is used to automatically generate related metrics from a single source
+(e.g., alarm/limit variants of a temperature or voltage sensor). Each key selects the derived metric kind. Supported keys include:
+`low`/`min`, `high`/`max`, `critical`/`crit`, `emergency`/`emerg`, `alarm`, and `beep`. Each nested object can override
+fields such as `description`. ASTL automatically expands those into sibling declaration entries (e.g.,
+`Composite_thermal_limit_high`, `Composite_thermal_limit_emergency`, `Composite_alarm`), preserving the base metric's
+units, formula, and metric groups. When metrics are discovered via lm-sensors or a fallback family file, unsupported or unavailable derived metric keys are silently skipped if the corresponding subfeature is not present on the current system. When an exact target file is used as an allowlist, ASTL instead emits a warning for each declared derived metric whose subfeature is not observed on the current system.
+
 Within the ASTL_CONFIG_DIR path, you can override definitions of metrics, which look like:
 
 ```json
@@ -170,7 +193,7 @@ Within the ASTL_CONFIG_DIR path, you can override definitions of metrics, which 
       "description": "Number of thermal throttling events",
       "unit": "",
       "metric_type": "delta",
-      "category": "COUNT",
+      "identifier": "THERMAL_THROTTLE",
       "metric_groups": ["throttling"],
       "collection": {
         "register": "THROTTLE_EVENTS",
@@ -364,6 +387,9 @@ status = astlStartCollectionPaused(&start_all_paused_params);  // all CONFIGURED
 ASTL_INIT_STRUCT(astl_start_collection_params_t, start_all_params,
                  .flags = 0);
 status = astlStartCollection(&start_all_params);  // all CONFIGURED targets -> STARTED
+
+// Aggregate starts are transactional: if one CONFIGURED target fails to start,
+// ASTL stops any earlier targets started by the same call before returning.
 
 // Optional: temporarily suspend sampling after a normal start
 ASTL_INIT_STRUCT(astl_pause_collection_on_target_params_t, pause_params,

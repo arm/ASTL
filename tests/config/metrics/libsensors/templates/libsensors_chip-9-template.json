@@ -1,5 +1,5 @@
 {
-  "_comment": "Metrics definitions for libsensors target libsensors_chip-7-1",
+  "_comment": "Template used to validate libsensors config inheritance and temperature limit expansion",
   "document": {
     "confidential": false
   },
@@ -11,16 +11,10 @@
       "identifier": "TEMPERATURE",
       "metric_groups": ["thermal"],
       "derived_metrics": {
-        "low": {
-          "description": "Configured low thermal limit for Composite"
-        },
         "high": {
           "description": "Configured high thermal limit for Composite"
         },
-        "critical": {
-          "description": "Configured critical thermal limit for Composite"
-        },
-        "emergency": {
+        "emerg": {
           "description": "Configured emergency thermal limit for Composite"
         }
       },

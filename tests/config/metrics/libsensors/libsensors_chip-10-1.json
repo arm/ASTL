@@ -1,0 +1,38 @@
+{
+  "_comment": "Metrics definitions for libsensors target libsensors_chip-10-1",
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "Vcore": {
+      "description": "Configured voltage reading for Vcore",
+      "unit": "volts",
+      "metric_type": "value",
+      "identifier": "VOLTAGE",
+      "metric_groups": ["power", "core"],
+      "derived_metrics": {
+        "min": {
+          "description": "Configured minimum voltage for Vcore"
+        },
+        "critical": {
+          "register_suffix": "crit",
+          "description": "Configured critical voltage for Vcore"
+        },
+        "alarm": {
+          "description": "Configured voltage alarm for Vcore",
+          "unit": "none",
+          "identifier": "STATUS"
+        },
+        "beep": {
+          "description": "Configured voltage beep status for Vcore",
+          "unit": "none",
+          "identifier": "STATUS"
+        }
+      },
+      "collection": {
+        "register": "Vcore",
+        "protocol": "libsensors"
+      }
+    }
+  }
+}

@@ -74,7 +74,7 @@ With other metric definitions, and a automatically detected lm-sensors target,
 we might see metrics with names like the table below:
 
 ```bash
-$ ./build/debug/bin/atx list-metrics
+./build/debug/bin/atx --help
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐
 │       Metric Name      │                      Description              │  Units  │ Metric Type │
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐
@@ -143,7 +143,12 @@ Essentially, ASTL will build metric names with <component>.<instance>.<name> whe
 from 0 to the 'count' element containing these members.
 
 ```bash
-$ ./build/debug/bin/atx list-metrics
+./build/debug/bin/atx --help
+```
+
+The output shows available metrics with their descriptions, units, and types:
+
+```text
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐
 │       Metric Name      │                      Description              │  Units  │ Metric Type │
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐
@@ -199,6 +204,26 @@ The file [`config/metrics/platform_lookup.json`](../config/metrics/platform_look
 
 When ConfigManager encounters the `CAFEBABE` UUID, it builds metrics using [`config/metrics/mocksysfs/metrics.json`](../config/metrics/mocksysfs/metrics.json).
 
+### Libsensors Declaration Lookup
+
+Libsensors declarations are resolved differently from SCMI metrics files. ASTL does not rely on the full detected chip
+name, including machine-specific PCI addresses, to decide which subfeatures a device supports.
+
+Instead, ASTL tries these files in order:
+
+1. an exact file matching the discovered target name, for example `libsensors_nvme-pci-40100.json`
+2. progressively less specific family files derived from the chip name, for example `libsensors_nvme-pci.json`
+
+If an exact file is found, it acts as a target-specific allowlist.
+If only a fallback family file is found, ASTL still uses lm-sensors feature enumeration to decide which metrics exist
+on the current system and only applies JSON metadata to matching discovered sensors. Undeclared discovered sensors keep
+their default metadata and are still registered.
+
+This means the shipped libsensors configs should normally be family-level files such as
+[`config/metrics/libsensors/libsensors_nvme-pci.json`](../config/metrics/libsensors/libsensors_nvme-pci.json) and
+[`config/metrics/libsensors/libsensors_bnxt_en-pci.json`](../config/metrics/libsensors/libsensors_bnxt_en-pci.json),
+not PCI-address-specific wrappers.
+
 ### Metrics Declaration Format
 
 Metrics declaration files (e.g., [`config/metrics/mocksysfs/metrics.json`](../config/metrics/mocksysfs/metrics.json)) specify which telemetry counters are available and their processing methods:
@@ -209,7 +234,7 @@ Metrics declaration files (e.g., [`config/metrics/mocksysfs/metrics.json`](../co
       "description": "SoC Temperature in Celsius",
       "unit": "C",
       "metric_type": "value",
-      "category": "TEMPERATURE",
+      "identifier": "TEMPERATURE",
       "metric_groups": ["thermal", "throttling"],
       "collection": {
         "register": "CORE_0_TEMP",
@@ -222,7 +247,7 @@ Metrics declaration files (e.g., [`config/metrics/mocksysfs/metrics.json`](../co
       "description": "Number of thermal throttling events",
       "unit": "",
       "metric_type": "delta",
-      "category": "COUNT",
+      "identifier": "THERMAL_THROTTLE",
       "metric_groups": ["throttling"],
       "collection": {
         "register": "THROTTLE_EVENTS",
@@ -269,7 +294,7 @@ Metrics declaration files are parsed by:
 
 So we need a mechanism to select and move a subset of files and elements to an output directory. That's what [`scripts/publish_configs.sh`](../scripts/publish_configs.sh) is for.
 
-```bash
+```text
 ./scripts/publish_configs.sh --help
 
  OUTPUT_DIR [OPTIONS]

@@ -1,0 +1,7 @@
+{
+  "_comment": "Child config used to validate libsensors config inheritance",
+  "extends": "templates/libsensors_chip-9-template.json",
+  "document": {
+    "confidential": false
+  }
+}

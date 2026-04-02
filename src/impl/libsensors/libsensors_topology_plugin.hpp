@@ -26,7 +26,6 @@ namespace detail {
 
 #ifdef ASTL_INCLUDE_LIBSENSORS
 static auto BuildTargetName(const std::string& chip_name) -> std::string { return "libsensors_" + chip_name; }
-
 /**
  * @brief Returns a list of targets accessible via lm-sensors on this platform
  *
@@ -73,10 +72,18 @@ auto ScanForTargetsWithLibsensors(const AstlConfiguration&    configuration,
         ASTL_LOG_DEBUG("  Found voltage sensor: {}", feature->name);
       } else if (feature->type == SENSORS_FEATURE_POWER) {
         ASTL_LOG_DEBUG("  Found power sensor: {}", feature->name);
+      } else if (feature->type == SENSORS_FEATURE_ENERGY) {
+        ASTL_LOG_DEBUG("  Found energy sensor: {}", feature->name);
+      } else if (feature->type == SENSORS_FEATURE_CURR) {
+        ASTL_LOG_DEBUG("  Found current sensor: {}", feature->name);
       } else if (feature->type == SENSORS_FEATURE_HUMIDITY) {
         ASTL_LOG_DEBUG("  Found humidity sensor: {}", feature->name);
       } else if (feature->type == SENSORS_FEATURE_VID) {
         ASTL_LOG_DEBUG("  Found VID sensor: {}", feature->name);
+      } else if (feature->type == SENSORS_FEATURE_INTRUSION) {
+        ASTL_LOG_DEBUG("  Found intrusion sensor: {}", feature->name);
+      } else if (feature->type == SENSORS_FEATURE_BEEP_ENABLE) {
+        ASTL_LOG_DEBUG("  Found chip beep-enable sensor: {}", feature->name);
       } else {
         ASTL_LOG_DEBUG("  Found other sensor type {}: {}", feature->type, feature->name);
       }

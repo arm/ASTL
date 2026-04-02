@@ -1,0 +1,19 @@
+{
+  "_comment": "Metrics definitions for libsensors target libsensors_chip-8-1",
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "temp1": {
+      "description": "Configured temperature reading for the wifi adapter",
+      "unit": "celsius",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal", "nic"],
+      "collection": {
+        "register": "temp1",
+        "protocol": "libsensors"
+      }
+    }
+  }
+}

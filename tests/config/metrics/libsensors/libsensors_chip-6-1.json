@@ -9,6 +9,7 @@
       "unit": "watts",
       "metric_type": "value",
       "identifier": "POWER",
+      "metric_groups": ["power", "cpu"],
       "collection": {
         "register": "CPU power",
         "protocol": "libsensors"
