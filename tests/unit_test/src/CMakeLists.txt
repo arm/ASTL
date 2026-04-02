@@ -11,6 +11,8 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 set(UNIT_TEST_SRCS
     api_layout_utests.cpp
+    ${CMAKE_SOURCE_DIR}/tools/atx/alias_table.cpp
+    alias_table_utests.cpp
     astl_value_utests.cpp
     astl_configuration_utests.cpp
     collector_manager_utests.cpp
