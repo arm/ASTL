@@ -52,16 +52,19 @@ format:
 lint preset='debug':
     #!/usr/bin/env bash
     set -eu -o pipefail
+    cmake --build --preset {{preset}} --target proto_gen --parallel=$(nproc)
     ./scripts/lint.sh build/{{preset}} pull-request
 
 lint-staged preset='debug':
     #!/usr/bin/env bash
     set -eu -o pipefail
+    cmake --build --preset {{preset}} --target proto_gen --parallel=$(nproc)
     ./scripts/lint.sh build/{{preset}} pre-commit
 
 lint-all preset='debug':
     #!/usr/bin/env bash
     set -eu -o pipefail
+    cmake --build --preset {{preset}} --target proto_gen --parallel=$(nproc)
     ./scripts/lint.sh build/{{preset}} all
 
 wrapper-coverage:
@@ -74,12 +77,29 @@ license-lint:
     set -eu -o pipefail
     ./scripts/license_lint.sh
 
-# run unit tests
+# run C++ tests
 test preset='debug': build
     #!/usr/bin/env bash
     set -eu -o pipefail
     echo "[test] Using preset={{preset}}"
+    echo "[test] Running C++ tests"
     ctest -LE "integration" --preset {{preset}}
+    echo "[test] Running Python wrapper tests"
+    just python-test {{preset}}
+    echo "[test] Running Go wrapper tests"
+    just go-test {{preset}}
+
+# run all tests: C++, Python wrapper, and Go wrapper
+test-all preset='debug': build
+    #!/usr/bin/env bash
+    set -eu -o pipefail
+    echo "[test-all] Using preset={{preset}}"
+    echo "[test-all] Running C++ tests"
+    ctest -LE "integration" --preset {{preset}}
+    echo "[test-all] Running Python wrapper tests"
+    just python-test {{preset}}
+    echo "[test-all] Running Go wrapper tests"
+    just go-test {{preset}}
 
 # test everything, generate html coverage file
 test-cov: build
@@ -162,6 +182,23 @@ python-pytest preset='debug':
     pytest -q python/tests
     echo "[python-pytest] Running mypy"
     mypy python/astl || { echo "[python-pytest] mypy failed"; exit 1; }
+
+python-test preset='debug':
+    #!/usr/bin/env bash
+    set -eu -o pipefail
+    just python-reuse-tests {{preset}}
+
+go-test preset='debug':
+    #!/usr/bin/env bash
+    set -eu -o pipefail
+    if [ "{{preset}}" != "debug" ]; then
+        echo "[go-test][ERROR] Go wrapper tests currently require preset=debug because the cgo binding links against build/debug." >&2
+        exit 2
+    fi
+    echo "[go-test] Using preset={{preset}}"
+    export LD_LIBRARY_PATH="$PWD/build/{{preset}}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    cd Go
+    go test ./...
 
 # Build a wheel and smoke test import & version in a clean isolated environment
 python-wheel-smoke preset='debug':
@@ -249,33 +286,33 @@ full-ci preset='debug':
     echo "[full-ci] COMPLETE in $(( $(date +%s) - START_TS ))s"
 
 # Reuse pre-built native library (downloaded artifact) to run Python tests & mypy without invoking CMake.
-python-reuse-tests:
+python-reuse-tests preset='debug':
     #!/usr/bin/env bash
     set -eu -o pipefail
     PYBIN="${PY:-python3}"
     echo "[python-reuse-tests] Python: $("$PYBIN" -V)"
-    if [ ! -d build/debug/lib ]; then
-        echo "[python-reuse-tests][WARN] build/debug/lib missing"
+    if [ ! -d build/{{preset}}/lib ]; then
+        echo "[python-reuse-tests][WARN] build/{{preset}}/lib missing"
         ROOT_LIB=$(ls -1 libastl-*.so 2>/dev/null | head -n1 || true)
         if [ -n "${ROOT_LIB}" ]; then
             echo "[python-reuse-tests][HEAL] Found ${ROOT_LIB} at repo root; recreating expected directory"
-            mkdir -p build/debug/lib
-            mv "${ROOT_LIB}" build/debug/lib/
+            mkdir -p build/{{preset}}/lib
+            mv "${ROOT_LIB}" build/{{preset}}/lib/
         fi
     fi
 
-    if [ ! -d build/debug/lib ]; then
+    if [ ! -d build/{{preset}}/lib ]; then
         if [ "${ASTL_DISABLE_NATIVE_FALLBACK:-0}" = "1" ]; then
-            echo "[python-reuse-tests][ERROR] build/debug/lib still missing and fallback disabled (ASTL_DISABLE_NATIVE_FALLBACK=1)" >&2
+            echo "[python-reuse-tests][ERROR] build/{{preset}}/lib still missing and fallback disabled (ASTL_DISABLE_NATIVE_FALLBACK=1)" >&2
             exit 3
         fi
         echo "[python-reuse-tests][HEAL] Performing minimal local configure/build (fallback enabled)" >&2
-        cmake -S . --preset debug -DENABLE_VALGRIND=OFF
-        cmake --build --preset debug --parallel=$(nproc)
+        cmake -S . --preset {{preset}} -DENABLE_VALGRIND=OFF
+        cmake --build --preset {{preset}} --parallel=$(nproc)
     fi
 
-    if [ ! -d build/debug/lib ]; then
-        echo "[python-reuse-tests][ERROR] Unable to establish build/debug/lib after fallback build" >&2
+    if [ ! -d build/{{preset}}/lib ]; then
+        echo "[python-reuse-tests][ERROR] Unable to establish build/{{preset}}/lib after fallback build" >&2
         find build -maxdepth 4 -type f -name 'libastl*' 2>/dev/null || true
         exit 3
     fi
@@ -290,7 +327,7 @@ python-reuse-tests:
     # Idempotent install (wheel cache speeds reruns)
     python -m pip install -e python pytest mypy build >/dev/null
     echo "[python-reuse-tests] Vendoring public headers into package"
-    bash python/scripts/vendor_headers.sh --quiet || { echo "[python-reuse-tests][ERROR] vendoring headers failed" >&2; exit 5; }
+    bash python/scripts/vendor_headers.sh --build-dir build/{{preset}} --quiet || { echo "[python-reuse-tests][ERROR] vendoring headers failed" >&2; exit 5; }
     echo "[python-reuse-tests] Verifying vendored headers present"
     missing=0
     for h in astl.h astl_errors.h astl_telemetry.h astl_utils.h astl_version.h; do
@@ -305,7 +342,7 @@ python-reuse-tests:
         exit 6
     fi
     echo "[python-reuse-tests] Checking for libastl-*"
-    ls build/debug/lib/libastl-*.so > /dev/null || { echo "[python-reuse-tests][ERROR] libastl not found after venv setup" >&2; exit 4; }
+    ls build/{{preset}}/lib/libastl-*.so > /dev/null || { echo "[python-reuse-tests][ERROR] libastl not found after venv setup" >&2; exit 4; }
     START_TS=$(date +%s)
     echo "[python-reuse-tests] pytest start"
     pytest -q python/tests

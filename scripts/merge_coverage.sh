@@ -56,20 +56,44 @@ echo "Outputted index to ${TMP_DIR}/index_test_dirs.txt"
 mkdir "${TMP_DIR}/finished_merges/"
 while IFS= read -r CUR_TEST_DIR; do
 	echo "Merging all coverage in test directory ${CUR_TEST_DIR}"
-	NUM_DIRS_TO_MERGE=$(parallel grep ::: "${CUR_TEST_DIR}" ::: "${TMP_DIR}/index_all_coverage_dirs.txt" | tee "${TMP_DIR}/index_current_coverage_dirs.txt" | wc -l)
+	awk -v current_test_dir="${CUR_TEST_DIR}" '
+		{
+			coverage_dir = $0
+			sub(/\/[^/]+$/, "", coverage_dir)
+			if (coverage_dir == current_test_dir) {
+				print $0
+			}
+		}
+	' "${TMP_DIR}/index_all_coverage_dirs.txt" >"${TMP_DIR}/index_current_coverage_dirs.txt"
+	NUM_DIRS_TO_MERGE=$(wc -l <"${TMP_DIR}/index_current_coverage_dirs.txt")
 	echo "Found ${NUM_DIRS_TO_MERGE} coverage directories to merge for this 1 test directory"
+	if [ "${NUM_DIRS_TO_MERGE}" -eq 0 ]; then
+		echo "No coverage directories remain for ${CUR_TEST_DIR}, skipping"
+		continue
+	fi
 
 	FIRST_DIR_TO_MERGE=$(head -1 "${TMP_DIR}/index_current_coverage_dirs.txt")
+	if [ ! -d "${FIRST_DIR_TO_MERGE}" ]; then
+		echo "❌ Error. Coverage directory ${FIRST_DIR_TO_MERGE} does not exist."
+		exit 1
+	fi
 	mv "${FIRST_DIR_TO_MERGE}" "${TMP_DIR}/accumulator_in"
 	echo "Merging first file: ${FIRST_DIR_TO_MERGE}"
 
 	# This works even when there is only a single file.  No merging will occur, it will be passed through
-	for CURRENT_DIR_TO_MERGE in $(tail --lines=+2 "${TMP_DIR}/index_current_coverage_dirs.txt"); do
+	while IFS= read -r CURRENT_DIR_TO_MERGE; do
+		if [ -z "${CURRENT_DIR_TO_MERGE}" ]; then
+			continue
+		fi
+		if [ ! -d "${CURRENT_DIR_TO_MERGE}" ]; then
+			echo "Skipping missing coverage directory: ${CURRENT_DIR_TO_MERGE}"
+			continue
+		fi
 		echo "Merging next file: ${CURRENT_DIR_TO_MERGE}"
 		gcov-tool merge -o "${TMP_DIR}/accumulator_out" "${TMP_DIR}/accumulator_in" "${CURRENT_DIR_TO_MERGE}"
 		rm -rf "${TMP_DIR}/accumulator_in" "${CURRENT_DIR_TO_MERGE}"
 		mv "${TMP_DIR}/accumulator_out" "${TMP_DIR}/accumulator_in"
-	done
+	done < <(tail --lines=+2 "${TMP_DIR}/index_current_coverage_dirs.txt")
 
 	FINISHED_MERGED_DIR=$(mktemp -d "${TMP_DIR}/finished_merges/XXXX")
 	mv "${TMP_DIR}/accumulator_in" "$FINISHED_MERGED_DIR/"
@@ -82,14 +106,16 @@ NUM_TESTSUITE_DIRS=$(wc -l <"${TMP_DIR}/index_all_test_suite_dirs.txt")
 echo "Created ${NUM_TESTSUITE_DIRS} test suite directories, combining coverage data from multiple parallel threads"
 FIRST_TEST_SUITE_DIR_TO_MERGE=$(head -1 "${TMP_DIR}/index_all_test_suite_dirs.txt")
 mv "${FIRST_TEST_SUITE_DIR_TO_MERGE}" "${TMP_DIR}/accumulator_in"
-echo "Merging first directory: ${FIRST_DIR_TO_MERGE}"
-for SUBDIR in $(tail --lines=+2 "${TMP_DIR}/index_all_test_suite_dirs.txt"); do
-	CURRENT_DIR_TO_MERGE="${SUBDIR}"
+echo "Merging first directory: ${FIRST_TEST_SUITE_DIR_TO_MERGE}"
+while IFS= read -r CURRENT_DIR_TO_MERGE; do
+	if [ -z "${CURRENT_DIR_TO_MERGE}" ]; then
+		continue
+	fi
 	echo "Merging next directory: ${CURRENT_DIR_TO_MERGE}"
 	gcov-tool merge -o "${TMP_DIR}/accumulator_out" "${TMP_DIR}/accumulator_in" "${CURRENT_DIR_TO_MERGE}"
 	rm -rf "${TMP_DIR}/accumulator_in" "${CURRENT_DIR_TO_MERGE}"
 	mv "${TMP_DIR}/accumulator_out" "${TMP_DIR}/accumulator_in"
-done
+done < <(tail --lines=+2 "${TMP_DIR}/index_all_test_suite_dirs.txt")
 MERGED_SUITES_DIR=${TMP_DIR}/merged_suites
 mv "${TMP_DIR}/accumulator_in" "${MERGED_SUITES_DIR}"
 echo "Saved merged results to ${MERGED_SUITES_DIR}"

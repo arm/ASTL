@@ -18,7 +18,6 @@
 #include "libsensors/libsensors_metric_builder.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "metric/metric_manager.hpp"
-#include "topology/scmi_target.hpp"
 
 namespace astl {
 
@@ -38,7 +37,15 @@ static auto ReplaceAll(std::string value, std::string_view needle, std::string_v
 }
 
 static auto GetScmiTelemetrySubdirectory(const ITarget& target) -> std::string_view {
-  return ScmiTarget::TelemetrySubdirectoryForTarget(target);
+  if (const auto collector_target_path = target.CollectorTargetPath();
+      collector_target_path.has_value() && !collector_target_path->empty()) {
+    return *collector_target_path;
+  }
+  ASTL_LOG_WARNING(
+      "SCMI target '{}' is missing collector path metadata; '{{telemetry_subdirectory}}' resolves to "
+      "an empty string",
+      target.Name());
+  return {};
 }
 
 static auto ResolveScmiTargetNameTemplate(std::string_view name_template, const ITarget& target) -> std::string {

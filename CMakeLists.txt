@@ -304,7 +304,7 @@ else()
 endif()
 
 # define a CLI application to use the library
-add_subdirectory(tools/atx)
+add_subdirectory(tools/ATX)
 
 include(CTest)
 
@@ -317,6 +317,7 @@ endif()
 if(BUILD_TESTING AND ASTL_BUILD_TESTING)
   enable_testing()
   add_subdirectory(tests/unit_test)
+  add_subdirectory(tools/ATX/tests)
   add_subdirectory(tests/wrapper_test)
   add_subdirectory(tests/libsensors_collector_test)
   add_subdirectory(tests/e2e_test)

@@ -3,17 +3,15 @@
 This directory provides a Go wrapper for the Arm SoC Telemetry Library (ASTL),
 similar in spirit to the Python wrapper under [`python/`](../python/).
 
-## Experimental Status
+## Status
 
-This Go interface is experimental.
+This Go interface is part of the supported in-tree ASTL wrapper surface.
 
-The current wrapper is intended for early adoption and evaluation. Its API
-surface, packaging details, and supported-platform story may still evolve as
-the binding matures, so it should not yet be treated as a long-term stable Go
-SDK.
-
-The wrapper is implemented with cgo and talks directly to the public ASTL C API
-from [`include/astl/`](../include/astl/).
+It is implemented with `cgo` and maps closely to the public ASTL C API rather
+than introducing a separate Go-native telemetry model. The main remaining
+practical caveat is build/runtime integration: the wrapper still expects ASTL
+headers and a built shared library to be available to `cgo`, and it talks
+directly to the public ASTL C API from [`include/astl/`](../include/astl/).
 
 ## Layout
 
@@ -39,13 +37,10 @@ only the linker path needs to be provided for the default in-repo workflow.
 
 For an installed ASTL, point cgo directly at the install prefix:
 
-````bash
-export CGO_CFLAGS="-I/path/to/prefix/include"
 ```bash
+export CGO_CFLAGS="-I/path/to/prefix/include"
 export CGO_LDFLAGS="-L/path/to/prefix/lib -Wl,-rpath,/path/to/prefix/lib -lastl-0d"
-````
-
-````
+```
 
 ## Running Tests
 
@@ -56,14 +51,13 @@ export CGO_LDFLAGS="-L$PWD/build/debug/lib -Wl,-rpath,$PWD/build/debug/lib -last
 export LD_LIBRARY_PATH="$PWD/build/debug/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 cd Go
 go test ./...
-````
+```
 
 A `go.mod` file is included in the `Go/` directory to enable module mode. Ensure
 you're using Go 1.11 or later, which supports modules by default.
 
 These tests are lightweight smoke tests today. They are mainly there to catch
-linking, cgo, and basic-discovery regressions while the Go wrapper remains
-experimental.
+linking, `cgo`, and basic-discovery regressions for the Go wrapper.
 
 ## Minimal Example
 

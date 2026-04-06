@@ -45,7 +45,7 @@ gcovr -r . --verbose \
 	--exclude 'src/astl_test_hooks.cpp' \
 	--exclude 'build/*' \
 	--exclude 'third_party/*' \
-	--exclude 'tools/atx' \
+	--exclude 'tools/ATX' \
 	--exclude 'tools/mock_sysfs' \
 	--exclude-unreachable-branches \
 	--exclude-throw-branches \

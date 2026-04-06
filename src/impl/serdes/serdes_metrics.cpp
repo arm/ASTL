@@ -726,8 +726,7 @@ static auto RebuildOperationMap(const astl::protobuf::MetricManager&            
   return target_to_operation_to_metric_map;
 }
 
-static auto RebuildMetricGroupDescriptions(const astl::protobuf::MetricManager& proto_manager,
-                                           const RebuiltMetricHandles&          rebuilt_metrics)
+static auto RebuildMetricGroupDescriptions(const astl::protobuf::MetricManager& proto_manager)
     -> MetricManager::MetricGroupDescriptionMap {
   const auto build_fallback_description = [](std::string_view group_name) -> std::string {
     if (group_name.empty()) {
@@ -743,21 +742,6 @@ static auto RebuildMetricGroupDescriptions(const astl::protobuf::MetricManager& 
     metric_group_descriptions.emplace(
         proto_group.group_name(),
         description.empty() ? build_fallback_description(proto_group.group_name()) : description);
-  }
-
-  // Older session files may serialize group membership on metrics without a separate top-level MetricGroup
-  // declaration. Preserve loadability by synthesizing empty descriptions for any such groups so
-  // AddMetricToGroups() can rebuild membership without depending on external config files.
-  for (const auto& handle_ptr : rebuilt_metrics.metric_handles) {
-    if (!handle_ptr || !handle_ptr->config) {
-      continue;
-    }
-    for (const auto& group_name : handle_ptr->config->MetricGroups()) {
-      auto [it, inserted] = metric_group_descriptions.try_emplace(group_name, build_fallback_description(group_name));
-      if (!inserted && it->second.empty()) {
-        it->second = build_fallback_description(group_name);
-      }
-    }
   }
 
   return metric_group_descriptions;
@@ -895,7 +879,7 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream&                  
 
   auto& rebuilt_metrics = *rebuilt_metrics_or_err;
   ASTL_LOG_DEBUG("Deserialize<MetricManager>: rebuilt {} metric handles", rebuilt_metrics.metric_handles.size());
-  metric_manager->_metric_group_descriptions = detail::RebuildMetricGroupDescriptions(proto_manager, rebuilt_metrics);
+  metric_manager->_metric_group_descriptions = detail::RebuildMetricGroupDescriptions(proto_manager);
   metric_manager->_metric_handles.swap(rebuilt_metrics.metric_handles);
   metric_manager->_target_to_metrics_map.swap(rebuilt_metrics.target_to_metrics_map);
 

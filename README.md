@@ -29,7 +29,7 @@ See the dedicated "Output Formats" section near the end of this document for ful
 currently supported output mechanisms (in-memory buffer, Perfetto trace, Interval CSV, and Summary CSV).
 
 The initial implementation focuses on the System Control and Management Interface (SCMI)
-specification through the Linux SCMI sysfs interface. It also has experimental support of
+specification through the Linux SCMI sysfs interface. It also supports
 hwmon telemetry through libsensors. It may eventually be expanded to add support for other
 interfaces such as: BIOS mailboxes, PCIe configuration spaces, direct register accesses,
 PROCFS, OS provided data or other sources of data.
@@ -38,7 +38,7 @@ The library has a C-interface for the API and a C++ implementation. A comprehens
 Python wrapper layer (Cython bindings + high-level utilities) is now available—refer to the
 **[Python User Guide](python/docs/USER_GUIDE.md)**.
 
-An experimental native Go wrapper is also available under
+A native Go wrapper is also available under
 **[Go/](Go/README.md)** for Go programs that want to call the ASTL C API
 through cgo.
 
@@ -163,7 +163,7 @@ export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="/sys/fs/arm_telemetry"
 export ASTL_CONFIG_DIR="/path/to/my_astl/config"
 ```
 
-For experimental `libsensors` targets, ASTL also looks for optional metric metadata files under
+For `libsensors` targets, ASTL also looks for optional metric metadata files under
 `$ASTL_CONFIG_DIR/metrics/libsensors/` or the built-in `config/metrics/libsensors/` directory.
 ASTL first looks for an exact file matching the discovered target name and then falls back to progressively less
 specific chip-family files. For example, an `nvme-pci-40100` target will fall back to `libsensors_nvme-pci.json` if no
@@ -817,7 +817,7 @@ ASTL_INIT_STRUCT(astl_get_metric_statistics_on_target_params_t, stats_params,
 astl_status_code rc = astlGetMetricStatisticsOnTarget(&stats_params);
 ```
 
-### Status Codes
+### Filter Status Codes
 
 If either filter field is non-zero, the API currently returns
 `ASTL_STATUS_NOT_IMPLEMENTED`. Full filtering support will be added in a future release.

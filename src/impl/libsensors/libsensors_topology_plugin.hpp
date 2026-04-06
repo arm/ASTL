@@ -7,6 +7,7 @@
 
 #include <expected>
 #include <memory>
+#include <string>
 #include <vector>
 
 #ifdef ASTL_INCLUDE_LIBSENSORS
@@ -25,7 +26,11 @@ namespace LibsensorsTopologyPlugin {
 namespace detail {
 
 #ifdef ASTL_INCLUDE_LIBSENSORS
-static auto BuildTargetName(const std::string& chip_name) -> std::string { return "libsensors_" + chip_name; }
+constexpr std::string_view kLibsensorsTargetNamePrefix{"libsensors_"};
+
+static auto BuildTargetName(std::string_view target_suffix) -> std::string {
+  return std::string{kLibsensorsTargetNamePrefix} + std::string{target_suffix};
+}
 /**
  * @brief Returns a list of targets accessible via lm-sensors on this platform
  *
@@ -34,8 +39,8 @@ static auto BuildTargetName(const std::string& chip_name) -> std::string { retur
 auto ScanForTargetsWithLibsensors(const AstlConfiguration&    configuration,
                                   std::shared_ptr<SensorsApi> sensors_api = nullptr)
     -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
+  (void)configuration;
   std::vector<std::unique_ptr<ITarget> > targets;
-  (void)configuration;  // currently unused
   // dynamically load and initialize the libsensors library with default system configuration
   if (!sensors_api) {
     sensors_api = SensorsApi::Create();

@@ -47,17 +47,6 @@ class ScmiTarget : public astl::Target {
     return std::nullopt;
   }
 
-  static auto TelemetrySubdirectoryForTarget(const ITarget& target) -> std::string_view {
-    if (const auto* scmi_target = dynamic_cast<const ScmiTarget*>(&target)) {
-      return scmi_target->TelemetrySubdirectory();
-    }
-    if (const auto collector_target_path = target.CollectorTargetPath();
-        collector_target_path.has_value() && !collector_target_path->empty()) {
-      return *collector_target_path;
-    }
-    return TryInferTelemetrySubdirectoryFromName(target.Name()).value_or(target.Name());
-  }
-
  private:
   std::string _telemetry_subdirectory;
 };

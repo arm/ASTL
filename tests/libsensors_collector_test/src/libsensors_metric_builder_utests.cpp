@@ -203,6 +203,115 @@ TEST_CASE("RegisterLibsensorsMetrics disambiguates duplicate labels across chips
   REQUIRE(metric_names_2[0] == "chip-1-2_CPU_power");
 }
 
+TEST_CASE("RegisterLibsensorsMetrics uses stable family instance prefixes for address-bearing chips",
+          "[libsensors_metric_builder]") {
+  MockSensorsApiTestHarness harness;
+  auto&                     mock_libsensors = harness.mock_libsensors;
+  ALLOW_CALL(*mock_libsensors, sensors_get_subfeature(_, _, _)).RETURN(nullptr);
+  ALLOW_CALL(*mock_libsensors, sensors_get_value(_, _, _)).SIDE_EFFECT(*_3 = 42.0).RETURN(0);
+
+  const auto temp_root = std::filesystem::temp_directory_path() / "astl_libsensors_metric_stable_names";
+  WriteTextFile(temp_root / "libsensors" / "libsensors_nvme-pci.json", R"json(
+{
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "Composite": {
+      "description": "Composite NVMe temperature",
+      "unit": "celsius",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal"],
+      "collection": {
+        "register": "Composite",
+        "protocol": "libsensors"
+      }
+    }
+  }
+}
+)json");
+
+  std::string       chip1_prefix = "nvme";
+  sensors_bus_id    chip1_bus    = {.type = 1, .nr = 1};
+  std::string       chip1_path   = "/test/chip1";
+  sensors_chip_name chip1 = {.prefix = chip1_prefix.data(), .bus = chip1_bus, .addr = 0x1, .path = chip1_path.data()};
+
+  std::string       chip2_prefix = "nvme";
+  sensors_bus_id    chip2_bus    = {.type = 1, .nr = 2};
+  std::string       chip2_path   = "/test/chip2";
+  sensors_chip_name chip2 = {.prefix = chip2_prefix.data(), .bus = chip2_bus, .addr = 0x2, .path = chip2_path.data()};
+
+  static char            feature1_name[] = "temp1";
+  static char            feature2_name[] = "temp2";
+  static sensors_feature feature1        = {
+             .name = feature1_name, .number = 1, .type = SENSORS_FEATURE_TEMP, .first_subfeature = 0, .padding1 = 0};
+  static sensors_feature feature2 = {
+      .name = feature2_name, .number = 2, .type = SENSORS_FEATURE_TEMP, .first_subfeature = 0, .padding1 = 0};
+  static sensors_subfeature subfeature1 = {.name    = feature1_name,
+                                           .number  = 11,
+                                           .type    = SENSORS_SUBFEATURE_TEMP_INPUT,
+                                           .mapping = 0,
+                                           .flags   = SENSORS_MODE_R};
+  static sensors_subfeature subfeature2 = {.name    = feature2_name,
+                                           .number  = 22,
+                                           .type    = SENSORS_SUBFEATURE_TEMP_INPUT,
+                                           .mapping = 0,
+                                           .flags   = SENSORS_MODE_R};
+
+  trompeloeil::sequence sequence;
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _)).IN_SEQUENCE(sequence).RETURN(&chip1);
+  REQUIRE_CALL(*mock_libsensors, sensors_snprintf_chip_name(_, _, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(std::snprintf(_1, _2, "nvme-pci-40100"))
+      .RETURN(0);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _)).IN_SEQUENCE(sequence).RETURN(&feature1);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_label(_, &feature1))
+      .IN_SEQUENCE(sequence)
+      .RETURN(const_cast<char*>("Composite"));
+  REQUIRE_CALL(*mock_libsensors, sensors_get_subfeature(_, &feature1, SENSORS_SUBFEATURE_TEMP_INPUT))
+      .IN_SEQUENCE(sequence)
+      .RETURN(&subfeature1);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _)).IN_SEQUENCE(sequence).RETURN(nullptr);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _)).IN_SEQUENCE(sequence).RETURN(&chip2);
+  REQUIRE_CALL(*mock_libsensors, sensors_snprintf_chip_name(_, _, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(std::snprintf(_1, _2, "nvme-pci-20100"))
+      .RETURN(0);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _)).IN_SEQUENCE(sequence).RETURN(&feature2);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_label(_, &feature2))
+      .IN_SEQUENCE(sequence)
+      .RETURN(const_cast<char*>("Composite"));
+  REQUIRE_CALL(*mock_libsensors, sensors_get_subfeature(_, &feature2, SENSORS_SUBFEATURE_TEMP_INPUT))
+      .IN_SEQUENCE(sequence)
+      .RETURN(&subfeature2);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _)).IN_SEQUENCE(sequence).RETURN(nullptr);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _)).IN_SEQUENCE(sequence).RETURN(nullptr);
+
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration             = configuration_result.value();
+  configuration.metrics_dir_path = temp_root;
+
+  MetricManager metric_manager{MakeCaps(), MakeMetricGroupDescriptions()};
+  auto libsensors_target_1 = std::make_unique<astl::LibsensorsTarget>("libsensors_nvme-pci-40100", "nvme target 1",
+                                                                      "nvme-pci-40100", harness.api);
+  auto libsensors_target_2 = std::make_unique<astl::LibsensorsTarget>("libsensors_nvme-pci-20100", "nvme target 2",
+                                                                      "nvme-pci-20100", harness.api);
+  const auto*                                                          target_ptr_1 = libsensors_target_1.get();
+  const auto*                                                          target_ptr_2 = libsensors_target_2.get();
+  std::unordered_map<CollectorType, std::vector<const astl::ITarget*>> targets_by_collector{
+      {CollectorType::LIBSENSORS, {target_ptr_1, target_ptr_2}}
+  };
+
+  REQUIRE(astl::RegisterLibsensorsMetrics(configuration, targets_by_collector, &metric_manager) == ASTL_STATUS_SUCCESS);
+
+  const auto metric_names_1 = GetRegisteredMetricNames(metric_manager, target_ptr_1);
+  const auto metric_names_2 = GetRegisteredMetricNames(metric_manager, target_ptr_2);
+  REQUIRE(metric_names_1 == std::vector<std::string>{"nvme-pci-1_Composite"});
+  REQUIRE(metric_names_2 == std::vector<std::string>{"nvme-pci-2_Composite"});
+}
+
 TEST_CASE("RegisterLibsensorsMetrics resolves duplicate labels on the same chip", "[libsensors_metric_builder]") {
   MockSensorsApiTestHarness harness;
   auto&                     mock_libsensors = harness.mock_libsensors;
@@ -804,12 +913,12 @@ TEST_CASE("RegisterLibsensorsMetrics applies family-level JSON declarations with
   const auto properties = GetRegisteredMetricProperties(metric_manager, target_ptr);
   REQUIRE(properties.size() == 2);
 
-  const auto& power_property = FindMetricPropertyByName(properties, "chip-11-7_CPU_power");
+  const auto& power_property = FindMetricPropertyByName(properties, "chip-11-1_CPU_power");
   REQUIRE(std::string(power_property.description) == "Configured family power reading for CPU power");
   REQUIRE(power_property.units == ASTL_UNITS_WATTS);
   REQUIRE(power_property.identifier == ASTL_METRIC_IDENTIFIER_POWER);
 
-  const auto& temp_property = FindMetricPropertyByName(properties, "chip-11-7_Board_Temp");
+  const auto& temp_property = FindMetricPropertyByName(properties, "chip-11-1_Board_Temp");
   REQUIRE(std::string(temp_property.description) == "Temperature reading for Board Temp");
   REQUIRE(temp_property.units == ASTL_UNITS_CELSIUS);
   REQUIRE(temp_property.identifier == ASTL_METRIC_IDENTIFIER_TEMPERATURE);

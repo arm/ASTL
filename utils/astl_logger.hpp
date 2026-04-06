@@ -277,18 +277,14 @@ class Logger {
    */
   explicit Logger(astl::LogLevel level, bool console, bool default_formatting,
                   const std::string& log_name = std::string(), const std::string& component_tag = std::string())
-      : _component_tag(component_tag), _log_name(log_name) {
+      : _component_tag(component_tag) {
     const bool use_logging_env_overrides = default_formatting;
     const bool console_enabled = console || (use_logging_env_overrides && IsEnvVarSet(astl::EnvVar::ASTL_LOG_CONSOLE));
     const std::string& var_file_name =
         use_logging_env_overrides ? GetEnvVar(astl::EnvVar::ASTL_LOG_NAME) : std::string();
     astl::LogLevel var_level =
         use_logging_env_overrides ? GetEnvVarLogLevel(astl::EnvVar::ASTL_LOG_LEVEL) : astl::LogLevel::None;
-    /* Normalize None/Unknown to Off for deterministic behavior */
-    if (var_level == astl::LogLevel::None || var_level == astl::LogLevel::Unknown) {
-      var_level = astl::LogLevel::Off;
-    }
-    InitializeLogger(var_level == astl::LogLevel::Off ? level : var_level, console_enabled, default_formatting,
+    InitializeLogger(var_level == astl::LogLevel::None ? level : var_level, console_enabled, default_formatting,
                      var_file_name.empty() ? log_name : var_file_name);
   }
 

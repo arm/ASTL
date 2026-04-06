@@ -15,10 +15,7 @@
 #endif
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
-#include "topology/scmi_target.hpp"
-
 namespace astl {
-
 /**
  * @brief Builds collectors for the given targets based on the provided configuration.
  *
@@ -37,8 +34,13 @@ auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
 
   for (const auto& cur_target : targets) {
     if (cur_target->GetCollectorType() == CollectorType::SCMI) {
-      std::filesystem::path scmi_target_path =
-          scmi_sysfs_root_path / ScmiTarget::TelemetrySubdirectoryForTarget(*cur_target);
+      const auto scmi_target_directory = cur_target->CollectorTargetPath();
+      if (!scmi_target_directory.has_value() || scmi_target_directory->empty()) {
+        ASTL_LOG_ERROR("BuildCollectorManager: SCMI target '{}' is missing collector path metadata",
+                       cur_target->Name());
+        return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+      }
+      std::filesystem::path             scmi_target_path = scmi_sysfs_root_path / std::string{*scmi_target_directory};
       astl::FileInterface               scmi_target_file_interface{scmi_target_path};
       std::unique_ptr<astl::ICollector> scmi_collector =
           std::make_unique<ScmiCollector>(std::move(scmi_target_file_interface));

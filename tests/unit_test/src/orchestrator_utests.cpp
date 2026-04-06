@@ -24,6 +24,7 @@
 #include "serdes/archive_utils.hpp"
 #include "serdes/protobuf_serdes.hpp"
 #include "target.hpp"
+#include "topology/scmi_target.hpp"
 #include "topology/topology_manager.hpp"
 
 using Catch::Matchers::ContainsSubstring;
@@ -1443,7 +1444,7 @@ TEST_CASE("Orchestrator::SaveToFile round-trip", "[Orchestrator][cache]") {
   auto output_manager = std::make_unique<MockOutputManager>();
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "", "tlm-0"));
   auto topology_manager = std::make_unique<astl::TopologyManager>(std::move(targets));
 
   auto orchestrator =
@@ -1481,7 +1482,7 @@ TEST_CASE("Orchestrator::SaveStateToCacheDir serialises topology + metric manage
   auto output_manager = std::make_unique<MockOutputManager>();
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "", "tlm-0"));
   auto topology_manager = std::make_unique<astl::TopologyManager>(std::move(targets));
 
   auto orchestrator =
@@ -1537,7 +1538,7 @@ TEST_CASE("Orchestrator::SaveToFile creates a valid .astl archive", "[Orchestrat
   auto output_manager = std::make_unique<MockOutputManager>();
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "", "tlm-0"));
   auto topology_manager = std::make_unique<astl::TopologyManager>(std::move(targets));
 
   auto orchestrator =

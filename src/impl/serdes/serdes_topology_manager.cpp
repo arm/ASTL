@@ -2,8 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <string_view>
-
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/targets.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
 #include "topology/scmi_target.hpp"
@@ -31,10 +29,12 @@ static auto SerializeTarget(const ITarget& target, astl::protobuf::Target* proto
     proto_target->set_id(props.id);
   }
   if (target.GetCollectorType() == CollectorType::SCMI) {
-    const auto telemetry_subdirectory = ScmiTarget::TelemetrySubdirectoryForTarget(target);
-    if (!telemetry_subdirectory.empty()) {
-      proto_target->set_scmi_sysfs_subdirectory(std::string{telemetry_subdirectory});
+    const auto collector_target_path = target.CollectorTargetPath();
+    if (!collector_target_path.has_value() || collector_target_path->empty()) {
+      ASTL_LOG_ERROR("SerializeTarget: SCMI target '{}' is missing scmi_sysfs_subdirectory metadata", target.Name());
+      return ASTL_STATUS_INVALID_VALUE_TYPE;
     }
+    proto_target->set_scmi_sysfs_subdirectory(std::string{*collector_target_path});
   }
 
   return ASTL_STATUS_SUCCESS;
@@ -99,21 +99,13 @@ auto Deserialize<std::unique_ptr<ITopologyManager>>(std::istream& input_stream)
 
     std::unique_ptr<ITarget> target;
     if (collector == CollectorType::SCMI) {
-      auto scmi_sysfs_subdirectory = proto_target.has_scmi_sysfs_subdirectory()
-                                         ? std::optional<std::string>{proto_target.scmi_sysfs_subdirectory()}
-                                         : [&name]() -> std::optional<std::string> {
-        auto inferred = ScmiTarget::TryInferTelemetrySubdirectoryFromName(name);
-        if (!inferred.has_value()) {
-          return std::nullopt;
-        }
-        return std::string{*inferred};
-      }();
-      if (scmi_sysfs_subdirectory.has_value()) {
-        target =
-            std::make_unique<ScmiTarget>(name, description, std::move(scmi_sysfs_subdirectory.value()), nullptr, id);
+      if (!proto_target.has_scmi_sysfs_subdirectory() || proto_target.scmi_sysfs_subdirectory().empty()) {
+        ASTL_LOG_ERROR("Deserialize<ITopologyManager>: SCMI target '{}' is missing scmi_sysfs_subdirectory metadata",
+                       name);
+        return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
       }
-    }
-    if (!target) {
+      target = std::make_unique<ScmiTarget>(name, description, proto_target.scmi_sysfs_subdirectory(), nullptr, id);
+    } else {
       target = std::make_unique<Target>(name, description, collector, nullptr, id);
     }
 

@@ -198,7 +198,7 @@ TEST_CASE("CollectorManager::BuildCollectorManager uses SCMI target metadata for
   REQUIRE(capabilities_map.at(target).front().collector_type == astl::CollectorType::SCMI);
 }
 
-TEST_CASE("CollectorManager::BuildCollectorManager accepts legacy SCMI targets without SCMI-specific metadata",
+TEST_CASE("CollectorManager::BuildCollectorManager rejects SCMI targets without SCMI-specific metadata",
           "[collector_manager]") {
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
@@ -209,13 +209,8 @@ TEST_CASE("CollectorManager::BuildCollectorManager accepts legacy SCMI targets w
   targets.emplace_back(target);
 
   auto collector_manager = astl::BuildCollectorManager(targets, configuration);
-  REQUIRE(collector_manager.has_value());
-
-  auto capabilities_map = collector_manager.value()->ReportCollectionCapabilities();
-  REQUIRE(capabilities_map.size() == 1);
-  REQUIRE(capabilities_map.contains(target));
-  REQUIRE(capabilities_map.at(target).size() == 1);
-  REQUIRE(capabilities_map.at(target).front().collector_type == astl::CollectorType::SCMI);
+  REQUIRE_FALSE(collector_manager.has_value());
+  REQUIRE(collector_manager.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
 }
 
 TEST_CASE("CollectorManager::BuildCollectorManager rejects unsupported collector types", "[collector_manager]") {

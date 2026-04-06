@@ -21,6 +21,7 @@
 #include "metric/sampled_value_metric.hpp"
 #include "serdes/protobuf_serdes.hpp"
 #include "target.hpp"
+#include "topology/scmi_target.hpp"
 
 using trompeloeil::_;
 
@@ -285,9 +286,9 @@ TEST_CASE("MetricBuilder::BuildMetricManager uses JSON descriptions for SCMI cou
   configuration = MakeConfigurationForTestRoot(config_root);
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  auto scmi_target = std::make_unique<astl::Target>("scmi_tlm-0", "test target", astl::CollectorType::SCMI, nullptr,
-                                                    "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
-  const auto* target_ptr = scmi_target.get();
+  auto        scmi_target = std::make_unique<astl::ScmiTarget>("scmi_tlm-0", "test target", "tlm-0", nullptr,
+                                                               "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
+  const auto* target_ptr  = scmi_target.get();
   targets.push_back(std::move(scmi_target));
 
   auto metric_manager_or_error = astl::BuildMetricManager(targets, configuration, std::nullopt);
@@ -367,8 +368,7 @@ TEST_CASE("MetricBuilder::BuildMetricManagerFromASTLFile fails on corrupt metric
 
 TEST_CASE("MetricBuilder::BuildMetricManagerFromASTLFile rebuilds a serialized metric manager", "[MetricBuilder]") {
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(
-      std::make_unique<astl::Target>("tlm-0", "unit-test target", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "unit-test target", "tlm-0"));
 
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
@@ -397,8 +397,8 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from tempora
   auto configuration = MakeConfigurationForTestRoot(config_root);
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("tlm-0", "unit-test target", astl::CollectorType::SCMI, nullptr,
-                                                   "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
+  targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "unit-test target", "tlm-0", nullptr,
+                                                       "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
 
   auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
 
@@ -433,8 +433,8 @@ TEST_CASE("MetricBuilder::BuildMetricManager applies SCMI target name template f
   auto configuration = MakeConfigurationForTestRoot(config_root);
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("scmi_tlm-0", "unit-test target", astl::CollectorType::SCMI, nullptr,
-                                                   "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
+  targets.push_back(std::make_unique<astl::ScmiTarget>("scmi_tlm-0", "unit-test target", "tlm-0", nullptr,
+                                                       "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
 
   auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
 
@@ -470,8 +470,8 @@ TEST_CASE("MetricBuilder::BuildMetricManager loads metric group metadata without
   auto configuration = MakeConfigurationForTestRoot(config_root);
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("tlm-0", "unit-test target", astl::CollectorType::SCMI, nullptr,
-                                                   "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
+  targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "unit-test target", "tlm-0", nullptr,
+                                                       "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
 
   auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
 

@@ -4,9 +4,11 @@
 
 #include "../../test_includes.hpp"  // include before catch2
 #ifndef _WIN32
+#  include <sys/stat.h>
 #  include <unistd.h>
 #endif
 #include <cstdlib>  // getenv
+#include <thread>
 
 #include "astl_file_interface.hpp"
 #include "astl_utils.hpp"
@@ -117,6 +119,44 @@ TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") 
     REQUIRE(sysfs.Read(file.Path(), output) == ASTL_STATUS_SUCCESS);
     REQUIRE(output == updated_content);
   }
+
+#ifndef _WIN32
+  SECTION("Read() reopens non-seekable files on repeated reads") {
+    const auto      fifo_path = std::filesystem::path{"/tmp/test_sysfs_fifo"};
+    std::error_code ec;
+    std::filesystem::remove(fifo_path, ec);
+    REQUIRE(mkfifo(fifo_path.c_str(), 0600) == 0);
+    const auto cleanup_fifo = [&fifo_path]() { std::filesystem::remove(fifo_path); };
+
+    std::string output;
+    {
+      std::thread writer([&fifo_path]() {
+        std::ofstream fifo_stream(fifo_path);
+        if (fifo_stream.is_open()) {
+          fifo_stream << "first";
+        }
+      });
+      REQUIRE(sysfs.Read(fifo_path, output) == ASTL_STATUS_SUCCESS);
+      writer.join();
+      REQUIRE(output == "first");
+    }
+
+    output.clear();
+    {
+      std::thread writer([&fifo_path]() {
+        std::ofstream fifo_stream(fifo_path);
+        if (fifo_stream.is_open()) {
+          fifo_stream << "second";
+        }
+      });
+      REQUIRE(sysfs.Read(fifo_path, output) == ASTL_STATUS_SUCCESS);
+      writer.join();
+      REQUIRE(output == "second");
+    }
+
+    cleanup_fifo();
+  }
+#endif
 
   SECTION("Read() test file read interface error code") {
 #ifndef _WIN32

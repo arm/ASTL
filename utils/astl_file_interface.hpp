@@ -151,12 +151,20 @@ class FileInterface {
       return ASTL_STATUS_FILE_OPEN_FAILED;
     }
 
-    file.clear();
-    file.seekg(0, std::ios::beg);
-    if (!file.good()) {
+    // Freshly opened streams already start at the beginning. Rewinding them can
+    // fail for non-seekable files such as FIFOs, which would otherwise force an
+    // unnecessary reopen before the first read.
+    if (!inserted) {
+      file.clear();
+      file.seekg(0, std::ios::beg);
+    }
+    if (!inserted && !file.good()) {
       file.close();
-      _read_streams.erase(stream_it);
-      return ASTL_STATUS_FILE_ERROR;
+      file.open(resolved_path);
+      if (!file.is_open()) {
+        _read_streams.erase(stream_it);
+        return ASTL_STATUS_FILE_OPEN_FAILED;
+      }
     }
 
     opString.assign(std::istreambuf_iterator<char>(file), {});

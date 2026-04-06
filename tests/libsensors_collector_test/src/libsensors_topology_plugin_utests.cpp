@@ -5,7 +5,10 @@
 #include <algorithm>
 #include <array>
 #include <expected>
+#include <filesystem>
+#include <fstream>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "../../mock_classes.hpp"
@@ -38,6 +41,17 @@ auto CopyChipName(char* buffer, size_t buffer_size, std::string_view name) -> vo
   }
   const auto copy_size = std::min(name.size(), buffer_size - 1U);
   std::copy_n(name.data(), copy_size, buffer);
+}
+
+auto WriteTextFile(const std::filesystem::path& path, std::string_view contents) -> void {
+  std::error_code err;
+  std::filesystem::create_directories(path.parent_path(), err);
+  REQUIRE_FALSE(err);
+
+  std::ofstream output(path, std::ios::out | std::ios::trunc);
+  REQUIRE(output.is_open());
+  output << contents;
+  REQUIRE(output.good());
 }
 
 }  // namespace
@@ -220,4 +234,81 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets creates one target per chip"
   REQUIRE(result->size() == 2);
   REQUIRE(result->at(0)->Name() == "libsensors_snsr-1-2");
   REQUIRE(result->at(1)->Name() == "libsensors_snsr-1-3");
+}
+
+TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets keeps raw chip names even when family metadata exists",
+          "[libsensors_collector]") {
+  MockSensorsApiTestHarness harness;
+  auto&                     mock_libsensors = harness.mock_libsensors;
+
+  ALLOW_CALL(*mock_libsensors, sensors_init(_)).RETURN(0);
+  ALLOW_CALL(*mock_libsensors, sensors_cleanup());
+
+  const auto temp_root = std::filesystem::temp_directory_path() / "astl_libsensors_topology_stable_names";
+  WriteTextFile(temp_root / "libsensors" / "libsensors_nvme-pci.json",
+                R"json({"document":{"confidential":false},"metrics":{}})json");
+
+  std::string       chip1_prefix = "nvme";
+  sensors_bus_id    chip1_bus    = {.type = 1, .nr = 1};
+  std::string       chip1_path   = "/test/chip1";
+  sensors_chip_name chip1 = {.prefix = chip1_prefix.data(), .bus = chip1_bus, .addr = 0x1, .path = chip1_path.data()};
+
+  std::string       chip2_prefix = "nvme";
+  sensors_bus_id    chip2_bus    = {.type = 1, .nr = 2};
+  std::string       chip2_path   = "/test/chip2";
+  sensors_chip_name chip2 = {.prefix = chip2_prefix.data(), .bus = chip2_bus, .addr = 0x2, .path = chip2_path.data()};
+
+  trompeloeil::sequence sequence;
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(*_2 = 0)
+      .RETURN(&chip1);
+  REQUIRE_CALL(*mock_libsensors, sensors_snprintf_chip_name(_, _, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(CopyChipName(_1, _2, "nvme-pci-40100"))
+      .RETURN(0);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(*_2 = 0)
+      .RETURN([]() -> sensors_feature* {
+        static auto            temp1_name   = kMakeMutableCString("temp1");
+        static sensors_feature feature_temp = {
+            .name = temp1_name.data(), .number = 1, .type = SENSORS_FEATURE_TEMP, .first_subfeature = 0, .padding1 = 0};
+        return &feature_temp;
+      }());
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _)).IN_SEQUENCE(sequence).SIDE_EFFECT(*_2 = 1).RETURN(nullptr);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(*_2 = 1)
+      .RETURN(&chip2);
+  REQUIRE_CALL(*mock_libsensors, sensors_snprintf_chip_name(_, _, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(CopyChipName(_1, _2, "nvme-pci-20100"))
+      .RETURN(0);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(*_2 = 0)
+      .RETURN([]() -> sensors_feature* {
+        static auto            temp1_name   = kMakeMutableCString("temp1");
+        static sensors_feature feature_temp = {
+            .name = temp1_name.data(), .number = 1, .type = SENSORS_FEATURE_TEMP, .first_subfeature = 0, .padding1 = 0};
+        return &feature_temp;
+      }());
+  REQUIRE_CALL(*mock_libsensors, sensors_get_features(_, _)).IN_SEQUENCE(sequence).SIDE_EFFECT(*_2 = 1).RETURN(nullptr);
+  REQUIRE_CALL(*mock_libsensors, sensors_get_detected_chips(nullptr, _))
+      .IN_SEQUENCE(sequence)
+      .SIDE_EFFECT(*_2 = 2)
+      .RETURN(nullptr);
+
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration             = configuration_result.value();
+  configuration.metrics_dir_path = temp_root;
+
+  auto result = astl::LibsensorsTopologyPlugin::detail::ScanForTargetsWithLibsensors(configuration, harness.api);
+
+  REQUIRE(result.has_value());
+  REQUIRE(result->size() == 2);
+  REQUIRE(result->at(0)->Name() == "libsensors_nvme-pci-40100");
+  REQUIRE(result->at(1)->Name() == "libsensors_nvme-pci-20100");
 }

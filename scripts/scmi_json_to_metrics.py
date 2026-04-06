@@ -142,7 +142,7 @@ def build_output_metric(metric: dict[str, Any], mapped_metric_type: str) -> dict
     output_metric: dict[str, Any] = {
         "description": metric.get("description", register),
         "metric_type": mapped_metric_type,
-        "category": "unknown",
+        "identifier": "unknown",
         "collection": {
             "register": register,
             "protocol": "scmi",

@@ -169,7 +169,7 @@ struct MetricJsonDeclaration {
   //!< Type of metric (e.g., value, delta, rate)
   std::string metric_type;
 
-  //!< Categories include things like Temperature, Power, Count, etc.
+  //!< High-level metric identifier such as Temperature, Power, Count, etc.
   std::string identifier;
 
   //!< Groups this metric is associated with

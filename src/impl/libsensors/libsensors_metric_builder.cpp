@@ -61,6 +61,7 @@ struct LibsensorsMetricRegistrationDetails {
 struct LibsensorsTargetContext {
   const LibsensorsTarget*                          target;
   std::optional<metrics::spec::MetricsDeclaration> declarations;
+  std::string                                      metric_name_prefix;
   enum class DeclarationMatchKind {
     NONE,
     EXACT,
@@ -859,9 +860,39 @@ static auto BuildConfigMetricName(const DiscoveredSensorMetric&               se
   return normalized_name + "_" + std::to_string(sensor.feature->number);
 }
 
-static auto BuildFinalMetricName(const DiscoveredSensorMetric& sensor, std::string_view config_metric_name)
+static auto FindStableMetricFamilyName(const AstlConfiguration& configuration, std::string_view chip_name)
+    -> std::optional<std::string> {
+  std::string chip_family{chip_name};
+  while (true) {
+    const auto separator_position = chip_family.rfind('-');
+    if (separator_position == std::string::npos) {
+      break;
+    }
+    chip_family.erase(separator_position);
+    const auto metrics_file_path =
+        configuration.metrics_dir_path / "libsensors" / ("libsensors_" + chip_family + ".json");
+    if (std::filesystem::exists(metrics_file_path)) {
+      return chip_family;
+    }
+  }
+  return std::nullopt;
+}
+
+static auto BuildMetricNamePrefix(const AstlConfiguration& configuration, const LibsensorsTarget& target,
+                                  std::unordered_map<std::string, std::size_t>& instance_counts_by_family)
     -> std::string {
-  return NormalizeNameComponent(sensor.chip_name + "_" + std::string{config_metric_name});
+  const auto family_name = FindStableMetricFamilyName(configuration, target.ChipName());
+  if (!family_name.has_value()) {
+    return target.ChipName();
+  }
+
+  const auto instance_index = ++instance_counts_by_family[*family_name];
+  return *family_name + "-" + std::to_string(instance_index);
+}
+
+static auto BuildFinalMetricName(std::string_view metric_name_prefix, std::string_view config_metric_name)
+    -> std::string {
+  return NormalizeNameComponent(std::string{metric_name_prefix} + "_" + std::string{config_metric_name});
 }
 
 static auto BuildMetricId(const DiscoveredSensorMetric& sensor) -> std::string {
@@ -933,9 +964,10 @@ static auto AddDerivedSubfeatureMetrics(std::vector<DiscoveredSensorMetric>& dis
 
 static auto BuildDeclarationLookupNames(const LibsensorsTarget& target) -> std::vector<std::pair<std::string, bool>> {
   std::vector<std::pair<std::string, bool>> lookup_names;
-  lookup_names.emplace_back(target.Name(), true);
+  const auto                                exact_lookup_name = std::string{"libsensors_"} + target.ChipName();
+  lookup_names.emplace_back(exact_lookup_name, true);
 
-  std::unordered_set<std::string> seen_names{target.Name()};
+  std::unordered_set<std::string> seen_names{exact_lookup_name};
   std::string                     chip_family = target.ChipName();
   while (true) {
     const auto separator_position = chip_family.rfind('-');
@@ -1000,11 +1032,12 @@ static auto LoadMetricDeclarationsForTarget(const AstlConfiguration& configurati
   return LoadedMetricDeclarations{};
 }
 
-static auto MakeDefaultRegistrationDetails(const DiscoveredSensorMetric& sensor, std::string_view config_metric_name)
+static auto MakeDefaultRegistrationDetails(std::string_view metric_name_prefix, const DiscoveredSensorMetric& sensor,
+                                           std::string_view config_metric_name)
     -> std::optional<LibsensorsMetricRegistrationDetails> {
   return std::optional<LibsensorsMetricRegistrationDetails>{
       LibsensorsMetricRegistrationDetails{
-                                          .name          = BuildFinalMetricName(sensor, config_metric_name),
+                                          .name          = BuildFinalMetricName(metric_name_prefix, config_metric_name),
                                           .description   = BuildMetricDescription(sensor),
                                           .units         = sensor.units,
                                           .identifier    = BuildDefaultIdentifier(sensor),
@@ -1018,9 +1051,10 @@ static auto MakeDefaultRegistrationDetails(const DiscoveredSensorMetric& sensor,
 static auto ResolveMetricRegistrationDetails(const DiscoveredSensorMetric& sensor, std::string config_metric_name,
                                              const LibsensorsTargetContext& target_context)
     -> std::expected<std::optional<LibsensorsMetricRegistrationDetails>, astl_status_code> {
-  const auto final_metric_name = BuildFinalMetricName(sensor, config_metric_name);
+  const auto& final_metric_name_prefix = target_context.metric_name_prefix;
+  const auto  final_metric_name        = BuildFinalMetricName(final_metric_name_prefix, config_metric_name);
   if (!target_context.declarations.has_value()) {
-    return MakeDefaultRegistrationDetails(sensor, config_metric_name);
+    return MakeDefaultRegistrationDetails(final_metric_name_prefix, sensor, config_metric_name);
   }
 
   auto declaration_iter = target_context.declarations->metrics.find(config_metric_name);
@@ -1037,7 +1071,7 @@ static auto ResolveMetricRegistrationDetails(const DiscoveredSensorMetric& senso
           "Registering discovered libsensors metric '{}' on chip '{}' using default metadata because it was not "
           "declared in the fallback family config",
           final_metric_name, sensor.chip_name);
-      return MakeDefaultRegistrationDetails(sensor, config_metric_name);
+      return MakeDefaultRegistrationDetails(final_metric_name_prefix, sensor, config_metric_name);
     }
     ASTL_LOG_WARNING(
         "Skipping discovered libsensors metric '{}' on chip '{}' because it is not declared in the exact "
@@ -1253,6 +1287,7 @@ auto RegisterLibsensorsMetrics(
 
   std::unordered_map<std::string, LibsensorsTargetContext> target_contexts;
   target_contexts.reserve(libsensors_targets.size());
+  std::unordered_map<std::string, std::size_t> instance_counts_by_family;
   for (const auto* target : libsensors_targets) {
     const auto* libsensors_target = dynamic_cast<const astl::LibsensorsTarget*>(target);
     if (!libsensors_target) {
@@ -1263,12 +1298,14 @@ auto RegisterLibsensorsMetrics(
     if (!declarations_or_error.has_value()) {
       return declarations_or_error.error();
     }
-    target_contexts.emplace(libsensors_target->ChipName(),
-                            LibsensorsTargetContext{
-                                .target                 = libsensors_target,
-                                .declarations           = std::move(declarations_or_error->declarations),
-                                .declaration_match_kind = declarations_or_error->match_kind,
-                            });
+    target_contexts.emplace(
+        libsensors_target->ChipName(),
+        LibsensorsTargetContext{
+            .target             = libsensors_target,
+            .declarations       = std::move(declarations_or_error->declarations),
+            .metric_name_prefix = BuildMetricNamePrefix(configuration, *libsensors_target, instance_counts_by_family),
+            .declaration_match_kind = declarations_or_error->match_kind,
+        });
   }
 
   const sensors_chip_name*                                         chip       = nullptr;

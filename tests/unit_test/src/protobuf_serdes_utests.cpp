@@ -48,10 +48,10 @@ RawSampledData MakeSample(OperationId operation_id, AstlValue value, int64_t ts_
 }
 
 auto MakeTarget(std::string name, std::string description, astl::CollectorType collector_type,
-                std::optional<std::string> uuid                  = std::nullopt,
-                std::optional<std::string> collector_target_path = std::nullopt) -> std::unique_ptr<astl::Target> {
+                std::optional<std::string> uuid                = std::nullopt,
+                std::optional<std::string> collector_path_name = std::nullopt) -> std::unique_ptr<astl::Target> {
   return std::make_unique<astl::Target>(std::move(name), std::move(description), collector_type, nullptr,
-                                        std::move(uuid), std::move(collector_target_path));
+                                        std::move(uuid), std::move(collector_path_name));
 }
 
 // Helper to install a single SCMI target named "tlm-0" into the Orchestrator
@@ -275,6 +275,24 @@ TEST_CASE("Serialize(ITopologyManager) + Deserialize<unique_ptr<ITopologyManager
     REQUIRE(std::string{props.description ? props.description : ""} == "Target discovered via SCMI");
     REQUIRE(std::string{props.id ? props.id : ""} == "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
   }
+}
+
+TEST_CASE("Deserialize<unique_ptr<ITopologyManager>> rejects SCMI targets without scmi_sysfs_subdirectory") {
+  astl::protobuf::TargetList proto_list;
+  auto*                      proto_target = proto_list.add_targets();
+  proto_target->set_name("socket 0 telemetry");
+  proto_target->set_description("Target discovered via SCMI");
+  proto_target->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
+  proto_target->set_id("0xCAFEBABECAFEBABECAFEBABEBEEF0000");
+
+  std::stringstream str_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(proto_list.SerializeToOstream(&str_stream));
+
+  str_stream.seekg(0);
+  auto topology_manager_or_error =
+      astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::ITopologyManager>>(str_stream);
+  REQUIRE_FALSE(topology_manager_or_error.has_value());
+  REQUIRE(topology_manager_or_error.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
 }
 
 TEST_CASE("MetricHandle + SampledValueMetric: protobuf round-trip", "[MetricHandle][SampledValueMetric][protobuf]") {
@@ -755,7 +773,7 @@ TEST_CASE(
   REQUIRE(mgr->ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
 }
 
-TEST_CASE("Deserialize<MetricManager> rebuilds metric groups without external metadata", "[MetricManager][protobuf]") {
+TEST_CASE("Deserialize<MetricManager> rejects metric groups without top-level metadata", "[MetricManager][protobuf]") {
   InstallSingleScmiTargetTlm0();
   const auto& orch    = astl::Orchestrator::GetInstance()->get();
   const auto& targets = orch->GetTargets();
@@ -768,21 +786,8 @@ TEST_CASE("Deserialize<MetricManager> rebuilds metric groups without external me
   cache_stream.seekg(0);
 
   auto mgr_or_err = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
-  REQUIRE(mgr_or_err.has_value());
-
-  auto mgr = std::move(mgr_or_err.value());
-  REQUIRE(mgr != nullptr);
-  REQUIRE(mgr->GetMetricGroups().size() == 1);
-
-  auto target_groups = mgr->GetMetricGroups(targets[0].get());
-  REQUIRE(target_groups.has_value());
-  REQUIRE(target_groups->size() == 1);
-
-  astl_metric_group_props_t props{};
-  props.size = sizeof(astl_metric_group_props_t);
-  REQUIRE(mgr->GetMetricGroupProperties((*target_groups)[0], &props) == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string{props.name} == "thermal");
-  REQUIRE(std::string{props.description} == "Metrics in the 'thermal' group.");
+  REQUIRE_FALSE(mgr_or_err.has_value());
+  REQUIRE(mgr_or_err.error() == ASTL_STATUS_BAD_CONFIGURATION);
 }
 
 TEST_CASE("Deserialize<MetricManager> rejects invalid operation map references", "[MetricManager][protobuf]") {
