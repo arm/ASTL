@@ -20,6 +20,7 @@
 #include "common/metric_config.hpp"
 #include "config/scmi_platform_telemetry_spec.hpp"
 #include "metric/formula_builder.hpp"
+#include "target.hpp"
 
 using json = nlohmann::json;
 
@@ -107,12 +108,41 @@ static auto BuildScmiMetricDescription(std::string_view metric_name, astl_metric
   }
 }
 
-static auto ResolveScmiMetricDescription(const MetricJsonDeclaration& metric_declaration, std::string_view metric_name,
-                                         astl_metric_identifier_t identifier) -> std::string {
-  if (!metric_declaration.description.empty()) {
-    return metric_declaration.description;
+static auto BuildScmiComponentInstanceSuffix(const scmi::spec::ScmiMetricDeclaration& scmi_metric_declaration)
+    -> std::string {
+  if (scmi_metric_declaration.component.empty()) {
+    return {};
   }
-  return BuildScmiMetricDescription(metric_name, identifier);
+  if (scmi_metric_declaration.instance.empty()) {
+    return std::format(" [component: {}]", scmi_metric_declaration.component);
+  }
+  return std::format(" [component: {} instance: {}]", scmi_metric_declaration.component,
+                     scmi_metric_declaration.instance);
+}
+
+static auto ResolveScmiMetricDescription(const MetricJsonDeclaration& metric_declaration, std::string_view metric_name,
+                                         astl_metric_identifier_t                 identifier,
+                                         const scmi::spec::ScmiMetricDeclaration& scmi_metric_declaration)
+    -> std::string {
+  std::string base_description;
+  if (!metric_declaration.description.empty()) {
+    base_description = metric_declaration.description;
+  } else {
+    base_description = BuildScmiMetricDescription(metric_name, identifier);
+  }
+  return base_description + BuildScmiComponentInstanceSuffix(scmi_metric_declaration);
+}
+
+static auto BuildScmiUniqueMetricName(std::string_view                         metric_name,
+                                      const scmi::spec::ScmiMetricDeclaration& scmi_metric_declaration) -> std::string {
+  const auto component =
+      scmi_metric_declaration.component.empty() ? std::string{"component"} : scmi_metric_declaration.component;
+  const auto instance = scmi_metric_declaration.instance.empty() ? std::string{"0"} : scmi_metric_declaration.instance;
+  return std::format("{}_{}_{}", metric_name, component, instance);
+}
+
+static auto BuildScmiMetricId(std::string_view metric_name, const ITarget& target) -> std::string {
+  return std::format("{}__{}", metric_name, GetStableTargetKey(target));
 }
 
 auto BuildScalingFormulaFromBase10Modifier(int32_t base10_unit_modifier) -> AnyFormula {
@@ -252,32 +282,36 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   // SCMI collection remains uint64 on-wire; output value type may change after scaling.
   const auto input_value_type = ParseValueType(metric_declaration);
   for (const auto& scmi_metric_declaration : metric_registers) {
-    const auto              metric_name          = std::string{metric_key_name};
+    const auto              base_metric_name     = std::string{metric_key_name};
     const auto              units                = scmi_metric_declaration.units;
     const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
     const astl_value_type_t value_type =
         ParseScmiOutputValueType(input_value_type, base10_unit_modifier, metric_declaration.formula.has_value());
     const auto& de_id = scmi_metric_declaration.de_id;
-    // @todo(ASTL-186) - may need to handle different data event ids for different targets
-    ScmiOperationBuilder operation_builder{de_id};
-    auto                 finite_set_copy = finite_set;     // copy for this metric instance
-    auto                 info_copy       = value_to_info;  // copy for this metric instance
 
-    auto formula_result = BuildFormula(metric_declaration.formula);
-    if (!formula_result.has_value()) {
-      return std::unexpected(formula_result.error());
+    const auto description =
+        ResolveScmiMetricDescription(metric_declaration, base_metric_name, identifier, scmi_metric_declaration);
+
+    for (const auto* target : applicable_targets) {
+      const auto metric_name = BuildScmiUniqueMetricName(base_metric_name, scmi_metric_declaration);
+      auto       metric_id   = BuildScmiMetricId(metric_name, *target);
+      // @todo(ASTL-186) - may need to handle different data event ids for different targets
+      ScmiOperationBuilder operation_builder{de_id};
+      auto                 formula_result = BuildFormula(metric_declaration.formula);
+      if (!formula_result.has_value()) {
+        return std::unexpected(formula_result.error());
+      }
+      // Apply user formula first, then protocol-derived scaling.
+      auto composed_formula = ComposeFormulas(std::move(formula_result.value()),
+                                              BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
+
+      auto new_metric_config = std::make_unique<FiniteSetMetricConfig>(
+          metric_name, description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE, identifier, collector_type.value(),
+          std::move(operation_builder), finite_set, value_to_info, std::move(composed_formula), input_value_type,
+          std::vector<std::string>{}, std::move(metric_id));
+
+      metric_configs_on_targets.emplace(std::move(new_metric_config), std::vector<const ITarget*>{target});
     }
-    // Apply user formula first, then protocol-derived scaling.
-    auto composed_formula =
-        ComposeFormulas(std::move(formula_result.value()), BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
-
-    auto new_metric_config = std::make_unique<FiniteSetMetricConfig>(
-        metric_name, metric_declaration.description, units, value_type, ASTL_METRIC_FINITE_SET_VALUE, identifier,
-        collector_type.value(), std::move(operation_builder), std::move(finite_set_copy), std::move(info_copy),
-        std::move(composed_formula), input_value_type, std::vector<std::string>{},
-        scmi_metric_declaration.GetFullyQualifiedName());
-
-    metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
   }
   ASTL_LOG_INFO("Created {} finite set metric config(s) for '{}' with {} valid values",
                 metric_configs_on_targets.size(), metric_key_name, finite_set.size());
@@ -421,26 +455,29 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
   for (const auto& scmi_metric_declaration : metric_registers) {
     const auto              units                = scmi_metric_declaration.units;
     const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
-    ScmiOperationBuilder    operation_builder{scmi_metric_declaration.de_id};
     const astl_value_type_t value_type =
         ParseScmiOutputValueType(input_value_type, base10_unit_modifier, metric_declaration.formula.has_value());
-    const auto resolved_name = scmi_metric_declaration.GetFullyQualifiedName();
-    const auto description   = ResolveScmiMetricDescription(metric_declaration, resolved_name, identifier);
+    const auto description =
+        ResolveScmiMetricDescription(metric_declaration, metric_key_name, identifier, scmi_metric_declaration);
 
-    auto formula_result = BuildFormula(metric_declaration.formula);
-    if (!formula_result.has_value()) {
-      return std::unexpected(formula_result.error());
+    for (const auto* target : applicable_targets) {
+      const auto metric_name = BuildScmiUniqueMetricName(std::string_view{metric_key_name}, scmi_metric_declaration);
+      auto       metric_id   = BuildScmiMetricId(metric_name, *target);
+      ScmiOperationBuilder operation_builder{scmi_metric_declaration.de_id};
+      auto                 formula_result = BuildFormula(metric_declaration.formula);
+      if (!formula_result.has_value()) {
+        return std::unexpected(formula_result.error());
+      }
+      // Apply user formula first, then protocol-derived scaling.
+      auto composed_formula  = ComposeFormulas(std::move(formula_result.value()),
+                                               BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
+      auto metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
+      auto new_metric_config = std::make_unique<MetricConfig>(
+          metric_name, description, units, value_type, identifier, metric_type, collector_type.value(),
+          std::move(operation_builder), std::move(composed_formula), input_value_type, std::move(metric_groups),
+          std::move(metric_id));
+      metric_configs_on_targets.emplace(std::move(new_metric_config), std::vector<const ITarget*>{target});
     }
-    // Apply user formula first, then protocol-derived scaling.
-    auto composed_formula =
-        ComposeFormulas(std::move(formula_result.value()), BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
-
-    auto metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
-    auto new_metric_config = std::make_unique<MetricConfig>(std::string{metric_key_name}, description, units,
-                                                            value_type, identifier, metric_type, collector_type.value(),
-                                                            std::move(operation_builder), std::move(composed_formula),
-                                                            input_value_type, std::move(metric_groups), resolved_name);
-    metric_configs_on_targets.emplace(std::move(new_metric_config), applicable_targets);
   }
   return metric_configs_on_targets;
 }

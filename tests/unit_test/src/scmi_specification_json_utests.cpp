@@ -278,13 +278,13 @@ TEST_CASE("GetMetricRegistersScmiData", "[ConfigManager]") {
 
   auto scmi_metrics_definitions = GetMetricRegistersScmiData(current_temp_metric_declaration, scmi_specification);
   REQUIRE(scmi_metrics_definitions.size() == 4);
-  REQUIRE(scmi_metrics_definitions[0].GetFullyQualifiedName() == "VCPU_C0.TEMP_PRESENT");
+  REQUIRE(scmi_metrics_definitions[0].GetFullyQualifiedName() == "VCPU_C0.0.TEMP_PRESENT");
   REQUIRE(scmi_metrics_definitions[0].de_id == 0x00004441);
-  REQUIRE(scmi_metrics_definitions[1].GetFullyQualifiedName() == "VCPU_C1.TEMP_PRESENT");
+  REQUIRE(scmi_metrics_definitions[1].GetFullyQualifiedName() == "VCPU_C1.1.TEMP_PRESENT");
   REQUIRE(scmi_metrics_definitions[1].de_id == 0x00014441);
-  REQUIRE(scmi_metrics_definitions[2].GetFullyQualifiedName() == "VGPU.TEMP_PRESENT");
+  REQUIRE(scmi_metrics_definitions[2].GetFullyQualifiedName() == "VGPU.2.TEMP_PRESENT");
   REQUIRE(scmi_metrics_definitions[2].de_id == 0x00024441);
-  REQUIRE(scmi_metrics_definitions[3].GetFullyQualifiedName() == "VDDR.TEMP_PRESENT");
+  REQUIRE(scmi_metrics_definitions[3].GetFullyQualifiedName() == "VDDR.3.TEMP_PRESENT");
   REQUIRE(scmi_metrics_definitions[3].de_id == 0x00034441);
 }
 

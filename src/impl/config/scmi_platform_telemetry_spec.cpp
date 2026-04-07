@@ -104,9 +104,6 @@ static auto AddMetricInstancesIfScmiElementMatches(metrics::spec::MetricJsonDecl
     std::string alias_key        = std::format("{}.{}", component_string, instance_string);
     if (auto iter = aliases.find(alias_key); iter != aliases.end()) {
       component_string = iter->second;
-      // if we have a more descriptive alias that includes the instance, we can clear the instance string to avoid
-      // redundancy. e.g. "VOLTAGE_RAIL.0" -> "VCPU_C0", no need to have instance string "0" in this case.
-      instance_string = "";
     }
 
     // const auto [descriptive_name, descriptive_instance] = aliases.

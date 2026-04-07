@@ -274,12 +274,12 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
     for (auto& cfg_ptr : metric_configs_on_targets) {
       auto* fs_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(cfg_ptr.first.get());
       REQUIRE(fs_cfg != nullptr);
-      REQUIRE(fs_cfg->Name() == "P-State");
+      REQUIRE(fs_cfg->Name() == "P-State_AP_0");
       by_id[fs_cfg->Id()] = fs_cfg;
     }
-    REQUIRE(by_id.contains("AP.0.P_STATE"));  // fully qualified with component.index.name
+    REQUIRE(by_id.contains("P-State_AP_0__scmi__tlm-0"));
 
-    auto* ap0_cfg = by_id["AP.0.P_STATE"];
+    auto* ap0_cfg = by_id.at("P-State_AP_0__scmi__tlm-0");
     REQUIRE(ap0_cfg->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
 
     // Expect 4 unique values
@@ -601,8 +601,8 @@ TEST_CASE("ParseConfiguration missing identifier defaults to unknown/UNKNOWN", "
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
-  REQUIRE(metric_configs.begin()->first->Name() == "CPU Power");
-  REQUIRE(metric_configs.begin()->first->Id() == "AP.0.CPU_POWER");
+  REQUIRE(metric_configs.begin()->first->Name() == "CPU Power_AP_0");
+  REQUIRE(metric_configs.begin()->first->Id() == "CPU Power_AP_0__scmi__tlm-0");
   REQUIRE(metric_configs.begin()->first->Identifier() == ASTL_METRIC_IDENTIFIER_UNKNOWN);
 }
 
@@ -660,7 +660,7 @@ TEST_CASE("ParseConfiguration valid identifier string maps to enum", "[ConfigMan
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
   REQUIRE(metric_configs.begin()->first->Identifier() == ASTL_METRIC_IDENTIFIER_TEMPERATURE);
-  REQUIRE(metric_configs.begin()->first->Description() == "Temperature in Celsius");
+  REQUIRE(metric_configs.begin()->first->Description() == "Temperature in Celsius [component: AP instance: 0]");
 }
 
 TEST_CASE("CreateScmiMetricConfigs falls back to generated description when JSON description is empty",
@@ -696,7 +696,52 @@ TEST_CASE("CreateScmiMetricConfigs falls back to generated description when JSON
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
-  REQUIRE(metric_configs.begin()->first->Description() == "Temperature reading for AP.0.SOC_TEMP");
+  REQUIRE(metric_configs.begin()->first->Description() ==
+          "Temperature reading for SoC Temperature [component: AP instance: 0]");
+}
+
+TEST_CASE("CreateScmiMetricConfigs scopes SCMI metric ids per target", "[ConfigManager][Identifier]") {
+  astl::metrics::spec::MetricJsonDeclaration metric_declaration;
+  metric_declaration.description              = "CPU power consumption";
+  metric_declaration.metric_type              = "value";
+  metric_declaration.identifier               = "POWER";
+  metric_declaration.collection.protocol      = "scmi";
+  metric_declaration.collection.register_name = "CPU_POWER";
+
+  astl::scmi::spec::ScmiSpecification spec;
+  spec.members = {
+      {.count        = 1,
+       .start_offset = 0,
+       .block_size   = 32,
+       .metrics      = {{"CPU_POWER",
+                         {.base_de_id           = 0xabcd,
+                          .name                 = "CPU_POWER",
+                          .component            = "AP",
+                          .description          = "CPU Power",
+                          .unit                 = "W",
+                          .base10_unit_modifier = 0,
+                          .rel_offset           = 0x00}}}}
+  };
+
+  astl::Target target_tlm0("scmi-mocksysfs-tlm-0", "test target 0", astl::CollectorType::SCMI, nullptr, std::nullopt,
+                           std::string{"tlm-0"});
+  astl::Target target_tlm1("scmi-mocksysfs-tlm-1", "test target 1", astl::CollectorType::SCMI, nullptr, std::nullopt,
+                           std::string{"tlm-1"});
+  std::vector<const astl::ITarget*> targets{&target_tlm0, &target_tlm1};
+
+  auto metric_configs_result =
+      astl::metrics::spec::CreateScmiMetricConfigs("CPU Power", metric_declaration, spec, targets);
+  REQUIRE(metric_configs_result);
+
+  std::unordered_set<std::string> metric_ids;
+  for (auto& [config, scoped_targets] : *metric_configs_result) {
+    REQUIRE(config->Name() == "CPU Power_AP_0");
+    REQUIRE(scoped_targets.size() == 1);
+    REQUIRE(metric_ids.insert(config->Id()).second);
+  }
+
+  REQUIRE(metric_ids.contains("CPU Power_AP_0__scmi__tlm-0"));
+  REQUIRE(metric_ids.contains("CPU Power_AP_0__scmi__tlm-1"));
 }
 
 TEST_CASE("CreateScmiMetricConfigs maps Count units to ASTL_UNITS_COUNT", "[ConfigManager][Units]") {

@@ -75,6 +75,54 @@ struct MetricAndCounterConfigurations {
 
 using MetricGroupDescriptionMap = MetricManager::MetricGroupDescriptionMap;
 
+static auto GetScmiDataEventDirectoryPath(const AstlConfiguration& configuration, const ITarget& target,
+                                          ScmiDataEventId data_event_id, bool wide_hex) -> std::filesystem::path {
+  const auto telemetry_subdirectory = GetScmiTelemetrySubdirectory(target);
+  const auto folder_name = wide_hex ? std::format("0x{:08X}", data_event_id) : std::format("0x{:04X}", data_event_id);
+  return configuration.scmi_sysfs_telemetry_root_path / telemetry_subdirectory / "des" / folder_name;
+}
+
+static auto FilterUnavailableScmiMetricConfigs(const AstlConfiguration& configuration, MetricConfigOnTargets& configs)
+    -> void {
+  std::erase_if(configs, [&configuration](auto& config_entry) {
+    const auto& metric_config     = config_entry.first;
+    auto&       targets           = config_entry.second;
+    const auto* operation_builder = std::get_if<ScmiOperationBuilder>(&metric_config->GetOperationBuilder());
+
+    std::erase_if(targets, [&](const ITarget* target) {
+      if (target == nullptr || target->GetCollectorType() != CollectorType::SCMI) {
+        return false;
+      }
+      if (operation_builder == nullptr) {
+        return false;
+      }
+
+      const auto data_event_id = operation_builder->GetDataEventId();
+
+      // Support both real-kernel 32-bit DE directory naming (0xXXXXXXXX) and
+      // legacy/mocksysfs 16-bit naming (0xXXXX).
+      const auto data_event_dir_path_wide = GetScmiDataEventDirectoryPath(configuration, *target, data_event_id, true);
+      const auto data_event_dir_path_narrow =
+          GetScmiDataEventDirectoryPath(configuration, *target, data_event_id, false);
+      std::error_code ec{};
+      const bool      wide_exists = std::filesystem::exists(data_event_dir_path_wide, ec);
+      ec.clear();
+      const bool narrow_exists = std::filesystem::exists(data_event_dir_path_narrow, ec);
+      if (wide_exists || narrow_exists) {
+        return false;
+      }
+
+      ASTL_LOG_WARNING(
+          "Skipping SCMI metric '{}' (id: '{}') on target '{}' because DE directory '{}' (or legacy '{}') is missing",
+          metric_config->Name(), metric_config->Id(), target->Name(), data_event_dir_path_wide.string(),
+          data_event_dir_path_narrow.string());
+      return true;
+    });
+
+    return targets.empty();
+  });
+}
+
 /** @brief helper function template to parse a given path as a given json structure type
  *
  * @param SpecType - template param specifying the type to try and parse to
@@ -126,7 +174,8 @@ static auto LoadMetricGroupDescriptions(const AstlConfiguration& configuration)
  * @brief helper function to create MetricConfig objects for all SCMI metrics defined in the
  *        given SCMI specification and matching the given metric declaration from the top-level config file.
  */
-static auto CreateScmiConfigurationsForMetrics(const scmi::spec::ScmiSpecification&     scmi_specification,
+static auto CreateScmiConfigurationsForMetrics(const AstlConfiguration&                 configuration,
+                                               const scmi::spec::ScmiSpecification&     scmi_specification,
                                                const metrics::spec::MetricsDeclaration& metric_declarations,
                                                const std::vector<const ITarget*>&       applicable_targets)
     -> std::expected<MetricConfigOnTargets, astl_status_code> {
@@ -146,6 +195,7 @@ static auto CreateScmiConfigurationsForMetrics(const scmi::spec::ScmiSpecificati
     auto metric_configs_result =
         metrics::spec::CreateScmiMetricConfigs(metric_name, metric_declaration, scmi_specification, applicable_targets);
     if (metric_configs_result.has_value()) {
+      FilterUnavailableScmiMetricConfigs(configuration, metric_configs_result.value());
       // combine the results into the output map
       configurations.merge(metric_configs_result.value());
     } else {
@@ -160,7 +210,8 @@ static auto CreateScmiConfigurationsForMetrics(const scmi::spec::ScmiSpecificati
  * @brief helper function to create MetricConfig objects for all SCMI counters defined in the
  *       given SCMI specification and underlying the given metric declaration from the top-level config file.
  */
-static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecification&     scmi_specification,
+static auto CreateScmiConfigurationsForCounters(const AstlConfiguration&                 configuration,
+                                                const scmi::spec::ScmiSpecification&     scmi_specification,
                                                 const metrics::spec::MetricsDeclaration& metric_declarations,
                                                 const std::vector<const ITarget*>&       applicable_targets)
     -> std::expected<MetricConfigOnTargets, astl_status_code> {
@@ -195,6 +246,7 @@ static auto CreateScmiConfigurationsForCounters(const scmi::spec::ScmiSpecificat
       configurations_on_targets.emplace(std::move(new_counter_config), applicable_targets);
     }
   }
+  FilterUnavailableScmiMetricConfigs(configuration, configurations_on_targets);
   // @todo(ASTL-236) add support for counters specified in astl configuration separate from metrics.
   return configurations_on_targets;
 }
@@ -386,16 +438,16 @@ static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfigurati
     }
     const auto& metric_declarations = metric_declaration_result.value();
     // convert all of the metric declarations in the top-level config file into usable MetricConfig objects
-    auto metric_configs_result =
-        CreateScmiConfigurationsForMetrics(scmi_specification, metric_declarations, spec_info.applicable_targets);
+    auto metric_configs_result = CreateScmiConfigurationsForMetrics(configuration, scmi_specification,
+                                                                    metric_declarations, spec_info.applicable_targets);
     if (!metric_configs_result.has_value()) {
       return std::unexpected(metric_configs_result.error());
     }
     // after this, the metric_configurations will include all metrics from the current UUID
     metric_and_counter_configurations.metric_configurations.merge(std::move(metric_configs_result.value()));
     // now combine the counters underlying those metrics for the current UUID
-    auto counter_configs_result =
-        CreateScmiConfigurationsForCounters(scmi_specification, metric_declarations, spec_info.applicable_targets);
+    auto counter_configs_result = CreateScmiConfigurationsForCounters(
+        configuration, scmi_specification, metric_declarations, spec_info.applicable_targets);
     if (!counter_configs_result.has_value()) {
       return std::unexpected(counter_configs_result.error());
     }

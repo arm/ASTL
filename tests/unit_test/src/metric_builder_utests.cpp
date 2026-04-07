@@ -29,6 +29,11 @@ namespace fs = std::filesystem;
 
 namespace {
 
+enum class ScmiDeDirectoryFormat {
+  K_NARROW,
+  K_WIDE,
+};
+
 void WriteTextFile(const fs::path& path, std::string_view contents) {
   std::error_code ec;
   fs::create_directories(path.parent_path(), ec);
@@ -44,15 +49,17 @@ auto MakeConfigurationForTestRoot(const fs::path& config_root) -> astl::AstlConf
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
 
-  auto configuration                   = configuration_result.value();
-  configuration.config_dir_path        = config_root;
-  configuration.metrics_dir_path       = config_root / "metrics";
-  configuration.groups_dir_path        = config_root / "groups";
-  configuration.scmi_specification_dir = config_root / "scmi" / "public";
+  auto configuration                           = configuration_result.value();
+  configuration.config_dir_path                = config_root;
+  configuration.metrics_dir_path               = config_root / "metrics";
+  configuration.groups_dir_path                = config_root / "groups";
+  configuration.scmi_specification_dir         = config_root / "scmi" / "public";
+  configuration.scmi_sysfs_telemetry_root_path = config_root / "scmi_sysfs";
   return configuration;
 }
 
-void WriteMinimalScmiFixture(const fs::path& config_root) {
+void WriteMinimalScmiFixture(const fs::path&       config_root,
+                             ScmiDeDirectoryFormat de_directory_format = ScmiDeDirectoryFormat::K_NARROW) {
   WriteTextFile(config_root / "scmi" / "public" / "repometa.json", R"json({
   "last_updated": "2026-03-16",
   "uuid_mapping": {
@@ -137,6 +144,11 @@ void WriteMinimalScmiFixture(const fs::path& config_root) {
     }
   }
 })json");
+
+  std::error_code   ec;
+  const auto* const de_directory_name = de_directory_format == ScmiDeDirectoryFormat::K_WIDE ? "0x00009E4F" : "0x9E4F";
+  fs::create_directories(config_root / "scmi_sysfs" / "tlm-0" / "des" / de_directory_name, ec);
+  REQUIRE(!ec);
 }
 
 void WriteSerializedMetricManagerCache(const fs::path& cache_dir, const astl::ITarget* target) {
@@ -416,7 +428,43 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from tempora
   astl_metric_props_t metric_props{};
   metric_props.size = sizeof(astl_metric_props_t);
   REQUIRE(result.value()->GetProperties((*metrics_or_error)[0], &metric_props) == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string{metric_props.name} == "SoC Power");
+  REQUIRE(std::string{metric_props.name} == "SoC Power_SOC_0");
+
+  astl_counter_props_t counter_props{};
+  counter_props.size = sizeof(astl_counter_props_t);
+  REQUIRE(result.value()->GetCounterProperties((*counters_or_error)[0], &counter_props) == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::string{counter_props.name} == "ENERGY_COUNTER");
+}
+
+TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from wide-only DE directory fixture",
+          "[MetricBuilder]") {
+  const fs::path config_root = fs::temp_directory_path() / "astl_metric_builder_scmi_fixture_wide_only";
+  TempFileGuard  config_guard(config_root);
+  WriteMinimalScmiFixture(config_root, ScmiDeDirectoryFormat::K_WIDE);
+
+  auto configuration = MakeConfigurationForTestRoot(config_root);
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "unit-test target", "tlm-0", nullptr,
+                                                       "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
+
+  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+
+  REQUIRE(result.has_value());
+  REQUIRE(result.value() != nullptr);
+
+  auto metrics_or_error = result.value()->GetAvailableMetrics(targets[0].get());
+  REQUIRE(metrics_or_error.has_value());
+  REQUIRE(metrics_or_error->size() == 1);
+
+  auto counters_or_error = result.value()->GetAvailableCounters(targets[0].get());
+  REQUIRE(counters_or_error.has_value());
+  REQUIRE(counters_or_error->size() == 1);
+
+  astl_metric_props_t metric_props{};
+  metric_props.size = sizeof(astl_metric_props_t);
+  REQUIRE(result.value()->GetProperties((*metrics_or_error)[0], &metric_props) == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::string{metric_props.name} == "SoC Power_SOC_0");
 
   astl_counter_props_t counter_props{};
   counter_props.size = sizeof(astl_counter_props_t);

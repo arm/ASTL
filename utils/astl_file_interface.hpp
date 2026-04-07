@@ -139,41 +139,52 @@ class FileInterface {
    * @return ASTL_STATUS_SUCCESS if the file is successfully read, or an error code otherwise.
    */
   astl_status_code Read(const std::filesystem::path &path, std::string &opString) {
-    const auto resolved_path   = Resolve(path);
-    auto [stream_it, inserted] = _read_streams.try_emplace(resolved_path);
-    if (inserted) {
-      stream_it->second.open(resolved_path);
-    }
+    try {
+      const auto resolved_path   = Resolve(path);
+      auto [stream_it, inserted] = _read_streams.try_emplace(resolved_path);
+      if (inserted) {
+        stream_it->second.open(resolved_path);
+      }
 
-    auto &file = stream_it->second;
-    if (!file.is_open()) {
-      _read_streams.erase(stream_it);
-      return ASTL_STATUS_FILE_OPEN_FAILED;
-    }
-
-    // Freshly opened streams already start at the beginning. Rewinding them can
-    // fail for non-seekable files such as FIFOs, which would otherwise force an
-    // unnecessary reopen before the first read.
-    if (!inserted) {
-      file.clear();
-      file.seekg(0, std::ios::beg);
-    }
-    if (!inserted && !file.good()) {
-      file.close();
-      file.open(resolved_path);
+      auto &file = stream_it->second;
       if (!file.is_open()) {
         _read_streams.erase(stream_it);
         return ASTL_STATUS_FILE_OPEN_FAILED;
       }
-    }
 
-    opString.assign(std::istreambuf_iterator<char>(file), {});
-    if (file.bad()) {
-      file.close();
-      _read_streams.erase(stream_it);
+      // Freshly opened streams already start at the beginning. Rewinding them can
+      // fail for non-seekable files such as FIFOs, which would otherwise force an
+      // unnecessary reopen before the first read.
+      if (!inserted) {
+        file.clear();
+        file.seekg(0, std::ios::beg);
+      }
+      if (!inserted && !file.good()) {
+        file.close();
+        file.open(resolved_path);
+        if (!file.is_open()) {
+          _read_streams.erase(stream_it);
+          return ASTL_STATUS_FILE_OPEN_FAILED;
+        }
+      }
+
+      opString.assign(std::istreambuf_iterator<char>(file), {});
+      if (file.bad()) {
+        file.close();
+        _read_streams.erase(stream_it);
+        return ASTL_STATUS_FILE_ERROR;
+      }
+      return ASTL_STATUS_SUCCESS;
+    } catch (const std::bad_alloc &e) {
+      ASTL_LOG_ERROR("Read: {}", e.what());
+      return ASTL_STATUS_OUT_OF_MEMORY;
+    } catch (const std::ios_base::failure &e) {
+      ASTL_LOG_ERROR("Read: {}", e.what());
+      return ASTL_STATUS_FILE_ERROR;
+    } catch (const std::exception &e) {
+      ASTL_LOG_ERROR("Read: {}", e.what());
       return ASTL_STATUS_FILE_ERROR;
     }
-    return ASTL_STATUS_SUCCESS;
   }
 
   /**

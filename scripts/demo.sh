@@ -19,7 +19,7 @@ echo "ASTL_ROOT = ${ASTL_ROOT}"
 export ASTL_MOCKSYSFS_TLM_JSON_PATH="${ASTL_ROOT}/tools/mock_sysfs/config/tlm.json"
 echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = ${ASTL_MOCKSYSFS_TLM_JSON_PATH}"
 MOCK_SYSFS="${ASTL_ROOT}/build/debug/bin/MockSysfs"
-MOUNT_POINT=~/tmp/fuse
+MOUNT_POINT="${ASTL_MOCKSYSFS_MOUNT_POINT:-${TMPDIR:-/tmp}/astl-mocksysfs}"
 
 # Constants for startup detection
 TIMEOUT=30
@@ -43,7 +43,7 @@ DURATION=10
 INTERVAL=500
 SAVE_PATH=""
 LOAD_PATH=""
-TARGET_NAME="${SCMI_TLM_CHIP_TARGET:-scmi_tlm-0}"
+TARGET_NAME="${SCMI_TLM_CHIP_TARGET:-scmi-mocksysfs-tlm-0}"
 
 # Parse command-line arguments for mode, interval, and duration (using '=' syntax)
 while [[ $# -gt 0 ]]; do
@@ -79,7 +79,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-mkdir -p "${TELEMETRY_ROOT}"
+mkdir -p "${MOUNT_POINT}"
 
 LOG_DIR="${ASTL_ROOT}"
 SYSFS_LOG="${LOG_DIR}/sysfs.log"
@@ -99,6 +99,9 @@ cleanup() {
 	echo "🛑 Stopping MockSysfs (PID=${SYSFS_PID})..."
 	kill -SIGTERM "${SYSFS_PID}" 2>/dev/null || true
 	wait "${SYSFS_PID}" 2>/dev/null || true
+	if mount | grep -q "on ${MOUNT_POINT} "; then
+		fusermount3 -u "${MOUNT_POINT}" 2>/dev/null || fusermount -u "${MOUNT_POINT}" 2>/dev/null || true
+	fi
 }
 trap cleanup EXIT
 
@@ -159,6 +162,8 @@ fi
 
 # force ASTL to use our mocksysfs mount point for the SCMI sysfs rather than the default /sys/fs/arm_telemetry
 export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="${TELEMETRY_ROOT}"
+export ASTL_CONFIG_DIR="${ASTL_ROOT}/build/debug/lib/config"
+echo "ASTL_CONFIG_DIR = ${ASTL_CONFIG_DIR}"
 
 # Set CSV output file for summary data
 export ASTL_OUTPUT_SUMMARY_CSV="${LOG_DIR}/astl_summary.csv"

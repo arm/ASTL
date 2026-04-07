@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <format>
+#include <type_traits>
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
@@ -11,6 +12,7 @@
 #include "metric/delta_metric.hpp"
 #include "metric/event_metric.hpp"
 #include "metric/finite_set_metric.hpp"
+#include "metric/formula_builder.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/rate_metric.hpp"
 #include "metric/sampled_value_metric.hpp"
@@ -20,6 +22,174 @@
 namespace astl::ProtobufSerDes {
 
 namespace detail {
+
+static auto ToProtoUnits(astl_units_t units) -> astl::protobuf::AstlUnits {
+  return units == ASTL_UNITS_UNKNOWN ? astl::protobuf::ASTL_UNITS_UNKNOWN_PROTO
+                                     : static_cast<astl::protobuf::AstlUnits>(units);
+}
+
+static auto ToProtoValueType(astl_value_type_t value_type) -> astl::protobuf::AstlValueType {
+  return value_type == ASTL_VALUE_UNKNOWN ? astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
+                                          : static_cast<astl::protobuf::AstlValueType>(value_type);
+}
+
+static auto ToProtoMetricType(astl_metric_type_t metric_type) -> astl::protobuf::AstlMetricType {
+  return metric_type == ASTL_METRIC_UNKNOWN ? astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
+                                            : static_cast<astl::protobuf::AstlMetricType>(metric_type);
+}
+
+static auto ToProtoMetricIdentifier(astl_metric_identifier_t identifier) -> astl::protobuf::AstlMetricIdentifier {
+  return identifier == ASTL_METRIC_IDENTIFIER_UNKNOWN ? astl::protobuf::ASTL_METRIC_IDENTIFIER_UNKNOWN_PROTO
+                                                      : static_cast<astl::protobuf::AstlMetricIdentifier>(identifier);
+}
+
+static auto ToProtoCollectorType(CollectorType collector_type) -> astl::protobuf::CollectorType {
+  return collector_type == CollectorType::UNKNOWN ? astl::protobuf::COLLECTOR_TYPE_UNKNOWN
+                                                  : static_cast<astl::protobuf::CollectorType>(collector_type);
+}
+
+static auto FromProtoUnits(astl::protobuf::AstlUnits units) -> astl_units_t {
+  return units == astl::protobuf::ASTL_UNITS_UNKNOWN_PROTO ? ASTL_UNITS_UNKNOWN : static_cast<astl_units_t>(units);
+}
+
+static auto FromProtoValueType(astl::protobuf::AstlValueType value_type) -> astl_value_type_t {
+  return value_type == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO ? ASTL_VALUE_UNKNOWN
+                                                                : static_cast<astl_value_type_t>(value_type);
+}
+
+static auto FromProtoMetricIdentifier(astl::protobuf::AstlMetricIdentifier identifier) -> astl_metric_identifier_t {
+  return identifier == astl::protobuf::ASTL_METRIC_IDENTIFIER_UNKNOWN_PROTO
+             ? ASTL_METRIC_IDENTIFIER_UNKNOWN
+             : static_cast<astl_metric_identifier_t>(identifier);
+}
+
+static auto FromProtoMetricType(astl::protobuf::AstlMetricType metric_type) -> astl_metric_type_t {
+  return metric_type == astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO ? ASTL_METRIC_UNKNOWN
+                                                                  : static_cast<astl_metric_type_t>(metric_type);
+}
+
+static auto FromProtoCollectorType(astl::protobuf::CollectorType collector_type) -> CollectorType {
+  return collector_type == astl::protobuf::COLLECTOR_TYPE_UNKNOWN ? CollectorType::UNKNOWN
+                                                                  : static_cast<CollectorType>(collector_type);
+}
+
+static auto SerializeFormulaStep(const FormulaPipeline::PipelineStep& step, astl::protobuf::FormulaStep* out)
+    -> astl_status_code {
+  return std::visit(
+      [out](const auto& impl) -> astl_status_code {
+        using T = std::decay_t<decltype(impl)>;
+        if constexpr (std::is_same_v<T, IdentityFormula>) {
+          out->set_identity(true);
+          return ASTL_STATUS_SUCCESS;
+        }
+        if constexpr (std::is_same_v<T, ScalingFormula>) {
+          auto* scaling = out->mutable_scaling();
+          scaling->set_numerator(impl.GetNumerator());
+          scaling->set_denominator(impl.GetDenominator());
+          return ASTL_STATUS_SUCCESS;
+        }
+        if constexpr (std::is_same_v<T, ExpressionFormula>) {
+          out->set_expression(std::string{impl.GetExpression()});
+          return ASTL_STATUS_SUCCESS;
+        }
+        return ASTL_STATUS_INTERNAL_ERROR;
+      },
+      step);
+}
+
+static auto SerializeFormula(const AnyFormula& formula, astl::protobuf::MetricFormula* out) -> astl_status_code {
+  return std::visit(
+      [out](const auto& impl) -> astl_status_code {
+        using T = std::decay_t<decltype(impl)>;
+        if constexpr (std::is_same_v<T, IdentityFormula>) {
+          out->mutable_identity();
+          return ASTL_STATUS_SUCCESS;
+        }
+        if constexpr (std::is_same_v<T, ScalingFormula>) {
+          auto* scaling = out->mutable_scaling();
+          scaling->set_numerator(impl.GetNumerator());
+          scaling->set_denominator(impl.GetDenominator());
+          return ASTL_STATUS_SUCCESS;
+        }
+        if constexpr (std::is_same_v<T, ExpressionFormula>) {
+          out->mutable_expression()->set_expression(std::string{impl.GetExpression()});
+          return ASTL_STATUS_SUCCESS;
+        }
+        if constexpr (std::is_same_v<T, FormulaPipeline>) {
+          auto* pipeline = out->mutable_pipeline();
+          for (const auto& step : impl.Steps()) {
+            auto status = SerializeFormulaStep(step, pipeline->add_steps());
+            if (status != ASTL_STATUS_SUCCESS) {
+              return status;
+            }
+          }
+          return ASTL_STATUS_SUCCESS;
+        }
+        return ASTL_STATUS_INTERNAL_ERROR;
+      },
+      formula);
+}
+
+static auto DeserializeFormulaStep(const astl::protobuf::FormulaStep& step)
+    -> std::expected<FormulaPipeline::PipelineStep, astl_status_code> {
+  switch (step.step_case()) {
+    case astl::protobuf::FormulaStep::kIdentity:
+      return FormulaPipeline::PipelineStep{IdentityFormula{}};
+    case astl::protobuf::FormulaStep::kScaling: {
+      const auto& scaling = step.scaling();
+      return FormulaPipeline::PipelineStep{
+          ScalingFormula{scaling.numerator(), scaling.denominator()}
+      };
+    }
+    case astl::protobuf::FormulaStep::kExpression: {
+      auto expression_or_err = ExpressionFormula::Create(step.expression());
+      if (!expression_or_err) {
+        return std::unexpected(expression_or_err.error());
+      }
+      return FormulaPipeline::PipelineStep{std::move(expression_or_err.value())};
+    }
+    case astl::protobuf::FormulaStep::STEP_NOT_SET:
+    default:
+      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+}
+
+static auto DeserializeFormula(const astl::protobuf::MetricFormula& serialized_formula)
+    -> std::expected<AnyFormula, astl_status_code> {
+  switch (serialized_formula.formula_case()) {
+    case astl::protobuf::MetricFormula::kIdentity:
+      return AnyFormula{IdentityFormula{}};
+    case astl::protobuf::MetricFormula::kScaling: {
+      const auto& scaling = serialized_formula.scaling();
+      return AnyFormula{
+          ScalingFormula{scaling.numerator(), scaling.denominator()}
+      };
+    }
+    case astl::protobuf::MetricFormula::kExpression: {
+      auto expression_or_err = ExpressionFormula::Create(serialized_formula.expression().expression());
+      if (!expression_or_err) {
+        return std::unexpected(expression_or_err.error());
+      }
+      return AnyFormula{std::move(expression_or_err.value())};
+    }
+    case astl::protobuf::MetricFormula::kPipeline: {
+      std::vector<FormulaPipeline::PipelineStep> steps;
+      const auto&                                pipeline = serialized_formula.pipeline();
+      steps.reserve(static_cast<size_t>(pipeline.steps_size()));
+      for (const auto& step : pipeline.steps()) {
+        auto step_or_err = DeserializeFormulaStep(step);
+        if (!step_or_err) {
+          return std::unexpected(step_or_err.error());
+        }
+        steps.push_back(std::move(step_or_err.value()));
+      }
+      return steps.empty() ? AnyFormula{IdentityFormula{}} : AnyFormula{FormulaPipeline{std::move(steps)}};
+    }
+    case astl::protobuf::MetricFormula::FORMULA_NOT_SET:
+    default:
+      return AnyFormula{IdentityFormula{}};
+  }
+}
 
 /**
  * @brief Serializes a MetricConfig into a protobuf representation.
@@ -45,28 +215,22 @@ static auto SerializeBasicMetricConfig(const MetricConfig& config)
 
   out.set_metric_name(config.Name());
   out.set_description(config.Description());
-  out.set_units(config.Units() == ASTL_UNITS_UNKNOWN ? astl::protobuf::ASTL_UNITS_UNKNOWN_PROTO
-                                                     : static_cast<astl::protobuf::AstlUnits>(config.Units()));
-  out.set_value_type(config.ValueType() == ASTL_VALUE_UNKNOWN
-                         ? astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
-                         : static_cast<astl::protobuf::AstlValueType>(config.ValueType()));
-  out.set_input_value_type(config.InputValueType() == ASTL_VALUE_UNKNOWN
-                               ? astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
-                               : static_cast<astl::protobuf::AstlValueType>(config.InputValueType()));
-  out.set_metric_type(config.MetricType() == ASTL_METRIC_UNKNOWN
-                          ? astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
-                          : static_cast<astl::protobuf::AstlMetricType>(config.MetricType()));
-  out.set_identifier(config.Identifier() == ASTL_METRIC_IDENTIFIER_UNKNOWN
-                         ? astl::protobuf::ASTL_METRIC_IDENTIFIER_UNKNOWN_PROTO
-                         : static_cast<astl::protobuf::AstlMetricIdentifier>(config.Identifier()));
+  out.set_units(ToProtoUnits(config.Units()));
+  out.set_value_type(ToProtoValueType(config.ValueType()));
+  out.set_input_value_type(ToProtoValueType(config.InputValueType()));
+  out.set_metric_type(ToProtoMetricType(config.MetricType()));
+  out.set_identifier(ToProtoMetricIdentifier(config.Identifier()));
 
   for (const auto& group : config.MetricGroups()) {
     out.add_metric_groups(group);
   }
 
-  out.set_collector_type(config.GetCollectorType() == CollectorType::UNKNOWN
-                             ? astl::protobuf::COLLECTOR_TYPE_UNKNOWN
-                             : static_cast<astl::protobuf::CollectorType>(config.GetCollectorType()));
+  out.set_collector_type(ToProtoCollectorType(config.GetCollectorType()));
+  auto formula_status = SerializeFormula(config.GetFormula(), out.mutable_formula());
+  if (formula_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("SerializeBasicMetricConfig: failed to serialize formula for metric {}", config.Id());
+    return std::unexpected(formula_status);
+  }
 
   return out;
 }
@@ -141,35 +305,32 @@ static auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& pro
   const std::string& name        = proto_cfg.metric_name();
   const std::string& description = proto_cfg.description();
 
-  const auto units            = proto_cfg.units() == astl::protobuf::ASTL_UNITS_UNKNOWN_PROTO
-                                    ? ASTL_UNITS_UNKNOWN
-                                    : static_cast<astl_units_t>(proto_cfg.units());
-  const auto value_type       = proto_cfg.value_type() == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
-                                    ? ASTL_VALUE_UNKNOWN
-                                    : static_cast<astl_value_type_t>(proto_cfg.value_type());
-  const auto input_value_type = proto_cfg.input_value_type() == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
-                                    ? ASTL_VALUE_UNKNOWN
-                                    : static_cast<astl_value_type_t>(proto_cfg.input_value_type());
-  const auto identifier       = proto_cfg.identifier() == astl::protobuf::ASTL_METRIC_IDENTIFIER_UNKNOWN_PROTO
-                                    ? ASTL_METRIC_IDENTIFIER_UNKNOWN
-                                    : static_cast<astl_metric_identifier_t>(proto_cfg.identifier());
-  const auto metric_type      = proto_cfg.metric_type() == astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
-                                    ? ASTL_METRIC_UNKNOWN
-                                    : static_cast<astl_metric_type_t>(proto_cfg.metric_type());
-  const auto collector        = proto_cfg.collector_type() == astl::protobuf::COLLECTOR_TYPE_UNKNOWN
-                                    ? CollectorType::UNKNOWN
-                                    : static_cast<CollectorType>(proto_cfg.collector_type());
+  const auto units            = FromProtoUnits(proto_cfg.units());
+  const auto value_type       = FromProtoValueType(proto_cfg.value_type());
+  const auto input_value_type = FromProtoValueType(proto_cfg.input_value_type());
+  const auto identifier       = FromProtoMetricIdentifier(proto_cfg.identifier());
+  const auto metric_type      = FromProtoMetricType(proto_cfg.metric_type());
+  const auto collector        = FromProtoCollectorType(proto_cfg.collector_type());
+  AnyFormula formula          = IdentityFormula{};
+  if (proto_cfg.has_formula()) {
+    auto formula_or_err = DeserializeFormula(proto_cfg.formula());
+    if (!formula_or_err) {
+      ASTL_LOG_ERROR("DeserializeBasicMetricConfig: failed to deserialize formula for metric {}", metric_id);
+      return std::unexpected(formula_or_err.error());
+    }
+    formula = std::move(formula_or_err.value());
+  }
 
   if (proto_cfg.metric_groups_size() == 0) {
     auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, identifier, metric_type, collector,
-                                              NullOperationBuilder{}, IdentityFormula{}, input_value_type,
+                                              NullOperationBuilder{}, std::move(formula), input_value_type,
                                               std::vector<std::string>{}, metric_id);
     return cfg;
   }
 
   std::vector<std::string> groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
   auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, identifier, metric_type, collector,
-                                            NullOperationBuilder{}, IdentityFormula{}, input_value_type,
+                                            NullOperationBuilder{}, std::move(formula), input_value_type,
                                             std::move(groups), metric_id);
   return cfg;
 }
@@ -185,24 +346,12 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   const std::string& name                 = proto_cfg.metric_name();
   const std::string& description          = proto_cfg.description();
 
-  const auto               units            = proto_cfg.units() == astl::protobuf::ASTL_UNITS_UNKNOWN_PROTO
-                                                  ? ASTL_UNITS_UNKNOWN
-                                                  : static_cast<astl_units_t>(proto_cfg.units());
-  const auto               value_type       = proto_cfg.value_type() == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
-                                                  ? ASTL_VALUE_UNKNOWN
-                                                  : static_cast<astl_value_type_t>(proto_cfg.value_type());
-  const auto               input_value_type = proto_cfg.input_value_type() == astl::protobuf::ASTL_VALUE_UNKNOWN_PROTO
-                                                  ? ASTL_VALUE_UNKNOWN
-                                                  : static_cast<astl_value_type_t>(proto_cfg.input_value_type());
-  const auto               identifier  = proto_cfg.identifier() == astl::protobuf::ASTL_METRIC_IDENTIFIER_UNKNOWN_PROTO
-                                             ? ASTL_METRIC_IDENTIFIER_UNKNOWN
-                                             : static_cast<astl_metric_identifier_t>(proto_cfg.identifier());
-  const auto               metric_type = proto_cfg.metric_type() == astl::protobuf::ASTL_METRIC_UNKNOWN_PROTO
-                                             ? ASTL_METRIC_UNKNOWN
-                                             : static_cast<astl_metric_type_t>(proto_cfg.metric_type());
-  const auto               collector   = proto_cfg.collector_type() == astl::protobuf::COLLECTOR_TYPE_UNKNOWN
-                                             ? CollectorType::UNKNOWN
-                                             : static_cast<CollectorType>(proto_cfg.collector_type());
+  const auto               units            = FromProtoUnits(proto_cfg.units());
+  const auto               value_type       = FromProtoValueType(proto_cfg.value_type());
+  const auto               input_value_type = FromProtoValueType(proto_cfg.input_value_type());
+  const auto               identifier       = FromProtoMetricIdentifier(proto_cfg.identifier());
+  const auto               metric_type      = FromProtoMetricType(proto_cfg.metric_type());
+  const auto               collector        = FromProtoCollectorType(proto_cfg.collector_type());
   std::vector<std::string> metric_groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
 
   FiniteSetMetricConfig::FiniteSet      finite_set;
@@ -220,6 +369,14 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   }
 
   AnyFormula formula = IdentityFormula{};
+  if (proto_cfg.has_formula()) {
+    auto formula_or_err = DeserializeFormula(proto_cfg.formula());
+    if (!formula_or_err) {
+      ASTL_LOG_ERROR("DeserializeFiniteSetMetricConfig: failed to deserialize formula for metric {}", metric_id);
+      return std::unexpected(formula_or_err.error());
+    }
+    formula = std::move(formula_or_err.value());
+  }
   auto cfg = std::make_unique<FiniteSetMetricConfig>(name, description, units, value_type, metric_type, identifier,
                                                      collector, NullOperationBuilder{}, std::move(finite_set),
                                                      std::move(state_info), std::move(formula), input_value_type,
