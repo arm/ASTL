@@ -795,6 +795,8 @@ TEST_CASE("Orchestrator-FullLifecyclePositive", "[Orchestrator][lifecycle]") {
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
+  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
@@ -951,6 +953,8 @@ TEST_CASE("Orchestrator-ConfigureMetricCollection resets per-target cached artif
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
+  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_metric, Name()).RETURN(metric_name);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
@@ -1020,6 +1024,8 @@ TEST_CASE("Orchestrator-StartCollectionPaused transitions directly to paused", "
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
+  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
@@ -1077,6 +1083,8 @@ TEST_CASE("Orchestrator-StartCollectionPaused rolls back when pause is unsupport
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
+  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
@@ -1130,6 +1138,8 @@ TEST_CASE("Orchestrator-StartFailureDoesNotStickStartedState", "[Orchestrator][l
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
+  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
@@ -1186,6 +1196,8 @@ TEST_CASE("Orchestrator-StartSetsStartingStateDuringCollectorStart", "[Orchestra
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
+  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
 
@@ -1256,6 +1268,8 @@ TEST_CASE("Orchestrator-StopDuringStartingReturnsInvalidStateTransition", "[Orch
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
+  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
 

@@ -296,6 +296,16 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_c
     std::lock_guard state_lock(_collection_state_mutex);
     _target_collection_states[target] = TargetCollectionState::CONFIGURED;
   }
+
+  // Register the synthetic pause-event metric for this target (no-op if already registered).
+  const auto pause_metric_status = RegisterPauseResumeEventMetricForTarget(target);
+  if (pause_metric_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_WARNING(
+        "Orchestrator: pause-event metric registration failed for '{}' ({}); samples during this pause/resume window "
+        "will not be ignored as expected.",
+        target->Name(), astlStatusString(pause_metric_status));
+  }
+
   return status;
 }
 
@@ -834,6 +844,75 @@ auto Orchestrator::SinkProcessedSamples(const ITarget *target, const IMetric *me
     }
   }
 
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::GetPauseMarkersSnapshot() const -> PauseMarkersMap {
+  // Resolve each target's pause-event metric directly from MetricManager — no opaque handle
+  std::unordered_map<const ITarget *, const IMetric *> target_to_pause_metric;
+  {
+    std::lock_guard state_lock{_collection_state_mutex};
+    for (const auto &[target, collection_state] : _target_collection_states) {
+      static_cast<void>(collection_state);
+      if (const auto *pause_metric = _metric_manager->GetPauseResumeEventMetricOnTarget(target);
+          pause_metric != nullptr) {
+        target_to_pause_metric[target] = pause_metric;
+      }
+    }
+  }
+
+  // Phase 2: snapshot timestamps from _processed_samples under the mutex.
+  PauseMarkersMap result;
+  std::lock_guard lock{_processed_samples_mtx};
+  for (const auto &[target, pause_metric] : target_to_pause_metric) {
+    const auto target_it = _processed_samples.find(target);
+    if (target_it == _processed_samples.end()) {
+      continue;
+    }
+    const auto metric_it = target_it->second.find(pause_metric);
+    if (metric_it == target_it->second.end()) {
+      continue;
+    }
+    auto &timestamps = result[target];
+    timestamps.reserve(metric_it->second.size());
+    for (const auto &sample : metric_it->second) {
+      // Filter to pause events only (value=0).  Resume events (value=1) share the same
+      // EventMetric but must not be passed to ComputeTimeWeightedAverage as pause boundaries.
+      const auto *val = std::get_if<uint64_t>(&sample.value.value);
+      if (val != nullptr && *val == 0) {
+        timestamps.push_back(sample.timestamp);
+      }
+    }
+  }
+  return result;
+}
+
+auto Orchestrator::RegisterPauseResumeEventMetricForTarget(const ITarget *target) -> astl_status_code {
+  if (!target || !_metric_manager) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  // Already registered for this target — MetricManager will reject the duplicate metric id
+  // gracefully, but we can skip work by checking the dedicated map.
+  if (_metric_manager->GetPauseResumeEventMetricOnTarget(target) != nullptr) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  // Use a target-scoped ID to avoid conflicts when multiple targets are configured.
+  const std::string metric_name = std::string{"astl_pause_events."} + target->Name();
+  auto              cfg = std::make_unique<MetricConfig>(metric_name, "Pause events emitted during collection pauses",
+                                                         ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                                         ASTL_METRIC_EVENT, CollectorType::ASTL_NATIVE, NullOperationBuilder{});
+
+  const auto status = _metric_manager->RegisterMetric(std::move(cfg), {target});
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Orchestrator: failed to register pause-event metric for target '{}': {}", target->Name(),
+                   astlStatusString(status));
+    return status;
+  }
+
+  // MetricManager::RegisterMetric stores the IMetric* in _target_to_pause_resume_event_metric;
+  // no need to locate the handle — GetPauseResumeEventMetricOnTarget provides direct access.
+  ASTL_LOG_DEBUG("Orchestrator: registered pause-event metric '{}' for target '{}'", metric_name, target->Name());
   return ASTL_STATUS_SUCCESS;
 }
 

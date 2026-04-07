@@ -38,7 +38,8 @@ set(UNIT_TEST_SRCS
     summary_csv_output_utests.cpp
     string_pool_utests.cpp
     protobuf_serdes_utests.cpp
-    archive_utests.cpp)
+    archive_utests.cpp
+    pause_marker_utests.cpp)
 find_library(SENSORS_LIB sensors)
 if(SENSORS_LIB)
   message(STATUS "libsensors found, building sensors_collector_utests")

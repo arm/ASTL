@@ -125,6 +125,9 @@ auto RawMetric::LogNormalizedSample(const NormalizedSampledData &sample) -> void
 }
 
 auto RawMetric::ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code {
+  // Log the pause boundary for diagnostics. Derived classes (e.g. DeltaMetric, ResidencyMetric)
+  // override this to also reset internal accumulation state. EventMetric overrides it to record
+  // the pause as a processed sample. The base implementation is intentionally a no-op sink-wise.
   ASTL_LOG_INFO("Metric {}: collection paused at {} ns", _configuration->Name(),
                 pause_timestamp.time_since_epoch().count());
   return ASTL_STATUS_SUCCESS;

@@ -17,5 +17,9 @@ using RawSamplesMap = std::unordered_map<const ITarget*, std::vector<RawSampledD
 using ProcessedSamplesMap =
     std::unordered_map<const ITarget*, std::unordered_map<const IMetric*, std::vector<ProcessedSampledData>>>;
 
+/// Map of pause-event timestamps keyed by target.
+/// All metrics on the same target share a single pause timeline; pause events are target-scoped.
+using PauseMarkersMap = std::unordered_map<const ITarget*, std::vector<ProcessedSampleTimestamp>>;
+
 }  // namespace astl
 #endif  // ASTL_DEFINES_HPP_

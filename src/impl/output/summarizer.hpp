@@ -14,6 +14,7 @@
 
 #include "astl/astl.h"
 #include "common/astl_value.hpp"
+#include "common/monotonic_raw_clock.hpp"
 
 namespace astl {
 
@@ -48,8 +49,14 @@ struct TimeWeightedAvgSummary {
  *
  * Uses each sample value until the next timestamp as the interval weight.
  * Falls back to arithmetic mean when no positive time intervals are available.
+ * Clips each inter-sample interval at the first pause timestamp within it so
+ * that the pause gap does not inflate sample weights.
+ *
+ * @param samples       Processed samples in ascending timestamp order.
+ * @param pause_markers Pause timestamps for the same (target, metric) pair.
  */
-auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData> samples)
+auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData>     samples,
+                                std::span<const ProcessedSampleTimestamp> pause_markers)
     -> std::expected<std::optional<AstlValue>, astl_status_code>;
 
 /**
@@ -149,6 +156,17 @@ class TimeWeightedAvgSummarizer : public ISummarizer {
  public:
   auto Summarize(std::span<const ProcessedSampledData> samples) const
       -> std::expected<SummaryResult, astl_status_code> override;
+
+  /**
+   * @brief Pause-aware overload: clips each inter-sample interval at the first pause
+   * timestamp within it so that the pause gap does not inflate sample weights.
+   *
+   * @param samples       Processed samples in ascending timestamp order.
+   * @param pause_markers Pause timestamps for this (target, metric) pair.
+   */
+  static auto Summarize(std::span<const ProcessedSampledData>     samples,
+                        std::span<const ProcessedSampleTimestamp> pause_markers)
+      -> std::expected<SummaryResult, astl_status_code>;
 
   auto GetSummaryType() const -> std::string override { return "TimeWeightedAvg"; }
 

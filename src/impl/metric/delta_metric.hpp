@@ -86,6 +86,14 @@ class DeltaMetric : public RawMetric {
    */
   auto Reset() -> void override;
 
+  /**
+   * @brief Handle a pause event by resetting the previous-sample reference.
+   *
+   * @param pause_timestamp CLOCK_MONOTONIC_RAW timestamp of the pause event.
+   * @return ASTL_STATUS_SUCCESS.
+   */
+  auto ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code override;
+
  protected:
   /**
    * @brief Initialize/reset delta samples and summary data.

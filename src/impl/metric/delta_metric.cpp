@@ -87,6 +87,16 @@ auto DeltaMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> a
   return delta_result.value();
 }
 
+auto DeltaMetric::ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code {
+  // Drop the previous sample so the first post-resume raw sample starts a fresh delta
+  // window rather than computing a delta across the pause gap.
+  _previous_sample = std::nullopt;
+  ASTL_LOG_INFO("DeltaMetric {}: reset previous sample on pause at {} ns", _configuration->Name(),
+                pause_timestamp.time_since_epoch().count());
+  // Propagate the pause-marker sentinel downstream.
+  return RawMetric::ProcessPauseSample(pause_timestamp);
+}
+
 auto DeltaMetric::UpdateDeltaStatistics(const AstlValue& delta_value) -> astl_status_code {
   if (!delta_value.IsArithmetic()) {
     ASTL_LOG_TRACE("DeltaMetric: received delta with non-arithmetic value type for metric: {}", _configuration->Name());

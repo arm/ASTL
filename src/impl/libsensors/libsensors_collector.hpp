@@ -89,6 +89,7 @@ class LibsensorsCollector : public ICollector {
   // internal classes + enums
 
   enum class CollectionState { UNCONFIGURED, STOPPED, STARTED, PAUSED };
+  enum class PauseResumeMarker { PAUSE, RESUME };
 
   // data members
 
@@ -115,9 +116,9 @@ class LibsensorsCollector : public ICollector {
   astl_status_code StartIntervalSampling();
 
   /*
-   * @brief Emit a reserved pause-marker sample for raw-sample consumers.
+   * @brief Emit a pause or resume marker sample to the raw-sample sink.
    */
-  astl_status_code EmitPauseSample(ProcessedSampleTimestamp pause_timestamp);
+  astl_status_code EmitPauseResumeSample(PauseResumeMarker marker_type, ProcessedSampleTimestamp timestamp);
 
   /*
    * @brief Stop any background threads or async tasks that were started for interval sampling.

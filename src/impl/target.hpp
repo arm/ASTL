@@ -43,6 +43,8 @@ inline auto CollectorTypeStableKeyPrefix(CollectorType collector_type) -> std::s
       return "procfs";
     case CollectorType::UNKNOWN:
       return "unknown";
+    case CollectorType::ASTL_NATIVE:
+      return "astl_native";
   }
   return "unknown";
 }

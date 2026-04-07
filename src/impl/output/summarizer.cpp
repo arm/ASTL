@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include "../common/i_processed_sample_sink.hpp"
 #include "astl_logger.hpp"
@@ -37,11 +38,16 @@ constexpr auto IsArithmeticValueType(astl_value_type_t value_type) -> bool {
 
 }  // namespace
 
-auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData> samples)
+auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData>     samples,
+                                std::span<const ProcessedSampleTimestamp> pause_markers)
     -> std::expected<std::optional<AstlValue>, astl_status_code> {
   if (samples.empty()) {
     return std::optional<AstlValue>{};
   }
+
+  // Sort pause markers once for O(log n) lower_bound lookups per interval.
+  std::vector<ProcessedSampleTimestamp> sorted_pauses(pause_markers.begin(), pause_markers.end());
+  std::sort(sorted_pauses.begin(), sorted_pauses.end());
 
   double weighted_sum = 0.0;
   double total_weight = 0.0;
@@ -52,7 +58,20 @@ auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData> samples)
     if (!current.value.IsArithmetic() || !next.value.IsArithmetic()) {
       continue;
     }
-    if (next.timestamp <= current.timestamp) {
+
+    // Clip the interval end to the first pause that falls strictly after current
+    // and before (or at) next.  This prevents the last pre-pause sample from
+    // being weighted across the entire idle gap.
+    ProcessedSampleTimestamp interval_end = next.timestamp;
+    if (!sorted_pauses.empty()) {
+      // Find first pause strictly after current.timestamp.
+      auto it = std::upper_bound(sorted_pauses.begin(), sorted_pauses.end(), current.timestamp);
+      if (it != sorted_pauses.end() && *it < next.timestamp) {
+        interval_end = *it;
+      }
+    }
+
+    if (interval_end <= current.timestamp) {
       continue;
     }
 
@@ -61,8 +80,8 @@ auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData> samples)
       return std::unexpected(current_value.error());
     }
 
-    const auto interval_us = next.timestamp.time_since_epoch().count() - current.timestamp.time_since_epoch().count();
-    const auto weight      = static_cast<double>(interval_us);
+    const auto weight =
+        static_cast<double>(interval_end.time_since_epoch().count() - current.timestamp.time_since_epoch().count());
     weighted_sum += current_value.value() * weight;
     total_weight += weight;
   }
@@ -176,6 +195,12 @@ auto MinMaxAvgSummarizer::IsSupported(astl_value_type_t value_type, astl_metric_
 // TimeWeightedAvgSummarizer Implementation
 auto TimeWeightedAvgSummarizer::Summarize(std::span<const ProcessedSampledData> samples) const
     -> std::expected<SummaryResult, astl_status_code> {
+  return Summarize(samples, {});
+}
+
+auto TimeWeightedAvgSummarizer::Summarize(std::span<const ProcessedSampledData>     samples,
+                                          std::span<const ProcessedSampleTimestamp> pause_markers)
+    -> std::expected<SummaryResult, astl_status_code> {
   if (samples.empty()) {
     ASTL_LOG_TRACE("TimeWeightedAvgSummarizer: No samples to summarize");
     return TimeWeightedAvgSummary{std::nullopt, 0};
@@ -184,7 +209,7 @@ auto TimeWeightedAvgSummarizer::Summarize(std::span<const ProcessedSampledData> 
   TimeWeightedAvgSummary summary{};
   summary.count = samples.size();
 
-  auto result = ComputeTimeWeightedAverage(samples);
+  auto result = ComputeTimeWeightedAverage(samples, pause_markers);
   if (!result.has_value()) {
     ASTL_LOG_ERROR("TimeWeightedAvgSummarizer: Failed to compute time-weighted average");
     return std::unexpected(result.error());

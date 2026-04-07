@@ -232,6 +232,12 @@ TEST_CASE("FileInterface functionality with relative path", "[file_interface]") 
   const auto *const   content  = "test";
   ScopedTestFile      file(abs_path, content);
 
+  SECTION("Absolute input paths bypass the configured base path") {
+    std::string output;
+    REQUIRE(sysfs.Read(abs_path, output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == content);
+  }
+
   SECTION("IsValid() detects existing and non-existing files") {
     const auto *const invalid_path = "test_sysfs_invalid";
     auto              result       = sysfs.IsValid(invalid_path);

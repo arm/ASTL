@@ -105,7 +105,7 @@ auto LibsensorsCollector::PauseCollection() -> astl_status_code {
   } else {
     _periodic_sampler->Pause();
   }
-  return EmitPauseSample(ClockMonotonicRaw::now());
+  return EmitPauseResumeSample(PauseResumeMarker::PAUSE, ClockMonotonicRaw::now());
 };
 
 /*
@@ -113,12 +113,16 @@ auto LibsensorsCollector::PauseCollection() -> astl_status_code {
  */
 auto LibsensorsCollector::ResumeCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
+  // Emit the resume marker before restarting the periodic sampler so the marker timestamp
+  // strictly precedes any new samples produced after the sampler resumes.
+  auto       resume_timestamp = ClockMonotonicRaw::now();
+  const auto emit_status      = EmitPauseResumeSample(PauseResumeMarker::RESUME, resume_timestamp);
   if (!_periodic_sampler) {
     ASTL_LOG_WARNING("ResumeCollection called when no periodic sampler initialized");
   } else {
     _periodic_sampler->Resume();
   }
-  return ASTL_STATUS_SUCCESS;
+  return emit_status;
 };
 
 /*
@@ -256,17 +260,18 @@ auto LibsensorsCollector::StartIntervalSampling() -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
-auto LibsensorsCollector::EmitPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code {
+auto LibsensorsCollector::EmitPauseResumeSample(PauseResumeMarker marker_type, ProcessedSampleTimestamp timestamp)
+    -> astl_status_code {
   if (!_configuration.has_value()) {
-    ASTL_LOG_WARNING("Pause sample emission skipped because collector has no active configuration");
+    ASTL_LOG_WARNING("Marker sample emission skipped because collector has no active configuration");
     return ASTL_STATUS_SUCCESS;
   }
   if (_sample_sink == nullptr) {
     return ASTL_STATUS_SUCCESS;
   }
-
-  auto pause_sample = RawSampledData::PauseMarker(pause_timestamp);
-  return _sample_sink->SinkRawSamples(_configuration->Target(), {&pause_sample, 1});
+  auto marker = (marker_type == PauseResumeMarker::PAUSE) ? RawSampledData::PauseMarker(timestamp)
+                                                          : RawSampledData::ResumeMarker(timestamp);
+  return _sample_sink->SinkRawSamples(_configuration->Target(), {&marker, 1});
 }
 
 /*

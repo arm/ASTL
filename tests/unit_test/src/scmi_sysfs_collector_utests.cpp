@@ -801,8 +801,9 @@ TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[s
   MockRawSampleSink mock_raw_sample_sink;
   REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
       .WITH(_2.size() == 1)
-      .WITH(_2[0].operation_id == astl::kPauseOperationId)
-      .WITH(std::get<uint64_t>(_2[0].value.value) == _2[0].raw_tick)
+      .WITH(_2[0].operation_id == astl::kPauseResumeOperationId)
+      .WITH(std::get<uint64_t>(_2[0].value.value) == 0)
+      .WITH(_2[0].raw_tick > 0)
       .RETURN(ASTL_STATUS_SUCCESS);
 
   astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));

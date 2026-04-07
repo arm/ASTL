@@ -284,6 +284,8 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
   auto topology_manager = std::make_unique<MockTopologyManager>();
 
   auto collector_manager = std::make_unique<MockCollectorManager>();

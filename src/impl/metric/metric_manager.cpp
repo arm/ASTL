@@ -28,17 +28,49 @@ namespace {
 using ProcessingQueueEntry = std::pair<IMetric*, NormalizedSampledData>;
 using ProcessingQueue      = std::vector<ProcessingQueueEntry>;
 
-auto EnqueuePauseMarkerSamples(const MetricManager::OperationToMetricMap& operation_to_metric_map,
+auto EnqueuePauseMarkerSamples(IMetric*                                   pause_resume_event_metric,
+                               const MetricManager::OperationToMetricMap& operation_to_metric_map,
                                const RawSampledData& sample, ProcessingQueue& processing_queue) -> void {
   const auto pause_ts =
       ProcessedSampleTimestamp{std::chrono::duration<int64_t, std::nano>{static_cast<int64_t>(sample.raw_tick)}};
+
+  // The ASTL-native event metric receives value=0 (pause) via ReceiveRawSample.
+  // kFirstAssignableOperationId is used so IsPauseResumeMarker() returns false in the dispatch
+  // loop, ensuring ReceiveRawSample is called rather than ProcessPauseSample.
+  if (pause_resume_event_metric != nullptr) {
+    processing_queue.emplace_back(pause_resume_event_metric,
+                                  NormalizedSampledData{kFirstAssignableOperationId, AstlValue{uint64_t{0}}, pause_ts});
+  }
+
+  // Broadcast the pause marker (kPauseResumeOperationId) to every other unique metric so they
+  // can reset their internal accumulation state (e.g. DeltaMetric clears _previous_sample).
   std::unordered_set<IMetric*> seen_metrics;
+  if (pause_resume_event_metric != nullptr) {
+    seen_metrics.insert(pause_resume_event_metric);  // exclude it from the pause-marker broadcast
+  }
   for (const auto& [operation_id, metric] : operation_to_metric_map) {
     (void)operation_id;
     if (metric != nullptr && seen_metrics.insert(metric).second) {
       processing_queue.emplace_back(metric, NormalizedSampledData{sample.operation_id, sample.value, pause_ts});
     }
   }
+}
+
+auto EnqueueResumeMarkerSamples(IMetric*                                   pause_resume_event_metric,
+                                const MetricManager::OperationToMetricMap& operation_to_metric_map,
+                                const RawSampledData& sample, ProcessingQueue& processing_queue) -> void {
+  const auto resume_ts =
+      ProcessedSampleTimestamp{std::chrono::duration<int64_t, std::nano>{static_cast<int64_t>(sample.raw_tick)}};
+
+  // Resume events are tracked only in the ASTL-native event metric (value=1).
+  // No state reset is needed for other metrics — they simply resume accumulating normally.
+  if (pause_resume_event_metric != nullptr) {
+    processing_queue.emplace_back(pause_resume_event_metric, NormalizedSampledData{kFirstAssignableOperationId,
+                                                                                   AstlValue{uint64_t{1}}, resume_ts});
+  }
+
+  ASTL_LOG_INFO("Collection resumed for {} metric(s); resume event recorded at {} ns", operation_to_metric_map.size(),
+                sample.raw_tick);
 }
 
 auto EnqueueNormalizedSample(const MetricManager::OperationToMetricMap& operation_to_metric_map,
@@ -67,6 +99,7 @@ auto EnqueueNormalizedSample(const MetricManager::OperationToMetricMap& operatio
 }
 
 auto EnqueueTargetSamples(const MetricManager::TargetOperationToMetricMap& target_to_operation_to_metric_map,
+                          const MetricManager::PauseResumeEventMetricMap&  pause_resume_event_metrics,
                           const ClockCorrelationMap& clock_correlations, const ITarget* target,
                           std::span<const RawSampledData> samples, ProcessingQueue& processing_queue)
     -> astl_status_code {
@@ -81,9 +114,16 @@ auto EnqueueTargetSamples(const MetricManager::TargetOperationToMetricMap& targe
     return ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
   }
 
+  const auto pause_it                  = pause_resume_event_metrics.find(target);
+  IMetric*   pause_resume_event_metric = (pause_it != pause_resume_event_metrics.end()) ? pause_it->second : nullptr;
+
   for (const auto& sample : samples) {
-    if (sample.IsPauseMarker()) [[unlikely]] {
-      EnqueuePauseMarkerSamples(target_iter->second, sample, processing_queue);
+    if (sample.IsPauseResumeMarker()) [[unlikely]] {
+      if (sample.get<uint64_t>() == 0) {
+        EnqueuePauseMarkerSamples(pause_resume_event_metric, target_iter->second, sample, processing_queue);
+      } else {
+        EnqueueResumeMarkerSamples(pause_resume_event_metric, target_iter->second, sample, processing_queue);
+      }
       continue;
     }
 
@@ -492,6 +532,22 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
     _target_to_metrics_map[target].push_back(metric_handle);
   }
 
+  // ASTL_NATIVE event metrics are pause-event sinks: record the IMetric* in the dedicated
+  // _target_to_pause_resume_event_metric map so that EnqueuePauseMarkerSamples can route pause raw
+  // samples directly to ReceiveRawSample on this metric, and GetPauseResumeEventMetricOnTarget can
+  // expose it to Orchestrator without an opaque handle round-trip.
+  if (metric_config_ptr->GetCollectorType() == CollectorType::ASTL_NATIVE &&
+      metric_config_ptr->MetricType() == ASTL_METRIC_EVENT) {
+    const auto& new_handle = _metric_handles.back();
+    for (const auto* const target : targets) {
+      if (auto it = new_handle->target_to_metric_map.find(target); it != new_handle->target_to_metric_map.end()) {
+        _target_to_pause_resume_event_metric[target] = it->second.get();
+        ASTL_LOG_DEBUG("RegisterMetric: recorded pause-event metric '{}' for target '{}'", metric_config_ptr->Name(),
+                       target->Name());
+      }
+    }
+  }
+
   auto status = AddMetricToGroups(metric_handle, metric_config_ptr, targets);
 
   return status;
@@ -635,8 +691,8 @@ auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status
   {
     std::lock_guard<std::mutex> lock(_mutex);
     for (const auto& [target, samples] : raw_samples) {
-      const auto status = EnqueueTargetSamples(_target_to_operation_to_metric_map, _clock_correlations, target, samples,
-                                               processing_queue);
+      const auto status = EnqueueTargetSamples(_target_to_operation_to_metric_map, _target_to_pause_resume_event_metric,
+                                               _clock_correlations, target, samples, processing_queue);
       if (status != ASTL_STATUS_SUCCESS) {
         enqueue_status = status;
         break;
@@ -656,13 +712,13 @@ auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status
 
   for (const auto& [metric_handle, normalized_sample] : processing_queue) {
     astl_status_code status = ASTL_STATUS_SUCCESS;
-    if (normalized_sample.IsPauseMarker()) [[unlikely]] {
+    if (normalized_sample.IsPauseResumeMarker()) [[unlikely]] {
       status = metric_handle->ProcessPauseSample(normalized_sample.timestamp);
     } else {
       status = metric_handle->ReceiveRawSample(normalized_sample);
     }
     if (status != ASTL_STATUS_SUCCESS) {
-      if (normalized_sample.IsPauseMarker()) {
+      if (normalized_sample.IsPauseResumeMarker()) {
         ASTL_LOG_ERROR("ProcessData: Failed to process pause sample on metric '{}' with status {}",
                        metric_handle->Name(), astlStatusString(status));
       } else {
@@ -772,9 +828,21 @@ auto MetricManager::RemoveAllMetrics() -> void {
   _target_to_metrics_map.clear();
   _target_to_metric_groups_map.clear();
   _target_to_operation_to_metric_map.clear();
+  _target_to_pause_resume_event_metric.clear();
+}
+
+auto MetricManager::GetPauseResumeEventMetricOnTarget(const ITarget* target) const -> const IMetric* {
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto                  it = _target_to_pause_resume_event_metric.find(target);
+  return it != _target_to_pause_resume_event_metric.end() ? it->second : nullptr;
 }
 
 auto MetricManager::IsCollectorTypeSupported(CollectorType required_collector_type) const -> bool {
+  // CollectorType::ASTL_NATIVE means "no collector required" (internally generated / software
+  // metric); always supported regardless of platform capabilities.
+  if (required_collector_type == CollectorType::ASTL_NATIVE) {
+    return true;
+  }
   // Check against the manager's capabilities.
   // NOTE: caller is responsible for synchronization when needed.
   const std::vector<CollectorCapability>& collector_caps = _capabilities.GetCollectorCapability();
@@ -885,4 +953,5 @@ auto MetricManager::SinkProcessedSamples(const ITarget* target, const IMetric* m
   }
   return result;
 }
+
 }  // namespace astl

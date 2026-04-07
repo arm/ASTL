@@ -105,6 +105,14 @@ class ResidencyMetric : public DeltaMetric {
   void Reset() override;
 
   /**
+   * @brief Handle a pause event by resetting all per-state previous-sample references.
+   *
+   * @param pause_timestamp CLOCK_MONOTONIC_RAW timestamp of the pause event.
+   * @return ASTL_STATUS_SUCCESS.
+   */
+  auto ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code override;
+
+  /**
    * @brief Process and record a new sample value for a specific state.
    *
    * Calculates residency delta for the specific state identified by the sample's operation_id,

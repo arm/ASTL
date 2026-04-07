@@ -27,6 +27,25 @@ ResidencyMetric::ResidencyMetric(const ResidencyMetricConfig*                  c
 
 auto ResidencyMetric::Reset() -> void { InitializeResidencyState(); }
 
+auto ResidencyMetric::ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code {
+  // Discard all per-state previous-sample cursors so the first post-resume samples
+  // open a fresh delta window instead of computing a residency delta across the gap.
+  _previous_samples.clear();
+  // Reset the first-operation-id baseline used for inferred-state ordering.
+  _first_operation_id.reset();
+  // Clear in-progress per-timestamp state accumulation to avoid stale inferred-state math.
+  _processed_states_per_timestamp.clear();
+  // Discard any pending ordered samples that belonged to the pre-pause interval.
+  _pending_processed_samples.clear();
+  _pending_inferred_sample.reset();
+
+  ASTL_LOG_INFO("ResidencyMetric {}: reset per-state previous samples on pause at {} ns", _configuration->Name(),
+                pause_timestamp.time_since_epoch().count());
+  // Propagate the pause-marker sentinel downstream (bypasses DeltaMetric::_previous_sample
+  // which ResidencyMetric does not use).
+  return RawMetric::ProcessPauseSample(pause_timestamp);
+}
+
 auto ResidencyMetric::InitializeResidencyState() -> void {
   _previous_samples.clear();
   _residency_data.clear();

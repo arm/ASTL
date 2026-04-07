@@ -113,6 +113,15 @@ struct IMetricManager {
       -> std::expected<IMetric*, astl_status_code> = 0;
 
   /**
+   * @brief Return the pause-event EventMetric instance for the given target, or nullptr if none is registered.
+   *
+   * MetricManager records this pointer when an ASTL_NATIVE + ASTL_METRIC_EVENT metric is registered
+   * via RegisterMetric.  Callers (e.g. Orchestrator::GetPauseMarkersSnapshot) use it to locate the
+   * pause-event metric's ProcessedSampledData in the processed-samples store.
+   */
+  [[nodiscard]] virtual auto GetPauseResumeEventMetricOnTarget(const ITarget* target) const -> const IMetric* = 0;
+
+  /**
    * @brief Register a sink to receive processed samples produced by metrics.
    *
    * Multiple sinks may be registered. Typical sinks include the output manager or test harnesses.

@@ -140,7 +140,23 @@ class FileInterface {
    */
   astl_status_code Read(const std::filesystem::path &path, std::string &opString) {
     try {
-      const auto resolved_path   = Resolve(path);
+      const auto      resolved_path = Resolve(path);
+      std::error_code status_ec;
+      const bool      can_cache_stream = std::filesystem::is_regular_file(resolved_path, status_ec) ||
+                                    std::filesystem::is_symlink(resolved_path, status_ec);
+
+      if (!can_cache_stream) {
+        std::ifstream file(resolved_path);
+        if (!file.is_open()) {
+          return ASTL_STATUS_FILE_OPEN_FAILED;
+        }
+        opString.assign(std::istreambuf_iterator<char>(file), {});
+        if (file.bad()) {
+          return ASTL_STATUS_FILE_ERROR;
+        }
+        return ASTL_STATUS_SUCCESS;
+      }
+
       auto [stream_it, inserted] = _read_streams.try_emplace(resolved_path);
       if (inserted) {
         stream_it->second.open(resolved_path);
@@ -210,7 +226,7 @@ class FileInterface {
  private:
   // Resolve a given path relative to the base path if set.
   std::filesystem::path Resolve(const std::filesystem::path &path) const {
-    if (_basePath.empty()) {
+    if (_basePath.empty() || path.is_absolute()) {
       return path;  // Allow it to behave as no base path
     }
     return _basePath / path;

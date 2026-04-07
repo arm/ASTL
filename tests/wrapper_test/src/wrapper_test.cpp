@@ -652,6 +652,8 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -989,6 +991,8 @@ TEST_CASE("astlStartCollection", "[wrapper]") {
   ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
@@ -1155,6 +1159,8 @@ TEST_CASE("astlStartCollectionPaused", "[wrapper]") {
   ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
@@ -1290,6 +1296,8 @@ TEST_CASE("astlStartCollection rolls back previously started targets when a late
   ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto  output_manager = std::make_unique<MockOutputManager>();
   auto  orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
@@ -1366,6 +1374,8 @@ TEST_CASE("astlStartCollectionPaused rolls back previously started targets when 
   ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto  output_manager = std::make_unique<MockOutputManager>();
   auto  orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),

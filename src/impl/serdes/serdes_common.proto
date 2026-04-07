@@ -66,10 +66,11 @@ enum AstlMetricIdentifier {
 }
 
 enum CollectorType {
-  COLLECTOR_TYPE_UNKNOWN = 0;
+  COLLECTOR_TYPE_UNKNOWN     = 0;
   COLLECTOR_TYPE_SCMI        = 1;
   COLLECTOR_TYPE_LIBSENSORS  = 2;
   COLLECTOR_TYPE_PROCFS      = 3;
+  COLLECTOR_TYPE_ASTL_NATIVE = 4;
 }
 
 message AstlValue {

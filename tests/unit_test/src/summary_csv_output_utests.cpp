@@ -487,7 +487,7 @@ TEST_CASE("ComputeTimeWeightedAverage direct testing", "[csv_summary][summarizer
         {astl::AstlValue{30.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{400}}},
     };
 
-    auto result = astl::ComputeTimeWeightedAverage(samples);
+    auto result = astl::ComputeTimeWeightedAverage(samples, {});
     REQUIRE(result.has_value());
     REQUIRE(result->has_value());
     REQUIRE(result->value() == astl::AstlValue{17.5});
@@ -500,10 +500,183 @@ TEST_CASE("ComputeTimeWeightedAverage direct testing", "[csv_summary][summarizer
         {astl::AstlValue{30.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}}},
     };
 
-    auto result = astl::ComputeTimeWeightedAverage(samples);
+    auto result = astl::ComputeTimeWeightedAverage(samples, {});
     REQUIRE(result.has_value());
     REQUIRE(result->has_value());
     REQUIRE(result->value() == astl::AstlValue{20.0});
+  }
+}
+
+TEST_CASE("ComputeTimeWeightedAverage pause marker clipping",
+          "[csv_summary][summarizer][time_weighted_average][pause]") {
+  using TS = astl::ProcessedSampleTimestamp;
+  using D  = astl::ProcessedSampleTimestamp::duration;
+
+  SECTION("Pause mid-interval clips weight to pause point") {
+    // Samples: t=0 v=100, t=1000 v=200, t=2000 v=300.  Pause at t=500.
+    // Interval [0,1000]: clipped to [0,500] → weight 500, contribution 50000
+    // Interval [1000,2000]: no pause after t=1000, weight 1000, contribution 200000
+    // TWA = 250000/1500 = 166.67
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{100.0}, TS{D{0}}   },
+        {astl::AstlValue{200.0}, TS{D{1000}}},
+        {astl::AstlValue{300.0}, TS{D{2000}}},
+    };
+    std::vector<astl::ProcessedSampleTimestamp> pauses{TS{D{500}}};
+
+    auto result = astl::ComputeTimeWeightedAverage(samples, pauses);
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    REQUIRE(result->value() == astl::AstlValue{166.67});
+  }
+
+  SECTION("Pause clips only the interval it falls in; later intervals unaffected") {
+    // Samples: t=0 v=0, t=200 v=100, t=600 v=200.  Pause at t=100.
+    // Interval [0,200]:   pause at 100 clips it → weight 100, contribution 0
+    // Interval [200,600]: no pause after t=200, weight 400, contribution 40000
+    // TWA = 40000/500 = 80.0
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{0.0},   TS{D{0}}  },
+        {astl::AstlValue{100.0}, TS{D{200}}},
+        {astl::AstlValue{200.0}, TS{D{600}}},
+    };
+    std::vector<astl::ProcessedSampleTimestamp> pauses{TS{D{100}}};
+
+    auto result = astl::ComputeTimeWeightedAverage(samples, pauses);
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    REQUIRE(result->value() == astl::AstlValue{80.0});
+  }
+
+  SECTION("Multiple pauses in one interval - only the first clips") {
+    // Samples: t=0 v=100, t=1000 v=200.  Pauses at t=300 and t=600.
+    // upper_bound(0) finds t=300 first; 300 < 1000 → interval_end=300, weight=300
+    // TWA = 100.0 (single active interval)
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{100.0}, TS{D{0}}   },
+        {astl::AstlValue{200.0}, TS{D{1000}}},
+    };
+    std::vector<astl::ProcessedSampleTimestamp> pauses{TS{D{300}}, TS{D{600}}};
+
+    auto result = astl::ComputeTimeWeightedAverage(samples, pauses);
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    REQUIRE(result->value() == astl::AstlValue{100.0});
+  }
+
+  SECTION("Pause before first sample has no effect") {
+    // Pause at t=50, first sample at t=100. upper_bound(100) on [50] → end; no clipping.
+    // Interval [100,200]: weight 100, contribution 10000. TWA = 100.0
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{100.0}, TS{D{100}}},
+        {astl::AstlValue{200.0}, TS{D{200}}},
+    };
+    std::vector<astl::ProcessedSampleTimestamp> pauses{TS{D{50}}};
+
+    auto result = astl::ComputeTimeWeightedAverage(samples, pauses);
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    REQUIRE(result->value() == astl::AstlValue{100.0});
+  }
+
+  SECTION("Pause after last sample has no effect") {
+    // Samples: t=0 v=100, t=1000 v=200.  Pause at t=1500 (after all samples).
+    // Interval [0,1000]: pause at 1500 is not < 1000; no clipping. weight=1000.
+    // TWA = 100.0
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{100.0}, TS{D{0}}   },
+        {astl::AstlValue{200.0}, TS{D{1000}}},
+    };
+    std::vector<astl::ProcessedSampleTimestamp> pauses{TS{D{1500}}};
+
+    auto result = astl::ComputeTimeWeightedAverage(samples, pauses);
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    REQUIRE(result->value() == astl::AstlValue{100.0});
+  }
+
+  SECTION("Pause exactly at current timestamp is not treated as clipping") {
+    // Pause at t=0 == current.timestamp; upper_bound(0) on [0] → end; no clipping.
+    // Interval [0,1000]: weight=1000. TWA = 100.0
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{100.0}, TS{D{0}}   },
+        {astl::AstlValue{200.0}, TS{D{1000}}},
+    };
+    std::vector<astl::ProcessedSampleTimestamp> pauses{TS{D{0}}};
+
+    auto result = astl::ComputeTimeWeightedAverage(samples, pauses);
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    REQUIRE(result->value() == astl::AstlValue{100.0});
+  }
+
+  SECTION("Unsorted pause markers are sorted internally before processing") {
+    // Same as the mid-interval clip test, but pauses supplied in reverse order.
+    // Pause at t=500 should still clip interval [0,1000] to weight=500.
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{100.0}, TS{D{0}}   },
+        {astl::AstlValue{200.0}, TS{D{1000}}},
+        {astl::AstlValue{300.0}, TS{D{2000}}},
+    };
+    std::vector<astl::ProcessedSampleTimestamp> pauses{TS{D{1500}}, TS{D{500}}};  // unsorted
+
+    auto result = astl::ComputeTimeWeightedAverage(samples, pauses);
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    // Interval [0,1000]: clips at 500 → weight=500, contrib=50000
+    // Interval [1000,2000]: clips at 1500 → weight=500, contrib=100000
+    // TWA = 150000/1000 = 150.0
+    REQUIRE(result->value() == astl::AstlValue{150.0});
+  }
+}
+
+TEST_CASE("TimeWeightedAvgSummarizer pause marker integration",
+          "[csv_summary][summarizer][time_weighted_average][pause]") {
+  using TS = astl::ProcessedSampleTimestamp;
+  using D  = astl::ProcessedSampleTimestamp::duration;
+
+  SECTION("Empty samples with pause markers returns empty result") {
+    std::vector<astl::ProcessedSampledData>     samples;
+    std::vector<astl::ProcessedSampleTimestamp> pauses{TS{D{500}}};
+
+    auto result = astl::TimeWeightedAvgSummarizer::Summarize(samples, pauses);
+    REQUIRE(result.has_value());
+    auto summary = std::get<astl::TimeWeightedAvgSummary>(result.value());
+    REQUIRE(!summary.time_weighted_avg.has_value());
+    REQUIRE(summary.count == 0);
+  }
+
+  SECTION("Single pause clip propagates through summarizer") {
+    // Mirrors the ComputeTimeWeightedAverage mid-interval clip test.
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{100.0}, TS{D{0}}   },
+        {astl::AstlValue{200.0}, TS{D{1000}}},
+        {astl::AstlValue{300.0}, TS{D{2000}}},
+    };
+    std::vector<astl::ProcessedSampleTimestamp> pauses{TS{D{500}}};
+
+    auto result = astl::TimeWeightedAvgSummarizer::Summarize(samples, pauses);
+    REQUIRE(result.has_value());
+    auto summary = std::get<astl::TimeWeightedAvgSummary>(result.value());
+    REQUIRE(summary.time_weighted_avg.has_value());
+    REQUIRE(summary.time_weighted_avg.value() == astl::AstlValue{166.67});
+    REQUIRE(summary.count == 3);
+  }
+
+  SECTION("No pause markers yields same result as empty span") {
+    std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{10.0}, TS{D{0}}  },
+        {astl::AstlValue{20.0}, TS{D{100}}},
+        {astl::AstlValue{30.0}, TS{D{400}}},
+    };
+
+    auto result_no_pause = astl::TimeWeightedAvgSummarizer::Summarize(samples, {});
+    auto result_pauses =
+        astl::TimeWeightedAvgSummarizer::Summarize(samples, std::vector<astl::ProcessedSampleTimestamp>{});
+    REQUIRE(result_no_pause.has_value());
+    REQUIRE(result_pauses.has_value());
+    REQUIRE(std::get<astl::TimeWeightedAvgSummary>(result_no_pause.value()).time_weighted_avg ==
+            std::get<astl::TimeWeightedAvgSummary>(result_pauses.value()).time_weighted_avg);
   }
 }
 

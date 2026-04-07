@@ -24,8 +24,9 @@ namespace astl {
  * `OperationId` that initiated its collection so the metric layer can dispatch it to the correct
  * `IMetric` instance.  The `raw_tick` field usually holds the collector-native hardware clock tick
  * count; MetricManager converts it to `CLOCK_MONOTONIC_RAW` nanoseconds before forwarding to metrics.
- * Reserved pause markers are the exception: they store an already-normalized `CLOCK_MONOTONIC_RAW`
- * timestamp directly in both `raw_tick` and the raw value payload.
+ * Reserved pause/resume markers are the exception: they store an already-normalized
+ * `CLOCK_MONOTONIC_RAW` timestamp in `raw_tick`, and use the raw value payload as a compact
+ * discriminator (0 = pause, 1 = resume).
  *
  * Thread-safety: Once constructed the object is immutable and can be shared safely between threads
  * if the underlying `AstlValue` variant alternative is trivially copyable (the typical case).
@@ -53,20 +54,34 @@ struct RawSampledData {
   /**
    * @brief Construct a reserved pause-marker sample.
    *
-   * The pause timestamp is stored in both `raw_tick` and the raw value payload so downstream
-   * consumers inspecting serialized raw samples can identify the pause boundary without any
+   * The pause timestamp is stored in `raw_tick`; the raw value payload is reserved as a pause/resume
+   * discriminator so downstream consumers can distinguish pause from resume without
    * collector-specific clock correlation.
+   */
+  /**
+   * @brief Create a pause-event marker sample (value = 0).  Both pause and resume markers share
+   *        `kPauseResumeOperationId`; the value payload distinguishes them (0 = pause, 1 = resume).
+   *        The CLOCK_MONOTONIC_RAW nanosecond timestamp is stored in `raw_tick`.
    */
   static auto PauseMarker(ProcessedSampleTimestamp pause_timestamp) -> RawSampledData {
     const auto pause_tick = static_cast<uint64_t>(pause_timestamp.time_since_epoch().count());
-    return RawSampledData{kPauseOperationId, AstlValue{pause_tick}, pause_tick};
+    return RawSampledData{kPauseResumeOperationId, AstlValue{uint64_t{0}}, pause_tick};
   }
 
-  static constexpr auto IsPauseMarkerOperationId(OperationId operation_id) -> bool {
-    return operation_id == kPauseOperationId;
+  /**
+   * @brief Create a resume-event marker sample (value = 1).  Same `kPauseResumeOperationId` as
+   *        `PauseMarker`; the value payload = 1 distinguishes this as a resume event.
+   */
+  static auto ResumeMarker(ProcessedSampleTimestamp resume_timestamp) -> RawSampledData {
+    const auto resume_tick = static_cast<uint64_t>(resume_timestamp.time_since_epoch().count());
+    return RawSampledData{kPauseResumeOperationId, AstlValue{uint64_t{1}}, resume_tick};
   }
 
-  [[nodiscard]] auto IsPauseMarker() const -> bool { return IsPauseMarkerOperationId(operation_id); }
+  static constexpr auto IsPauseResumeMarkerOperationId(OperationId operation_id) -> bool {
+    return operation_id == kPauseResumeOperationId;
+  }
+
+  [[nodiscard]] auto IsPauseResumeMarker() const -> bool { return IsPauseResumeMarkerOperationId(operation_id); }
 
   /** @brief Identifier of the operation that produced this sample. */
   OperationId operation_id{kOperationIdInvalid};
@@ -111,11 +126,11 @@ struct NormalizedSampledData {
   NormalizedSampledData(OperationId operation_id, AstlValue value, ProcessedSampleTimestamp timestamp)
       : operation_id{operation_id}, value{value}, timestamp{timestamp} {}
 
-  static constexpr auto IsPauseMarkerOperationId(OperationId operation_id) -> bool {
-    return operation_id == kPauseOperationId;
+  static constexpr auto IsPauseResumeMarkerOperationId(OperationId operation_id) -> bool {
+    return operation_id == kPauseResumeOperationId;
   }
 
-  [[nodiscard]] auto IsPauseMarker() const -> bool { return IsPauseMarkerOperationId(operation_id); }
+  [[nodiscard]] auto IsPauseResumeMarker() const -> bool { return IsPauseResumeMarkerOperationId(operation_id); }
 
   /** @brief Identifier of the operation that produced this sample. */
   OperationId operation_id{kOperationIdInvalid};

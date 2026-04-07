@@ -22,8 +22,10 @@ using SampleMicroseconds = std::chrono::duration<uint64_t, std::micro>;
 using SampleTimestamp    = std::chrono::time_point<std::chrono::steady_clock, SampleMicroseconds>;
 
 using OperationId = uint16_t;
-constexpr OperationId kPauseOperationId{0};
-constexpr OperationId kFirstAssignableOperationId{kPauseOperationId + 1};
+/// Operation ID shared by both pause and resume marker samples; value payload distinguishes them
+/// (0 = pause, 1 = resume).  All real metric operation IDs begin at kFirstAssignableOperationId.
+constexpr OperationId kPauseResumeOperationId{0};
+constexpr OperationId kFirstAssignableOperationId{kPauseResumeOperationId + 1};
 constexpr size_t      kOperationIdInvalid = std::numeric_limits<OperationId>::max();
 
 /**

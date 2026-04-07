@@ -53,6 +53,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   using TargetToMetricsMap         = std::unordered_map<const ITarget*, std::vector<astl_metric_handle_t>>;
   using OperationToMetricMap       = std::unordered_map<uint32_t, IMetric*>;
   using TargetOperationToMetricMap = std::unordered_map<const ITarget*, OperationToMetricMap>;
+  using PauseResumeEventMetricMap  = std::unordered_map<const ITarget*, IMetric*>;
 
   ~MetricManager() override = default;
 
@@ -132,6 +133,8 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    */
   auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target) const
       -> std::expected<IMetric*, astl_status_code> override;
+
+  auto GetPauseResumeEventMetricOnTarget(const ITarget* target) const -> const IMetric* override;
 
   /**
    * @brief Register a sink to receive processed metric samples as they are produced.
@@ -369,6 +372,10 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
 
   // Maps operation IDs to their corresponding metrics for each target.
   TargetOperationToMetricMap _target_to_operation_to_metric_map;
+
+  // Tracks the single pause-event EventMetric per target (registered by Orchestrator via
+  // RegisterMetric with ASTL_NATIVE + ASTL_METRIC_EVENT).
+  PauseResumeEventMetricMap _target_to_pause_resume_event_metric;
 
   // Optional metadata loaded from config/groups/metric_groups.json.
   MetricGroupDescriptionMap _metric_group_descriptions;

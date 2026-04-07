@@ -394,6 +394,12 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   auto SinkProcessedSamples(const ITarget *target, const IMetric *metric,
                             std::span<const ProcessedSampledData> processed_samples) -> astl_status_code override;
 
+  /**
+   * @brief Return a snapshot of pause-event timestamps per target.
+   *
+   */
+  auto GetPauseMarkersSnapshot() const -> PauseMarkersMap;
+
  private:
   auto StartCollectionImpl(const ITarget *target, bool start_paused) -> astl_status_code;
 
@@ -448,6 +454,12 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
       -> void;
 
   /**
+   * @brief Register (once per target) a synthetic ASTL_METRIC_EVENT metric that records pause events.
+   *
+   */
+  auto RegisterPauseResumeEventMetricForTarget(const ITarget *target) -> astl_status_code;
+
+  /**
    * @brief Global singleton initialization mutex.
    *
    * Guards `instance_` construction/teardown paths used by InitializeInstance/GetInstance/ResetInstance.
@@ -462,15 +474,14 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
                      _target_resume_timestamps;  // last resume time
   mutable std::mutex _collection_state_mutex;    // protects lifecycle state and pause/resume timestamp maps
 
-  std::unique_ptr<ITopologyManager>  _topology_manager;   // manages the set of Targets
-  std::unique_ptr<ICollectorManager> _collector_manager;  // manages the collection of raw samples
-  std::unique_ptr<IMetricManager>    _metric_manager;     // manages the processing of raw samples into metrics
-  std::unique_ptr<IOutputManager>    _output_manager;     // manages the output of processed samples
-  RawSamplesMap                      _raw_samples;        // collected raw samples, organized by target
-  mutable std::mutex                 _raw_samples_mtx;    // protect the _raw_samples container
-  mutable ProcessedSamplesMap        _processed_samples;  // processed metric samples, organized by target and metric
-  mutable std::mutex                 _processed_samples_mtx;  // protect the _processed_samples container
-
+  std::unique_ptr<ITopologyManager>     _topology_manager;   // manages the set of Targets
+  std::unique_ptr<ICollectorManager>    _collector_manager;  // manages the collection of raw samples
+  std::unique_ptr<IMetricManager>       _metric_manager;     // manages the processing of raw samples into metrics
+  std::unique_ptr<IOutputManager>       _output_manager;     // manages the output of processed samples
+  RawSamplesMap                         _raw_samples;        // collected raw samples, organized by target
+  mutable std::mutex                    _raw_samples_mtx;    // protect the _raw_samples container
+  mutable ProcessedSamplesMap           _processed_samples;  // processed metric samples, organized by target and metric
+  mutable std::mutex                    _processed_samples_mtx;  // protect the _processed_samples container
   std::atomic<FinalOutputEmissionState> _perfetto_emission_state{FinalOutputEmissionState::NOT_EMITTED};
   std::atomic<FinalOutputEmissionState> _intervalcsv_emission_state{FinalOutputEmissionState::NOT_EMITTED};
   std::filesystem::path                 _cache_dir;  // temporary directory to save and load from ASTL file
