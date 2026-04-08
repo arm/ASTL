@@ -36,7 +36,7 @@ PROCFS, OS provided data or other sources of data.
 
 The library has a C-interface for the API and a C++ implementation. A comprehensive experimental
 Python wrapper layer (Cython bindings + high-level utilities) is now available—refer to the
-**[Python User Guide](python/docs/USER_GUIDE.md)**.
+**[Python User Guide](python/doc/USER_GUIDE.md)**.
 
 A native Go wrapper is also available under
 **[Go/](Go/README.md)** for Go programs that want to call the ASTL C API
@@ -124,7 +124,7 @@ ASTL looks for it in the following directories in preferred order:
 See [Build steps for developers](#build-steps-for-developers) for more detailed build instructions.
 
 > Looking for the Python telemetry wrapper? See the
-> **[ASTL Python User Guide](python/docs/USER_GUIDE.md)** for: initialization, streaming (sync &
+> **[ASTL Python User Guide](python/doc/USER_GUIDE.md)** for: initialization, streaming (sync &
 > async), diagnostics CLI, derived metrics, DataFrame integration, benchmarking,
 > metric state discovery (`get_metric_states_on_target` / `MetricState`), and
 > exception model.
@@ -1183,15 +1183,15 @@ sudo apt-get -y install doxygen graphviz
 ## Experimental Python API and usage
 
 For Python usage (installation, quick start, streaming, diagnostics, derived metrics,
-benchmarking) jump directly to the **[Python User Guide](python/docs/USER_GUIDE.md)**.
+benchmarking) jump directly to the **[Python User Guide](python/doc/USER_GUIDE.md)**.
 
 Python examples (including an end-to-end session + streaming + derived rates) are in
 `python/samples/` and documented in the
-**[User Guide](python/docs/USER_GUIDE.md#putting-it-together-end-to-end-example)**.
+**[User Guide](python/doc/USER_GUIDE.md#putting-it-together-end-to-end-example)**.
 
 ### Python API Documentation (Sphinx)
 
-The Python layer includes a Sphinx scaffold under `python/docs/`.
+The Python layer includes a Sphinx scaffold under `python/doc/`.
 
 #### Build HTML Docs
 
@@ -1201,18 +1201,18 @@ python -m pip install --upgrade pip
 python -m pip install sphinx
 
 # From repository root
-sphinx-build -b html python/docs python/docs/_build/html
+sphinx-build -b html python/doc python/doc/_build/html
 
 # Open the generated documentation
-xdg-open python/docs/_build/html/index.html 2>/dev/null \
-  || open python/docs/_build/html/index.html \
-  || echo "Docs at python/docs/_build/html/index.html"
+xdg-open python/doc/_build/html/index.html 2>/dev/null \
+  || open python/doc/_build/html/index.html \
+  || echo "Docs at python/doc/_build/html/index.html"
 ```
 
 ### Incremental Rebuild During Editing
 
 ```bash
-sphinx-build -b html -a -E python/docs python/docs/_build/html
+sphinx-build -b html -a -E python/doc python/doc/_build/html
 ```
 
 ### Adding New Modules

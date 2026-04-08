@@ -19,7 +19,7 @@ deep-clean: clean
     #!/usr/bin/env bash
     set -eu -o pipefail
     echo "[purge] Removing additional artifacts"
-    rm -rf external/vcpkg doc/html python/docs/_build/ python/astl/__pycache__/ python/astl/__pycache__/ .mypy_cache .venv python/astl.egg-info/ python/dist/ python/astl/_core.cpp
+    rm -rf external/vcpkg doc/html python/doc/_build/ python/astl/__pycache__/ python/astl/__pycache__/ .mypy_cache .venv python/astl.egg-info/ python/dist/ python/astl/_core.cpp
 
 # generate build files through cmake
 config preset='debug':
@@ -124,8 +124,8 @@ doc preset='debug':
     echo "[doxygen] Generating documentation"
     cmake --build --preset {{preset}} --target doxygen
     echo "[doxygen] Documentation generated under doc/html/index.html"
-    sphinx-build -b html python/docs python/docs/_build/html
-    echo "[sphinx] Documentation generated under python/docs/_build/html/index.html"
+    sphinx-build -b html python/doc python/dos/_build/html
+    echo "[sphinx] Documentation generated under python/doc/_build/html/index.html"
 
 # Full Python cycle: build native lib, install editable package, refresh vendored headers,
 # run tests and sample scripts. Accepts optional python version via PY env var.

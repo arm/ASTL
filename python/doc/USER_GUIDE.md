@@ -214,7 +214,7 @@ astl.crop_samples_on_target(t, start_ts=2_000_000_000, end_ts=5_000_000_000)
 
 ### Behaviour
 
-> **Note:** Both `crop_samples` and `crop_samples_on_target` currently raise `NotImplementedErrorASTL`.
+> Note: Both `crop_samples` and `crop_samples_on_target` currently raise `NotImplementedErrorASTL`.
 > The API surface and struct layout are stable; full implementation is pending.
 
 - **Scope** — `crop_samples` applies to every configured target and every collected
@@ -306,7 +306,7 @@ else:
 | `avg`     | `float` | Arithmetic mean. Always a `float` (`fp64` internally).                    |
 | `count`   | `int`   | Number of samples processed. When `0`, `min`/`max`/`avg` are meaningless. |
 
-> **Important:** The ASTL C API always stores `avg` as a `double` (`fp64`),
+> Important: The ASTL C API always stores `avg` as a `double` (`fp64`),
 > regardless of whether the metric's native type is integer or float.
 > The Python wrapper reads `avg.fp64` unconditionally and returns it as a Python `float`.
 > `min` and `max` are also surfaced as `float` for convenience; the underlying C union
@@ -344,7 +344,7 @@ else:
         print(f"  value={b.value}  count={b.count}")
 ```
 
-### Two-step C API
+### Two-step C API for Histograms
 
 Internally the function calls `astlGetMetricDiscreteHistogramBinCountOnTarget` to
 allocate an exact-sized array, then `astlGetMetricDiscreteHistogramOnTarget` to fill
@@ -397,7 +397,7 @@ if residency_metrics:
         print(f"  state={s.name!r}  description={s.description!r}")
 ```
 
-### Two-step C API
+### Two-step C API for State Discovery
 
 Internally the function calls `astlGetMetricStateCountOnTarget` to determine the
 number of states, allocates an exact-sized `astl_state_props_t[]` buffer, then
@@ -412,7 +412,7 @@ completely.
 | `description` | `str \| None` | Optional longer description of the state; `None` when not provided by the platform config. |
 | `value`       | `Any \| None` | Decoded enumerated value for `FINITE_SET_VALUE` metrics; `None` for `RESIDENCY` metrics.   |
 
-> **Order guarantee:** the list is returned in the same order as the C API delivers the
+> Order guarantee: the list is returned in the same order as the C API delivers the
 > states. For residency metrics this matches the sample-vector order returned by
 > `get_metric_samples`, so you can zip states and sample sub-values index-by-index.
 
@@ -676,4 +676,4 @@ File issues or enhancement requests describing: desired metric, usage pattern, p
 
 ---
 
-_End of User Guide_
+## End of User Guide

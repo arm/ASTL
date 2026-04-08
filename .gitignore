@@ -14,7 +14,7 @@ python/astl.egg-info/
 python/astl/__pycache__/
 scripts/__pycache__/
 python/tests/__pycache__/
-python/docs/_build/
+python/doc/_build/
 python/dist/
 python/astl/_core.cpp
 
