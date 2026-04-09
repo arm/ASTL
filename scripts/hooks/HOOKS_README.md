@@ -9,8 +9,8 @@ SPDX-License-Identifier: Apache-2.0
 This directory contains hook scripts that automatically:
 
 - adds Coverity query URLs to commit messages when Coverity IDs (CIDs) are mentioned.
+- formats code before a commit is finalized and re-stages any staged files that changed.
 - runs license lint checks before a commit is finalized.
-  (TODO - later extend to format, do cppcheck (clang-tidy might be too lengthy))
 
 ## Overview
 
@@ -18,9 +18,9 @@ This directory contains hook scripts that automatically:
 
 When you commit code that fixes Coverity issues and mention the CIDs in your commit message, this hook will automatically generate and insert a clickable URL that links directly to those defects in Coverity.
 
-### pre-commit license lint
+### pre-commit formatting and license lint
 
-The installed `pre-commit` hook invokes `scripts/license_lint.sh` before each commit. If the lint check fails, the commit is blocked.
+The installed `pre-commit` hook invokes `scripts/format.sh` before each commit. If formatting changes any file that was already staged, the hook stages the updated version again automatically. After formatting, the hook invokes `scripts/license_lint.sh`. If either step fails, the commit is blocked.
 
 ## Installation
 
@@ -36,7 +36,7 @@ This will create both a `commit-msg` hook and a `pre-commit` hook in your `.git/
 
 Once installed, the hooks work automatically:
 
-- `pre-commit`: runs `scripts/license_lint.sh`.
+- `pre-commit`: runs `scripts/format.sh`, re-stages any staged files it changed, then runs `scripts/license_lint.sh`.
 - `commit-msg`: appends a Coverity URL when CIDs are detected.
 
 For the `commit-msg` hook, write your commit message as usual, mentioning CIDs:

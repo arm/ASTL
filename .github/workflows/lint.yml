@@ -22,7 +22,7 @@ jobs:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
       fail-fast: false
       matrix:
-        os: [self-hosted-ubuntu-24.04]
+        os: [ubuntu-latest]
         cmake_preset: [debug]
 
     env:
@@ -38,7 +38,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
 
-      - name: ⤵️ Install Tools (self-hosted-ubuntu-24.04)
+      - name: ⤵️ Install Tools (ubuntu-latest)
         if: contains(matrix.os, 'ubuntu')
         run: |
           sudo apt-get -o DPkg::Lock::Timeout=300 update
@@ -83,7 +83,7 @@ jobs:
         run: cmake --build --preset ${{ matrix.cmake_preset }} --target proto_gen
 
       - name: 🧹 YAML Lint
-        if: matrix.os == 'self-hosted-ubuntu-24.04'
+        if: matrix.os == 'ubuntu-latest'
         run: yamllint ${{ github.workspace }}/.github/workflows/*.yaml
 
       - name: 🧹 Check Formatting
