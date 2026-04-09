@@ -34,24 +34,24 @@ jobs:
       # - <Linux,   Debug,   latest Clang compiler toolchain on the default runner image, default generator>
       # - <MacOs,   Release, latest Clang compiler toolchain on the default runner image, default generator>
       matrix:
-        os: [self-hosted-ubuntu-24.04-arm64, windows-latest, macos-15]
+        os: [ubuntu-24.04-arm, windows-latest, macos-15]
         cmake_preset: [release, debug]
         cpp_compiler: [g++, clang++, cl]
         include:
           - os: windows-latest
             c_compiler: cl
             cpp_compiler: cl
-          - os: self-hosted-ubuntu-24.04-arm64
+          - os: ubuntu-24.04-arm
             c_compiler: gcc
             cpp_compiler: g++
-          - os: self-hosted-ubuntu-24.04-arm64
+          - os: ubuntu-24.04-arm
             c_compiler: clang
             cpp_compiler: clang++
           - os: macos-15
             c_compiler: clang
             cpp_compiler: clang++
         exclude:
-          - os: self-hosted-ubuntu-24.04-arm64
+          - os: ubuntu-24.04-arm
             cmake_preset: release
           - os: windows-latest
             cmake_preset: debug
@@ -59,7 +59,7 @@ jobs:
             cpp_compiler: g++
           - os: windows-latest
             cpp_compiler: clang++
-          - os: self-hosted-ubuntu-24.04-arm64
+          - os: ubuntu-24.04-arm
             cpp_compiler: cl
           - os: macos-15
             cpp_compiler: cl

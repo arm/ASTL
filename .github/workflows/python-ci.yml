@@ -21,7 +21,7 @@ on:
 jobs:
   build-native:
     # Single native C++ build reused by all Python matrix jobs.
-    runs-on: self-hosted-ubuntu-24.04-arm64
+    runs-on: ubuntu-24.04-arm
     # Minimal permissions; only needs read access.
     steps:
       - name: Checkout
@@ -53,7 +53,7 @@ jobs:
 
   build-test:
     needs: build-native
-    runs-on: self-hosted-ubuntu-24.04-arm64
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       matrix:
@@ -109,7 +109,7 @@ jobs:
     needs: [build-native, build-test]
     # Run only for scheduled (cron) executions and when upstream succeeded
     if: github.event_name == 'schedule' && !cancelled() && needs.build-test.result == 'success'
-    runs-on: self-hosted-ubuntu-24.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
@@ -163,7 +163,7 @@ jobs:
             benchmark_output.log
 
   python-full-cycle:
-    runs-on: self-hosted-ubuntu-24.04
+    runs-on: ubuntu-24.04
     needs: build-test
     # Restrict to scheduled (cron) runs only when build-test succeeded
     if: github.event_name == 'schedule' && !cancelled() && needs.build-test.result == 'success'
