@@ -5,6 +5,7 @@
 #include "interval_csv_output.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -107,7 +108,8 @@ void EmitGroup(std::ostream& output_stream, const std::string& metric_name, cons
     if (!row.target || !row.sample) {
       continue;
     }
-    const uint64_t ts_us = static_cast<uint64_t>(row.sample->timestamp.time_since_epoch().count());
+    const uint64_t ts_us = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(row.sample->timestamp.time_since_epoch()).count());
     output_stream << ts_us << ',' << row.target->Name() << ',' << metric_name << ',';
     EmitValue(output_stream, row.sample->value);
     output_stream << '\n';

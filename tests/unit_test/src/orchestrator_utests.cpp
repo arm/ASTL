@@ -866,9 +866,13 @@ TEST_CASE("Orchestrator-FullLifecyclePositive", "[Orchestrator][lifecycle]") {
 
 TEST_CASE("Orchestrator-ConfigureCounterCollection transitions target to configured lifecycle",
           "[Orchestrator][lifecycle]") {
-  using State            = astl::Orchestrator::TargetCollectionState;
-  auto topology_manager  = std::make_unique<MockTopologyManager>();
-  auto collector_manager = std::make_unique<MockCollectorManager>();
+  using State = astl::Orchestrator::TargetCollectionState;
+  // Suppress output-emission paths so StopCollection does not invoke un-mocked OutputManager methods.
+  EnvVarGuard perfetto_guard(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
+  EnvVarGuard interval_guard(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");
+  EnvVarGuard summary_guard(astl::EnvVar::ASTL_OUTPUT_SUMMARY_CSV, "");
+  auto        topology_manager  = std::make_unique<MockTopologyManager>();
+  auto        collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);

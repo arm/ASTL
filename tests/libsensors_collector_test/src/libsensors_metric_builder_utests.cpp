@@ -15,6 +15,7 @@
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
+#include "../../test_utilities.hpp"
 #include "common/capabilities.hpp"
 #include "config/astl_configuration.hpp"
 #include "libsensors/libsensors_metric_builder.hpp"
@@ -210,7 +211,8 @@ TEST_CASE("RegisterLibsensorsMetrics uses stable family instance prefixes for ad
   ALLOW_CALL(*mock_libsensors, sensors_get_subfeature(_, _, _)).RETURN(nullptr);
   ALLOW_CALL(*mock_libsensors, sensors_get_value(_, _, _)).SIDE_EFFECT(*_3 = 42.0).RETURN(0);
 
-  const auto temp_root = std::filesystem::temp_directory_path() / "astl_libsensors_metric_stable_names";
+  const auto    temp_root = std::filesystem::temp_directory_path() / "astl_libsensors_metric_stable_names";
+  TempFileGuard temp_root_guard{temp_root};
   WriteTextFile(temp_root / "libsensors" / "libsensors_nvme-pci.json", R"json(
 {
   "document": {

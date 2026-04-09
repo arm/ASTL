@@ -454,6 +454,21 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
       -> void;
 
   /**
+   * @brief Trigger final-emission processed-sample rebuild once per lifecycle.
+   *
+   * Subsequent calls within the same final emission phase are no-ops.
+   */
+  auto EnsureFinalEmissionProcessedSamplesRebuilt() const -> void;
+
+  /**
+   * @brief Rebuild processed samples for all known (target, metric) pairs.
+   *
+   * Triggers lazy population via GetProcessedMetricSamples() so final outputs can
+   * consume a fully populated _processed_samples map.
+   */
+  auto RebuildProcessedSamplesForAllTargets() const -> void;
+
+  /**
    * @brief Register (once per target) a synthetic ASTL_METRIC_EVENT metric that records pause events.
    *
    */
@@ -484,6 +499,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   mutable std::mutex                    _processed_samples_mtx;  // protect the _processed_samples container
   std::atomic<FinalOutputEmissionState> _perfetto_emission_state{FinalOutputEmissionState::NOT_EMITTED};
   std::atomic<FinalOutputEmissionState> _intervalcsv_emission_state{FinalOutputEmissionState::NOT_EMITTED};
+  mutable std::atomic<bool>             _final_rebuild_attempted{false};
   std::filesystem::path                 _cache_dir;  // temporary directory to save and load from ASTL file
 };
 

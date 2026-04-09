@@ -194,3 +194,23 @@ TEST_CASE("IntervalCsvOutput orders metric groups alphabetically", "[intervalcsv
   REQUIRE(metric_names[1] == "Mid");
   REQUIRE(metric_names[2] == "Zeta");
 }
+
+TEST_CASE("IntervalCsvOutput converts monotonic nanoseconds to timestamp_us", "[intervalcsv]") {  // NOLINT
+  std::filesystem::path   path = "astl_intervalcsv_timestamp_units.csv";
+  TempFileGuard           tmp_guard{path};
+  astl::IntervalCsvOutput writer(path);
+  REQUIRE(writer.Ready());
+
+  TestTargetBase            target{"Soc"};
+  TestMetricBase            metric{"Power", ASTL_UNITS_WATTS};
+  astl::ProcessedSamplesMap processed;
+  const auto                ns_timestamp =
+      astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{1'234'567}};  // 1234 us after truncation
+  processed[&target][&metric].push_back(MakeSample(3.0, ns_timestamp));
+
+  REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
+  std::ifstream ifs(path);
+  REQUIRE(ifs.is_open());
+  std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+  REQUIRE(content.find("1234,Soc,Power,3") != std::string::npos);
+}

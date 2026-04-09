@@ -13,6 +13,7 @@
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
+#include "../../test_utilities.hpp"
 #include "astl/astl.h"
 #include "libsensors/libsensors_topology_plugin.hpp"
 #include "mock_libsensors.hpp"  // for global mock_libsensors object
@@ -244,7 +245,8 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets keeps raw chip names even wh
   ALLOW_CALL(*mock_libsensors, sensors_init(_)).RETURN(0);
   ALLOW_CALL(*mock_libsensors, sensors_cleanup());
 
-  const auto temp_root = std::filesystem::temp_directory_path() / "astl_libsensors_topology_stable_names";
+  const auto    temp_root = std::filesystem::temp_directory_path() / "astl_libsensors_topology_stable_names";
+  TempFileGuard temp_root_guard{temp_root};
   WriteTextFile(temp_root / "libsensors" / "libsensors_nvme-pci.json",
                 R"json({"document":{"confidential":false},"metrics":{}})json");
 

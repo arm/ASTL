@@ -342,6 +342,7 @@ auto Orchestrator::ResetTargetCollectionArtifacts(const ITarget *target) -> astl
 auto Orchestrator::ResetFinalOutputEmissionState() -> void {
   _perfetto_emission_state.store(FinalOutputEmissionState::NOT_EMITTED, std::memory_order_release);
   _intervalcsv_emission_state.store(FinalOutputEmissionState::NOT_EMITTED, std::memory_order_release);
+  _final_rebuild_attempted.store(false, std::memory_order_release);
 }
 
 auto Orchestrator::TryBeginFinalOutputEmission(std::atomic<FinalOutputEmissionState> &emission_state) -> bool {
@@ -654,7 +655,7 @@ auto Orchestrator::EmitPerfettoTraceIfRequested() -> void {
     FinishFinalOutputEmission(_perfetto_emission_state, false);
     return;  // no-op if unset
   }
-
+  EnsureFinalEmissionProcessedSamplesRebuilt();
   // Acquire processed samples snapshot under lock to avoid race with late sample insertion.
   std::lock_guard processed_lock{_processed_samples_mtx};
   if (_processed_samples.empty()) {
@@ -687,6 +688,8 @@ auto Orchestrator::EmitIntervalCsvIfRequested() -> void {
     FinishFinalOutputEmission(_intervalcsv_emission_state, false);
     return;  // nothing to do
   }
+  EnsureFinalEmissionProcessedSamplesRebuilt();
+
   std::lock_guard processed_lock{_processed_samples_mtx};
   if (!_output_manager) {
     ASTL_LOG_ERROR("EmitIntervalCsvIfRequested: OutputManager unavailable");
@@ -710,26 +713,7 @@ auto Orchestrator::EmitSummaryCsvIfRequested() -> void {
     return;  // no-op if unset
   }
 
-  // Ensure _processed_samples is fully populated before emitting the summary.
-  // We must trigger that lazy rebuild for every known (target, metric) pair now,
-  // before acquiring _processed_samples_mtx and passing the map to the output
-  // writer — otherwise the summary CSV is written from an empty map.
-  if (_metric_manager && _topology_manager) {
-    for (const auto &target : _topology_manager->GetTargets()) {
-      auto handles_or_err = _metric_manager->GetAvailableMetrics(target.get());
-      if (!handles_or_err.has_value()) {
-        continue;
-      }
-      for (const auto &handle : handles_or_err.value()) {
-        auto metric_or_err = _metric_manager->GetMetricOnTarget(handle, target.get());
-        if (!metric_or_err.has_value()) {
-          continue;
-        }
-        // Side-effect: populates _processed_samples for this (metric, target) pair
-        (void)GetProcessedMetricSamples(metric_or_err.value(), target.get());
-      }
-    }
-  }
+  EnsureFinalEmissionProcessedSamplesRebuilt();
 
   // Acquire processed samples snapshot under lock to avoid race with late sample insertion.
   std::lock_guard processed_lock{_processed_samples_mtx};
@@ -748,6 +732,49 @@ auto Orchestrator::EmitSummaryCsvIfRequested() -> void {
     return;
   }
   ASTL_LOG_INFO("Summary CSV emission completed (env path='{}')", csv_path);
+}
+
+auto Orchestrator::EnsureFinalEmissionProcessedSamplesRebuilt() const -> void {
+  if (_final_rebuild_attempted.exchange(true, std::memory_order_acq_rel)) {
+    return;
+  }
+  RebuildProcessedSamplesForAllTargets();
+}
+
+auto Orchestrator::RebuildProcessedSamplesForAllTargets() const -> void {
+  // Ensure _processed_samples is fully populated before emission.
+  // A single GetProcessedMetricSamples() call can rebuild all metrics for a target,
+  // so we attempt at most once per target to avoid repeated rebuild work.
+  if (!_metric_manager || !_topology_manager) {
+    return;
+  }
+  if (_cache_dir.empty()) {
+    return;
+  }
+
+  for (const auto &target : _topology_manager->GetTargets()) {
+    // Rebuild is only meaningful if a cached raw-sample batch exists for this target.
+    // This avoids expensive and unnecessary metric-manager probing in no-samples paths.
+    const auto cache_file_path = _cache_dir / (GetStableTargetKey(*target) + kAstlFileExtension);
+    if (!fs::exists(cache_file_path)) {
+      continue;
+    }
+
+    auto handles_or_err = _metric_manager->GetAvailableMetrics(target.get());
+    if (!handles_or_err.has_value()) {
+      continue;
+    }
+
+    for (const auto &handle : handles_or_err.value()) {
+      auto metric_or_err = _metric_manager->GetMetricOnTarget(handle, target.get());
+      if (!metric_or_err.has_value()) {
+        continue;
+      }
+      // Side-effect: may lazily rebuild and populate all processed samples for this target.
+      (void)GetProcessedMetricSamples(metric_or_err.value(), target.get());
+      break;
+    }
+  }
 }
 
 auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) -> astl_status_code {
