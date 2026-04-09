@@ -7,10 +7,17 @@
 #define CSV_SYSTEM_INFO_HPP_
 
 #include <iosfwd>
+#include <string>
+#include <string_view>
+
+#include "common/astl_value.hpp"
 
 namespace astl {
 
-void WriteSystemInfoCsvSection(std::ostream& output_stream);
+auto EscapeCsvField(std::string_view value) -> std::string;
+auto FormatReportFloatingValue(double value) -> std::string;
+auto FormatReportValue(const AstlValue& value) -> std::string;
+void WriteCollectionInfoCsvSection(std::ostream& output_stream);
 
 }  // namespace astl
 

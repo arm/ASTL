@@ -955,27 +955,25 @@ ASTL supports multiple output mechanisms for processed telemetry samples:
      export ASTL_OUTPUT_INTERVAL_CSV=/tmp/astl_intervals.csv
      ```
 
-   - Hybrid grouped format (per metric name): Metrics are aggregated by name across all targets.
-     For each unique metric name a metric info line is written:
-     `metric_name,metric_description` (description = first non-empty encountered) then a header line
-     `timestamp_us,target,metric,value` followed by all sample rows for that metric across every target, where
-     each sample row repeats the metric name. Metric groups are emitted in stable alphabetical order by metric name.
-     Blank line separates groups.
-   - Samples: `timestamp_us` is raw microseconds (same base as Perfetto). Target is the owning target's name.
-     Value is numeric or quoted string (internal double quotes replaced with single quotes).
-   - Empty collection yields an empty file (no global header).
-   - Rationale: Grouping reduces scanning effort when analyzing one metric across many targets.
+   - ATX-compatible interval format: one section is written per metric/target pair.
+     Each section begins with `metric_name on target_name`, followed by `timestamp_us,value`
+     and then one row per sample. Sections are emitted in stable alphabetical order by metric name,
+     then target name. Blank line separates sections.
+   - Samples: `timestamp_us` is raw microseconds (same base as Perfetto). Value is numeric.
+   - Empty collection yields collection metadata only.
 
 Example snippet (two metrics, one sample each):
 
 ```csv
-SoC Power,"SoC Power Consumption in Watts"
-timestamp_us,target,metric,value
-1734735123456789,SoC,SoC Power,3.14
+SoC Power on SoC
 
-SoC Temp,"SoC Temperature in Celsius"
-timestamp_us,target,metric,value
-1734735124456790,SoC,SoC Temp,55.0
+timestamp_us,value
+1734735123456789,3.14
+
+SoC Temp on SoC
+
+timestamp_us,value
+1734735124456790,55.0
 ```
 
 Import into Python:

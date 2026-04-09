@@ -252,7 +252,8 @@ TEST_CASE("OutputManager::OutputProcessedSamples SUMMARY_CSV env var and path ha
     std::ifstream ifs(output_file.path);
     REQUIRE(ifs.is_open());
     std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-    REQUIRE(content.find("Min/Max/Average Summary") != std::string::npos);
+    REQUIRE(content.find("ASTL Build Version,") != std::string::npos);
+    REQUIRE(content.find("Target,Min,Max,Average,Time Weighted Average,Count") != std::string::npos);
   }
 }
 
@@ -302,7 +303,7 @@ TEST_CASE("OutputManager::OutputProcessedSamples INTERVAL_CSV success with sampl
   std::ifstream ifs(tmp_guard.path);
   REQUIRE(ifs.is_open());
   std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-  REQUIRE(content.find("timestamp_us,target,metric,value") != std::string::npos);
+  REQUIRE(content.find("timestamp_us,value") != std::string::npos);
 }
 
 TEST_CASE("OutputManager::OutputProcessedSamples unknown output type", "[output_manager]") {  // NOLINT

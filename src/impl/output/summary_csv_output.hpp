@@ -8,11 +8,11 @@
  *
  * Core behaviors:
  *  - Inherits from SummaryOutput to get summary computation functionality
- *  - Produces two sections in a single CSV file:
- *      1. Min/Max/Average Summary  – one table per metric with Target,Min,Max,Average,TimeWeightedAvg,Count rows
- *      2. Histogram Summary        – one table per metric with Target,Type,Value/Range,Count rows
- *  - Sections are separated by a blank line; absent sections are omitted entirely
- *  - Environment variable `ASTL_CSV_OUTPUT_FILE` selects the output file path
+ *  - Produces a CSV file with collection metadata followed by one
+ *    per-metric section containing:
+ *      1. Summary Statistics
+ *      2. Histogram Summary (when supported)
+ *  - Environment variable `ASTL_OUTPUT_SUMMARY_CSV` selects the output file path
  *  - Overwrites existing files (truncate mode) to ensure clean output
  *
  * Schema example (Min/Max/Average section):
@@ -25,6 +25,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -80,6 +81,14 @@ class SummaryCsvOutput : public SummaryOutput {
       -> astl_status_code override;
 
  private:
+  struct MetricTargetSummary {
+    const ITarget*                        target{nullptr};
+    const IMetric*                        metric{nullptr};
+    std::optional<MinMaxAvgSummary>       minmax;
+    std::optional<HistogramSummary>       histogram;
+    std::optional<TimeWeightedAvgSummary> twa;
+  };
+
   std::filesystem::path _path;
 
   /**
@@ -100,7 +109,14 @@ class SummaryCsvOutput : public SummaryOutput {
    */
   static auto WriteCombinedStatsSection(
       std::ofstream& csv_file, const std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>& minmax,
+      const std::vector<std::tuple<const ITarget*, const IMetric*, HistogramSummary>>&       histogram,
       const std::vector<std::tuple<const ITarget*, const IMetric*, TimeWeightedAvgSummary>>& twa) -> void;
+
+  static auto BuildMetricSections(
+      const std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>&       minmax,
+      const std::vector<std::tuple<const ITarget*, const IMetric*, HistogramSummary>>&       histogram,
+      const std::vector<std::tuple<const ITarget*, const IMetric*, TimeWeightedAvgSummary>>& twa)
+      -> std::map<std::string, std::map<std::string, MetricTargetSummary>>;
 
   /**
    * @brief Write one combined stats row (Min,Max,Average,TimeWeightedAvg,Count).
@@ -110,18 +126,17 @@ class SummaryCsvOutput : public SummaryOutput {
    * @param summary     The computed MinMaxAvg summary statistics
    * @param tw_avg      The optional time-weighted average for this (metric, target) pair
    */
-  static auto WriteCombinedStatsEntry(std::ofstream& csv_file, const std::string& metric_name, const ITarget* target,
-                                      const MinMaxAvgSummary& summary, const std::optional<AstlValue>& tw_avg) -> void;
+  static auto WriteCombinedStatsEntry(std::ofstream& csv_file, const MetricTargetSummary& entry) -> void;
 
   /**
-   * @brief Write a Histogram summary entry to the CSV file.
-   * @param csv_file The output stream to write to
-   * @param metric_name The name of the metric
-   * @param target The target this summary applies to
-   * @param summary The computed Histogram summary statistics
+   * @brief Write the histogram table for a metric when discrete histogram summaries exist.
+   *
+   * @param csv_file    The output stream to write to
+   * @param metric_name The metric name for lookup consistency
+   * @param histogram   Discrete histogram summaries keyed by target
    */
-  static auto WriteHistogramEntry(std::ofstream& csv_file, const std::string& metric_name, const ITarget* target,
-                                  const HistogramSummary& summary) -> void;
+  static auto WriteHistogramSection(std::ofstream& csv_file, const std::string& metric_name,
+                                    const std::map<std::string, MetricTargetSummary>& entries_by_target) -> void;
 };
 
 }  // namespace astl

@@ -8,12 +8,10 @@
 #include <fstream>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
-#include <type_traits>
-#include <variant>
 
-#include "astl_logger.hpp"        // ASTL_LOG_*
-#include "common/astl_value.hpp"  // to_string
+#include "astl_logger.hpp"  // ASTL_LOG_*
 #include "csv_system_info.hpp"
 
 namespace astl {
@@ -47,57 +45,11 @@ SummaryCsvOutput::SummaryCsvOutput(std::filesystem::path path)
 std::vector<std::unique_ptr<ISummarizer>> SummaryCsvOutput::CreateSummarizers() {
   std::vector<std::unique_ptr<ISummarizer>> summarizers;
 
-  // Add MinMaxAvg summarizer
   summarizers.push_back(std::make_unique<MinMaxAvgSummarizer>());
-
-  // Add time-weighted average summarizer
   summarizers.push_back(std::make_unique<TimeWeightedAvgSummarizer>());
-
-  // Add discrete histogram summarizer (each unique value gets its own bin)
   summarizers.push_back(std::make_unique<HistogramSummarizer>());
 
   return summarizers;
-}
-
-// Generic grouper: groups (target, metric, summary) tuples by metric name.
-template <typename SummaryT>
-static auto GroupByMetricName(const std::vector<std::tuple<const ITarget*, const IMetric*, SummaryT>>& summaries)
-    -> std::map<std::string, std::vector<std::tuple<const ITarget*, const IMetric*, SummaryT>>> {
-  std::map<std::string, std::vector<std::tuple<const ITarget*, const IMetric*, SummaryT>>> summaries_by_name;
-  for (const auto& [target, metric, summary] : summaries) {
-    std::string metric_name = metric->Name();
-    summaries_by_name[metric_name].emplace_back(target, metric, summary);
-  }
-  return summaries_by_name;
-}
-
-template <typename SummaryT>
-static auto SortMetricEntriesByTargetName(std::vector<std::tuple<const ITarget*, const IMetric*, SummaryT>>& entries)
-    -> void {
-  std::ranges::sort(entries, [](const auto& left, const auto& right) {
-    return std::get<0>(left)->Name() < std::get<0>(right)->Name();
-  });
-}
-
-// Writes one CSV section with one table per metric and target-oriented rows.
-template <typename SummaryT, typename WriterFn>
-static auto WriteSection(std::ofstream& csv_file, const std::string& section_header, const std::string& column_header,
-                         const std::vector<std::tuple<const ITarget*, const IMetric*, SummaryT>>& entries,
-                         WriterFn                                                                 writer) -> void {
-  if (entries.empty()) {
-    return;
-  }
-  csv_file << section_header << "\n";
-  auto by_name = GroupByMetricName(entries);
-  for (auto& [metric_name, metric_entries] : by_name) {
-    SortMetricEntriesByTargetName(metric_entries);
-    WriteMetricHeader(csv_file, metric_name, std::get<1>(metric_entries.front()));
-    csv_file << column_header << "\n";
-    for (const auto& [target, metric, summary] : metric_entries) {
-      writer(csv_file, metric_name, target, summary);
-    }
-    csv_file << "\n";
-  }
 }
 
 // Partitioned view of a SummaryResult collection split by concrete type.
@@ -141,12 +93,11 @@ auto SummaryCsvOutput::WriteSummaries(
     return ASTL_STATUS_FILE_ERROR;
   }
 
-  WriteSystemInfoCsvSection(csv_file);
+  WriteCollectionInfoCsvSection(csv_file);
 
   auto [minmax, histogram, twa] = PartitionSummaries(summaries);
 
-  WriteCombinedStatsSection(csv_file, minmax, twa);
-  WriteSection(csv_file, "Histogram Summary", "Target,Type,Value/Range,Count", histogram, WriteHistogramEntry);
+  WriteCombinedStatsSection(csv_file, minmax, histogram, twa);
 
   csv_file.close();
   if (csv_file.fail()) {
@@ -160,74 +111,151 @@ auto SummaryCsvOutput::WriteSummaries(
 
 auto SummaryCsvOutput::WriteCombinedStatsSection(
     std::ofstream& csv_file, const std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>& minmax,
+    const std::vector<std::tuple<const ITarget*, const IMetric*, HistogramSummary>>&       histogram,
     const std::vector<std::tuple<const ITarget*, const IMetric*, TimeWeightedAvgSummary>>& twa) -> void {
-  if (minmax.empty()) {
+  auto metric_sections = BuildMetricSections(minmax, histogram, twa);
+  if (metric_sections.empty()) {
     return;
   }
-  // Build (metric_name, target_name) → time_weighted_avg lookup from TWA results
-  std::map<std::pair<std::string, std::string>, std::optional<AstlValue>> twa_lookup;
-  for (const auto& [target, metric, summary] : twa) {
-    twa_lookup[{metric->Name(), target->Name()}] = summary.time_weighted_avg;
+
+  for (auto& [metric_name, entries_by_target] : metric_sections) {
+    const auto first_entry = std::find_if(entries_by_target.begin(), entries_by_target.end(),
+                                          [](const auto& item) { return item.second.metric != nullptr; });
+    if (first_entry == entries_by_target.end()) {
+      continue;
+    }
+
+    WriteMetricHeader(csv_file, metric_name, first_entry->second.metric);
+    csv_file << "\nSummary Statistics\n";
+    csv_file << "Target,Min,Max,Average,Time Weighted Average,Count\n";
+    for (const auto& [target_name, entry] : entries_by_target) {
+      (void)target_name;
+      WriteCombinedStatsEntry(csv_file, entry);
+    }
+    WriteHistogramSection(csv_file, metric_name, entries_by_target);
   }
-  csv_file << "Min/Max/Average Summary\n";
-  auto by_name = GroupByMetricName(minmax);
-  for (auto& [metric_name, entries] : by_name) {
-    SortMetricEntriesByTargetName(entries);
-    WriteMetricHeader(csv_file, metric_name, std::get<1>(entries.front()));
-    csv_file << "Target,Min,Max,Average,TimeWeightedAvg,Count\n";
-    for (const auto& [target, metric, summary] : entries) {
-      auto       it     = twa_lookup.find({metric_name, target->Name()});
-      const auto tw_avg = (it != twa_lookup.end()) ? it->second : std::optional<AstlValue>{};
-      WriteCombinedStatsEntry(csv_file, metric_name, target, summary, tw_avg);
+}
+
+auto SummaryCsvOutput::BuildMetricSections(
+    const std::vector<std::tuple<const ITarget*, const IMetric*, MinMaxAvgSummary>>&       minmax,
+    const std::vector<std::tuple<const ITarget*, const IMetric*, HistogramSummary>>&       histogram,
+    const std::vector<std::tuple<const ITarget*, const IMetric*, TimeWeightedAvgSummary>>& twa)
+    -> std::map<std::string, std::map<std::string, MetricTargetSummary>> {
+  std::map<std::string, std::map<std::string, MetricTargetSummary>> metric_sections;
+
+  const auto ensure_entry = [&metric_sections](const ITarget* target, const IMetric* metric) -> MetricTargetSummary& {
+    auto& entry  = metric_sections[metric->Name()][target->Name()];
+    entry.target = target;
+    entry.metric = metric;
+    return entry;
+  };
+
+  for (const auto& [target, metric, summary] : minmax) {
+    ensure_entry(target, metric).minmax = summary;
+  }
+
+  for (const auto& [target, metric, summary] : histogram) {
+    ensure_entry(target, metric).histogram = summary;
+  }
+
+  for (const auto& [target, metric, summary] : twa) {
+    ensure_entry(target, metric).twa = summary;
+  }
+
+  return metric_sections;
+}
+
+auto SummaryCsvOutput::WriteCombinedStatsEntry(std::ofstream& csv_file, const MetricTargetSummary& entry) -> void {
+  std::size_t count = 0;
+  if (entry.minmax.has_value()) {
+    count = entry.minmax->count;
+  } else if (entry.twa.has_value()) {
+    count = entry.twa->count;
+  } else if (entry.histogram.has_value()) {
+    count = entry.histogram->total_count;
+  }
+
+  csv_file << (entry.target != nullptr ? entry.target->Name() : std::string{"<unknown target>"}) << ",";
+  csv_file << (entry.minmax.has_value() && entry.minmax->min.has_value() ? FormatReportValue(entry.minmax->min.value())
+                                                                         : "N/A")
+           << ",";
+  csv_file << (entry.minmax.has_value() && entry.minmax->max.has_value() ? FormatReportValue(entry.minmax->max.value())
+                                                                         : "N/A")
+           << ",";
+  csv_file << (entry.minmax.has_value() && entry.minmax->avg.has_value() ? FormatReportValue(entry.minmax->avg.value())
+                                                                         : "N/A")
+           << ",";
+  csv_file << (entry.twa.has_value() && entry.twa->time_weighted_avg.has_value()
+                   ? FormatReportValue(entry.twa->time_weighted_avg.value())
+                   : "N/A")
+           << ",";
+  csv_file << count << "\n";
+}
+
+auto SummaryCsvOutput::WriteHistogramSection(std::ofstream& csv_file, const std::string& metric_name,
+                                             const std::map<std::string, MetricTargetSummary>& entries_by_target)
+    -> void {
+  (void)metric_name;
+
+  struct TargetHistogramRow {
+    std::string                        target_name;
+    std::map<std::string, std::size_t> counts_by_value;
+  };
+
+  std::vector<TargetHistogramRow> target_rows;
+  std::vector<std::string>        distinct_values;
+  std::set<std::string>           seen_values;
+
+  for (const auto& [target_name, entry] : entries_by_target) {
+    (void)target_name;
+    if (!entry.histogram.has_value()) {
+      continue;
+    }
+    const auto& summary = entry.histogram.value();
+    if (!summary.is_discrete || summary.bins.empty()) {
+      continue;
+    }
+
+    TargetHistogramRow target_row{
+        .target_name     = entry.target != nullptr ? entry.target->Name() : std::string{"<unknown target>"},
+        .counts_by_value = {}};
+    for (const auto& bin : summary.bins) {
+      const auto value = FormatReportValue(bin.value);
+      target_row.counts_by_value[value] += bin.count;
+      if (seen_values.insert(value).second) {
+        distinct_values.push_back(value);
+      }
+    }
+    target_rows.push_back(std::move(target_row));
+  }
+
+  if (target_rows.empty() || distinct_values.empty()) {
+    csv_file << "\n";
+    return;
+  }
+
+  csv_file << "\nHistogram Summary\n";
+  csv_file << "Target,Type";
+  for (const auto& value : distinct_values) {
+    csv_file << "," << value;
+  }
+  csv_file << "\n";
+
+  std::ranges::sort(target_rows, [](const TargetHistogramRow& left, const TargetHistogramRow& right) {
+    return left.target_name < right.target_name;
+  });
+
+  for (const auto& target_row : target_rows) {
+    csv_file << target_row.target_name << ",Discrete";
+    for (const auto& value : distinct_values) {
+      const auto count_it = target_row.counts_by_value.find(value);
+      const auto count    = (count_it != target_row.counts_by_value.end()) ? count_it->second : 0;
+      csv_file << "," << count;
     }
     csv_file << "\n";
   }
-}
 
-auto SummaryCsvOutput::WriteCombinedStatsEntry(std::ofstream& csv_file, const std::string& metric_name,
-                                               const ITarget* target, const MinMaxAvgSummary& summary,
-                                               const std::optional<AstlValue>& tw_avg) -> void {
-  (void)metric_name;
-  csv_file << target->Name() << ",";
-
-  // Min value
-  csv_file << (summary.min.has_value() ? to_string(summary.min.value()) : "N/A") << ",";
-
-  // Max value
-  csv_file << (summary.max.has_value() ? to_string(summary.max.value()) : "N/A") << ",";
-
-  // Average value
-  csv_file << (summary.avg.has_value() ? to_string(summary.avg.value()) : "N/A") << ",";
-
-  // Time-weighted average value
-  csv_file << (tw_avg.has_value() ? to_string(tw_avg.value()) : "N/A") << ",";
-
-  // Sample count
-  csv_file << summary.count << "\n";
-}
-
-auto SummaryCsvOutput::WriteHistogramEntry(std::ofstream& csv_file, const std::string& metric_name,
-                                           const ITarget* target, const HistogramSummary& summary) -> void {
-  (void)metric_name;
-  // Write one row per bin
-  for (const auto& bin : summary.bins) {
-    csv_file << target->Name() << ",";
-
-    // Type column (Discrete or Range)
-    csv_file << (summary.is_discrete ? "Discrete" : "Range") << ",";
-
-    // Value/Range column
-    if (summary.is_discrete) {
-      // For discrete: show the exact value
-      csv_file << to_string(bin.value);
-    } else {
-      // For range: show the bin range as [lower, upper)
-      csv_file << "[" << bin.lower_bound << "," << bin.upper_bound << ")";
-    }
-
-    // Count column
-    csv_file << "," << bin.count << "\n";
-  }
+  csv_file << "\n";
 }
 
 }  // namespace astl

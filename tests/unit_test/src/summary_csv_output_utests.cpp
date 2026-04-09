@@ -39,12 +39,20 @@ struct SummaryTestTarget : public astl::ITarget {
 };
 
 struct SummaryTestMetric : public astl::IMetric {
-  std::string  name{"M0"};
-  std::string  description{"Test metric description"};
-  astl_units_t units{ASTL_UNITS_UNKNOWN};
+  std::string        name{"M0"};
+  std::string        description{"Test metric description"};
+  astl_units_t       units{ASTL_UNITS_UNKNOWN};
+  astl_value_type_t  value_type{ASTL_VALUE_FLOAT64};
+  astl_metric_type_t metric_type{ASTL_METRIC_VALUE};
   SummaryTestMetric() = default;
-  SummaryTestMetric(std::string metric_name, std::string metric_description, astl_units_t metric_units)
-      : name(std::move(metric_name)), description(std::move(metric_description)), units(metric_units) {}
+  SummaryTestMetric(std::string metric_name, std::string metric_description, astl_units_t metric_units,
+                    astl_value_type_t  metric_value_type  = ASTL_VALUE_FLOAT64,
+                    astl_metric_type_t metric_metric_type = ASTL_METRIC_VALUE)
+      : name(std::move(metric_name)),
+        description(std::move(metric_description)),
+        units(metric_units),
+        value_type(metric_value_type),
+        metric_type(metric_metric_type) {}
   bool CheckCapabilities(const astl::Capabilities& caps) const override {
     (void)caps;
     return true;
@@ -66,6 +74,8 @@ struct SummaryTestMetric : public astl::IMetric {
     props->name        = name.c_str();
     props->description = description.c_str();
     props->units       = units;
+    props->value_type  = value_type;
+    props->metric_type = metric_type;
     return ASTL_STATUS_SUCCESS;
   }
   auto             Name() const -> std::string const& override { return name; }
@@ -81,6 +91,17 @@ struct SummaryTestMetric : public astl::IMetric {
 
 // Helper to create test samples with specific values for summary testing
 std::vector<astl::ProcessedSampledData> MakeSamplesWithValues(const std::vector<double>& values) {
+  std::vector<astl::ProcessedSampledData> samples_vec;
+  samples_vec.reserve(values.size());
+  for (size_t i = 0; i < values.size(); ++i) {
+    samples_vec.emplace_back(
+        astl::AstlValue{values[i]},
+        astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100 + static_cast<int>(i)}});
+  }
+  return samples_vec;
+}
+
+std::vector<astl::ProcessedSampledData> MakeSamplesWithBoolValues(const std::vector<bool>& values) {
   std::vector<astl::ProcessedSampledData> samples_vec;
   samples_vec.reserve(values.size());
   for (size_t i = 0; i < values.size(); ++i) {
@@ -126,7 +147,7 @@ TEST_CASE("OutputManager::OutputProcessedSamples SUMMARY_CSV mode error paths",
   SummaryTestMetric         metric;
   astl::ProcessedSamplesMap processed_samples;
 
-  SECTION("SUMMARY_CSV mode without ASTL_CSV_OUTPUT_FILE environment variable") {
+  SECTION("SUMMARY_CSV mode without ASTL_OUTPUT_SUMMARY_CSV environment variable") {
     REQUIRE(mgr.OutputProcessedSamples(processed_samples, astl::OutputType::SUMMARY_CSV, &target, &metric) ==
             ASTL_STATUS_BAD_ARGUMENT);
   }
@@ -159,26 +180,23 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
 
     std::string line;
 
-    // Check System Info section header
     std::getline(file, line);
-    REQUIRE(line == "System Info");
-
-    // Check System Info column headers
+    REQUIRE(line.rfind("ASTL Build Version,", 0) == 0);
     std::getline(file, line);
-    REQUIRE(line == "Field,Value");
-
-    // Skip system info rows until blank separator
+    REQUIRE(line.rfind("Collection Date/Time,", 0) == 0);
+    std::getline(file, line);
+    REQUIRE(line == "Command Line,\"<not captured>\"");
     while (std::getline(file, line) && !line.empty()) {
     }
-
-    // Check MinMaxAvg section header
-    std::getline(file, line);
-    REQUIRE(line == "Min/Max/Average Summary");
 
     std::getline(file, line);
     REQUIRE(line == "Metric: Temperature - Board temperature (Celsius)");
     std::getline(file, line);
-    REQUIRE(line == "Target,Min,Max,Average,TimeWeightedAvg,Count");
+    REQUIRE(line.empty());
+    std::getline(file, line);
+    REQUIRE(line == "Summary Statistics");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Min,Max,Average,Time Weighted Average,Count");
     std::getline(file, line);
     REQUIRE(line.find("Target1,10,30,20,15,3") != std::string::npos);
     std::getline(file, line);
@@ -186,44 +204,42 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
     std::getline(file, line);
     REQUIRE(line.empty());
     std::getline(file, line);
+    REQUIRE(line == "Histogram Summary");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Type,10,20,30,15,25,35");
+    std::getline(file, line);
+    REQUIRE(line == "Target1,Discrete,1,1,1,0,0,0");
+    std::getline(file, line);
+    REQUIRE(line == "Target2,Discrete,0,0,0,1,1,1");
+    std::getline(file, line);
+    REQUIRE(line.empty());
+    std::getline(file, line);
     REQUIRE(line == "Metric: Voltage - Rail voltage (Volts)");
     std::getline(file, line);
-    REQUIRE(line == "Target,Min,Max,Average,TimeWeightedAvg,Count");
+    REQUIRE(line.empty());
+    std::getline(file, line);
+    REQUIRE(line == "Summary Statistics");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Min,Max,Average,Time Weighted Average,Count");
     std::getline(file, line);
     REQUIRE(line.find("Target1,3.3,3.5,3.4,3.35") != std::string::npos);
     std::getline(file, line);
     REQUIRE(line.find("Target2,5,5.2,5.1,5.05") != std::string::npos);
     std::getline(file, line);
     REQUIRE(line.empty());
-
-    // Check Histogram section header
     std::getline(file, line);
     REQUIRE(line == "Histogram Summary");
-
     std::getline(file, line);
-    REQUIRE(line == "Metric: Temperature - Board temperature (Celsius)");
+    REQUIRE(line == "Target,Type,3.3,3.4,3.5,5,5.1,5.2");
     std::getline(file, line);
-    REQUIRE(line == "Target,Type,Value/Range,Count");
-
-    std::vector<std::string> temperature_histogram_lines;
-    while (std::getline(file, line) && !line.empty()) {
-      temperature_histogram_lines.push_back(line);
-    }
-    REQUIRE(temperature_histogram_lines.size() == 6);
-
+    REQUIRE(line == "Target1,Discrete,1,1,1,0,0,0");
     std::getline(file, line);
-    REQUIRE(line == "Metric: Voltage - Rail voltage (Volts)");
+    REQUIRE(line == "Target2,Discrete,0,0,0,1,1,1");
     std::getline(file, line);
-    REQUIRE(line == "Target,Type,Value/Range,Count");
-
-    std::vector<std::string> voltage_histogram_lines;
-    while (std::getline(file, line) && !line.empty()) {
-      voltage_histogram_lines.push_back(line);
-    }
-    REQUIRE(voltage_histogram_lines.size() == 6);
+    REQUIRE(line.empty());
   }
 
-  SECTION("SUMMARY_CSV mode with empty data writes system info section") {
+  SECTION("SUMMARY_CSV mode with empty data writes collection info") {
     astl::ProcessedSamplesMap empty_samples;
 
     REQUIRE(mgr.OutputProcessedSamples(empty_samples, astl::OutputType::SUMMARY_CSV, nullptr, nullptr) ==
@@ -238,11 +254,12 @@ TEST_CASE(  // NOLINT(readability-function-cognitive-complexity)
 
     std::string line;
 
-    // With empty data, only the system info section is emitted.
     std::getline(file, line);
-    REQUIRE(line == "System Info");
+    REQUIRE(line.rfind("ASTL Build Version,", 0) == 0);
     std::getline(file, line);
-    REQUIRE(line == "Field,Value");
+    REQUIRE(line.rfind("Collection Date/Time,", 0) == 0);
+    std::getline(file, line);
+    REQUIRE(line == "Command Line,\"<not captured>\"");
   }
 }
 
@@ -267,67 +284,88 @@ TEST_CASE("SummaryCsvOutput direct testing", "[csv_summary]") {  // NOLINT
 
     std::string line;
 
-    // Check System Info section header
     std::getline(file, line);
-    REQUIRE(line == "System Info");
-
-    // Check System Info column headers
+    REQUIRE(line.rfind("ASTL Build Version,", 0) == 0);
     std::getline(file, line);
-    REQUIRE(line == "Field,Value");
-
-    // Skip system info rows until blank separator
+    REQUIRE(line.rfind("Collection Date/Time,", 0) == 0);
+    std::getline(file, line);
+    REQUIRE(line == "Command Line,\"<not captured>\"");
     while (std::getline(file, line) && !line.empty()) {
     }
-
-    // Check MinMaxAvg section header
-    std::getline(file, line);
-    REQUIRE(line == "Min/Max/Average Summary");
 
     std::getline(file, line);
     REQUIRE(line == "Metric: Temperature - Board temperature (Celsius)");
     std::getline(file, line);
-    REQUIRE(line == "Target,Min,Max,Average,TimeWeightedAvg,Count");
+    REQUIRE(line.empty());
+    std::getline(file, line);
+    REQUIRE(line == "Summary Statistics");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Min,Max,Average,Time Weighted Average,Count");
     std::getline(file, line);
     REQUIRE(line.find("Target1,10,30,20,15,3") != std::string::npos);
     std::getline(file, line);
     REQUIRE(line.find("Target2,15,35,25,20,3") != std::string::npos);
     std::getline(file, line);
     REQUIRE(line.empty());
+    std::getline(file, line);
+    REQUIRE(line == "Histogram Summary");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Type,10,20,30,15,25,35");
+    std::getline(file, line);
+    REQUIRE(line == "Target1,Discrete,1,1,1,0,0,0");
+    std::getline(file, line);
+    REQUIRE(line == "Target2,Discrete,0,0,0,1,1,1");
+    std::getline(file, line);
+    REQUIRE(line.empty());
 
     std::getline(file, line);
     REQUIRE(line == "Metric: Voltage - Rail voltage (Volts)");
     std::getline(file, line);
-    REQUIRE(line == "Target,Min,Max,Average,TimeWeightedAvg,Count");
+    REQUIRE(line.empty());
+    std::getline(file, line);
+    REQUIRE(line == "Summary Statistics");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Min,Max,Average,Time Weighted Average,Count");
     std::getline(file, line);
     REQUIRE(line.find("Target1,3.3,3.5,3.4,3.35") != std::string::npos);
     std::getline(file, line);
     REQUIRE(line.find("Target2,5,5.2,5.1,5.05") != std::string::npos);
     std::getline(file, line);
     REQUIRE(line.empty());
-
-    // Check Histogram section header
     std::getline(file, line);
     REQUIRE(line == "Histogram Summary");
+    std::getline(file, line);
+    REQUIRE(line == "Target,Type,3.3,3.4,3.5,5,5.1,5.2");
+    std::getline(file, line);
+    REQUIRE(line == "Target1,Discrete,1,1,1,0,0,0");
+    std::getline(file, line);
+    REQUIRE(line == "Target2,Discrete,0,0,0,1,1,1");
+    std::getline(file, line);
+    REQUIRE(line.empty());
+  }
 
-    std::getline(file, line);
-    REQUIRE(line == "Metric: Temperature - Board temperature (Celsius)");
-    std::getline(file, line);
-    REQUIRE(line == "Target,Type,Value/Range,Count");
-    size_t temperature_histogram_count = 0;
-    while (std::getline(file, line) && !line.empty()) {
-      ++temperature_histogram_count;
-    }
-    REQUIRE(temperature_histogram_count == 6);
+  SECTION("SummaryCsvOutput includes histogram-only metrics") {
+    astl::SummaryCsvOutput csv_output(temp_file.string());
+    REQUIRE(csv_output.Ready());
 
-    std::getline(file, line);
-    REQUIRE(line == "Metric: Voltage - Rail voltage (Volts)");
-    std::getline(file, line);
-    REQUIRE(line == "Target,Type,Value/Range,Count");
-    size_t voltage_histogram_count = 0;
-    while (std::getline(file, line) && !line.empty()) {
-      ++voltage_histogram_count;
-    }
-    REQUIRE(voltage_histogram_count == 6);
+    SummaryTestTarget         target{"EventTarget"};
+    SummaryTestMetric         metric{"PowerState", "Power state transitions", ASTL_UNITS_UNKNOWN, ASTL_VALUE_BOOL8,
+                             ASTL_METRIC_EVENT};
+    astl::ProcessedSamplesMap processed_samples;
+    processed_samples[&target][&metric] = MakeSamplesWithBoolValues({true, false, true});
+
+    REQUIRE(csv_output.WriteProcessedSamples(processed_samples) == ASTL_STATUS_SUCCESS);
+
+    std::ifstream file(temp_file);
+    REQUIRE(file.is_open());
+    const std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+    REQUIRE(content.find("Metric: PowerState - Power state transitions (Unknown)") != std::string::npos);
+    REQUIRE(
+        content.find(
+            "Summary Statistics\nTarget,Min,Max,Average,Time Weighted Average,Count\nEventTarget,N/A,N/A,N/A,N/A,3") !=
+        std::string::npos);
+    REQUIRE(content.find("Histogram Summary\nTarget,Type,0,1\nEventTarget,Discrete,1,2") != std::string::npos);
   }
 
   SECTION("SummaryCsvOutput with empty path") {

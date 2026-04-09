@@ -11,13 +11,14 @@
  *  - Similar to Perfetto output: only produced at StopCollection when
  *    ASTL_OUTPUT_INTERVAL_CSV env var is set to a path. Lifetime is a single write.
  *
- * Format (grouped by metric name, hybrid rows):
- *  For each unique metric name encountered across all targets:
- *    metric_name,metric_description        (info row; description is first non-empty encountered)
- *    timestamp_us,target,metric,value      (per-metric header line)
- *    <one row per sample for that metric across all targets>
- *        where each sample row repeats the metric name for easier downstream filtering
- *  Blank line separates metric groups. Empty collection yields empty file.
+ * Format (ATX-compatible interval sections):
+ *  For each metric/target pair encountered:
+ *    <metric_name> on <target_name>
+ *
+ *    timestamp_us,value
+ *    <one row per sample for that metric-target series>
+ *
+ *  Blank line separates sections. Empty collection yields collection info only.
  */
 #ifndef INTERVAL_CSV_OUTPUT_HPP_
 #define INTERVAL_CSV_OUTPUT_HPP_
@@ -36,14 +37,14 @@ namespace astl {
 
 /** @class IntervalCsvOutput
  *  @ingroup output_writers
- *  @brief Emits processed interval samples in a grouped CSV format.
+ *  @brief Emits processed interval samples in an ATX-compatible CSV format.
  *  @details Usage is deferred: file opens on construction but rows are only
  *           written once via WriteProcessedSamples (called from orchestrator
- *           stop path when ASTL_OUTPUT_INTERVAL_CSV is set). Each metric group has:
- *           an info row (name, description), a header row
- *           (timestamp_us,target,metric,value), then sample rows repeating the
- *           metric name. Groups ordered alphabetically; blank line separates
- *           groups. Empty set produces empty file. Thread-safety: not thread-safe.
+ *           stop path when ASTL_OUTPUT_INTERVAL_CSV is set). Each metric-target
+ *           section has an info row (`metric on target`), a header row
+ *           (`timestamp_us,value`), then sample rows. Sections are ordered by
+ *           metric then target; blank line separates sections. Empty set
+ *           produces collection info only. Thread-safety: not thread-safe.
  */
 class IntervalCsvOutput : public IOutput {  // NOLINT(cppcoreguidelines-special-member-functions)
  public:
