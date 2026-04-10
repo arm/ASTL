@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -211,7 +212,9 @@ TEST_CASE("RegisterLibsensorsMetrics uses stable family instance prefixes for ad
   ALLOW_CALL(*mock_libsensors, sensors_get_subfeature(_, _, _)).RETURN(nullptr);
   ALLOW_CALL(*mock_libsensors, sensors_get_value(_, _, _)).SIDE_EFFECT(*_3 = 42.0).RETURN(0);
 
-  const auto    temp_root = std::filesystem::temp_directory_path() / "astl_libsensors_metric_stable_names";
+  const auto temp_root = std::filesystem::temp_directory_path() /
+                         ("astl_libsensors_metric_stable_names_" +
+                          std::to_string(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
   TempFileGuard temp_root_guard{temp_root};
   WriteTextFile(temp_root / "libsensors" / "libsensors_nvme-pci.json", R"json(
 {

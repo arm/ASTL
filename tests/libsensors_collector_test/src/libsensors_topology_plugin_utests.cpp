@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <expected>
 #include <filesystem>
 #include <fstream>
@@ -245,7 +246,9 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets keeps raw chip names even wh
   ALLOW_CALL(*mock_libsensors, sensors_init(_)).RETURN(0);
   ALLOW_CALL(*mock_libsensors, sensors_cleanup());
 
-  const auto    temp_root = std::filesystem::temp_directory_path() / "astl_libsensors_topology_stable_names";
+  const auto temp_root = std::filesystem::temp_directory_path() /
+                         ("astl_libsensors_topology_stable_names_" +
+                          std::to_string(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
   TempFileGuard temp_root_guard{temp_root};
   WriteTextFile(temp_root / "libsensors" / "libsensors_nvme-pci.json",
                 R"json({"document":{"confidential":false},"metrics":{}})json");
