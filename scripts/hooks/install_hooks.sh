@@ -65,7 +65,10 @@ if [ ! -x "$LICENSE_LINT_SCRIPT" ]; then
 	exit 1
 fi
 
-mapfile -t STAGED_FILES < <(git diff --cached --name-only --diff-filter=ACMR)
+STAGED_FILES=()
+while IFS= read -r file; do
+	STAGED_FILES+=("$file")
+done < <(git diff --cached --name-only --diff-filter=ACMR)
 
 if [ "${#STAGED_FILES[@]}" -gt 0 ]; then
 	echo "Running formatter before commit"
