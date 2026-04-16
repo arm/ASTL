@@ -78,6 +78,10 @@ enum class EnvVar {
 
   /* used by tests to force SCMI process-lock temp dir lookup failure */
   ASTL_TEST_FORCE_SCMI_PROCESS_LOCK_TEMP_DIR_FAILURE,
+
+  /* set to any value other than empty, 0, off, no, or false to enable per-sample CSV logging to raw_samples.csv (debug
+     feature) */
+  ASTL_LOG_RAW_SAMPLES,
 };
 
 /**
@@ -340,7 +344,7 @@ inline auto to_string(astl_units_t units) -> std::string {
   std::string_view name = magic_enum::enum_name(units);
   // ignore the first part of the name, which is "ASTL_UNITS_";
   constexpr size_t prefix_length = 11;  // length of "ASTL_UNITS_";
-  return name.empty() ? "UNKNOWN" : name.data() + prefix_length;
+  return name.empty() ? "UNKNOWN" : std::string(name.substr(prefix_length));
 }
 }  // namespace std
 

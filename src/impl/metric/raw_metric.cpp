@@ -15,6 +15,12 @@
 #include "metric/formula_builder.hpp"
 namespace astl {
 
+// Static member definitions — one shared logger and header-init flag for all RawMetric instances.
+// _raw_sample_logger starts empty; it is emplaced inside call_once so that ASTL_LOG_RAW_SAMPLES is
+// consulted at first construction time, not at static-initialization time.
+std::optional<astl::Logger> RawMetric::_raw_sample_logger;
+std::once_flag              RawMetric::_raw_sample_logger_header_flag;
+
 RawMetric::RawMetric(const MetricConfig *configuration, const ITarget *target,
                      IProcessedSampleSink *processed_sample_sink)
     : _configuration(configuration), _target(target) {
@@ -26,9 +32,14 @@ RawMetric::RawMetric(const MetricConfig *configuration, const ITarget *target,
         _configuration->Name());
   }
 
-  // Initialize logger header
-  // TODO (ASTL-58): When the output manager is implemented raw_sample_logger will be part of the OutputManager.
-  _raw_sample_logger.LogInfo("Metric, Description, Units, Raw-Value, Timestamp(ns) \n");
+  // On first construction: read ASTL_LOG_RAW_SAMPLES env variable, configure the shared logger, and write the CSV
+  // header. All subsequent constructions skip this block entirely.
+  std::call_once(_raw_sample_logger_header_flag, [] {
+    const auto level =
+        astl::IsEnvVarSet(astl::EnvVar::ASTL_LOG_RAW_SAMPLES) ? astl::LogLevel::Info : astl::LogLevel::Off;
+    _raw_sample_logger.emplace(level, false /* no console */, false /* no default formatting */, "raw_samples.csv");
+    _raw_sample_logger->LogInfo("Metric, Description, Units, Raw-Value, Timestamp(ns) \n");
+  });
 }
 
 /*
@@ -118,10 +129,13 @@ auto RawMetric::CheckSampleValueType(const NormalizedSampledData &raw_sample) co
 }
 
 auto RawMetric::LogNormalizedSample(const NormalizedSampledData &sample) -> void {
+  if (!_raw_sample_logger) {
+    return;
+  }
   // LOG : Metric, Description, Units, Raw-Value, Timestamp(ns)
   auto timestamp = sample.timestamp.time_since_epoch().count();
-  _raw_sample_logger.LogInfo("{}, {}, {}, {}, {} \n", _configuration->Name(), _configuration->Description(),
-                             _configuration->Units(), sample.value, timestamp);
+  _raw_sample_logger->LogInfo("{}, {}, {}, {}, {} \n", _configuration->Name(), _configuration->Description(),
+                              _configuration->Units(), sample.value, timestamp);
 }
 
 auto RawMetric::ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code {

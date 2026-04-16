@@ -6,6 +6,8 @@
 #define RAW_METRIC_HPP_
 
 #include <cctype>
+#include <mutex>
+#include <optional>
 #include <string>
 
 #include "astl/astl.h"
@@ -183,10 +185,11 @@ class RawMetric : public virtual IMetric {
   IProcessedSampleSink *_processed_sample_sink =
       nullptr;  //!< The (optional) destination for where processed data should be sent
 
-  // Create a Logger instance explicitly to log raw samples
-  // TODO (ASTL-58): When the output manager is implemented raw_sample_logger will be part of the OutputManager.
-  astl::Logger _raw_sample_logger{astl::LogLevel::Info, false /* Console logging disabled */,
-                                  false /* No default formatting */, "raw_samples.csv"};
+  // Single logger shared across all RawMetric instances — one "raw_samples.csv" file for all metrics.
+  // Lazily configured on first RawMetric construction so that ASTL_LOG_RAW_SAMPLES is read at runtime
+  // rather than at static-initialization time (which would break test isolation via EnvVarGuard).
+  static std::optional<astl::Logger> _raw_sample_logger;
+  static std::once_flag              _raw_sample_logger_header_flag;  // ensures init + CSV header happen exactly once
 
   // NOLINTEND - End of clang-tidy checks for protected members.
 };  // End of RawMetric class
