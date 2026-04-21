@@ -12,6 +12,7 @@
 #include <string>
 #include <unordered_set>
 #include <variant>
+#include <vector>
 
 #include "astl/astl.h"
 #include "common/astl_defines.hpp"
@@ -198,6 +199,69 @@ auto GetProcessedSamplesSnapshot() noexcept -> std::expected<astl::ProcessedSamp
   const auto& orchestrator = orchestrator_or_error->get();
   // Snapshot return avoids exposing references to mutable shared state across threads.
   return orchestrator->GetProcessedSamplesSnapshot();
+}
+
+auto ValidateTimestampRange(const char* api_name, uint64_t start_ts, uint64_t end_ts) noexcept -> astl_status_code {
+  if (start_ts != 0 && end_ts != 0 && start_ts > end_ts) {
+    ASTL_LOG_ERROR("{}: start_ts ({}) must be <= end_ts ({})", api_name, start_ts, end_ts);
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto SampleIsWithinTimestampRange(const astl::ProcessedSampledData& sample, uint64_t start_ts, uint64_t end_ts) noexcept
+    -> bool {
+  const uint64_t timestamp = static_cast<uint64_t>(sample.timestamp.time_since_epoch().count());
+  if (start_ts != 0 && timestamp < start_ts) {
+    return false;
+  }
+  if (end_ts != 0 && timestamp > end_ts) {
+    return false;
+  }
+  return true;
+}
+
+auto CountSamplesInTimestampRange(std::span<const astl::ProcessedSampledData> samples, uint64_t start_ts,
+                                  uint64_t end_ts) -> size_t {
+  return static_cast<size_t>(
+      std::count_if(samples.begin(), samples.end(), [start_ts, end_ts](const astl::ProcessedSampledData& sample) {
+        return SampleIsWithinTimestampRange(sample, start_ts, end_ts);
+      }));
+}
+
+auto FilterSamplesInTimestampRange(std::span<const astl::ProcessedSampledData> samples, uint64_t start_ts,
+                                   uint64_t end_ts) -> std::vector<astl::ProcessedSampledData> {
+  std::vector<astl::ProcessedSampledData> filtered_samples;
+  filtered_samples.reserve(CountSamplesInTimestampRange(samples, start_ts, end_ts));
+  std::copy_if(samples.begin(), samples.end(), std::back_inserter(filtered_samples),
+               [start_ts, end_ts](const astl::ProcessedSampledData& sample) {
+                 return SampleIsWithinTimestampRange(sample, start_ts, end_ts);
+               });
+  return filtered_samples;
+}
+
+auto ConvertProcessedSampleToAstlSample(const astl::ProcessedSampledData& processed_sample) -> astl_sample_t {
+  const auto union_value = processed_sample.value.ToAstlUnionValue().first;
+  return astl_sample_t{.timestamp = static_cast<uint64_t>(processed_sample.timestamp.time_since_epoch().count()),
+                       .value     = union_value};
+}
+
+auto WriteSamplesInTimestampRange(std::span<const astl::ProcessedSampledData> processed_samples,
+                                  std::span<astl_sample_t> output_samples, uint32_t* output_count, uint64_t start_ts,
+                                  uint64_t end_ts) noexcept -> astl_status_code {
+  uint32_t written = 0;
+  for (const auto& processed_sample : processed_samples) {
+    if (!SampleIsWithinTimestampRange(processed_sample, start_ts, end_ts)) {
+      continue;
+    }
+    if (written >= output_samples.size()) {
+      break;
+    }
+    output_samples[written] = ConvertProcessedSampleToAstlSample(processed_sample);
+    ++written;
+  }
+  *output_count = written;
+  return ASTL_STATUS_SUCCESS;
 }
 
 constexpr uint32_t kFirstElementIdx{0};
@@ -2137,8 +2201,10 @@ auto astlGetCounterSampleCountOnTarget(const astl_get_counter_sample_count_on_ta
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  if (params->start_ts != 0 || params->end_ts != 0) {
-    return ASTL_STATUS_NOT_IMPLEMENTED;
+  const auto timestamp_status =
+      ValidateTimestampRange("astlGetCounterSampleCountOnTarget", params->start_ts, params->end_ts);
+  if (timestamp_status != ASTL_STATUS_SUCCESS) {
+    return timestamp_status;
   }
   const auto* target_handle  = params->target_handle;
   const auto* counter_handle = params->counter_handle;
@@ -2166,12 +2232,13 @@ auto astlGetCounterSampleCountOnTarget(const astl_get_counter_sample_count_on_ta
   if (!sample_result) {
     return sample_result.error();
   }
-  if (sample_result->size() > std::numeric_limits<uint32_t>::max()) {
-    ASTL_LOG_ERROR("orchestrator.GetProcessedMetricSamples reports absurdly large number of samples: {}",
-                   sample_result->size());
+  const size_t filtered_count = CountSamplesInTimestampRange(*sample_result, params->start_ts, params->end_ts);
+  if (filtered_count > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("orchestrator.GetProcessedMetricSamples reports absurdly large filtered sample count: {}",
+                   filtered_count);
     return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
   }
-  *sample_count = static_cast<uint32_t>(sample_result->size());
+  *sample_count = static_cast<uint32_t>(filtered_count);
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -2182,8 +2249,10 @@ auto astlGetCounterSamplesOnTarget(const astl_get_counter_samples_on_target_para
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  if (params->start_ts != 0 || params->end_ts != 0) {
-    return ASTL_STATUS_NOT_IMPLEMENTED;
+  const auto timestamp_status =
+      ValidateTimestampRange("astlGetCounterSamplesOnTarget", params->start_ts, params->end_ts);
+  if (timestamp_status != ASTL_STATUS_SUCCESS) {
+    return timestamp_status;
   }
   const auto* target_handle  = params->target_handle;
   const auto* counter_handle = params->counter_handle;
@@ -2215,27 +2284,7 @@ auto astlGetCounterSamplesOnTarget(const astl_get_counter_samples_on_target_para
   if (!sample_result) {
     return sample_result.error();
   }
-  if (sample_result->size() > std::numeric_limits<uint32_t>::max()) {
-    ASTL_LOG_ERROR("orchestrator.GetProcessedMetricSamples reports absurdly large number of samples: {}",
-                   sample_result->size());
-    return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
-  }
-  *sample_count = static_cast<uint32_t>(sample_result->size());
-  if (sample_result->size() > samples_span.size()) {
-    *sample_count = 0;
-    return ASTL_STATUS_COUNTER_SAMPLES_BUFFER_TOO_SMALL;
-  }
-
-  // helper lambda to convert a ProcessedSampledData into an astl_sample_t
-  auto convert_to_counter_sample = [](const astl::ProcessedSampledData& processed_sample) {
-    const auto union_value = processed_sample.value.ToAstlUnionValue().first;  // avoid constructing pair twice
-    return astl_sample_t{.timestamp = static_cast<uint64_t>(processed_sample.timestamp.time_since_epoch().count()),
-                         .value     = union_value};
-  };
-
-  // samples_span is at least large enough to accomodate sample_result because of above check.
-  std::transform(sample_result->begin(), sample_result->end(), samples_span.begin(), convert_to_counter_sample);
-  return ASTL_STATUS_SUCCESS;
+  return WriteSamplesInTimestampRange(*sample_result, samples_span, sample_count, params->start_ts, params->end_ts);
 }
 
 /*** COLLECTED METRIC SAMPLES ***/
@@ -2246,8 +2295,10 @@ auto astlGetMetricSampleCountOnTarget(const astl_get_metric_sample_count_on_targ
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  if (params->start_ts != 0 || params->end_ts != 0) {
-    return ASTL_STATUS_NOT_IMPLEMENTED;
+  const auto timestamp_status =
+      ValidateTimestampRange("astlGetMetricSampleCountOnTarget", params->start_ts, params->end_ts);
+  if (timestamp_status != ASTL_STATUS_SUCCESS) {
+    return timestamp_status;
   }
   const auto* target_handle = params->target_handle;
   const auto* metric_handle = params->metric_handle;
@@ -2274,13 +2325,14 @@ auto astlGetMetricSampleCountOnTarget(const astl_get_metric_sample_count_on_targ
   if (!get_samples_result) {
     return get_samples_result.error();
   }
-  auto samples = *get_samples_result;
+  const auto samples        = *get_samples_result;
+  const auto filtered_count = CountSamplesInTimestampRange(samples, params->start_ts, params->end_ts);
 
-  if (samples.size() > std::numeric_limits<uint32_t>::max()) {
-    ASTL_LOG_ERROR("metric->GetProcessedSamples reports absurdly large number of samples: {}", samples.size());
+  if (filtered_count > std::numeric_limits<uint32_t>::max()) {
+    ASTL_LOG_ERROR("metric->GetProcessedSamples reports absurdly large filtered sample count: {}", filtered_count);
     return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
   }
-  *sample_count = static_cast<uint32_t>(samples.size());
+  *sample_count = static_cast<uint32_t>(filtered_count);
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -2291,8 +2343,10 @@ auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  if (params->start_ts != 0 || params->end_ts != 0) {
-    return ASTL_STATUS_NOT_IMPLEMENTED;
+  const auto timestamp_status =
+      ValidateTimestampRange("astlGetMetricSamplesOnTarget", params->start_ts, params->end_ts);
+  if (timestamp_status != ASTL_STATUS_SUCCESS) {
+    return timestamp_status;
   }
   const auto* target_handle = params->target_handle;
   const auto* metric_handle = params->metric_handle;
@@ -2321,33 +2375,8 @@ auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params
   const auto& collected_samples = *collected_samples_or_error;
 
   std::span<astl_sample_t> output_samples{samples, *sample_count};
-  if (*sample_count < collected_samples.size()) {
-    *sample_count = 0;
-    return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
-  }
-
-  auto get_output_manager_result = GetOutputManager();
-  if (!get_output_manager_result) {
-    return get_output_manager_result.error();
-  }
-  auto* output_manager = *get_output_manager_result;
-
-  auto create_buffer_result = output_manager->CreateBufferOutput(output_samples, sample_count);
-  if (ASTL_STATUS_SUCCESS != create_buffer_result) {
-    return create_buffer_result;
-  }
-
-  auto processed_samples_snapshot_or_error = GetProcessedSamplesSnapshot();
-  if (!processed_samples_snapshot_or_error) {
-    (void)output_manager->DestroyBufferOutput();
-    return processed_samples_snapshot_or_error.error();
-  }
-
-  astl_status_code status = output_manager->OutputProcessedSamples(*processed_samples_snapshot_or_error,
-                                                                   astl::OutputType::BUFFER, target, metric);
-  // Intentionally ignore the result of DestroyBufferOutput; cleanup best-effort during sample retrieval.
-  (void)output_manager->DestroyBufferOutput();
-  return status;
+  return WriteSamplesInTimestampRange(collected_samples, output_samples, sample_count, params->start_ts,
+                                      params->end_ts);
 }
 
 /***********************************************************************************
@@ -2421,8 +2450,10 @@ auto astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  if (params->start_ts != 0 || params->end_ts != 0) {
-    return ASTL_STATUS_NOT_IMPLEMENTED;
+  const auto timestamp_status =
+      ValidateTimestampRange("astlGetMetricStatisticsOnTarget", params->start_ts, params->end_ts);
+  if (timestamp_status != ASTL_STATUS_SUCCESS) {
+    return timestamp_status;
   }
   const auto* target_handle = params->target_handle;
   const auto* metric_handle = params->metric_handle;
@@ -2478,7 +2509,13 @@ auto astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_
   if (!samples_result) {
     return samples_result.error();
   }
-  auto samples = *samples_result;
+  const auto                              samples = *samples_result;
+  std::vector<astl::ProcessedSampledData> filtered_samples_storage;
+  auto                                    filtered_samples = std::span<const astl::ProcessedSampledData>(samples);
+  if (params->start_ts != 0 || params->end_ts != 0) {
+    filtered_samples_storage = FilterSamplesInTimestampRange(samples, params->start_ts, params->end_ts);
+    filtered_samples         = filtered_samples_storage;
+  }
 
   // Get metric properties (needed for IsSupported check in MinMaxAvgSummarizer)
   astl_metric_props_t metric_properties{};
@@ -2492,7 +2529,7 @@ auto astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_
   const bool is_twa = (selected_avg_mode == ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG);
 
   // Always compute min/max/count; fill avg only for regular-average mode.
-  auto minmax_result = ComputeMinMaxStats(samples, metric_properties);
+  auto minmax_result = ComputeMinMaxStats(filtered_samples, metric_properties);
   if (!minmax_result) {
     return minmax_result.error();
   }
@@ -2508,7 +2545,7 @@ auto astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_
   }
 
   if (is_twa) {
-    auto twa_result = ComputeTimeWeightedAvg(samples, target);
+    auto twa_result = ComputeTimeWeightedAvg(filtered_samples, target);
     if (!twa_result) {
       return twa_result.error();
     }
@@ -2526,8 +2563,8 @@ namespace {
  * @brief Shared helper: run the HistogramSummarizer (discrete mode) for the given
  *        target/metric and return the HistogramSummary, or an error status.
  */
-auto ComputeDiscreteHistogram(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle)
-    -> std::expected<astl::HistogramSummary, astl_status_code> {
+auto ComputeDiscreteHistogram(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle, uint64_t start_ts,
+                              uint64_t end_ts) -> std::expected<astl::HistogramSummary, astl_status_code> {
   auto get_target_result = GetTargetFromHandle(target_handle);
   if (!get_target_result) {
     return std::unexpected(get_target_result.error());
@@ -2560,7 +2597,14 @@ auto ComputeDiscreteHistogram(astl_target_handle_t target_handle, astl_metric_ha
     return std::unexpected(samples_result.error());
   }
 
-  auto summary_result = summarizer.Summarize(*samples_result);
+  std::vector<astl::ProcessedSampledData> filtered_samples_storage;
+  auto filtered_samples = std::span<const astl::ProcessedSampledData>(*samples_result);
+  if (start_ts != 0 || end_ts != 0) {
+    filtered_samples_storage = FilterSamplesInTimestampRange(*samples_result, start_ts, end_ts);
+    filtered_samples         = filtered_samples_storage;
+  }
+
+  auto summary_result = summarizer.Summarize(filtered_samples);
   if (!summary_result) {
     ASTL_LOG_ERROR("ComputeDiscreteHistogram: Failed to compute histogram");
     return std::unexpected(summary_result.error());
@@ -2584,8 +2628,10 @@ auto astlGetMetricDiscreteHistogramBinCountOnTarget(
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  if (params->start_ts != 0 || params->end_ts != 0) {
-    return ASTL_STATUS_NOT_IMPLEMENTED;
+  const auto timestamp_status =
+      ValidateTimestampRange("astlGetMetricDiscreteHistogramBinCountOnTarget", params->start_ts, params->end_ts);
+  if (timestamp_status != ASTL_STATUS_SUCCESS) {
+    return timestamp_status;
   }
   const auto* target_handle = params->target_handle;
   const auto* metric_handle = params->metric_handle;
@@ -2595,7 +2641,7 @@ auto astlGetMetricDiscreteHistogramBinCountOnTarget(
     return ASTL_STATUS_BAD_ARGUMENT;
   }
 
-  auto histogram_result = ComputeDiscreteHistogram(target_handle, metric_handle);
+  auto histogram_result = ComputeDiscreteHistogram(target_handle, metric_handle, params->start_ts, params->end_ts);
   if (!histogram_result) {
     return histogram_result.error();
   }
@@ -2617,8 +2663,10 @@ auto astlGetMetricDiscreteHistogramOnTarget(
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  if (params->start_ts != 0 || params->end_ts != 0) {
-    return ASTL_STATUS_NOT_IMPLEMENTED;
+  const auto timestamp_status =
+      ValidateTimestampRange("astlGetMetricDiscreteHistogramOnTarget", params->start_ts, params->end_ts);
+  if (timestamp_status != ASTL_STATUS_SUCCESS) {
+    return timestamp_status;
   }
   const auto* target_handle = params->target_handle;
   const auto* metric_handle = params->metric_handle;
@@ -2643,7 +2691,7 @@ auto astlGetMetricDiscreteHistogramOnTarget(
     return ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE;
   }
 
-  auto histogram_result = ComputeDiscreteHistogram(target_handle, metric_handle);
+  auto histogram_result = ComputeDiscreteHistogram(target_handle, metric_handle, params->start_ts, params->end_ts);
   if (!histogram_result) {
     return histogram_result.error();
   }

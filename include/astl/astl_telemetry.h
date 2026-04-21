@@ -1191,6 +1191,8 @@ typedef struct astl_get_counter_samples_on_target_params_t {
   astl_counter_handle_t counter_handle;  //!< Counter handle of interest from astl_counter_props_t.
   astl_sample_t*        samples;         //!< Caller-allocated sample array. Cannot be NULL.
   uint32_t*             sample_count;    //!< In: sample-array capacity. Out: number of samples written. Cannot be NULL.
+                                         //!< If the capacity is smaller than the filtered sample count, ASTL writes the
+                                         //!< earliest matching samples that fit and returns success.
   uint64_t start_ts;  //!< Filter start timestamp. If non-zero, only samples with timestamp >= this value are included.
                       //!< Uses CLOCK_MONOTONIC_RAW on Linux.
   uint64_t end_ts;  //!< Filter end timestamp. If non-zero, only samples with timestamp <= this value are included. Uses
@@ -1243,6 +1245,8 @@ typedef struct astl_get_metric_samples_on_target_params_t {
   astl_metric_handle_t metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
   astl_sample_t*       samples;        //!< Caller-allocated sample array. Cannot be NULL.
   uint32_t*            sample_count;   //!< In: sample-array capacity. Out: number of samples written. Cannot be NULL.
+                                       //!< If the capacity is smaller than the filtered sample count, ASTL writes the
+                                       //!< earliest matching samples that fit and returns success.
   uint64_t start_ts;  //!< Filter start timestamp. If non-zero, only samples with timestamp >= this value are included.
                       //!< Uses CLOCK_MONOTONIC_RAW on Linux.
   uint64_t end_ts;  //!< Filter end timestamp. If non-zero, only samples with timestamp <= this value are included. Uses

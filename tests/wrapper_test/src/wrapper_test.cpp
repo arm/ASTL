@@ -1573,8 +1573,92 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
 }
 // NOLINTEND(readability-function-cognitive-complexity)
 
-TEST_CASE("astlGetCounterSamplesOnTarget", "[unimplemented for now][wrapper]") {
+TEST_CASE("astlGetCounterSamplesOnTarget", "[wrapper][Orchestrator]") {
+  auto                     counter = std::make_unique<MockCounter>();
+  astl::ICounter*          counter_ptr{counter.get()};
+  static std::string const counter_name{"MockCounter"};
+  ALLOW_CALL(*counter, Name()).RETURN(counter_name);
+
+  auto                     mock_target        = std::make_unique<MockTarget>();
+  const astl::ITarget*     mock_target_raw    = mock_target.get();
+  astl_target_handle_t     mock_target_handle = mock_target_raw;
+  static std::string const target_name{"MockTarget"};
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
+  ALLOW_CALL(*mock_target, Name()).RETURN(target_name);
+  ALLOW_CALL(*mock_target, GetProperties(_))
+      .SIDE_EFFECT({
+        _1->handle      = mock_target_handle;
+        _1->name        = target_name.c_str();
+        _1->description = target_name.c_str();
+      })
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  auto counter_config = std::make_unique<astl::MetricConfig>(
+      counter_name, counter_name, ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
+      astl::CollectorType::SCMI, astl::NullOperationBuilder{});
+  std::unordered_map<const astl::ITarget*, std::unique_ptr<astl::ICounter>> target_to_counter_map;
+  target_to_counter_map[mock_target_raw] = std::move(counter);
+  auto counter_handle =
+      std::make_unique<astl::CounterHandle>(std::move(counter_config), std::move(target_to_counter_map));
+  astl_counter_handle_t counter_api_handle = static_cast<astl_counter_handle_t>(counter_handle.get());
+
+  auto  mock_metric_manager_uptr = std::make_unique<MockMetricManager>();
+  auto* mock_metric_manager      = mock_metric_manager_uptr.get();
+  ALLOW_CALL(*mock_metric_manager, GetNumAvailableCounters(_)).RETURN(1);
+  ALLOW_CALL(*mock_metric_manager, GetAvailableCounters(mock_target_raw))
+      .RETURN(std::span<const astl_counter_handle_t>{&counter_api_handle, 1});
+  ALLOW_CALL(*mock_metric_manager, GetCounterOnTarget(counter_api_handle, mock_target_raw)).RETURN(counter_ptr);
+  ALLOW_CALL(*mock_metric_manager, GetCounterProperties(counter_api_handle, _))
+      .SIDE_EFFECT({
+        _2->handle      = counter_api_handle;
+        _2->name        = counter_name.c_str();
+        _2->description = counter_name.c_str();
+        _2->value_type  = ASTL_VALUE_UINT64;
+      })
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  auto [orchestrator, expectations] = MakeMinimalOrchestrator(std::move(mock_metric_manager_uptr));
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target));
+  orchestrator->SetTargets(std::move(mock_targets));
+  auto*                    orchestrator_raw = orchestrator.get();
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  uint32_t sample_count = kJunk;
+  REQUIRE(GetCounterSampleCountOnTarget(nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
   REQUIRE(GetCounterSamplesOnTarget(nullptr, nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(GetCounterSampleCountOnTarget(mock_target_handle, counter_api_handle, &sample_count, 10, 5) ==
+          ASTL_STATUS_BAD_ARGUMENT);
+
+  std::vector<astl::ProcessedSampledData> samples;
+  samples.emplace_back(astl::AstlValue{uint64_t{10}},
+                       astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}});
+  samples.emplace_back(astl::AstlValue{uint64_t{20}},
+                       astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{101}});
+  samples.emplace_back(astl::AstlValue{uint64_t{30}},
+                       astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{102}});
+  REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, counter_ptr, samples) == ASTL_STATUS_SUCCESS);
+
+  REQUIRE(GetCounterSampleCountOnTarget(mock_target_handle, counter_api_handle, &sample_count) == ASTL_STATUS_SUCCESS);
+  REQUIRE(sample_count == samples.size());
+  REQUIRE(GetCounterSampleCountOnTarget(mock_target_handle, counter_api_handle, &sample_count, 101, 102) ==
+          ASTL_STATUS_SUCCESS);
+  REQUIRE(sample_count == 2);
+
+  auto samples_out = AllocateAstlVector<astl_sample_t>(2);
+  sample_count     = 2;
+  REQUIRE(GetCounterSamplesOnTarget(mock_target_handle, counter_api_handle, samples_out.data(), &sample_count) ==
+          ASTL_STATUS_SUCCESS);
+  REQUIRE(sample_count == 2);
+  REQUIRE(samples_out[0].timestamp == 100);
+  REQUIRE(samples_out[1].timestamp == 101);
+
+  sample_count = 2;
+  REQUIRE(GetCounterSamplesOnTarget(mock_target_handle, counter_api_handle, samples_out.data(), &sample_count, 101,
+                                    0) == ASTL_STATUS_SUCCESS);
+  REQUIRE(sample_count == 2);
+  REQUIRE(samples_out[0].timestamp == 101);
+  REQUIRE(samples_out[1].timestamp == 102);
 }
 
 /*** COLLECTED METRIC SAMPLES ***/
@@ -1680,6 +1764,8 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
     REQUIRE((result == ASTL_STATUS_INVALID_TARGET_HANDLE || result == ASTL_STATUS_BAD_ARGUMENT));
     REQUIRE(GetMetricSampleCountOnTarget(mock_target_handle, invalid_metric_handle, nullptr) ==
             ASTL_STATUS_BAD_ARGUMENT);
+    REQUIRE(GetMetricSampleCountOnTarget(mock_target_handle, metric_handle.get(), &sample_count, 300, 200) ==
+            ASTL_STATUS_BAD_ARGUMENT);
     // GetMetricSamples
     // invalid targets
     result = GetMetricSamplesOnTarget(nullptr, nullptr, nullptr, nullptr);
@@ -1702,6 +1788,9 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
     sample_count = 0;  // 0 is not a valid size for the output buffer, even if 0 samples are expected
     REQUIRE(GetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), &sample_count) ==
             ASTL_STATUS_BAD_ARGUMENT);
+    sample_count = 1;
+    REQUIRE(GetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), &sample_count, 300,
+                                     200) == ASTL_STATUS_BAD_ARGUMENT);
   }
 
   SECTION("[no samples][wrapper]") {
@@ -1733,17 +1822,25 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
     REQUIRE(GetMetricSampleCountOnTarget(mock_target_handle, metric_handle.get(), &sample_count) ==
             ASTL_STATUS_SUCCESS);
     REQUIRE(sample_count == samples.size());
+    REQUIRE(GetMetricSampleCountOnTarget(mock_target_handle, metric_handle.get(), &sample_count, 101, 102) ==
+            ASTL_STATUS_SUCCESS);
+    REQUIRE(sample_count == 2);
 
-    sample_count     = static_cast<uint32_t>(samples.size());
+    sample_count     = 2;
     auto samples_out = AllocateAstlVector<astl_sample_t>(kAFew);
 
     REQUIRE(GetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), &sample_count) ==
             ASTL_STATUS_SUCCESS);
-    REQUIRE(sample_count == samples.size());
-    // NOTE: Value copying path under investigation; for now validate count and monotonic timestamps.
-    REQUIRE(sample_count == samples.size());
-    REQUIRE(samples_out[0].timestamp <= samples_out[1].timestamp);
-    REQUIRE(samples_out[1].timestamp <= samples_out[2].timestamp);
+    REQUIRE(sample_count == 2);
+    REQUIRE(samples_out[0].timestamp == 100);
+    REQUIRE(samples_out[1].timestamp == 101);
+
+    sample_count = 2;
+    REQUIRE(GetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), &sample_count, 101,
+                                     0) == ASTL_STATUS_SUCCESS);
+    REQUIRE(sample_count == 2);
+    REQUIRE(samples_out[0].timestamp == 101);
+    REQUIRE(samples_out[1].timestamp == 102);
   }
 }
 

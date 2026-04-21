@@ -806,33 +806,85 @@ The following APIs honour `start_ts` / `end_ts`:
 
 ```c
 #include "astl/astl_telemetry.h"
-#include <time.h>
+#include <stdint.h>
 
-static uint64_t now_ns(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    return (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+enum { SAMPLE_CHUNK_CAPACITY = 4 };
+
+static astl_status_code read_metric_samples_in_chunks(astl_target_handle_t target_handle,
+                                                      astl_metric_handle_t metric_handle) {
+    uint32_t expected_samples = 0;
+    ASTL_INIT_STRUCT(astl_get_metric_sample_count_on_target_params_t, count_params,
+        .flags         = 0,
+        .target_handle = target_handle,
+        .metric_handle = metric_handle,
+        .sample_count  = &expected_samples,
+        .start_ts      = 0,
+        .end_ts        = 0);
+    astl_status_code rc = astlGetMetricSampleCountOnTarget(&count_params);
+    if (rc != ASTL_STATUS_SUCCESS) {
+        return rc;
+    }
+
+    uint64_t      next_start_ts = 0;
+    uint32_t      total_written = 0;
+    astl_sample_t chunk[SAMPLE_CHUNK_CAPACITY];
+    while (total_written < expected_samples) {
+        uint32_t chunk_count = SAMPLE_CHUNK_CAPACITY;
+        ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, sample_params,
+            .flags         = 0,
+            .target_handle = target_handle,
+            .metric_handle = metric_handle,
+            .samples       = chunk,
+            .sample_count  = &chunk_count,
+            .start_ts      = next_start_ts,
+            .end_ts        = 0);
+        rc = astlGetMetricSamplesOnTarget(&sample_params);
+        if (rc != ASTL_STATUS_SUCCESS || chunk_count == 0) {
+            return rc;
+        }
+        total_written += chunk_count;
+        next_start_ts = chunk[chunk_count - 1].timestamp + 1;
+    }
+    return ASTL_STATUS_SUCCESS;
 }
 
-/* Record a window of interest during collection */
-uint64_t window_start = now_ns();
-/* ... workload under measurement ... */
-uint64_t window_end = now_ns();
+static astl_status_code read_counter_samples_in_chunks(astl_target_handle_t target_handle,
+                                                       astl_counter_handle_t counter_handle) {
+    uint32_t expected_samples = 0;
+    ASTL_INIT_STRUCT(astl_get_counter_sample_count_on_target_params_t, count_params,
+        .flags          = 0,
+        .target_handle  = target_handle,
+        .counter_handle = counter_handle,
+        .sample_count   = &expected_samples,
+        .start_ts       = 0,
+        .end_ts         = 0);
+    astl_status_code rc = astlGetCounterSampleCountOnTarget(&count_params);
+    if (rc != ASTL_STATUS_SUCCESS) {
+        return rc;
+    }
 
-/* Retrieve only the samples that fall within that window */
-astl_metric_statistics_t summary = {0};
-summary.size  = sizeof(astl_metric_statistics_t);
-summary.flags = ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG;
-
-ASTL_INIT_STRUCT(astl_get_metric_statistics_on_target_params_t, stats_params,
-    .flags                  = 0,
-    .target_handle          = target_handle,
-    .metric_handle          = metric_handle,
-    .summary                = &summary,
-    .start_ts = window_start,
-    .end_ts   = window_end);
-
-astl_status_code rc = astlGetMetricStatisticsOnTarget(&stats_params);
+    uint64_t      next_start_ts = 0;
+    uint32_t      total_written = 0;
+    astl_sample_t chunk[SAMPLE_CHUNK_CAPACITY];
+    while (total_written < expected_samples) {
+        uint32_t chunk_count = SAMPLE_CHUNK_CAPACITY;
+        ASTL_INIT_STRUCT(astl_get_counter_samples_on_target_params_t, sample_params,
+            .flags          = 0,
+            .target_handle  = target_handle,
+            .counter_handle = counter_handle,
+            .samples        = chunk,
+            .sample_count   = &chunk_count,
+            .start_ts       = next_start_ts,
+            .end_ts         = 0);
+        rc = astlGetCounterSamplesOnTarget(&sample_params);
+        if (rc != ASTL_STATUS_SUCCESS || chunk_count == 0) {
+            return rc;
+        }
+        total_written += chunk_count;
+        next_start_ts = chunk[chunk_count - 1].timestamp + 1;
+    }
+    return ASTL_STATUS_SUCCESS;
+}
 ```
 
 ### Filter Status Codes

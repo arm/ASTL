@@ -11,6 +11,7 @@
 #include <format>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -74,8 +75,8 @@ auto UnitsToString(astl_units_t units) -> std::string {
 }
 
 auto NormalizeTargetName(std::string_view target_name) -> std::string_view {
-  constexpr std::array<std::string_view, 3> k_known_prefixes = {"scmi-mocksysfs-", "scmi_", "scmi-"};
-  for (const auto prefix : k_known_prefixes) {
+  constexpr std::array<std::string_view, 3> known_prefixes = {"scmi-mocksysfs-", "scmi_", "scmi-"};
+  for (const auto prefix : known_prefixes) {
     if (target_name.starts_with(prefix)) {
       return target_name.substr(prefix.size());
     }
@@ -501,6 +502,7 @@ auto ConfigureAndRunCollection(const astl_target_props_t&              target_pr
 
 auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_metric_props_t>& metric_buffer)
     -> void {
+  constexpr uint32_t sample_chunk_capacity = 4;
   for (const auto& metric_props : metric_buffer) {
     if (!metric_props.name) {
       continue;  // skip nameless metrics
@@ -518,20 +520,38 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
     if (status != ASTL_STATUS_SUCCESS || sample_count == 0) {
       continue;
     }
-    std::vector<astl_sample_t> samples(sample_count);
-    ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, get_metric_samples_params, .flags = 0,
-                     .target_handle = target_handle, .metric_handle = metric_props.handle, .samples = samples.data(),
-                     .sample_count = &sample_count, .start_ts = 0, .end_ts = 0);
-    status = astlGetMetricSamplesOnTarget(&get_metric_samples_params);
-    if (status != ASTL_STATUS_SUCCESS) {
-      return;
+    const uint32_t             total_sample_count = sample_count;
+    std::vector<astl_sample_t> samples;
+    samples.reserve(total_sample_count);
+
+    uint64_t next_start_ts = 0;
+    while (samples.size() < total_sample_count) {
+      const auto remaining_samples = static_cast<uint32_t>(total_sample_count - static_cast<uint32_t>(samples.size()));
+      uint32_t   chunk_count       = std::min<uint32_t>(sample_chunk_capacity, remaining_samples);
+      auto       chunk             = std::vector<astl_sample_t>(chunk_count);
+      ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, get_metric_samples_params, .flags = 0,
+                       .target_handle = target_handle, .metric_handle = metric_props.handle, .samples = chunk.data(),
+                       .sample_count = &chunk_count, .start_ts = next_start_ts, .end_ts = 0);
+      status = astlGetMetricSamplesOnTarget(&get_metric_samples_params);
+      if (status != ASTL_STATUS_SUCCESS || chunk_count == 0) {
+        return;
+      }
+      samples.insert(samples.end(), chunk.begin(), chunk.begin() + chunk_count);
+      if (samples.size() >= total_sample_count) {
+        break;
+      }
+      const uint64_t last_timestamp = samples.back().timestamp;
+      if (last_timestamp == std::numeric_limits<uint64_t>::max()) {
+        break;
+      }
+      next_start_ts = last_timestamp + 1;
     }
     // Check if all samples are non-zero
-    bool all_samples_non_zero = std::all_of(samples.begin(), samples.begin() + sample_count,
-                                            [](const astl_sample_t& sample) { return sample.value.ui64 != 0; });
+    bool all_samples_non_zero =
+        std::all_of(samples.begin(), samples.end(), [](const astl_sample_t& sample) { return sample.value.ui64 != 0; });
 
     std::cout << "Collected Samples for metric '" << metric_props.name << "':\n";
-    for (uint32_t i = 0; i < sample_count; ++i) {
+    for (size_t i = 0; i < samples.size(); ++i) {
       const auto& sample_entry = samples[i];
       std::cout << "  [" << i << "] ts=" << sample_entry.timestamp
                 << " value=" << ValueToString(sample_entry.value, metric_props.value_type) << '\n';

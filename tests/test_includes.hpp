@@ -267,32 +267,38 @@ inline auto StopCollection() -> astl_status_code {
 }
 
 inline auto GetCounterSampleCountOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
-                                          uint32_t* sample_count) -> astl_status_code {
+                                          uint32_t* sample_count, uint64_t start_ts = 0, uint64_t end_ts = 0)
+    -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_counter_sample_count_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
-                   .counter_handle = counter_handle, .sample_count = sample_count, .start_ts = 0, .end_ts = 0);
+                   .counter_handle = counter_handle, .sample_count = sample_count, .start_ts = start_ts,
+                   .end_ts = end_ts);
   return astlGetCounterSampleCountOnTarget(&params);
 }
 
 inline auto GetCounterSamplesOnTarget(astl_target_handle_t target_handle, astl_counter_handle_t counter_handle,
-                                      astl_sample_t* samples, uint32_t* sample_count) -> astl_status_code {
+                                      astl_sample_t* samples, uint32_t* sample_count, uint64_t start_ts = 0,
+                                      uint64_t end_ts = 0) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_counter_samples_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
-                   .counter_handle = counter_handle, .samples = samples, .sample_count = sample_count, .start_ts = 0,
-                   .end_ts = 0);
+                   .counter_handle = counter_handle, .samples = samples, .sample_count = sample_count,
+                   .start_ts = start_ts, .end_ts = end_ts);
   return astlGetCounterSamplesOnTarget(&params);
 }
 
 inline auto GetMetricSampleCountOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                         uint32_t* sample_count) -> astl_status_code {
+                                         uint32_t* sample_count, uint64_t start_ts = 0, uint64_t end_ts = 0)
+    -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_metric_sample_count_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
-                   .metric_handle = metric_handle, .sample_count = sample_count, .start_ts = 0, .end_ts = 0);
+                   .metric_handle = metric_handle, .sample_count = sample_count, .start_ts = start_ts,
+                   .end_ts = end_ts);
   return astlGetMetricSampleCountOnTarget(&params);
 }
 
 inline auto GetMetricSamplesOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                     astl_sample_t* samples, uint32_t* sample_count) -> astl_status_code {
+                                     astl_sample_t* samples, uint32_t* sample_count, uint64_t start_ts = 0,
+                                     uint64_t end_ts = 0) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
-                   .metric_handle = metric_handle, .samples = samples, .sample_count = sample_count, .start_ts = 0,
-                   .end_ts = 0);
+                   .metric_handle = metric_handle, .samples = samples, .sample_count = sample_count,
+                   .start_ts = start_ts, .end_ts = end_ts);
   return astlGetMetricSamplesOnTarget(&params);
 }
 
