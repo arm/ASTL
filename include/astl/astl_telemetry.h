@@ -16,7 +16,12 @@
  * this field to `sizeof(struct_type)` before calling into the API so that
  * forward/backward compatibility can be managed. Buffer-returning APIs follow a
  * two-step pattern: query required counts, allocate & initialize (setting the
- * first element's `size`), then call the getter to populate data.
+ * first element's `size`), then call the getter to populate data. For APIs
+ * with caller-provided arrays, getter calls require non-NULL buffers and
+ * input capacities > 0; if the discovered required count is 0, skip the
+ * corresponding getter call. For APIs that return ASTL_STATUS_BUFFER_TOO_SMALL, the
+ * corresponding in/out count is set to the required capacity (when representable
+ * in uint32_t).
  */
 #ifndef INCLUDE_ASTL_TELEMETRY_H_
 #define INCLUDE_ASTL_TELEMETRY_H_
@@ -40,11 +45,24 @@ extern "C" {
  * @brief macro to declare a struct of type `type` with name `var` and initialize all fields,
  *        including the size field for API versioning.
  *
- * Compatible with both C and C++.
+ * Compatible with C and C++.
+ * Empty variadic arguments are supported only in C++20 or C23 (via `__VA_OPT__`).
+ * For older language modes, pass at least one initializer or use `ASTL_INIT_STRUCT_NO_FIELDS`.
  * @example
  * `ASTL_INIT_STRUCT(astl_get_system_info_params_t, params, .flags = 0, .system_info = &platform_info)`
  */
-#define ASTL_INIT_STRUCT(type, var, ...) type var = {.size = sizeof(type), __VA_ARGS__}
+#if (defined(__cplusplus) && __cplusplus >= 202002L) || \
+    (!defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L)
+#  define ASTL_INIT_STRUCT(type, var, ...) type var = {.size = sizeof(type) __VA_OPT__(, ) __VA_ARGS__}
+#else
+// Portable fallback for C99/C11/C17 and pre-C++20: requires at least one initializer in __VA_ARGS__.
+#  define ASTL_INIT_STRUCT(type, var, ...) type var = {.size = sizeof(type), __VA_ARGS__}
+#endif
+
+/**
+ * @brief macro to declare a struct of type `type` with name `var` and initialize only `size`.
+ */
+#define ASTL_INIT_STRUCT_NO_FIELDS(type, var) type var = {.size = sizeof(type)}
 
 /**
  * @brief macro to declare and 0-initialize a `count`-length array of structs of type `type` named `var`
@@ -52,7 +70,7 @@ extern "C" {
  */
 #define ASTL_ALLOC_ARRAY(type, var, count)          \
   type* var = (type*)calloc((count), sizeof(type)); \
-  if (var) {                                        \
+  if (var && ((count) > 0)) {                       \
     var[0].size = sizeof(type);                     \
   }
 
@@ -139,9 +157,6 @@ typedef struct _astl_target_props_t {
   const char* name;                    //!< Device name
   const char* description;             //!< Device description
   const char* id;                      //!< Optional null-terminated target identifier string (NULL if not available)
-                                       //!< What other fields? Socket number? Node number?
-                                       //!< PCIe BDF? Vendor? Model name? Model number?
-                                       //!< Serial number? Version? Unique ID?
 } astl_target_props_t;
 
 /** A parameter structure describes inputs and outputs for this API call.
@@ -167,7 +182,8 @@ typedef struct astl_get_targets_params_t {
   uint32_t             flags;    //!< Reserved for future flags (must be 0 for now).
   astl_target_props_t* targets;  //!< Caller-allocated target array. Cannot be NULL; set
                                  //!< targets[0].size to sizeof(astl_target_props_t).
-  uint32_t* target_count;        //!< In: target-array capacity. Out: number of elements written. Cannot be NULL.
+  uint32_t* target_count;        //!< In: target-array capacity (> 0). Out: number of elements written.
+                                 //!< Cannot be NULL.
 } astl_get_targets_params_t;
 
 /**
@@ -199,7 +215,7 @@ typedef enum _astl_units_t {
   ASTL_UNITS_BYTES        = 8,  //!< Bytes transferred
   ASTL_UNITS_MBYTESPERSEC = 9,  //!< Bandwidth in MB/s. For calculated metrics but hardware may
                                 //!< already be doing the calculation, not ideal but possible
-  ASTL_UNITS_MHERTZ  = 10,      //!< Frequency readings in MHz
+  ASTL_UNITS_MHZ     = 10,      //!< Frequency readings in MHz
   ASTL_UNITS_RPM     = 11,      //!< Fan speed in revolutions per minute
   ASTL_UNITS_COUNT   = 12,      //!< Count of events or occurrences
   ASTL_UNITS_PERCENT = 13,      //!< Percentage-style readings such as humidity
@@ -213,9 +229,9 @@ typedef enum _astl_value_type_t {
   ASTL_VALUE_UINT16  = 1,   //!< Unsigned 16bit integer (short)
   ASTL_VALUE_UINT32  = 2,   //!< Unsigned 32bit integer
   ASTL_VALUE_UINT64  = 3,   //!< Unsigned 64bit integer (long)
-  ASTL_VALUE_FLOAT32 = 6,   //!< 32bit float
-  ASTL_VALUE_FLOAT64 = 7,   //!< 64bit float (double)
-  ASTL_VALUE_BOOL8   = 8,   //!< 8bit boolean
+  ASTL_VALUE_FLOAT32 = 4,   //!< 32bit float
+  ASTL_VALUE_FLOAT64 = 5,   //!< 64bit float (double)
+  ASTL_VALUE_BOOL8   = 6,   //!< 8bit boolean
 } astl_value_type_t;
 
 /** Value container. Processing of an astl_value_t should be based on astl_value_type_t
@@ -305,7 +321,7 @@ typedef struct astl_get_counter_count_params_t {
  * @param params Parameters for this call (see astl_get_counter_count_params_t).
  * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetCounterCount(const astl_get_counter_count_params_t* params) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetCounterCountOnTarget(const astl_get_counter_count_params_t* params) ASTL_API_NOEXCEPT;
 
 /** A parameter structure describes inputs and outputs for this API call.
  */
@@ -315,7 +331,8 @@ typedef struct astl_get_counters_params_t {
   astl_target_handle_t  target_handle;  //!< Target handle of interest from astl_target_props_t.
   astl_counter_props_t* counters;       //!< Caller-allocated counter array. Cannot be NULL; set
                                         //!< counters[0].size to sizeof(astl_counter_props_t).
-  uint32_t* counter_count;  //!< In: counter-array capacity. Out: number of elements written. Cannot be NULL.
+  uint32_t* counter_count;              //!< In: counter-array capacity (> 0). Out: number of elements written.
+                                        //!< Cannot be NULL.
 } astl_get_counters_params_t;
 
 /**
@@ -324,7 +341,7 @@ typedef struct astl_get_counters_params_t {
  * @param params Parameters for this call (see astl_get_counters_params_t).
  * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetCounters(const astl_get_counters_params_t* params) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetCountersOnTarget(const astl_get_counters_params_t* params) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************              METRIC                    *********************
@@ -358,7 +375,7 @@ typedef enum _astl_metric_type_t {
                                       //!< Power as energy/s
 } astl_metric_type_t;
 
-/** High-level identifier of a metric/counter. Derived from configuration JSON "identifier" string. */
+/** High-level identifier of a metric. Derived from configuration JSON "identifier" string. */
 typedef enum _astl_metric_identifier_t {
   ASTL_METRIC_IDENTIFIER_UNKNOWN       = -1,  //!< Unknown or unmapped identifier
   ASTL_METRIC_IDENTIFIER_COUNT         = 0,   //!< Count-based metrics (monotonic counters, event counts)
@@ -412,7 +429,7 @@ typedef struct astl_get_metric_count_params_t {
  * @param params Parameters for this call (see astl_get_metric_count_params_t).
  * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetricCount(const astl_get_metric_count_params_t* params) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricCountOnTarget(const astl_get_metric_count_params_t* params) ASTL_API_NOEXCEPT;
 
 /** A parameter structure describes inputs and outputs for this API call.
  */
@@ -422,7 +439,8 @@ typedef struct astl_get_metrics_params_t {
   astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
   astl_metric_props_t* metrics;        //!< Caller-allocated metric array. Cannot be NULL; set
                                        //!< metrics[0].size to sizeof(astl_metric_props_t).
-  uint32_t* metric_count;              //!< In: metric-array capacity. Out: number of elements written. Cannot be NULL.
+  uint32_t* metric_count;              //!< In: metric-array capacity (> 0). Out: number of elements written.
+                                       //!< Cannot be NULL.
 } astl_get_metrics_params_t;
 
 /**
@@ -431,7 +449,7 @@ typedef struct astl_get_metrics_params_t {
  * @param params Parameters for this call (see astl_get_metrics_params_t).
  * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
-ASTL_API astl_status_code astlGetMetrics(const astl_get_metrics_params_t* params) ASTL_API_NOEXCEPT;
+ASTL_API astl_status_code astlGetMetricsOnTarget(const astl_get_metrics_params_t* params) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************      METRIC VALUE/STATE DISCOVERY      *********************
@@ -490,7 +508,8 @@ typedef struct astl_get_metric_states_on_target_params_t {
   astl_metric_handle_t metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
   astl_state_props_t*  states;         //!< Caller-allocated state array. Cannot be NULL; set
                                        //!< states[0].size to sizeof(astl_state_props_t).
-  uint32_t* state_count;               //!< In: state-array capacity. Out: number of elements written. Cannot be NULL.
+  uint32_t* state_count;               //!< In: state-array capacity (> 0). Out: number of elements written.
+                                       //!< Cannot be NULL.
 } astl_get_metric_states_on_target_params_t;
 
 /**
@@ -564,7 +583,8 @@ typedef struct astl_get_metric_groups_params_t {
   uint32_t flags;  //!< Reserved for future flags (must be 0 for now).
   astl_metric_group_props_t* metric_groups;  //!< Caller-allocated metric-group array. Cannot be NULL;
                                              //!< set metric_groups[0].size to sizeof(astl_metric_group_props_t).
-  uint32_t* metric_group_count;  //!< In: group-array capacity. Out: number of elements written. Cannot be NULL.
+  uint32_t* metric_group_count;              //!< In: group-array capacity (> 0). Out: number of elements written.
+                                             //!< Cannot be NULL.
 } astl_get_metric_groups_params_t;
 
 /**
@@ -604,7 +624,8 @@ typedef struct astl_get_metric_groups_on_target_params_t {
   astl_target_handle_t       target_handle;  //!< Target handle of interest from astl_target_props_t.
   astl_metric_group_props_t* metric_groups;  //!< Caller-allocated metric-group array. Cannot be NULL;
                                              //!< set metric_groups[0].size to sizeof(astl_metric_group_props_t).
-  uint32_t* metric_group_count;  //!< In: group-array capacity. Out: number of elements written. Cannot be NULL.
+  uint32_t* metric_group_count;              //!< In: group-array capacity (> 0). Out: number of elements written.
+                                             //!< Cannot be NULL.
 } astl_get_metric_groups_on_target_params_t;
 
 /**
@@ -646,7 +667,8 @@ typedef struct astl_get_metric_group_metrics_params_t {
   astl_metric_group_handle_t metric_group_handle;  //!< Metric-group handle. Cannot be NULL.
   astl_metric_props_t*       metrics;  //!< Caller-allocated metric array. Cannot be NULL; set metrics[0].size
                                        //!< to sizeof(astl_metric_props_t).
-  uint32_t* metric_count;  //!< In: metric-array capacity. Out: number of metrics in the group. Cannot be NULL.
+  uint32_t* metric_count;              //!< In: metric-array capacity (> 0). Out: number of metrics in the group.
+                                       //!< Cannot be NULL.
 } astl_get_metric_group_metrics_params_t;
 
 /**
@@ -692,8 +714,8 @@ typedef struct astl_get_metric_group_metrics_on_target_params_t {
   astl_metric_group_handle_t metric_group_handle;  //!< Metric-group handle. Cannot be NULL.
   astl_metric_props_t*       metrics;  //!< Caller-allocated metric array. Cannot be NULL; set metrics[0].size
                                        //!< to sizeof(astl_metric_props_t).
-  uint32_t*
-      metric_count;  //!< In: metric-array capacity. Out: number of metrics in the group on target. Cannot be NULL.
+  uint32_t* metric_count;  //!< In: metric-array capacity (> 0). Out: number of metrics in the group on target.
+                           //!< Cannot be NULL.
 } astl_get_metric_group_metrics_on_target_params_t;
 
 /**
@@ -1190,9 +1212,8 @@ typedef struct astl_get_counter_samples_on_target_params_t {
   astl_target_handle_t  target_handle;   //!< Target handle of interest from astl_target_props_t.
   astl_counter_handle_t counter_handle;  //!< Counter handle of interest from astl_counter_props_t.
   astl_sample_t*        samples;         //!< Caller-allocated sample array. Cannot be NULL.
-  uint32_t*             sample_count;    //!< In: sample-array capacity. Out: number of samples written. Cannot be NULL.
-                                         //!< If the capacity is smaller than the filtered sample count, ASTL writes the
-                                         //!< earliest matching samples that fit and returns success.
+  uint32_t*             sample_count;    //!< In: sample-array capacity (> 0). Out: number of samples written.
+                                         //!< Cannot be NULL.
   uint64_t start_ts;  //!< Filter start timestamp. If non-zero, only samples with timestamp >= this value are included.
                       //!< Uses CLOCK_MONOTONIC_RAW on Linux.
   uint64_t end_ts;  //!< Filter end timestamp. If non-zero, only samples with timestamp <= this value are included. Uses
@@ -1244,9 +1265,8 @@ typedef struct astl_get_metric_samples_on_target_params_t {
   astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
   astl_metric_handle_t metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
   astl_sample_t*       samples;        //!< Caller-allocated sample array. Cannot be NULL.
-  uint32_t*            sample_count;   //!< In: sample-array capacity. Out: number of samples written. Cannot be NULL.
-                                       //!< If the capacity is smaller than the filtered sample count, ASTL writes the
-                                       //!< earliest matching samples that fit and returns success.
+  uint32_t*            sample_count;   //!< In: sample-array capacity (> 0). Out: number of samples written.
+                                       //!< Cannot be NULL.
   uint64_t start_ts;  //!< Filter start timestamp. If non-zero, only samples with timestamp >= this value are included.
                       //!< Uses CLOCK_MONOTONIC_RAW on Linux.
   uint64_t end_ts;  //!< Filter end timestamp. If non-zero, only samples with timestamp <= this value are included. Uses
@@ -1378,9 +1398,10 @@ typedef struct astl_get_metric_discrete_histogram_on_target_params_t {
   astl_metric_handle_t           metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
   astl_discrete_histogram_bin_t* bins;           //!< Caller-allocated bin array. Cannot be NULL; set
                                                  //!< bins[0].size to sizeof(astl_discrete_histogram_bin_t).
-  uint32_t* bin_count;  //!< In: bin-array capacity. Out: number of bins written/required. Cannot be NULL.
-  uint64_t  start_ts;  //!< Filter start timestamp. If non-zero, only samples with timestamp >= this value are included.
-                       //!< Uses CLOCK_MONOTONIC_RAW on Linux.
+  uint32_t* bin_count;  //!< In: bin-array capacity (> 0). Out: number of bins written/required.
+                        //!< Cannot be NULL.
+  uint64_t start_ts;  //!< Filter start timestamp. If non-zero, only samples with timestamp >= this value are included.
+                      //!< Uses CLOCK_MONOTONIC_RAW on Linux.
   uint64_t end_ts;  //!< Filter end timestamp. If non-zero, only samples with timestamp <= this value are included. Uses
                     //!< CLOCK_MONOTONIC_RAW on Linux.
 } astl_get_metric_discrete_histogram_on_target_params_t;
@@ -1435,7 +1456,8 @@ typedef struct astl_crop_window_t {
                       //!< Set to 0 for no lower bound on the retained range.
   uint64_t end_ts;    //!< Inclusive retention-window end (CLOCK_MONOTONIC_RAW nanoseconds on Linux).
                       //!< Samples with timestamp <= end_ts are candidates for retention.
-  //!< Set to 0 for no upper bound on the retained range. Must be >= start_ts when both are non-zero.
+                      //!< Set to 0 for no upper bound on the retained range.
+                      //!< Must be >= start_ts when both are non-zero.
 } astl_crop_window_t;
 
 /** A parameter structure describes inputs and outputs for astlCropSamplesOnTarget().

@@ -106,7 +106,6 @@ from ._core import (
     CollectionMode,
     ASTLError,
     MetricIdentifier,
-    Status,
     Target,
     version,
     status_name,
@@ -153,7 +152,57 @@ from .session import Session
 from .dataframe import to_dataframe
 from .derived import deltas, rates
 # Enum wrappers (lightweight) - could be moved to a separate enums.py if they grow
+class Status(IntEnum):
+    UNKNOWN_ERROR = -1
+    SUCCESS = 0
+    BAD_ARGUMENT = 1
+    BAD_CONFIGURATION = 2
+    INVALID_TARGET_HANDLE = 3
+    INVALID_COUNTER_HANDLE = 4
+    INVALID_METRIC_HANDLE = 5
+    INVALID_METRIC_GROUP_HANDLE = 6
+    NOT_IMPLEMENTED = 7
+    NOT_SUPPORTED = 8
+    DEPRECATED_API = 9
+    NO_TARGET_FOUND = 10
+    OLD_STRUCT_VERSION = 11
+    NEW_STRUCT_VERSION = 12
+    NO_COUNTERS_FOUND = 13
+    NO_METRICS_FOUND = 14
+    NO_METRIC_GROUPS_FOUND = 15
+    BUFFER_TOO_SMALL = 16
+    METRIC_RECEIVED_INVALID_SAMPLE = 17
+    METRIC_OVERFLOW_DETECTED = 18
+    INVALID_SAMPLING_INTERVAL = 19
+    SAMPLING_INTERVAL_IGNORED = 20
+    INVALID_COLLECTION_MODE = 21
+    INVALID_FLAG_VALUE = 22
+    COUNTER_NOT_SUPPORTED_ON_TARGET = 23
+    METRIC_NOT_SUPPORTED_ON_TARGET = 24
+    METRIC_GROUP_NOT_SUPPORTED_ON_TARGET = 25
+    COLLECTION_NOT_CONFIGURED = 26
+    COLLECTION_NOT_RUNNING = 27
+    COLLECTION_NOT_STOPPED = 28
+    COLLECTION_NOT_PAUSED = 29
+    COLLECTION_ALREADY_RUNNING = 30
+    COLLECTION_ALREADY_STOPPED = 31
+    COLLECTION_ALREADY_PAUSED = 32
+    NO_DATA_COLLECTED = 33
+    BUFFER_LARGER_THAN_NEEDED = 34
+    UNSUPPORTED_COLLECTOR_TYPE = 35
+    FILE_OPEN_FAILED = 36
+    FILE_ERROR = 37
+    OUT_OF_MEMORY = 38
+    DIVIDE_BY_ZERO = 39
+    INVALID_VALUE_TYPE = 40
+    INVALID_STATE_TRANSITION = 41
+    PAUSE_UNSUPPORTED = 42
+    RESUME_UNSUPPORTED = 43
+    INTERNAL_ERROR = 127
+
+
 class Units(IntEnum):
+    UNKNOWN = -1
     NONE = 0
     TICKS = 1
     SECONDS = 2
@@ -164,11 +213,14 @@ class Units(IntEnum):
     AMPS = 7
     BYTES = 8
     MBYTESPERSEC = 9
-    MHERTZ = 10
-    UNKNOWN = 11
+    MHZ = 10
+    RPM = 11
+    COUNT = 12
+    PERCENT = 13
 
 
 class ValueType(IntEnum):
+    UNKNOWN = -1
     UINT8 = 0
     UINT16 = 1
     UINT32 = 2
@@ -176,25 +228,23 @@ class ValueType(IntEnum):
     FLOAT32 = 4
     FLOAT64 = 5
     BOOL8 = 6
-    STRING = 7
-    UNKNOWN = 8
 
 
 class CounterType(IntEnum):
+    UNKNOWN = -1
     VALUE = 0
     COUNT = 1
     EVENT = 2
-    UNKNOWN = 3
 
 
 class MetricType(IntEnum):
+    UNKNOWN = -1
     VALUE = 0
     FINITE_SET_VALUE = 1
     EVENT = 2
     DELTA = 3
     RESIDENCY = 4
     RATE = 5
-    UNKNOWN = 6
 
 __all__ = [
     "initialize",

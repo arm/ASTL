@@ -91,8 +91,8 @@ auto GetTargetByName(const std::string& target_name, astl_target_props_t& target
  * @param metric_names Output vector of metric names
  * @return true if metrics found, false otherwise
  */
-auto GetMetrics(astl_target_handle_t target_handle, std::vector<astl_metric_handle_t>& metric_handles,
-                std::vector<std::string>& metric_names) -> bool;
+auto GetMetricsOnTarget(astl_target_handle_t target_handle, std::vector<astl_metric_handle_t>& metric_handles,
+                        std::vector<std::string>& metric_names) -> bool;
 
 /**
  * @brief Retrieve and count collected samples for all metrics

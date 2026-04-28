@@ -68,12 +68,12 @@ auto GetTargetByName(const std::string& target_name, astl_target_props_t& target
   return false;
 }
 
-auto GetMetrics(astl_target_handle_t target_handle, std::vector<astl_metric_handle_t>& metric_handles,
-                std::vector<std::string>& metric_names) -> bool {
+auto GetMetricsOnTarget(astl_target_handle_t target_handle, std::vector<astl_metric_handle_t>& metric_handles,
+                        std::vector<std::string>& metric_names) -> bool {
   uint32_t metric_count = 0;
   ASTL_INIT_STRUCT(astl_get_metric_count_params_t, get_metric_count_params, .flags = 0, .target_handle = target_handle,
                    .metric_count = &metric_count);
-  auto status = astlGetMetricCount(&get_metric_count_params);
+  auto status = astlGetMetricCountOnTarget(&get_metric_count_params);
   if (status != ASTL_STATUS_SUCCESS || metric_count == 0) {
     std::cerr << "No metrics found" << std::endl;
     return false;
@@ -86,7 +86,7 @@ auto GetMetrics(astl_target_handle_t target_handle, std::vector<astl_metric_hand
 
   ASTL_INIT_STRUCT(astl_get_metrics_params_t, get_metrics_params, .flags = 0, .target_handle = target_handle,
                    .metrics = metrics.data(), .metric_count = &metric_count);
-  status = astlGetMetrics(&get_metrics_params);
+  status = astlGetMetricsOnTarget(&get_metrics_params);
   if (status != ASTL_STATUS_SUCCESS) {
     std::cerr << "Failed to get metrics" << std::endl;
     return false;

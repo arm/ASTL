@@ -186,9 +186,10 @@ ASTL_INIT_STRUCT(astl_get_target_count_params_t, params,
 Discovery and retrieval APIs generally follow a two-step pattern:
 
 1. Query the count,
-2. Allocate a buffer,
-3. Set the `size` field of the first element when required,
-4. Call the getter.
+2. If the required count is `0`, skip the corresponding getter call,
+3. Otherwise allocate a buffer (non-NULL, capacity `> 0`),
+4. Set the `size` field of the first element when required,
+5. Call the getter.
 
 Helper macros:
 
@@ -217,8 +218,8 @@ Examples worth handling explicitly:
 
 - `ASTL_STATUS_SUCCESS`
 - `ASTL_STATUS_BAD_ARGUMENT`
-- `ASTL_STATUS_NOT_INITIALIZED`
-- `ASTL_STATUS_NO_TARGETS_FOUND`
+- `ASTL_STATUS_INVALID_FLAG_VALUE`
+- `ASTL_STATUS_NO_TARGET_FOUND`
 - `ASTL_STATUS_NO_COUNTERS_FOUND`
 - `ASTL_STATUS_NO_METRICS_FOUND`
 - `ASTL_STATUS_NO_METRIC_GROUPS_FOUND`
@@ -237,6 +238,9 @@ Examples worth handling explicitly:
 - `ASTL_STATUS_INTERNAL_ERROR`
 
 Use `astlStatusString()` to turn a status code into a readable message.
+
+`astl_status_code` numeric assignments use explicit contiguous values (`0..44`)
+with `ASTL_STATUS_UNKNOWN_ERROR = -1`.
 
 ### Ownership and Lifetimes
 
@@ -424,13 +428,13 @@ typedef struct _astl_sample_t {
 
 ### Counter Discovery
 
-- `astlGetCounterCount`: Return the number of counters on a target.
-- `astlGetCounters`: Return counter properties on a target.
+- `astlGetCounterCountOnTarget`: Return the number of counters on a target.
+- `astlGetCountersOnTarget`: Return counter properties on a target.
 
 ### Metric Discovery
 
-- `astlGetMetricCount`: Return the number of metrics on a target.
-- `astlGetMetrics`: Return metric properties on a target.
+- `astlGetMetricCountOnTarget`: Return the number of metrics on a target.
+- `astlGetMetricsOnTarget`: Return metric properties on a target.
 
 ### Metric State Discovery
 
@@ -528,7 +532,7 @@ main fields are:
 1. Call `astlGetTargetCount`
 2. Allocate and call `astlGetTargets`
 3. Choose a target
-4. Call `astlGetCounters`, `astlGetMetrics`, or `astlGetMetricGroupsOnTarget`
+4. Call `astlGetCountersOnTarget`, `astlGetMetricsOnTarget`, or `astlGetMetricGroupsOnTarget`
 
 ### Flow 2: Configure And Collect Metrics
 
@@ -683,8 +687,8 @@ The current package exports:
   - `GetSystemInfoWithFlags(...)`
 - Discovery:
   - `GetTargets()`
-  - `GetCounters(target)`
-  - `GetMetrics(target)`
+  - `GetCountersOnTarget(target)`
+  - `GetMetricsOnTarget(target)`
   - `GetMetricGroups()`
   - `GetMetricGroupsOnTarget(target)`
   - `GetMetricGroupMetricCount(group)`

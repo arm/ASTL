@@ -207,7 +207,7 @@ auto CollectorManager::SelectCollectorLocked(const ITarget* target, CollectorCap
   // find a set of collectors associated with the given target
   const auto& potential_collectors = _collectors.find(target);
   if (potential_collectors == _collectors.end()) {
-    return std::unexpected(ASTL_STATUS_NO_TARGETS_FOUND);
+    return std::unexpected(ASTL_STATUS_NO_TARGET_FOUND);
   }
 
   // choose a collector that meets the requirements

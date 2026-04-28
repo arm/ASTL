@@ -49,7 +49,7 @@ void TestMultiThreadedEndToEnd() {
 
   std::vector<astl_metric_handle_t> metric_handles;
   std::vector<std::string>          metric_names;
-  REQUIRE(GetMetrics(target_properties.handle, metric_handles, metric_names));
+  REQUIRE(GetMetricsOnTarget(target_properties.handle, metric_handles, metric_names));
 
   ThreadSyncHelper  sync;
   std::atomic<bool> test_failed{false};
@@ -173,7 +173,7 @@ void TestMultipleConfigureAfterStart() {
 
   std::vector<astl_metric_handle_t> metric_handles;
   std::vector<std::string>          metric_names;
-  REQUIRE(GetMetrics(target_properties.handle, metric_handles, metric_names));
+  REQUIRE(GetMetricsOnTarget(target_properties.handle, metric_handles, metric_names));
 
   ThreadSyncHelper  sync;
   std::atomic<int>  failed_configs{0};

@@ -11,6 +11,7 @@
 #include <random>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
@@ -268,7 +269,7 @@ inline auto ParseUnits(std::string_view units_str) -> astl_units_t {
       {"bytes",      ASTL_UNITS_BYTES       },
       {"mbps",       ASTL_UNITS_MBYTESPERSEC},
       {"mb/s",       ASTL_UNITS_MBYTESPERSEC},
-      {"mhz",        ASTL_UNITS_MHERTZ      },
+      {"mhz",        ASTL_UNITS_MHZ         },
       {"%",          ASTL_UNITS_PERCENT     },
       {"percent",    ASTL_UNITS_PERCENT     },
       {"percentage", ASTL_UNITS_PERCENT     },
@@ -320,7 +321,7 @@ inline auto UnitsToString(astl_units_t units) -> std::string_view {
     case ASTL_UNITS_MBYTESPERSEC:
       units_text = "MB/s";
       break;
-    case ASTL_UNITS_MHERTZ:
+    case ASTL_UNITS_MHZ:
       units_text = "MHz";
       break;
     case ASTL_UNITS_PERCENT:

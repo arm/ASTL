@@ -52,30 +52,30 @@ inline auto GetTargets(astl_target_props_t* targets, uint32_t* target_count) -> 
   return astlGetTargets(&params);
 }
 
-inline auto GetCounterCount(astl_target_handle_t target_handle, uint32_t* counter_count) -> astl_status_code {
+inline auto GetCounterCountOnTarget(astl_target_handle_t target_handle, uint32_t* counter_count) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_counter_count_params_t, params, .flags = 0, .target_handle = target_handle,
                    .counter_count = counter_count);
-  return astlGetCounterCount(&params);
+  return astlGetCounterCountOnTarget(&params);
 }
 
-inline auto GetCounters(astl_target_handle_t target_handle, astl_counter_props_t* counters, uint32_t* counter_count)
-    -> astl_status_code {
+inline auto GetCountersOnTarget(astl_target_handle_t target_handle, astl_counter_props_t* counters,
+                                uint32_t* counter_count) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_counters_params_t, params, .flags = 0, .target_handle = target_handle, .counters = counters,
                    .counter_count = counter_count);
-  return astlGetCounters(&params);
+  return astlGetCountersOnTarget(&params);
 }
 
-inline auto GetMetricCount(astl_target_handle_t target_handle, uint32_t* metric_count) -> astl_status_code {
+inline auto GetMetricCountOnTarget(astl_target_handle_t target_handle, uint32_t* metric_count) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_metric_count_params_t, params, .flags = 0, .target_handle = target_handle,
                    .metric_count = metric_count);
-  return astlGetMetricCount(&params);
+  return astlGetMetricCountOnTarget(&params);
 }
 
-inline auto GetMetrics(astl_target_handle_t target_handle, astl_metric_props_t* metrics, uint32_t* metric_count)
+inline auto GetMetricsOnTarget(astl_target_handle_t target_handle, astl_metric_props_t* metrics, uint32_t* metric_count)
     -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_metrics_params_t, params, .flags = 0, .target_handle = target_handle, .metrics = metrics,
                    .metric_count = metric_count);
-  return astlGetMetrics(&params);
+  return astlGetMetricsOnTarget(&params);
 }
 
 inline auto GetMetricStateCountOnTarget(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,

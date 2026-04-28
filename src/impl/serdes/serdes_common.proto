@@ -17,7 +17,7 @@ enum AstlUnits {
   ASTL_UNITS_AMPS         = 7;
   ASTL_UNITS_BYTES        = 8;
   ASTL_UNITS_MBYTESPERSEC = 9;
-  ASTL_UNITS_MHERTZ       = 10;
+  ASTL_UNITS_MHZ       = 10;
   ASTL_UNITS_RPM          = 11;
   ASTL_UNITS_COUNT        = 12;
   ASTL_UNITS_PERCENT      = 13;
@@ -30,9 +30,10 @@ enum AstlValueType {
   ASTL_VALUE_UINT16  = 1;
   ASTL_VALUE_UINT32  = 2;
   ASTL_VALUE_UINT64  = 3;
-  ASTL_VALUE_FLOAT32 = 6;
-  ASTL_VALUE_FLOAT64 = 7;
-  ASTL_VALUE_BOOL8   = 8;
+  ASTL_VALUE_FLOAT32 = 4;
+  ASTL_VALUE_FLOAT64 = 5;
+  ASTL_VALUE_BOOL8   = 6;
+  // C unknown = -1 - stored using dedicated protobuf sentinel.
   ASTL_VALUE_UNKNOWN_PROTO = 0xFF;
 }
 

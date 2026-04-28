@@ -13,7 +13,7 @@
  *    count is reflected through `_buffer_sample_count`.
  *  - If the buffer is larger than needed, `ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED` is returned
  *    (success condition signaling unused capacity). If smaller, an error status (e.g.
- *    `ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL`) should be returned by the implementation.
+ *    `ASTL_STATUS_BUFFER_TOO_SMALL`) should be returned by the implementation.
  */
 #ifndef BUFFER_OUTPUT_HPP_
 #define BUFFER_OUTPUT_HPP_

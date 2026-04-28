@@ -20,37 +20,19 @@ cdef extern from "astl/astl_errors.h":
         ASTL_STATUS_NOT_IMPLEMENTED
         ASTL_STATUS_NOT_SUPPORTED
         ASTL_STATUS_DEPRECATED_API
-        ASTL_STATUS_NO_TARGETS_FOUND
-        ASTL_STATUS_OLD_TARGET_PROPERTIES_STRUCT_VERSION
-        ASTL_STATUS_NEW_TARGET_PROPERTIES_STRUCT_VERSION
+        ASTL_STATUS_NO_TARGET_FOUND
+        ASTL_STATUS_OLD_STRUCT_VERSION
+        ASTL_STATUS_NEW_STRUCT_VERSION
         ASTL_STATUS_NO_COUNTERS_FOUND
-        ASTL_STATUS_OLD_COUNTER_PROPERTIES_STRUCT_VERSION
-        ASTL_STATUS_NEW_COUNTER_PROPERTIES_STRUCT_VERSION
-        ASTL_STATUS_OLD_COUNTER_SAMPLE_STRUCT_VERSION
-        ASTL_STATUS_NEW_COUNTER_SAMPLE_STRUCT_VERSION
         ASTL_STATUS_NO_METRICS_FOUND
-        ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION
-        ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION
-        ASTL_STATUS_OLD_METRIC_SAMPLE_STRUCT_VERSION
-        ASTL_STATUS_NEW_METRIC_SAMPLE_STRUCT_VERSION
         ASTL_STATUS_NO_METRIC_GROUPS_FOUND
-        ASTL_STATUS_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION
-        ASTL_STATUS_NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION
-        ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION
-        ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION
-        ASTL_STATUS_TARGET_PROPERTIES_BUFFER_TOO_SMALL
-        ASTL_STATUS_COUNTER_PROPERTIES_BUFFER_TOO_SMALL
-        ASTL_STATUS_METRIC_PROPERTIES_BUFFER_TOO_SMALL
-        ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL
-        ASTL_STATUS_COUNTER_SAMPLES_BUFFER_TOO_SMALL
-        ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL
+        ASTL_STATUS_BUFFER_TOO_SMALL
         ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE
         ASTL_STATUS_METRIC_OVERFLOW_DETECTED
-        ASTL_STATUS_SAMPLING_INTERVAL_TOO_SMALL
-        ASTL_STATUS_SAMPLING_INTERVAL_TOO_LARGE
+        ASTL_STATUS_INVALID_SAMPLING_INTERVAL
         ASTL_STATUS_SAMPLING_INTERVAL_IGNORED
         ASTL_STATUS_INVALID_COLLECTION_MODE
-        ASTL_STATUS_INVALID_COLLECTION_OPTIMIZATION
+        ASTL_STATUS_INVALID_FLAG_VALUE
         ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET
         ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET
         ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET
@@ -69,8 +51,6 @@ cdef extern from "astl/astl_errors.h":
         ASTL_STATUS_OUT_OF_MEMORY
         ASTL_STATUS_DIVIDE_BY_ZERO
         ASTL_STATUS_INVALID_VALUE_TYPE
-        ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE
-        ASTL_STATUS_NOT_INITIALIZED
         ASTL_STATUS_INVALID_STATE_TRANSITION
         ASTL_STATUS_PAUSE_UNSUPPORTED
         ASTL_STATUS_RESUME_UNSUPPORTED
@@ -114,6 +94,7 @@ cdef extern from "astl/astl_telemetry.h":
 
     # Units
     cdef enum _astl_units_t:
+        ASTL_UNITS_UNKNOWN
         ASTL_UNITS_NONE
         ASTL_UNITS_TICKS
         ASTL_UNITS_SECONDS
@@ -124,12 +105,15 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_UNITS_AMPS
         ASTL_UNITS_BYTES
         ASTL_UNITS_MBYTESPERSEC
-        ASTL_UNITS_MHERTZ
-        ASTL_UNITS_UNKNOWN
+        ASTL_UNITS_MHZ
+        ASTL_UNITS_RPM
+        ASTL_UNITS_COUNT
+        ASTL_UNITS_PERCENT
     ctypedef int astl_units_t
 
     # Value types
     cdef enum _astl_value_type_t:
+        ASTL_VALUE_UNKNOWN
         ASTL_VALUE_UINT8
         ASTL_VALUE_UINT16
         ASTL_VALUE_UINT32
@@ -137,7 +121,6 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_VALUE_FLOAT32
         ASTL_VALUE_FLOAT64
         ASTL_VALUE_BOOL8
-        ASTL_VALUE_UNKNOWN
     ctypedef int astl_value_type_t
 
     cdef struct _astl_value_t:
@@ -153,10 +136,10 @@ cdef extern from "astl/astl_telemetry.h":
     # Counter
     ctypedef const void* astl_counter_handle_t
     cdef enum _astl_counter_type_t:
+        ASTL_COUNTER_TYPE_UNKNOWN
         ASTL_COUNTER_TYPE_VALUE
         ASTL_COUNTER_TYPE_COUNT
         ASTL_COUNTER_TYPE_EVENT
-        ASTL_COUNTER_TYPE_UNKNOWN
     ctypedef int astl_counter_type_t
 
     cdef struct _astl_counter_props_t:
@@ -174,16 +157,17 @@ cdef extern from "astl/astl_telemetry.h":
     # Metric
     ctypedef const void* astl_metric_handle_t
     cdef enum _astl_metric_type_t:
+        ASTL_METRIC_UNKNOWN
         ASTL_METRIC_VALUE
         ASTL_METRIC_FINITE_SET_VALUE
         ASTL_METRIC_EVENT
         ASTL_METRIC_DELTA
         ASTL_METRIC_RESIDENCY
         ASTL_METRIC_RATE
-        ASTL_METRIC_UNKNOWN
     ctypedef int astl_metric_type_t
 
     cdef enum _astl_metric_identifier_t:
+        ASTL_METRIC_IDENTIFIER_UNKNOWN
         ASTL_METRIC_IDENTIFIER_COUNT
         ASTL_METRIC_IDENTIFIER_TEMPERATURE
         ASTL_METRIC_IDENTIFIER_THERMAL_LIMIT
@@ -199,7 +183,6 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_METRIC_IDENTIFIER_FAN_SPEED
         ASTL_METRIC_IDENTIFIER_HUMIDITY
         ASTL_METRIC_IDENTIFIER_STATUS
-        ASTL_METRIC_IDENTIFIER_UNKNOWN
     ctypedef int astl_metric_identifier_t
 
     cdef struct _astl_metric_props_t:
@@ -478,12 +461,12 @@ cdef extern from "astl/astl_telemetry.h":
     int astlGetTargets(const astl_get_targets_params_t* params)
 
     # counters
-    int astlGetCounterCount(const astl_get_counter_count_params_t* params)
-    int astlGetCounters(const astl_get_counters_params_t* params)
+    int astlGetCounterCountOnTarget(const astl_get_counter_count_params_t* params)
+    int astlGetCountersOnTarget(const astl_get_counters_params_t* params)
 
     # metrics
-    int astlGetMetricCount(const astl_get_metric_count_params_t* params)
-    int astlGetMetrics(const astl_get_metrics_params_t* params)
+    int astlGetMetricCountOnTarget(const astl_get_metric_count_params_t* params)
+    int astlGetMetricsOnTarget(const astl_get_metrics_params_t* params)
 
     # metric groups
     int astlGetMetricGroupCount(const astl_get_metric_group_count_params_t* params)

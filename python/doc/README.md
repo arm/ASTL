@@ -15,6 +15,8 @@ Core:
 
 - `version() -> (major, minor, micro, string)`
 - `Status` namespace with all status codes + `status_name(int)`
+  - Numeric parity follows `include/astl/astl_errors.h` (`SUCCESS = 0` through
+    `INTERNAL_ERROR = 127`, `UNKNOWN_ERROR = -1`).
 
 Discovery:
 
@@ -229,10 +231,10 @@ releases.
 
 Specialized subclasses (all inherit from `ASTLError`):
 
-- `InitializationError`
 - `NotImplementedErrorASTL`
 - `InvalidArgumentError`
 - `OutOfMemoryError`
+- `InternalError`
 
 The internal mapping layer can be expanded; for now they are available for
 consumer code that wishes to raise or catch them explicitly.

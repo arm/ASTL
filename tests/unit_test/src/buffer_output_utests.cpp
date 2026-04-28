@@ -97,7 +97,7 @@ TEST_CASE("BufferOutput fails when provided capacity smaller than samples", "[bu
   auto status = output.WriteProcessedSamples(std::span<const astl::ProcessedSampledData>(samples));
 
   // Assert
-  REQUIRE(status == ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL);
+  REQUIRE(status == ASTL_STATUS_BUFFER_TOO_SMALL);
   // Contract: implementation performs no partial writes on insufficient capacity.
   // sample_count_capacity may remain as original capacity or reset to 0 (implementation resets only on success path),
   // so enforce not equal to samples.size() to detect accidental partial success.

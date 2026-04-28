@@ -16,8 +16,6 @@ cdef class ASTLError(Exception):
         self.code = code
         cdef const char* s = astlStatusString(<astl_status_code>code)
         msg = s.decode() if s != NULL else f"ASTL error {code}"
-        if code == ASTL_STATUS_NOT_INITIALIZED:
-            msg += " ASTL internals not initialized"
         super().__init__(msg)
 
 cdef inline void _check(int code):
@@ -26,8 +24,6 @@ cdef inline void _check(int code):
         exc_cls = map_status_to_exception(code)
         if exc_cls is not None:
             raise exc_cls(code)
-        if code == ASTL_STATUS_NOT_INITIALIZED:
-            raise ASTLError(code)
         raise ASTLError(code)
 
 cdef class Target:
@@ -152,37 +148,19 @@ class Status:
     NOT_IMPLEMENTED = ASTL_STATUS_NOT_IMPLEMENTED
     NOT_SUPPORTED = ASTL_STATUS_NOT_SUPPORTED
     DEPRECATED_API = ASTL_STATUS_DEPRECATED_API
-    NO_TARGETS_FOUND = ASTL_STATUS_NO_TARGETS_FOUND
-    OLD_TARGET_PROPERTIES_STRUCT_VERSION = ASTL_STATUS_OLD_TARGET_PROPERTIES_STRUCT_VERSION
-    NEW_TARGET_PROPERTIES_STRUCT_VERSION = ASTL_STATUS_NEW_TARGET_PROPERTIES_STRUCT_VERSION
+    NO_TARGET_FOUND = ASTL_STATUS_NO_TARGET_FOUND
+    OLD_STRUCT_VERSION = ASTL_STATUS_OLD_STRUCT_VERSION
+    NEW_STRUCT_VERSION = ASTL_STATUS_NEW_STRUCT_VERSION
     NO_COUNTERS_FOUND = ASTL_STATUS_NO_COUNTERS_FOUND
-    OLD_COUNTER_PROPERTIES_STRUCT_VERSION = ASTL_STATUS_OLD_COUNTER_PROPERTIES_STRUCT_VERSION
-    NEW_COUNTER_PROPERTIES_STRUCT_VERSION = ASTL_STATUS_NEW_COUNTER_PROPERTIES_STRUCT_VERSION
-    OLD_COUNTER_SAMPLE_STRUCT_VERSION = ASTL_STATUS_OLD_COUNTER_SAMPLE_STRUCT_VERSION
-    NEW_COUNTER_SAMPLE_STRUCT_VERSION = ASTL_STATUS_NEW_COUNTER_SAMPLE_STRUCT_VERSION
     NO_METRICS_FOUND = ASTL_STATUS_NO_METRICS_FOUND
-    OLD_METRIC_PROPERTIES_STRUCT_VERSION = ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION
-    NEW_METRIC_PROPERTIES_STRUCT_VERSION = ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION
-    OLD_METRIC_SAMPLE_STRUCT_VERSION = ASTL_STATUS_OLD_METRIC_SAMPLE_STRUCT_VERSION
-    NEW_METRIC_SAMPLE_STRUCT_VERSION = ASTL_STATUS_NEW_METRIC_SAMPLE_STRUCT_VERSION
     NO_METRIC_GROUPS_FOUND = ASTL_STATUS_NO_METRIC_GROUPS_FOUND
-    OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION = ASTL_STATUS_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION
-    NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION = ASTL_STATUS_NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION
-    OLD_COLLECTION_PARAMETERS_STRUCT_VERSION = ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION
-    NEW_COLLECTION_PARAMETERS_STRUCT_VERSION = ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION
-    TARGET_PROPERTIES_BUFFER_TOO_SMALL = ASTL_STATUS_TARGET_PROPERTIES_BUFFER_TOO_SMALL
-    COUNTER_PROPERTIES_BUFFER_TOO_SMALL = ASTL_STATUS_COUNTER_PROPERTIES_BUFFER_TOO_SMALL
-    METRIC_PROPERTIES_BUFFER_TOO_SMALL = ASTL_STATUS_METRIC_PROPERTIES_BUFFER_TOO_SMALL
-    METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL = ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL
-    COUNTER_SAMPLES_BUFFER_TOO_SMALL = ASTL_STATUS_COUNTER_SAMPLES_BUFFER_TOO_SMALL
-    METRIC_SAMPLES_BUFFER_TOO_SMALL = ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL
+    BUFFER_TOO_SMALL = ASTL_STATUS_BUFFER_TOO_SMALL
     METRIC_RECEIVED_INVALID_SAMPLE = ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE
     METRIC_OVERFLOW_DETECTED = ASTL_STATUS_METRIC_OVERFLOW_DETECTED
-    SAMPLING_INTERVAL_TOO_SMALL = ASTL_STATUS_SAMPLING_INTERVAL_TOO_SMALL
-    SAMPLING_INTERVAL_TOO_LARGE = ASTL_STATUS_SAMPLING_INTERVAL_TOO_LARGE
+    INVALID_SAMPLING_INTERVAL = ASTL_STATUS_INVALID_SAMPLING_INTERVAL
     SAMPLING_INTERVAL_IGNORED = ASTL_STATUS_SAMPLING_INTERVAL_IGNORED
     INVALID_COLLECTION_MODE = ASTL_STATUS_INVALID_COLLECTION_MODE
-    INVALID_COLLECTION_OPTIMIZATION = ASTL_STATUS_INVALID_COLLECTION_OPTIMIZATION
+    INVALID_FLAG_VALUE = ASTL_STATUS_INVALID_FLAG_VALUE
     COUNTER_NOT_SUPPORTED_ON_TARGET = ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET
     METRIC_NOT_SUPPORTED_ON_TARGET = ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET
     METRIC_GROUP_NOT_SUPPORTED_ON_TARGET = ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET
@@ -201,8 +179,6 @@ class Status:
     OUT_OF_MEMORY = ASTL_STATUS_OUT_OF_MEMORY
     DIVIDE_BY_ZERO = ASTL_STATUS_DIVIDE_BY_ZERO
     INVALID_VALUE_TYPE = ASTL_STATUS_INVALID_VALUE_TYPE
-    INCOMPATIBLE_STRUCT_SIZE = ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE
-    NOT_INITIALIZED = ASTL_STATUS_NOT_INITIALIZED
     INVALID_STATE_TRANSITION = ASTL_STATUS_INVALID_STATE_TRANSITION
     PAUSE_UNSUPPORTED = ASTL_STATUS_PAUSE_UNSUPPORTED
     RESUME_UNSUPPORTED = ASTL_STATUS_RESUME_UNSUPPORTED
@@ -253,7 +229,7 @@ cpdef list get_counters(Target target):
     count_params.flags = 0
     count_params.target_handle = <const void*>target.handle_ptr
     count_params.counter_count = &count
-    _check(astlGetCounterCount(&count_params))
+    _check(astlGetCounterCountOnTarget(&count_params))
     if count == 0:
         return []
     cdef astl_counter_props_t* arr = <astl_counter_props_t*>calloc(count, sizeof(astl_counter_props_t))
@@ -267,7 +243,7 @@ cpdef list get_counters(Target target):
         params.target_handle = <const void*>target.handle_ptr
         params.counters = arr
         params.counter_count = &count
-        _check(astlGetCounters(&params))
+        _check(astlGetCountersOnTarget(&params))
         py_list = []
         for i in range(count):
             name = arr[i].name.decode() if arr[i].name != NULL else ""
@@ -288,7 +264,7 @@ cpdef list get_metrics(Target target):
     count_params.flags = 0
     count_params.target_handle = <const void*>target.handle_ptr
     count_params.metric_count = &count
-    cdef int rc = astlGetMetricCount(&count_params)
+    cdef int rc = astlGetMetricCountOnTarget(&count_params)
     if rc in (ASTL_STATUS_NO_METRICS_FOUND, ASTL_STATUS_BAD_ARGUMENT):
         return []
     _check(rc)
@@ -305,7 +281,7 @@ cpdef list get_metrics(Target target):
         params.target_handle = <const void*>target.handle_ptr
         params.metrics = arr
         params.metric_count = &count
-        rc = astlGetMetrics(&params)
+        rc = astlGetMetricsOnTarget(&params)
         if rc in (ASTL_STATUS_NO_METRICS_FOUND, ASTL_STATUS_BAD_ARGUMENT):
             return []
         _check(rc)
@@ -621,7 +597,7 @@ cpdef start_collection(Target target=None):
         ASTL_STATUS_NOT_IMPLEMENTED,
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
-        ASTL_STATUS_NOT_INITIALIZED,
+        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -644,7 +620,7 @@ cpdef start_collection_paused(Target target=None):
         ASTL_STATUS_NOT_IMPLEMENTED,
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
-        ASTL_STATUS_NOT_INITIALIZED,
+        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -668,7 +644,7 @@ cpdef pause_collection(Target target=None):
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
         ASTL_STATUS_COLLECTION_NOT_RUNNING,
-        ASTL_STATUS_NOT_INITIALIZED,
+        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -692,7 +668,7 @@ cpdef resume_collection(Target target=None):
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
         ASTL_STATUS_COLLECTION_NOT_PAUSED,
-        ASTL_STATUS_NOT_INITIALIZED,
+        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -716,7 +692,7 @@ cpdef stop_collection(Target target=None):
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
         ASTL_STATUS_COLLECTION_NOT_RUNNING,
-        ASTL_STATUS_NOT_INITIALIZED,
+        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -867,12 +843,12 @@ cpdef read_immediate(Target target=None):
         target_params.flags = 0
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlReadImmediateOnTarget(&target_params)
-    # Treat NOT_IMPLEMENTED, BAD_CONFIGURATION, COLLECTION_NOT_CONFIGURED, and NOT_INITIALIZED as benign
+    # Treat NOT_IMPLEMENTED, BAD_CONFIGURATION, COLLECTION_NOT_CONFIGURED, and INTERNAL_ERROR as benign
     if rc not in (
         ASTL_STATUS_NOT_IMPLEMENTED,
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
-        ASTL_STATUS_NOT_INITIALIZED,
+        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -1264,10 +1240,10 @@ cpdef list get_targets():
     count_params.target_count = &count
     cdef int rc = astlGetTargetCount(&count_params)
     if rc in (
-        ASTL_STATUS_NO_TARGETS_FOUND,
+        ASTL_STATUS_NO_TARGET_FOUND,
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_NOT_IMPLEMENTED,
-        ASTL_STATUS_NOT_INITIALIZED,
+        ASTL_STATUS_INTERNAL_ERROR,
     ):
         return []
     _check(rc)
@@ -1285,10 +1261,10 @@ cpdef list get_targets():
         params.target_count = &count
         rc = astlGetTargets(&params)
         if rc in (
-            ASTL_STATUS_NO_TARGETS_FOUND,
+            ASTL_STATUS_NO_TARGET_FOUND,
             ASTL_STATUS_BAD_CONFIGURATION,
             ASTL_STATUS_NOT_IMPLEMENTED,
-            ASTL_STATUS_NOT_INITIALIZED,
+            ASTL_STATUS_INTERNAL_ERROR,
         ):
             return []
         _check(rc)

@@ -37,11 +37,11 @@ sequenceDiagram
     API-->>User: targets
 
     %% Metric enumeration (two-step using count + list)
-    User->>API: astlGetMetricCount(get_metric_count_params)
+    User->>API: astlGetMetricCountOnTarget(get_metric_count_params)
     API->>Orchestrator: GetMetricCountOnTarget(target)
     Orchestrator-->>API: count | error
     API-->>User: count | error
-    User->>API: astlGetMetrics(get_metrics_params)
+    User->>API: astlGetMetricsOnTarget(get_metrics_params)
     API->>Orchestrator: GetMetricsOnTarget(target, buffer, &count)
     Orchestrator->>MetricManager: GetAvailableMetrics(target)
     MetricManager-->>Orchestrator: metric props | error

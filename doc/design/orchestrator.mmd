@@ -247,8 +247,8 @@ class CollectionOperations{
 
 class IMetricManager{
     <<Interface>>
-    +GetMetricCount()
-    +GetMetrics()
+    +GetMetricCountOnTarget()
+    +GetMetricsOnTarget()
     +GetCollectionOperations(std::span~ITarget~, std::span~IMetric~) CollectionOperations
 }
 
@@ -271,8 +271,8 @@ class SamplerOperation{
 }
 
 class MetricManager{
-    +GetMetricCount()
-    +GetMetrics()
+    +GetMetricCountOnTarget()
+    +GetMetricsOnTarget()
 }
 
 

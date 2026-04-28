@@ -131,9 +131,9 @@ TEST_CASE("astlGetMetricStatesOnTarget - Finite Set Metric", "[wrapper][MetricSt
       ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
                        .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
                        .state_count = &state_count);
-      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_BUFFER_TOO_SMALL);
     }
-    REQUIRE(state_count == 0);
+    REQUIRE(state_count == 3);
   }
 
   SECTION("Valid request returns state names and values") {
@@ -192,7 +192,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Finite Set Metric", "[wrapper][MetricSt
       ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
                        .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
                        .state_count = &state_count);
-      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
     }
 
     // New struct version
@@ -201,7 +201,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Finite Set Metric", "[wrapper][MetricSt
       ASTL_INIT_STRUCT(astl_get_metric_states_on_target_params_t, params, .flags = 0,
                        .target_handle = mock_target_handle, .metric_handle = metric_handle, .states = states.data(),
                        .state_count = &state_count);
-      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+      REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_NEW_STRUCT_VERSION);
     }
   }
 }

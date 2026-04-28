@@ -3,15 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import importlib, sys
-import astl
-from astl import Status, InitializationError, map_status_to_exception
+from astl import Status, InternalError, map_status_to_exception
 
-def test_reload_preserves_mapping_for_not_initialized():
+def test_reload_preserves_mapping_for_internal_error():
     # Sanity precondition
-    assert map_status_to_exception(Status.NOT_INITIALIZED) is InitializationError
+    assert map_status_to_exception(Status.INTERNAL_ERROR) is InternalError
     # Remove module and reload
     sys.modules.pop('astl.exceptions', None)
     importlib.import_module('astl.exceptions')  # re-import
     # Re-import mapping function to ensure we get the possibly reloaded implementation
     from astl import map_status_to_exception as m
-    assert m(Status.NOT_INITIALIZED) is InitializationError
+    assert m(Status.INTERNAL_ERROR) is InternalError

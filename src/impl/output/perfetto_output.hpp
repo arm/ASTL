@@ -90,7 +90,7 @@ class PerfettoOutput : public IOutput {
   //  ASTL_UNITS_WATTS      -> "Power"
   //  ASTL_UNITS_JOULES     -> "Energy"
   //  ASTL_UNITS_CELSIUS    -> "Temperature"
-  //  ASTL_UNITS_MHERTZ     -> "Frequency"
+  //  ASTL_UNITS_MHZ     -> "Frequency"
   //  ASTL_UNITS_VOLTS      -> "Voltage"
   //  ASTL_UNITS_AMPS       -> "Current"
   //  ASTL_UNITS_BYTES      -> "Bytes"

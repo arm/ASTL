@@ -279,6 +279,10 @@ ASTL_INIT_STRUCT(astl_get_target_count_params_t, get_target_count_params,
                  .flags = 0,
                  .target_count = &target_count);
 status = astlGetTargetCount(&get_target_count_params);
+if (status != ASTL_STATUS_SUCCESS || target_count == 0) {
+  // skip astlGetTargets when target_count == 0
+  return;
+}
 // allocate an array to hold the properties of each target
 ASTL_ALLOC_ARRAY(astl_target_props_t, target_properties_buffer, target_count);
 ASTL_INIT_STRUCT(astl_get_targets_params_t, get_targets_params,
@@ -299,7 +303,11 @@ ASTL_INIT_STRUCT(astl_get_metric_count_params_t, get_metric_count_params,
     .flags = 0,
     .target_handle = target_properties.handle,
     .metric_count = &metric_count);
-astlGetMetricCount(&get_metric_count_params);
+astlGetMetricCountOnTarget(&get_metric_count_params);
+if (metric_count == 0) {
+    // skip astlGetMetricsOnTarget when metric_count == 0
+    return;
+}
 std::vector<astl_metric_props_t> metric_buffer(metric_count);
 metric_buffer[0].size = sizeof(astl_metric_props_t);
 ASTL_INIT_STRUCT(astl_get_metrics_params_t, get_metrics_params,
@@ -307,7 +315,7 @@ ASTL_INIT_STRUCT(astl_get_metrics_params_t, get_metrics_params,
     .target_handle = target_properties.handle,
     .metrics = metric_buffer.data(),
     .metric_count = &metric_count);
-status = astlGetMetrics(&get_metrics_params);
+status = astlGetMetricsOnTarget(&get_metrics_params);
 
 ASTL_INIT_STRUCT(astl_collection_params_t, collection_params,
     .flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
@@ -332,7 +340,7 @@ metrics for that target after `astlConfigureMetricCollectionOnTarget(...)` compl
 need the synthetic `astl_pause_events.<target-name>` metric in the collection and want to take
 actions on it later, such as filtering or cropping. This metric is registered during
 configuration, so it will not appear in a metric list retrieved earlier. For a given target, call
-`astlGetMetricCount(...)` again, then call `astlGetMetrics(...)` again to fetch the updated metric
+`astlGetMetricCountOnTarget(...)` again, then call `astlGetMetricsOnTarget(...)` again to fetch the updated metric
 set and locate the new metric handle.
 
 Alternatively, we can configure collection by metric groups
@@ -377,7 +385,7 @@ status = astlConfigureMetricGroupCollectionOnTarget(&configure_group_params);
 
 The same rediscovery rule applies when you configure by metric group: once
 `astlConfigureMetricGroupCollectionOnTarget(...)` succeeds for a target, call
-`astlGetMetricCount(...)` and `astlGetMetrics(...)` again for that target if you also need the
+`astlGetMetricCountOnTarget(...)` and `astlGetMetricsOnTarget(...)` again for that target if you also need the
 synthetic `astl_pause_events.<target-name>` metric in the collection and want to filter or crop it
 later.
 
@@ -540,7 +548,7 @@ the minimum, maximum, average, and sample count over all collected samples. See 
 
 // Retrieve metric statistics (min/max/avg)
 astl_target_props_t* target_properties = /* initialized from astlGetTargets */;
-astl_metric_props_t* metric_buffer = /* initialized from astlGetMetrics */;
+astl_metric_props_t* metric_buffer = /* initialized from astlGetMetricsOnTarget */;
 
 astl_metric_statistics_t summary = {0}; // zero-initialize
 summary.size = sizeof(astl_metric_statistics_t);
@@ -626,8 +634,13 @@ Common status codes:
 
 - `ASTL_STATUS_SUCCESS`
 - `ASTL_STATUS_BAD_ARGUMENT`
-- `ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE`
+- `ASTL_STATUS_INVALID_FLAG_VALUE`
+- `ASTL_STATUS_OLD_STRUCT_VERSION`
+- `ASTL_STATUS_NEW_STRUCT_VERSION`
 - `ASTL_STATUS_NOT_SUPPORTED`
+
+`astl_status_code` numbering is contiguous for public statuses (`0..43`), with
+`ASTL_STATUS_UNKNOWN_ERROR = -1` and `ASTL_STATUS_INTERNAL_ERROR = 127` reserved.
 
 ## String Pointer Lifetimes and Ownership
 
@@ -749,13 +762,14 @@ if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
 
 #### `astlGetMetricDiscreteHistogramOnTarget`
 
-| Code                                          | Meaning                                                                    |
-| --------------------------------------------- | -------------------------------------------------------------------------- |
-| `ASTL_STATUS_SUCCESS`                         | Bins filled successfully.                                                  |
-| `ASTL_STATUS_BAD_ARGUMENT`                    | A pointer argument is `NULL`, or `bin_count` is `0` on entry.              |
-| `ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE`        | `bins[0].size` does not equal `sizeof(astl_discrete_histogram_bin_t)`.     |
-| `ASTL_STATUS_NOT_SUPPORTED`                   | Metric type not supported.                                                 |
-| `ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL` | Array capacity < required bin count; `bin_count` updated to required size. |
+| Code                             | Meaning                                                                    |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| `ASTL_STATUS_SUCCESS`            | Bins filled successfully.                                                  |
+| `ASTL_STATUS_BAD_ARGUMENT`       | A pointer argument is `NULL`, or `bin_count` is `0` on entry.              |
+| `ASTL_STATUS_OLD_STRUCT_VERSION` | `bins[0].size` is smaller than `sizeof(astl_discrete_histogram_bin_t)`.    |
+| `ASTL_STATUS_NEW_STRUCT_VERSION` | `bins[0].size` is larger than `sizeof(astl_discrete_histogram_bin_t)`.     |
+| `ASTL_STATUS_NOT_SUPPORTED`      | Metric type not supported.                                                 |
+| `ASTL_STATUS_BUFFER_TOO_SMALL`   | Array capacity < required bin count; `bin_count` updated to required size. |
 
 ---
 
@@ -937,13 +951,15 @@ Same as `astl_crop_samples_params_t` with an additional `target_handle` field sp
 
 ### Status Codes
 
-| Code                                   | Meaning                                                                                                  |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `ASTL_STATUS_SUCCESS`                  | Crop applied successfully.                                                                               |
-| `ASTL_STATUS_COLLECTION_NOT_STOPPED`   | A target is still in STARTED or PAUSED state.                                                            |
-| `ASTL_STATUS_NOT_IMPLEMENTED`          | `astlCropSamples` and `astlCropSamplesOnTarget` are not yet implemented.                                 |
-| `ASTL_STATUS_BAD_ARGUMENT`             | `params` or `windows` is `NULL`, `window_count` is 0, a window has `flags != 0`, or `start_ts > end_ts`. |
-| `ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE` | `params->size` or `windows[0].size` does not match the expected struct size.                             |
+| Code                                 | Meaning                                                                       |
+| ------------------------------------ | ----------------------------------------------------------------------------- |
+| `ASTL_STATUS_SUCCESS`                | Crop applied successfully.                                                    |
+| `ASTL_STATUS_COLLECTION_NOT_STOPPED` | A target is still in STARTED or PAUSED state.                                 |
+| `ASTL_STATUS_NOT_IMPLEMENTED`        | `astlCropSamples` and `astlCropSamplesOnTarget` are not yet implemented.      |
+| `ASTL_STATUS_BAD_ARGUMENT`           | `params` or `windows` is `NULL`, `window_count` is 0, or `start_ts > end_ts`. |
+| `ASTL_STATUS_INVALID_FLAG_VALUE`     | `params->flags != 0` or any window has `flags != 0`.                          |
+| `ASTL_STATUS_OLD_STRUCT_VERSION`     | `params->size` or `windows[0].size` is smaller than expected.                 |
+| `ASTL_STATUS_NEW_STRUCT_VERSION`     | `params->size` or `windows[0].size` is larger than expected.                  |
 
 ---
 
@@ -955,7 +971,7 @@ ASTL supports multiple output mechanisms for processed telemetry samples:
 
 - Samples are written into a caller-provided contiguous buffer via `BufferOutput`.
 - Use when integrating directly with a higher-level runtime (e.g., Python wrapper) or when you want zero file IO.
-- Capacity mismatch semantics are reflected through status codes (e.g., `ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL`).
+- Capacity mismatch semantics are reflected through status codes (e.g., `ASTL_STATUS_BUFFER_TOO_SMALL`).
 - Suitable for low-latency pipelines or streaming directly into analytics code.
 
 2. Perfetto JSON Trace Output (Visualization)
@@ -971,7 +987,7 @@ ASTL supports multiple output mechanisms for processed telemetry samples:
 - Emits a single JSON array; each sample becomes one event object.
 - Numeric values (integral or floating) → counter events (`ph:"C"`). String values → instant events (`ph:"I"`, thread scope `s:"t"`).
 - Stable `pid` per target; distinct `tid` per metric under that target for separate tracks.
-- Category/unit mapping (selected): WATTS → Power, JOULES → Energy, CELSIUS → Temperature, MHERTZ → Frequency,
+- Category/unit mapping (selected): WATTS → Power, JOULES → Energy, CELSIUS → Temperature, MHZ → Frequency,
   VOLTS → Voltage, AMPS → Current, BYTES → Bytes, MBYTESPERSEC → Bandwidth, TICKS → Ticks, SECONDS → Time.
 - String sample without quantitative unit → State; fallback → (empty category string).
 - Name sanitization (whitespace & quotes → `_`); string values safely JSON-escaped.

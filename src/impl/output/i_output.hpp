@@ -50,7 +50,7 @@ struct IOutput {
    * @retval ASTL_STATUS_SUCCESS Entire span written.
    * @retval ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED Written successfully with unused downstream capacity (buffer outputs
    * only).
-   * @retval ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL Destination buffer could not hold all samples (no partial write
+   * @retval ASTL_STATUS_BUFFER_TOO_SMALL Destination buffer could not hold all samples (no partial write
    * unless documented).
    * @retval ASTL_STATUS_INTERNAL_ERROR Implementation-specific failure (e.g. null internal pointer, IO error).
    * @retval ASTL_STATUS_NOT_IMPLEMENTED Default base implementation (when not overridden).

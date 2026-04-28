@@ -210,7 +210,7 @@ auto PerfettoOutput::DetermineCategory(astl_units_t units) -> std::string {
     case ASTL_UNITS_CELSIUS:
       category = "Temperature";
       break;
-    case ASTL_UNITS_MHERTZ:
+    case ASTL_UNITS_MHZ:
       category = "Frequency";
       break;
     case ASTL_UNITS_VOLTS:

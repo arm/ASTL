@@ -7,7 +7,7 @@
 Purpose:
         Provide semantic Python exception subclasses mapped from integer status
         codes surfaced by the C layer. This lets user code catch *meaningful* error
-        categories (``InitializationError`` etc.) while preserving a single base
+        categories (``InternalError`` etc.) while preserving a single base
         class (``ASTLError``) for broad handling.
 
 Mapping policy:
@@ -35,17 +35,12 @@ except Exception:  # pragma: no cover - fallback path during partial init
 
 
 class InitializationError(ASTLError):
-    """Raised when operations are attempted before successful initialize()."""
+    """Backward-compatible exception retained for callers importing this name."""
     def __init__(self, *args):  # type: ignore[override]
-        """Augment message with user guidance.
-
-        Tests raise ``InitializationError(Status.NOT_INITIALIZED)`` directly; the
-        base ``ASTLError`` would normally turn an int into just that numeric in
-        the .args, so we provide a clearer human‑readable message.
-        """
+        """Preserve the specialized message shape used by legacy callers."""
         if len(args) == 1 and isinstance(args[0], int):
             code = int(args[0])
-            super().__init__(f"Operation requires initialize() to be called first (status code {code})")
+            super().__init__(f"Initialization-related ASTL failure (status code {code})")
         else:  # Pass through any richer message/signature combinations
             super().__init__(*args)  # pragma: no cover - exercised indirectly
 
@@ -92,7 +87,6 @@ def _build_status_map() -> None:
         return
     # Mapping table (attribute name on Status -> exception subclass)
     spec: Dict[str, Type[ASTLError]] = {
-        'NOT_INITIALIZED': InitializationError,
         'NOT_IMPLEMENTED': NotImplementedErrorASTL,
         'INVALID_ARGUMENT': InvalidArgumentError,
         'BAD_ARGUMENT': BadArgumentError,
@@ -118,10 +112,10 @@ def _ensure_real_status() -> None:
     in the genuine class.
     """
     global Status
-    if not hasattr(Status, 'NOT_INITIALIZED') or not isinstance(getattr(Status, 'NOT_INITIALIZED', None), int):
+    if not hasattr(Status, 'INTERNAL_ERROR') or not isinstance(getattr(Status, 'INTERNAL_ERROR', None), int):
         try:  # pragma: no cover - defensive path
             from ._core import Status as RealStatus  # type: ignore
-            if hasattr(RealStatus, 'NOT_INITIALIZED'):
+            if hasattr(RealStatus, 'INTERNAL_ERROR'):
                 # Rebinding the imported Status symbol at runtime is intentional to swap
                 # the provisional placeholder with the real extension class. Mypy flags
                 # this as "Cannot assign to a type" (misc); safe to ignore here.

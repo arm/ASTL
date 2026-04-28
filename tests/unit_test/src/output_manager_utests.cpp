@@ -63,10 +63,10 @@ TEST_CASE("BufferOutput::WriteProcessedSamples basic behaviors", "[output_manage
     REQUIRE(tight_capacity == samples.size());
   }
 
-  SECTION("Capacity smaller than samples returns METRIC_SAMPLES_BUFFER_TOO_SMALL") {
+  SECTION("Capacity smaller than samples returns BUFFER_TOO_SMALL") {
     auto samples   = MakeSamples(4);
     count_capacity = 3;  // claim only space for 3
-    REQUIRE(buffer_output.WriteProcessedSamples(samples) == ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL);
+    REQUIRE(buffer_output.WriteProcessedSamples(samples) == ASTL_STATUS_BUFFER_TOO_SMALL);
   }
 }
 

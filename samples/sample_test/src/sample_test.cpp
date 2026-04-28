@@ -11,7 +11,6 @@
 #include <format>
 #include <iomanip>
 #include <iostream>
-#include <limits>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -66,7 +65,7 @@ auto UnitsToString(astl_units_t units) -> std::string {
       return "B";
     case ASTL_UNITS_MBYTESPERSEC:
       return "MB/s";
-    case ASTL_UNITS_MHERTZ:
+    case ASTL_UNITS_MHZ:
       return "MHz";
     case ASTL_UNITS_PERCENT:
       return "%";
@@ -293,7 +292,7 @@ auto GetTargets(std::vector<astl_target_props_t>& target_properties_buffer, astl
   target_properties_buffer.resize(target_count);
 
   if (target_count == 0) {
-    return ASTL_STATUS_NO_TARGETS_FOUND;
+    return ASTL_STATUS_NO_TARGET_FOUND;
   }
 
   target_properties_buffer[0].size = sizeof(astl_target_props_t);
@@ -318,15 +317,15 @@ auto GetTargets(std::vector<astl_target_props_t>& target_properties_buffer, astl
   return ASTL_STATUS_INTERNAL_ERROR;
 }
 
-auto GetCounters(const astl_target_props_t& target_properties)
+auto GetCountersOnTarget(const astl_target_props_t& target_properties)
     -> std::expected<std::vector<astl_counter_props_t>, astl_status_code> {
   uint32_t counter_count{};
   ASTL_INIT_STRUCT(astl_get_counter_count_params_t, get_counter_count_params, .flags = 0,
                    .target_handle = target_properties.handle, .counter_count = &counter_count);
-  auto status = astlGetCounterCount(&get_counter_count_params);
+  auto status = astlGetCounterCountOnTarget(&get_counter_count_params);
   std::cout << "Counter count: " << counter_count << "\n";
   if (status != ASTL_STATUS_SUCCESS) {
-    std::cout << "astlGetCounterCount Status: " << astlStatusString(status) << '\n';
+    std::cout << "astlGetCounterCountOnTarget Status: " << astlStatusString(status) << '\n';
     std::cout << "target_handle: " << target_properties.handle << " \n";
     return std::unexpected{status};
   }
@@ -342,8 +341,8 @@ auto GetCounters(const astl_target_props_t& target_properties)
   ASTL_INIT_STRUCT(astl_get_counters_params_t, get_counters_params, .flags = 0,
                    .target_handle = target_properties.handle, .counters = counter_buffer.data(),
                    .counter_count = &counter_count);
-  status = astlGetCounters(&get_counters_params);
-  std::cout << "astlGetCounters Status: " << astlStatusString(status) << '\n';
+  status = astlGetCountersOnTarget(&get_counters_params);
+  std::cout << "astlGetCountersOnTarget Status: " << astlStatusString(status) << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
     return std::unexpected{status};
   }
@@ -358,14 +357,14 @@ void PrintCounters(std::vector<astl_counter_props_t> const& counter_buffer) {
   }
 }
 
-auto GetMetrics(const astl_target_props_t& target_properties, std::vector<astl_metric_props_t>& metric_buffer,
-                uint32_t& metric_count) -> astl_status_code {
+auto GetMetricsOnTarget(const astl_target_props_t& target_properties, std::vector<astl_metric_props_t>& metric_buffer,
+                        uint32_t& metric_count) -> astl_status_code {
   ASTL_INIT_STRUCT(astl_get_metric_count_params_t, get_metric_count_params, .flags = 0,
                    .target_handle = target_properties.handle, .metric_count = &metric_count);
-  astl_status_code status = astlGetMetricCount(&get_metric_count_params);
+  astl_status_code status = astlGetMetricCountOnTarget(&get_metric_count_params);
   std::cout << "Metric count: " << metric_count << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
-    std::cout << "astlGetMetricCount Status: " << astlStatusString(status) << '\n';
+    std::cout << "astlGetMetricCountOnTarget Status: " << astlStatusString(status) << '\n';
     std::cout << "target_handle: " << target_properties.handle << " \n";
     std::cout << "&metric_count: " << &metric_count << " \n";
     return status;
@@ -382,8 +381,8 @@ auto GetMetrics(const astl_target_props_t& target_properties, std::vector<astl_m
   }
   ASTL_INIT_STRUCT(astl_get_metrics_params_t, get_metrics_params, .flags = 0, .target_handle = target_properties.handle,
                    .metrics = metric_buffer.data(), .metric_count = &metric_count);
-  status = astlGetMetrics(&get_metrics_params);
-  std::cout << "astlGetMetrics Status: " << astlStatusString(status) << '\n';
+  status = astlGetMetricsOnTarget(&get_metrics_params);
+  std::cout << "astlGetMetricsOnTarget Status: " << astlStatusString(status) << '\n';
   return status;
 }
 
@@ -504,7 +503,6 @@ auto ConfigureAndRunCollection(const astl_target_props_t&              target_pr
 
 auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_metric_props_t>& metric_buffer)
     -> void {
-  constexpr uint32_t sample_chunk_capacity = 4;
   for (const auto& metric_props : metric_buffer) {
     if (!metric_props.name) {
       continue;  // skip nameless metrics
@@ -522,32 +520,18 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
     if (status != ASTL_STATUS_SUCCESS || sample_count == 0) {
       continue;
     }
-    const uint32_t             total_sample_count = sample_count;
-    std::vector<astl_sample_t> samples;
-    samples.reserve(total_sample_count);
 
-    uint64_t next_start_ts = 0;
-    while (samples.size() < total_sample_count) {
-      const auto remaining_samples = static_cast<uint32_t>(total_sample_count - static_cast<uint32_t>(samples.size()));
-      uint32_t   chunk_count       = std::min<uint32_t>(sample_chunk_capacity, remaining_samples);
-      auto       chunk             = std::vector<astl_sample_t>(chunk_count);
-      ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, get_metric_samples_params, .flags = 0,
-                       .target_handle = target_handle, .metric_handle = metric_props.handle, .samples = chunk.data(),
-                       .sample_count = &chunk_count, .start_ts = next_start_ts, .end_ts = 0);
-      status = astlGetMetricSamplesOnTarget(&get_metric_samples_params);
-      if (status != ASTL_STATUS_SUCCESS || chunk_count == 0) {
-        return;
-      }
-      samples.insert(samples.end(), chunk.begin(), chunk.begin() + chunk_count);
-      if (samples.size() >= total_sample_count) {
-        break;
-      }
-      const uint64_t last_timestamp = samples.back().timestamp;
-      if (last_timestamp == std::numeric_limits<uint64_t>::max()) {
-        break;
-      }
-      next_start_ts = last_timestamp + 1;
+    std::vector<astl_sample_t> samples(sample_count);
+    ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, get_metric_samples_params, .flags = 0,
+                     .target_handle = target_handle, .metric_handle = metric_props.handle, .samples = samples.data(),
+                     .sample_count = &sample_count, .start_ts = 0, .end_ts = 0);
+    status = astlGetMetricSamplesOnTarget(&get_metric_samples_params);
+    std::cout << "astlGetMetricSamplesOnTarget Status: " << astlStatusString(status) << '\n';
+    if (status != ASTL_STATUS_SUCCESS || sample_count == 0) {
+      continue;
     }
+    samples.resize(sample_count);
+
     // Check if all samples are non-zero
     bool all_samples_non_zero =
         std::all_of(samples.begin(), samples.end(), [](const astl_sample_t& sample) { return sample.value.ui64 != 0; });
@@ -558,11 +542,8 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
       std::cout << "  [" << i << "] ts=" << sample_entry.timestamp
                 << " value=" << ValueToString(sample_entry.value, metric_props.value_type) << '\n';
     }
-    // Only print success status if all samples are non-zero
-    if (all_samples_non_zero) {
-      std::cout << "astlGetMetricSamplesOnTarget Status: " << astlStatusString(status) << '\n';
-    } else {
-      std::cout << "astlGetMetricSamplesOnTarget Status: Failed - contains zero values" << '\n';
+    if (!all_samples_non_zero) {
+      std::cout << "Collected samples contain zero values" << '\n';
     }
   }
 }
@@ -696,7 +677,7 @@ auto main(int argc, char* argv[]) -> int {
     status = GetTargets(target_properties_buffer, target_properties);
   }
   if (status != ASTL_STATUS_SUCCESS) {
-    if (status == ASTL_STATUS_NO_TARGETS_FOUND) {
+    if (status == ASTL_STATUS_NO_TARGET_FOUND) {
       std::cout << "No targets discovered; exiting successfully for integration environment.\n";
       return 0;  // treat absence of targets as non-fatal in integration runs
     }
@@ -704,7 +685,7 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   // Get and print counters
-  auto counters_result = GetCounters(target_properties);
+  auto counters_result = GetCountersOnTarget(target_properties);
   if (counters_result) {
     PrintCounters(*counters_result);
   }
@@ -721,10 +702,10 @@ auto main(int argc, char* argv[]) -> int {
     metric_buffer = *metrics_or_error;
   } else {
     uint32_t metric_count{};
-    status = GetMetrics(target_properties, metric_buffer, metric_count);
+    status = GetMetricsOnTarget(target_properties, metric_buffer, metric_count);
     if (status != ASTL_STATUS_SUCCESS) {
       std::cout << "Masking error code " << status
-                << " from GetMetrics so sample integration tests will pass w/out mock sysfs\n";
+                << " from GetMetricsOnTarget so sample integration tests will pass w/out mock sysfs\n";
       // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
       // even without mock sysfs running
       return 0;

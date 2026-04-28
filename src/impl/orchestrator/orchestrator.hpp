@@ -123,8 +123,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    * @brief Returns true if the global Orchestrator instance has been explicitly initialized.
    *
    * Unlike GetInstance(), this function will NOT attempt lazy construction. It is used by the
-   * C API wrapper layer to return ASTL_STATUS_NOT_INITIALIZED for lifecycle operations that
-   * require prior `Orchestrator::GetInstance()` invocation.
+   * C API wrapper layer to gate lifecycle operations that require prior
+   * `Orchestrator::GetInstance()` invocation.
    */
   static auto IsInitialized() -> bool { return instance_ != nullptr; }
 

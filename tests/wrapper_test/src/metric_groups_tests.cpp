@@ -181,7 +181,7 @@ TEST_CASE("Metric group discovery APIs", "[wrapper][Orchestrator][MetricGroups]"
       const auto* target_handle = mock_target_handle;
       ASTL_INIT_STRUCT(astl_get_metric_groups_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
                        .metric_groups = groups.data(), .metric_group_count = &group_count);
-      REQUIRE(astlGetMetricGroupsOnTarget(&params) == ASTL_STATUS_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION);
+      REQUIRE(astlGetMetricGroupsOnTarget(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
     }
     group_count    = kAFew;
     groups[0].size = sizeof(astl_metric_group_props_t) + 1;
@@ -189,7 +189,7 @@ TEST_CASE("Metric group discovery APIs", "[wrapper][Orchestrator][MetricGroups]"
       const auto* target_handle = mock_target_handle;
       ASTL_INIT_STRUCT(astl_get_metric_groups_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
                        .metric_groups = groups.data(), .metric_group_count = &group_count);
-      REQUIRE(astlGetMetricGroupsOnTarget(&params) == ASTL_STATUS_NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION);
+      REQUIRE(astlGetMetricGroupsOnTarget(&params) == ASTL_STATUS_NEW_STRUCT_VERSION);
     }
     group_count    = 1;
     groups[0].size = sizeof(astl_metric_group_props_t);
@@ -197,7 +197,8 @@ TEST_CASE("Metric group discovery APIs", "[wrapper][Orchestrator][MetricGroups]"
       const auto* target_handle = mock_target_handle;
       ASTL_INIT_STRUCT(astl_get_metric_groups_on_target_params_t, params, .flags = 0, .target_handle = target_handle,
                        .metric_groups = groups.data(), .metric_group_count = &group_count);
-      REQUIRE(astlGetMetricGroupsOnTarget(&params) == ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL);
+      REQUIRE(astlGetMetricGroupsOnTarget(&params) == ASTL_STATUS_BUFFER_TOO_SMALL);
+      REQUIRE(group_count == 2);
     }
   }
 
@@ -378,7 +379,7 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
       ASTL_INIT_STRUCT(astl_get_metric_group_metrics_on_target_params_t, params, .flags = 0,
                        .target_handle = target_handle, .metric_group_handle = group0_handle, .metrics = metrics.data(),
                        .metric_count = &metric_count);
-      REQUIRE(astlGetMetricGroupMetricsOnTarget(&params) == ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION);
+      REQUIRE(astlGetMetricGroupMetricsOnTarget(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
     }
     metrics[0].size = sizeof(astl_metric_props_t) + 1;  // caller has newer struct
     {
@@ -387,7 +388,7 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
       ASTL_INIT_STRUCT(astl_get_metric_group_metrics_on_target_params_t, params, .flags = 0,
                        .target_handle = target_handle, .metric_group_handle = group0_handle, .metrics = metrics.data(),
                        .metric_count = &metric_count);
-      REQUIRE(astlGetMetricGroupMetricsOnTarget(&params) == ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION);
+      REQUIRE(astlGetMetricGroupMetricsOnTarget(&params) == ASTL_STATUS_NEW_STRUCT_VERSION);
     }
     metrics[0].size = sizeof(astl_metric_props_t);
   }
@@ -419,14 +420,14 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
       auto metric_count = static_cast<uint32_t>(metrics.size());
       ASTL_INIT_STRUCT(astl_get_metric_group_metrics_params_t, params, .flags = 0, .metric_group_handle = group0_handle,
                        .metrics = metrics.data(), .metric_count = &metric_count);
-      REQUIRE(astlGetMetricGroupMetrics(&params) == ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION);
+      REQUIRE(astlGetMetricGroupMetrics(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
     }
     metrics[0].size = sizeof(astl_metric_props_t) + 1;
     {
       auto metric_count = static_cast<uint32_t>(metrics.size());
       ASTL_INIT_STRUCT(astl_get_metric_group_metrics_params_t, params, .flags = 0, .metric_group_handle = group0_handle,
                        .metrics = metrics.data(), .metric_count = &metric_count);
-      REQUIRE(astlGetMetricGroupMetrics(&params) == ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION);
+      REQUIRE(astlGetMetricGroupMetrics(&params) == ASTL_STATUS_NEW_STRUCT_VERSION);
     }
     metrics[0].size = sizeof(astl_metric_props_t);
   }
@@ -509,14 +510,14 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
     uint32_t member_count = 1;
     ASTL_INIT_STRUCT(astl_get_metric_group_metrics_params_t, params, .flags = 0, .metric_group_handle = group0_handle,
                      .metrics = metrics.data(), .metric_count = &member_count);
-    REQUIRE(astlGetMetricGroupMetrics(&params) == ASTL_STATUS_METRIC_PROPERTIES_BUFFER_TOO_SMALL);
+    REQUIRE(astlGetMetricGroupMetrics(&params) == ASTL_STATUS_BUFFER_TOO_SMALL);
     REQUIRE(member_count == 2);
 
     member_count = 1;
     ASTL_INIT_STRUCT(astl_get_metric_group_metrics_on_target_params_t, on_target_params, .flags = 0,
                      .target_handle = mock_target_handle, .metric_group_handle = group0_handle,
                      .metrics = metrics.data(), .metric_count = &member_count);
-    REQUIRE(astlGetMetricGroupMetricsOnTarget(&on_target_params) == ASTL_STATUS_METRIC_PROPERTIES_BUFFER_TOO_SMALL);
+    REQUIRE(astlGetMetricGroupMetricsOnTarget(&on_target_params) == ASTL_STATUS_BUFFER_TOO_SMALL);
     REQUIRE(member_count == 2);
   }
 

@@ -30,7 +30,7 @@ SPDX-License-Identifier: Apache-2.0
 | Diagnostics     | `astl.diagnostics` | Environment & configuration snapshot     | `diagnostics()`                                       |
 | DataFrames      | `astl.dataframe`   | Optional pandas integration              | `to_dataframe()`                                      |
 | Derived Metrics | `astl.derived`     | Rate / delta computation utilities       | `deltas()`, `rates()`                                 |
-| Exceptions      | `astl.exceptions`  | Semantic error mapping                   | `InitializationError`, `BadArgumentError`, ...        |
+| Exceptions      | `astl.exceptions`  | Semantic error mapping                   | `InternalError`, `BadArgumentError`, ...              |
 
 ---
 
@@ -579,7 +579,7 @@ The exception mapping layer self-heals after module reloads
 (`importlib.reload(astl.exceptions)`) and after temporary stubbing during test
 setup.
 
-Hardening tests enforce that `InitializationError` still maps correctly after
+Hardening tests enforce that `InternalError` still maps correctly after
 repeated reload cycles.
 
 ---

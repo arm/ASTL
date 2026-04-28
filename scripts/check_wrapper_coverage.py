@@ -117,7 +117,7 @@ GO_UNITS_CONSTANTS = {
     "UnitsAmps": "ASTL_UNITS_AMPS",
     "UnitsBytes": "ASTL_UNITS_BYTES",
     "UnitsMBytesPerSec": "ASTL_UNITS_MBYTESPERSEC",
-    "UnitsMHz": "ASTL_UNITS_MHERTZ",
+    "UnitsMHz": "ASTL_UNITS_MHZ",
     "UnitsRPM": "ASTL_UNITS_RPM",
     "UnitsCount": "ASTL_UNITS_COUNT",
     "UnitsPercent": "ASTL_UNITS_PERCENT",

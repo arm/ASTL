@@ -60,44 +60,44 @@
         "symbol": "GetTargets"
       }
     },
-    "astlGetCounterCount": {
+    "astlGetCounterCountOnTarget": {
       "python": {
         "mode": "wrapped",
         "symbol": "get_counters"
       },
       "go": {
         "mode": "wrapped",
-        "symbol": "GetCounters"
+        "symbol": "GetCountersOnTarget"
       }
     },
-    "astlGetCounters": {
+    "astlGetCountersOnTarget": {
       "python": {
         "mode": "wrapped",
         "symbol": "get_counters"
       },
       "go": {
         "mode": "wrapped",
-        "symbol": "GetCounters"
+        "symbol": "GetCountersOnTarget"
       }
     },
-    "astlGetMetricCount": {
+    "astlGetMetricCountOnTarget": {
       "python": {
         "mode": "wrapped",
         "symbol": "get_metrics"
       },
       "go": {
         "mode": "wrapped",
-        "symbol": "GetMetrics"
+        "symbol": "GetMetricsOnTarget"
       }
     },
-    "astlGetMetrics": {
+    "astlGetMetricsOnTarget": {
       "python": {
         "mode": "wrapped",
         "symbol": "get_metrics"
       },
       "go": {
         "mode": "wrapped",
-        "symbol": "GetMetrics"
+        "symbol": "GetMetricsOnTarget"
       }
     },
     "astlGetMetricStateCountOnTarget": {

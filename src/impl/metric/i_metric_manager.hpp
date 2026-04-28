@@ -84,7 +84,8 @@ struct IMetricManager {
    * @brief Assign values such as name, units, etc to the given properties pointer.
    *
    * @param counter The counter API handle for potentially many identical counters that differ only in their target
-   * @param properties A non-null pointer to a struct containing properties to fill in, comes from astlGetCounters API
+   * @param properties A non-null pointer to a struct containing properties to fill in, comes from
+   * astlGetCountersOnTarget API
    *
    * @return An astl_status_code indicating success or ASTL_STATUS_BAD_PARAM
    */

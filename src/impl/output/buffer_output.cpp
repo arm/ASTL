@@ -24,7 +24,7 @@ auto BufferOutput::WriteProcessedSamples(std::span<const ProcessedSampledData> s
         "BufferOutput: Not enough space in buffer to write samples. Buffer capacity: {}, Buffer span size: {}, Samples "
         "size: {}",
         capacity, _samples_buffer.size(), samples.size());
-    return ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL;
+    return ASTL_STATUS_BUFFER_TOO_SMALL;
   }
 
   *_buffer_sample_count = 0;  // reset count before writing

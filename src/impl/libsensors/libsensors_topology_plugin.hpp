@@ -56,7 +56,7 @@ auto ScanForTargetsWithLibsensors(const AstlConfiguration&    configuration,
   if (!sensors_api->Ok()) {
     // If we loaded the sensors library but some of the functions didn't load properly, treat that as an error
     ASTL_LOG_ERROR("LibsensorsTopologyPlugin::ScanForTargets: Failed to load all requisite functions from libsensors");
-    return std::unexpected(ASTL_STATUS_NO_TARGETS_FOUND);
+    return std::unexpected(ASTL_STATUS_NO_TARGET_FOUND);
   }
 
   const sensors_chip_name* chip       = nullptr;

@@ -394,7 +394,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             break;
           case 9:
             status = PauseCollection();
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_NOT_INITIALIZED,
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_INTERNAL_ERROR,
                                      ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
@@ -407,7 +407,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             break;
           case 11:
             status = ResumeCollection();
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_NOT_INITIALIZED,
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_INTERNAL_ERROR,
                                      ASTL_STATUS_NOT_IMPLEMENTED})) {
               all_ok.store(false, std::memory_order_release);
             }
@@ -475,8 +475,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             group_props[0].size = sizeof(astl_metric_group_props_t);
             status              = GetMetricGroupsOnTarget(valid_target, group_props.data(), &metric_group_count);
             if (!is_allowed(status, {ASTL_STATUS_SUCCESS, ASTL_STATUS_BAD_ARGUMENT, ASTL_STATUS_NO_METRIC_GROUPS_FOUND,
-                                     ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED,
-                                     ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL})) {
+                                     ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED, ASTL_STATUS_BUFFER_TOO_SMALL})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;

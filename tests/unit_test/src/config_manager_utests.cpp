@@ -835,7 +835,7 @@ TEST_CASE("CreateScmiMetricConfigs allows output-unit override with formula scal
 
   auto* cfg = metric_configs.begin()->first.get();
   REQUIRE(cfg != nullptr);
-  REQUIRE(cfg->Units() == ASTL_UNITS_MHERTZ);
+  REQUIRE(cfg->Units() == ASTL_UNITS_MHZ);
   REQUIRE(cfg->ValueType() == ASTL_VALUE_UINT64);
   REQUIRE(cfg->InputValueType() == ASTL_VALUE_UINT64);
 

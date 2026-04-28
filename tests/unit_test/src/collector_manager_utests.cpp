@@ -263,7 +263,7 @@ TEST_CASE("CollectorManager with no collectors", "collector_manager") {
                                           .samplingInterval      = std::chrono::milliseconds{100},
                                           .requirements = {astl::CollectorCapability{astl::CollectorType::SCMI}}};
     REQUIRE(collector_manager.ConfigureCollectionOnTarget(mock_target.get(), collection_params,
-                                                          std::move(operations)) == ASTL_STATUS_NO_TARGETS_FOUND);
+                                                          std::move(operations)) == ASTL_STATUS_NO_TARGET_FOUND);
   }
 
   SECTION("StartOnTarget with no collectors") {

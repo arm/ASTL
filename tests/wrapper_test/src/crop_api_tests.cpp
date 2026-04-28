@@ -49,12 +49,12 @@ TEST_CASE("astlCropSamplesOnTarget - incompatible struct size", "[crop_api]") {
 
   SECTION("size too small") {
     params.size = sizeof(astl_crop_samples_on_target_params_t) - 1;
-    REQUIRE(astlCropSamplesOnTarget(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    REQUIRE(astlCropSamplesOnTarget(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
   }
 
   SECTION("size too large") {
     params.size = sizeof(astl_crop_samples_on_target_params_t) + 1;
-    REQUIRE(astlCropSamplesOnTarget(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    REQUIRE(astlCropSamplesOnTarget(&params) == ASTL_STATUS_NEW_STRUCT_VERSION);
   }
 }
 
@@ -66,7 +66,7 @@ TEST_CASE("astlCropSamplesOnTarget - non-zero params flags", "[crop_api]") {
   params.target_handle = kTarget;
   params.windows       = &window;
   params.window_count  = 1;
-  REQUIRE(astlCropSamplesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(astlCropSamplesOnTarget(&params) == ASTL_STATUS_INVALID_FLAG_VALUE);
 }
 
 TEST_CASE("astlCropSamplesOnTarget - valid params returns NOT_IMPLEMENTED", "[crop_api]") {
@@ -96,12 +96,12 @@ TEST_CASE("astlCropMetricSamplesOnTarget - incompatible struct size", "[crop_api
 
   SECTION("size too small") {
     params.size = sizeof(astl_crop_metric_samples_on_target_params_t) - 1;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
   }
 
   SECTION("size too large") {
     params.size = sizeof(astl_crop_metric_samples_on_target_params_t) + 1;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_NEW_STRUCT_VERSION);
   }
 }
 
@@ -114,7 +114,7 @@ TEST_CASE("astlCropMetricSamplesOnTarget - non-zero params flags", "[crop_api]")
   params.metric_handle = kMetric;
   params.windows       = &window;
   params.window_count  = 1;
-  REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_INVALID_FLAG_VALUE);
 }
 
 TEST_CASE("astlCropMetricSamplesOnTarget - window array validation", "[crop_api]") {
@@ -141,14 +141,14 @@ TEST_CASE("astlCropMetricSamplesOnTarget - window array validation", "[crop_api]
     astl_crop_window_t window{sizeof(astl_crop_window_t) - 1, 0, 0, 0};
     params.windows      = &window;
     params.window_count = 1;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
   }
 
   SECTION("windows[0].flags is non-zero") {
     astl_crop_window_t window{sizeof(astl_crop_window_t), /*flags=*/1U, 0, 0};
     params.windows      = &window;
     params.window_count = 1;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
+    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_INVALID_FLAG_VALUE);
   }
 
   SECTION("start_ts > end_ts (both non-zero)") {
@@ -189,12 +189,12 @@ TEST_CASE("astlCropSamples - incompatible struct size", "[crop_api]") {
 
   SECTION("size too small") {
     params.size = sizeof(astl_crop_samples_params_t) - 1;
-    REQUIRE(astlCropSamples(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    REQUIRE(astlCropSamples(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
   }
 
   SECTION("size too large") {
     params.size = sizeof(astl_crop_samples_params_t) + 1;
-    REQUIRE(astlCropSamples(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    REQUIRE(astlCropSamples(&params) == ASTL_STATUS_NEW_STRUCT_VERSION);
   }
 }
 
@@ -205,7 +205,7 @@ TEST_CASE("astlCropSamples - non-zero params flags", "[crop_api]") {
   params.flags        = 1U;
   params.windows      = &window;
   params.window_count = 1;
-  REQUIRE(astlCropSamples(&params) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(astlCropSamples(&params) == ASTL_STATUS_INVALID_FLAG_VALUE);
 }
 
 TEST_CASE("astlCropSamples - window array validation", "[crop_api]") {
@@ -230,14 +230,14 @@ TEST_CASE("astlCropSamples - window array validation", "[crop_api]") {
     astl_crop_window_t window{sizeof(astl_crop_window_t) + 1, 0, 0, 0};
     params.windows      = &window;
     params.window_count = 1;
-    REQUIRE(astlCropSamples(&params) == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    REQUIRE(astlCropSamples(&params) == ASTL_STATUS_NEW_STRUCT_VERSION);
   }
 
   SECTION("windows[0].flags is non-zero") {
     astl_crop_window_t window{sizeof(astl_crop_window_t), /*flags=*/1U, 0, 0};
     params.windows      = &window;
     params.window_count = 1;
-    REQUIRE(astlCropSamples(&params) == ASTL_STATUS_BAD_ARGUMENT);
+    REQUIRE(astlCropSamples(&params) == ASTL_STATUS_INVALID_FLAG_VALUE);
   }
 
   SECTION("start_ts > end_ts (both non-zero)") {

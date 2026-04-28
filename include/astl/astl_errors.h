@@ -27,102 +27,60 @@ extern "C" {
  * TODO (https://jira.arm.com/browse/ASTL-98) - Create separate list for internal error codes.
  */
 typedef enum _astl_status_code {
-  ASTL_STATUS_UNKNOWN_ERROR                        = -1,   //!< Unknown error
-  ASTL_STATUS_SUCCESS                              = 0,    //!< Success
-  ASTL_STATUS_BAD_ARGUMENT                         = 1,    //!< Bad argument passed to function
-  ASTL_STATUS_BAD_CONFIGURATION                    = 2,    //!< Generic bad configuration error code
-  ASTL_STATUS_INVALID_TARGET_HANDLE                = 3,    //!< Invalid target handle used
-  ASTL_STATUS_INVALID_COUNTER_HANDLE               = 4,    //!< Invalid counter handle used
-  ASTL_STATUS_INVALID_METRIC_HANDLE                = 5,    //!< Invalid metric handle used
-  ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE          = 6,    //!< Invalid metric group handle used
-  ASTL_STATUS_NOT_IMPLEMENTED                      = 7,    //!< Functionality not implemented yet
-  ASTL_STATUS_NOT_SUPPORTED                        = 8,    //!< Unsupported functionality requested
-  ASTL_STATUS_DEPRECATED_API                       = 9,    //!< Deprecated API used
-  ASTL_STATUS_NO_TARGETS_FOUND                     = 10,   //!< No targets were detected or configured
-  ASTL_STATUS_OLD_TARGET_PROPERTIES_STRUCT_VERSION = 11,   //!< The version of the target properties structure used
-                                                           // by client is older
-  ASTL_STATUS_NEW_TARGET_PROPERTIES_STRUCT_VERSION = 12,   //!< The version of the target properties structure used
-                                                           // by client is newer
-  ASTL_STATUS_NO_COUNTERS_FOUND                     = 13,  //!< No counters were detected or configured
-  ASTL_STATUS_OLD_COUNTER_PROPERTIES_STRUCT_VERSION = 14,  //!< The version of the counter properties structure
-                                                           // used by client is older
-  ASTL_STATUS_NEW_COUNTER_PROPERTIES_STRUCT_VERSION = 15,  //!< The version of the counter properties structure
-                                                           // used by client is newer
-  ASTL_STATUS_OLD_COUNTER_SAMPLE_STRUCT_VERSION = 16,      //!< The version of the counter sample structure used by
-                                                           // client is older
-  ASTL_STATUS_NEW_COUNTER_SAMPLE_STRUCT_VERSION = 17,      //!< The version of the counter sample structure used by
-                                                           // client is newer
-  ASTL_STATUS_NO_METRICS_FOUND                     = 18,   //!< No metrics were detected or configured
-  ASTL_STATUS_OLD_METRIC_PROPERTIES_STRUCT_VERSION = 19,   //!< The version of the metric properties structure used
-                                                           // by client is older
-  ASTL_STATUS_NEW_METRIC_PROPERTIES_STRUCT_VERSION = 20,   //!< The version of the metric properties structure used
-                                                           // by client is newer
-  ASTL_STATUS_OLD_METRIC_SAMPLE_STRUCT_VERSION = 21,       //!< The version of the metric sample structure used by
-                                                           // client is older
-  ASTL_STATUS_NEW_METRIC_SAMPLE_STRUCT_VERSION = 22,       //!< The version of the metric sample structure used by
-                                                           // client is newer
-  ASTL_STATUS_NO_METRIC_GROUPS_FOUND = 23,                 //!< No metrics were detected or configured
-  ASTL_STATUS_OLD_METRIC_GROUP_PROPERTIES_STRUCT_VERSION =
-      24,  //!< The version of the metric group properties structure
-           // used by client is older
-  ASTL_STATUS_NEW_METRIC_GROUP_PROPERTIES_STRUCT_VERSION =
-      25,                                                     //!< The version of the metric group properties structure
-                                                              // used by client is newer
-  ASTL_STATUS_OLD_COLLECTION_PARAMETERS_STRUCT_VERSION = 26,  //!< The version of the collection parameters structure
-                                                              // used by client is older
-  ASTL_STATUS_NEW_COLLECTION_PARAMETERS_STRUCT_VERSION = 27,  //!< The version of the collection parameters structure
-                                                              // used by client is newer
-  ASTL_STATUS_TARGET_PROPERTIES_BUFFER_TOO_SMALL = 28,        //!< Buffer of target properties passed in by client is
-                                                              // too small to hold all targets
-  ASTL_STATUS_COUNTER_PROPERTIES_BUFFER_TOO_SMALL = 29,       //!< Buffer of counter properties passed in by client is
-                                                              // too small to hold all counters
-  ASTL_STATUS_METRIC_PROPERTIES_BUFFER_TOO_SMALL = 30,        //!< Buffer of metric properties passed in by client is
-                                                              // too small to hold all metrics
-  ASTL_STATUS_METRIC_GROUP_PROPERTIES_BUFFER_TOO_SMALL = 31,  //!< Buffer of metric group properties passed in by client
-                                                              // is too small to hold all metric groups
-  ASTL_STATUS_COUNTER_SAMPLES_BUFFER_TOO_SMALL = 32,          //!< Buffer of counter samples passed in by client is too
-                                                              // small to hold all counter samples
-  ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL = 33,           //!< Buffer of metric samples passed in by client is too
-                                                              // small to hold all metric samples
+  ASTL_STATUS_UNKNOWN_ERROR               = -1,  //!< Unknown error
+  ASTL_STATUS_SUCCESS                     = 0,   //!< Success
+  ASTL_STATUS_BAD_ARGUMENT                = 1,   //!< Bad argument passed to function
+  ASTL_STATUS_BAD_CONFIGURATION           = 2,   //!< Generic bad configuration error code
+  ASTL_STATUS_INVALID_TARGET_HANDLE       = 3,   //!< Invalid target handle used
+  ASTL_STATUS_INVALID_COUNTER_HANDLE      = 4,   //!< Invalid counter handle used
+  ASTL_STATUS_INVALID_METRIC_HANDLE       = 5,   //!< Invalid metric handle used
+  ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE = 6,   //!< Invalid metric group handle used
+  ASTL_STATUS_NOT_IMPLEMENTED             = 7,   //!< Functionality not implemented yet
+  ASTL_STATUS_NOT_SUPPORTED               = 8,   //!< Unsupported functionality requested
+  ASTL_STATUS_DEPRECATED_API              = 9,   //!< Deprecated API used
+  ASTL_STATUS_NO_TARGET_FOUND             = 10,  //!< No targets were detected or configured
+  ASTL_STATUS_OLD_STRUCT_VERSION          = 11,  //!< Caller-provided struct size is smaller than expected.
+  ASTL_STATUS_NEW_STRUCT_VERSION          = 12,  //!< Caller-provided struct size is larger than expected.
+  ASTL_STATUS_NO_COUNTERS_FOUND           = 13,  //!< No counters were detected or configured
+  ASTL_STATUS_NO_METRICS_FOUND            = 14,  //!< No metrics were detected or configured
+  ASTL_STATUS_NO_METRIC_GROUPS_FOUND      = 15,  //!< No metric groups were detected or configured
+  ASTL_STATUS_BUFFER_TOO_SMALL            = 16,  //!< Caller-provided output buffer is too small.
   ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE =
-      34,  //!< Metric or MetricManager received a sample that does not match the expected type or value.
-  ASTL_STATUS_METRIC_OVERFLOW_DETECTED    = 35,           //!< Overflow detected in metric processing.
-  ASTL_STATUS_SAMPLING_INTERVAL_TOO_SMALL = 36,           //!< Sampling interval specified is too small
-  ASTL_STATUS_SAMPLING_INTERVAL_TOO_LARGE = 37,           //!< Sampling interval specified is too large
-  ASTL_STATUS_SAMPLING_INTERVAL_IGNORED   = 38,           //!< Sampling interval paramater ignored. This would be if
+      17,  //!< Metric or MetricManager received a sample that does not match the expected type or value.
+  ASTL_STATUS_METRIC_OVERFLOW_DETECTED  = 18,             //!< Overflow detected in metric processing.
+  ASTL_STATUS_INVALID_SAMPLING_INTERVAL = 19,             //!< Sampling interval specified is invalid
+  ASTL_STATUS_SAMPLING_INTERVAL_IGNORED = 20,             //!< Sampling interval parameter ignored. This would be if
                                                           // collection mode is SNAPSHOT or IMMEDIATE
-  ASTL_STATUS_INVALID_COLLECTION_MODE              = 39,  //!< Invalid collection mode specified
-  ASTL_STATUS_INVALID_COLLECTION_OPTIMIZATION      = 40,  //!< Invalid collection optimization specified
-  ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET      = 41,  //!< Counter cannot be collected on specified target
-  ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET       = 42,  //!< Metric cannot be collected on specified target
-  ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET = 43,  //!< Metric group cannot be collected on specified target
-  ASTL_STATUS_COLLECTION_NOT_CONFIGURED            = 44,  //!< Collection not configured. Error when starting collection
-  ASTL_STATUS_COLLECTION_NOT_RUNNING               = 45,  //!< Collection not running. Error when issuing command meant
+  ASTL_STATUS_INVALID_COLLECTION_MODE              = 21,  //!< Invalid collection mode specified
+  ASTL_STATUS_INVALID_FLAG_VALUE                   = 22,  //!< Invalid flag value specified
+  ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET      = 23,  //!< Counter cannot be collected on specified target
+  ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET       = 24,  //!< Metric cannot be collected on specified target
+  ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET = 25,  //!< Metric group cannot be collected on specified target
+  ASTL_STATUS_COLLECTION_NOT_CONFIGURED            = 26,  //!< Collection not configured. Error when starting collection
+  ASTL_STATUS_COLLECTION_NOT_RUNNING               = 27,  //!< Collection not running. Error when issuing command meant
                                                           // for a running collection
-  ASTL_STATUS_COLLECTION_NOT_STOPPED = 46,                //!< Collection not stopped. Error when issuing command meant
+  ASTL_STATUS_COLLECTION_NOT_STOPPED = 28,                //!< Collection not stopped. Error when issuing command meant
                                                           // for a stopped collection
-  ASTL_STATUS_COLLECTION_NOT_PAUSED = 47,                 //!< Collection not running. Error when issuing command meant
+  ASTL_STATUS_COLLECTION_NOT_PAUSED = 29,                 //!< Collection not running. Error when issuing command meant
                                                           // for a paused collection
-  ASTL_STATUS_COLLECTION_ALREADY_RUNNING = 48,            //!< Collection already running. Error when issuing command
+  ASTL_STATUS_COLLECTION_ALREADY_RUNNING = 30,            //!< Collection already running. Error when issuing command
                                                           // meant to start or resume an already running collection
-  ASTL_STATUS_COLLECTION_ALREADY_STOPPED = 49,            //!< Collection already stopped. Error when issuing command
+  ASTL_STATUS_COLLECTION_ALREADY_STOPPED = 31,            //!< Collection already stopped. Error when issuing command
                                                           // meant to stop an already stopped collection
-  ASTL_STATUS_COLLECTION_ALREADY_PAUSED = 50,             //!< Collection already paused. Error when issuing command
+  ASTL_STATUS_COLLECTION_ALREADY_PAUSED = 32,             //!< Collection already paused. Error when issuing command
                                                           // meant to pause an already paused collection
-  ASTL_STATUS_NO_DATA_COLLECTED = 51,                     //!< No data collected. Error when attempting to get collected
+  ASTL_STATUS_NO_DATA_COLLECTED = 33,                     //!< No data collected. Error when attempting to get collected
                                                           // samples but no samples are available.
-  ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED  = 52,            //!< Given buffer  was larger than needed. Not an error.
-  ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE = 53,            //!< Unsupported collector type requested.
-  ASTL_STATUS_FILE_OPEN_FAILED           = 54,            //!< File exists, but open failed.
-  ASTL_STATUS_FILE_ERROR                 = 55,            //!< File system operations failed.
-  ASTL_STATUS_OUT_OF_MEMORY              = 56,            //!< Memory allocation failed.
-  ASTL_STATUS_DIVIDE_BY_ZERO             = 57,            //!< Attempted division by zero
-  ASTL_STATUS_INVALID_VALUE_TYPE         = 58,            //!< Invalid astl_value_type_t for operation
-  ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE   = 59,            //!< A struct parameter's _size property doesn't match
-  ASTL_STATUS_NOT_INITIALIZED            = 60,            //!< Failed to initialize internal state
-  ASTL_STATUS_INVALID_STATE_TRANSITION   = 61,            //!< Generic lifecycle transition not permitted.
-  ASTL_STATUS_PAUSE_UNSUPPORTED          = 62,            //!< Collector/hardware cannot pause (treated as no-op error).
-  ASTL_STATUS_RESUME_UNSUPPORTED         = 63,  //!< Collector/hardware cannot resume (treated as no-op error).
+  ASTL_STATUS_BUFFER_LARGER_THAN_NEEDED  = 34,            //!< Given buffer  was larger than needed. Not an error.
+  ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE = 35,            //!< Unsupported collector type requested.
+  ASTL_STATUS_FILE_OPEN_FAILED           = 36,            //!< File exists, but open failed.
+  ASTL_STATUS_FILE_ERROR                 = 37,            //!< File system operations failed.
+  ASTL_STATUS_OUT_OF_MEMORY              = 38,            //!< Memory allocation failed.
+  ASTL_STATUS_DIVIDE_BY_ZERO             = 39,            //!< Attempted division by zero
+  ASTL_STATUS_INVALID_VALUE_TYPE         = 40,            //!< Invalid astl_value_type_t for operation
+  ASTL_STATUS_INVALID_STATE_TRANSITION   = 41,            //!< Generic lifecycle transition not permitted.
+  ASTL_STATUS_PAUSE_UNSUPPORTED          = 42,            //!< Collector/hardware cannot pause (treated as no-op error).
+  ASTL_STATUS_RESUME_UNSUPPORTED         = 43,  //!< Collector/hardware cannot resume (treated as no-op error).
   // Add new status codes here
 
   ASTL_STATUS_INTERNAL_ERROR = 127,  //!< Internal failure

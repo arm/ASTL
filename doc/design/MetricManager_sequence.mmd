@@ -26,8 +26,8 @@ sequenceDiagram
     MetricManager->>Metric2: construct concrete metric
     MetricManager->>MetricManager: store MetricHandle
 
-    %% Enumeration from public API call (astlGetMetrics -> GetAvailableMetrics)
-    User->>Orchestrator: astlGetMetrics(get_metrics_params)
+    %% Enumeration from public API call (astlGetMetricsOnTarget -> GetAvailableMetrics)
+    User->>Orchestrator: astlGetMetricsOnTarget(get_metrics_params)
     Orchestrator->>MetricManager: GetAvailableMetrics()
     MetricManager-->>Orchestrator: span<astl_metric_handle_t>
     Orchestrator-->>User: metric handles

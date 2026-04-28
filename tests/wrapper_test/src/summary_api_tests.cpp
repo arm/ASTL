@@ -90,14 +90,14 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - invalid struct size", "[summary_api
     astl_metric_statistics_t summary{};
     summary.size = sizeof(astl_metric_statistics_t) - 1;
     auto result  = GetMetricStatisticsOnTarget(non_null_target, non_null_metric, &summary);
-    REQUIRE(result == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    REQUIRE(result == ASTL_STATUS_OLD_STRUCT_VERSION);
   }
 
   SECTION("Size too large") {
     astl_metric_statistics_t summary{};
     summary.size = sizeof(astl_metric_statistics_t) + 1;
     auto result  = GetMetricStatisticsOnTarget(non_null_target, non_null_metric, &summary);
-    REQUIRE(result == ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+    REQUIRE(result == ASTL_STATUS_NEW_STRUCT_VERSION);
   }
 }
 
@@ -112,7 +112,7 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - invalid summary flags", "[summary_a
     summary.size  = sizeof(astl_metric_statistics_t);
     summary.flags = (1U << 7);
     auto result   = GetMetricStatisticsOnTarget(non_null_target, non_null_metric, &summary);
-    REQUIRE(result == ASTL_STATUS_BAD_ARGUMENT);
+    REQUIRE(result == ASTL_STATUS_INVALID_FLAG_VALUE);
   }
 
   SECTION("Mutually exclusive average-mode flags") {
@@ -120,7 +120,7 @@ TEST_CASE("astlGetMetricStatisticsOnTarget - invalid summary flags", "[summary_a
     summary.size  = sizeof(astl_metric_statistics_t);
     summary.flags = ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG | ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG;
     auto result   = GetMetricStatisticsOnTarget(non_null_target, non_null_metric, &summary);
-    REQUIRE(result == ASTL_STATUS_BAD_ARGUMENT);
+    REQUIRE(result == ASTL_STATUS_INVALID_FLAG_VALUE);
   }
 }
 
@@ -483,12 +483,12 @@ TEST_CASE("astlGetMetricDiscreteHistogramOnTarget - invalid struct size", "[hist
   SECTION("Size too small") {
     bins[0].size = sizeof(astl_discrete_histogram_bin_t) - 1;
     REQUIRE(GetMetricDiscreteHistogramOnTarget(non_null_target, non_null_metric, bins.data(), &count) ==
-            ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+            ASTL_STATUS_OLD_STRUCT_VERSION);
   }
   SECTION("Size too large") {
     bins[0].size = sizeof(astl_discrete_histogram_bin_t) + 1;
     REQUIRE(GetMetricDiscreteHistogramOnTarget(non_null_target, non_null_metric, bins.data(), &count) ==
-            ASTL_STATUS_INCOMPATIBLE_STRUCT_SIZE);
+            ASTL_STATUS_NEW_STRUCT_VERSION);
   }
 }
 
@@ -642,7 +642,7 @@ TEST_CASE("astlGetMetricDiscreteHistogramOnTarget - uint64 samples, correct bins
     bins[0].size = sizeof(astl_discrete_histogram_bin_t);
 
     auto result = GetMetricDiscreteHistogramOnTarget(target_handle, metric_handle.get(), bins.data(), &bin_count);
-    REQUIRE(result == ASTL_STATUS_METRIC_SAMPLES_BUFFER_TOO_SMALL);
+    REQUIRE(result == ASTL_STATUS_BUFFER_TOO_SMALL);
     REQUIRE(bin_count == 3);
   }
 }

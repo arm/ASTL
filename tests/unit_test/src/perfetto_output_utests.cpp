@@ -479,7 +479,7 @@ TEST_CASE("PerfettoOutput category inference - frequency (unit-based)", "[perfet
   TestTargetBase target{"CatT2"};
   class FreqMetric : public astl::IMetric {
    public:
-    FreqMetric() : name_("Core Frequency"), units_(ASTL_UNITS_MHERTZ) {}
+    FreqMetric() : name_("Core Frequency"), units_(ASTL_UNITS_MHZ) {}
     bool CheckCapabilities(const astl::Capabilities& capabilities) const override {
       (void)capabilities;
       return true;
