@@ -9,6 +9,7 @@
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/targets.pb.h"
 #include "target.hpp"
+#include "topology/procfs_topology_plugin.hpp"
 #include "topology/scmi_target.hpp"
 #include "topology/scmi_topology_plugin.hpp"
 #include "topology/topology_builder.hpp"
@@ -162,4 +163,29 @@ TEST_CASE("TopologyBuilder::BuildTopologyManagerFromASTLFile rebuilds a serializ
   REQUIRE(result.value()->GetTargets()[0]->CollectorTargetPath().has_value());
   REQUIRE(*result.value()->GetTargets()[0]->CollectorTargetPath() == "tlm-0");
   REQUIRE(scmi_target->TelemetrySubdirectory() == "tlm-0");
+}
+
+TEST_CASE("Topology::ProcfsPlugin", "[TopologyManager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+
+  const fs::path  procfs_root = fs::temp_directory_path() / "astl_topology_procfs_fixture";
+  TempFileGuard   procfs_guard(procfs_root);
+  std::error_code ec;
+  fs::create_directories(procfs_root, ec);
+  REQUIRE(!ec);
+
+  {
+    std::ofstream stat_file(procfs_root / "stat", std::ios::out | std::ios::trunc);
+    REQUIRE(stat_file.good());
+    stat_file << "cpu 1 2 3 4\n";
+  }
+
+  astl::FileInterface procfs_file_interface{procfs_root};
+  auto targets = astl::ProcfsTopologyPlugin::detail::ScanForTargetsOnFileInterface(configuration_result.value(),
+                                                                                   std::move(procfs_file_interface));
+  REQUIRE(targets.has_value());
+  REQUIRE(targets->size() == 1);
+  REQUIRE((*targets)[0]->Name() == "procfs");
+  REQUIRE((*targets)[0]->GetCollectorType() == astl::CollectorType::PROCFS);
 }

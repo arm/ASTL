@@ -97,6 +97,7 @@ class PerfettoOutput : public IOutput {
   //  ASTL_UNITS_MBYTESPERSEC -> "Bandwidth"
   //  ASTL_UNITS_TICKS      -> "Ticks"
   //  ASTL_UNITS_SECONDS    -> "Time"
+  //  ASTL_UNITS_PERCENT    -> "Percent"
   //  fallback -> ""
   static auto DetermineCategory(astl_units_t units) -> std::string;
 };

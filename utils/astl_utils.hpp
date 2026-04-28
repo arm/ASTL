@@ -6,6 +6,7 @@
 #define INCLUDE_ASTL_UTILS_HPP_
 
 #include <algorithm>
+#include <array>
 #include <magic_enum/magic_enum.hpp>
 #include <random>
 #include <string>
@@ -231,47 +232,55 @@ inline auto ParseMetricIdentifier(std::string const& identifier_str) -> astl_met
 
 inline auto ParseUnits(std::string_view units_str) -> astl_units_t {
   auto unit_str_lower = ToLowerCopy(units_str);
-  if (unit_str_lower == "none" || unit_str_lower.empty()) {
+  if (unit_str_lower.empty()) {
     return ASTL_UNITS_NONE;
   }
-  if (unit_str_lower == "ticks") {
-    return ASTL_UNITS_TICKS;
-  }
-  if (unit_str_lower == "s" || unit_str_lower == "sec" || unit_str_lower == "second" || unit_str_lower == "seconds") {
-    return ASTL_UNITS_SECONDS;
-  }
-  if (unit_str_lower == "c" || unit_str_lower == "celsius" || unit_str_lower == "celcius") {
-    return ASTL_UNITS_CELSIUS;
-  }
-  if (unit_str_lower == "j" || unit_str_lower == "joule" || unit_str_lower == "joules") {
-    return ASTL_UNITS_JOULES;
-  }
-  if (unit_str_lower == "w" || unit_str_lower == "watt" || unit_str_lower == "watts") {
-    return ASTL_UNITS_WATTS;
-  }
-  if (unit_str_lower == "v" || unit_str_lower == "volt" || unit_str_lower == "volts") {
-    return ASTL_UNITS_VOLTS;
-  }
-  if (unit_str_lower == "a" || unit_str_lower == "amp" || unit_str_lower == "amps") {
-    return ASTL_UNITS_AMPS;
-  }
-  if (unit_str_lower == "b" || unit_str_lower == "byte" || unit_str_lower == "bytes") {
-    return ASTL_UNITS_BYTES;
-  }
-  if (unit_str_lower == "mbps" || unit_str_lower == "mb/s") {
-    return ASTL_UNITS_MBYTESPERSEC;
-  }
-  if (unit_str_lower == "mhz") {
-    return ASTL_UNITS_MHERTZ;
-  }
-  if (unit_str_lower == "rpm") {
-    return ASTL_UNITS_RPM;
-  }
-  if (unit_str_lower == "count" || unit_str_lower == "counts") {
-    return ASTL_UNITS_COUNT;
-  }
-  if (unit_str_lower == "%" || unit_str_lower == "percent" || unit_str_lower == "percentage") {
-    return ASTL_UNITS_PERCENT;
+
+  struct UnitAlias {
+    std::string_view alias;
+    astl_units_t     units;
+  };
+
+  static constexpr auto k_unit_aliases = std::to_array<UnitAlias>({
+      {"none",       ASTL_UNITS_NONE        },
+      {"ticks",      ASTL_UNITS_TICKS       },
+      {"s",          ASTL_UNITS_SECONDS     },
+      {"sec",        ASTL_UNITS_SECONDS     },
+      {"second",     ASTL_UNITS_SECONDS     },
+      {"seconds",    ASTL_UNITS_SECONDS     },
+      {"c",          ASTL_UNITS_CELSIUS     },
+      {"celsius",    ASTL_UNITS_CELSIUS     },
+      {"celcius",    ASTL_UNITS_CELSIUS     },
+      {"j",          ASTL_UNITS_JOULES      },
+      {"joule",      ASTL_UNITS_JOULES      },
+      {"joules",     ASTL_UNITS_JOULES      },
+      {"w",          ASTL_UNITS_WATTS       },
+      {"watt",       ASTL_UNITS_WATTS       },
+      {"watts",      ASTL_UNITS_WATTS       },
+      {"v",          ASTL_UNITS_VOLTS       },
+      {"volt",       ASTL_UNITS_VOLTS       },
+      {"volts",      ASTL_UNITS_VOLTS       },
+      {"a",          ASTL_UNITS_AMPS        },
+      {"amp",        ASTL_UNITS_AMPS        },
+      {"amps",       ASTL_UNITS_AMPS        },
+      {"b",          ASTL_UNITS_BYTES       },
+      {"byte",       ASTL_UNITS_BYTES       },
+      {"bytes",      ASTL_UNITS_BYTES       },
+      {"mbps",       ASTL_UNITS_MBYTESPERSEC},
+      {"mb/s",       ASTL_UNITS_MBYTESPERSEC},
+      {"mhz",        ASTL_UNITS_MHERTZ      },
+      {"%",          ASTL_UNITS_PERCENT     },
+      {"percent",    ASTL_UNITS_PERCENT     },
+      {"percentage", ASTL_UNITS_PERCENT     },
+      {"rpm",        ASTL_UNITS_RPM         },
+      {"count",      ASTL_UNITS_COUNT       },
+      {"counts",     ASTL_UNITS_COUNT       },
+  });
+
+  const std::array<UnitAlias, std::size(k_unit_aliases)>::const_iterator alias_it = std::ranges::find_if(
+      k_unit_aliases, [&unit_str_lower](const UnitAlias& alias) { return alias.alias == unit_str_lower; });
+  if (alias_it != k_unit_aliases.end()) {
+    return alias_it->units;
   }
   return ASTL_UNITS_UNKNOWN;
 }
@@ -279,39 +288,54 @@ inline auto ParseUnits(std::string_view units_str) -> astl_units_t {
 // For user-facing labels, the switch is the better fit than magic_enum as it allows for
 // more control over the formatting of the returned string
 inline auto UnitsToString(astl_units_t units) -> std::string_view {
+  std::string_view units_text = "Unknown";
   switch (units) {
     case ASTL_UNITS_NONE:
-      return "None";
+      units_text = "None";
+      break;
     case ASTL_UNITS_TICKS:
-      return "Ticks";
+      units_text = "Ticks";
+      break;
     case ASTL_UNITS_SECONDS:
-      return "Seconds";
+      units_text = "Seconds";
+      break;
     case ASTL_UNITS_CELSIUS:
-      return "Celsius";
+      units_text = "Celsius";
+      break;
     case ASTL_UNITS_JOULES:
-      return "Joules";
+      units_text = "Joules";
+      break;
     case ASTL_UNITS_WATTS:
-      return "Watts";
+      units_text = "Watts";
+      break;
     case ASTL_UNITS_VOLTS:
-      return "Volts";
+      units_text = "Volts";
+      break;
     case ASTL_UNITS_AMPS:
-      return "Amps";
+      units_text = "Amps";
+      break;
     case ASTL_UNITS_BYTES:
-      return "Bytes";
+      units_text = "Bytes";
+      break;
     case ASTL_UNITS_MBYTESPERSEC:
-      return "MB/s";
+      units_text = "MB/s";
+      break;
     case ASTL_UNITS_MHERTZ:
-      return "MHz";
-    case ASTL_UNITS_RPM:
-      return "RPM";
-    case ASTL_UNITS_COUNT:
-      return "Count";
+      units_text = "MHz";
+      break;
     case ASTL_UNITS_PERCENT:
-      return "Percent";
+      units_text = "Percent";
+      break;
+    case ASTL_UNITS_RPM:
+      units_text = "RPM";
+      break;
+    case ASTL_UNITS_COUNT:
+      units_text = "Count";
+      break;
     case ASTL_UNITS_UNKNOWN:
-      return "Unknown";
+      break;
   }
-  return "Unknown";
+  return units_text;
 }
 
 inline auto ParseMetricType(std::string const& metric_type_str) -> astl_metric_type_t {

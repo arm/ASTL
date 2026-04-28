@@ -6,6 +6,7 @@
 #include "astl/astl_errors.h"
 #include "common/scmi/uuid.hpp"
 #include "config/metric_json_declaration.hpp"
+#include "config/scmi_metric_json_declaration.hpp"
 #include "config/scmi_platform_telemetry_spec.hpp"
 
 using json = nlohmann::json;
@@ -396,13 +397,16 @@ TEST_CASE("GetMetricRegistersScmiData applies unit, component, and instance filt
 
   SECTION("component and instance filters narrow the matched metrics") {
     astl::metrics::spec::MetricJsonDeclaration metric_declaration;
-    metric_declaration.description                      = "CPU temperature";
-    metric_declaration.metric_type                      = "value";
-    metric_declaration.unit                             = "C";
-    metric_declaration.collection.protocol              = "scmi";
-    metric_declaration.collection.register_name         = "TEMP_PRESENT";
-    metric_declaration.collection.scmi_component_filter = "CPU";
-    metric_declaration.collection.scmi_instance_filter  = "1";
+    metric_declaration.description         = "CPU temperature";
+    metric_declaration.metric_type         = "value";
+    metric_declaration.unit                = "C";
+    metric_declaration.collection.protocol = "scmi";
+    metric_declaration.collection.raw_json = nlohmann::json{
+        {"protocol",              "scmi"        },
+        {"register",              "TEMP_PRESENT"},
+        {"scmi_component_filter", "CPU"         },
+        {"scmi_instance_filter",  "1"           }
+    };
 
     auto matches = GetMetricRegistersScmiData(metric_declaration, scmi_specification);
 
@@ -413,11 +417,14 @@ TEST_CASE("GetMetricRegistersScmiData applies unit, component, and instance filt
 
   SECTION("unit mismatch filters out otherwise matching SCMI registers") {
     astl::metrics::spec::MetricJsonDeclaration metric_declaration;
-    metric_declaration.description              = "CPU temperature";
-    metric_declaration.metric_type              = "value";
-    metric_declaration.unit                     = "W";
-    metric_declaration.collection.protocol      = "scmi";
-    metric_declaration.collection.register_name = "TEMP_PRESENT";
+    metric_declaration.description         = "CPU temperature";
+    metric_declaration.metric_type         = "value";
+    metric_declaration.unit                = "W";
+    metric_declaration.collection.protocol = "scmi";
+    metric_declaration.collection.raw_json = nlohmann::json{
+        {"protocol", "scmi"        },
+        {"register", "TEMP_PRESENT"}
+    };
 
     auto matches = GetMetricRegistersScmiData(metric_declaration, scmi_specification);
 

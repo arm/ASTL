@@ -138,7 +138,7 @@ class FileInterface {
    * @param opString Reference to a string where the file contents will be stored.
    * @return ASTL_STATUS_SUCCESS if the file is successfully read, or an error code otherwise.
    */
-  astl_status_code Read(const std::filesystem::path &path, std::string &opString) {
+  astl_status_code Read(const std::filesystem::path &path, std::string &opString) const {
     try {
       const auto      resolved_path = Resolve(path);
       std::error_code status_ec;
@@ -232,8 +232,8 @@ class FileInterface {
     return _basePath / path;
   }
 
-  std::filesystem::path                                    _basePath;
-  std::unordered_map<std::filesystem::path, std::ifstream> _read_streams;
+  std::filesystem::path                                            _basePath;
+  mutable std::unordered_map<std::filesystem::path, std::ifstream> _read_streams;
 };
 
 }  // namespace astl

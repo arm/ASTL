@@ -199,31 +199,45 @@ auto PerfettoOutput::WriteProcessedSamples(const ProcessedSamplesMap& samples) -
 }
 
 auto PerfettoOutput::DetermineCategory(astl_units_t units) -> std::string {
+  std::string category;
   switch (units) {
     case ASTL_UNITS_JOULES:
-      return "Energy";
+      category = "Energy";
+      break;
     case ASTL_UNITS_WATTS:
-      return "Power";
+      category = "Power";
+      break;
     case ASTL_UNITS_CELSIUS:
-      return "Temperature";
+      category = "Temperature";
+      break;
     case ASTL_UNITS_MHERTZ:
-      return "Frequency";
+      category = "Frequency";
+      break;
     case ASTL_UNITS_VOLTS:
-      return "Voltage";
+      category = "Voltage";
+      break;
     case ASTL_UNITS_AMPS:
-      return "Current";
+      category = "Current";
+      break;
     case ASTL_UNITS_BYTES:
-      return "Bytes";
+      category = "Bytes";
+      break;
     case ASTL_UNITS_MBYTESPERSEC:
-      return "Bandwidth";
+      category = "Bandwidth";
+      break;
     case ASTL_UNITS_TICKS:
-      return "Ticks";
+      category = "Ticks";
+      break;
     case ASTL_UNITS_SECONDS:
-      return "Time";
+      category = "Time";
+      break;
+    case ASTL_UNITS_PERCENT:
+      category = "Percent";
+      break;
     default:
       break;
   }
-  return "";  // fallback empty category
+  return category;
 }
 
 }  // namespace astl

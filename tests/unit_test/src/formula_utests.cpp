@@ -9,7 +9,7 @@
 
 #include "../../test_includes.hpp"  // include before catch2
 #include "common/astl_value.hpp"
-#include "config/metric_json_declaration.hpp"
+#include "config/scmi_metric_json_declaration.hpp"
 #include "metric/expression_formula.hpp"
 #include "metric/formula_builder.hpp"
 

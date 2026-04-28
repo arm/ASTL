@@ -8,11 +8,12 @@
 #include <map>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <vector>
 
-#include "config/metric_json_declaration.hpp"
+#include "config/scmi_metric_json_declaration.hpp"
 #include "operation/scmi_read_operation.hpp"
 
 using json = nlohmann::json;
@@ -58,19 +59,19 @@ inline auto GetUnitsIfCompatible(metrics::spec::MetricJsonDeclaration const& met
  *                                               (the containing json block's 'count' field.)
  * @param metric_declarations The collection to extend with new fully-qualified metric declarations if a match is found
  */
-static auto AddMetricInstancesIfScmiElementMatches(metrics::spec::MetricJsonDeclaration const& metric_declaration,
-                                                   scmi::spec::DataEvent const&                scmi_spec_layout_member,
-                                                   uint32_t scmi_spec_layout_member_instance_count,
-                                                   std::unordered_map<std::string, std::string> const& aliases,
-                                                   std::vector<ScmiMetricDeclaration>& metric_declarations) -> void {
-  if (!metric_declaration.collection.register_name.empty() &&
-      scmi_spec_layout_member.name != metric_declaration.collection.register_name) {
+static auto AddMetricInstancesIfScmiElementMatches(
+    metrics::spec::MetricJsonDeclaration const&            metric_declaration,
+    metrics::spec::ScmiMetricJsonCollectionSettings const& collection_settings,
+    scmi::spec::DataEvent const& scmi_spec_layout_member, uint32_t scmi_spec_layout_member_instance_count,
+    std::unordered_map<std::string, std::string> const& aliases,
+    std::vector<ScmiMetricDeclaration>&                 metric_declarations) -> void {
+  if (!collection_settings.register_name.empty() && scmi_spec_layout_member.name != collection_settings.register_name) {
     return;  // metric's specified register name doesn't match this scmi register, move along.
   }
 
   // the 'component' field, if given must match, so we can specify which unit (e.g. 'PSS') to look for
-  if (metric_declaration.collection.scmi_component_filter.has_value() &&
-      scmi_spec_layout_member.component != metric_declaration.collection.scmi_component_filter.value()) {
+  if (collection_settings.scmi_component_filter.has_value() &&
+      scmi_spec_layout_member.component != collection_settings.scmi_component_filter.value()) {
     return;  // metric's specified component filter doesn't match this scmi register, move along.
   }
   // if the metric declaration and the scmi spec both specify units, they must match
@@ -87,11 +88,11 @@ static auto AddMetricInstancesIfScmiElementMatches(metrics::spec::MetricJsonDecl
   // we've found a match, so create entries with the data event id based on the count, and base_de_id
   metric_declarations.reserve(metric_declarations.size() + scmi_spec_layout_member_instance_count);
   for (InstanceId instance_index = 0; instance_index < scmi_spec_layout_member_instance_count; ++instance_index) {
-    if (metric_declaration.collection.scmi_instance_filter.has_value()) {
+    if (collection_settings.scmi_instance_filter.has_value()) {
       // check if instance index matches the filter
       std::ostringstream sstream;
       sstream << instance_index;
-      if (sstream.str() != metric_declaration.collection.scmi_instance_filter.value()) {
+      if (sstream.str() != collection_settings.scmi_instance_filter.value()) {
         continue;  // instance index doesn't match filter, move along.
       }
     }
@@ -124,15 +125,70 @@ static auto AddMetricInstancesIfScmiElementMatches(metrics::spec::MetricJsonDecl
 auto GetMetricRegistersScmiData(metrics::spec::MetricJsonDeclaration const& metric_declaration,
                                 ScmiSpecification const& scmi_specification) -> std::vector<ScmiMetricDeclaration> {
   std::vector<ScmiMetricDeclaration> metric_declarations;
+  auto collection_settings = metrics::spec::ParseScmiMetricJsonCollectionSettings(metric_declaration.collection);
+  if (!collection_settings.has_value()) {
+    return metric_declarations;
+  }
 
   // each member consists of a count, which indicates how many times to repeat the metrics in the 'metrics' list
   for (const auto& layout_member : scmi_specification.members) {
     for (const auto& block_member : layout_member.metrics) {
-      AddMetricInstancesIfScmiElementMatches(metric_declaration, block_member.second, layout_member.count,
-                                             scmi_specification.aliases, metric_declarations);
+      AddMetricInstancesIfScmiElementMatches(metric_declaration, *collection_settings, block_member.second,
+                                             layout_member.count, scmi_specification.aliases, metric_declarations);
     }
   }
   return metric_declarations;
+}
+
+auto FindMatchingResidencyStateName(metrics::spec::MetricJsonDeclaration const& metric_declaration,
+                                    std::string_view register_name) -> std::optional<std::string> {
+  for (const auto& [state_name, state_json] : metric_declaration.states.value()) {
+    if (!state_json.contains("register")) {
+      continue;
+    }
+
+    std::string expected_register_name;
+    state_json.at("register").get_to(expected_register_name);
+    if (expected_register_name == register_name) {
+      return state_name;
+    }
+  }
+  return std::nullopt;
+}
+
+auto MatchesResidencyComponentFilter(metrics::spec::ScmiMetricJsonCollectionSettings const& collection_settings,
+                                     scmi::spec::DataEvent const&                           block_member) -> bool {
+  return !collection_settings.scmi_component_filter.has_value() ||
+         block_member.component == collection_settings.scmi_component_filter.value();
+}
+
+auto UpdateResidencyInstanceCount(ResidencyStateRegisterDefinitions& result, uint32_t layout_member_count) -> bool {
+  if (result.count == 0) {
+    result.count = layout_member_count;
+    return true;
+  }
+  if (result.count == layout_member_count) {
+    return true;
+  }
+
+  ASTL_LOG_WARNING("Mismatched counts {} and {} for residency metric, checking for other possible matches",
+                   result.count, layout_member_count);
+  return false;
+}
+
+auto AddResidencyRegisterMatch(ResidencyStateRegisterDefinitions& result, std::string_view state_name,
+                               scmi::spec::DataEvent const& block_member) -> std::expected<void, astl_status_code> {
+  if (block_member.base10_unit_modifier != 0) {
+    ASTL_LOG_ERROR("SCMI residency register {} has non-zero base10 unit modifier {}, which is currently not supported",
+                   block_member.name, block_member.base10_unit_modifier);
+    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+  }
+
+  result.state_to_register_def.emplace(
+      std::string{state_name},
+      ResidencyStateRegisterDefinitions::StateRegisterDefinition{
+          .base_data_event_id = block_member.base_de_id, .base10_unit_modifier = block_member.base10_unit_modifier});
+  return {};
 }
 
 /**
@@ -144,52 +200,32 @@ auto FindMatchingScmiRegistersForResidency(astl::metrics::spec::MetricJsonDeclar
                                            ScmiSpecification const&                          scmi_spec)
     -> std::expected<ResidencyStateRegisterDefinitions, astl_status_code> {
   ResidencyStateRegisterDefinitions result;
+  auto collection_settings = metrics::spec::ParseScmiMetricJsonCollectionSettings(metric_declaration.collection);
+  if (!collection_settings.has_value()) {
+    return std::unexpected(collection_settings.error());
+  }
 
   // if the component is specified, we must match it
   // if we know the count yet, we must match it
   for (const auto& layout_member : scmi_spec.members) {
-    for (const auto& [member_name, block_member] : layout_member.metrics) {
-      // if any metric state's register matches this register, then consider it.
-      auto matching_state_name = find_if(metric_declaration.states->begin(), metric_declaration.states->end(),
-                                         [&block_member](const auto& state_entry) {
-                                           const auto& state_json = state_entry.second;
-                                           if (!state_json.contains("register")) {
-                                             return false;
-                                           }
-                                           std::string expected_register_name;
-                                           state_json.at("register").get_to(expected_register_name);
-                                           return expected_register_name == block_member.name;
-                                         });
-      if (matching_state_name == metric_declaration.states->end()) {
+    for (const auto& block_member : std::views::values(layout_member.metrics)) {
+      const auto matching_state_name = FindMatchingResidencyStateName(metric_declaration, block_member.name);
+      if (!matching_state_name.has_value()) {
         continue;  // no states match this register, move along.
       }
-      // metric's specified component filter doesn't match this scmi register, move along.
-      if (metric_declaration.collection.scmi_component_filter.has_value() &&
-          block_member.component != metric_declaration.collection.scmi_component_filter.value()) {
+
+      if (!MatchesResidencyComponentFilter(*collection_settings, block_member)) {
         continue;
       }
-      // check that the 'count' field for all registers in the residency metric declaration match.
-      if (result.count == 0) {
-        result.count = layout_member.count;
-      } else if (result.count != layout_member.count) {
-        ASTL_LOG_WARNING("Mismatched counts {} and {} for residency metric, checking for other possible matches",
-                         result.count, layout_member.count);
+
+      if (!UpdateResidencyInstanceCount(result, layout_member.count)) {
         continue;
       }
-      // Residency scaling for non-zero base10 modifiers is not implemented yet.
-      // Fail fast to avoid silently producing incorrect residency values.
-      if (block_member.base10_unit_modifier != 0) {
-        ASTL_LOG_ERROR(
-            "SCMI residency register {} has non-zero base10 unit modifier {}, which is currently not supported",
-            block_member.name, block_member.base10_unit_modifier);
-        return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+
+      auto add_match_result = AddResidencyRegisterMatch(result, *matching_state_name, block_member);
+      if (!add_match_result.has_value()) {
+        return std::unexpected(add_match_result.error());
       }
-      // instance count, register name, component name all match, let's add this to the state table.
-      result.state_to_register_def.emplace(
-          // Keep state-level metadata together so residency config/build can stay protocol-agnostic.
-          matching_state_name->first, ResidencyStateRegisterDefinitions::StateRegisterDefinition{
-                                          .base_data_event_id   = block_member.base_de_id,
-                                          .base10_unit_modifier = block_member.base10_unit_modifier});
     }
   }
   // double-check that all the necessary states were found

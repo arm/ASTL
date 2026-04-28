@@ -25,6 +25,8 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/config/astl_configuration.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/config/configuration_manager.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/config/metric_json_declaration.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/config/procfs_metric_json_declaration.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/config/scmi_metric_json_declaration.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/config/scmi_platform_telemetry_spec.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/topology/topology_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/topology/topology_manager.cpp"
@@ -32,6 +34,17 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/common/string_pool.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/common/system_info.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/libsensors/libsensors_metric_builder.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/collector/procfs_collector.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_composite_metric.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder_helpers.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder_expansion_helpers.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder_parsing_helpers.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/operation/procfs_operation_builder.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_counter_discovery.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/common/procfs_utils.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/common/procfs_utils_readers.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/common/procfs_utils_readers_primitives.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/counter.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/metric_group.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/metric_manager.cpp"
@@ -69,7 +82,7 @@ target_sources(
           "${PROJECT_SOURCE_DIR}/src/astl_test_hooks.cpp"
           "${PROJECT_SOURCE_DIR}/src/astl_version.cpp")
 
-# Disable noisy warnings from third-party tinyexpr++ code
+# Disable noisy warnings from third - party tinyexpr++ code
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   set_source_files_properties("${PROJECT_SOURCE_DIR}/third_party/tinyexpr-plusplus/tinyexpr.cpp"
                               PROPERTIES COMPILE_OPTIONS "-Wno-conversion")
@@ -78,7 +91,7 @@ elseif(MSVC)
                               PROPERTIES COMPILE_OPTIONS "/wd4146;/wd4702")
 endif()
 
-# Enable uint64 mode for tinyexpr++ for exact integer arithmetic Enable bitwise operators so & and | work as bitwise
+# Enable uint64 mode for tinyexpr++ for exact integer arithmetic Enable bitwise operators so &and | work as bitwise
 # operators instead of logical operators
 target_compile_definitions(${LIBRARY_NAME} PRIVATE TE_UINT64 TE_BITWISE_OPERATORS)
 message(STATUS "Using TE_UINT64 for tinyexpr++ (exact uint64_t arithmetic)")
@@ -109,7 +122,7 @@ target_include_directories(
          # where external projects will look for the library's public headers
          $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
-# Include third-party tinyexpr++ as SYSTEM to suppress warnings from its headers
+# Include third - party tinyexpr++ as SYSTEM to suppress warnings from its headers
 target_include_directories(${LIBRARY_NAME} SYSTEM
                            PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/tinyexpr-plusplus>)
 
@@ -120,7 +133,7 @@ target_link_libraries(${LIBRARY_NAME} PRIVATE nlohmann_json::nlohmann_json)
 find_package(miniz CONFIG REQUIRED)
 target_link_libraries(${LIBRARY_NAME} PRIVATE miniz::miniz)
 
-# if doing a debug build, include detailed json diagnostics on parse errors This setting has two parts: - the CMake
+# if doing a debug build, include detailed json diagnostics on parse errors This setting has two parts : -the CMake
 # cache variable JSON_DIAGNOSTICS, which is set in the CmakePresets.json file and used here in the conditional below -
 # the preprocessor definition JSON_DIAGNOSTICS which nlohmann::json looks for at compile time.
 if(JSON_DIAGNOSTICS)
@@ -140,11 +153,14 @@ file(MAKE_DIRECTORY "${GEN_DIR}")
 # Generate .pb.cc and .pb.h
 # cmake-format: off
 protobuf_generate(
-  LANGUAGE       cpp
-  OUT_VAR        GEN_FILES
-  PROTOC_OUT_DIR "${GEN_DIR}"
-  PROTOS         ${PROTO_FILES}
-)
+  LANGUAGE
+  cpp
+  OUT_VAR
+  GEN_FILES
+  PROTOC_OUT_DIR
+  "${GEN_DIR}"
+  PROTOS
+  ${PROTO_FILES})
 # cmake-format: on
 
 # Separate target to just run protoc
@@ -161,16 +177,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set_source_files_properties(${GEN_FILES} PROPERTIES COMPILE_OPTIONS "-Wno-nullability-extension;")
 endif()
 
-# Protobuf generates code that returns container sizes as size_t (usually unsigned long). Some of the generated
-# accessors (e.g., _internal_value_to_label_map_size()) return int but internally call .size(), which triggers a
-# -Wconversion warning: warning: conversion from size_t to int may change value. Also disable -Wnullability-extension
-# for serdes_metrics.cpp which includes protobuf headers.
+# Protobuf-generated code can trigger `-Wconversion` and `-Wnullability-extension`; suppress these warnings for
+# generated sources and serdes_metrics.cpp.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp" ${GEN_FILES}
                               PROPERTIES COMPILE_OPTIONS "-Wno-conversion;-Wno-nullability-extension")
 elseif(MSVC)
-  # Suppress noisy warnings from protobuf-generated code and includes when compiling on MSVC: - C4267: size_t -> int
-  # conversion in generated accessors - C4100: unreferenced parameters in generated helper functions
+  # Suppress noisy warnings from protobuf - generated code and includes when compiling on MSVC : -C4267 : size_t->int
+  # conversion in generated accessors - C4100 : unreferenced parameters in generated helper functions
   foreach(gen_src IN LISTS GEN_FILES)
     set_source_files_properties(${gen_src} APPEND_STRING PROPERTY COMPILE_FLAGS " /wd4267 /wd4100")
   endforeach()
@@ -180,8 +194,8 @@ endif()
 
 target_link_libraries(${LIBRARY_NAME} PRIVATE protobuf::libprotobuf)
 
-# find spdlog, include it as a header-only dependency. This is a little slower (+10-12s) to compile ASTL, but necessary
-# because #including spdlog headers in multiple translation units causes linker errors like LNK2005
+# find spdlog and use header-only mode. This is slightly slower to compile, but avoids duplicate symbol/linker issues
+# from spdlog in multiple translation units.
 find_package(spdlog CONFIG REQUIRED)
 target_link_libraries(${LIBRARY_NAME} PRIVATE spdlog::spdlog_header_only)
 

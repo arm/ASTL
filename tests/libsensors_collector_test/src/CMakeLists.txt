@@ -39,8 +39,14 @@ if(SENSORS_LIB)
   # have catch2's cmake module discover the tests and add them to ctest for us
   include(CTest)
   include(Catch)
-  catch_discover_tests(${TARGET} ADD_TAGS_AS_LABELS PROPERTIES ENVIRONMENT
-                       "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")
+  catch_discover_tests(
+    ${TARGET}
+    DISCOVERY_MODE
+    PRE_TEST
+    ADD_TAGS_AS_LABELS
+    PROPERTIES
+    ENVIRONMENT
+    "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")
 
 else()
   message(STATUS "libsensors not found: please install libsensors-dev package. "

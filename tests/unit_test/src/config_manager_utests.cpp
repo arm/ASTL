@@ -12,6 +12,7 @@
 #include "config/astl_configuration.hpp"
 #include "config/configuration_manager.hpp"
 #include "config/metric_json_declaration.hpp"
+#include "config/scmi_metric_json_declaration.hpp"
 #include "operation/scmi_operation_builder.hpp"
 #include "operation/scmi_read_operation.hpp"
 
@@ -29,6 +30,31 @@ astl::ScmiDataEventId GetDataEventId(const astl::ResidencyMetricConfig::StateInf
     return scmi_builder->GetDataEventId();
   }
   return astl::ScmiDataEventId{0xFFFFFFFF};  // invalid id
+}
+
+void SetScmiCollection(astl::metrics::spec::MetricJsonDeclaration& metric_declaration,
+                       std::optional<std::string>                  register_name    = std::nullopt,
+                       std::optional<std::string>                  component_filter = std::nullopt,
+                       std::optional<std::string>                  instance_filter  = std::nullopt) {
+  metric_declaration.collection.protocol = "scmi";
+  metric_declaration.collection.register_name.clear();
+  metric_declaration.collection.scmi_component_filter.reset();
+  metric_declaration.collection.scmi_instance_filter.reset();
+  metric_declaration.collection.raw_json = nlohmann::json{
+      {"protocol", "scmi"}
+  };
+  if (register_name.has_value()) {
+    metric_declaration.collection.register_name        = *register_name;
+    metric_declaration.collection.raw_json["register"] = *register_name;
+  }
+  if (component_filter.has_value()) {
+    metric_declaration.collection.scmi_component_filter             = *component_filter;
+    metric_declaration.collection.raw_json["scmi_component_filter"] = *component_filter;
+  }
+  if (instance_filter.has_value()) {
+    metric_declaration.collection.scmi_instance_filter             = *instance_filter;
+    metric_declaration.collection.raw_json["scmi_instance_filter"] = *instance_filter;
+  }
 }
 
 auto MakeSingleRegisterScmiSpec(std::string register_name, std::string component = "AP", std::string unit = "")
@@ -142,10 +168,10 @@ TEST_CASE("CreateMetricConfig for Residency Metric", "[ConfigManager]") {
 
   // Create a residency metric declaration
   astl::metrics::spec::MetricJsonDeclaration residency_declaration;
-  residency_declaration.description         = "CPU C-State residency";
-  residency_declaration.unit                = "seconds";
-  residency_declaration.metric_type         = "residency";
-  residency_declaration.collection.protocol = "scmi";
+  residency_declaration.description = "CPU C-State residency";
+  residency_declaration.unit        = "seconds";
+  residency_declaration.metric_type = "residency";
+  SetScmiCollection(residency_declaration);
   residency_declaration.inferred_state = astl::ResidencyMetricConfig::InferredStateInfo{"Active", "CPU active state"};
 
   // Set up states configuration
@@ -249,11 +275,10 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
     mock_scmi_targets.push_back(&mock_target_tlm0);
 
     astl::metrics::spec::MetricJsonDeclaration finite_decl;
-    finite_decl.description              = "Current CPU performance state (P-state)";
-    finite_decl.unit                     = "";
-    finite_decl.metric_type              = "finite_set";
-    finite_decl.collection.protocol      = "scmi";
-    finite_decl.collection.register_name = "P_STATE";
+    finite_decl.description = "Current CPU performance state (P-state)";
+    finite_decl.unit        = "";
+    finite_decl.metric_type = "finite_set";
+    SetScmiCollection(finite_decl, "P_STATE");
 
     // json finite_set_values representation: object map of label -> {value, description}
     std::map<std::string, nlohmann::json> finite_json{
@@ -313,11 +338,10 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
     mock_scmi_targets.push_back(&mock_target_tlm0);
 
     astl::metrics::spec::MetricJsonDeclaration bad_decl;
-    bad_decl.description              = "Bad P-State metric";
-    bad_decl.unit                     = "";
-    bad_decl.metric_type              = "finite_set";
-    bad_decl.collection.protocol      = "scmi";
-    bad_decl.collection.register_name = "P_STATE";
+    bad_decl.description = "Bad P-State metric";
+    bad_decl.unit        = "";
+    bad_decl.metric_type = "finite_set";
+    SetScmiCollection(bad_decl, "P_STATE");
     // finite_set_values left empty (optional disengaged)
 
     auto bad_result =
@@ -350,12 +374,11 @@ TEST_CASE("CreateBasicMetricConfigs/CreateFiniteSetMetricConfigs lock formula-be
     mock_scmi_targets.push_back(&mock_target_tlm0);
 
     astl::metrics::spec::MetricJsonDeclaration basic_decl;
-    basic_decl.description              = "CPU Power";
-    basic_decl.metric_type              = "value";
-    basic_decl.identifier               = "POWER";
-    basic_decl.collection.protocol      = "scmi";
-    basic_decl.collection.register_name = "POWER_COUNTER";
-    basic_decl.formula                  = nlohmann::json("value + 1");
+    basic_decl.description = "CPU Power";
+    basic_decl.metric_type = "value";
+    basic_decl.identifier  = "POWER";
+    SetScmiCollection(basic_decl, "POWER_COUNTER");
+    basic_decl.formula = nlohmann::json("value + 1");
 
     auto metric_configs_result =
         astl::metrics::spec::CreateScmiMetricConfigs("CPU Power", basic_decl, mock_scmi_spec, mock_scmi_targets);
@@ -396,12 +419,11 @@ TEST_CASE("CreateBasicMetricConfigs/CreateFiniteSetMetricConfigs lock formula-be
     mock_scmi_targets.push_back(&mock_target_tlm0);
 
     astl::metrics::spec::MetricJsonDeclaration finite_decl;
-    finite_decl.description              = "Current CPU performance state";
-    finite_decl.metric_type              = "finite_set";
-    finite_decl.collection.protocol      = "scmi";
-    finite_decl.collection.register_name = "P_STATE";
-    finite_decl.formula                  = nlohmann::json("value + 1");
-    finite_decl.finite_set_values        = std::map<std::string, nlohmann::json>{
+    finite_decl.description = "Current CPU performance state";
+    finite_decl.metric_type = "finite_set";
+    SetScmiCollection(finite_decl, "P_STATE");
+    finite_decl.formula           = nlohmann::json("value + 1");
+    finite_decl.finite_set_values = std::map<std::string, nlohmann::json>{
         {"P0", {{"value", 0}, {"description", "Performance state 0"}}},
         {"P1", {{"value", 1}, {"description", "Performance state 1"}}},
     };
@@ -434,10 +456,9 @@ TEST_CASE("CreateScmiMetricConfigs validates metric declarations and unsupported
     auto basic_spec = MakeSingleRegisterScmiSpec("TEMP_PRESENT", "AP", "celsius");
 
     astl::metrics::spec::MetricJsonDeclaration decl;
-    decl.description              = "Unknown metric type";
-    decl.metric_type              = "mystery";
-    decl.collection.protocol      = "scmi";
-    decl.collection.register_name = "TEMP_PRESENT";
+    decl.description = "Unknown metric type";
+    decl.metric_type = "mystery";
+    SetScmiCollection(decl, "TEMP_PRESENT");
 
     auto result = astl::metrics::spec::CreateScmiMetricConfigs("Unknown Metric", decl, basic_spec, mock_scmi_targets);
     REQUIRE_FALSE(result.has_value());
@@ -448,10 +469,13 @@ TEST_CASE("CreateScmiMetricConfigs validates metric declarations and unsupported
     auto basic_spec = MakeSingleRegisterScmiSpec("TEMP_PRESENT", "AP", "celsius");
 
     astl::metrics::spec::MetricJsonDeclaration decl;
-    decl.description              = "Libsensors metric";
-    decl.metric_type              = "value";
-    decl.collection.protocol      = "libsensors";
-    decl.collection.register_name = "TEMP_PRESENT";
+    decl.description         = "Libsensors metric";
+    decl.metric_type         = "value";
+    decl.collection.protocol = "libsensors";
+    decl.collection.raw_json = nlohmann::json{
+        {"protocol", "libsensors"  },
+        {"register", "TEMP_PRESENT"}
+    };
 
     auto result =
         astl::metrics::spec::CreateScmiMetricConfigs("Libsensors Metric", decl, basic_spec, mock_scmi_targets);
@@ -463,11 +487,10 @@ TEST_CASE("CreateScmiMetricConfigs validates metric declarations and unsupported
     auto finite_spec = MakeSingleRegisterScmiSpec("P_STATE");
 
     astl::metrics::spec::MetricJsonDeclaration decl;
-    decl.description              = "Duplicate finite-set values";
-    decl.metric_type              = "finite_set";
-    decl.collection.protocol      = "scmi";
-    decl.collection.register_name = "P_STATE";
-    decl.finite_set_values        = std::map<std::string, nlohmann::json>{
+    decl.description = "Duplicate finite-set values";
+    decl.metric_type = "finite_set";
+    SetScmiCollection(decl, "P_STATE");
+    decl.finite_set_values = std::map<std::string, nlohmann::json>{
         {"P0", {{"value", 0}, {"description", "Performance state 0"}}},
         {"P1", {{"value", 0}, {"description", "Duplicate value"}}    },
     };
@@ -481,11 +504,10 @@ TEST_CASE("CreateScmiMetricConfigs validates metric declarations and unsupported
     auto finite_spec = MakeSingleRegisterScmiSpec("P_STATE");
 
     astl::metrics::spec::MetricJsonDeclaration decl;
-    decl.description              = "Bad finite-set value type";
-    decl.metric_type              = "finite_set";
-    decl.collection.protocol      = "scmi";
-    decl.collection.register_name = "P_STATE";
-    decl.finite_set_values        = std::map<std::string, nlohmann::json>{
+    decl.description = "Bad finite-set value type";
+    decl.metric_type = "finite_set";
+    SetScmiCollection(decl, "P_STATE");
+    decl.finite_set_values = std::map<std::string, nlohmann::json>{
         {"P0", {{"value", "zero"}, {"description", "String value should fail"}}},
     };
 
@@ -498,12 +520,12 @@ TEST_CASE("CreateScmiMetricConfigs validates metric declarations and unsupported
     auto residency_spec = MakeResidencyScmiSpec();
 
     astl::metrics::spec::MetricJsonDeclaration decl;
-    decl.description         = "CPU C-State residency";
-    decl.unit                = "seconds";
-    decl.metric_type         = "residency";
-    decl.collection.protocol = "scmi";
-    decl.inferred_state      = astl::ResidencyMetricConfig::InferredStateInfo{"Active", "CPU active state"};
-    decl.states              = std::map<std::string, nlohmann::json>{
+    decl.description    = "CPU C-State residency";
+    decl.unit           = "seconds";
+    decl.metric_type    = "residency";
+    decl.inferred_state = astl::ResidencyMetricConfig::InferredStateInfo{"Active", "CPU active state"};
+    SetScmiCollection(decl);
+    decl.states = std::map<std::string, nlohmann::json>{
         {"C1", {{"register", "C1_RESIDENCY_COUNTER"}, {"description", "C1 idle state"}}                               },
         {"C3", {{"register", "C3_RESIDENCY_COUNTER"}, {"tick_frequency", 1000000.0}, {"description", "C3 idle state"}}},
     };
@@ -666,11 +688,10 @@ TEST_CASE("ParseConfiguration valid identifier string maps to enum", "[ConfigMan
 TEST_CASE("CreateScmiMetricConfigs falls back to generated description when JSON description is empty",
           "[ConfigManager][Identifier]") {
   astl::metrics::spec::MetricJsonDeclaration metric_declaration;
-  metric_declaration.description              = "";
-  metric_declaration.metric_type              = "value";
-  metric_declaration.identifier               = "TEMPERATURE";
-  metric_declaration.collection.protocol      = "scmi";
-  metric_declaration.collection.register_name = "SOC_TEMP";
+  metric_declaration.description = "";
+  metric_declaration.metric_type = "value";
+  metric_declaration.identifier  = "TEMPERATURE";
+  SetScmiCollection(metric_declaration, "SOC_TEMP");
 
   astl::scmi::spec::ScmiSpecification spec;
   spec.members = {
@@ -746,11 +767,10 @@ TEST_CASE("CreateScmiMetricConfigs scopes SCMI metric ids per target", "[ConfigM
 
 TEST_CASE("CreateScmiMetricConfigs maps Count units to ASTL_UNITS_COUNT", "[ConfigManager][Units]") {
   astl::metrics::spec::MetricJsonDeclaration metric_declaration;
-  metric_declaration.description              = "Number of thermal throttling events";
-  metric_declaration.metric_type              = "delta";
-  metric_declaration.identifier               = "COUNT";
-  metric_declaration.collection.protocol      = "scmi";
-  metric_declaration.collection.register_name = "THROTTLE_EVENTS";
+  metric_declaration.description = "Number of thermal throttling events";
+  metric_declaration.metric_type = "delta";
+  metric_declaration.identifier  = "COUNT";
+  SetScmiCollection(metric_declaration, "THROTTLE_EVENTS");
 
   astl::scmi::spec::ScmiSpecification spec;
   spec.members = {
@@ -781,13 +801,12 @@ TEST_CASE("CreateScmiMetricConfigs maps Count units to ASTL_UNITS_COUNT", "[Conf
 
 TEST_CASE("CreateScmiMetricConfigs allows output-unit override with formula scaling", "[ConfigManager][Units]") {
   astl::metrics::spec::MetricJsonDeclaration metric_declaration;
-  metric_declaration.description              = "Frequency reading for FREQUENCY_PRESENT";
-  metric_declaration.unit                     = "MHz";
-  metric_declaration.formula                  = nlohmann::json("value / 1000");
-  metric_declaration.metric_type              = "value";
-  metric_declaration.identifier               = "FREQUENCY";
-  metric_declaration.collection.protocol      = "scmi";
-  metric_declaration.collection.register_name = "FREQUENCY_PRESENT";
+  metric_declaration.description = "Frequency reading for FREQUENCY_PRESENT";
+  metric_declaration.unit        = "MHz";
+  metric_declaration.formula     = nlohmann::json("value / 1000");
+  metric_declaration.metric_type = "value";
+  metric_declaration.identifier  = "FREQUENCY";
+  SetScmiCollection(metric_declaration, "FREQUENCY_PRESENT");
 
   astl::scmi::spec::ScmiSpecification spec;
   spec.members = {

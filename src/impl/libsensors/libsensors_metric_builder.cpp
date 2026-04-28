@@ -10,7 +10,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -22,6 +21,7 @@
 
 #include "astl_utils.hpp"
 #include "config/astl_configuration.hpp"
+#include "config/json_file_utils.hpp"
 #include "config/metric_json_declaration.hpp"
 #include "metric/formula_builder.hpp"
 #include "metric/i_metric_manager.hpp"
@@ -422,39 +422,6 @@ static auto RecordObservedSensorNames(std::unordered_set<std::string>& observed_
   }
 }
 
-template <typename SpecType>
-static auto TryParseJson(std::filesystem::path const& json_file_path) -> std::expected<SpecType, astl_status_code> {
-  try {
-    std::ifstream json_file{json_file_path};
-    json_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-    auto json_data   = nlohmann::json::parse(json_file);
-    auto parsed_data = json_data.get<SpecType>();
-    return parsed_data;
-  } catch (std::ifstream::failure const& e) {
-    ASTL_LOG_ERROR("Unable to open json file {}: {}", json_file_path.string(), e.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  } catch (std::exception const& e) {
-    ASTL_LOG_ERROR("Unable to parse json file {}: {}", json_file_path.string(), e.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-}
-
-static auto LoadJsonFile(std::filesystem::path const& json_file_path)
-    -> std::expected<nlohmann::json, astl_status_code> {
-  try {
-    std::ifstream json_file{json_file_path};
-    json_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-    auto json_data = nlohmann::json::parse(json_file);
-    return json_data;
-  } catch (std::ifstream::failure const& e) {
-    ASTL_LOG_ERROR("Unable to open json file {}: {}", json_file_path.string(), e.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  } catch (std::exception const& e) {
-    ASTL_LOG_ERROR("Unable to parse json file {}: {}", json_file_path.string(), e.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-}
-
 static auto MergeMetricsDeclarationJson(nlohmann::json base_json, const nlohmann::json& overlay_json)
     -> nlohmann::json {
   auto merged_json = std::move(base_json);
@@ -489,6 +456,49 @@ static auto MergeMetricsDeclarationJson(nlohmann::json base_json, const nlohmann
 
 static auto LoadMergedMetricsDeclarationJson(const std::filesystem::path&     json_file_path,
                                              std::unordered_set<std::string>& active_paths)
+    -> std::expected<nlohmann::json, astl_status_code>;
+
+class ActiveDeclarationPathScope {
+ public:
+  ActiveDeclarationPathScope(std::unordered_set<std::string>& active_paths, std::string path_key)
+      : _active_paths(active_paths), _path_key(std::move(path_key)) {}
+  ActiveDeclarationPathScope(const ActiveDeclarationPathScope&)                        = delete;
+  auto operator=(const ActiveDeclarationPathScope&) -> ActiveDeclarationPathScope&     = delete;
+  ActiveDeclarationPathScope(ActiveDeclarationPathScope&&) noexcept                    = delete;
+  auto operator=(ActiveDeclarationPathScope&&) noexcept -> ActiveDeclarationPathScope& = delete;
+  ~ActiveDeclarationPathScope() { _active_paths.erase(_path_key); }
+
+ private:
+  std::unordered_set<std::string>& _active_paths;
+  std::string                      _path_key;
+};
+
+static auto MergeParentDeclarationIfPresent(const std::filesystem::path& normalized_path, nlohmann::json& merged_json,
+                                            std::unordered_set<std::string>& active_paths)
+    -> std::expected<void, astl_status_code> {
+  if (!merged_json.contains("extends")) {
+    return {};
+  }
+  if (!merged_json["extends"].is_string()) {
+    ASTL_LOG_ERROR("libsensors metrics declaration {} uses a non-string 'extends' field", normalized_path.string());
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  auto parent_path = std::filesystem::path{merged_json["extends"].get<std::string>()};
+  if (parent_path.is_relative()) {
+    parent_path = normalized_path.parent_path() / parent_path;
+  }
+
+  auto parent_json_or_error = LoadMergedMetricsDeclarationJson(parent_path, active_paths);
+  if (!parent_json_or_error.has_value()) {
+    return std::unexpected(parent_json_or_error.error());
+  }
+  merged_json = MergeMetricsDeclarationJson(std::move(parent_json_or_error.value()), merged_json);
+  return {};
+}
+
+static auto LoadMergedMetricsDeclarationJson(const std::filesystem::path&     json_file_path,
+                                             std::unordered_set<std::string>& active_paths)
     -> std::expected<nlohmann::json, astl_status_code> {
   std::error_code ec;
   const auto      normalized_path = std::filesystem::weakly_canonical(json_file_path, ec);
@@ -502,33 +512,18 @@ static auto LoadMergedMetricsDeclarationJson(const std::filesystem::path&     js
     ASTL_LOG_ERROR("Detected cyclic libsensors metrics declaration inheritance involving {}", active_key);
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
+  const ActiveDeclarationPathScope active_path_scope{active_paths, active_key};
 
-  auto loaded_json_or_error = LoadJsonFile(normalized_path);
+  auto loaded_json_or_error = config::LoadJsonFile(normalized_path);
   if (!loaded_json_or_error.has_value()) {
-    active_paths.erase(active_key);
     return std::unexpected(loaded_json_or_error.error());
   }
 
-  auto merged_json = std::move(loaded_json_or_error.value());
-  if (merged_json.contains("extends")) {
-    if (!merged_json["extends"].is_string()) {
-      ASTL_LOG_ERROR("libsensors metrics declaration {} uses a non-string 'extends' field", normalized_path.string());
-      active_paths.erase(active_key);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-    }
-    auto parent_path = std::filesystem::path{merged_json["extends"].get<std::string>()};
-    if (parent_path.is_relative()) {
-      parent_path = normalized_path.parent_path() / parent_path;
-    }
-    auto parent_json_or_error = LoadMergedMetricsDeclarationJson(parent_path, active_paths);
-    if (!parent_json_or_error.has_value()) {
-      active_paths.erase(active_key);
-      return std::unexpected(parent_json_or_error.error());
-    }
-    merged_json = MergeMetricsDeclarationJson(std::move(parent_json_or_error.value()), merged_json);
+  auto merged_json         = std::move(loaded_json_or_error.value());
+  auto merge_parent_status = MergeParentDeclarationIfPresent(normalized_path, merged_json, active_paths);
+  if (!merge_parent_status.has_value()) {
+    return std::unexpected(merge_parent_status.error());
   }
-
-  active_paths.erase(active_key);
   return merged_json;
 }
 
@@ -1048,65 +1043,105 @@ static auto MakeDefaultRegistrationDetails(std::string_view metric_name_prefix, 
   };
 }
 
-static auto ResolveMetricRegistrationDetails(const DiscoveredSensorMetric& sensor, std::string config_metric_name,
-                                             const LibsensorsTargetContext& target_context)
-    -> std::expected<std::optional<LibsensorsMetricRegistrationDetails>, astl_status_code> {
-  const auto& final_metric_name_prefix = target_context.metric_name_prefix;
-  const auto  final_metric_name        = BuildFinalMetricName(final_metric_name_prefix, config_metric_name);
-  if (!target_context.declarations.has_value()) {
-    return MakeDefaultRegistrationDetails(final_metric_name_prefix, sensor, config_metric_name);
-  }
+using MetricsDeclarationMap = decltype(std::declval<metrics::spec::MetricsDeclaration>().metrics);
 
-  auto declaration_iter = target_context.declarations->metrics.find(config_metric_name);
-  if (declaration_iter == target_context.declarations->metrics.end()) {
-    declaration_iter =
-        std::ranges::find_if(target_context.declarations->metrics, [&sensor](const auto& declaration_entry) {
-          const auto& [declared_metric_name, metric_declaration] = declaration_entry;
-          return SensorMatchesDeclaredRegister(sensor, DeclaredRegisterName(declared_metric_name, metric_declaration));
-        });
+static auto FindMatchingMetricDeclaration(const metrics::spec::MetricsDeclaration& declarations,
+                                          std::string_view config_metric_name, const DiscoveredSensorMetric& sensor)
+    -> MetricsDeclarationMap::const_iterator {
+  auto declaration_iter = declarations.metrics.find(std::string{config_metric_name});
+  if (declaration_iter != declarations.metrics.end()) {
+    return declaration_iter;
   }
-  if (declaration_iter == target_context.declarations->metrics.end()) {
-    if (target_context.declaration_match_kind == LibsensorsTargetContext::DeclarationMatchKind::FALLBACK) {
-      ASTL_LOG_INFO(
-          "Registering discovered libsensors metric '{}' on chip '{}' using default metadata because it was not "
-          "declared in the fallback family config",
-          final_metric_name, sensor.chip_name);
-      return MakeDefaultRegistrationDetails(final_metric_name_prefix, sensor, config_metric_name);
-    }
-    ASTL_LOG_WARNING(
-        "Skipping discovered libsensors metric '{}' on chip '{}' because it is not declared in the exact "
-        "target config allowlist",
+  return std::ranges::find_if(declarations.metrics, [&sensor](const auto& declaration_entry) {
+    const auto& [declared_metric_name, metric_declaration] = declaration_entry;
+    return SensorMatchesDeclaredRegister(sensor, DeclaredRegisterName(declared_metric_name, metric_declaration));
+  });
+}
+
+static auto ResolveUndeclaredMetricRegistration(std::string_view config_metric_name, std::string_view final_metric_name,
+                                                const LibsensorsTargetContext& target_context,
+                                                const DiscoveredSensorMetric&  sensor)
+    -> std::optional<LibsensorsMetricRegistrationDetails> {
+  if (target_context.declaration_match_kind == LibsensorsTargetContext::DeclarationMatchKind::FALLBACK) {
+    ASTL_LOG_INFO(
+        "Registering discovered libsensors metric '{}' on chip '{}' using default metadata because it was not "
+        "declared in the fallback family config",
         final_metric_name, sensor.chip_name);
-    return std::optional<LibsensorsMetricRegistrationDetails>{std::nullopt};
+    return MakeDefaultRegistrationDetails(target_context.metric_name_prefix, sensor, config_metric_name);
   }
+  ASTL_LOG_WARNING(
+      "Skipping discovered libsensors metric '{}' on chip '{}' because it is not declared in the exact "
+      "target config allowlist",
+      final_metric_name, sensor.chip_name);
+  return std::nullopt;
+}
 
-  const auto& metric_declaration = declaration_iter->second;
-  auto        collector_type     = metrics::spec::ParseCollectorType(metric_declaration);
+static auto ValidateDeclaredMetric(const DiscoveredSensorMetric& sensor, std::string_view final_metric_name,
+                                   std::string_view                            declared_metric_name,
+                                   const metrics::spec::MetricJsonDeclaration& metric_declaration) -> astl_status_code {
+  auto collector_type = metrics::spec::ParseCollectorType(metric_declaration);
   if (!collector_type.has_value() || collector_type.value() != CollectorType::LIBSENSORS) {
     ASTL_LOG_ERROR("Libsensors metric '{}' on chip '{}' has invalid collector protocol '{}'", final_metric_name,
                    sensor.chip_name, metric_declaration.collection.protocol);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-  if (!metric_declaration.collection.register_name.empty() &&
-      !SensorMatchesDeclaredRegister(sensor, metric_declaration.collection.register_name)) {
-    ASTL_LOG_ERROR("Libsensors metric '{}' on chip '{}' expects register '{}' but discovered '{}'", final_metric_name,
-                   sensor.chip_name, metric_declaration.collection.register_name, sensor.register_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return ASTL_STATUS_BAD_CONFIGURATION;
   }
 
-  astl_units_t units = sensor.units;
-  if (metric_declaration.unit.has_value()) {
-    units = ParseUnits(metric_declaration.unit.value());
-    if (units == ASTL_UNITS_UNKNOWN) {
-      ASTL_LOG_ERROR("Libsensors metric '{}' on chip '{}' uses unsupported unit '{}'", final_metric_name,
-                     sensor.chip_name, metric_declaration.unit.value());
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-    }
-    if (units != sensor.units) {
-      ASTL_LOG_ERROR("Libsensors metric '{}' on chip '{}' overrides units from '{}' to '{}', which is not supported",
-                     final_metric_name, sensor.chip_name, std::to_string(sensor.units), std::to_string(units));
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-    }
+  const auto declared_register_name = std::string{DeclaredRegisterName(declared_metric_name, metric_declaration)};
+  if (!declared_register_name.empty() && !SensorMatchesDeclaredRegister(sensor, declared_register_name)) {
+    ASTL_LOG_ERROR("Libsensors metric '{}' on chip '{}' expects register '{}' but discovered '{}'", final_metric_name,
+                   sensor.chip_name, declared_register_name, sensor.register_name);
+    return ASTL_STATUS_BAD_CONFIGURATION;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+static auto ResolveDeclaredUnits(const DiscoveredSensorMetric& sensor, std::string_view final_metric_name,
+                                 const metrics::spec::MetricJsonDeclaration& metric_declaration)
+    -> std::expected<astl_units_t, astl_status_code> {
+  if (!metric_declaration.unit.has_value()) {
+    return sensor.units;
+  }
+
+  const auto units = ParseUnits(metric_declaration.unit.value());
+  if (units == ASTL_UNITS_UNKNOWN) {
+    ASTL_LOG_ERROR("Libsensors metric '{}' on chip '{}' uses unsupported unit '{}'", final_metric_name,
+                   sensor.chip_name, metric_declaration.unit.value());
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  if (units != sensor.units) {
+    ASTL_LOG_ERROR("Libsensors metric '{}' on chip '{}' overrides units from '{}' to '{}', which is not supported",
+                   final_metric_name, sensor.chip_name, std::to_string(sensor.units), std::to_string(units));
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  return units;
+}
+
+static auto ResolveDeclaredMetricType(std::string_view final_metric_name, const DiscoveredSensorMetric& sensor,
+                                      const metrics::spec::MetricJsonDeclaration& metric_declaration)
+    -> std::expected<astl_metric_type_t, astl_status_code> {
+  const auto metric_type =
+      metric_declaration.metric_type.empty() ? ASTL_METRIC_VALUE : ParseMetricType(metric_declaration.metric_type);
+  if (metric_type == ASTL_METRIC_UNKNOWN) {
+    ASTL_LOG_ERROR("Libsensors metric '{}' on chip '{}' has unsupported metric type '{}'", final_metric_name,
+                   sensor.chip_name, metric_declaration.metric_type);
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  return metric_type;
+}
+
+static auto BuildDeclaredRegistrationDetails(const DiscoveredSensorMetric& sensor, std::string_view final_metric_name,
+                                             std::string_view                            declared_metric_name,
+                                             const metrics::spec::MetricJsonDeclaration& metric_declaration)
+    -> std::expected<LibsensorsMetricRegistrationDetails, astl_status_code> {
+  const auto validation_status =
+      ValidateDeclaredMetric(sensor, final_metric_name, declared_metric_name, metric_declaration);
+  if (validation_status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(validation_status);
+  }
+
+  auto units_or_error = ResolveDeclaredUnits(sensor, final_metric_name, metric_declaration);
+  if (!units_or_error.has_value()) {
+    return std::unexpected(units_or_error.error());
   }
 
   auto formula_result = BuildFormula(metric_declaration.formula);
@@ -1115,27 +1150,46 @@ static auto ResolveMetricRegistrationDetails(const DiscoveredSensorMetric& senso
                    sensor.chip_name, astlStatusString(formula_result.error()));
     return std::unexpected(formula_result.error());
   }
-  auto metric_type =
-      metric_declaration.metric_type.empty() ? ASTL_METRIC_VALUE : ParseMetricType(metric_declaration.metric_type);
-  if (metric_type == ASTL_METRIC_UNKNOWN) {
-    ASTL_LOG_ERROR("Libsensors metric '{}' on chip '{}' has unsupported metric type '{}'", final_metric_name,
-                   sensor.chip_name, metric_declaration.metric_type);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+
+  auto metric_type_or_error = ResolveDeclaredMetricType(final_metric_name, sensor, metric_declaration);
+  if (!metric_type_or_error.has_value()) {
+    return std::unexpected(metric_type_or_error.error());
   }
 
-  return std::optional<LibsensorsMetricRegistrationDetails>{
-      LibsensorsMetricRegistrationDetails{
-                                          .name = final_metric_name,
-                                          .description =
-              metric_declaration.description.empty() ? BuildMetricDescription(sensor) : metric_declaration.description,
-                                          .units         = units,
-                                          .identifier    = metric_declaration.identifier.empty() ? BuildDefaultIdentifier(sensor)
-                                                                 : ParseMetricIdentifier(metric_declaration.identifier),
-                                          .metric_type   = metric_type,
-                                          .metric_groups = metric_declaration.metric_groups.value_or(std::vector<std::string>{}),
-                                          .formula       = std::move(formula_result.value()),
-                                          }
+  return LibsensorsMetricRegistrationDetails{
+      .name = std::string{final_metric_name},
+      .description =
+          metric_declaration.description.empty() ? BuildMetricDescription(sensor) : metric_declaration.description,
+      .units         = *units_or_error,
+      .identifier    = metric_declaration.identifier.empty() ? BuildDefaultIdentifier(sensor)
+                                                             : ParseMetricIdentifier(metric_declaration.identifier),
+      .metric_type   = *metric_type_or_error,
+      .metric_groups = metric_declaration.metric_groups.value_or(std::vector<std::string>{}),
+      .formula       = std::move(formula_result.value()),
   };
+}
+
+static auto ResolveMetricRegistrationDetails(const DiscoveredSensorMetric&  sensor,
+                                             const std::string&             config_metric_name,
+                                             const LibsensorsTargetContext& target_context)
+    -> std::expected<std::optional<LibsensorsMetricRegistrationDetails>, astl_status_code> {
+  const auto& final_metric_name_prefix = target_context.metric_name_prefix;
+  const auto  final_metric_name        = BuildFinalMetricName(final_metric_name_prefix, config_metric_name);
+  if (!target_context.declarations.has_value()) {
+    return MakeDefaultRegistrationDetails(final_metric_name_prefix, sensor, config_metric_name);
+  }
+
+  auto declaration_iter = FindMatchingMetricDeclaration(*target_context.declarations, config_metric_name, sensor);
+  if (declaration_iter == target_context.declarations->metrics.end()) {
+    return ResolveUndeclaredMetricRegistration(config_metric_name, final_metric_name, target_context, sensor);
+  }
+
+  auto registration_details_or_error =
+      BuildDeclaredRegistrationDetails(sensor, final_metric_name, declaration_iter->first, declaration_iter->second);
+  if (!registration_details_or_error.has_value()) {
+    return std::unexpected(registration_details_or_error.error());
+  }
+  return std::optional<LibsensorsMetricRegistrationDetails>{std::move(registration_details_or_error.value())};
 }
 
 static auto WarnAboutUndiscoveredDeclaredMetrics(const LibsensorsTargetContext&         target_context,

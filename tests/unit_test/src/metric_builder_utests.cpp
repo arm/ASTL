@@ -222,6 +222,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager with SCMI target but no config", "[
   REQUIRE(create_config_result.has_value());
   auto config = create_config_result.value();
   auto result = astl::BuildMetricManager(targets, config, std::nullopt);
+  (void)result;
   // Note this will pass only if publish_data.sh has been run to move config files to the expected location
   // like ./build/debug/lib/data
   // REQUIRE(result.has_value());

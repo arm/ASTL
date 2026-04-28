@@ -16,6 +16,7 @@
 #include "delta_metric.hpp"
 #include "finite_set_metric.hpp"
 #include "i_metric.hpp"
+#include "metric/procfs_composite_metricconfig.hpp"
 #include "metric_config.hpp"
 #include "operation/scmi_read_operation.hpp"
 #include "rate_metric.hpp"
@@ -371,6 +372,46 @@ auto MetricManager::SinkProcessedSamples(const IMetric* metric, std::span<const 
  * CreateResidencyMetricFromConfig (for residency metrics with target-specific configuration), or implement visitor
  * pattern to maintain abstraction without dynamic_cast.
  */
+auto CreateResidencyMetricFromConfig(const MetricConfig* metric_config, const ITarget* target,
+                                     IProcessedSampleSink* sink)
+    -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
+  const auto& metric_name = metric_config->Name();
+  ASTL_LOG_INFO("CreateMetricFromConfig: Creating ResidencyMetric '{}'", metric_name);
+
+  const auto* residency_config = dynamic_cast<const ResidencyMetricConfig*>(metric_config);
+  if (!residency_config) {
+    ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to ResidencyMetricConfig for metric '{}'", metric_name);
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  if (residency_config->GetStateInfo().empty()) {
+    ASTL_LOG_ERROR("CreateMetricFromConfig: No state info found in ResidencyMetricConfig for metric '{}'", metric_name);
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  std::vector<ResidencyMetricConfig::StateInfo> state_configs;
+  std::ranges::transform(
+      residency_config->GetStateInfo(), std::back_inserter(state_configs), [](const auto& state_pair) {
+        const auto& [state_name, state_data] = state_pair;
+        return ResidencyMetricConfig::StateInfo{state_name, state_data.state_description, state_data.tick_frequency,
+                                                state_data.operation_builder};
+      });
+  return std::make_unique<ResidencyMetric>(residency_config, state_configs, target, sink);
+}
+
+auto CreateFiniteSetMetricFromConfig(const MetricConfig* metric_config, const ITarget* target,
+                                     IProcessedSampleSink* sink)
+    -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
+  const auto& metric_name = metric_config->Name();
+  ASTL_LOG_INFO("CreateMetricFromConfig: Creating FiniteSetMetric '{}'", metric_name);
+
+  const auto* finite_set_config = dynamic_cast<const FiniteSetMetricConfig*>(metric_config);
+  if (!finite_set_config) {
+    ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to FiniteSetMetricConfig for metric '{}'", metric_name);
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  return std::make_unique<FiniteSetMetric>(finite_set_config, target, sink);
+}
+
 auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* target, IProcessedSampleSink* sink)
     -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
   if (!target) {
@@ -385,65 +426,39 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
   const auto  metric_type = metric_config->MetricType();
   const auto& metric_name = metric_config->Name();
 
-  switch (metric_type) {
-    case astl_metric_type_t::ASTL_METRIC_VALUE:
-      ASTL_LOG_INFO("CreateMetricFromConfig: Creating SampledValue metric '{}'", metric_name);
-      return std::make_unique<SampledValueMetric>(metric_config, target, sink);
-      break;
-
-    case astl_metric_type_t::ASTL_METRIC_DELTA:
-      ASTL_LOG_INFO("CreateMetricFromConfig: Creating DeltaMetric '{}'", metric_name);
-      return std::make_unique<DeltaMetric>(metric_config, target, sink);
-      break;
-
-    case astl_metric_type_t::ASTL_METRIC_RATE:
-      ASTL_LOG_INFO("CreateMetricFromConfig: Creating RateMetric '{}'", metric_name);
-      return std::make_unique<RateMetric>(metric_config, target, sink);
-      break;
-
-    case astl_metric_type_t::ASTL_METRIC_RESIDENCY: {
-      ASTL_LOG_INFO("CreateMetricFromConfig: Creating ResidencyMetric '{}'", metric_name);
-
-      // Cast to ResidencyMetricConfig to get state configurations
-      const auto* residency_config = dynamic_cast<const ResidencyMetricConfig*>(metric_config);
-      if (!residency_config) {
-        ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to ResidencyMetricConfig for metric '{}'", metric_name);
-        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-      }
-      if (residency_config->GetStateInfo().empty()) {
-        ASTL_LOG_ERROR("CreateMetricFromConfig: No state info found in ResidencyMetricConfig for metric '{}'",
-                       metric_name);
-        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-      }
-      // Create state configurations from the metric config for the specific target
-      std::vector<ResidencyMetricConfig::StateInfo> state_configs;
-      // turn the map of state->info to a vector of StateInfo
-      std::ranges::transform(
-          residency_config->GetStateInfo(), std::back_inserter(state_configs), [](const auto& state_pair) {
-            const auto& [state_name, state_data] = state_pair;
-            return ResidencyMetricConfig::StateInfo{state_name, state_data.state_description, state_data.tick_frequency,
-                                                    state_data.operation_builder};
-          });
-      return std::make_unique<ResidencyMetric>(residency_config, state_configs, target, sink);
+  std::expected<std::unique_ptr<IMetric>, astl_status_code> metric_or_error =
+      std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+  if (const auto* procfs_composite_config = dynamic_cast<const ProcfsCompositeMetricConfig*>(metric_config)) {
+    ASTL_LOG_INFO("CreateMetricFromConfig: Creating ProcfsCompositeMetric '{}'", metric_name);
+    metric_or_error = std::make_unique<ProcfsCompositeMetric>(procfs_composite_config, target, sink);
+  } else {
+    switch (metric_type) {
+      case astl_metric_type_t::ASTL_METRIC_VALUE:
+        ASTL_LOG_INFO("CreateMetricFromConfig: Creating SampledValue metric '{}'", metric_name);
+        metric_or_error = std::make_unique<SampledValueMetric>(metric_config, target, sink);
+        break;
+      case astl_metric_type_t::ASTL_METRIC_DELTA:
+        ASTL_LOG_INFO("CreateMetricFromConfig: Creating DeltaMetric '{}'", metric_name);
+        metric_or_error = std::make_unique<DeltaMetric>(metric_config, target, sink);
+        break;
+      case astl_metric_type_t::ASTL_METRIC_RATE:
+        ASTL_LOG_INFO("CreateMetricFromConfig: Creating RateMetric '{}'", metric_name);
+        metric_or_error = std::make_unique<RateMetric>(metric_config, target, sink);
+        break;
+      case astl_metric_type_t::ASTL_METRIC_RESIDENCY:
+        metric_or_error = CreateResidencyMetricFromConfig(metric_config, target, sink);
+        break;
+      case astl_metric_type_t::ASTL_METRIC_FINITE_SET_VALUE:
+        metric_or_error = CreateFiniteSetMetricFromConfig(metric_config, target, sink);
+        break;
+      // TODO (https://jira.arm.com/browse/ASTL-102):
+      // handle additional MetricType cases here
+      default:
+        ASTL_LOG_ERROR("CreateMetricFromConfig: unknown metric type received: {}", metric_type);
+        break;
     }
-    case astl_metric_type_t::ASTL_METRIC_FINITE_SET_VALUE: {
-      ASTL_LOG_INFO("CreateMetricFromConfig: Creating FiniteSetMetric '{}'", metric_name);
-
-      // Cast to FiniteSetMetricConfig to get finite set configuration
-      const auto* finite_set_config = dynamic_cast<const FiniteSetMetricConfig*>(metric_config);
-      if (!finite_set_config) {
-        ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to FiniteSetMetricConfig for metric '{}'", metric_name);
-        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-      }
-      return std::make_unique<FiniteSetMetric>(finite_set_config, target, sink);
-    }
-    // TODO (https://jira.arm.com/browse/ASTL-102):
-    // handle additional MetricType cases here
-    default:
-      // Unknown metric type; ignore or log an error.
-      ASTL_LOG_ERROR("CreateMetricFromConfig: unknown metric type received: {}", metric_type);
-      return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
   }
+  return metric_or_error;
 }
 
 /**

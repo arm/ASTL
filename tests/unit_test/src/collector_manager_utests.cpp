@@ -10,6 +10,7 @@
 #include "../../test_utilities.hpp"
 #include "collector/collector_builder.hpp"
 #include "collector/collector_manager.hpp"
+#include "topology/procfs_target.hpp"
 #include "topology/scmi_target.hpp"
 
 TEST_CASE("CollectorManager::RegisterRawSampleSink", "[collector_manager]") {
@@ -177,6 +178,26 @@ TEST_CASE("CollectorManager::BuildCollectorManager creates SCMI collectors for S
   REQUIRE(capabilities_map.at(target_1).size() == 1);
   REQUIRE(capabilities_map.at(target_0).front().collector_type == astl::CollectorType::SCMI);
   REQUIRE(capabilities_map.at(target_1).front().collector_type == astl::CollectorType::SCMI);
+}
+
+TEST_CASE("CollectorManager::BuildCollectorManager creates procfs collectors for procfs targets",
+          "[collector_manager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration = configuration_result.value();
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  auto* procfs_target = new astl::ProcfsTarget{"procfs", "test procfs target", "/proc"};
+  targets.emplace_back(procfs_target);
+
+  auto collector_manager = astl::BuildCollectorManager(targets, configuration);
+  REQUIRE(collector_manager.has_value());
+
+  auto capabilities_map = collector_manager.value()->ReportCollectionCapabilities();
+  REQUIRE(capabilities_map.size() == 1);
+  REQUIRE(capabilities_map.contains(procfs_target));
+  REQUIRE(capabilities_map.at(procfs_target).size() == 1);
+  REQUIRE(capabilities_map.at(procfs_target).front().collector_type == astl::CollectorType::PROCFS);
 }
 
 TEST_CASE("CollectorManager::BuildCollectorManager uses SCMI target metadata for sysfs subdirectories",

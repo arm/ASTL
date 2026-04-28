@@ -11,6 +11,7 @@
 #include "serdes/protobuf_serdes.hpp"
 #include "target.hpp"
 #include "topology/i_topology_manager.hpp"
+#include "topology/procfs_topology_plugin.hpp"
 #include "topology/scmi_topology_plugin.hpp"
 #include "topology/topology_manager.hpp"
 
@@ -76,6 +77,7 @@ auto BuildTopologyManager(const AstlConfiguration& configuration, std::optional<
     // Add more topology plugins here by calling ActivatePlugin on each
     ActivatePlugin(targets, configuration, ScmiTopologyPlugin::ScanForTargets);
     ActivatePlugin(targets, configuration, LibsensorsTopologyPlugin::ScanForTargets);
+    ActivatePlugin(targets, configuration, ProcfsTopologyPlugin::ScanForTargets);
   } catch (astl_status_code& error_code) {
     return std::unexpected(error_code);
   }

@@ -46,5 +46,11 @@ include(CTest)
 include(Catch)
 
 # tests will be run with ASTL_CONFIG_DIR set to the config directory in the build tree
-catch_discover_tests(wrapper_test ADD_TAGS_AS_LABELS PROPERTIES ENVIRONMENT
-                     "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")
+catch_discover_tests(
+  wrapper_test
+  DISCOVERY_MODE
+  PRE_TEST
+  ADD_TAGS_AS_LABELS
+  PROPERTIES
+  ENVIRONMENT
+  "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")

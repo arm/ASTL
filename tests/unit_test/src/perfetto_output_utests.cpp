@@ -729,6 +729,7 @@ TEST_CASE("PerfettoOutput category inference for remaining unit families", "[per
   metrics.emplace_back(TestMetricBase{"BandwidthMetric", ASTL_UNITS_MBYTESPERSEC}, "\"cat\":\"Bandwidth\"");
   metrics.emplace_back(TestMetricBase{"TicksMetric", ASTL_UNITS_TICKS}, "\"cat\":\"Ticks\"");
   metrics.emplace_back(TestMetricBase{"TimeMetric", ASTL_UNITS_SECONDS}, "\"cat\":\"Time\"");
+  metrics.emplace_back(TestMetricBase{"PercentMetric", ASTL_UNITS_PERCENT}, "\"cat\":\"Percent\"");
 
   uint64_t value = 10;
   for (auto& [metric, expected_category] : metrics) {

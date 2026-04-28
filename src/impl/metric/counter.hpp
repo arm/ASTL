@@ -99,7 +99,7 @@ class Counter : public RawMetric, public virtual ICounter {
   auto Name() const -> std::string const & override { return RawMetric::Name(); };
 
   /**
-   * @brief Retrieve the Counter's identifier.
+   * @brief Retrieve the counter's stable internal identifier.
    */
   auto Id() const -> std::string const & override { return RawMetric::Id(); };
 

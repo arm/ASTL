@@ -31,6 +31,9 @@ set(UNIT_TEST_SRCS
     scmi_specification_json_utests.cpp
     topology_manager_utests.cpp
     output_manager_utests.cpp
+    procfs_collector_utests.cpp
+    procfs_composite_metric_utests.cpp
+    procfs_metric_builder_utests.cpp
     buffer_output_utests.cpp
     processed_sampled_data_utests.cpp
     perfetto_output_utests.cpp
@@ -71,8 +74,14 @@ add_custom_target(
 include(CTest)
 include(Catch)
 # unit tests will be run with ASTL_CONFIG_DIR set to the config directory in the build tree
-catch_discover_tests(unit_test ADD_TAGS_AS_LABELS PROPERTIES ENVIRONMENT
-                     "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")
+catch_discover_tests(
+  unit_test
+  DISCOVERY_MODE
+  PRE_TEST
+  ADD_TAGS_AS_LABELS
+  PROPERTIES
+  ENVIRONMENT
+  "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")
 
 add_executable(pure_c_header_smoke pure_c_header_smoke.c)
 set_target_properties(

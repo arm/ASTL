@@ -68,6 +68,8 @@ auto UnitsToString(astl_units_t units) -> std::string {
       return "MB/s";
     case ASTL_UNITS_MHERTZ:
       return "MHz";
+    case ASTL_UNITS_PERCENT:
+      return "%";
     case ASTL_UNITS_UNKNOWN:
     default:
       return "?";

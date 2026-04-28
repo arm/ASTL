@@ -13,8 +13,11 @@
 #  include "libsensors/libsensors_collector.hpp"
 #  include "libsensors/libsensors_target.hpp"
 #endif
+#include "collector/procfs_collector.hpp"
+#include "common/procfs_utils.hpp"
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
+#include "topology/procfs_target.hpp"
 namespace astl {
 /**
  * @brief Builds collectors for the given targets based on the provided configuration.
@@ -55,6 +58,15 @@ auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
         collectors.emplace(cur_target.get(), std::move(collectors_for_target));
       }
 #endif
+    } else if (cur_target->GetCollectorType() == CollectorType::PROCFS) {
+      auto procfs_root_path = procfs::kDefaultProcfsRootPath;
+      if (const auto* procfs_target = dynamic_cast<const astl::ProcfsTarget*>(cur_target.get())) {
+        procfs_root_path = procfs_target->ProcfsRootPath();
+      }
+      astl::FileInterface                            procfs_file_interface{procfs_root_path};
+      std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
+      collectors_for_target.push_back(std::make_unique<astl::ProcfsCollector>(std::move(procfs_file_interface)));
+      collectors.emplace(cur_target.get(), std::move(collectors_for_target));
     } else {
       ASTL_LOG_ERROR("BuildCollectorManager: Unsupported collector type for target {}", cur_target->Name());
       return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
