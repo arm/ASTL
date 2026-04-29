@@ -164,6 +164,29 @@ TEST_CASE("MetricManager::RegisterMetric succeeds when collector supported", "[M
   REQUIRE(mgr.GetAvailableMetrics(&target).value().size() == 1);
 }
 
+TEST_CASE("MetricManager::RegisterMetric succeeds for ASTL-native event metric", "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+
+  auto cfg = std::make_unique<MetricConfig>("pause_event_metric",                   // name
+                                            "Synthetic pause/resume event metric",  // description
+                                            astl_units_t::ASTL_UNITS_NONE,          // units
+                                            astl_value_type_t::ASTL_VALUE_UNKNOWN,  // value type
+                                            ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier
+                                            astl_metric_type_t::ASTL_METRIC_EVENT,  // metric type
+                                            CollectorType::ASTL_NATIVE,             // collector type
+                                            astl::NullOperationBuilder{}            // operation builder
+  );
+
+  MockTarget  target;
+  std::string target_name{"AP0"};
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+
+  REQUIRE(mgr.RegisterMetric(std::move(cfg), {&target}) == ASTL_STATUS_SUCCESS);
+  REQUIRE(mgr.GetAvailableMetrics(&target).value().size() == 1);
+  REQUIRE(mgr.GetPauseResumeEventMetricOnTarget(&target) != nullptr);
+}
+
 TEST_CASE("MetricManager::RegisterMetric fails when collector unsupported", "[MetricManager]") {
   // 1) Manager only supports SCMI
   Capabilities  caps = MakeCaps(CollectorType::SCMI);

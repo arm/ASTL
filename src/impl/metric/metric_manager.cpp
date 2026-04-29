@@ -14,6 +14,7 @@
 #include "collector/collection_operations.hpp"
 #include "common/astl_defines.hpp"
 #include "delta_metric.hpp"
+#include "event_metric.hpp"
 #include "finite_set_metric.hpp"
 #include "i_metric.hpp"
 #include "metric/procfs_composite_metricconfig.hpp"
@@ -451,7 +452,10 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
       case astl_metric_type_t::ASTL_METRIC_FINITE_SET_VALUE:
         metric_or_error = CreateFiniteSetMetricFromConfig(metric_config, target, sink);
         break;
-      // TODO (https://jira.arm.com/browse/ASTL-102):
+      case astl_metric_type_t::ASTL_METRIC_EVENT:
+        ASTL_LOG_INFO("CreateMetricFromConfig: Creating EventMetric '{}'", metric_name);
+        metric_or_error = std::make_unique<EventMetric>(metric_config, target, sink);
+        break;
       // handle additional MetricType cases here
       default:
         ASTL_LOG_ERROR("CreateMetricFromConfig: unknown metric type received: {}", metric_type);
