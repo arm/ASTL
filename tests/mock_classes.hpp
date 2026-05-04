@@ -323,6 +323,8 @@ struct MockMetricManager : public astl::IMetricManager {
 
   MAKE_MOCK1(SetClockCorrelations, auto(const astl::ClockCorrelationMap& correlations)->void, override);
 
+  MAKE_MOCK0(GetClockCorrelations, auto()->astl::ClockCorrelationMap, const override);
+
   MAKE_MOCK1(ResetMetricsOnTarget, auto(const astl::ITarget* target)->astl_status_code, override);
 
   MAKE_MOCK2(SinkProcessedSamples,

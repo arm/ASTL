@@ -704,6 +704,11 @@ auto MetricManager::SetClockCorrelations(const ClockCorrelationMap& correlations
   }
 }
 
+auto MetricManager::GetClockCorrelations() const -> ClockCorrelationMap {
+  std::lock_guard<std::mutex> lock(_mutex);
+  return _clock_correlations;
+}
+
 auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code {
   ProcessingQueue  processing_queue;
   astl_status_code enqueue_status = ASTL_STATUS_SUCCESS;

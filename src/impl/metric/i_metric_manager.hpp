@@ -220,6 +220,16 @@ struct IMetricManager {
   virtual auto SetClockCorrelations(const ClockCorrelationMap& correlations) -> void = 0;
 
   /**
+   * @brief Return a snapshot of the current per-operation clock correlation map.
+   *
+   * Used by crop operations to convert raw hardware clock ticks to CLOCK_MONOTONIC_RAW
+   * nanoseconds when filtering the on-disk raw sample cache file.
+   *
+   * @return A copy of the current ClockCorrelationMap.
+   */
+  [[nodiscard]] virtual auto GetClockCorrelations() const -> ClockCorrelationMap = 0;
+
+  /**
    * @brief Reset all metric and counter instances associated with a target.
    *
    * This is primarily used before replaying cached raw samples back through the

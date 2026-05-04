@@ -217,6 +217,11 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   auto SetClockCorrelations(const ClockCorrelationMap& correlations) -> void override;
 
   /**
+   * @brief Return a snapshot of the current per-operation clock correlation map.
+   */
+  [[nodiscard]] auto GetClockCorrelations() const -> ClockCorrelationMap override;
+
+  /**
    * @brief Reset all metric/counter instances associated with a target.
    *
    * Stateful metrics such as delta/rate metrics retain previous-sample state.

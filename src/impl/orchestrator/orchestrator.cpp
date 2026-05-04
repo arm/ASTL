@@ -8,7 +8,9 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>  // for std::reference_wrapper in expected return types
+#include <iterator>
 #include <magic_enum/magic_enum.hpp>
+#include <vector>
 
 #include "astl/astl_errors.h"
 #include "astl_defines.hpp"
@@ -1179,4 +1181,292 @@ auto Orchestrator::LoadFromFile(fs::path file_path, fs::path cache_dir_path) -> 
 
   return ASTL_STATUS_SUCCESS;
 }
+
+// ---------------------------------------------------------------------------
+// Internal helpers for crop operations
+// ---------------------------------------------------------------------------
+
+namespace {
+
+auto WindowEndPrecedesStart(uint64_t end_ts, uint64_t start_ts) noexcept -> bool {
+  return end_ts != 0U && start_ts != 0U && end_ts < start_ts;
+}
+
+auto MaxWindowEnd(uint64_t lhs, uint64_t rhs) noexcept -> uint64_t {
+  if (lhs == 0U || rhs == 0U) {
+    return 0U;
+  }
+  return std::max(lhs, rhs);
+}
+
+auto ConsolidateCropWindows(std::span<const astl_crop_window_t> windows) -> std::vector<astl_crop_window_t> {
+  if (windows.empty()) {
+    return {};
+  }
+
+  std::vector<astl_crop_window_t> consolidated{windows.begin(), windows.end()};
+  std::sort(consolidated.begin(), consolidated.end(), [](const auto &lhs, const auto &rhs) {
+    if (lhs.start_ts == rhs.start_ts) {
+      if (lhs.end_ts == 0U) {
+        return false;
+      }
+      if (rhs.end_ts == 0U) {
+        return true;
+      }
+      return lhs.end_ts < rhs.end_ts;
+    }
+    if (lhs.start_ts == 0U) {
+      return true;
+    }
+    if (rhs.start_ts == 0U) {
+      return false;
+    }
+    return lhs.start_ts < rhs.start_ts;
+  });
+
+  auto write_it = consolidated.begin();
+  for (auto read_it = std::next(consolidated.begin()); read_it != consolidated.end(); ++read_it) {
+    if (!WindowEndPrecedesStart(write_it->end_ts, read_it->start_ts)) {
+      write_it->end_ts = MaxWindowEnd(write_it->end_ts, read_it->end_ts);
+      continue;
+    }
+
+    ++write_it;
+    if (write_it != read_it) {
+      *write_it = *read_it;
+    }
+  }
+  consolidated.erase(std::next(write_it), consolidated.end());
+  return consolidated;
+}
+
+/// Returns true when @p ts_ns falls inside at least one of the @p windows.
+auto IsTimestampWithinWindows(uint64_t ts_ns, std::span<const astl_crop_window_t> windows) noexcept -> bool {
+  return std::any_of(windows.begin(), windows.end(), [ts_ns](const astl_crop_window_t &window) {
+    const bool after_start = (window.start_ts == 0U || ts_ns >= window.start_ts);
+    const bool before_end  = (window.end_ts == 0U || ts_ns <= window.end_ts);
+    return after_start && before_end;
+  });
+}
+
+/// Filter @p samples in-place, retaining only those within @p windows.
+auto FilterProcessedSamples(std::vector<ProcessedSampledData> &samples, std::span<const astl_crop_window_t> windows)
+    -> void {
+  auto remove_it = std::remove_if(samples.begin(), samples.end(), [&](const ProcessedSampledData &sample) {
+    const auto ts_ns = static_cast<uint64_t>(sample.timestamp.time_since_epoch().count());
+    return !IsTimestampWithinWindows(ts_ns, windows);
+  });
+  samples.erase(remove_it, samples.end());
+}
+
+/// Filter @p raw_samples in-place using @p correlations to convert HW ticks to nanoseconds.
+auto FilterRawSamples(std::vector<RawSampledData> &raw_samples, const ClockCorrelationMap &correlations,
+                      std::span<const astl_crop_window_t> windows) -> void {
+  auto remove_it = std::remove_if(raw_samples.begin(), raw_samples.end(), [&](const RawSampledData &sample) -> bool {
+    uint64_t ts_ns = 0U;
+    if (sample.IsPauseResumeMarker()) {
+      // Pause/resume markers store CLOCK_MONOTONIC_RAW nanoseconds directly in raw_tick.
+      ts_ns = sample.raw_tick;
+    } else {
+      const auto corr_it = correlations.find(sample.operation_id);
+      if (corr_it == correlations.end()) {
+        // No clock correlation available — conservatively keep the sample.
+        return false;
+      }
+      ts_ns = static_cast<uint64_t>(
+          NormalizeToCorrelatedRawTimestamp(sample.raw_tick, corr_it->second).time_since_epoch().count());
+    }
+    return !IsTimestampWithinWindows(ts_ns, windows);
+  });
+  raw_samples.erase(remove_it, raw_samples.end());
+}
+
+}  // namespace
+
+auto Orchestrator::EnsureProcessedSamplesLoadedForTarget(const ITarget *target) -> void {
+  auto metric_handles_result = _metric_manager->GetAvailableMetrics(target);
+  if (metric_handles_result) {
+    for (const auto *const handle : *metric_handles_result) {
+      auto metric_result = _metric_manager->GetMetricOnTarget(handle, target);
+      if (metric_result) {
+        (void)GetProcessedMetricSamples(*metric_result, target);
+      }
+    }
+  }
+
+  auto counter_handles_result = _metric_manager->GetAvailableCounters(target);
+  if (counter_handles_result) {
+    for (const auto *const handle : *counter_handles_result) {
+      auto counter_result = _metric_manager->GetCounterOnTarget(handle, target);
+      if (counter_result) {
+        (void)GetProcessedMetricSamples(*counter_result, target);
+      }
+    }
+  }
+}
+
+auto Orchestrator::FilterProcessedSamplesOnTarget(const ITarget *target, std::span<const astl_crop_window_t> windows)
+    -> void {
+  std::lock_guard lock{_processed_samples_mtx};
+  auto            target_it = _processed_samples.find(target);
+  if (target_it == _processed_samples.end()) {
+    return;
+  }
+
+  for (auto &metric_samples : target_it->second) {
+    FilterProcessedSamples(metric_samples.second, windows);
+  }
+}
+
+auto Orchestrator::FilterRawSamplesOnTarget(const ITarget *target, const ClockCorrelationMap &correlations,
+                                            std::span<const astl_crop_window_t> windows) -> void {
+  std::lock_guard raw_lock{_raw_samples_mtx};
+  auto            raw_it = _raw_samples.find(target);
+  if (raw_it != _raw_samples.end() && !raw_it->second.empty()) {
+    FilterRawSamples(raw_it->second, correlations, windows);
+  }
+}
+
+auto Orchestrator::FilterRawSampleCacheFile(const ITarget *target, const ClockCorrelationMap &correlations,
+                                            std::span<const astl_crop_window_t> windows) -> astl_status_code {
+  const auto cache_file_path = _cache_dir / (GetStableTargetKey(*target) + kAstlFileExtension);
+  if (!fs::exists(cache_file_path)) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  std::ifstream in_stream(cache_file_path, std::ios::binary);
+  if (!in_stream) {
+    ASTL_LOG_ERROR("CropSamplesOnTarget: failed to open raw sample cache file {}", cache_file_path.string());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  auto raw_result = ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(in_stream);
+  in_stream.close();
+
+  if (!raw_result) {
+    ASTL_LOG_ERROR("CropSamplesOnTarget: failed to deserialize raw samples from {}: {}", cache_file_path.string(),
+                   astlStatusString(raw_result.error()));
+    return raw_result.error();
+  }
+
+  FilterRawSamples(*raw_result, correlations, windows);
+
+  std::error_code error_code;
+  fs::remove(cache_file_path, error_code);
+  if (error_code) {
+    ASTL_LOG_ERROR("CropSamplesOnTarget: failed to remove old cache file {}: {}", cache_file_path.string(),
+                   error_code.message());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  if (raw_result->empty()) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  std::ofstream out_stream(cache_file_path, std::ios::binary | std::ios::out);
+  if (!out_stream) {
+    ASTL_LOG_ERROR("CropSamplesOnTarget: failed to create filtered cache file {}", cache_file_path.string());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto write_status = ProtobufSerDes::Serialize(*raw_result, out_stream);
+  if (write_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("CropSamplesOnTarget: failed to serialize filtered raw samples to {}: {}", cache_file_path.string(),
+                   astlStatusString(write_status));
+  }
+  return write_status;
+}
+
+auto Orchestrator::CropSamplesOnTarget(const ITarget *target, std::span<const astl_crop_window_t> windows)
+    -> astl_status_code {
+  if (!target) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!_metric_manager) {
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto consolidated_windows = ConsolidateCropWindows(windows);
+  windows                         = std::span<const astl_crop_window_t>{consolidated_windows};
+
+  // Reject crop while collection is STARTED or PAUSED on this target.
+  {
+    auto state_result = GetTargetCollectionState(target);
+    if (!state_result) {
+      return state_result.error();
+    }
+    if (*state_result == TargetCollectionState::STARTED || *state_result == TargetCollectionState::PAUSED) {
+      return ASTL_STATUS_COLLECTION_NOT_STOPPED;
+    }
+  }
+
+  // Step 1: Ensure processed samples for all metrics on this target are populated in memory.
+  // GetProcessedMetricSamples triggers lazy rebuild from disk when samples are not yet loaded.
+  // Must be called without _processed_samples_mtx held.
+  EnsureProcessedSamplesLoadedForTarget(target);
+
+  // Step 2: Filter in-memory processed samples for all metrics on this target.
+  FilterProcessedSamplesOnTarget(target, windows);
+
+  // Obtain clock correlations once; used for both in-memory and on-disk raw sample filtering.
+  const ClockCorrelationMap correlations = _metric_manager->GetClockCorrelations();
+
+  // Step 3: Filter in-memory raw samples for this target (non-empty only before StopCollection is called,
+  // but handled defensively here).
+  FilterRawSamplesOnTarget(target, correlations, windows);
+
+  // Step 4: Filter the on-disk raw sample cache file.
+  return FilterRawSampleCacheFile(target, correlations, windows);
+}
+
+auto Orchestrator::CropMetricSamplesOnTarget(const ITarget *target, const IMetric *metric,
+                                             std::span<const astl_crop_window_t> windows) -> astl_status_code {
+  if (!target || !metric) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!_metric_manager) {
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto consolidated_windows = ConsolidateCropWindows(windows);
+  windows                         = std::span<const astl_crop_window_t>{consolidated_windows};
+
+  // Reject crop while collection is STARTED or PAUSED on this target.
+  {
+    auto state_result = GetTargetCollectionState(target);
+    if (!state_result) {
+      return state_result.error();
+    }
+    if (*state_result == TargetCollectionState::STARTED || *state_result == TargetCollectionState::PAUSED) {
+      return ASTL_STATUS_COLLECTION_NOT_STOPPED;
+    }
+  }
+
+  // Step 1: Ensure in-memory processed samples are populated for this (target, metric) pair.
+  (void)GetProcessedMetricSamples(metric, target);
+
+  // Step 2: Filter in-memory processed samples for this (target, metric) pair only.
+  {
+    std::lock_guard lock{_processed_samples_mtx};
+    auto            target_it = _processed_samples.find(target);
+    if (target_it != _processed_samples.end()) {
+      auto metric_it = target_it->second.find(metric);
+      if (metric_it != target_it->second.end()) {
+        FilterProcessedSamples(metric_it->second, windows);
+      }
+    }
+  }
+
+  // Note: the on-disk raw sample cache is shared across all metrics for a target.
+  // Filtering it here would discard raw samples that belong to other metrics.
+  // Callers that require the raw cache to be updated for persistence should use
+  // CropSamplesOnTarget instead.
+  ASTL_LOG_WARNING(
+      "CropMetricSamplesOnTarget: on-disk raw sample cache was NOT filtered for metric '{}' on target "
+      "'{}'. A future rebuild from cache will regenerate unfiltered samples. Use CropSamplesOnTarget to "
+      "persist the crop.",
+      metric->Name(), target->Name());
+
+  return ASTL_STATUS_SUCCESS;
+}
+
 }  // namespace astl

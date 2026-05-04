@@ -9,6 +9,7 @@
 #include <functional>  // for std::reference_wrapper in expected return types
 #include <memory>
 #include <mutex>
+#include <span>
 #include <vector>
 
 #include "astl/astl.h"
@@ -400,8 +401,43 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    */
   auto GetPauseMarkersSnapshot() const -> PauseMarkersMap;
 
+  /**
+   * @brief Permanently retain processed and raw samples for the specified target that fall within
+   *        one or more time windows, discarding all others.
+   *
+   * Precondition: collection must not be STARTED or PAUSED on the target.
+   * Both the in-memory processed sample store and the on-disk raw sample cache file are updated.
+   *
+   * @param target  Target whose samples are to be cropped (must be owned by this orchestrator).
+   * @param windows Span of retention windows; a sample is kept when it falls inside any window.
+   * @return ASTL_STATUS_SUCCESS on success, or an error status.
+   */
+  auto CropSamplesOnTarget(const ITarget *target, std::span<const astl_crop_window_t> windows) -> astl_status_code;
+
+  /**
+   * @brief Permanently retain processed samples for a single (target, metric) pair that fall within
+   *        one or more time windows, discarding all others.
+   *
+   * Precondition: collection must not be STARTED or PAUSED on the target.
+   * The in-memory processed sample store for the given metric is updated; the on-disk raw sample
+   * cache is left unchanged (raw samples are shared across all metrics for the target).
+   *
+   * @param target  Target that owns the metric.
+   * @param metric  Metric instance whose samples are to be cropped.
+   * @param windows Span of retention windows.
+   * @return ASTL_STATUS_SUCCESS on success, or an error status.
+   */
+  auto CropMetricSamplesOnTarget(const ITarget *target, const IMetric *metric,
+                                 std::span<const astl_crop_window_t> windows) -> astl_status_code;
+
  private:
   auto StartCollectionImpl(const ITarget *target, bool start_paused) -> astl_status_code;
+  auto EnsureProcessedSamplesLoadedForTarget(const ITarget *target) -> void;
+  auto FilterProcessedSamplesOnTarget(const ITarget *target, std::span<const astl_crop_window_t> windows) -> void;
+  auto FilterRawSamplesOnTarget(const ITarget *target, const ClockCorrelationMap &correlations,
+                                std::span<const astl_crop_window_t> windows) -> void;
+  auto FilterRawSampleCacheFile(const ITarget *target, const ClockCorrelationMap &correlations,
+                                std::span<const astl_crop_window_t> windows) -> astl_status_code;
 
   /**
    * @brief Emit a summary CSV file of all processed samples if requested via environment variable.
