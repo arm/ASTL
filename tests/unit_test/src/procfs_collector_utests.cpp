@@ -280,7 +280,8 @@ TEST_CASE("ProcfsCollector runs snapshot operations at start and stop", "[procfs
   REQUIRE(sink.batches[2].front().get<double>() == Catch::Approx(0.50));
 }
 
-TEST_CASE("ProcfsCollector samples periodically and pause resume controls the sampler", "[procfs_collector]") {
+TEST_CASE("ProcfsCollector samples periodically and pause resume controls the sampler",
+          "[procfs_collector][time_sensitive]") {
   const fs::path procfs_root = fs::temp_directory_path() / "astl_procfs_sampling";
   TempFileGuard  procfs_guard(procfs_root);
 
