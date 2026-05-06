@@ -51,15 +51,8 @@ auto EscapeCsvField(std::string_view value) -> std::string {
 
 auto FormatReportFloatingValue(double value) -> std::string {
   std::ostringstream stream;
-  stream << std::fixed << std::setprecision(3) << value;
-  auto formatted = stream.str();
-  while (!formatted.empty() && formatted.back() == '0') {
-    formatted.pop_back();
-  }
-  if (!formatted.empty() && formatted.back() == '.') {
-    formatted.pop_back();
-  }
-  return formatted.empty() ? std::string{"0"} : formatted;
+  stream << std::fixed << std::setprecision(2) << value;
+  return stream.str();
 }
 
 auto FormatReportValue(const AstlValue& value) -> std::string {
