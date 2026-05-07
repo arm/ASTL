@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -13,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
 #include "astl/astl.h"
@@ -102,13 +104,21 @@ TEST_CASE("C interface supports mixed concurrent calls", "[wrapper][thread_safet
 }
 
 TEST_CASE("C interface supports valid-handle configure/start/stop interleavings", "[wrapper][thread_safety]") {
+  auto  target_uptr = std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt);
+  auto* target_raw  = target_uptr.get();
+
+  auto mock_collector = std::make_unique<MockCollector>();
+  ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
+  ALLOW_CALL(*mock_collector, StopCollection()).RETURN(ASTL_STATUS_COLLECTION_NOT_RUNNING);
+  std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+  collectors_map[target_raw].push_back(std::move(mock_collector));
+
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  targets.push_back(std::move(target_uptr));
 
   auto topology_manager  = std::make_unique<astl::TopologyManager>(std::move(targets));
-  auto collector_manager = std::make_unique<astl::CollectorManager>(
-      std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>>{});
-  auto metric_manager = std::make_unique<astl::MetricManager>(
+  auto collector_manager = std::make_unique<astl::CollectorManager>(std::move(collectors_map));
+  auto metric_manager    = std::make_unique<astl::MetricManager>(
       astl::Capabilities{std::vector<astl::CollectorCapability>{}, std::vector<astl::SystemCapability>{}});
   auto output_manager = std::make_unique<astl::OutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
@@ -138,7 +148,9 @@ TEST_CASE("C interface supports valid-handle configure/start/stop interleavings"
   std::vector<std::thread> workers;
   workers.reserve(k_thread_count);
 
-  auto is_allowed = [](astl_status_code, std::initializer_list<astl_status_code>) { return true; };
+  auto is_allowed = [](astl_status_code status, std::initializer_list<astl_status_code> allowed) {
+    return std::find(allowed.begin(), allowed.end(), status) != allowed.end();
+  };
 
   for (int thread_index = 0; thread_index < k_thread_count; ++thread_index) {
     workers.emplace_back([&all_ok, &ready_count, &start, thread_index, valid_target, fake_counter_handle,
@@ -185,13 +197,21 @@ TEST_CASE("C interface supports valid-handle configure/start/stop interleavings"
 }
 
 TEST_CASE("C interface supports valid-handle pause/resume interleavings", "[wrapper][thread_safety]") {
+  auto  target_uptr = std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt);
+  auto* target_raw  = target_uptr.get();
+
+  auto mock_collector = std::make_unique<MockCollector>();
+  ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
+  ALLOW_CALL(*mock_collector, StopCollection()).RETURN(ASTL_STATUS_COLLECTION_NOT_RUNNING);
+  std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+  collectors_map[target_raw].push_back(std::move(mock_collector));
+
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  targets.push_back(std::move(target_uptr));
 
   auto topology_manager  = std::make_unique<astl::TopologyManager>(std::move(targets));
-  auto collector_manager = std::make_unique<astl::CollectorManager>(
-      std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>>{});
-  auto metric_manager = std::make_unique<astl::MetricManager>(
+  auto collector_manager = std::make_unique<astl::CollectorManager>(std::move(collectors_map));
+  auto metric_manager    = std::make_unique<astl::MetricManager>(
       astl::Capabilities{std::vector<astl::CollectorCapability>{}, std::vector<astl::SystemCapability>{}});
   auto output_manager = std::make_unique<astl::OutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
@@ -221,7 +241,9 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings", "[wrap
   std::vector<std::thread> workers;
   workers.reserve(k_thread_count);
 
-  auto is_allowed = [](astl_status_code, std::initializer_list<astl_status_code>) { return true; };
+  auto is_allowed = [](astl_status_code status, std::initializer_list<astl_status_code> allowed) {
+    return std::find(allowed.begin(), allowed.end(), status) != allowed.end();
+  };
 
   for (int thread_index = 0; thread_index < k_thread_count; ++thread_index) {
     workers.emplace_back([&all_ok, &ready_count, &start, thread_index, valid_target, fake_counter_handle,
@@ -247,15 +269,13 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings", "[wrap
             break;
           case 2:
             status = PauseCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_COLLECTION_ALREADY_PAUSED,
-                                     ASTL_STATUS_PAUSE_UNSUPPORTED, ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_COLLECTION_ALREADY_PAUSED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 3:
             status = ResumeCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_COLLECTION_ALREADY_RUNNING,
-                                     ASTL_STATUS_RESUME_UNSUPPORTED, ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_COLLECTION_ALREADY_RUNNING})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
@@ -282,13 +302,21 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings", "[wrap
 }
 
 TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", "[wrapper][thread_safety]") {
+  auto  target_uptr = std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt);
+  auto* target_raw  = target_uptr.get();
+
+  auto mock_collector = std::make_unique<MockCollector>();
+  ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
+  ALLOW_CALL(*mock_collector, StopCollection()).RETURN(ASTL_STATUS_COLLECTION_NOT_RUNNING);
+  std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
+  collectors_map[target_raw].push_back(std::move(mock_collector));
+
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt));
+  targets.push_back(std::move(target_uptr));
 
   auto topology_manager  = std::make_unique<astl::TopologyManager>(std::move(targets));
-  auto collector_manager = std::make_unique<astl::CollectorManager>(
-      std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>>{});
-  auto metric_manager = std::make_unique<astl::MetricManager>(
+  auto collector_manager = std::make_unique<astl::CollectorManager>(std::move(collectors_map));
+  auto metric_manager    = std::make_unique<astl::MetricManager>(
       astl::Capabilities{std::vector<astl::CollectorCapability>{}, std::vector<astl::SystemCapability>{}});
   auto output_manager = std::make_unique<astl::OutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
@@ -315,7 +343,9 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
   std::vector<std::thread> workers;
   workers.reserve(k_thread_count);
 
-  auto is_allowed = [](astl_status_code, std::initializer_list<astl_status_code>) { return true; };
+  auto is_allowed = [](astl_status_code status, std::initializer_list<astl_status_code> allowed) {
+    return std::find(allowed.begin(), allowed.end(), status) != allowed.end();
+  };
 
   for (int thread_index = 0; thread_index < k_thread_count; ++thread_index) {
     workers.emplace_back([&all_ok, &ready_count, &start, thread_index, valid_target, &collection_params,
@@ -364,7 +394,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             break;
           case 4:
             status = ConfigureMetricGroupCollectionOnTarget(valid_target, &collection_params, &null_group_handle, 1);
-            if (!is_allowed(status, {ASTL_STATUS_BAD_ARGUMENT})) {
+            if (!is_allowed(status, {ASTL_STATUS_BAD_ARGUMENT, ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
@@ -376,51 +406,52 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             break;
           case 6:
             status = StartCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_INVALID_STATE_TRANSITION})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 7:
             status = StartCollection();
-            if (!is_allowed(status, {ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_SUCCESS})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 8:
             status = PauseCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_COLLECTION_ALREADY_PAUSED,
+                                     ASTL_STATUS_PAUSE_UNSUPPORTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 9:
             status = PauseCollection();
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_INTERNAL_ERROR,
-                                     ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_INTERNAL_ERROR})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 10:
             status = ResumeCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_COLLECTION_ALREADY_RUNNING,
+                                     ASTL_STATUS_RESUME_UNSUPPORTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 11:
             status = ResumeCollection();
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_INTERNAL_ERROR,
-                                     ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_INTERNAL_ERROR})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 12:
             status = StopCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_INVALID_STATE_TRANSITION})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 13:
             status = StopCollection();
-            if (!is_allowed(status, {ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_SUCCESS, ASTL_STATUS_COLLECTION_NOT_RUNNING,
+                                     ASTL_STATUS_INVALID_STATE_TRANSITION, ASTL_STATUS_INTERNAL_ERROR})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;

@@ -1433,18 +1433,8 @@ TEST_CASE("astlPauseCollectionOnTarget", "[wrapper]") {
   REQUIRE(PauseCollectionOnTarget(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
 }
 
-TEST_CASE("astlPauseCollection", "[wrapper]") {
-  auto status = PauseCollection();
-  REQUIRE((status == ASTL_STATUS_INTERNAL_ERROR || status == ASTL_STATUS_NOT_IMPLEMENTED));
-}
-
 TEST_CASE("astlResumeCollectionOnTarget", "[wrapper]") {
   REQUIRE(ResumeCollectionOnTarget(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
-}
-
-TEST_CASE("astlResumeCollection", "[wrapper]") {
-  auto status = ResumeCollection();
-  REQUIRE((status == ASTL_STATUS_INTERNAL_ERROR || status == ASTL_STATUS_NOT_IMPLEMENTED));
 }
 
 TEST_CASE("astlStopCollectionOnTarget", "[unimplemented for now][wrapper]") {
@@ -1480,8 +1470,10 @@ TEST_CASE("astlStopCollectionOnTarget", "[unimplemented for now][wrapper]") {
   REQUIRE(StopCollectionOnTarget(invalid_target_handle) == ASTL_STATUS_INVALID_TARGET_HANDLE);
 }
 
-TEST_CASE("astlStopCollection", "[unimplemented for now][wrapper]") {
-  REQUIRE(StopCollection() == ASTL_STATUS_NOT_IMPLEMENTED);
+TEST_CASE("astlStopCollection returns INTERNAL_ERROR without an active session", "[wrapper]") {
+  // Explicitly clear any orchestrator state inherited from other tests so this is order-independent
+  TestOrchestratorInjector injector(nullptr);
+  REQUIRE(StopCollection() == ASTL_STATUS_INTERNAL_ERROR);
 }
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
@@ -2384,4 +2376,139 @@ TEST_CASE("astlLoadCollection fails for non-existent file", "[wrapper][cache]") 
   ASTL_INIT_STRUCT(astl_load_params_t, params, .flags = 0, .input_file_path = "/tmp/astl_nonexistent_12345.astl",
                    .chunk_size_bytes = 0);
   REQUIRE(astlLoadCollection(&params) != ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("astlPauseCollection and astlResumeCollection route through orchestrator", "[wrapper]") {
+  auto  topology_manager  = std::make_unique<MockTopologyManager>();
+  auto  collector_manager = std::make_unique<MockCollectorManager>();
+  auto* collector_mgr     = collector_manager.get();
+  ALLOW_CALL(*collector_mgr, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_mgr, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_mgr, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_mgr, IsAnyTargetBeingCollected()).RETURN(true);
+
+  auto  metric_manager = std::make_unique<MockMetricManager>();
+  auto* metric_mgr     = metric_manager.get();
+  ALLOW_CALL(*metric_mgr, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_mgr, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_mgr, RemoveAllMetrics());
+  static int                        pr_metric_storage = 0;
+  astl_metric_handle_t              metric_handle     = &pr_metric_storage;
+  std::vector<astl_metric_handle_t> available_metrics{metric_handle};
+  ALLOW_CALL(*metric_mgr, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
+  ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
+      .RETURN(astl::CollectionOperations{
+          {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto  output_manager = std::make_unique<MockOutputManager>();
+  auto  orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                              std::move(metric_manager), std::move(output_manager), "");
+  auto* orchestrator_raw = orchestrator.get();
+
+  auto                     mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t     mock_target_handle = mock_target.get();
+  static const std::string pr_target_name     = "pause_resume_target";
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
+  ALLOW_CALL(*mock_target, Name()).RETURN(pr_target_name);
+
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target));
+  REQUIRE(orchestrator->SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
+
+  auto*                               target = orchestrator_raw->GetTargets()[0].get();
+  astl_collection_params_t            params{.size              = sizeof(astl_collection_params_t),
+                                             .flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY,
+                                             .sampling_interval = 0,
+                                             .collection_mode   = ASTL_COLLECTION_MODE_SAMPLING};
+  std::array<astl_metric_handle_t, 1> metrics{metric_handle};
+  REQUIRE(orchestrator_raw->ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_SUCCESS);
+
+  ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
+      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+  ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
+
+  using State = astl::Orchestrator::TargetCollectionState;
+  trompeloeil::sequence seq;
+  REQUIRE_CALL(*collector_mgr, StartOnTarget(target)).IN_SEQUENCE(seq).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*collector_mgr, PauseOnTarget(target)).IN_SEQUENCE(seq).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*collector_mgr, ResumeOnTarget(target)).IN_SEQUENCE(seq).RETURN(ASTL_STATUS_SUCCESS);
+
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  REQUIRE(StartCollection() == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator_raw->GetTargetCollectionState(target).value() == State::STARTED);
+
+  REQUIRE(PauseCollection() == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator_raw->GetTargetCollectionState(target).value() == State::PAUSED);
+
+  REQUIRE(ResumeCollection() == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator_raw->GetTargetCollectionState(target).value() == State::STARTED);
+}
+
+TEST_CASE("astlStopCollection routes through orchestrator", "[wrapper]") {
+  auto  topology_manager  = std::make_unique<MockTopologyManager>();
+  auto  collector_manager = std::make_unique<MockCollectorManager>();
+  auto* collector_mgr     = collector_manager.get();
+  ALLOW_CALL(*collector_mgr, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_mgr, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_mgr, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_mgr, IsAnyTargetBeingCollected()).RETURN(false);
+
+  auto  metric_manager = std::make_unique<MockMetricManager>();
+  auto* metric_mgr     = metric_manager.get();
+  ALLOW_CALL(*metric_mgr, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_mgr, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_mgr, RemoveAllMetrics());
+  static int                        stop_metric_storage = 0;
+  astl_metric_handle_t              metric_handle       = &stop_metric_storage;
+  std::vector<astl_metric_handle_t> available_metrics{metric_handle};
+  ALLOW_CALL(*metric_mgr, GetAvailableMetrics(_)).RETURN(std::span(available_metrics));
+  ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
+      .RETURN(astl::CollectionOperations{
+          {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto output_manager = std::make_unique<MockOutputManager>();
+  ALLOW_CALL(*output_manager, OutputProcessedSamples(_, _, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+  auto  orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                            std::move(metric_manager), std::move(output_manager), "");
+  auto* orchestrator_raw = orchestrator.get();
+
+  auto                     mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t     mock_target_handle = mock_target.get();
+  static const std::string stop_target_name   = "stop_all_target";
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
+  ALLOW_CALL(*mock_target, Name()).RETURN(stop_target_name);
+
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  mock_targets.push_back(std::move(mock_target));
+  REQUIRE(orchestrator->SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
+
+  auto*                               target = orchestrator_raw->GetTargets()[0].get();
+  astl_collection_params_t            params{.size              = sizeof(astl_collection_params_t),
+                                             .flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY,
+                                             .sampling_interval = 0,
+                                             .collection_mode   = ASTL_COLLECTION_MODE_SAMPLING};
+  std::array<astl_metric_handle_t, 1> metrics{metric_handle};
+  REQUIRE(orchestrator_raw->ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_SUCCESS);
+
+  ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
+      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+  ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
+
+  using State = astl::Orchestrator::TargetCollectionState;
+  trompeloeil::sequence seq;
+  REQUIRE_CALL(*collector_mgr, StartOnTarget(target)).IN_SEQUENCE(seq).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*collector_mgr, StopOnTarget(target)).IN_SEQUENCE(seq).RETURN(ASTL_STATUS_SUCCESS);
+
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  REQUIRE(StartCollection() == ASTL_STATUS_SUCCESS);
+  REQUIRE(StopCollection() == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator_raw->GetTargetCollectionState(target).value() == State::STOPPED);
 }

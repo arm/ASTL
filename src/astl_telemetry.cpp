@@ -2492,20 +2492,12 @@ auto astlPauseCollectionOnTarget(const astl_pause_collection_on_target_params_t*
   astl_status_code    status           = orchestrator_ptr->PauseCollection(target);
   ASTL_LOG_DEBUG("PauseCollection on target '{}' returned with code: {}",
                  (target ? target->Name() : std::string{"<null>"}), status);
-  // TODO(ASTL-250,ASTL-326): Remove ASTL_STATUS_NOT_IMPLEMENTED once pause/resume is implemented in collector and
-  // metric managers
-  status = ASTL_STATUS_NOT_IMPLEMENTED;
-
   return status;
 }
 
-auto astlPauseCollection(const astl_pause_collection_params_t* params) noexcept -> astl_status_code {
-  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-  const auto                  params_status = ValidateApiParams(params);
-  if (params_status != ASTL_STATUS_SUCCESS) {
-    return params_status;
-  }
-  // Do not trigger lazy construction; require `Orchestrator::GetInstance()` to have run.
+// Helper: get the initialized orchestrator, iterate all targets, call op_fn on each, and return the
+// first non-success status (or SUCCESS if all pass). Requires the orchestrator to already be initialized.
+static auto ApplyToAllTargets(std::string_view operation_name, auto op_fn) noexcept -> astl_status_code {
   if (!astl::Orchestrator::IsInitialized()) {
     return ASTL_STATUS_INTERNAL_ERROR;
   }
@@ -2516,16 +2508,24 @@ auto astlPauseCollection(const astl_pause_collection_params_t* params) noexcept 
   astl::Orchestrator* orchestrator_ptr = orchestrator_or_error.value().get().get();
   astl_status_code    aggregate_status = ASTL_STATUS_SUCCESS;
   for (auto const& target_unique_ptr : orchestrator_ptr->GetTargets()) {
-    auto status = orchestrator_ptr->PauseCollection(target_unique_ptr.get());
+    auto status = op_fn(orchestrator_ptr, target_unique_ptr.get());
     if (status != ASTL_STATUS_SUCCESS && aggregate_status == ASTL_STATUS_SUCCESS) {
       aggregate_status = status;
     }
   }
-  ASTL_LOG_DEBUG("PauseCollection returned with code: {}", aggregate_status);
-  // TODO(ASTL-250,ASTL-326): Remove ASTL_STATUS_NOT_IMPLEMENTED once pause/resume is implemented in collector and
-  // metric managers
-  aggregate_status = ASTL_STATUS_NOT_IMPLEMENTED;
+  ASTL_LOG_DEBUG("{} returned with code: {}", operation_name, aggregate_status);
   return aggregate_status;
+}
+
+auto astlPauseCollection(const astl_pause_collection_params_t* params) noexcept -> astl_status_code {
+  std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+  const auto                  params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return params_status;
+  }
+  return ApplyToAllTargets("PauseCollection", [](astl::Orchestrator* orchestrator, const astl::ITarget* target) {
+    return orchestrator->PauseCollection(target);
+  });
 }
 
 auto astlResumeCollectionOnTarget(const astl_resume_collection_on_target_params_t* params) noexcept
@@ -2553,10 +2553,6 @@ auto astlResumeCollectionOnTarget(const astl_resume_collection_on_target_params_
 
   ASTL_LOG_DEBUG("ResumeCollection on target '{}' returned with code: {}",
                  (target ? target->Name() : std::string{"<null>"}), status);
-  // TODO(ASTL-250,ASTL-326): Remove ASTL_STATUS_NOT_IMPLEMENTED once pause/resume is implemented in collector and
-  // metric managers
-  status = ASTL_STATUS_NOT_IMPLEMENTED;
-
   return status;
 }
 
@@ -2566,26 +2562,9 @@ auto astlResumeCollection(const astl_resume_collection_params_t* params) noexcep
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  if (!astl::Orchestrator::IsInitialized()) {
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-  auto orchestrator_or_error = astl::Orchestrator::GetInstance();
-  if (!orchestrator_or_error) {
-    return orchestrator_or_error.error();
-  }
-  astl::Orchestrator* orchestrator_ptr = orchestrator_or_error.value().get().get();
-  astl_status_code    aggregate_status = ASTL_STATUS_SUCCESS;
-  for (auto const& target_unique_ptr : orchestrator_ptr->GetTargets()) {
-    auto status = orchestrator_ptr->ResumeCollection(target_unique_ptr.get());
-    if (status != ASTL_STATUS_SUCCESS && aggregate_status == ASTL_STATUS_SUCCESS) {
-      aggregate_status = status;
-    }
-  }
-  ASTL_LOG_DEBUG("ResumeCollection returned with code: {}", aggregate_status);
-  // TODO(ASTL-250,ASTL-326): Remove ASTL_STATUS_NOT_IMPLEMENTED once pause/resume is implemented in collector and
-  // metric managers
-  aggregate_status = ASTL_STATUS_NOT_IMPLEMENTED;
-  return aggregate_status;
+  return ApplyToAllTargets("ResumeCollection", [](astl::Orchestrator* orchestrator, const astl::ITarget* target) {
+    return orchestrator->ResumeCollection(target);
+  });
 }
 
 auto astlStopCollectionOnTarget(const astl_stop_collection_on_target_params_t* params) noexcept -> astl_status_code {
@@ -2619,8 +2598,9 @@ auto astlStopCollection(const astl_stop_collection_params_t* params) noexcept ->
   if (params_status != ASTL_STATUS_SUCCESS) {
     return params_status;
   }
-  astl_status_code result{ASTL_STATUS_NOT_IMPLEMENTED};
-  return result;
+  return ApplyToAllTargets("StopCollection", [](astl::Orchestrator* orchestrator, const astl::ITarget* target) {
+    return orchestrator->StopCollection(target);
+  });
 }
 
 /*** Save collection session to .astl file ***/
