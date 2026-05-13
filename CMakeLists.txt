@@ -225,7 +225,8 @@ endif()
 target_sources(
   ${LIBRARY_NAME}
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_errors.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_telemetry.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_test_hooks.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_version.cpp")
+          "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_test_hooks.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_version.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/utils/astl_read_file_handle_cache.cpp")
 
 # include directories
 target_include_directories(

@@ -81,7 +81,8 @@ target_sources(
           "${PROJECT_SOURCE_DIR}/src/astl_errors.cpp"
           "${PROJECT_SOURCE_DIR}/src/astl_telemetry.cpp"
           "${PROJECT_SOURCE_DIR}/src/astl_test_hooks.cpp"
-          "${PROJECT_SOURCE_DIR}/src/astl_version.cpp")
+          "${PROJECT_SOURCE_DIR}/src/astl_version.cpp"
+          "${PROJECT_SOURCE_DIR}/utils/astl_read_file_handle_cache.cpp")
 
 # Disable noisy warnings from third - party tinyexpr++ code
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")

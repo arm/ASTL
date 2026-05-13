@@ -8,6 +8,7 @@
 #  include <unistd.h>
 #endif
 #include <cstdlib>  // getenv
+#include <system_error>
 #include <thread>
 
 #include "astl_file_interface.hpp"
@@ -79,6 +80,20 @@ struct ScopedDropRoot {
 };
 #endif
 
+#ifdef __linux__
+static auto CountOpenDescriptorsForPath(const std::filesystem::path &path) -> std::size_t {
+  std::size_t count = 0;
+  for (const auto &entry : std::filesystem::directory_iterator("/proc/self/fd")) {
+    std::error_code ec;
+    const auto      target = std::filesystem::read_symlink(entry.path(), ec);
+    if (!ec && target == path) {
+      ++count;
+    }
+  }
+  return count;
+}
+#endif
+
 // Test the main functionality of FileInterface when used with full absolute file paths.
 // Covers: read, write, IsValid, HasReadPermission, HasWritePermission.
 TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") {
@@ -119,6 +134,71 @@ TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") 
     REQUIRE(sysfs.Read(file.Path(), output) == ASTL_STATUS_SUCCESS);
     REQUIRE(output == updated_content);
   }
+
+#ifdef __linux__
+  SECTION("Read() does not evict cached handles on non-fd-limit open failure") {
+    ScopedTestFile      cached_file("/tmp/test_sysfs_evict_cached", "cached");
+    ScopedTestFile      no_perm_file("/tmp/test_sysfs_evict_noperm", "data");
+    astl::FileInterface bounded_sysfs(2U);
+    std::string         output;
+
+    // Prime the cache with an open file handle
+    REQUIRE(bounded_sysfs.Read(cached_file.Path(), output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(CountOpenDescriptorsForPath(cached_file.Path()) == 1U);
+
+    // Remove read permission on a second file
+    std::filesystem::permissions(
+        no_perm_file.Path(),
+        std::filesystem::perms::owner_read | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
+        std::filesystem::perm_options::remove);
+    ScopedDropRoot drop_root;
+
+    // The permission-denied failure must not evict the already-cached handle
+    REQUIRE(bounded_sysfs.Read(no_perm_file.Path(), output) == ASTL_STATUS_FILE_OPEN_FAILED);
+    REQUIRE(CountOpenDescriptorsForPath(cached_file.Path()) == 1U);
+  }
+#endif
+
+#ifdef __linux__
+  SECTION("Read() can disable cached read handles") {
+    astl::FileInterface uncached_sysfs(0U);
+    std::string         output;
+
+    REQUIRE(uncached_sysfs.Read(file.Path(), output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == content);
+    REQUIRE(CountOpenDescriptorsForPath(file.Path()) == 0U);
+
+    output.clear();
+    REQUIRE(uncached_sysfs.Read(file.Path(), output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == content);
+    REQUIRE(CountOpenDescriptorsForPath(file.Path()) == 0U);
+  }
+
+  SECTION("Read() evicts the least recently used cached stream when capacity is reached") {
+    ScopedTestFile      first_file("/tmp/test_sysfs_lru_first", "first");
+    ScopedTestFile      second_file("/tmp/test_sysfs_lru_second", "second");
+    ScopedTestFile      third_file("/tmp/test_sysfs_lru_third", "third");
+    astl::FileInterface bounded_sysfs(2U);
+    std::string         output;
+
+    REQUIRE(bounded_sysfs.Read(first_file.Path(), output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == "first");
+    REQUIRE(bounded_sysfs.Read(second_file.Path(), output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == "second");
+    REQUIRE(bounded_sysfs.Read(first_file.Path(), output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == "first");
+
+    REQUIRE(CountOpenDescriptorsForPath(first_file.Path()) == 1U);
+    REQUIRE(CountOpenDescriptorsForPath(second_file.Path()) == 1U);
+
+    REQUIRE(bounded_sysfs.Read(third_file.Path(), output) == ASTL_STATUS_SUCCESS);
+    REQUIRE(output == "third");
+
+    REQUIRE(CountOpenDescriptorsForPath(first_file.Path()) == 1U);
+    REQUIRE(CountOpenDescriptorsForPath(second_file.Path()) == 0U);
+    REQUIRE(CountOpenDescriptorsForPath(third_file.Path()) == 1U);
+  }
+#endif
 
 #ifndef _WIN32
   SECTION("Read() reopens non-seekable files on repeated reads") {

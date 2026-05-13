@@ -120,11 +120,9 @@ void AppendArg(std::ostringstream& oss, T const& arg_val) {
 template <typename... Args>
 std::string DumpArgs(Args const&... args) {
   std::ostringstream oss;
-  bool               first = true;
+  std::string_view   separator;
 
-  // allow dead code (first is always true for zero,one args specialization)
-  // coverity[DEADCODE]
-  ((oss << (first ? "" : ", "), first = false, AppendArg(oss, args)), ...);
+  ((oss << separator, AppendArg(oss, args), separator = ", "), ...);
 
   return oss.str();
 }
@@ -299,7 +297,9 @@ class Logger {
     return logger_instance;
   }
 
-  static auto FormatMessage(std::string message) -> std::string { return message; }
+  static auto FormatMessage(std::string const& message) -> std::string { return message; }
+
+  static auto FormatMessage(std::string&& message) -> std::string { return std::move(message); }
 
  private:
   /* @brief main logging function that invokes the spdlog logger log function
