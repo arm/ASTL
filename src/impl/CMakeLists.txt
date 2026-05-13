@@ -72,6 +72,7 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/target.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_raw_samples.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_topology_manager.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_counters.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp"
           # tinyexpr++ for formulas.
           "${PROJECT_SOURCE_DIR}/third_party/tinyexpr-plusplus/tinyexpr.cpp"
@@ -178,18 +179,20 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 # Protobuf-generated code can trigger `-Wconversion` and `-Wnullability-extension`; suppress these warnings for
-# generated sources and serdes_metrics.cpp.
+# generated sources and protobuf serde sources.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-  set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp" ${GEN_FILES}
-                              PROPERTIES COMPILE_OPTIONS "-Wno-conversion;-Wno-nullability-extension")
+  set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_counters.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp"
+    ${GEN_FILES} PROPERTIES COMPILE_OPTIONS "-Wno-conversion;-Wno-nullability-extension")
 elseif(MSVC)
   # Suppress noisy warnings from protobuf - generated code and includes when compiling on MSVC : -C4267 : size_t->int
   # conversion in generated accessors - C4100 : unreferenced parameters in generated helper functions
   foreach(gen_src IN LISTS GEN_FILES)
     set_source_files_properties(${gen_src} APPEND_STRING PROPERTY COMPILE_FLAGS " /wd4267 /wd4100")
   endforeach()
-  set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp" APPEND_STRING PROPERTY
-                              COMPILE_FLAGS " /wd4267 /wd4100")
+  set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_counters.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp"
+    APPEND_STRING PROPERTY COMPILE_FLAGS " /wd4267 /wd4100")
 endif()
 
 target_link_libraries(${LIBRARY_NAME} PRIVATE protobuf::libprotobuf)

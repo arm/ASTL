@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <random>
+#include <string_view>
 
 #include "../../mock_classes.hpp"
 #include "../../test_utilities.hpp"
@@ -20,6 +21,7 @@
 #include "metric/metric_manager.hpp"
 #include "metric/rate_metric.hpp"
 #include "metric/sampled_value_metric.hpp"
+#include "operation/scmi_operation_builder.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "serdes/metrics.pb.h"
 #include "serdes/protobuf_serdes.hpp"
@@ -98,6 +100,31 @@ astl::protobuf::MetricManager BuildValidMetricManagerProto() {
   cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
 
   return proto_mgr;
+}
+
+auto AddCounterToMetricManagerProto(astl::protobuf::MetricManager& proto_mgr, std::string_view counter_id = "counter")
+    -> astl::protobuf::RawMetric* {
+  auto* raw = proto_mgr.mutable_counters()->add_metrics();
+  raw->set_metric_id(std::string{counter_id});
+  raw->add_target_ids("tlm-0");
+
+  auto* cfg = raw->mutable_config();
+  cfg->set_metric_name(std::string{counter_id});
+  cfg->set_description("unit-test counter");
+  cfg->set_units(static_cast<astl::protobuf::AstlUnits>(ASTL_UNITS_NONE));
+  cfg->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+  cfg->set_input_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_UINT64));
+  cfg->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_VALUE));
+  cfg->set_identifier(static_cast<astl::protobuf::AstlMetricIdentifier>(ASTL_METRIC_IDENTIFIER_UNKNOWN));
+  cfg->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::SCMI));
+
+  return raw;
+}
+
+auto MakeCaps(astl::CollectorType collector_type) -> astl::Capabilities {
+  std::vector<astl::CollectorCapability> collector_caps{astl::CollectorCapability{collector_type}};
+  std::vector<astl::SystemCapability>    system_caps{astl::SystemCapability{}};
+  return astl::Capabilities{std::move(collector_caps), std::move(system_caps)};
 }
 
 }  // namespace
@@ -555,57 +582,53 @@ TEST_CASE("Serialize(IMetricManager) rejects non-concrete metric manager", "[Met
 }
 
 TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[MetricManager][protobuf]") {
-  // Arrange: build a real MetricManager via Orchestrator and inject one metric
-  const astl::ITarget* tgt = InstallSingleScmiTargetTlm0();
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(
+      MakeTarget("tlm-0", "unit-test target", astl::CollectorType::SCMI, "0xCAFEBABECAFEBABECAFEBABEBEEF0000"));
+  const astl::ITarget* tgt = targets[0].get();
+  REQUIRE(tgt != nullptr);
 
-  auto orch_expected = astl::Orchestrator::GetInstance();
-  REQUIRE(orch_expected.has_value());
-  auto* orch = orch_expected->get().get();
-  REQUIRE(orch != nullptr);
-
-  astl::IMetricManager* metric_manager_interface = orch->GetMetricManager().get();
-  REQUIRE(metric_manager_interface != nullptr);
-
-  auto* metric_mgr = dynamic_cast<astl::MetricManager*>(metric_manager_interface);
-  REQUIRE(metric_mgr != nullptr);
-
-  auto cfg = std::make_unique<astl::MetricConfig>("test_metric", "unit-test metric", ASTL_UNITS_CELSIUS,
-                                                  ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
-                                                  astl::CollectorType::SCMI, astl::NullOperationBuilder{});
+  auto cfg = std::make_unique<astl::MetricConfig>(
+      "test_metric", "unit-test metric", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+      ASTL_METRIC_VALUE, astl::CollectorType::SCMI, astl::ScmiOperationBuilder{astl::ScmiDataEventId{0x24}});
   REQUIRE(cfg != nullptr);
 
-  auto metric = std::make_unique<astl::SampledValueMetric>(cfg.get(),  // const MetricConfig*
-                                                           tgt,        // const ITarget*
-                                                           nullptr);   // IProcessedSampleSink*
-  REQUIRE(metric != nullptr);
-  auto* metric_ptr = metric.get();
+  astl::MetricManager metric_manager{MakeCaps(astl::CollectorType::SCMI)};
+  REQUIRE(metric_manager.RegisterMetric(std::move(cfg), {tgt}) == ASTL_STATUS_SUCCESS);
 
-  astl::MetricManagerTestAccessor::InjectMetric(*metric_mgr, std::move(metric), std::move(cfg), tgt);
-  astl::MetricManagerTestAccessor::InjectOperation(*metric_mgr, tgt, 42U, metric_ptr);  // NOLINT
+  auto metrics_or_err = metric_manager.GetAvailableMetrics(tgt);
+  REQUIRE(metrics_or_err.has_value());
+  REQUIRE(metrics_or_err->size() == 1);
+  const astl_metric_handle_t metric_handle = metrics_or_err->front();
+
+  auto operations_or_err = metric_manager.GetRequiredOperations({&metric_handle, 1}, tgt);
+  REQUIRE(operations_or_err.has_value());
+  REQUIRE(operations_or_err->operationsOnSample.size() == 1);
+  const auto operation_id = operations_or_err->operationsOnSample.front()->GetId();
 
   // Act: serialize via the IMetricManager overload (dynamic_cast inside)
   std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
-  const auto        status = astl::ProtobufSerDes::Serialize(*metric_manager_interface, cache_stream);
+  const auto        status =
+      astl::ProtobufSerDes::Serialize(static_cast<const astl::IMetricManager&>(metric_manager), cache_stream);
 
   // Assert
   REQUIRE(status == ASTL_STATUS_SUCCESS);
   REQUIRE(cache_stream.tellp() > 0);
 
   cache_stream.seekg(0);
-  auto rebuilt_or_err =
-      astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::IMetricManager>>(cache_stream, orch->GetTargets());
+  auto rebuilt_or_err = astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::IMetricManager>>(cache_stream, targets);
   REQUIRE(rebuilt_or_err.has_value());
 
   auto rebuilt_mgr = std::move(rebuilt_or_err.value());
   REQUIRE(rebuilt_mgr != nullptr);
 
   // Basic sanity: metric still available on the same target
-  auto metrics_or_err = rebuilt_mgr->GetAvailableMetrics(tgt);
-  REQUIRE(metrics_or_err.has_value());
-  auto handles = metrics_or_err.value();
+  auto rebuilt_metrics_or_err = rebuilt_mgr->GetAvailableMetrics(tgt);
+  REQUIRE(rebuilt_metrics_or_err.has_value());
+  auto handles = rebuilt_metrics_or_err.value();
   REQUIRE(handles.size() == 1);
 
-  const auto* rebuilt_handle = static_cast<const astl::MetricHandle*>(metrics_or_err.value()[0]);
+  const auto* rebuilt_handle = static_cast<const astl::MetricHandle*>(rebuilt_metrics_or_err.value()[0]);
   REQUIRE(rebuilt_handle != nullptr);
   REQUIRE(rebuilt_handle->config != nullptr);
 
@@ -622,13 +645,121 @@ TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[Metric
   REQUIRE(rebuilt_it->second != nullptr);
 
   astl::ClockCorrelationMap corr;
-  corr[42U] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}}, uint64_t{0},
-                                              astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  corr[operation_id] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}},
+                                                       uint64_t{0}, astl::MakeTickRatio<astl::SampleMicroseconds>()};
   rebuilt_mgr->SetClockCorrelations(corr);
 
   astl::RawSamplesMap samples_map;
-  samples_map[tgt] = {MakeSample(42U, AstlValue{uint64_t{99}}, 1000)};  // NOLINT
+  samples_map[tgt] = {MakeSample(operation_id, AstlValue{uint64_t{99}}, 1000)};  // NOLINT
   REQUIRE(rebuilt_mgr->ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("Serialize(IMetricManager) round-trips counters through MetricManager", "[MetricManager][protobuf]") {
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(
+      MakeTarget("tlm-0", "unit-test target", astl::CollectorType::SCMI, "0xCAFEBABECAFEBABECAFEBABEBEEF0000"));
+  const astl::ITarget* target = targets[0].get();
+  REQUIRE(target != nullptr);
+
+  astl::MetricManager metric_manager{MakeCaps(astl::CollectorType::SCMI)};
+  auto                counter_config = std::make_unique<astl::MetricConfig>(
+      "raw_counter", "unit-test counter", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+      ASTL_METRIC_VALUE, astl::CollectorType::SCMI, astl::ScmiOperationBuilder{astl::ScmiDataEventId{0x42}},
+      astl::IdentityFormula{}, ASTL_VALUE_UINT64, std::vector<std::string>{}, "counter::raw_counter");
+
+  REQUIRE(metric_manager.RegisterCounter(std::move(counter_config), {target}) == ASTL_STATUS_SUCCESS);
+
+  auto counters_or_err = metric_manager.GetAvailableCounters(target);
+  REQUIRE(counters_or_err.has_value());
+  REQUIRE(counters_or_err->size() == 1);
+
+  const astl_counter_handle_t counter_handle = counters_or_err->front();
+  auto operations_or_err = metric_manager.GetCounterRequiredOperations({&counter_handle, 1}, target);
+  REQUIRE(operations_or_err.has_value());
+  REQUIRE(operations_or_err->operationsOnSample.size() == 1);
+  const auto operation_id = operations_or_err->operationsOnSample.front()->GetId();
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(astl::ProtobufSerDes::Serialize(static_cast<const astl::IMetricManager&>(metric_manager), cache_stream) ==
+          ASTL_STATUS_SUCCESS);
+
+  cache_stream.seekg(0);
+  auto rebuilt_or_err = astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::IMetricManager>>(cache_stream, targets);
+  REQUIRE(rebuilt_or_err.has_value());
+  auto rebuilt_mgr = std::move(rebuilt_or_err.value());
+  REQUIRE(rebuilt_mgr != nullptr);
+
+  auto rebuilt_counters_or_err = rebuilt_mgr->GetAvailableCounters(target);
+  REQUIRE(rebuilt_counters_or_err.has_value());
+  REQUIRE(rebuilt_counters_or_err->size() == 1);
+
+  astl_counter_props_t props{};
+  REQUIRE(rebuilt_mgr->GetCounterProperties(rebuilt_counters_or_err->front(), &props) == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::string{props.name} == "raw_counter");
+  REQUIRE(std::string{props.description} == "unit-test counter");
+  REQUIRE(props.value_type == ASTL_VALUE_UINT64);
+
+  astl::ClockCorrelationMap corr;
+  corr[operation_id] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}},
+                                                       uint64_t{0}, astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  rebuilt_mgr->SetClockCorrelations(corr);
+
+  astl::RawSamplesMap samples_map;
+  samples_map[target] = {MakeSample(operation_id, AstlValue{uint64_t{99}}, 1000)};  // NOLINT
+  REQUIRE(rebuilt_mgr->ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("Deserialize<MetricManager> rejects malformed counter payloads", "[MetricManager][protobuf]") {
+  InstallSingleScmiTargetTlm0();
+  const auto& orch    = astl::Orchestrator::GetInstance()->get();
+  const auto& targets = orch->GetTargets();
+
+  auto deserialize = [&targets](astl::protobuf::MetricManager& proto_mgr) {
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+    cache_stream.seekg(0);
+    return astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+  };
+
+  SECTION("missing target ids") {
+    auto  proto_mgr = BuildValidMetricManagerProto();
+    auto* raw       = AddCounterToMetricManagerProto(proto_mgr);
+    raw->clear_target_ids();
+
+    auto mgr_or_err = deserialize(proto_mgr);
+    REQUIRE_FALSE(mgr_or_err.has_value());
+    REQUIRE(mgr_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  SECTION("duplicate target ids") {
+    auto  proto_mgr = BuildValidMetricManagerProto();
+    auto* raw       = AddCounterToMetricManagerProto(proto_mgr);
+    raw->add_target_ids("tlm-0");
+
+    auto mgr_or_err = deserialize(proto_mgr);
+    REQUIRE_FALSE(mgr_or_err.has_value());
+    REQUIRE(mgr_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  SECTION("unknown target id") {
+    auto  proto_mgr = BuildValidMetricManagerProto();
+    auto* raw       = AddCounterToMetricManagerProto(proto_mgr);
+    raw->set_target_ids(0, "missing-target");
+
+    auto mgr_or_err = deserialize(proto_mgr);
+    REQUIRE_FALSE(mgr_or_err.has_value());
+    REQUIRE(mgr_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  SECTION("duplicate counter ids") {
+    auto proto_mgr = BuildValidMetricManagerProto();
+    AddCounterToMetricManagerProto(proto_mgr, "duplicate_counter");
+    AddCounterToMetricManagerProto(proto_mgr, "duplicate_counter");
+
+    auto mgr_or_err = deserialize(proto_mgr);
+    REQUIRE_FALSE(mgr_or_err.has_value());
+    REQUIRE(mgr_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
 }
 
 TEST_CASE("Deserialize<vector<MetricHandle>> rejects malformed metric payloads", "[MetricHandle][protobuf]") {

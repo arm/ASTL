@@ -119,9 +119,9 @@ message ClockCorrelationEntry {
 
 message MetricManager {
   repeated CollectorType capabilities = 1;
-  // counter handles
   RawMetricVec metrics = 2;
   repeated OperationToMetric operation_to_metric_map = 3;
   repeated MetricGroup metric_groups = 4;
   repeated ClockCorrelationEntry clock_correlations = 5;
+  RawMetricVec counters = 6;
 }

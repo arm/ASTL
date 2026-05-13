@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <format>
+#include <string_view>
 #include <type_traits>
 
 #include "astl/astl_errors.h"
@@ -18,10 +19,14 @@
 #include "metric/sampled_value_metric.hpp"
 #include "serdes/metrics.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
 #include "serdes/protobuf_serdes.hpp"
+#include "serdes/serdes_metrics_detail.hpp"
 
 namespace astl::ProtobufSerDes {
 
 namespace detail {
+
+template <typename>
+inline constexpr bool kAlwaysFalse = false;
 
 static auto ToProtoUnits(astl_units_t units) -> astl::protobuf::AstlUnits {
   return units == ASTL_UNITS_UNKNOWN ? astl::protobuf::ASTL_UNITS_UNKNOWN_PROTO
@@ -73,59 +78,45 @@ static auto FromProtoCollectorType(astl::protobuf::CollectorType collector_type)
                                                                   : static_cast<CollectorType>(collector_type);
 }
 
-static auto SerializeFormulaStep(const FormulaPipeline::PipelineStep& step, astl::protobuf::FormulaStep* out)
-    -> astl_status_code {
-  return std::visit(
-      [out](const auto& impl) -> astl_status_code {
+static void SerializeFormulaStep(const FormulaPipeline::PipelineStep& step, astl::protobuf::FormulaStep* out) {
+  std::visit(
+      [out](const auto& impl) {
         using T = std::decay_t<decltype(impl)>;
         if constexpr (std::is_same_v<T, IdentityFormula>) {
           out->set_identity(true);
-          return ASTL_STATUS_SUCCESS;
-        }
-        if constexpr (std::is_same_v<T, ScalingFormula>) {
+        } else if constexpr (std::is_same_v<T, ScalingFormula>) {
           auto* scaling = out->mutable_scaling();
           scaling->set_numerator(impl.GetNumerator());
           scaling->set_denominator(impl.GetDenominator());
-          return ASTL_STATUS_SUCCESS;
-        }
-        if constexpr (std::is_same_v<T, ExpressionFormula>) {
+        } else if constexpr (std::is_same_v<T, ExpressionFormula>) {
           out->set_expression(std::string{impl.GetExpression()});
-          return ASTL_STATUS_SUCCESS;
+        } else {
+          static_assert(kAlwaysFalse<T>, "Unhandled formula pipeline step type");
         }
-        return ASTL_STATUS_INTERNAL_ERROR;
       },
       step);
 }
 
-static auto SerializeFormula(const AnyFormula& formula, astl::protobuf::MetricFormula* out) -> astl_status_code {
-  return std::visit(
-      [out](const auto& impl) -> astl_status_code {
+static void SerializeFormula(const AnyFormula& formula, astl::protobuf::MetricFormula* out) {
+  std::visit(
+      [out](const auto& impl) {
         using T = std::decay_t<decltype(impl)>;
         if constexpr (std::is_same_v<T, IdentityFormula>) {
           out->mutable_identity();
-          return ASTL_STATUS_SUCCESS;
-        }
-        if constexpr (std::is_same_v<T, ScalingFormula>) {
+        } else if constexpr (std::is_same_v<T, ScalingFormula>) {
           auto* scaling = out->mutable_scaling();
           scaling->set_numerator(impl.GetNumerator());
           scaling->set_denominator(impl.GetDenominator());
-          return ASTL_STATUS_SUCCESS;
-        }
-        if constexpr (std::is_same_v<T, ExpressionFormula>) {
+        } else if constexpr (std::is_same_v<T, ExpressionFormula>) {
           out->mutable_expression()->set_expression(std::string{impl.GetExpression()});
-          return ASTL_STATUS_SUCCESS;
-        }
-        if constexpr (std::is_same_v<T, FormulaPipeline>) {
+        } else if constexpr (std::is_same_v<T, FormulaPipeline>) {
           auto* pipeline = out->mutable_pipeline();
           for (const auto& step : impl.Steps()) {
-            auto status = SerializeFormulaStep(step, pipeline->add_steps());
-            if (status != ASTL_STATUS_SUCCESS) {
-              return status;
-            }
+            SerializeFormulaStep(step, pipeline->add_steps());
           }
-          return ASTL_STATUS_SUCCESS;
+        } else {
+          static_assert(kAlwaysFalse<T>, "Unhandled formula type");
         }
-        return ASTL_STATUS_INTERNAL_ERROR;
       },
       formula);
 }
@@ -209,7 +200,7 @@ static auto DeserializeFormula(const astl::protobuf::MetricFormula& serialized_f
  *       string handles are discarded. If this behavior is not needed, consider
  *       removing these calls to reduce overhead.
  */
-static auto SerializeBasicMetricConfig(const MetricConfig& config)
+auto SerializeBasicMetricConfig(const MetricConfig& config)
     -> std::expected<astl::protobuf::MetricConfig, astl_status_code> {
   astl::protobuf::MetricConfig out;
 
@@ -226,11 +217,7 @@ static auto SerializeBasicMetricConfig(const MetricConfig& config)
   }
 
   out.set_collector_type(ToProtoCollectorType(config.GetCollectorType()));
-  auto formula_status = SerializeFormula(config.GetFormula(), out.mutable_formula());
-  if (formula_status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("SerializeBasicMetricConfig: failed to serialize formula for metric {}", config.Id());
-    return std::unexpected(formula_status);
-  }
+  SerializeFormula(config.GetFormula(), out.mutable_formula());
 
   return out;
 }
@@ -300,7 +287,7 @@ static auto SerializeIMetric(const MetricConfig& metric_config, const ITarget* t
   }
 }
 
-static auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& proto_cfg, const std::string& metric_id)
+auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& proto_cfg, const std::string& metric_id)
     -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code> {
   const std::string& name        = proto_cfg.metric_name();
   const std::string& description = proto_cfg.description();
@@ -831,8 +818,65 @@ static auto RebuildMetricHandles(const astl::protobuf::MetricManager&         pr
   return rebuilt_metric_handles;
 }
 
-static auto RebuildOperationMap(const astl::protobuf::MetricManager&              proto_manager,
-                                const std::vector<std::unique_ptr<MetricHandle>>& metric_handles)
+static auto FindMetricForOperationMapEntry(const std::vector<std::unique_ptr<MetricHandle>>&  metric_handles,
+                                           const std::vector<std::unique_ptr<CounterHandle>>& counter_handles,
+                                           const std::string& metric_id, const std::string& target_id)
+    -> std::expected<std::pair<const ITarget*, IMetric*>, astl_status_code> {
+  const auto metric_handle_it =
+      std::find_if(metric_handles.begin(), metric_handles.end(), [&](const std::unique_ptr<MetricHandle>& handle) {
+        return handle && handle->config && handle->config->Id() == metric_id;
+      });
+
+  if (metric_handle_it != metric_handles.end()) {
+    MetricHandle* handle = metric_handle_it->get();
+    const auto    target_it =
+        std::find_if(handle->target_to_metric_map.begin(), handle->target_to_metric_map.end(), [&](const auto& pair) {
+          const ITarget* target = pair.first;
+          return target && target->Name() == target_id;
+        });
+
+    if (target_it == handle->target_to_metric_map.end() || !target_it->second) {
+      ASTL_LOG_ERROR(
+          "Deserialize<MetricManager>: operation map refers to unknown metric target (metric_id='{}', "
+          "target_id='{}')",
+          metric_id, target_id);
+      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    }
+
+    return std::pair<const ITarget*, IMetric*>{target_it->first, target_it->second.get()};
+  }
+
+  const auto counter_handle_it =
+      std::find_if(counter_handles.begin(), counter_handles.end(), [&](const std::unique_ptr<CounterHandle>& handle) {
+        return handle && handle->config && handle->config->Id() == metric_id;
+      });
+
+  if (counter_handle_it == counter_handles.end()) {
+    ASTL_LOG_ERROR("Deserialize<MetricManager>: operation map refers to unknown metric_id '{}'", metric_id);
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  CounterHandle* handle = counter_handle_it->get();
+  const auto     target_it =
+      std::find_if(handle->target_to_counter_map.begin(), handle->target_to_counter_map.end(), [&](const auto& pair) {
+        const ITarget* target = pair.first;
+        return target && target->Name() == target_id;
+      });
+
+  if (target_it == handle->target_to_counter_map.end() || !target_it->second) {
+    ASTL_LOG_ERROR(
+        "Deserialize<MetricManager>: operation map refers to unknown counter target (metric_id='{}', "
+        "target_id='{}')",
+        metric_id, target_id);
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  return std::pair<const ITarget*, IMetric*>{target_it->first, target_it->second.get()};
+}
+
+static auto RebuildOperationMap(const astl::protobuf::MetricManager&               proto_manager,
+                                const std::vector<std::unique_ptr<MetricHandle>>&  metric_handles,
+                                const std::vector<std::unique_ptr<CounterHandle>>& counter_handles)
     -> std::expected<MetricManager::TargetOperationToMetricMap, astl_status_code> {
   MetricManager::TargetOperationToMetricMap target_to_operation_to_metric_map;
 
@@ -841,34 +885,13 @@ static auto RebuildOperationMap(const astl::protobuf::MetricManager&            
     const std::string& metric_id = entry.metric_id();
     const std::string& target_id = entry.target_id();
 
-    // 1) find the MetricHandle with this metric_id
-    const auto handle_it =
-        std::find_if(metric_handles.begin(), metric_handles.end(), [&](const std::unique_ptr<MetricHandle>& handle) {
-          return handle && handle->config && handle->config->Id() == metric_id;
-        });
-
-    if (handle_it == metric_handles.end()) {
-      ASTL_LOG_ERROR("Deserialize<MetricManager>: op_id {} refers to unknown metric_id '{}'", op_id, metric_id);
-      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    auto metric_or_err = FindMetricForOperationMapEntry(metric_handles, counter_handles, metric_id, target_id);
+    if (!metric_or_err) {
+      ASTL_LOG_ERROR("Deserialize<MetricManager>: op_id {} could not be resolved", op_id);
+      return std::unexpected(metric_or_err.error());
     }
 
-    MetricHandle* handle = handle_it->get();
-
-    // 2) within that handle, find the metric for the target with target_id
-    const auto target_it =
-        std::find_if(handle->target_to_metric_map.begin(), handle->target_to_metric_map.end(), [&](const auto& pair) {
-          const ITarget* target = pair.first;
-          return target && target->Name() == target_id;
-        });
-
-    if (target_it == handle->target_to_metric_map.end() || !target_it->second) {
-      ASTL_LOG_ERROR("Deserialize<MetricManager>: op_id {} refers to unknown (metric_id='{}', target_id='{}')", op_id,
-                     metric_id, target_id);
-      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    }
-
-    const ITarget* target       = target_it->first;
-    IMetric*       found_metric = target_it->second.get();
+    const auto& [target, found_metric] = *metric_or_err;
 
     ASTL_LOG_DEBUG("RebuildOperationMap: mapping operation id {} to metric '{}' on target '{}'", op_id, metric_id,
                    target_id);
@@ -902,6 +925,34 @@ static auto RebuildMetricGroupDescriptions(const astl::protobuf::MetricManager& 
   }
 
   return metric_group_descriptions;
+}
+
+template <typename AddMetricToGroups>
+static auto RebuildMetricGroups(std::vector<std::unique_ptr<MetricGroup>>&  metric_groups,
+                                std::vector<astl_metric_group_handle_t>&    metric_group_api_handles,
+                                std::vector<std::unique_ptr<MetricHandle>>& metric_handles,
+                                AddMetricToGroups add_metric_to_groups) -> std::expected<void, astl_status_code> {
+  metric_groups.clear();
+  metric_group_api_handles.clear();
+  for (auto& handle_ptr : metric_handles) {
+    const MetricConfig* cfg = handle_ptr->config.get();
+    if (!cfg || cfg->MetricGroups().empty()) {
+      continue;
+    }
+
+    std::vector<const ITarget*> local_targets{};
+    local_targets.reserve(handle_ptr->target_to_metric_map.size());
+    for (auto& [target, metric] : handle_ptr->target_to_metric_map) {
+      local_targets.push_back(target);
+    }
+
+    auto status = add_metric_to_groups(handle_ptr.get(), cfg, local_targets);
+    if (status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(status);
+    }
+  }
+
+  return {};
 }
 
 }  // namespace detail
@@ -970,6 +1021,11 @@ auto Serialize(const MetricManager& metric_manager, std::ostream& output_stream)
     return metrics_status.error();
   }
 
+  auto counters_status = detail::SerializeCounterHandles(metric_manager._counter_handles, proto_mgr);
+  if (!counters_status) {
+    return counters_status.error();
+  }
+
   auto group_status = detail::SerializeMetricGroups(metric_manager._metric_groups, proto_mgr);
   if (group_status != ASTL_STATUS_SUCCESS) {
     return group_status;
@@ -1025,10 +1081,6 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream&                  
   auto caps           = detail::BuildCapabilities(proto_manager);
   auto metric_manager = std::make_unique<MetricManager>(std::move(caps));
 
-  // TODO(ASTL-408) counters: not serialized yet
-  metric_manager->_counter_handles.clear();
-  metric_manager->_target_to_counters_map.clear();
-
   auto rebuilt_metrics_or_err = detail::RebuildMetricHandles(proto_manager, targets);
   if (!rebuilt_metrics_or_err) {
     return std::unexpected(rebuilt_metrics_or_err.error());
@@ -1040,28 +1092,27 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream&                  
   metric_manager->_metric_handles.swap(rebuilt_metrics.metric_handles);
   metric_manager->_target_to_metrics_map.swap(rebuilt_metrics.target_to_metrics_map);
 
-  // metric groups
-  metric_manager->_metric_groups.clear();
-  metric_manager->_metric_group_api_handles.clear();
-  for (auto& handle_ptr : metric_manager->_metric_handles) {
-    const MetricConfig* cfg = handle_ptr->config.get();
-    if (!cfg || cfg->MetricGroups().empty()) {
-      continue;
-    }
+  auto rebuilt_counters_or_err = detail::RebuildCounterHandles(proto_manager, targets, metric_manager->_capabilities);
+  if (!rebuilt_counters_or_err) {
+    return std::unexpected(rebuilt_counters_or_err.error());
+  }
+  auto& rebuilt_counters = *rebuilt_counters_or_err;
+  ASTL_LOG_DEBUG("Deserialize<MetricManager>: rebuilt {} counter handles", rebuilt_counters.counter_handles.size());
+  metric_manager->_counter_handles.swap(rebuilt_counters.counter_handles);
+  metric_manager->_target_to_counters_map.swap(rebuilt_counters.target_to_counters_map);
 
-    std::vector<const ITarget*> local_targets{};
-    local_targets.reserve(handle_ptr->target_to_metric_map.size());
-    for (auto& [target, metric] : handle_ptr->target_to_metric_map) {
-      local_targets.push_back(target);
-    }
-
-    auto status = metric_manager->AddMetricToGroups(handle_ptr.get(), cfg, local_targets);
-    if (status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(status);
-    }
+  auto metric_groups_status = detail::RebuildMetricGroups(
+      metric_manager->_metric_groups, metric_manager->_metric_group_api_handles, metric_manager->_metric_handles,
+      [&metric_manager](astl_metric_handle_t metric_handle, const MetricConfig* metric_config,
+                        const std::vector<const ITarget*>& local_targets) {
+        return metric_manager->AddMetricToGroups(metric_handle, metric_config, local_targets);
+      });
+  if (!metric_groups_status) {
+    return std::unexpected(metric_groups_status.error());
   }
 
-  auto op_map_or_err = detail::RebuildOperationMap(proto_manager, metric_manager->_metric_handles);
+  auto op_map_or_err =
+      detail::RebuildOperationMap(proto_manager, metric_manager->_metric_handles, metric_manager->_counter_handles);
   if (!op_map_or_err) {
     return std::unexpected(op_map_or_err.error());
   }
@@ -1075,6 +1126,11 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream&                  
   for (const auto& handle_ptr : metric_manager->_metric_handles) {
     for (const auto& [target, metric_ptr] : handle_ptr->target_to_metric_map) {
       metric_ptr->SetProcessedSampleSink(metric_manager.get());
+    }
+  }
+  for (const auto& handle_ptr : metric_manager->_counter_handles) {
+    for (const auto& [target, counter_ptr] : handle_ptr->target_to_counter_map) {
+      counter_ptr->SetProcessedSampleSink(metric_manager.get());
     }
   }
 
