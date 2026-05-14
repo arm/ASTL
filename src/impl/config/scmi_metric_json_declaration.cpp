@@ -132,7 +132,7 @@ auto BuildScmiUniqueMetricName(std::string_view                         metric_n
   const auto component =
       scmi_metric_declaration.component.empty() ? std::string{"component"} : scmi_metric_declaration.component;
   const auto instance = scmi_metric_declaration.instance.empty() ? std::string{"0"} : scmi_metric_declaration.instance;
-  return std::format("{}_{}_{}", metric_name, component, instance);
+  return std::format("{}.{}.{}", component, instance, metric_name);
 }
 
 auto BuildScmiMetricId(std::string_view metric_name, const ITarget& target) -> std::string {

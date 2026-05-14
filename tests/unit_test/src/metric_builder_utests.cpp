@@ -429,7 +429,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from tempora
   astl_metric_props_t metric_props{};
   metric_props.size = sizeof(astl_metric_props_t);
   REQUIRE(result.value()->GetProperties((*metrics_or_error)[0], &metric_props) == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string{metric_props.name} == "SoC Power_SOC_0");
+  REQUIRE(std::string{metric_props.name} == "SOC.0.SoC Power");
 
   astl_counter_props_t counter_props{};
   counter_props.size = sizeof(astl_counter_props_t);
@@ -465,7 +465,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from wide-on
   astl_metric_props_t metric_props{};
   metric_props.size = sizeof(astl_metric_props_t);
   REQUIRE(result.value()->GetProperties((*metrics_or_error)[0], &metric_props) == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string{metric_props.name} == "SoC Power_SOC_0");
+  REQUIRE(std::string{metric_props.name} == "SOC.0.SoC Power");
 
   astl_counter_props_t counter_props{};
   counter_props.size = sizeof(astl_counter_props_t);

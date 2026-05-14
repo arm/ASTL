@@ -299,12 +299,12 @@ TEST_CASE("CreateMetricConfig for Finite Set Metric", "[ConfigManager][FiniteSet
     for (auto& cfg_ptr : metric_configs_on_targets) {
       auto* fs_cfg = dynamic_cast<astl::FiniteSetMetricConfig*>(cfg_ptr.first.get());
       REQUIRE(fs_cfg != nullptr);
-      REQUIRE(fs_cfg->Name() == "P-State_AP_0");
+      REQUIRE(fs_cfg->Name() == "AP.0.P-State");
       by_id[fs_cfg->Id()] = fs_cfg;
     }
-    REQUIRE(by_id.contains("P-State_AP_0__scmi__tlm-0"));
+    REQUIRE(by_id.contains("AP.0.P-State__scmi__tlm-0"));
 
-    auto* ap0_cfg = by_id.at("P-State_AP_0__scmi__tlm-0");
+    auto* ap0_cfg = by_id.at("AP.0.P-State__scmi__tlm-0");
     REQUIRE(ap0_cfg->MetricType() == ASTL_METRIC_FINITE_SET_VALUE);
 
     // Expect 4 unique values
@@ -623,8 +623,8 @@ TEST_CASE("ParseConfiguration missing identifier defaults to unknown/UNKNOWN", "
   REQUIRE(metric_configs_result);
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
-  REQUIRE(metric_configs.begin()->first->Name() == "CPU Power_AP_0");
-  REQUIRE(metric_configs.begin()->first->Id() == "CPU Power_AP_0__scmi__tlm-0");
+  REQUIRE(metric_configs.begin()->first->Name() == "AP.0.CPU Power");
+  REQUIRE(metric_configs.begin()->first->Id() == "AP.0.CPU Power__scmi__tlm-0");
   REQUIRE(metric_configs.begin()->first->Identifier() == ASTL_METRIC_IDENTIFIER_UNKNOWN);
 }
 
@@ -756,13 +756,13 @@ TEST_CASE("CreateScmiMetricConfigs scopes SCMI metric ids per target", "[ConfigM
 
   std::unordered_set<std::string> metric_ids;
   for (auto& [config, scoped_targets] : *metric_configs_result) {
-    REQUIRE(config->Name() == "CPU Power_AP_0");
+    REQUIRE(config->Name() == "AP.0.CPU Power");
     REQUIRE(scoped_targets.size() == 1);
     REQUIRE(metric_ids.insert(config->Id()).second);
   }
 
-  REQUIRE(metric_ids.contains("CPU Power_AP_0__scmi__tlm-0"));
-  REQUIRE(metric_ids.contains("CPU Power_AP_0__scmi__tlm-1"));
+  REQUIRE(metric_ids.contains("AP.0.CPU Power__scmi__tlm-0"));
+  REQUIRE(metric_ids.contains("AP.0.CPU Power__scmi__tlm-1"));
 }
 
 TEST_CASE("CreateScmiMetricConfigs maps Count units to ASTL_UNITS_COUNT", "[ConfigManager][Units]") {
