@@ -5,6 +5,9 @@
 #ifndef OPERATION_BUILDER_HPP_
 #define OPERATION_BUILDER_HPP_
 
+#include <concepts>
+#include <variant>
+
 #include "operation/operation.hpp"  // defines OperationSequence and OperationBuilder concept
 #include "target.hpp"
 
@@ -39,6 +42,9 @@ using AnyOperationBuilder = std::variant<NullOperationBuilder,
                                          LibsensorsOperationBuilder,
 #endif
                                          ProcfsOperationBuilder, ScmiOperationBuilder, ScmiMultiTargetOperationBuilder>;
+
+template <typename OperationBuilderType>
+concept AnyOperationBuilderCompatible = std::constructible_from<AnyOperationBuilder, OperationBuilderType&&>;
 
 /**
  * @brief Use the given builder to create operations for the given target

@@ -16,6 +16,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "astl/astl.h"
@@ -61,10 +62,11 @@ class MetricConfig {
    * @param metric_groups  Optional group names this metric belongs to.
    * @param metric_id      Optional stable internal identifier. Defaults to the metric name when omitted.
    */
+  template <AnyOperationBuilderCompatible OperationBuilderType>
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                         astl_value_type_t value_type, astl_metric_identifier_t identifier,
                         astl_metric_type_t metric_type, CollectorType collector_type,
-                        AnyOperationBuilder operation_builder, AnyFormula formula = IdentityFormula{},
+                        OperationBuilderType &&operation_builder, AnyFormula formula = IdentityFormula{},
                         astl_value_type_t        input_value_type = ASTL_VALUE_UNKNOWN,
                         std::vector<std::string> metric_groups = {}, std::string metric_id = {})
       : _metric_id(metric_id.empty() ? name : std::move(metric_id)),
@@ -78,7 +80,7 @@ class MetricConfig {
         _identifier(identifier),
         _metric_groups(std::move(metric_groups)),
         _collector_type(collector_type),
-        _operation_builder(std::move(operation_builder)),
+        _operation_builder(std::forward<OperationBuilderType>(operation_builder)),
         _formula(std::move(formula)) {}
 
   // Delete copy operations since ExpressionFormula is move-only
@@ -290,16 +292,17 @@ class FiniteSetMetricConfig final : public MetricConfig {
    * @param state_info      Mapping from finite set values to state info (label + description).
    * @param formula         Formula for processing raw samples (ExpressionFormula or IdentityFormula).
    */
+  template <AnyOperationBuilderCompatible OperationBuilderType>
   explicit FiniteSetMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type,
                                  astl_metric_identifier_t identifier, CollectorType collector_type,
-                                 AnyOperationBuilder operation_builder, FiniteSet finite_set, ValueToInfoMap state_info,
-                                 AnyFormula               formula          = IdentityFormula{},
+                                 OperationBuilderType &&operation_builder, FiniteSet finite_set,
+                                 ValueToInfoMap state_info, AnyFormula formula = IdentityFormula{},
                                  astl_value_type_t        input_value_type = ASTL_VALUE_UNKNOWN,
                                  std::vector<std::string> metric_groups = {}, std::string metric_id = {})
       : MetricConfig(name, description, units, value_type, identifier, metric_type, collector_type,
-                     std::move(operation_builder), std::move(formula), input_value_type, std::move(metric_groups),
-                     std::move(metric_id)),
+                     std::forward<OperationBuilderType>(operation_builder), std::move(formula), input_value_type,
+                     std::move(metric_groups), std::move(metric_id)),
         _finite_set(std::move(finite_set)),
         _state_info(std::move(state_info)) {}
 
