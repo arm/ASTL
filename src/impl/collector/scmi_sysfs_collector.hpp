@@ -12,6 +12,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -197,6 +198,15 @@ class ScmiSysfsCollector : public ICollector {
    */
   void RollbackConfigurationState(const char* rollback_context) noexcept;
 
+  /**
+   * @brief SCMI-aware write helper.
+   *
+   * Reads the current file content first. If it already matches @p value, no write is attempted.
+   * If the file is not writable, logs a warning and continues successfully.
+   * If a write is required, acquires the process-scoped filesystem lock before writing.
+   */
+  astl_status_code ScmiWrite(std::filesystem::path const& path, std::string_view value);
+
   struct SharedProcessLockState {
     std::mutex                                             mutex;
     std::unique_ptr<FilesystemProcessLock<FileInterfaceT>> lock;
@@ -303,39 +313,18 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
   if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::STOPPED) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot reconfigure while already started
   }
-
-  auto lock_status = AcquireProcessLock();
-  if (lock_status != ASTL_STATUS_SUCCESS) {
-    if (lock_status == ASTL_STATUS_COLLECTION_ALREADY_RUNNING) {
-      ASTL_LOG_ERROR("SCMI sysfs is already in use by another process");
-    } else {
-      ASTL_LOG_ERROR("Failed to acquire SCMI sysfs process lock: {}", astl::to_string(lock_status));
-    }
-    return lock_status;
-  }
   auto rollback_configuration_state = [this]() { RollbackConfigurationState("ConfigureCollection failure"); };
 
   // enable the telemetry subsystem
-  auto result = _scmi_file_interface.Write(std::filesystem::path{kScmiTlmEnableFileName}, kScmiTlmEnableValue);
+  auto result = ScmiWrite(std::filesystem::path{kScmiTlmEnableFileName}, kScmiTlmEnableValue);
   if (result != ASTL_STATUS_SUCCESS) {
-    std::string current_tlm_enable;
-    const auto  read_result =
-        _scmi_file_interface.Read(std::filesystem::path{kScmiTlmEnableFileName}, current_tlm_enable);
-    uint32_t    current_tlm_enable_value = 0;
-    const auto* telemetry_value_begin    = current_tlm_enable.data();
-    const auto* telemetry_value_end =
-        std::next(telemetry_value_begin, static_cast<std::ptrdiff_t>(current_tlm_enable.size()));
-    const bool telemetry_already_enabled =
-        (read_result == ASTL_STATUS_SUCCESS) &&
-        (std::from_chars(telemetry_value_begin, telemetry_value_end, current_tlm_enable_value).ec == std::errc{}) &&
-        (current_tlm_enable_value != 0);
-    if (!telemetry_already_enabled) {
+    if (result == ASTL_STATUS_COLLECTION_ALREADY_RUNNING) {
+      ASTL_LOG_ERROR("SCMI sysfs is already in use by another process");
+    } else {
       ASTL_LOG_CRITICAL("Error {} enabling SCMI Telemetry subsystem!", astl::to_string(result));
-      rollback_configuration_state();
-      return result;
     }
-    ASTL_LOG_WARNING("SCMI Telemetry enable write failed with '{}', but subsystem already reports enabled. Continuing.",
-                     astl::to_string(result));
+    rollback_configuration_state();
+    return result;
   }
 
   _configuration          = std::move(configuration);
@@ -575,7 +564,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::EnableDataEvent(std::filesystem::path c
   const bool originally_enabled = (enabled_text == kScmiDataEventEnableValue);
   // enable the data event if it's not already enabled.
   if (!originally_enabled) {
-    result = _scmi_file_interface.Write(enable_file_path, kScmiDataEventEnableValue);
+    result = ScmiWrite(enable_file_path, kScmiDataEventEnableValue);
     if (result != ASTL_STATUS_SUCCESS) {
       ASTL_LOG_ERROR("Failed to enable data event: {} with error: {}", data_event_dir_path.filename().string(), result);
       return std::unexpected{result};
@@ -607,7 +596,12 @@ auto ScmiSysfsCollector<FileInterfaceT>::EnableTimestamp(std::filesystem::path c
   timestamp_enabled = (tstamp_enabled_text == kScmiDataEventTstampEnableValue);
   // enable the timestamp if it's not already enabled, but the enable file exists
   if (!timestamp_enabled.value_or(false)) {
-    result = _scmi_file_interface.Write(tstamp_enable_file_path, kScmiDataEventTstampEnableValue);
+    result = ScmiWrite(tstamp_enable_file_path, kScmiDataEventTstampEnableValue);
+    if (result != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("Failed to enable timestamp for data event: {} with error: {}",
+                     data_event_to_configure.filename().string(), result);
+      return std::unexpected{result};
+    }
   }
   return timestamp_enabled;
 }
@@ -705,16 +699,15 @@ auto ScmiSysfsCollector<FileInterfaceT>::RestoreDataEventEnabledState(std::vecto
     // disable in reverse order: first disable timestamp, then event
     if (!data_event.timestamp_enabled.value_or(true)) {
       // if the timestamp for this event had a enable file and wasn't enabled originally, disable it again now.
-      auto result = _scmi_file_interface.Write(data_event_dir_path.value() / kScmiDataEventTstampEnableFileName,
-                                               kScmiDataEventTstampDisableValue);
+      auto result =
+          ScmiWrite(data_event_dir_path.value() / kScmiDataEventTstampEnableFileName, kScmiDataEventTstampDisableValue);
       if (result != ASTL_STATUS_SUCCESS) {
         ASTL_LOG_ERROR("Failed to disable timestamp for data event ID: {:04X} with error: {}", data_event.id, result);
         return result;  // Return the error code from Write
       }
     }
     if (!data_event.originally_enabled) {
-      auto result = _scmi_file_interface.Write(data_event_dir_path.value() / kScmiDataEventEnableFileName,
-                                               kScmiDataEventDisableValue);
+      auto result = ScmiWrite(data_event_dir_path.value() / kScmiDataEventEnableFileName, kScmiDataEventDisableValue);
       if (result != ASTL_STATUS_SUCCESS) {
         ASTL_LOG_ERROR("Failed to disable data event ID: {:04X} with error: {}", data_event.id, result);
         return result;  // Return the error code from Write
@@ -847,6 +840,35 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::EmitPauseResumeSample(Pause
 template <typename FileInterfaceT>
 void ScmiSysfsCollector<FileInterfaceT>::StopIntervalSampling() {
   _periodic_sampler = nullptr;  // destroy periodic_sampler and wait for its thread pool to empty
+}
+
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::ScmiWrite(std::filesystem::path const& path, std::string_view value)
+    -> astl_status_code {
+  std::string current_value;
+  auto        result = _scmi_file_interface.Read(path, current_value);
+  if (result != ASTL_STATUS_SUCCESS) {
+    return result;
+  }
+  if (current_value == value) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  const auto write_permission = _scmi_file_interface.HasWritePermission(path);
+  if (!write_permission) {
+    return write_permission.error();
+  }
+  if (!write_permission.value()) {
+    ASTL_LOG_WARNING("SCMI sysfs file '{}' is not writable; skipping write of '{}'", path.generic_string(), value);
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  result = AcquireProcessLock();
+  if (result != ASTL_STATUS_SUCCESS) {
+    return result;
+  }
+
+  return _scmi_file_interface.Write(path, value);
 }
 
 template <typename FileInterfaceT>

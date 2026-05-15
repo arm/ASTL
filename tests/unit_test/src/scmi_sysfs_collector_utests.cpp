@@ -115,6 +115,7 @@ auto PrepareProcessLockTestPaths(const fs::path& base_path, const fs::path& proc
   fs::create_directories(process_lock_dir, ec);
   REQUIRE_FALSE(ec);
   SetWorldRWXPermissions(process_lock_dir);
+  WriteTextFileWithWorldRWX(base_path / "tlm_enable", "0");
   WriteTextFileWithWorldRWX(base_path / "de_implementation_version", "0.0.0");
   WriteTextFileWithWorldRWX(base_path / "version", "0.0.1");
 }
@@ -131,6 +132,9 @@ TEST_CASE("ScmiSysfsCollector::ConfigureCollection - empty", "[scmi_sysfs_collec
   // ensure that configuring an empty set of operations doesn't touch the file system
   MockFileInterface mock_file_interface;
 
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("tlm_enable"), _))
+      .SIDE_EFFECT(_2 = "1")
+      .RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("de_implementation_version"), _))
       .SIDE_EFFECT(_2 = "0.0.0")
       .RETURN(ASTL_STATUS_SUCCESS);
@@ -138,8 +142,7 @@ TEST_CASE("ScmiSysfsCollector::ConfigureCollection - empty", "[scmi_sysfs_collec
       .SIDE_EFFECT(_2 = "0.0.1")
       .RETURN(ASTL_STATUS_SUCCESS);
 
-  // expect collector may initialize telemetry subsystem
-  ALLOW_CALL(mock_file_interface, Write(std::filesystem::path("tlm_enable"), "1")).RETURN(ASTL_STATUS_SUCCESS);
+  FORBID_CALL(mock_file_interface, Write(std::filesystem::path("tlm_enable"), "1"));
 
   astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
   astl::CollectionOperations    operations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
@@ -150,12 +153,17 @@ TEST_CASE("ScmiSysfsCollector::ConfigureCollection - empty", "[scmi_sysfs_collec
 
 TEST_CASE("ScmiSysfsCollector returns internal error when process-lock temp dir lookup fails",
           "[scmi_sysfs_collector][process_lock]") {
-  MockFileInterface                           mock_file_interface;
-  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
+  MockFileInterface mock_file_interface;
+
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("tlm_enable"), _))
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, HasWritePermission(std::filesystem::path("tlm_enable"))).RETURN(true);
 
   astl::CollectionOperations    operations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
   astl_collection_params_t      collection_params{};
   astl::CollectionConfiguration configuration{nullptr, std::move(operations), collection_params};
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
 
   astl::test_hooks::SetForceScmiProcessLockTempDirFailureEnabled(true);
   std::scope_exit reset_failure_flag([] { astl::test_hooks::SetForceScmiProcessLockTempDirFailureEnabled(false); });
@@ -163,14 +171,69 @@ TEST_CASE("ScmiSysfsCollector returns internal error when process-lock temp dir 
   REQUIRE(ASTL_STATUS_INTERNAL_ERROR == collector.ConfigureCollection(std::move(configuration)));
 }
 
+TEST_CASE("ScmiSysfsCollector skips lock and write when SCMI value already matches",
+          "[scmi_sysfs_collector][process_lock]") {
+  MockFileInterface mock_file_interface;
+
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("tlm_enable"), _))
+      .SIDE_EFFECT(_2 = "1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("de_implementation_version"), _))
+      .SIDE_EFFECT(_2 = "0.0.0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("version"), _))
+      .SIDE_EFFECT(_2 = "0.0.1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  FORBID_CALL(mock_file_interface, HasWritePermission(std::filesystem::path("tlm_enable")));
+  FORBID_CALL(mock_file_interface, Write(std::filesystem::path("tlm_enable"), "1"));
+
+  astl::CollectionOperations    operations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
+  astl_collection_params_t      collection_params{};
+  astl::CollectionConfiguration configuration{nullptr, std::move(operations), collection_params};
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
+
+  astl::test_hooks::SetForceScmiProcessLockTempDirFailureEnabled(true);
+  std::scope_exit reset_failure_flag([] { astl::test_hooks::SetForceScmiProcessLockTempDirFailureEnabled(false); });
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+}
+
+TEST_CASE("ScmiSysfsCollector skips non-writable SCMI writes", "[scmi_sysfs_collector][process_lock]") {
+  MockFileInterface mock_file_interface;
+
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("tlm_enable"), _))
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, HasWritePermission(std::filesystem::path("tlm_enable"))).RETURN(false);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("de_implementation_version"), _))
+      .SIDE_EFFECT(_2 = "0.0.0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path("version"), _))
+      .SIDE_EFFECT(_2 = "0.0.1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  FORBID_CALL(mock_file_interface, Write(std::filesystem::path("tlm_enable"), "1"));
+
+  astl::CollectionOperations    operations{{}, {}, {}, {}, {}, astl::CollectorCapability{astl::CollectorType::SCMI}};
+  astl_collection_params_t      collection_params{};
+  astl::CollectionConfiguration configuration{nullptr, std::move(operations), collection_params};
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
+
+  astl::test_hooks::SetForceScmiProcessLockTempDirFailureEnabled(true);
+  std::scope_exit reset_failure_flag([] { astl::test_hooks::SetForceScmiProcessLockTempDirFailureEnabled(false); });
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+}
+
 TEST_CASE("ScmiSysfsCollector allows multiple collectors in one process", "[scmi_sysfs_collector][process_lock]") {
   namespace fs = std::filesystem;
 
   const fs::path temp_root         = fs::temp_directory_path();
-  const fs::path base_path         = temp_root / "astl_scmi_process_lock_test";
+  const fs::path base_path_1       = temp_root / "astl_scmi_process_lock_test_1";
+  const fs::path base_path_2       = temp_root / "astl_scmi_process_lock_test_2";
   const fs::path process_lock_dir  = temp_root / "astl_scmi_process_lock_test_lockdir";
   const fs::path process_lock_path = process_lock_dir / std::string{astl::scmi_detail::kScmiProcessLockFileName};
-  PrepareProcessLockTestPaths(base_path, process_lock_path);
+  PrepareProcessLockTestPaths(base_path_1, process_lock_path);
+  PrepareProcessLockTestPaths(base_path_2, process_lock_path);
   astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(process_lock_dir);
   std::scope_exit reset_process_lock_dir_override(
       [] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride({}); });
@@ -188,8 +251,8 @@ TEST_CASE("ScmiSysfsCollector allows multiple collectors in one process", "[scmi
   };
 
   {
-    astl::ScmiSysfsCollector<astl::FileInterface> collector_1{astl::FileInterface(base_path)};
-    astl::ScmiSysfsCollector<astl::FileInterface> collector_2{astl::FileInterface(base_path)};
+    astl::ScmiSysfsCollector<astl::FileInterface> collector_1{astl::FileInterface(base_path_1)};
+    astl::ScmiSysfsCollector<astl::FileInterface> collector_2{astl::FileInterface(base_path_2)};
 
     astl::CollectionConfiguration configuration_1{nullptr, make_operations(), collection_params};
     REQUIRE(ASTL_STATUS_SUCCESS == collector_1.ConfigureCollection(std::move(configuration_1)));
@@ -199,7 +262,8 @@ TEST_CASE("ScmiSysfsCollector allows multiple collectors in one process", "[scmi
   }  // collectors destroyed before filesystem cleanup
 
   std::error_code ec;
-  fs::remove_all(base_path, ec);
+  fs::remove_all(base_path_1, ec);
+  fs::remove_all(base_path_2, ec);
   fs::remove_all(process_lock_dir, ec);
 }
 
@@ -208,10 +272,12 @@ TEST_CASE("ScmiSysfsCollector blocks configure from second process", "[scmi_sysf
   namespace fs = std::filesystem;
 
   const fs::path temp_root         = fs::temp_directory_path();
-  const fs::path base_path         = temp_root / "astl_scmi_process_lock_cross_process_test";
+  const fs::path base_path_parent  = temp_root / "astl_scmi_process_lock_cross_process_parent";
+  const fs::path base_path_child   = temp_root / "astl_scmi_process_lock_cross_process_child";
   const fs::path process_lock_dir  = temp_root / "astl_scmi_process_lock_cross_process_test_lockdir";
   const fs::path process_lock_path = process_lock_dir / std::string{astl::scmi_detail::kScmiProcessLockFileName};
-  PrepareProcessLockTestPaths(base_path, process_lock_path);
+  PrepareProcessLockTestPaths(base_path_parent, process_lock_path);
+  PrepareProcessLockTestPaths(base_path_child, process_lock_path);
   astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(process_lock_dir);
   std::scope_exit reset_process_lock_dir_override(
       [] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride({}); });
@@ -242,7 +308,7 @@ TEST_CASE("ScmiSysfsCollector blocks configure from second process", "[scmi_sysf
     }
     close(sync_pipe[0]);
 
-    astl::ScmiSysfsCollector<astl::FileInterface> child_collector{astl::FileInterface(base_path)};
+    astl::ScmiSysfsCollector<astl::FileInterface> child_collector{astl::FileInterface(base_path_child)};
     astl::CollectionConfiguration                 child_configuration{nullptr, make_operations(), collection_params};
     const auto status = child_collector.ConfigureCollection(std::move(child_configuration));
     _exit(status == ASTL_STATUS_COLLECTION_ALREADY_RUNNING ? 0 : 1);
@@ -250,7 +316,7 @@ TEST_CASE("ScmiSysfsCollector blocks configure from second process", "[scmi_sysf
 
   close(sync_pipe[0]);
 
-  astl::ScmiSysfsCollector<astl::FileInterface> parent_collector{astl::FileInterface(base_path)};
+  astl::ScmiSysfsCollector<astl::FileInterface> parent_collector{astl::FileInterface(base_path_parent)};
   astl::CollectionConfiguration                 parent_configuration{nullptr, make_operations(), collection_params};
   REQUIRE(ASTL_STATUS_SUCCESS == parent_collector.ConfigureCollection(std::move(parent_configuration)));
 
@@ -267,7 +333,8 @@ TEST_CASE("ScmiSysfsCollector blocks configure from second process", "[scmi_sysf
   REQUIRE(ASTL_STATUS_SUCCESS == parent_collector.StopCollection());
 
   std::error_code ec;
-  fs::remove_all(base_path, ec);
+  fs::remove_all(base_path_parent, ec);
+  fs::remove_all(base_path_child, ec);
   fs::remove_all(process_lock_dir, ec);
 }
 
@@ -276,10 +343,12 @@ TEST_CASE("ScmiSysfsCollector releases process lock on destructor after configur
   namespace fs = std::filesystem;
 
   const fs::path temp_root         = fs::temp_directory_path();
-  const fs::path base_path         = temp_root / "astl_scmi_process_lock_destructor_release_test";
+  const fs::path base_path_parent  = temp_root / "astl_scmi_process_lock_destructor_release_parent";
+  const fs::path base_path_child   = temp_root / "astl_scmi_process_lock_destructor_release_child";
   const fs::path process_lock_dir  = temp_root / "astl_scmi_process_lock_destructor_release_test_lockdir";
   const fs::path process_lock_path = process_lock_dir / std::string{astl::scmi_detail::kScmiProcessLockFileName};
-  PrepareProcessLockTestPaths(base_path, process_lock_path);
+  PrepareProcessLockTestPaths(base_path_parent, process_lock_path);
+  PrepareProcessLockTestPaths(base_path_child, process_lock_path);
   astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(process_lock_dir);
   std::scope_exit reset_process_lock_dir_override(
       [] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride({}); });
@@ -297,7 +366,7 @@ TEST_CASE("ScmiSysfsCollector releases process lock on destructor after configur
   };
 
   {
-    astl::ScmiSysfsCollector<astl::FileInterface> collector{astl::FileInterface(base_path)};
+    astl::ScmiSysfsCollector<astl::FileInterface> collector{astl::FileInterface(base_path_parent)};
     astl::CollectionConfiguration                 configuration{nullptr, make_operations(), collection_params};
     REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
   }  // Collector destroyed without Start/Stop. Lock must be released here.
@@ -305,7 +374,7 @@ TEST_CASE("ScmiSysfsCollector releases process lock on destructor after configur
   const pid_t child_pid = fork();
   REQUIRE(child_pid >= 0);
   if (child_pid == 0) {
-    astl::ScmiSysfsCollector<astl::FileInterface> child_collector{astl::FileInterface(base_path)};
+    astl::ScmiSysfsCollector<astl::FileInterface> child_collector{astl::FileInterface(base_path_child)};
     astl::CollectionConfiguration                 child_configuration{nullptr, make_operations(), collection_params};
     const auto status = child_collector.ConfigureCollection(std::move(child_configuration));
     _exit(status == ASTL_STATUS_SUCCESS ? 0 : 1);
@@ -317,7 +386,8 @@ TEST_CASE("ScmiSysfsCollector releases process lock on destructor after configur
   REQUIRE(WEXITSTATUS(wait_status) == 0);
 
   std::error_code ec;
-  fs::remove_all(base_path, ec);
+  fs::remove_all(base_path_parent, ec);
+  fs::remove_all(base_path_child, ec);
   fs::remove_all(process_lock_dir, ec);
 }
 #endif
@@ -326,10 +396,12 @@ TEST_CASE("ScmiSysfsCollector releases process lock after stop", "[scmi_sysfs_co
   namespace fs = std::filesystem;
 
   const fs::path temp_root         = fs::temp_directory_path();
-  const fs::path base_path         = temp_root / "astl_scmi_process_lock_release_test";
+  const fs::path base_path_1       = temp_root / "astl_scmi_process_lock_release_test_1";
+  const fs::path base_path_2       = temp_root / "astl_scmi_process_lock_release_test_2";
   const fs::path process_lock_dir  = temp_root / "astl_scmi_process_lock_release_test_lockdir";
   const fs::path process_lock_path = process_lock_dir / std::string{astl::scmi_detail::kScmiProcessLockFileName};
-  PrepareProcessLockTestPaths(base_path, process_lock_path);
+  PrepareProcessLockTestPaths(base_path_1, process_lock_path);
+  PrepareProcessLockTestPaths(base_path_2, process_lock_path);
   astl::test_hooks::SetScmiProcessLockTempDirectoryOverride(process_lock_dir);
   std::scope_exit reset_process_lock_dir_override(
       [] { astl::test_hooks::SetScmiProcessLockTempDirectoryOverride({}); });
@@ -347,7 +419,7 @@ TEST_CASE("ScmiSysfsCollector releases process lock after stop", "[scmi_sysfs_co
   };
 
   {
-    astl::ScmiSysfsCollector<astl::FileInterface> collector_1{astl::FileInterface(base_path)};
+    astl::ScmiSysfsCollector<astl::FileInterface> collector_1{astl::FileInterface(base_path_1)};
     astl::CollectionConfiguration                 configuration_1{nullptr, make_operations(), collection_params};
     REQUIRE(ASTL_STATUS_SUCCESS == collector_1.ConfigureCollection(std::move(configuration_1)));
     REQUIRE(ASTL_STATUS_SUCCESS == collector_1.StartCollection());
@@ -355,13 +427,14 @@ TEST_CASE("ScmiSysfsCollector releases process lock after stop", "[scmi_sysfs_co
   }
 
   {
-    astl::ScmiSysfsCollector<astl::FileInterface> collector_2{astl::FileInterface(base_path)};
+    astl::ScmiSysfsCollector<astl::FileInterface> collector_2{astl::FileInterface(base_path_2)};
     astl::CollectionConfiguration                 configuration_2{nullptr, make_operations(), collection_params};
     REQUIRE(ASTL_STATUS_SUCCESS == collector_2.ConfigureCollection(std::move(configuration_2)));
   }  // collector destroyed before filesystem cleanup
 
   std::error_code ec;
-  fs::remove_all(base_path, ec);
+  fs::remove_all(base_path_1, ec);
+  fs::remove_all(base_path_2, ec);
   fs::remove_all(process_lock_dir, ec);
 }
 
@@ -429,10 +502,18 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
 
   trompeloeil::sequence seq;
   // expect collector to initialize telemetry subsystem
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"tlm_enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"tlm_enable"}, "1"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
   // initially, data event 0x1234 is disabled.
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
@@ -449,6 +530,10 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/tstamp_enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/tstamp_enable"}, "1"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
@@ -458,8 +543,16 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
       .SIDE_EFFECT(_2 = "1234567890 42")  // example value with timestamp
       .RETURN(ASTL_STATUS_SUCCESS);
   // finally, collector should disable timestamps and data for event 1234
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/tstamp_enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "1")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/tstamp_enable"}, "0"))
       .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "1")
       .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "0"))
       .IN_SEQUENCE(seq)
@@ -529,10 +622,18 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
 
   trompeloeil::sequence seq;
   // expect collector to initialize telemetry subsystem
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"tlm_enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"tlm_enable"}, "1"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
   // initially, data event 0x1234 is disabled.
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
@@ -573,6 +674,10 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
       .RETURN(ASTL_STATUS_FILE_ERROR);
 
   // finally, collector should disable timestamps and data for event 1234
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "1")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "0"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
@@ -655,11 +760,19 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
   trompeloeil::sequence seq;
 
   // Expect collector to initialize telemetry subsystem
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"tlm_enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"tlm_enable"}, "1"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // Data event 0x5678 setup
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
@@ -688,6 +801,10 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
 
   // Cleanup calls
   // tstamp_enable should _not_ be written
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "1")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x5678/enable"}, "0"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
@@ -778,8 +895,16 @@ TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[s
       .RETURN(ASTL_STATUS_SUCCESS);
 
   trompeloeil::sequence seq;
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"tlm_enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"tlm_enable"}, "1"))
       .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
       .IN_SEQUENCE(seq)
@@ -794,6 +919,10 @@ TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[s
   REQUIRE_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x1234/tstamp_rate"}))
       .IN_SEQUENCE(seq)
       .RETURN(false);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "1")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "0"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
