@@ -9,7 +9,6 @@ from libc.stdint cimport uint32_t
 from libc.stddef cimport size_t
 from libc.stdlib cimport calloc, free
 from libc.string cimport strdup
-from .exceptions import map_status_to_exception
 
 cdef class ASTLError(Exception):
     def __init__(self, code: int):
@@ -17,14 +16,6 @@ cdef class ASTLError(Exception):
         cdef const char* s = astlStatusString(<astl_status_code>code)
         msg = s.decode() if s != NULL else f"ASTL error {code}"
         super().__init__(msg)
-
-cdef inline void _check(int code):
-    if code != ASTL_STATUS_SUCCESS:
-        # Specialized mapping first (may return subclass of ASTLError)
-        exc_cls = map_status_to_exception(code)
-        if exc_cls is not None:
-            raise exc_cls(code)
-        raise ASTLError(code)
 
 cdef class Target:
     cdef public object name
@@ -184,6 +175,16 @@ class Status:
     RESUME_UNSUPPORTED = ASTL_STATUS_RESUME_UNSUPPORTED
     INTERNAL_ERROR = ASTL_STATUS_INTERNAL_ERROR
     UNKNOWN_ERROR = ASTL_STATUS_UNKNOWN_ERROR
+
+from .exceptions import map_status_to_exception
+
+cdef inline void _check(int code):
+    if code != ASTL_STATUS_SUCCESS:
+        # Specialized mapping first (may return subclass of ASTLError)
+        exc_cls = map_status_to_exception(code)
+        if exc_cls is not None:
+            raise exc_cls(code)
+        raise ASTLError(code)
 
 def status_name(code: int) -> str:
     """Return status symbolic name for a numeric code (best-effort)."""

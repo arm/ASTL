@@ -6,7 +6,10 @@ package astl
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../include -I${SRCDIR}/../../build/debug/include
-#cgo LDFLAGS: -L${SRCDIR}/../../build/debug/lib -Wl,-rpath,${SRCDIR}/../../build/debug/lib -lastl-0d
+#cgo amd64 LDFLAGS: -L${SRCDIR}/../../build/debug/x86_64/lib -Wl,-rpath,${SRCDIR}/../../build/debug/x86_64/lib
+#cgo arm64 LDFLAGS: -L${SRCDIR}/../../build/debug/arm64/lib -Wl,-rpath,${SRCDIR}/../../build/debug/arm64/lib
+#cgo 386 LDFLAGS: -L${SRCDIR}/../../build/debug/x86/lib -Wl,-rpath,${SRCDIR}/../../build/debug/x86/lib
+#cgo LDFLAGS: -lastl-0d
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>

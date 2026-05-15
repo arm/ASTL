@@ -98,6 +98,10 @@ jobs:
       - name: 🐹 Run Go Wrapper Smoke Tests
         if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
         run: |
+          ASTL_HOST_ARCH="$("${{ github.workspace }}/scripts/host_arch.sh")"
+          ASTL_LIB_DIR="${{ github.workspace }}/build/${{ matrix.cmake_preset }}/${ASTL_HOST_ARCH}/lib"
+          export CGO_LDFLAGS="-L${ASTL_LIB_DIR} -Wl,-rpath,${ASTL_LIB_DIR} -lastl-0d"
+          export LD_LIBRARY_PATH="${ASTL_LIB_DIR}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           cd ${{ github.workspace }}/Go
           go test ./...
 

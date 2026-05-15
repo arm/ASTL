@@ -11,6 +11,7 @@ set -euo pipefail
 ########################################
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASTL_ROOT="$(dirname "$SCRIPT_DIR")"
+ASTL_HOST_ARCH="$("${ASTL_ROOT}/scripts/host_arch.sh")"
 echo "ASTL_ROOT = $ASTL_ROOT"
 
 ########################################
@@ -18,7 +19,7 @@ echo "ASTL_ROOT = $ASTL_ROOT"
 ########################################
 export ASTL_MOCKSYSFS_TLM_JSON_PATH="$ASTL_ROOT/tools/mock_sysfs/config/tlm.json"
 echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = $ASTL_MOCKSYSFS_TLM_JSON_PATH"
-MOCK_SYSFS="$ASTL_ROOT/build/debug/bin/MockSysfs"
+MOCK_SYSFS="$ASTL_ROOT/build/debug/${ASTL_HOST_ARCH}/bin/MockSysfs"
 
 # Allow optional arguments to override MOUNT_POINT and SYSFS_LOG.
 MOUNT_POINT="${HOME}/tmp/fuse"

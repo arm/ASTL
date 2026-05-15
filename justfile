@@ -192,11 +192,14 @@ go-test preset='debug':
     #!/usr/bin/env bash
     set -eu -o pipefail
     if [ "{{preset}}" != "debug" ]; then
-        echo "[go-test][ERROR] Go wrapper tests currently require preset=debug because the cgo binding links against build/debug." >&2
+        echo "[go-test][ERROR] Go wrapper tests currently require preset=debug because the cgo binding links against the debug ASTL library name." >&2
         exit 2
     fi
     echo "[go-test] Using preset={{preset}}"
-    export LD_LIBRARY_PATH="$PWD/build/{{preset}}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    ARCH="$(./scripts/host_arch.sh)"
+    LIB_DIR="$PWD/build/{{preset}}/${ARCH}/lib"
+    export CGO_LDFLAGS="-L${LIB_DIR} -Wl,-rpath,${LIB_DIR} -lastl-0d${CGO_LDFLAGS:+ ${CGO_LDFLAGS}}"
+    export LD_LIBRARY_PATH="${LIB_DIR}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     cd Go
     go test ./...
 
@@ -290,20 +293,22 @@ python-reuse-tests preset='debug':
     #!/usr/bin/env bash
     set -eu -o pipefail
     PYBIN="${PY:-python3}"
+    ARCH="$(./scripts/host_arch.sh)"
+    LIB_DIR="build/{{preset}}/${ARCH}/lib"
     echo "[python-reuse-tests] Python: $("$PYBIN" -V)"
-    if [ ! -d build/{{preset}}/lib ]; then
-        echo "[python-reuse-tests][WARN] build/{{preset}}/lib missing"
+    if [ ! -d "${LIB_DIR}" ]; then
+        echo "[python-reuse-tests][WARN] ${LIB_DIR} missing"
         ROOT_LIB=$(ls -1 libastl-*.so 2>/dev/null | head -n1 || true)
         if [ -n "${ROOT_LIB}" ]; then
             echo "[python-reuse-tests][HEAL] Found ${ROOT_LIB} at repo root; recreating expected directory"
-            mkdir -p build/{{preset}}/lib
-            mv "${ROOT_LIB}" build/{{preset}}/lib/
+            mkdir -p "${LIB_DIR}"
+            mv "${ROOT_LIB}" "${LIB_DIR}/"
         fi
     fi
 
-    if [ ! -d build/{{preset}}/lib ]; then
+    if [ ! -d "${LIB_DIR}" ]; then
         if [ "${ASTL_DISABLE_NATIVE_FALLBACK:-0}" = "1" ]; then
-            echo "[python-reuse-tests][ERROR] build/{{preset}}/lib still missing and fallback disabled (ASTL_DISABLE_NATIVE_FALLBACK=1)" >&2
+            echo "[python-reuse-tests][ERROR] ${LIB_DIR} still missing and fallback disabled (ASTL_DISABLE_NATIVE_FALLBACK=1)" >&2
             exit 3
         fi
         echo "[python-reuse-tests][HEAL] Performing minimal local configure/build (fallback enabled)" >&2
@@ -311,8 +316,8 @@ python-reuse-tests preset='debug':
         cmake --build --preset {{preset}} --parallel=$(nproc)
     fi
 
-    if [ ! -d build/{{preset}}/lib ]; then
-        echo "[python-reuse-tests][ERROR] Unable to establish build/{{preset}}/lib after fallback build" >&2
+    if [ ! -d "${LIB_DIR}" ]; then
+        echo "[python-reuse-tests][ERROR] Unable to establish ${LIB_DIR} after fallback build" >&2
         find build -maxdepth 4 -type f -name 'libastl*' 2>/dev/null || true
         exit 3
     fi
@@ -342,7 +347,7 @@ python-reuse-tests preset='debug':
         exit 6
     fi
     echo "[python-reuse-tests] Checking for libastl-*"
-    ls build/{{preset}}/lib/libastl-*.so > /dev/null || { echo "[python-reuse-tests][ERROR] libastl not found after venv setup" >&2; exit 4; }
+    ls "${LIB_DIR}"/libastl-*.so > /dev/null || { echo "[python-reuse-tests][ERROR] libastl not found after venv setup" >&2; exit 4; }
     START_TS=$(date +%s)
     echo "[python-reuse-tests] pytest start"
     pytest -q python/tests
@@ -357,27 +362,29 @@ python-package-and-benchmark:
     set -eu -o pipefail
     echo "[python-package-and-benchmark] Start"
     PYBIN="${PY:-python3}"
-    if [ ! -d build/debug/lib ]; then
-        echo "[python-package-and-benchmark][WARN] build/debug/lib missing"
+    ARCH="$(./scripts/host_arch.sh)"
+    LIB_DIR="build/debug/${ARCH}/lib"
+    if [ ! -d "${LIB_DIR}" ]; then
+        echo "[python-package-and-benchmark][WARN] ${LIB_DIR} missing"
         ROOT_LIB=$(ls -1 libastl-*.so 2>/dev/null | head -n1 || true)
         if [ -n "${ROOT_LIB}" ]; then
             echo "[python-package-and-benchmark][HEAL] Found ${ROOT_LIB} at repo root; recreating expected directory"
-            mkdir -p build/debug/lib
-            mv "${ROOT_LIB}" build/debug/lib/
+            mkdir -p "${LIB_DIR}"
+            mv "${ROOT_LIB}" "${LIB_DIR}/"
         fi
     fi
-    if [ ! -d build/debug/lib ]; then
+    if [ ! -d "${LIB_DIR}" ]; then
         if [ "${ASTL_DISABLE_NATIVE_FALLBACK:-0}" = "1" ]; then
-            echo "[python-package-and-benchmark][ERROR] build/debug/lib still missing and fallback disabled (ASTL_DISABLE_NATIVE_FALLBACK=1)" >&2
+            echo "[python-package-and-benchmark][ERROR] ${LIB_DIR} still missing and fallback disabled (ASTL_DISABLE_NATIVE_FALLBACK=1)" >&2
             exit 2
         fi
         echo "[python-package-and-benchmark][HEAL] Performing minimal local configure/build (fallback enabled)" >&2
         cmake -S . --preset debug -DENABLE_VALGRIND=OFF
         cmake --build --preset debug --parallel=$(nproc)
     fi
-    if ! ls build/debug/lib/libastl-*.so >/dev/null 2>&1; then
-        echo "[python-package-and-benchmark][ERROR] No libastl-*.so under build/debug/lib after heal attempts" >&2
-        find build/debug -maxdepth 3 -type f -name 'libastl*' || true
+    if ! ls "${LIB_DIR}"/libastl-*.so >/dev/null 2>&1; then
+        echo "[python-package-and-benchmark][ERROR] No libastl-*.so under ${LIB_DIR} after heal attempts" >&2
+        find build/debug -maxdepth 4 -type f -name 'libastl*' || true
         exit 3
     fi
     echo "[python-package-and-benchmark] Vendoring headers"

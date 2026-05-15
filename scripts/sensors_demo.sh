@@ -11,6 +11,8 @@ set -euo pipefail
 ########################################
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASTL_ROOT="$(dirname "$SCRIPT_DIR")"
+ASTL_HOST_ARCH="$("${ASTL_ROOT}/scripts/host_arch.sh")"
+ASTL_BUILD_OUTPUT_DIR="$ASTL_ROOT/build/debug/${ASTL_HOST_ARCH}"
 echo "ASTL_ROOT = $ASTL_ROOT"
 
 # Exit if lm-sensors package not installed
@@ -54,7 +56,7 @@ echo "Logs Directory = $LOG_DIR"
 ###############
 # Demo action #
 ###############
-SAMPLE_TEST_BIN="$ASTL_ROOT/build/debug/bin/sample_test"
+SAMPLE_TEST_BIN="$ASTL_BUILD_OUTPUT_DIR/bin/sample_test"
 if [[ ! -x $SAMPLE_TEST_BIN ]]; then
 	echo "❌ Error: sample_test binary not found or not executable at $SAMPLE_TEST_BIN" >&2
 	exit 1

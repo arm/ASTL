@@ -36,7 +36,7 @@ jobs:
         run: |
           # Remove stale Cython artifacts from previous runs on this persistent runner
           rm -f python/astl/_core.cpython-*.so python/astl/_core.cpp
-          # Configure and build once. This produces build/debug/lib/libastl-<MAJOR>d.so
+          # Configure and build once. This produces build/debug/<arch>/lib/libastl-<MAJOR>d.so
           just config debug
           just build debug
 
@@ -46,7 +46,7 @@ jobs:
           name: astl-native-${{ github.sha }}
           if-no-files-found: error
           path: |
-            build/debug/lib/libastl-*.so
+            build/debug/*/lib/libastl-*.so
             build/debug/include/**
             build/debug/compile_commands.json
           retention-days: 7
@@ -77,11 +77,13 @@ jobs:
       - name: Prepare native artifact layout
         run: |
           set -euo pipefail
-          mkdir -p build/debug/lib build/debug/include
+          ASTL_HOST_ARCH="$(./scripts/host_arch.sh)"
+          ASTL_LIB_DIR="build/debug/${ASTL_HOST_ARCH}/lib"
+          mkdir -p "${ASTL_LIB_DIR}" build/debug/include
           # Move shared library(s) into expected location (search recursively to handle nested paths)
-          find native-artifact -type f -name 'libastl-*.so' -exec cp {} build/debug/lib/ \; || true
+          find native-artifact -type f -name 'libastl-*.so' -exec cp {} "${ASTL_LIB_DIR}/" \; || true
           # If multiple variants somehow exist, list them
-          echo "[ci] Discovered libastl variants:"; ls -1 build/debug/lib || true
+          echo "[ci] Discovered libastl variants:"; ls -1 "${ASTL_LIB_DIR}" || true
           # Preserve generated headers (version, etc.)
           if [ -d native-artifact/build/debug/include ]; then
             cp -r native-artifact/build/debug/include/* build/debug/include/ || true
@@ -91,7 +93,7 @@ jobs:
               cp -r native-artifact/include/* build/debug/include/ || true
             fi
           fi
-          echo "[ci] Native artifact contents:"; ls -1 build/debug/lib || true
+          echo "[ci] Native artifact contents:"; ls -1 "${ASTL_LIB_DIR}" || true
       - name: Install deps & run reuse tests
         run: |
           set -euo pipefail
@@ -120,15 +122,17 @@ jobs:
       - name: Prepare native artifact layout
         run: |
           set -euo pipefail
-          mkdir -p build/debug/lib build/debug/include
-          find native-artifact -type f -name 'libastl-*.so' -exec cp {} build/debug/lib/ \; || true
-          echo "[ci] Discovered libastl variants:"; ls -1 build/debug/lib || true
+          ASTL_HOST_ARCH="$(./scripts/host_arch.sh)"
+          ASTL_LIB_DIR="build/debug/${ASTL_HOST_ARCH}/lib"
+          mkdir -p "${ASTL_LIB_DIR}" build/debug/include
+          find native-artifact -type f -name 'libastl-*.so' -exec cp {} "${ASTL_LIB_DIR}/" \; || true
+          echo "[ci] Discovered libastl variants:"; ls -1 "${ASTL_LIB_DIR}" || true
           if [ -d native-artifact/build/debug/include ]; then
             cp -r native-artifact/build/debug/include/* build/debug/include/ || true
           elif [ -d native-artifact/include ]; then
             cp -r native-artifact/include/* build/debug/include/ || true
           fi
-          echo "[ci] Native artifact contents:"; ls -1 build/debug/lib || true
+          echo "[ci] Native artifact contents:"; ls -1 "${ASTL_LIB_DIR}" || true
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:

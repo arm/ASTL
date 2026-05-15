@@ -6,7 +6,7 @@ from __future__ import annotations
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 from Cython.Build import cythonize
-import os, glob, shutil, sys
+import os, glob, platform, shutil, sys
 
 
 def _repo_root() -> str:
@@ -14,6 +14,37 @@ def _repo_root() -> str:
 
 
 ROOT = _repo_root()
+
+
+def _normalize_architecture(machine: str) -> str:
+    machine = machine.lower()
+    if machine in {"aarch64", "arm64"}:
+        return "arm64"
+    if machine in {"amd64", "x64", "x86_64"}:
+        return "x86_64"
+    if machine in {"i386", "i486", "i586", "i686", "x86"}:
+        return "x86"
+    return "".join(char if char.isalnum() or char in "_+-" else "_" for char in machine) or "unknown"
+
+
+def _candidate_build_lib_dirs(root: str) -> list[str]:
+    host_arch = _normalize_architecture(platform.machine())
+    known_arches = [host_arch, "arm64", "x86_64", "x86"]
+    configs = ["debug", "release"]
+    candidates: list[str] = []
+
+    def append_once(path: str) -> None:
+        if path not in candidates:
+            candidates.append(path)
+
+    for config in configs:
+        for arch in known_arches:
+            append_once(os.path.join(root, "build", config, arch, "lib"))
+        for discovered in sorted(glob.glob(os.path.join(root, "build", config, "*", "lib"))):
+            append_once(discovered)
+        append_once(os.path.join(root, "build", config, "lib"))
+
+    return candidates
 
 
 def _discover_include_dirs(root: str) -> list[str]:
@@ -45,10 +76,7 @@ def _discover_include_dirs(root: str) -> list[str]:
 def _find_built_library(root: str) -> tuple[str | None, list[str], list[str]]:
     """Discover a prebuilt libastl-*.so and return (lib_name, lib_dirs, runtime_rpaths)."""
     lib_dirs: list[str] = []
-    candidate_builds = [
-        os.path.join(root, 'build', 'debug', 'lib'),
-        os.path.join(root, 'build', 'release', 'lib'),
-    ]
+    candidate_builds = _candidate_build_lib_dirs(root)
     lib_name: str | None = None
     for d in candidate_builds:
         if not os.path.isdir(d):
@@ -211,6 +239,6 @@ setup(
     zip_safe=False,
 )
 
-print(f"[astl setup] Detected shared library name: {LIB_NAME!r} (dirs searched: {[os.path.join(ROOT, 'build', 'debug', 'lib'), os.path.join(ROOT, 'build', 'release', 'lib')]})", file=sys.stderr)
+print(f"[astl setup] Detected shared library name: {LIB_NAME!r} (dirs searched: {_candidate_build_lib_dirs(ROOT)})", file=sys.stderr)
 if not LIB_NAME:
     print("[astl setup] WARNING: No prebuilt libastl-*.so discovered; extension will link at runtime (LD_LIBRARY_PATH may be required).", file=sys.stderr)

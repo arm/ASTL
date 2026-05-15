@@ -5,6 +5,7 @@
 import pytest
 
 from astl import (
+    ASTLError,
     InvalidArgumentError,
     BadArgumentError,
     NotSupportedError,
@@ -12,6 +13,11 @@ from astl import (
     map_status_to_exception,
     Status,
 )
+
+
+def test_specialized_exceptions_share_exported_base():
+    assert issubclass(InternalError, ASTLError)
+    assert isinstance(InternalError(Status.INTERNAL_ERROR), ASTLError)
 
 
 def test_map_status_to_exception_known_codes():
@@ -25,4 +31,3 @@ def test_map_status_to_exception_known_codes():
         assert map_status_to_exception(Status.NOT_SUPPORTED) is NotSupportedError
     if hasattr(Status, 'INTERNAL_ERROR'):
         assert map_status_to_exception(Status.INTERNAL_ERROR) is InternalError
-

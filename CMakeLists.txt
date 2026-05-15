@@ -50,6 +50,61 @@ project(
 message(STATUS "version is set to: ${ASTL_VERSION} " "major: ${PROJECT_VERSION_MAJOR} "
                "minor: ${PROJECT_VERSION_MINOR} " "micro: ${PROJECT_VERSION_PATCH}")
 
+# Normalize a CPU architecture string into the artifact directory name used by ASTL.
+function(astl_normalize_architecture architecture_name output_variable)
+  string(TOLOWER "${architecture_name}" astl_architecture)
+  if(astl_architecture MATCHES "^(aarch64|arm64)$")
+    set(astl_architecture "arm64")
+  elseif(astl_architecture MATCHES "^(amd64|x64|x86_64)$")
+    set(astl_architecture "x86_64")
+  elseif(astl_architecture MATCHES "^(i[3-6]86|x86)$")
+    set(astl_architecture "x86")
+  elseif(astl_architecture STREQUAL "")
+    set(astl_architecture "unknown")
+  else()
+    string(REGEX REPLACE "[^A-Za-z0-9_+-]" "_" astl_architecture "${astl_architecture}")
+  endif()
+
+  set(${output_variable}
+      "${astl_architecture}"
+      PARENT_SCOPE)
+endfunction()
+
+# Set a build output directory if the caller has not provided a custom path.
+function(astl_set_default_output_directory variable_name subdirectory)
+  set(astl_default_output_directory "${ASTL_OUTPUT_ROOT}/${subdirectory}")
+  set(astl_legacy_output_directory "${PROJECT_BINARY_DIR}/${subdirectory}")
+  set(astl_uses_project_default OFF)
+
+  if(NOT DEFINED ${variable_name}
+     OR "${${variable_name}}" STREQUAL ""
+     OR "${${variable_name}}" STREQUAL "${astl_legacy_output_directory}")
+    set(${variable_name}
+        "${astl_default_output_directory}"
+        CACHE PATH "" FORCE)
+    set(astl_uses_project_default ON)
+  elseif("${${variable_name}}" STREQUAL "${astl_default_output_directory}")
+    set(astl_uses_project_default ON)
+  endif()
+
+  foreach(astl_configuration DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set(astl_configuration_variable "${variable_name}_${astl_configuration}")
+    if(astl_uses_project_default
+       AND (NOT DEFINED ${astl_configuration_variable}
+            OR "${${astl_configuration_variable}}" STREQUAL ""
+            OR "${${astl_configuration_variable}}" STREQUAL "${astl_legacy_output_directory}"))
+      set(${astl_configuration_variable}
+          "${astl_default_output_directory}"
+          CACHE PATH "" FORCE)
+    elseif(DEFINED ${astl_configuration_variable}
+           AND "${${astl_configuration_variable}}" STREQUAL "${astl_legacy_output_directory}")
+      set(${astl_configuration_variable}
+          "${${variable_name}}"
+          CACHE PATH "" FORCE)
+    endif()
+  endforeach()
+endfunction()
+
 # Sanitizer option (Address + Undefined Behavior)
 option(ENABLE_ASAN "Enable Address/Undefined Behavior sanitizer instrumentation" OFF)
 option(ASTL_PYTHON_ENABLE_ASAN "Propagate sanitizer flags into Python extension build" OFF)
@@ -73,14 +128,22 @@ endif()
 
 if(PROJECT_IS_TOP_LEVEL)
   message(STATUS "This project is a top-level project")
+  astl_normalize_architecture("${CMAKE_HOST_SYSTEM_PROCESSOR}" ASTL_DETECTED_HOST_ARCHITECTURE)
+  set(ASTL_OUTPUT_ARCHITECTURE
+      "${ASTL_DETECTED_HOST_ARCHITECTURE}"
+      CACHE STRING "Architecture directory name used for build artifacts")
+  astl_normalize_architecture("${ASTL_OUTPUT_ARCHITECTURE}" ASTL_OUTPUT_ARCHITECTURE)
+  set(ASTL_OUTPUT_ARCHITECTURE
+      "${ASTL_OUTPUT_ARCHITECTURE}"
+      CACHE STRING "Architecture directory name used for build artifacts" FORCE)
+  set(ASTL_OUTPUT_ROOT "${PROJECT_BINARY_DIR}/${ASTL_OUTPUT_ARCHITECTURE}")
+  message(STATUS "ASTL output architecture: ${ASTL_OUTPUT_ARCHITECTURE} (host: ${CMAKE_HOST_SYSTEM_PROCESSOR})")
+  message(STATUS "ASTL output root: ${ASTL_OUTPUT_ROOT}")
   # Put executables in bin directory
-  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY
-      ${PROJECT_BINARY_DIR}/bin
-      CACHE STRING "")
+  astl_set_default_output_directory(CMAKE_RUNTIME_OUTPUT_DIRECTORY bin)
   # Put libraries in lib directory
-  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY
-      ${PROJECT_BINARY_DIR}/lib
-      CACHE STRING "")
+  astl_set_default_output_directory(CMAKE_LIBRARY_OUTPUT_DIRECTORY lib)
+  astl_set_default_output_directory(CMAKE_ARCHIVE_OUTPUT_DIRECTORY lib)
 else()
   message(STATUS "This project has a top-level one called [${CMAKE_PROJECT_NAME}]")
 endif()

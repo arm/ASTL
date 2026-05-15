@@ -28,8 +28,9 @@ For a repo-local debug build:
 
 ```bash
 just build
-export CGO_LDFLAGS="-L$PWD/build/debug/lib -Wl,-rpath,$PWD/build/debug/lib -lastl-0d"
-export LD_LIBRARY_PATH="$PWD/build/debug/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+ASTL_HOST_ARCH="$(./scripts/host_arch.sh)"
+export CGO_LDFLAGS="-L$PWD/build/debug/${ASTL_HOST_ARCH}/lib -Wl,-rpath,$PWD/build/debug/${ASTL_HOST_ARCH}/lib -lastl-0d"
+export LD_LIBRARY_PATH="$PWD/build/debug/${ASTL_HOST_ARCH}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 ```
 
 The Go wrapper already adds repo-local ASTL header search paths via cgo, so
@@ -47,8 +48,9 @@ export CGO_LDFLAGS="-L/path/to/prefix/lib -Wl,-rpath,/path/to/prefix/lib -lastl-
 From the repo root:
 
 ```bash
-export CGO_LDFLAGS="-L$PWD/build/debug/lib -Wl,-rpath,$PWD/build/debug/lib -lastl-0d"
-export LD_LIBRARY_PATH="$PWD/build/debug/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+ASTL_HOST_ARCH="$(./scripts/host_arch.sh)"
+export CGO_LDFLAGS="-L$PWD/build/debug/${ASTL_HOST_ARCH}/lib -Wl,-rpath,$PWD/build/debug/${ASTL_HOST_ARCH}/lib -lastl-0d"
+export LD_LIBRARY_PATH="$PWD/build/debug/${ASTL_HOST_ARCH}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 cd Go
 go test ./...
 ```
