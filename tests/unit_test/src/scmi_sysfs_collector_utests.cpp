@@ -510,55 +510,55 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
   // initially, data event 0x1234 is disabled.
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
   // collector should enable data event 1234
-  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "1"))
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/enable"}, "1"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
   // collector should enable timestamps on data event 1234
-  REQUIRE_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x1234/tstamp_enable"}))
+  REQUIRE_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x00001234/tstamp_enable"}))
       .IN_SEQUENCE(seq)
       .RETURN(true);
-  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/tstamp_enable"}, _))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/tstamp_enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/tstamp_enable"}, _))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/tstamp_enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/tstamp_enable"}, "1"))
+  ALLOW_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/tstamp_enable"}, "1"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
   // collector should read the value
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/value"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/value"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "1234567890 42")  // example value with timestamp
       .RETURN(ASTL_STATUS_SUCCESS);
   // finally, collector should disable timestamps and data for event 1234
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/tstamp_enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/tstamp_enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "1")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/tstamp_enable"}, "0"))
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/tstamp_enable"}, "0"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "1")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "0"))
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/enable"}, "0"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/tstamp_rate"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/tstamp_rate"}, _))
       .SIDE_EFFECT(_2 = "1")
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -630,25 +630,25 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
   // initially, data event 0x1234 is disabled.
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
   // collector should enable data event 1234
-  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "1"))
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/enable"}, "1"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
   // initially, data event 0x1234 has timestamp enabled for this test
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/tstamp_enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/tstamp_enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "1")
       .RETURN(ASTL_STATUS_SUCCESS);
 
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/tstamp_rate"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/tstamp_rate"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "1")
       .RETURN(ASTL_STATUS_SUCCESS);
@@ -660,7 +660,7 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
                                                "1234567898 18", "1234567899 19"};
   // we expect some number of calls to this value read function, depending on how long
   // we leave the collection enabled. return some of the expected data, and don't overrun that list.
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/value"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/value"}, _))
       .IN_SEQUENCE(seq)
       .TIMES(10)
       .LR_SIDE_EFFECT(_2 = expected_data[std::min(read_value_call_count, expected_data.size() - 1)],
@@ -668,17 +668,17 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // if over-sampling, return an error and increase the count
-  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/value"}, _))
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/value"}, _))
       .IN_SEQUENCE(seq)
       .LR_SIDE_EFFECT(++read_value_call_count)
       .RETURN(ASTL_STATUS_FILE_ERROR);
 
   // finally, collector should disable timestamps and data for event 1234
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "1")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "0"))
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/enable"}, "0"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -769,18 +769,18 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // Data event 0x5678 setup
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00005678/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00005678/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x5678/enable"}, "1"))
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00005678/enable"}, "1"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x5678/tstamp_enable"}))
+  ALLOW_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x00005678/tstamp_enable"}))
       .IN_SEQUENCE(seq)
       .RETURN(false);  // for this test, assume no timestamp enable file exists
 
@@ -793,7 +793,7 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
       "2000 200",  // Different timestamp: should be accepted. raw tick=2000, value=200
       "3000 300", "4000 400", "5000 500"};
 
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/value"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00005678/value"}, _))
       .IN_SEQUENCE(seq)
       .TIMES(5)
       .LR_SIDE_EFFECT(_2 = test_data[std::min(read_value_call_count, test_data.size() - 1)], ++read_value_call_count)
@@ -801,17 +801,17 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
 
   // Cleanup calls
   // tstamp_enable should _not_ be written
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00005678/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "1")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x5678/enable"}, "0"))
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00005678/enable"}, "0"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 
   // timestamps count up at 4KHz
-  ALLOW_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x5678/tstamp_rate"})).RETURN(true);
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x5678/tstamp_rate"}, _))
+  ALLOW_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x00005678/tstamp_rate"})).RETURN(true);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00005678/tstamp_rate"}, _))
       .SIDE_EFFECT(_2 = "4")
       .RETURN(ASTL_STATUS_SUCCESS);
 
@@ -902,28 +902,28 @@ TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[s
   REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"tlm_enable"}, "1"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "0")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "1"))
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/enable"}, "1"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x1234/tstamp_enable"}))
+  REQUIRE_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x00001234/tstamp_enable"}))
       .IN_SEQUENCE(seq)
       .RETURN(false);
-  REQUIRE_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x1234/tstamp_rate"}))
+  REQUIRE_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x00001234/tstamp_rate"}))
       .IN_SEQUENCE(seq)
       .RETURN(false);
-  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x1234/enable"}, _))
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "1")
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x1234/enable"}, "0"))
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/enable"}, "0"))
       .IN_SEQUENCE(seq)
       .RETURN(ASTL_STATUS_SUCCESS);
 

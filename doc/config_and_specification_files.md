@@ -69,7 +69,7 @@ These files enumerate the in-band telemetry sensors accessible through SCMI.
 },
 ```
 
-This example defines a register named `FREQUENCY` for the `CORE` component with data event ID `0x1A68`.
+This example defines a register named `FREQUENCY` for the `CORE` component with data event ID `0x00001A68`.
 With other metric definitions, and a automatically detected lm-sensors target,
 we might see metrics with names like the table below:
 

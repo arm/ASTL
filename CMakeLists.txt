@@ -96,8 +96,8 @@ function(astl_set_default_output_directory variable_name subdirectory)
       set(${astl_configuration_variable}
           "${astl_default_output_directory}"
           CACHE PATH "" FORCE)
-    elseif(DEFINED ${astl_configuration_variable}
-           AND "${${astl_configuration_variable}}" STREQUAL "${astl_legacy_output_directory}")
+    elseif(DEFINED ${astl_configuration_variable} AND "${${astl_configuration_variable}}" STREQUAL
+                                                      "${astl_legacy_output_directory}")
       set(${astl_configuration_variable}
           "${${variable_name}}"
           CACHE PATH "" FORCE)

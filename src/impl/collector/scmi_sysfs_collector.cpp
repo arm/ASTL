@@ -28,10 +28,7 @@ namespace fs = std::filesystem;
 ////////////////////////////////////////////////////////////////////////////////
 
 std::expected<fs::path, astl_status_code> GetDataEventDirPath(ScmiDataEventId data_event_id) {
-  if (data_event_id >= kScmiFirstReservedDataEventId) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);  // Reserved data event ID - unsupported in current spec
-  }
-  return fs::path{"des"} / std::format("0x{:04X}", data_event_id);
+  return fs::path{"des"} / std::format("0x{:08X}", data_event_id);
 }
 
 auto ParseScmiTimeStamp(std::string_view text)

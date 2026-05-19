@@ -17,8 +17,7 @@
 namespace astl {
 
 // Type alias for Data Event Identifiers
-using ScmiDataEventId                                   = uint32_t;
-constexpr ScmiDataEventId kScmiFirstReservedDataEventId = 0x10000;
+using ScmiDataEventId = uint32_t;
 
 // maps a target name to a data event ID for a DE
 using ScmiTargetToDataEventIdMap = std::unordered_map<std::string, std::vector<ScmiDataEventId>>;

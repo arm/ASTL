@@ -123,12 +123,12 @@ When running the thermal throttling demo, you'll see:
 
 The thermal throttling demo exposes these telemetry data events:
 
-| Event ID | Metric         | Unit    | Description                         |
-| -------- | -------------- | ------- | ----------------------------------- |
-| 0x7A9B   | Temperature    | Celsius | SoC temperature reading             |
-| 0x8C3D   | Throttle Count | Count   | Number of thermal throttling events |
-| 0x9E4F   | Energy         | Joules  | Energy consumption                  |
-| 0x1A68   | Frequency      | MHz     | CPU operating frequency             |
+| Event ID   | Metric         | Unit    | Description                         |
+| ---------- | -------------- | ------- | ----------------------------------- |
+| 0x00007A9B | Temperature    | Celsius | SoC temperature reading             |
+| 0x00008C3D | Throttle Count | Count   | Number of thermal throttling events |
+| 0x00009E4F | Energy         | Joules  | Energy consumption                  |
+| 0x00001A68 | Frequency      | MHz     | CPU operating frequency             |
 
 ## Directory Structure
 
@@ -137,10 +137,10 @@ During demo execution, the following structure is created:
 ```
 ~/tmp/fuse/arm_telemetry/
 ├── des/
-│   ├── 0x7A9B/          # Temperature data event
-│   ├── 0x8C3D/          # Throttle count data event
-│   ├── 0x9E4F/          # Energy data event
-│   └── 0x1A68/          # Frequency data event
+│   ├── 0x00007A9B/      # Temperature data event
+│   ├── 0x00008C3D/      # Throttle count data event
+│   ├── 0x00009E4F/      # Energy data event
+│   └── 0x00001A68/      # Frequency data event
 ├── tlm_enable
 ├── version
 └── current_update_interval_ms
@@ -230,10 +230,10 @@ While the demo is running, you can monitor the mock telemetry in another termina
 
 ```bash
 # Watch temperature readings
-watch -n 0.5 "cat ~/tmp/fuse/arm_telemetry/tlm-0/des/0x7A9B/value"
+watch -n 0.5 "cat ~/tmp/fuse/arm_telemetry/tlm-0/des/0x00007A9B/value"
 
 # Watch throttle count
-watch -n 0.5 "cat ~/tmp/fuse/arm_telemetry/tlm-0/des/0x8C3D/value"
+watch -n 0.5 "cat ~/tmp/fuse/arm_telemetry/tlm-0/des/0x00008C3D/value"
 ```
 
 #### Viewing MockSysfs Log

@@ -43,7 +43,7 @@ struct ScmiDataEvent {
  * @brief convert ScmiDataEvent ID and enable status to a string representation we'd expect to see in scmi sysfs.
  */
 inline std::string to_string(const ScmiDataEvent& data_event) {
-  return std::format("0x{:04X}, originally_enabled: {}, timestamp_enabled: {}", data_event.id,
+  return std::format("0x{:08X}, originally_enabled: {}, timestamp_enabled: {}", data_event.id,
                      data_event.originally_enabled ? "true" : "false",
                      data_event.timestamp_enabled.value_or(false) ? "true" : "false");
 }
