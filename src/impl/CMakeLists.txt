@@ -99,6 +99,10 @@ target_compile_definitions(${LIBRARY_NAME} PRIVATE TE_UINT64 TE_BITWISE_OPERATOR
 message(STATUS "Using TE_UINT64 for tinyexpr++ (exact uint64_t arithmetic)")
 message(STATUS "Using TE_BITWISE_OPERATORS for tinyexpr++ (& and | are bitwise)")
 
+if(ASTL_HAVE_LIBSENSORS)
+  target_compile_definitions(${LIBRARY_NAME} PUBLIC ASTL_INCLUDE_LIBSENSORS)
+endif()
+
 if(ASTL_INCLUDE_LIBSENSORS)
   target_sources(
     ${LIBRARY_NAME}

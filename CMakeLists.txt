@@ -236,14 +236,36 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(render_templates)
 
-# Find libsensors
+# Configure optional libsensors support.
+set(ASTL_LIBSENSORS
+    "AUTO"
+    CACHE STRING "libsensors support: AUTO, ON, or OFF")
+set_property(CACHE ASTL_LIBSENSORS PROPERTY STRINGS AUTO ON OFF)
+
+string(TOUPPER "${ASTL_LIBSENSORS}" ASTL_LIBSENSORS)
+if(NOT ASTL_LIBSENSORS STREQUAL "AUTO"
+   AND NOT ASTL_LIBSENSORS STREQUAL "ON"
+   AND NOT ASTL_LIBSENSORS STREQUAL "OFF")
+  message(FATAL_ERROR "ASTL_LIBSENSORS must be one of: AUTO, ON, OFF")
+endif()
+
+set(ASTL_HAVE_LIBSENSORS OFF)
 set(ASTL_INCLUDE_LIBSENSORS OFF)
-find_library(SENSORS_LIB sensors)
-if(SENSORS_LIB)
-  set(ASTL_INCLUDE_LIBSENSORS ON)
-  add_compile_definitions(ASTL_INCLUDE_LIBSENSORS)
+unset(ASTL_SENSORS_LIB CACHE)
+
+if(ASTL_LIBSENSORS STREQUAL "OFF")
+  message(STATUS "libsensors support explicitly disabled (ASTL_LIBSENSORS=OFF)")
 else()
-  message(STATUS "libsensors not found: please install libsensors-dev package")
+  find_library(ASTL_SENSORS_LIB sensors)
+  if(ASTL_SENSORS_LIB)
+    set(ASTL_HAVE_LIBSENSORS ON)
+    set(ASTL_INCLUDE_LIBSENSORS ON)
+    message(STATUS "libsensors support enabled")
+  elseif(ASTL_LIBSENSORS STREQUAL "ON")
+    message(FATAL_ERROR "ASTL_LIBSENSORS=ON but libsensors was not found. Please install libsensors-dev package")
+  else()
+    message(STATUS "libsensors not found: building without libsensors support")
+  endif()
 endif()
 
 # define the static library `astl_static` - aka Astl::astl_static
@@ -383,7 +405,11 @@ if(BUILD_TESTING AND ASTL_BUILD_TESTING)
   add_subdirectory(tests/unit_test)
   add_subdirectory(tools/ATX/tests)
   add_subdirectory(tests/wrapper_test)
-  add_subdirectory(tests/libsensors_collector_test)
+  if(ASTL_HAVE_LIBSENSORS)
+    add_subdirectory(tests/libsensors_collector_test)
+  else()
+    message(STATUS "Skipping libsensors_collector_test because libsensors support is disabled")
+  endif()
   add_subdirectory(tests/e2e_test)
 endif()
 

@@ -44,12 +44,10 @@ set(UNIT_TEST_SRCS
     protobuf_serdes_utests.cpp
     archive_utests.cpp
     pause_marker_utests.cpp)
-find_library(SENSORS_LIB sensors)
-if(SENSORS_LIB)
+if(ASTL_HAVE_LIBSENSORS)
   message(STATUS "libsensors found, building sensors_collector_utests")
 else()
-  message(
-    STATUS "libsensors not found: please install libsensors-dev package. sensors_collector_utests will not be built")
+  message(STATUS "libsensors support disabled, sensors_collector_utests will not be built")
 endif()
 add_executable(unit_test ${UNIT_TEST_SRCS})
 target_compile_definitions(unit_test PRIVATE ASTL_BUILD)

@@ -14,10 +14,8 @@ set(SRCS libsensors_collector_utests.cpp libsensors_metric_builder_utests.cpp li
          mock_libsensors.cpp)
 set(TARGET "libsensors_test")
 
-# find libsensors, just for the header
-find_library(SENSORS_LIB sensors)
-if(SENSORS_LIB)
-  message(STATUS "libsensors found, building libsensors_collector_utests")
+if(ASTL_HAVE_LIBSENSORS)
+  message(STATUS "libsensors support enabled, building libsensors_collector_utests")
   add_executable(${TARGET} ${SRCS})
   # note - do _not_ link to the real libsensors here, since we're mocking it out with mock_libsensors.cpp
   target_compile_definitions(${TARGET} PRIVATE ASTL_HAVE_SENSORS)
@@ -49,6 +47,5 @@ if(SENSORS_LIB)
     "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")
 
 else()
-  message(STATUS "libsensors not found: please install libsensors-dev package. "
-                 "sensors_collector_utests will not be built without sensors.h")
+  message(STATUS "libsensors support disabled, sensors_collector_utests will not be built")
 endif()
