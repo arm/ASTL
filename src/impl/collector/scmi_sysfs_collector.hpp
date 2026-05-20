@@ -124,6 +124,9 @@ class ScmiSysfsCollector : public ICollector {
   std::unordered_map<ScmiDataEventId, HwClockTicks>
        _previous_timestamps;            //!< Track previous raw_tick per data event ID to detect duplicates
   bool _holds_process_lock_ref{false};  //!< True when this collector instance has retained one shared lock reference.
+  //!< When true (ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS is set), use CLOCK_MONOTONIC_RAW instead of the SCMI
+  //!< hardware counter for all sample timestamps. tstamp_enable is not written to sysfs in this mode.
+  bool _use_software_clock_timestamps{false};
 
   // private methods
 
@@ -313,6 +316,8 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
   if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::STOPPED) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot reconfigure while already started
   }
+  _use_software_clock_timestamps = IsEnvVarSet(EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS);
+  ASTL_LOG_INFO("ScmiSysfsCollector: use_software_clock_timestamps={}", _use_software_clock_timestamps);
   auto rollback_configuration_state = [this]() { RollbackConfigurationState("ConfigureCollection failure"); };
 
   // enable the telemetry subsystem
@@ -517,6 +522,14 @@ auto ScmiSysfsCollector<FileInterfaceT>::GetNativeClockSnapshot()
     if (!scmi_op) {
       continue;
     }
+    if (_use_software_clock_timestamps) {
+      const auto raw_now       = ClockMonotonicRaw::now();
+      const auto native_anchor = static_cast<HwClockTicks>(raw_now.time_since_epoch().count());
+      result[scmi_op->GetId()] = OperationClockCorrelation{
+          raw_now, native_anchor, NativeToMonotonicRawRatio{1, 1}
+      };
+      continue;
+    }
     auto data_event_dir_path = scmi_detail::GetDataEventDirPath(scmi_op->scmi_data_event_id);
     if (!data_event_dir_path) {
       ASTL_LOG_WARNING(
@@ -664,21 +677,23 @@ std::expected<std::vector<ScmiDataEvent>, astl_status_code> ScmiSysfsCollector<F
     const auto originally_enabled = expected_originally_enabled.value();
     enabled_data_events.emplace_back(data_event_id, originally_enabled, std::nullopt, std::nullopt);
     auto& configured_data_event = enabled_data_events.back();
-    // enable the timestamp collection and determine the clock rate
-    const auto expected_timestamp_enabled = EnableTimestamp(data_event_dir_path);
-    if (!expected_timestamp_enabled) {
-      static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
-      return std::unexpected{expected_timestamp_enabled.error()};
-    }
-    const auto timestamp_enabled            = expected_timestamp_enabled.value();
-    configured_data_event.timestamp_enabled = timestamp_enabled;
+    if (!_use_software_clock_timestamps) {
+      // enable the timestamp collection and determine the clock rate
+      const auto expected_timestamp_enabled = EnableTimestamp(data_event_dir_path);
+      if (!expected_timestamp_enabled) {
+        static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
+        return std::unexpected{expected_timestamp_enabled.error()};
+      }
+      const auto timestamp_enabled            = expected_timestamp_enabled.value();
+      configured_data_event.timestamp_enabled = timestamp_enabled;
 
-    const auto expected_timestamp_rate = ReadTimestampRate(data_event_dir_path);
-    if (!expected_timestamp_rate) {
-      static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
-      return std::unexpected{expected_timestamp_rate.error()};
+      const auto expected_timestamp_rate = ReadTimestampRate(data_event_dir_path);
+      if (!expected_timestamp_rate) {
+        static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
+        return std::unexpected{expected_timestamp_rate.error()};
+      }
+      configured_data_event.timestamp_rate = expected_timestamp_rate.value();
     }
-    configured_data_event.timestamp_rate = expected_timestamp_rate.value();
   }
   return enabled_data_events;
 }
@@ -765,8 +780,10 @@ auto ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(ScmiReadOperat
   if (!parsed_value) {
     return parsed_value.error();
   }
-  auto timestamp = parsed_value->first;
-  auto raw_value = AstlValue{parsed_value->second.value};
+  const auto timestamp = _use_software_clock_timestamps
+                             ? static_cast<HwClockTicks>(ClockMonotonicRaw::now().time_since_epoch().count())
+                             : parsed_value->first;
+  auto       raw_value = AstlValue{parsed_value->second.value};
 
   /**
    * @brief Discard samples that arrive with the same timestamp as the previous one.

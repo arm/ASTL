@@ -963,3 +963,207 @@ TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[s
   REQUIRE(ASTL_STATUS_SUCCESS == collector.PauseCollection());
   REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
 }
+
+/*
+ * When ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS is set, the collector must:
+ *  - never touch tstamp_enable or tstamp_rate sysfs files
+ *  - record a CLOCK_MONOTONIC_RAW timestamp (not the hardware tick from the value file) in raw_tick
+ */
+TEST_CASE("ScmiSysfsCollector uses software clock timestamp when env var is set",
+          "[scmi_sysfs_collector][software_clock]") {
+  astl::SetEnvVar(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "1");
+  std::scope_exit env_cleanup{[] { astl::SetEnvVar(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, ""); }};
+
+  MockFileInterface mock_file_interface;
+  ALLOW_CALL(mock_file_interface, IsValid(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, HasWritePermission(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, HasReadPermission(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"de_implementation_version"}, _))
+      .SIDE_EFFECT(_2 = "0.0.0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"version"}, _))
+      .SIDE_EFFECT(_2 = "0.0.1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  // tstamp_enable and tstamp_rate must never be touched in software-clock mode
+  FORBID_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x00001234/tstamp_enable"}));
+  FORBID_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/tstamp_enable"}, _));
+  FORBID_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/tstamp_enable"}, _));
+  FORBID_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x00001234/tstamp_rate"}));
+  FORBID_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/tstamp_rate"}, _));
+
+  trompeloeil::sequence seq;
+  // initialize telemetry subsystem
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"tlm_enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"tlm_enable"}, "1"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  // enable data event 0x1234 (originally disabled)
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/enable"}, "1"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  // value read during ReadImmediate: sysfs returns a hardware tick of 1234567890 in the timestamp field
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/value"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "1234567890 42")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  // cleanup: restore originally-disabled data event
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/enable"}, "0"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  MockRawSampleSink mock_raw_sample_sink;
+  uint64_t          received_raw_tick{0};
+  REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
+      .WITH(_2.size() == 1)
+      .LR_SIDE_EFFECT(received_raw_tick = _2[0].raw_tick)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
+  collector.SetRawSampleSink(&mock_raw_sample_sink);
+
+  astl::OperationSequence operations_on_sample;
+  operations_on_sample.push_back(
+      std::make_unique<astl::ScmiReadOperation>(astl::ScmiDataEventId{0x1234}, astl::kilohertz{1}));
+  astl::CollectionOperations operations{.operationsBeforeStart{},
+                                        .operationsAtStart{},
+                                        .operationsOnSample{std::move(operations_on_sample)},
+                                        .operationsAtStop{},
+                                        .samplingInterval{},
+                                        .requirements{astl::CollectorCapability{astl::CollectorType::SCMI}}};
+  astl_collection_params_t   collection_params{
+        .size              = sizeof(astl_collection_params_t),
+        .flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
+        .sampling_interval = 0,
+        .collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+  };
+  astl::CollectionConfiguration configuration{nullptr, std::move(operations), collection_params};
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
+  const auto before_ns = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ReadImmediate());
+  const auto after_ns = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
+
+  // The raw_tick must be a software clock value bracketed by before/after, not the sysfs hardware tick 1234567890
+  CHECK(received_raw_tick != uint64_t{1234567890});
+  CHECK(received_raw_tick >= before_ns);
+  CHECK(received_raw_tick <= after_ns);
+}
+
+/*
+ * When ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS is set, GetNativeClockSnapshot must return correlations
+ * with a 1:1 tick ratio and native_at_start equal to the CLOCK_MONOTONIC_RAW snapshot timestamp.
+ */
+TEST_CASE("ScmiSysfsCollector::GetNativeClockSnapshot uses software clock when env var is set",
+          "[scmi_sysfs_collector][software_clock]") {
+  astl::SetEnvVar(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "1");
+  std::scope_exit env_cleanup{[] { astl::SetEnvVar(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, ""); }};
+
+  MockFileInterface mock_file_interface;
+  ALLOW_CALL(mock_file_interface, IsValid(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, HasWritePermission(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, HasReadPermission(_)).RETURN(true);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"de_implementation_version"}, _))
+      .SIDE_EFFECT(_2 = "0.0.0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(mock_file_interface, Read(std::filesystem::path{"version"}, _))
+      .SIDE_EFFECT(_2 = "0.0.1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  // tstamp_enable and tstamp_rate must never be touched in software-clock mode
+  FORBID_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x00001234/tstamp_enable"}));
+  FORBID_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/tstamp_enable"}, _));
+  FORBID_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/tstamp_enable"}, _));
+  FORBID_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x00001234/tstamp_rate"}));
+  FORBID_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/tstamp_rate"}, _));
+  // GetNativeClockSnapshot must not read the value file in software-clock mode
+  FORBID_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/value"}, _));
+
+  trompeloeil::sequence seq;
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"tlm_enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"tlm_enable"}, "1"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "0")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/enable"}, "1"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  // cleanup
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "1")
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(mock_file_interface, Write(std::filesystem::path{"des/0x00001234/enable"}, "0"))
+      .IN_SEQUENCE(seq)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
+
+  astl::OperationSequence operations_on_sample;
+  auto                    scmi_read_operation =
+      std::make_unique<astl::ScmiReadOperation>(astl::ScmiDataEventId{0x1234}, astl::kilohertz{1});
+  const auto op_id = scmi_read_operation->GetId();
+  operations_on_sample.push_back(std::move(scmi_read_operation));
+  astl::CollectionOperations operations{.operationsBeforeStart{},
+                                        .operationsAtStart{},
+                                        .operationsOnSample{std::move(operations_on_sample)},
+                                        .operationsAtStop{},
+                                        .samplingInterval{},
+                                        .requirements{astl::CollectorCapability{astl::CollectorType::SCMI}}};
+  astl_collection_params_t   collection_params{
+        .size              = sizeof(astl_collection_params_t),
+        .flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
+        .sampling_interval = 0,
+        .collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+  };
+  astl::CollectionConfiguration configuration{nullptr, std::move(operations), collection_params};
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
+
+  const auto before_ns    = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  const auto correlations = collector.GetNativeClockSnapshot();
+  const auto after_ns     = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+
+  REQUIRE(correlations.has_value());
+  REQUIRE(correlations->count(op_id) == 1);
+  const auto& corr = correlations->at(op_id);
+
+  // tick ratio must be 1:1 (software ns pass-through)
+  CHECK(corr.ticks == astl::NativeToMonotonicRawRatio{1, 1});
+  // native_at_start must equal the raw_monotonic_at_start nanosecond count
+  CHECK(corr.native_at_start ==
+        static_cast<astl::HwClockTicks>(corr.raw_monotonic_at_start.time_since_epoch().count()));
+  // both must lie within the before/after bracket
+  CHECK(corr.native_at_start >= before_ns);
+  CHECK(corr.native_at_start <= after_ns);
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
+}

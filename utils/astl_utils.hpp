@@ -84,6 +84,11 @@ enum class EnvVar {
   /* set to any value other than empty, 0, off, no, or false to enable per-sample CSV logging to raw_samples.csv (debug
      feature) */
   ASTL_LOG_RAW_SAMPLES,
+
+  /* set to any value other than empty, 0, off, no, or false to make the SCMI collector use software clock
+   * (CLOCK_MONOTONIC_RAW) timestamps instead of the SCMI hardware counter. When set, tstamp_enable is not
+   * written to sysfs at all. Useful when hardware timestamps are unavailable or unreliable. */
+  ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS,
 };
 
 /**
