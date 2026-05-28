@@ -389,8 +389,9 @@ else()
   message(STATUS "Skipping mock_sysfs on this platform")
 endif()
 
-# define a CLI application to use the library
+# define CLI applications to use the library
 add_subdirectory(tools/ATX)
+add_subdirectory(tools/turbostat-arm)
 
 include(CTest)
 

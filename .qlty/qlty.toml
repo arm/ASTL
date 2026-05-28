@@ -46,6 +46,7 @@ exclude_patterns = [
   "**/testdata/**",
   "**/third_party/**",
   "**/vendor/**",
+  "tools/turbostat-arm/**",
   "config/scmi/alpha/**",
   "config/scmi/beta/**",
 ]
