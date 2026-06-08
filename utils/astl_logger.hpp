@@ -23,8 +23,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
-#include <magic_enum/magic_enum.hpp>
-
+#include "astl_magic_enum.hpp"
 #include "astl_utils.hpp"
 namespace astl {
 

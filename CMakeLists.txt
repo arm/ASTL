@@ -201,6 +201,7 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 option(ASTL_BUILD_TESTING "Build tests" ${PROJECT_IS_TOP_LEVEL})
+option(ASTL_BUILD_TOOLS "Build tools" ${PROJECT_IS_TOP_LEVEL})
 option(ASTL_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
 # option(ASTL_INSTALL "Install library when invoking --install" ON) option(ASTL_ENABLE_LOGGING "Enable logging" OFF)
 
@@ -384,14 +385,20 @@ if(ENABLE_VALGRIND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 if(UNIX AND NOT APPLE)
-  add_subdirectory(tools/mock_sysfs)
+  if(ASTL_BUILD_TOOLS)
+    add_subdirectory(tools/mock_sysfs)
+  else()
+    message(STATUS "Skipping mock_sysfs because ASTL_BUILD_TOOLS is disabled")
+  endif()
 else()
   message(STATUS "Skipping mock_sysfs on this platform")
 endif()
 
-# define CLI applications to use the library
-add_subdirectory(tools/ATX)
-add_subdirectory(tools/turbostat-arm)
+# define a CLI application to use the library
+if(ASTL_BUILD_TOOLS)
+  add_subdirectory(tools/ATX)
+  add_subdirectory(tools/turbostat-arm)
+endif()
 
 include(CTest)
 
@@ -404,7 +411,9 @@ endif()
 if(BUILD_TESTING AND ASTL_BUILD_TESTING)
   enable_testing()
   add_subdirectory(tests/unit_test)
-  add_subdirectory(tools/ATX/tests)
+  if(ASTL_BUILD_TOOLS)
+    add_subdirectory(tools/ATX/tests)
+  endif()
   add_subdirectory(tests/wrapper_test)
   if(ASTL_HAVE_LIBSENSORS)
     add_subdirectory(tests/libsensors_collector_test)

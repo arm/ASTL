@@ -139,6 +139,9 @@ target_link_libraries(${LIBRARY_NAME} PRIVATE nlohmann_json::nlohmann_json)
 find_package(miniz CONFIG REQUIRED)
 target_link_libraries(${LIBRARY_NAME} PRIVATE miniz::miniz)
 
+find_package(magic_enum CONFIG REQUIRED)
+target_link_libraries(${LIBRARY_NAME} PRIVATE magic_enum::magic_enum)
+
 # if doing a debug build, include detailed json diagnostics on parse errors This setting has two parts : -the CMake
 # cache variable JSON_DIAGNOSTICS, which is set in the CmakePresets.json file and used here in the conditional below -
 # the preprocessor definition JSON_DIAGNOSTICS which nlohmann::json looks for at compile time.
@@ -188,7 +191,7 @@ endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   set_source_files_properties(
     "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_counters.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/serdes/serdes_metrics.cpp"
-    ${GEN_FILES} PROPERTIES COMPILE_OPTIONS "-Wno-conversion;-Wno-nullability-extension")
+    ${GEN_FILES} PROPERTIES COMPILE_OPTIONS "-Wno-conversion;-Wno-sign-conversion;-Wno-nullability-extension")
 elseif(MSVC)
   # Suppress noisy warnings from protobuf - generated code and includes when compiling on MSVC : -C4267 : size_t->int
   # conversion in generated accessors - C4100 : unreferenced parameters in generated helper functions

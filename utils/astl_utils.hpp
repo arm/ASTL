@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <array>
-#include <magic_enum/magic_enum.hpp>
 #include <random>
 #include <string>
 #include <string_view>
@@ -15,6 +14,7 @@
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
+#include "astl_magic_enum.hpp"
 
 namespace astl {
 

@@ -9,12 +9,12 @@
 #include <fstream>
 #include <functional>  // for std::reference_wrapper in expected return types
 #include <iterator>
-#include <magic_enum/magic_enum.hpp>
 #include <vector>
 
 #include "astl/astl_errors.h"
 #include "astl_defines.hpp"
 #include "astl_logger.hpp"
+#include "astl_magic_enum.hpp"
 #include "common/string_pool.hpp"
 #include "common/system_info.hpp"
 #include "config/configuration_manager.hpp"  // for ConfigurationManager::GetConfiguration

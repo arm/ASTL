@@ -10,11 +10,11 @@
 // which _must_ be defined before including some catch2 headers.
 
 #include <catch2/catch_tostring.hpp>
-#include <magic_enum/magic_enum.hpp>
 #include <string>
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
+#include "astl_magic_enum.hpp"
 
 /**
  * @brief Extend catch2's StringMaker to support astl_status_code. Include this header before including catch2.
