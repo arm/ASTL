@@ -43,10 +43,15 @@ set(UNIT_TEST_SRCS
     string_pool_utests.cpp
     protobuf_serdes_utests.cpp
     archive_utests.cpp
-    pause_marker_utests.cpp)
+    pause_marker_utests.cpp
+    ${CMAKE_SOURCE_DIR}/tests/test_utilities.cpp)
 if(ASTL_HAVE_LIBSENSORS)
-  message(STATUS "libsensors found, building sensors_collector_utests")
-else()
+  find_library(SENSORS_LIB sensors)
+  if(SENSORS_LIB)
+    message(STATUS "libsensors found, building sensors_collector_utests")
+  else()
+    message(STATUS "libsensors not found, sensors_collector_utests will not be built")
+  endif()
   message(STATUS "libsensors support disabled, sensors_collector_utests will not be built")
 endif()
 add_executable(unit_test ${UNIT_TEST_SRCS})
@@ -80,7 +85,7 @@ catch_discover_tests(
   ADD_TAGS_AS_LABELS
   PROPERTIES
   ENVIRONMENT
-  "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")
+  "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
 
 add_executable(pure_c_header_smoke pure_c_header_smoke.c)
 set_target_properties(

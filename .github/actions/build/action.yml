@@ -10,7 +10,7 @@ inputs:
     description: 'Operating system (ubuntu, windows-latest, macos-15)'
     required: true
   cmake_preset:
-    description: 'CMake preset (release, debug)'
+    description: 'CMake preset (release, debug, debug-valgrind-coverage)'
     required: true
   c_compiler:
     description: 'C compiler'

@@ -5,6 +5,7 @@
 #ifndef ASTL_TEST_UTILITIES_H_
 #define ASTL_TEST_UTILITIES_H_
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 
@@ -35,6 +36,9 @@ struct TempFileGuard {
 /**
  * @brief RAII guard to restore an environment variable on scope exit
  */
+
+[[noreturn]] auto ExitForkedTestChild(int exit_code) noexcept -> void;
+
 struct EnvVarGuard {
   // restore original value on destruction
   explicit EnvVarGuard(astl::EnvVar env_var) : env_var(env_var), old_value(astl::GetEnvVar(this->env_var)) {}

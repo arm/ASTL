@@ -12,7 +12,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASTL_ROOT="$(dirname "${SCRIPT_DIR}")"
 ASTL_HOST_ARCH="$("${ASTL_ROOT}/scripts/host_arch.sh")"
-ASTL_BUILD_OUTPUT_DIR="${ASTL_ROOT}/build/debug/${ASTL_HOST_ARCH}"
 echo "ASTL_ROOT = ${ASTL_ROOT}"
 
 ########################################
@@ -20,7 +19,12 @@ echo "ASTL_ROOT = ${ASTL_ROOT}"
 ########################################
 export ASTL_MOCKSYSFS_TLM_JSON_PATH="${ASTL_ROOT}/tools/mock_sysfs/config/tlm.json"
 echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = ${ASTL_MOCKSYSFS_TLM_JSON_PATH}"
-MOCK_SYSFS="${ASTL_BUILD_OUTPUT_DIR}/bin/MockSysfs"
+BUILD_PRESET="${ASTL_BUILD_PRESET:-debug}"
+BUILD_DIR="${ASTL_BUILD_DIR:-${ASTL_ROOT}/build/${BUILD_PRESET}/${ASTL_HOST_ARCH}}"
+MOCK_SYSFS="${ASTL_MOCKSYSFS_BIN:-${BUILD_DIR}/bin/MockSysfs}"
+echo "ASTL_BUILD_PRESET = ${BUILD_PRESET}"
+echo "BUILD_DIR = ${BUILD_DIR}"
+echo "MOCK_SYSFS = ${MOCK_SYSFS}"
 MOUNT_POINT="${ASTL_MOCKSYSFS_MOUNT_POINT:-${TMPDIR:-/tmp}/astl-mocksysfs}"
 
 # Constants for startup detection
@@ -128,7 +132,7 @@ echo "✅ MockSysfs mounted at ${MOUNT_POINT}"
 ###############################################################
 # Copy metrics + scmi spec config/ directory to build directory #
 ###############################################################
-./scripts/publish_configs.sh -o "${ASTL_BUILD_OUTPUT_DIR}/lib/config" --confidential --mocksysfs
+./scripts/publish_configs.sh -o "${BUILD_DIR}/lib/config" --confidential --mocksysfs
 
 ###############
 # Demo action #
@@ -137,7 +141,7 @@ echo "✅ MockSysfs mounted at ${MOUNT_POINT}"
 ### delete tmp/*.astl files if they exist to avoid interference with old samples
 rm -f tmp/*.astl
 
-SAMPLE_TEST_BIN="${ASTL_BUILD_OUTPUT_DIR}/bin/sample_test"
+SAMPLE_TEST_BIN="${BUILD_DIR}/bin/sample_test"
 if [[ ! -x ${SAMPLE_TEST_BIN} ]]; then
 	echo "❌ Error: sample_test binary not found or not executable at ${SAMPLE_TEST_BIN}" >&2
 	exit 1
@@ -164,7 +168,7 @@ fi
 
 # force ASTL to use our mocksysfs mount point for the SCMI sysfs rather than the default /sys/fs/arm_telemetry
 export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="${TELEMETRY_ROOT}"
-export ASTL_CONFIG_DIR="${ASTL_BUILD_OUTPUT_DIR}/lib/config"
+export ASTL_CONFIG_DIR="${BUILD_DIR}/lib/config"
 echo "ASTL_CONFIG_DIR = ${ASTL_CONFIG_DIR}"
 
 # Set CSV output file for summary data

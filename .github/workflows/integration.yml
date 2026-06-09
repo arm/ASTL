@@ -30,12 +30,12 @@ jobs:
 
       # Set up a matrix to run the following configurations:
       # - <Windows, Release, latest MSVC compiler toolchain on the default runner image, default generator>
-      # - <Linux,   Debug,   latest GCC compiler toolchain on the default runner image, default generator>
-      # - <Linux,   Debug,   latest Clang compiler toolchain on the default runner image, default generator>
+      # - <Linux,   Debug+Valgrind+Coverage, latest GCC compiler toolchain on the default runner image, default generator>
+      # - <Linux,   Debug+Valgrind+Coverage, latest Clang compiler toolchain on the default runner image, default generator>
       # - <MacOs,   Release, latest Clang compiler toolchain on the default runner image, default generator>
       matrix:
         os: [ubuntu-24.04-arm, windows-latest, macos-15]
-        cmake_preset: [release, debug]
+        cmake_preset: [release, debug-valgrind-coverage]
         cpp_compiler: [g++, clang++, cl]
         include:
           - os: windows-latest
@@ -54,7 +54,7 @@ jobs:
           - os: ubuntu-24.04-arm
             cmake_preset: release
           - os: windows-latest
-            cmake_preset: debug
+            cmake_preset: debug-valgrind-coverage
           - os: windows-latest
             cpp_compiler: g++
           - os: windows-latest
@@ -66,7 +66,7 @@ jobs:
           - os: macos-15
             cpp_compiler: g++
           - os: macos-15
-            cmake_preset: debug
+            cmake_preset: debug-valgrind-coverage
 
     steps:
       # Checkout MUST happen before calling local composite action
@@ -90,13 +90,13 @@ jobs:
 
       # ===== TEST STEPS =====
       - name: 🐹 Setup Go
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'release'
         uses: actions/setup-go@v6
         with:
           go-version: "1.22"
 
       - name: 🐹 Run Go Wrapper Smoke Tests
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'release'
         run: |
           ASTL_HOST_ARCH="$("${{ github.workspace }}/scripts/host_arch.sh")"
           ASTL_LIB_DIR="${{ github.workspace }}/build/${{ matrix.cmake_preset }}/${ASTL_HOST_ARCH}/lib"
@@ -114,8 +114,8 @@ jobs:
         # exclude sample tests - we want to measure coverage of tests that have assertions in them
         run: |
           MEMCHECK_PARAMS=()
-          if [[ "${GITHUB_EVENT_NAME}" == "schedule" && "${CMAKE_PRESET}" == "debug" ]]; then
-            echo 'Running unit tests with Valgrind, since this is a scheduled debug run.'
+          if [[ "${CMAKE_PRESET}" == "debug-valgrind-coverage" ]]; then
+            echo 'Running unit tests with Valgrind.'
             valgrind --version
             MEMCHECK_PARAMS=(--test-action memcheck)
           else
@@ -126,26 +126,36 @@ jobs:
           echo 'Running time_sensitive tests without parallelization or memcheck.'
           ctest -L "time_sensitive" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
 
-          if [[ -n "$MEMCHECK_PARAM" ]]; then
+          if [[ ${#MEMCHECK_PARAMS[@]} -gt 0 ]]; then
             echo 'Checking valgrind output for memory issues'
             # Grep will return a non-zero exit code if the defect list is non-empty and cause the CICD flow to fail
             grep -F '<DefectList/>' ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/*/DynamicAnalysis.xml
           fi
         env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
           CMAKE_PRESET: ${{  matrix.cmake_preset }}
 
+      - name: ⤴️ Upload Valgrind Logs
+        if: always() && contains(matrix.os, 'ubuntu') && matrix.cmake_preset == 'debug-valgrind-coverage'
+        uses: actions/upload-artifact@v7
+        with:
+          name: valgrind-logs-${{ matrix.os }}-${{ matrix.cpp_compiler }}
+          if-no-files-found: warn
+          path: |
+            ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/**/DynamicAnalysis.xml
+            ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/Temporary/LastDynamicAnalysis*.log*
+            ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/Temporary/MemoryChecker.*.log
+
       - name: 📊 Code Coverage - Merge Coverage from Parallel Runs
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage'
         run: ${{ github.workspace }}/scripts/merge_coverage.sh ${{ github.workspace }}/build
 
       - name: 📊 Code Coverage - Generate Report with gcovr
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage'
         run: ${{ github.workspace }}/scripts/create_coverage_report.sh --xml
 
       - name: ⤴️ Code Coverage - Publish to Qlty
         # project overview: https://qlty.sh/gh/Arm-Debug/projects/ASTL
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage'
         uses: qltysh/qlty-action/coverage@v2
         with:
           token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
@@ -161,11 +171,11 @@ jobs:
         run: ctest -L "integration" --preset ${{ matrix.cmake_preset }}
 
       - name: 📽️ Run Demo with MockSysFs
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage'
         run: |
           set -o pipefail
           EXPECTED_STRING="astlGetMetricSamplesOnTarget Status: SUCCESS"
-          ${{ github.workspace }}/scripts/demo.sh > demo.log
+          ASTL_BUILD_PRESET=${{ matrix.cmake_preset }} ${{ github.workspace }}/scripts/demo.sh > demo.log
           cat demo.log
           grep "${EXPECTED_STRING}" demo.log
         env:

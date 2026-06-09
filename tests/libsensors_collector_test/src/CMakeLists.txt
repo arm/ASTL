@@ -44,7 +44,8 @@ if(ASTL_HAVE_LIBSENSORS)
     ADD_TAGS_AS_LABELS
     PROPERTIES
     ENVIRONMENT
-    "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config")
+    # prevent valgrind from searching the web and hanging looking for debug symbols
+    "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
 
 else()
   message(STATUS "libsensors support disabled, sensors_collector_utests will not be built")

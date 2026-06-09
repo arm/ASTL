@@ -56,6 +56,7 @@ inline auto GetScmiProcessLockTempDirectory(std::error_code& error_code) -> std:
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
+#include "../../test_utilities.hpp"
 #include "astl/astl.h"
 #include "astl_file_interface.hpp"
 #include "collector/scmi_sysfs_collector.hpp"
@@ -304,14 +305,14 @@ TEST_CASE("ScmiSysfsCollector blocks configure from second process", "[scmi_sysf
     char start_signal{};
     if (read(sync_pipe[0], &start_signal, 1) != 1) {
       close(sync_pipe[0]);
-      _exit(2);
+      ExitForkedTestChild(2);
     }
     close(sync_pipe[0]);
 
     astl::ScmiSysfsCollector<astl::FileInterface> child_collector{astl::FileInterface(base_path_child)};
     astl::CollectionConfiguration                 child_configuration{nullptr, make_operations(), collection_params};
     const auto status = child_collector.ConfigureCollection(std::move(child_configuration));
-    _exit(status == ASTL_STATUS_COLLECTION_ALREADY_RUNNING ? 0 : 1);
+    ExitForkedTestChild(status == ASTL_STATUS_COLLECTION_ALREADY_RUNNING ? 0 : 1);
   }
 
   close(sync_pipe[0]);
@@ -377,7 +378,7 @@ TEST_CASE("ScmiSysfsCollector releases process lock on destructor after configur
     astl::ScmiSysfsCollector<astl::FileInterface> child_collector{astl::FileInterface(base_path_child)};
     astl::CollectionConfiguration                 child_configuration{nullptr, make_operations(), collection_params};
     const auto status = child_collector.ConfigureCollection(std::move(child_configuration));
-    _exit(status == ASTL_STATUS_SUCCESS ? 0 : 1);
+    ExitForkedTestChild(status == ASTL_STATUS_SUCCESS ? 0 : 1);
   }
 
   int wait_status = 0;

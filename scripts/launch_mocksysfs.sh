@@ -19,7 +19,23 @@ echo "ASTL_ROOT = $ASTL_ROOT"
 ########################################
 export ASTL_MOCKSYSFS_TLM_JSON_PATH="$ASTL_ROOT/tools/mock_sysfs/config/tlm.json"
 echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = $ASTL_MOCKSYSFS_TLM_JSON_PATH"
-MOCK_SYSFS="$ASTL_ROOT/build/debug/${ASTL_HOST_ARCH}/bin/MockSysfs"
+BUILD_PRESET="${ASTL_BUILD_PRESET:-debug}"
+ASTL_HOST_ARCH="$("${ASTL_ROOT}/scripts/host_arch.sh")"
+BUILD_DIR="${ASTL_BUILD_DIR:-$ASTL_ROOT/build/$BUILD_PRESET/$ASTL_HOST_ARCH}"
+MOCK_SYSFS="${ASTL_MOCKSYSFS_BIN:-}"
+if [[ -z $MOCK_SYSFS && -n ${ATX_BIN_PATH:-} ]]; then
+	ATX_BIN_DIR="$(dirname "$(realpath "${ATX_BIN_PATH}")")"
+	ATX_ADJACENT_MOCKSYSFS="${ATX_BIN_DIR}/MockSysfs"
+	if [[ -x $ATX_ADJACENT_MOCKSYSFS ]]; then
+		MOCK_SYSFS="$ATX_ADJACENT_MOCKSYSFS"
+	fi
+fi
+if [[ -z $MOCK_SYSFS ]]; then
+	MOCK_SYSFS="$BUILD_DIR/bin/MockSysfs"
+fi
+echo "ASTL_BUILD_PRESET = $BUILD_PRESET"
+echo "BUILD_DIR = $BUILD_DIR"
+echo "MOCK_SYSFS = $MOCK_SYSFS"
 
 # Allow optional arguments to override MOUNT_POINT and SYSFS_LOG.
 MOUNT_POINT="${HOME}/tmp/fuse"

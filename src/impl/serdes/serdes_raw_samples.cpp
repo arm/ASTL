@@ -3,9 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/message_lite.h>
 #include <google/protobuf/util/delimited_message_util.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <istream>
 #include <ostream>
@@ -16,6 +18,12 @@
 #include "serdes/serdes_util.hpp"
 
 namespace astl::ProtobufSerDes {
+
+namespace {
+auto ShutdownProtobufLibraryAtExit() noexcept -> void { google::protobuf::ShutdownProtobufLibrary(); }
+
+[[maybe_unused]] const bool kRegisteredProtobufShutdown = std::atexit(ShutdownProtobufLibraryAtExit) == 0;
+}  // namespace
 
 namespace fs = std::filesystem;
 

@@ -12,20 +12,20 @@ rm -r coverage*
 find . | grep -E "\.gcda|\.gcov" | xargs rm
 
 # run the tests
-ctest --parallel 8 -LE "integration|mocksysfs" --preset debug
+ctest --parallel 8 -LE "integration|mocksysfs" --preset debug-valgrind-coverage
 
 # make directories at the places merge_coverage expects them to be?
-mkdir -p build/debug/CMakeFiles/astl.dir/src/
-mkdir -p build/debug/samples/sample_test/src/CMakeFiles/sample_test.dir/
-mkdir -p build/debug/src/impl/CMakeFiles/astl_static.dir/
-mkdir -p build/debug/src/impl/CMakeFiles/astl_static.dir/collector/
-mkdir -p build/debug/src/impl/CMakeFiles/astl_static.dir/common/
-mkdir -p build/debug/src/impl/CMakeFiles/astl_static.dir/config/
-mkdir -p build/debug/src/impl/CMakeFiles/astl_static.dir/metric/
-mkdir -p build/debug/src/impl/CMakeFiles/astl_static.dir/topology/
-mkdir -p build/debug/tests/wrapper_test/src/CMakeFiles/libsensors_collector_test.dir/
-mkdir -p build/debug/tests/wrapper_test/src/CMakeFiles/unit_test.dir/
-mkdir -p build/debug/tests/wrapper_test/src/CMakeFiles/wrapper_test.dir/
+mkdir -p build/debug-valgrind-coverage/CMakeFiles/astl.dir/src/
+mkdir -p build/debug-valgrind-coverage/samples/sample_test/src/CMakeFiles/sample_test.dir/
+mkdir -p build/debug-valgrind-coverage/src/impl/CMakeFiles/astl_static.dir/
+mkdir -p build/debug-valgrind-coverage/src/impl/CMakeFiles/astl_static.dir/collector/
+mkdir -p build/debug-valgrind-coverage/src/impl/CMakeFiles/astl_static.dir/common/
+mkdir -p build/debug-valgrind-coverage/src/impl/CMakeFiles/astl_static.dir/config/
+mkdir -p build/debug-valgrind-coverage/src/impl/CMakeFiles/astl_static.dir/metric/
+mkdir -p build/debug-valgrind-coverage/src/impl/CMakeFiles/astl_static.dir/topology/
+mkdir -p build/debug-valgrind-coverage/tests/wrapper_test/src/CMakeFiles/libsensors_collector_test.dir/
+mkdir -p build/debug-valgrind-coverage/tests/wrapper_test/src/CMakeFiles/unit_test.dir/
+mkdir -p build/debug-valgrind-coverage/tests/wrapper_test/src/CMakeFiles/wrapper_test.dir/
 
 ./scripts/merge_coverage.sh build/
 ./scripts/create_coverage_report.sh --html

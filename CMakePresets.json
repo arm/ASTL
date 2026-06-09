@@ -12,17 +12,21 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "ENABLE_COVERAGE": "ON",
-        "ENABLE_VALGRIND": "ON",
+        "ENABLE_COVERAGE": "OFF",
+        "ENABLE_VALGRIND": "OFF",
         "JSON_DIAGNOSTICS": "1"
       },
       "binaryDir": "${sourceDir}/build/${presetName}"
     },
     {
-      "name": "debug-no-valgrind",
+      "name": "debug-valgrind-coverage",
       "inherits": "debug",
       "cacheVariables": {
-        "ENABLE_VALGRIND": "OFF"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_COVERAGE": "ON",
+        "ENABLE_VALGRIND": "ON",
+        "JSON_DIAGNOSTICS": "1"
       }
     },
     {
@@ -44,6 +48,11 @@
       "configuration": "Debug"
     },
     {
+      "name": "debug-valgrind-coverage",
+      "configurePreset": "debug-valgrind-coverage",
+      "configuration": "Debug"
+    },
+    {
       "name": "release",
       "configurePreset": "release",
       "configuration": "Release"
@@ -53,6 +62,14 @@
     {
       "name": "debug",
       "configurePreset": "debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug-valgrind-coverage",
+      "configurePreset": "debug-valgrind-coverage",
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true
