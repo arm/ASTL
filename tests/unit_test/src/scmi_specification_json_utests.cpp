@@ -4,6 +4,7 @@
 
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl_errors.h"
+#include "astl_internal_status.hpp"
 #include "common/scmi/uuid.hpp"
 #include "config/metric_json_declaration.hpp"
 #include "config/scmi_metric_json_declaration.hpp"
@@ -491,5 +492,5 @@ TEST_CASE("FindMatchingScmiRegistersForResidency rejects non-zero base10 modifie
   auto result =
       astl::scmi::spec::FindMatchingScmiRegistersForResidency(residency_metric_declaration, scmi_specification);
   REQUIRE_FALSE(result.has_value());
-  REQUIRE(result.error() == ASTL_STATUS_NOT_IMPLEMENTED);
+  REQUIRE(result.error() == astl::kInternalNotImplemented);
 }

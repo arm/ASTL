@@ -8,6 +8,7 @@
 #include <concepts>
 #include <variant>
 
+#include "astl_internal_status.hpp"
 #include "operation/operation.hpp"  // defines OperationSequence and OperationBuilder concept
 #include "target.hpp"
 
@@ -31,7 +32,7 @@ class NullOperationBuilder {
   [[nodiscard]] static auto BuildOperations(const ITarget* target)
       -> std::expected<OperationSequence, astl_status_code> {
     (void)target;
-    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+    return std::unexpected(astl::kInternalNotImplemented);
   }
 };
 

@@ -15,7 +15,6 @@ func TestStatusEnumABIParity(t *testing.T) {
 		got  Status
 		want Status
 	}{
-		{"unknown_error", StatusUnknownError, Status(^uint32(0))},
 		{"success", StatusSuccess, 0},
 		{"bad_argument", StatusBadArgument, 1},
 		{"bad_configuration", StatusBadConfiguration, 2},
@@ -23,7 +22,6 @@ func TestStatusEnumABIParity(t *testing.T) {
 		{"invalid_counter_handle", StatusInvalidCounterHandle, 4},
 		{"invalid_metric_handle", StatusInvalidMetricHandle, 5},
 		{"invalid_metric_group_handle", StatusInvalidMetricGroupHandle, 6},
-		{"not_implemented", StatusNotImplemented, 7},
 		{"not_supported", StatusNotSupported, 8},
 		{"deprecated_api", StatusDeprecatedAPI, 9},
 		{"no_target_found", StatusNoTargetFound, 10},
@@ -55,7 +53,6 @@ func TestStatusEnumABIParity(t *testing.T) {
 		{"file_open_failed", StatusFileOpenFailed, 36},
 		{"file_error", StatusFileError, 37},
 		{"out_of_memory", StatusOutOfMemory, 38},
-		{"divide_by_zero", StatusDivideByZero, 39},
 		{"invalid_value_type", StatusInvalidValueType, 40},
 		{"invalid_state_transition", StatusInvalidStateTransition, 41},
 		{"pause_unsupported", StatusPauseUnsupported, 42},

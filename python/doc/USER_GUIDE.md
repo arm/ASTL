@@ -142,8 +142,8 @@ with Session(target=t, counters=cs, auto_initialize=True) as sess:
 # Ensures best-effort stop on exit (with internal safety guards)
 ```
 
-`Session` tolerates already-initialized state and safely no-ops on cleanup if underlying C API
-reports NOT_IMPLEMENTED on certain lifecycle operations.
+`Session` tolerates already-initialized state and safely no-ops on cleanup for
+recoverable configuration-state lifecycle statuses.
 
 ---
 
@@ -192,8 +192,8 @@ samples whose timestamp falls within a single time window.
 ```python
 import astl
 
-# Both functions currently raise NotImplementedErrorASTL
-# The API surface is declared; implementation is pending.
+# Crop APIs permanently discard samples outside the requested time window.
+# Precondition: collection must be stopped on affected targets.
 astl.crop_samples(start_ts=2_000_000_000, end_ts=5_000_000_000)
 
 # No lower bound
@@ -214,9 +214,6 @@ astl.crop_samples_on_target(t, start_ts=2_000_000_000, end_ts=5_000_000_000)
 
 ### Behaviour
 
-> Note: Both `crop_samples` and `crop_samples_on_target` currently raise `NotImplementedErrorASTL`.
-> The API surface and struct layout are stable; full implementation is pending.
-
 - **Scope** — `crop_samples` applies to every configured target and every collected
   counter/metric. `crop_samples_on_target` is scoped to a single target.
 - **Irreversible** — call `load_collection` to recover discarded samples.
@@ -228,10 +225,10 @@ astl.crop_samples_on_target(t, start_ts=2_000_000_000, end_ts=5_000_000_000)
 
 ### Error Handling
 
-| Condition                                         | Exception                                       |
-| ------------------------------------------------- | ----------------------------------------------- |
-| `crop_samples` or `crop_samples_on_target` called | `NotImplementedErrorASTL` (not yet implemented) |
-| `start_ts > end_ts` (both non-zero)               | `BadArgumentError` (once implemented)           |
+| Condition                                         | Exception                              |
+| ------------------------------------------------- | -------------------------------------- |
+| `crop_samples` or `crop_samples_on_target` called | `ASTLError` (`COLLECTION_NOT_STOPPED`) |
+| `start_ts > end_ts` (both non-zero)               | `BadArgumentError`                     |
 
 ---
 
@@ -465,7 +462,7 @@ Streaming returns lightweight records (e.g., `PollResult`) with fields like `tim
 #### Backoff / Error Handling Strategy
 
 - Errors raise mapped exceptions immediately (fail-fast) so calling code decides retry policy.
-- If a NOT_IMPLEMENTED surface is encountered (some targets), helpers can degrade gracefully depending on the underlying C status mapping.
+- Recoverable configuration-state failures may be tolerated in best-effort helpers, but `INTERNAL_ERROR` is raised.
 
 ---
 
@@ -553,14 +550,13 @@ Benchmarking helper script (benchmark_polling) has been removed; use streaming o
 
 ## Exception Model
 
-| C Status         | Python Exception          | Typical Cause                   |
-| ---------------- | ------------------------- | ------------------------------- |
-| BAD_ARGUMENT     | `BadArgumentError`        | Invalid parameter / ID          |
-| INVALID_ARGUMENT | `InvalidArgumentError`    | Semantically invalid config     |
-| NOT_IMPLEMENTED  | `NotImplementedErrorASTL` | Feature unsupported on platform |
-| OUT_OF_MEMORY    | `OutOfMemoryError`        | Allocation failure              |
-| INTERNAL_ERROR   | `InternalError`           | Unexpected internal failure     |
-| DEPRECATED       | `DeprecatedAPIError`      | Obsolete call path              |
+| C Status         | Python Exception       | Typical Cause               |
+| ---------------- | ---------------------- | --------------------------- |
+| BAD_ARGUMENT     | `BadArgumentError`     | Invalid parameter / ID      |
+| INVALID_ARGUMENT | `InvalidArgumentError` | Semantically invalid config |
+| OUT_OF_MEMORY    | `OutOfMemoryError`     | Allocation failure          |
+| INTERNAL_ERROR   | `InternalError`        | Unexpected internal failure |
+| DEPRECATED       | `DeprecatedAPIError`   | Obsolete call path          |
 
 All raise immediately; no silent fallback except explicitly documented tolerant paths (e.g., session shutdown best-effort).
 
@@ -626,12 +622,12 @@ print(frame_or_list)
 
 ## Troubleshooting
 
-| Symptom                            | Likely Cause                                      | Resolution                                  |
-| ---------------------------------- | ------------------------------------------------- | ------------------------------------------- |
-| NotImplementedErrorASTL for metric | Platform lacks support                            | Conditional logic / skip gracefully         |
-| Empty DataFrame results            | No samples collected                              | Verify streaming loop iterations / interval |
-| Rates list shorter than samples    | First sample lacks predecessor / zero-dt filtered | Expected behavior                           |
-| pandas ImportError                 | Extra not installed                               | `pip install pandas`                        |
+| Symptom                         | Likely Cause                                          | Resolution                                  |
+| ------------------------------- | ----------------------------------------------------- | ------------------------------------------- |
+| InternalError for an operation  | Unexpected internal failure; check last-status detail | Investigate logs / contact support          |
+| Empty DataFrame results         | No samples collected                                  | Verify streaming loop iterations / interval |
+| Rates list shorter than samples | First sample lacks predecessor / zero-dt filtered     | Expected behavior                           |
+| pandas ImportError              | Extra not installed                                   | `pip install pandas`                        |
 
 ---
 

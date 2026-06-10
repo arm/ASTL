@@ -23,8 +23,8 @@ Provided capabilities:
 
 Design / behavioral notes:
         * Lifecycle calls (start/stop) rely on the underlying mapping of status
-            codes to exceptions; typical NOT_IMPLEMENTED statuses surface as
-            ``NotImplementedErrorASTL`` if not pre-suppressed by callers.
+            codes to exceptions; recoverable configuration-state failures are
+            tolerated, while ``INTERNAL_ERROR`` surfaces as an exception.
         * Each loop iteration issues a ``read_immediate`` just prior to sample
             retrieval. If the native library later supports autonomous background
             sampling we can adapt timing or optionally skip the call for efficiency.
@@ -65,7 +65,7 @@ def poll_counter_once(target, counter) -> PollResult:
     """Fetch latest samples for a single counter.
 
     Sequence:
-        1. Issue ``read_immediate`` (best effort, safe if NOT_IMPLEMENTED)
+        1. Issue ``read_immediate`` (best effort for recoverable configuration-state statuses)
         2. Retrieve all currently buffered samples for the counter
         3. Wrap in ``PollResult`` with host timestamp
     """

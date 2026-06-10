@@ -19,6 +19,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "astl_internal_status.hpp"
 #include "astl_utils.hpp"
 #include "config/astl_configuration.hpp"
 #include "config/json_file_utils.hpp"
@@ -807,7 +808,7 @@ auto GetPrimarySubfeature(const sensors_chip_name* chip, const sensors_feature* 
   const auto feature_descriptor = GetFeatureDescriptor(feature->type);
   if (!feature_descriptor.has_value()) {
     ASTL_LOG_WARNING("GetPrimarySubfeature: Unrecognized feature type {}", feature->type);
-    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+    return std::unexpected(astl::kInternalNotImplemented);
   }
 
   const auto primary_subfeatures = std::span<const sensors_subfeature_type>{
@@ -1235,7 +1236,7 @@ static auto DiscoverSensorsFromChip(const astl::AstlConfiguration& configuration
                    feature->name != nullptr ? feature->name : "<null>");
     const auto sub = GetPrimarySubfeature(chip, feature, sensors_api);
     if (!sub) {
-      if (sub.error() == ASTL_STATUS_NOT_IMPLEMENTED) {
+      if (sub.error() == astl::kInternalNotImplemented) {
         continue;
       }
       return std::unexpected(sub.error());

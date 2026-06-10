@@ -8,10 +8,11 @@
  * @file astl_errors.h
  * @brief Public status / error code enumeration and helpers for ASTL.
  *
- * The `astl_status_code` enumeration provides granular reporting for argument
- * validation, version mismatches, buffer sizing issues, unsupported features,
- * collection state transitions and internal failures. New codes must remain
- * below 128 (0x80) to preserve existing stringify logic constraints.
+ * The `astl_status_code` enumeration provides public, user-actionable status
+ * reporting for argument validation, version mismatches, buffer sizing issues,
+ * unsupported features, collection state transitions, and a generic internal
+ * failure. New public codes must remain below 128 (0x80) to preserve existing
+ * stringify logic constraints.
  */
 #ifndef INCLUDE_ASTL_ERRORS_H_
 #define INCLUDE_ASTL_ERRORS_H_
@@ -23,21 +24,22 @@ extern "C" {
 #endif
 
 /**
- * @brief Status codes
- * TODO (https://jira.arm.com/browse/ASTL-98) - Create separate list for internal error codes.
+ * @brief Public status codes returned by the ASTL C API.
+ *
+ * Internal implementation failures are normalized to
+ * `ASTL_STATUS_INTERNAL_ERROR` before crossing the public C API boundary.
  */
 typedef enum _astl_status_code {
-  ASTL_STATUS_UNKNOWN_ERROR               = -1,  //!< Unknown error
-  ASTL_STATUS_SUCCESS                     = 0,   //!< Success
-  ASTL_STATUS_BAD_ARGUMENT                = 1,   //!< Bad argument passed to function
-  ASTL_STATUS_BAD_CONFIGURATION           = 2,   //!< Generic bad configuration error code
-  ASTL_STATUS_INVALID_TARGET_HANDLE       = 3,   //!< Invalid target handle used
-  ASTL_STATUS_INVALID_COUNTER_HANDLE      = 4,   //!< Invalid counter handle used
-  ASTL_STATUS_INVALID_METRIC_HANDLE       = 5,   //!< Invalid metric handle used
-  ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE = 6,   //!< Invalid metric group handle used
-  ASTL_STATUS_NOT_IMPLEMENTED             = 7,   //!< Functionality not implemented yet
-  ASTL_STATUS_NOT_SUPPORTED               = 8,   //!< Unsupported functionality requested
-  ASTL_STATUS_DEPRECATED_API              = 9,   //!< Deprecated API used
+  ASTL_STATUS_INTERNAL_ONLY_RANGE_MIN = -4096,  // Reserved internal-only range floor; not returned by the public C API.
+  ASTL_STATUS_SUCCESS                 = 0,      //!< Success
+  ASTL_STATUS_BAD_ARGUMENT            = 1,      //!< Bad argument passed to function
+  ASTL_STATUS_BAD_CONFIGURATION       = 2,      //!< Generic bad configuration error code
+  ASTL_STATUS_INVALID_TARGET_HANDLE   = 3,      //!< Invalid target handle used
+  ASTL_STATUS_INVALID_COUNTER_HANDLE  = 4,      //!< Invalid counter handle used
+  ASTL_STATUS_INVALID_METRIC_HANDLE   = 5,      //!< Invalid metric handle used
+  ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE = 6,  //!< Invalid metric group handle used
+  ASTL_STATUS_NOT_SUPPORTED               = 8,  //!< Unsupported functionality requested
+  ASTL_STATUS_DEPRECATED_API              = 9,  //!< Deprecated API used
   ASTL_STATUS_NO_TARGET_FOUND             = 10,  //!< No targets were detected or configured
   ASTL_STATUS_OLD_STRUCT_VERSION          = 11,  //!< Caller-provided struct size is smaller than expected.
   ASTL_STATUS_NEW_STRUCT_VERSION          = 12,  //!< Caller-provided struct size is larger than expected.
@@ -76,7 +78,6 @@ typedef enum _astl_status_code {
   ASTL_STATUS_FILE_OPEN_FAILED           = 36,            //!< File exists, but open failed.
   ASTL_STATUS_FILE_ERROR                 = 37,            //!< File system operations failed.
   ASTL_STATUS_OUT_OF_MEMORY              = 38,            //!< Memory allocation failed.
-  ASTL_STATUS_DIVIDE_BY_ZERO             = 39,            //!< Attempted division by zero
   ASTL_STATUS_INVALID_VALUE_TYPE         = 40,            //!< Invalid astl_value_type_t for operation
   ASTL_STATUS_INVALID_STATE_TRANSITION   = 41,            //!< Generic lifecycle transition not permitted.
   ASTL_STATUS_PAUSE_UNSUPPORTED          = 42,            //!< Collector/hardware cannot pause (treated as no-op error).
@@ -84,7 +85,7 @@ typedef enum _astl_status_code {
   // Add new status codes here
 
   ASTL_STATUS_INTERNAL_ERROR = 127,  //!< Internal failure
-  // Do not define status codes higher than 127 due to stringify limitations
+  // Do not define public status codes outside 0..127; lower values are reserved for internal-only detail codes.
 } astl_status_code;
 
 /**
@@ -93,6 +94,17 @@ typedef enum _astl_status_code {
  * @return c-string of astl status code
  */
 ASTL_API const char* astlStatusString(astl_status_code status) ASTL_API_NOEXCEPT;
+
+/**
+ * @brief Returns the most recent failure detail recorded on the calling thread.
+ *
+ * The returned pointer remains valid until the next ASTL call on the same
+ * thread updates the stored status detail.
+ *
+ * @return borrowed c-string containing the last status detail, or an empty
+ *         string if no failure detail is currently recorded for the thread.
+ */
+ASTL_API const char* astlGetLastStatusString(void) ASTL_API_NOEXCEPT;
 
 #if defined(__cplusplus)
 }

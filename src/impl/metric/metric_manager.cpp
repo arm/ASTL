@@ -11,6 +11,7 @@
 #include <unordered_set>
 
 #include "astl/astl_errors.h"
+#include "astl_internal_status.hpp"
 #include "collector/collection_operations.hpp"
 #include "common/astl_defines.hpp"
 #include "delta_metric.hpp"
@@ -428,7 +429,7 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
   const auto& metric_name = metric_config->Name();
 
   std::expected<std::unique_ptr<IMetric>, astl_status_code> metric_or_error =
-      std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+      std::unexpected(astl::kInternalNotImplemented);
   if (const auto* procfs_composite_config = dynamic_cast<const ProcfsCompositeMetricConfig*>(metric_config)) {
     ASTL_LOG_INFO("CreateMetricFromConfig: Creating ProcfsCompositeMetric '{}'", metric_name);
     metric_or_error = std::make_unique<ProcfsCompositeMetric>(procfs_composite_config, target, sink);

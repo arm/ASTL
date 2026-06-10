@@ -13,6 +13,7 @@
 #include <variant>
 
 #include "astl/astl.h"
+#include "astl_internal_status.hpp"
 
 namespace astl {
 
@@ -196,7 +197,7 @@ struct AstlValue {
                                                   std::decay_t<decltype(dividend_x)>>;
           if constexpr (std::is_arithmetic_v<DividendType>) {
             if (divisor == 0) {
-              return std::unexpected(ASTL_STATUS_DIVIDE_BY_ZERO);
+              return std::unexpected(astl::kInternalDivideByZero);
             }
 
             auto promote_if_bool = [](auto value) {

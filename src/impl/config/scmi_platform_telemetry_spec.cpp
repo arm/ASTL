@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "astl_internal_status.hpp"
 #include "config/scmi_metric_json_declaration.hpp"
 #include "operation/scmi_read_operation.hpp"
 
@@ -181,7 +182,7 @@ auto AddResidencyRegisterMatch(ResidencyStateRegisterDefinitions& result, std::s
   if (block_member.base10_unit_modifier != 0) {
     ASTL_LOG_ERROR("SCMI residency register {} has non-zero base10 unit modifier {}, which is currently not supported",
                    block_member.name, block_member.base10_unit_modifier);
-    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+    return std::unexpected(astl::kInternalNotImplemented);
   }
 
   result.state_to_register_def.emplace(

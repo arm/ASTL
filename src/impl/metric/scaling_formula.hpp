@@ -15,6 +15,7 @@
 #include <type_traits>
 
 #include "astl/astl_errors.h"
+#include "astl_internal_status.hpp"
 #include "common/astl_value.hpp"
 #include "metric/formula.hpp"
 
@@ -65,7 +66,7 @@ class ScalingFormula {
           // Only support arithmetic types (not bool)
           if constexpr (std::is_arithmetic_v<T> && !std::is_same_v<T, bool>) {
             if (_denominator == 0) {
-              return std::unexpected(ASTL_STATUS_DIVIDE_BY_ZERO);
+              return std::unexpected(astl::kInternalDivideByZero);
             }
             if constexpr (std::is_integral_v<T>) {
               const auto raw_value = static_cast<uint64_t>(val);

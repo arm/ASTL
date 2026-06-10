@@ -24,7 +24,6 @@ MAPPING_FILE = REPO_ROOT / "scripts" / "wrapper_coverage.json"
 
 
 FUNCTION_PATTERN = re.compile(r"ASTL_API\s+[^;]*?\b(astl[A-Z][A-Za-z0-9_]+)\s*\(", re.DOTALL)
-STATUS_PATTERN = re.compile(r"\bASTL_STATUS_[A-Z0-9_]+\b")
 ENUM_TYPEDEF_PATTERN = re.compile(r"typedef enum _(?P<tag>[A-Za-z0-9_]+)\s*{(?P<body>.*?)}\s*(?P<name>[A-Za-z0-9_]+)\s*;", re.DOTALL)
 ENUM_ENTRY_PATTERN_TEMPLATE = r"\b({prefix}[A-Z0-9_]+)\b\s*=\s*([^,\n/]+)"
 PYTHON_FUNCTION_PATTERN = r"\b(?:cpdef|def)\s+(?:[A-Za-z_][A-Za-z0-9_]*\s+)?{name}\s*\("
@@ -258,7 +257,21 @@ def extract_c_functions() -> list[str]:
 
 
 def extract_c_statuses() -> list[str]:
-    return sorted(set(STATUS_PATTERN.findall(load_text(REPO_ROOT / "include" / "astl" / "astl_errors.h"))))
+    return sorted(extract_c_public_status_constants())
+
+
+def extract_c_public_status_constants() -> dict[str, str]:
+    public_statuses: dict[str, str] = {}
+    for name, value in extract_c_enum_constants("astl_status_code", "ASTL_STATUS_").items():
+        try:
+            numeric_value = int(value, 0)
+        except ValueError:
+            # Keep any non-internal symbolic definitions visible to coverage checks.
+            public_statuses[name] = value
+            continue
+        if numeric_value >= 0:
+            public_statuses[name] = value
+    return public_statuses
 
 
 def extract_c_enum_constants(enum_name: str, prefix: str) -> dict[str, str]:
@@ -474,7 +487,10 @@ def validate_go_enum_coverage(
     c_enum_name: str,
     c_prefix: str,
 ) -> list[str]:
-    c_enum_constants = extract_c_enum_constants(c_enum_name, c_prefix)
+    if c_enum_name == "astl_status_code":
+        c_enum_constants = extract_c_public_status_constants()
+    else:
+        c_enum_constants = extract_c_enum_constants(c_enum_name, c_prefix)
     go_constants = go_typed_constants(type_name)
     errors = validate_constant_mapping_inventory(
         set(c_enum_constants),

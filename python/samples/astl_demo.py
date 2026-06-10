@@ -9,7 +9,7 @@
 Demonstrates:
     * Initialization & version
     * Target, counter, metric, metric-group enumeration
-    * Configuring a simple collection (best-effort: NOT_IMPLEMENTED tolerated)
+    * Configuring a simple collection (best-effort: target-specific unsupported items tolerated)
     * Starting/stopping collection lifecycle
     * Retrieving (possibly empty) counter / metric samples
 

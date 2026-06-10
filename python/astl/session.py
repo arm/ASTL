@@ -13,8 +13,8 @@ Responsibilities handled:
     * Optional library initialization (``auto_initialize=True``).
     * Configuration of counters / metrics with an IMMEDIATE collection mode.
     * Best-effort lifecycle management: ``start_collection`` on enter and
-        ``stop_collection`` on exit. Failures (e.g., NOT_IMPLEMENTED) are swallowed
-        to keep the helper resilient across partial backend implementations.
+        ``stop_collection`` on exit. Recoverable configuration-state failures are
+        swallowed to keep the helper resilient across partial backend implementations.
     * A ``poll_once`` helper that issues a ``read_immediate`` then retrieves all
         available samples for each configured entity, returning a nested dict::
 

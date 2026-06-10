@@ -16,7 +16,7 @@ Core:
 - `version() -> (major, minor, micro, string)`
 - `Status` namespace with all status codes + `status_name(int)`
   - Numeric parity follows `include/astl/astl_errors.h` (`SUCCESS = 0` through
-    `INTERNAL_ERROR = 127`, `UNKNOWN_ERROR = -1`).
+    `INTERNAL_ERROR = 127`).
 
 Discovery:
 
@@ -52,7 +52,7 @@ Collection Configuration (per target for now):
 - `configure_metrics_on_target(target, params, metrics)`
 - `configure_metric_groups_on_target(target, params, groups)`
 
-Lifecycle (tolerates NOT_IMPLEMENTED by ignoring it):
+Lifecycle (tolerates recoverable configuration-state statuses):
 
 - `start_collection(target=None)` starts collection on the specified target, or
   on all configured targets when `target is None`
@@ -68,10 +68,9 @@ Session save/load:
 
 Post-collection processing:
 
-- `crop_samples(start_ts=0, end_ts=0)` — currently returns `NotImplementedErrorASTL`; the API
-  surface is declared and will permanently discard samples outside the given window for all targets
-  once implemented.
-- `crop_samples_on_target(target, start_ts=0, end_ts=0)` — currently returns `NotImplementedErrorASTL`.
+- `crop_samples(start_ts=0, end_ts=0)` — permanently discard samples outside
+  the given window for all targets.
+- `crop_samples_on_target(target, start_ts=0, end_ts=0)`.
 
 Samples:
 
@@ -181,7 +180,7 @@ import astl
 # Crop all targets: keep only samples in [2_000_000_000, 5_000_000_000] ns
 astl.crop_samples(start_ts=2_000_000_000, end_ts=5_000_000_000)
 
-# Crop a single target (not yet implemented, raises NotImplementedErrorASTL)
+# Crop a single target
 t = astl.get_targets()[0]
 astl.crop_samples_on_target(t, start_ts=2_000_000_000, end_ts=5_000_000_000)
 ```
@@ -231,7 +230,6 @@ releases.
 
 Specialized subclasses (all inherit from `ASTLError`):
 
-- `NotImplementedErrorASTL`
 - `InvalidArgumentError`
 - `OutOfMemoryError`
 - `InternalError`

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import importlib, sys
-from astl import Status, map_status_to_exception, InternalError, NotImplementedErrorASTL
+from astl import Status, map_status_to_exception, InternalError
 
 
 def test_multiple_reloads_preserve_internal_error_mapping():
@@ -21,7 +21,7 @@ def test_mapping_after_partial_stub_injection(monkeypatch):
     # after monkeypatching astl.exceptions.Status temporarily.
     import astl.exceptions as ex
     class FakeStatus:  # missing INTERNAL_ERROR intentionally
-        NOT_IMPLEMENTED = getattr(Status, 'NOT_IMPLEMENTED', 7)
+        BAD_ARGUMENT = getattr(Status, 'BAD_ARGUMENT', 1)
     monkeypatch.setattr(ex, 'Status', FakeStatus, raising=True)
     # Force map call while stub active (should not crash and may or may not self-heal).
     result = ex.map_status_to_exception(getattr(Status, 'INTERNAL_ERROR'))
@@ -40,12 +40,3 @@ def test_internal_error_mapping_integrity():
     from astl import map_status_to_exception as m
     if hasattr(Status, 'INTERNAL_ERROR'):
         assert m(Status.INTERNAL_ERROR) is InternalError
-
-
-def test_not_implemented_mapping_consistency():
-    # Guarantee NOT_IMPLEMENTED returns the specialized class
-    sys.modules.pop('astl.exceptions', None)
-    importlib.import_module('astl.exceptions')
-    from astl import map_status_to_exception as m
-    if hasattr(Status, 'NOT_IMPLEMENTED'):
-        assert m(Status.NOT_IMPLEMENTED) is NotImplementedErrorASTL

@@ -13,6 +13,7 @@
 
 #include "astl/astl_errors.h"
 #include "astl_defines.hpp"
+#include "astl_internal_status.hpp"
 #include "astl_logger.hpp"
 #include "astl_magic_enum.hpp"
 #include "common/string_pool.hpp"
@@ -455,7 +456,7 @@ auto Orchestrator::StartCollectionImpl(const ITarget *target, bool start_paused)
                    astlStatusString(rollback_status));
     return rollback_status;
   }
-  if (pause_status == ASTL_STATUS_NOT_IMPLEMENTED) {
+  if (pause_status == astl::kInternalNotImplemented) {
     return ASTL_STATUS_PAUSE_UNSUPPORTED;
   }
   return pause_status;
@@ -528,7 +529,7 @@ auto Orchestrator::PauseCollection(const ITarget *target) -> astl_status_code {
   }
   collector_status = _collector_manager->PauseOnTarget(target);
   if (collector_status != ASTL_STATUS_SUCCESS) {
-    if (collector_status == ASTL_STATUS_NOT_IMPLEMENTED) {
+    if (collector_status == astl::kInternalNotImplemented) {
       return ASTL_STATUS_PAUSE_UNSUPPORTED;
     }
     return collector_status;
@@ -564,7 +565,7 @@ auto Orchestrator::ResumeCollection(const ITarget *target) -> astl_status_code {
   }
   collector_status = _collector_manager->ResumeOnTarget(target);
   if (collector_status != ASTL_STATUS_SUCCESS) {
-    if (collector_status == ASTL_STATUS_NOT_IMPLEMENTED) {
+    if (collector_status == astl::kInternalNotImplemented) {
       return ASTL_STATUS_RESUME_UNSUPPORTED;
     }
     return collector_status;

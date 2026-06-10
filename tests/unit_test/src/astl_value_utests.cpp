@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "../../test_includes.hpp"  // include before catch2
+#include "astl_internal_status.hpp"
 #include "common/astl_value.hpp"
 
 using Catch::Matchers::WithinAbs;
@@ -70,7 +71,7 @@ TEST_CASE("AstlValue as u8", "[AstlValue]") {
   }
 
   SECTION("Divide by zero is an error", "[AstlValue]") {
-    REQUIRE(astl::AstlValue::Divide(val, uint8_t{0}).error() == ASTL_STATUS_DIVIDE_BY_ZERO);
+    REQUIRE(astl::AstlValue::Divide(val, uint8_t{0}).error() == astl::kInternalDivideByZero);
   }
 
   SECTION("Compute an average", "[AstlValue]") {
@@ -150,7 +151,7 @@ TEST_CASE("AstlValue as ui64", "[AstlValue]") {
   }
 
   SECTION("Divide by zero is an error", "[AstlValue]") {
-    REQUIRE(astl::AstlValue::Divide(val, uint64_t{0}).error() == ASTL_STATUS_DIVIDE_BY_ZERO);
+    REQUIRE(astl::AstlValue::Divide(val, uint64_t{0}).error() == astl::kInternalDivideByZero);
   }
 
   SECTION("Compute an average", "[AstlValue]") {

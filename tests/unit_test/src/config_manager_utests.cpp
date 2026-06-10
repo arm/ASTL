@@ -7,6 +7,7 @@
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl_errors.h"
+#include "astl_internal_status.hpp"
 #include "common/capabilities.hpp"
 #include "common/metric_config.hpp"
 #include "config/astl_configuration.hpp"
@@ -105,7 +106,7 @@ auto MakeResidencyScmiSpec() -> astl::scmi::spec::ScmiSpecification {
 TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
   MockMetricManager mock_metric_manager;
 
-  ALLOW_CALL(mock_metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_NOT_IMPLEMENTED);
+  ALLOW_CALL(mock_metric_manager, RegisterMetric(_, _)).RETURN(astl::kInternalNotImplemented);
   // TODO(ASTL-101): Create unit tests for metric manager
 
   SECTION("Register a valid metric config") {
@@ -115,7 +116,7 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
                                              ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
                                              astl::CollectorType::SCMI, astl::ScmiOperationBuilder{0x1234});
 
-    REQUIRE(mock_metric_manager.RegisterMetric(std::move(metric_config), {}) == ASTL_STATUS_NOT_IMPLEMENTED);
+    REQUIRE(mock_metric_manager.RegisterMetric(std::move(metric_config), {}) == astl::kInternalNotImplemented);
   }
 
   SECTION("Register an invalid metric config") {
@@ -123,7 +124,7 @@ TEST_CASE("ConfigManager::StaticMetricConfig", "[ConfigManager]") {
         "SoC Temperature", "SoC Temperature for abc xyz", ASTL_UNITS_CELSIUS, ASTL_VALUE_UINT64,
         ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE, astl::CollectorType::PROCFS, astl::NullOperationBuilder{});
 
-    REQUIRE(mock_metric_manager.RegisterMetric(std::move(invalid_metric_config), {}) == ASTL_STATUS_NOT_IMPLEMENTED);
+    REQUIRE(mock_metric_manager.RegisterMetric(std::move(invalid_metric_config), {}) == astl::kInternalNotImplemented);
   }
 }
 
@@ -462,7 +463,7 @@ TEST_CASE("CreateScmiMetricConfigs validates metric declarations and unsupported
 
     auto result = astl::metrics::spec::CreateScmiMetricConfigs("Unknown Metric", decl, basic_spec, mock_scmi_targets);
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error() == ASTL_STATUS_NOT_IMPLEMENTED);
+    REQUIRE(result.error() == astl::kInternalNotImplemented);
   }
 
   SECTION("Basic metric with unsupported collector returns NOT_IMPLEMENTED") {
@@ -480,7 +481,7 @@ TEST_CASE("CreateScmiMetricConfigs validates metric declarations and unsupported
     auto result =
         astl::metrics::spec::CreateScmiMetricConfigs("Libsensors Metric", decl, basic_spec, mock_scmi_targets);
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error() == ASTL_STATUS_NOT_IMPLEMENTED);
+    REQUIRE(result.error() == astl::kInternalNotImplemented);
   }
 
   SECTION("Finite-set metric rejects duplicate values across labels") {

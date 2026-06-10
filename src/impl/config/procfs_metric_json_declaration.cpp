@@ -4,6 +4,7 @@
 
 #include "config/procfs_metric_json_declaration.hpp"
 
+#include "astl_internal_status.hpp"
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
 
@@ -220,7 +221,7 @@ auto ParseProcfsMetricJsonCollectionSettings(const MetricJsonCollectionSettings&
     -> std::expected<ProcfsMetricJsonCollectionSettings, astl_status_code> {
   if (ToLowerCopy(collection_setting.protocol) != "procfs") {
     ASTL_LOG_ERROR("PROCFS collection parser received unsupported protocol '{}'", collection_setting.protocol);
-    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+    return std::unexpected(astl::kInternalNotImplemented);
   }
   if (!collection_setting.raw_json.is_object()) {
     ASTL_LOG_ERROR("PROCFS collection settings must be a JSON object");

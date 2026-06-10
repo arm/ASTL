@@ -8,7 +8,7 @@ import astl
 
 
 def test_lifecycle_no_exception():
-    """Lifecycle wrappers should never raise even if NOT_IMPLEMENTED in C layer.
+    """Lifecycle wrappers should tolerate recoverable configuration-state statuses.
 
     We call them both without a target (NULL -> global) and, if available, with the
     first detected target. The test passes if no exception is raised.

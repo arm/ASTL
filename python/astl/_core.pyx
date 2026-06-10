@@ -14,7 +14,12 @@ cdef class ASTLError(Exception):
     def __init__(self, code: int):
         self.code = code
         cdef const char* s = astlStatusString(<astl_status_code>code)
+        cdef const char* detail = astlGetLastStatusString()
         msg = s.decode() if s != NULL else f"ASTL error {code}"
+        if detail != NULL:
+            detail_msg = detail.decode()
+            if detail_msg and detail_msg != msg:
+                msg = f"{msg}: {detail_msg}"
         super().__init__(msg)
 
 cdef class Target:
@@ -136,7 +141,6 @@ class Status:
     INVALID_COUNTER_HANDLE = ASTL_STATUS_INVALID_COUNTER_HANDLE
     INVALID_METRIC_HANDLE = ASTL_STATUS_INVALID_METRIC_HANDLE
     INVALID_METRIC_GROUP_HANDLE = ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE
-    NOT_IMPLEMENTED = ASTL_STATUS_NOT_IMPLEMENTED
     NOT_SUPPORTED = ASTL_STATUS_NOT_SUPPORTED
     DEPRECATED_API = ASTL_STATUS_DEPRECATED_API
     NO_TARGET_FOUND = ASTL_STATUS_NO_TARGET_FOUND
@@ -168,13 +172,11 @@ class Status:
     FILE_OPEN_FAILED = ASTL_STATUS_FILE_OPEN_FAILED
     FILE_ERROR = ASTL_STATUS_FILE_ERROR
     OUT_OF_MEMORY = ASTL_STATUS_OUT_OF_MEMORY
-    DIVIDE_BY_ZERO = ASTL_STATUS_DIVIDE_BY_ZERO
     INVALID_VALUE_TYPE = ASTL_STATUS_INVALID_VALUE_TYPE
     INVALID_STATE_TRANSITION = ASTL_STATUS_INVALID_STATE_TRANSITION
     PAUSE_UNSUPPORTED = ASTL_STATUS_PAUSE_UNSUPPORTED
     RESUME_UNSUPPORTED = ASTL_STATUS_RESUME_UNSUPPORTED
     INTERNAL_ERROR = ASTL_STATUS_INTERNAL_ERROR
-    UNKNOWN_ERROR = ASTL_STATUS_UNKNOWN_ERROR
 
 from .exceptions import map_status_to_exception
 
@@ -192,6 +194,11 @@ def status_name(code: int) -> str:
         if k.isupper() and isinstance(v, int) and v == code:
             return k
     return f"UNKNOWN({code})"
+
+def last_status_string() -> str:
+    """Return the last status detail recorded on the current thread."""
+    cdef const char* s = astlGetLastStatusString()
+    return s.decode() if s != NULL else ""
 
 def version() -> tuple[int, int, int, str]:
     """Return (major, minor, micro, string) for the compiled ASTL library."""
@@ -304,7 +311,7 @@ cpdef list get_metric_groups():
     count_params.flags = 0
     count_params.metric_group_count = &count
     cdef int rc = astlGetMetricGroupCount(&count_params)
-    if rc in (ASTL_STATUS_NO_METRIC_GROUPS_FOUND, ASTL_STATUS_NOT_IMPLEMENTED):
+    if rc == ASTL_STATUS_NO_METRIC_GROUPS_FOUND:
         return []
     _check(rc)
     if count == 0:
@@ -320,7 +327,7 @@ cpdef list get_metric_groups():
         params.metric_groups = arr
         params.metric_group_count = &count
         rc = astlGetMetricGroups(&params)
-        if rc in (ASTL_STATUS_NO_METRIC_GROUPS_FOUND, ASTL_STATUS_NOT_IMPLEMENTED):
+        if rc == ASTL_STATUS_NO_METRIC_GROUPS_FOUND:
             return []
         _check(rc)
         py_list = []
@@ -342,7 +349,7 @@ cpdef list get_metric_groups_on_target(Target target):
     count_params.target_handle = <const void*>target.handle_ptr
     count_params.metric_group_count = &count
     cdef int rc = astlGetMetricGroupCountOnTarget(&count_params)
-    if rc in (ASTL_STATUS_NO_METRIC_GROUPS_FOUND, ASTL_STATUS_NOT_IMPLEMENTED):
+    if rc == ASTL_STATUS_NO_METRIC_GROUPS_FOUND:
         return []
     _check(rc)
     if count == 0:
@@ -359,7 +366,7 @@ cpdef list get_metric_groups_on_target(Target target):
         params.metric_groups = arr
         params.metric_group_count = &count
         rc = astlGetMetricGroupsOnTarget(&params)
-        if rc in (ASTL_STATUS_NO_METRIC_GROUPS_FOUND, ASTL_STATUS_NOT_IMPLEMENTED):
+        if rc == ASTL_STATUS_NO_METRIC_GROUPS_FOUND:
             return []
         _check(rc)
         py_list = []
@@ -436,7 +443,7 @@ cpdef configure_counters_on_target(Target target, params, list counters):
         call_params.counter_handles = <const astl_counter_handle_t*>handles
         call_params.counter_count = <uint32_t>n
         rc_cc = astlConfigureCounterCollectionOnTarget(&call_params)
-        if rc_cc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET):
+        if rc_cc != ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET:
             _check(rc_cc)
     finally:
         free(handles)
@@ -463,7 +470,7 @@ cpdef configure_counters(params, list counters):
         call_params.counter_handles = <const astl_counter_handle_t*>handles
         call_params.counter_count = <uint32_t>n
         rc_cc = astlConfigureCounterCollection(&call_params)
-        if rc_cc not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET):
+        if rc_cc != ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET:
             _check(rc_cc)
     finally:
         free(handles)
@@ -491,7 +498,7 @@ cpdef configure_metrics_on_target(Target target, params, list metrics):
         call_params.metric_handles = <const astl_metric_handle_t*>handles
         call_params.metric_count = <uint32_t>n
         rc_cm = astlConfigureMetricCollectionOnTarget(&call_params)
-        if rc_cm not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET):
+        if rc_cm != ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET:
             _check(rc_cm)
     finally:
         free(handles)
@@ -518,7 +525,7 @@ cpdef configure_metrics(params, list metrics):
         call_params.metric_handles = <const astl_metric_handle_t*>handles
         call_params.metric_count = <uint32_t>n
         rc_cm = astlConfigureMetricCollection(&call_params)
-        if rc_cm not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET):
+        if rc_cm != ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET:
             _check(rc_cm)
     finally:
         free(handles)
@@ -546,7 +553,7 @@ cpdef configure_metric_groups_on_target(Target target, params, list groups):
         call_params.metric_group_handles = <const astl_metric_group_handle_t*>handles
         call_params.metric_group_count = <uint32_t>n
         rc_cg = astlConfigureMetricGroupCollectionOnTarget(&call_params)
-        if rc_cg not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET):
+        if rc_cg != ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET:
             _check(rc_cg)
     finally:
         free(handles)
@@ -573,7 +580,7 @@ cpdef configure_metric_groups(params, list groups):
         call_params.metric_group_handles = <const astl_metric_group_handle_t*>handles
         call_params.metric_group_count = <uint32_t>n
         rc_cg = astlConfigureMetricGroupCollection(&call_params)
-        if rc_cg not in (ASTL_STATUS_NOT_IMPLEMENTED, ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET):
+        if rc_cg != ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET:
             _check(rc_cg)
     finally:
         free(handles)
@@ -595,10 +602,8 @@ cpdef start_collection(Target target=None):
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlStartCollectionOnTarget(&target_params)
     if rc not in (
-        ASTL_STATUS_NOT_IMPLEMENTED,
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
-        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -618,10 +623,8 @@ cpdef start_collection_paused(Target target=None):
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlStartCollectionOnTargetPaused(&target_params)
     if rc not in (
-        ASTL_STATUS_NOT_IMPLEMENTED,
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
-        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -641,11 +644,9 @@ cpdef pause_collection(Target target=None):
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlPauseCollectionOnTarget(&target_params)
     if rc not in (
-        ASTL_STATUS_NOT_IMPLEMENTED,
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
         ASTL_STATUS_COLLECTION_NOT_RUNNING,
-        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -665,11 +666,9 @@ cpdef resume_collection(Target target=None):
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlResumeCollectionOnTarget(&target_params)
     if rc not in (
-        ASTL_STATUS_NOT_IMPLEMENTED,
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
         ASTL_STATUS_COLLECTION_NOT_PAUSED,
-        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -689,11 +688,9 @@ cpdef stop_collection(Target target=None):
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlStopCollectionOnTarget(&target_params)
     if rc not in (
-        ASTL_STATUS_NOT_IMPLEMENTED,
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
         ASTL_STATUS_COLLECTION_NOT_RUNNING,
-        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -844,12 +841,10 @@ cpdef read_immediate(Target target=None):
         target_params.flags = 0
         target_params.target_handle = <const void*>target.handle_ptr
         rc = astlReadImmediateOnTarget(&target_params)
-    # Treat NOT_IMPLEMENTED, BAD_CONFIGURATION, COLLECTION_NOT_CONFIGURED, and INTERNAL_ERROR as benign
+    # Treat configuration-related discovery failures as benign.
     if rc not in (
-        ASTL_STATUS_NOT_IMPLEMENTED,
         ASTL_STATUS_BAD_CONFIGURATION,
         ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
-        ASTL_STATUS_INTERNAL_ERROR,
     ):
         _check(rc)
 
@@ -1243,8 +1238,6 @@ cpdef list get_targets():
     if rc in (
         ASTL_STATUS_NO_TARGET_FOUND,
         ASTL_STATUS_BAD_CONFIGURATION,
-        ASTL_STATUS_NOT_IMPLEMENTED,
-        ASTL_STATUS_INTERNAL_ERROR,
     ):
         return []
     _check(rc)
@@ -1264,8 +1257,6 @@ cpdef list get_targets():
         if rc in (
             ASTL_STATUS_NO_TARGET_FOUND,
             ASTL_STATUS_BAD_CONFIGURATION,
-            ASTL_STATUS_NOT_IMPLEMENTED,
-            ASTL_STATUS_INTERNAL_ERROR,
         ):
             return []
         _check(rc)

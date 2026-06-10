@@ -109,6 +109,7 @@ from ._core import (
     Target,
     version,
     status_name,
+    last_status_string,
 )
 import os as _os, pathlib as _p2, sys as _sys
 
@@ -153,7 +154,6 @@ from .dataframe import to_dataframe
 from .derived import deltas, rates
 # Enum wrappers (lightweight) - could be moved to a separate enums.py if they grow
 class Status(IntEnum):
-    UNKNOWN_ERROR = -1
     SUCCESS = 0
     BAD_ARGUMENT = 1
     BAD_CONFIGURATION = 2
@@ -161,7 +161,6 @@ class Status(IntEnum):
     INVALID_COUNTER_HANDLE = 4
     INVALID_METRIC_HANDLE = 5
     INVALID_METRIC_GROUP_HANDLE = 6
-    NOT_IMPLEMENTED = 7
     NOT_SUPPORTED = 8
     DEPRECATED_API = 9
     NO_TARGET_FOUND = 10
@@ -193,7 +192,6 @@ class Status(IntEnum):
     FILE_OPEN_FAILED = 36
     FILE_ERROR = 37
     OUT_OF_MEMORY = 38
-    DIVIDE_BY_ZERO = 39
     INVALID_VALUE_TYPE = 40
     INVALID_STATE_TRANSITION = 41
     PAUSE_UNSUPPORTED = 42
@@ -291,6 +289,7 @@ __all__ = [
     "Target",
     "version",
     "status_name",
+    "last_status_string",
     "Units",
     "ValueType",
     "CounterType",

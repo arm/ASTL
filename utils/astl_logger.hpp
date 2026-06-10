@@ -23,6 +23,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#include "astl_internal_status.hpp"
 #include "astl_magic_enum.hpp"
 #include "astl_utils.hpp"
 namespace astl {
@@ -323,13 +324,20 @@ class Logger {
     }
     try {
       auto formatted_text = FormatMessage(std::format(log_text, std::forward<Args>(args)...));
+      if (log_level >= astl::LogLevel::Error) {
+        CaptureLoggedStatusMessage(formatted_text);
+      }
       EnsureLogger()->log(spdlog_location, GetSpdLogLevel(log_level), std::move(formatted_text));
     } catch (const std::format_error& e) {
       std::ostringstream oss;
       oss << "LOG FORMAT ERROR: " << e.what() << "\n"
           << "  Format string: \"" << log_text.get() << "\"\n"
           << "  Arguments: [" << detail::DumpArgs(std::forward<Args>(args)...) << "]\n";
-      EnsureLogger()->log(spdlog_location, GetSpdLogLevel(log_level), FormatMessage(oss.str()));
+      auto formatted_text = FormatMessage(oss.str());
+      if (log_level >= astl::LogLevel::Error) {
+        CaptureLoggedStatusMessage(formatted_text);
+      }
+      EnsureLogger()->log(spdlog_location, GetSpdLogLevel(log_level), std::move(formatted_text));
     }
   }
 
@@ -345,13 +353,20 @@ class Logger {
     }
     try {
       auto formatted_text = FormatMessage(std::format(log_text, std::forward<Args>(args)...));
+      if (log_level >= astl::LogLevel::Error) {
+        CaptureLoggedStatusMessage(formatted_text);
+      }
       EnsureLogger()->log(GetSpdLogLevel(log_level), std::move(formatted_text));
     } catch (const std::format_error& e) {
       std::ostringstream oss;
       oss << "LOG FORMAT ERROR: " << e.what() << "\n"
           << "  Format string: \"" << log_text.get() << "\"\n"
           << "  Arguments: [" << detail::DumpArgs(std::forward<Args>(args)...) << "]\n";
-      EnsureLogger()->log(GetSpdLogLevel(log_level), FormatMessage(oss.str()));
+      auto formatted_text = FormatMessage(oss.str());
+      if (log_level >= astl::LogLevel::Error) {
+        CaptureLoggedStatusMessage(formatted_text);
+      }
+      EnsureLogger()->log(GetSpdLogLevel(log_level), std::move(formatted_text));
     }
   }
 
@@ -373,6 +388,9 @@ class Logger {
     if (source_loc_enabled) {
       spdlog_location = {location.file_name(), static_cast<int>(location.line()), location.function_name()};
     }
+    if (log_level >= astl::LogLevel::Error) {
+      CaptureLoggedStatusMessage(log_text);
+    }
     EnsureLogger()->log(spdlog_location, GetSpdLogLevel(log_level), FormatMessage(log_text));
   }
 
@@ -384,6 +402,9 @@ class Logger {
   void Log(astl::LogLevel log_level, std::string const& log_text) {
     if (!ShouldLog(log_level)) {
       return;
+    }
+    if (log_level >= astl::LogLevel::Error) {
+      CaptureLoggedStatusMessage(log_text);
     }
     EnsureLogger()->log(GetSpdLogLevel(log_level), FormatMessage(log_text));
   }

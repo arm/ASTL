@@ -17,6 +17,7 @@
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
 #include "astl/astl_test_hooks.h"
+#include "astl_internal_status.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "metric/metric_manager.hpp"
@@ -1068,7 +1069,7 @@ TEST_CASE("Orchestrator-StartCollectionPaused rolls back when pause is unsupport
   ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
       .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*collector_manager, StartOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(*collector_manager, PauseOnTarget(_)).RETURN(ASTL_STATUS_NOT_IMPLEMENTED);
+  ALLOW_CALL(*collector_manager, PauseOnTarget(_)).RETURN(astl::kInternalNotImplemented);
   ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto                              metric_manager       = std::make_unique<MockMetricManager>();

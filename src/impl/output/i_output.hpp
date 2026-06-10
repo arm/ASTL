@@ -9,6 +9,7 @@
 #ifndef I_OUTPUT_HPP_
 #define I_OUTPUT_HPP_
 
+#include "astl_internal_status.hpp"
 #include "common/astl_defines.hpp"  // ProcessedSamplesMap alias
 #include "common/i_processed_sample_sink.hpp"
 
@@ -53,13 +54,13 @@ struct IOutput {
    * @retval ASTL_STATUS_BUFFER_TOO_SMALL Destination buffer could not hold all samples (no partial write
    * unless documented).
    * @retval ASTL_STATUS_INTERNAL_ERROR Implementation-specific failure (e.g. null internal pointer, IO error).
-   * @retval ASTL_STATUS_NOT_IMPLEMENTED Default base implementation (when not overridden).
+   * @retval internal not-implemented status Default base implementation (when not overridden).
    */
   [[nodiscard]] virtual auto WriteProcessedSamples(std::span<const ProcessedSampledData> samples)
       // NOLINT(readability-convert-member-function-to-static)
       -> astl_status_code {
     (void)samples;  // unused default implementation
-    return ASTL_STATUS_NOT_IMPLEMENTED;
+    return astl::kInternalNotImplemented;
   }
 
   /**
@@ -83,13 +84,13 @@ struct IOutput {
    * @param processed Nested map Target* -> (Metric* -> vector<ProcessedSampledData>).
    * @retval ASTL_STATUS_SUCCESS All applicable samples written.
    * @retval ASTL_STATUS_INTERNAL_ERROR Implementation-specific failure (e.g. underlying IO error).
-   * @retval ASTL_STATUS_NOT_IMPLEMENTED Default base implementation (when not overridden).
+   * @retval internal not-implemented status Default base implementation (when not overridden).
    */
   [[nodiscard]] virtual auto WriteProcessedSamples(
       const ProcessedSamplesMap& processed)  // NOLINT(readability-convert-member-function-to-static)
       -> astl_status_code {
     (void)processed;  // unused default implementation
-    return ASTL_STATUS_NOT_IMPLEMENTED;
+    return astl::kInternalNotImplemented;
   }
 };
 

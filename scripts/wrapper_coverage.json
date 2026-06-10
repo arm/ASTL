@@ -10,6 +10,16 @@
         "symbol": "StatusName"
       }
     },
+    "astlGetLastStatusString": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "last_status_string"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "LastStatusString"
+      }
+    },
     "astlVersionString": {
       "python": {
         "mode": "wrapped",

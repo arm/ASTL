@@ -15,6 +15,7 @@
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl/astl_test_hooks.h"
+#include "astl_internal_status.hpp"
 #include "collector/collector_manager.hpp"
 #include "common/metric_config.hpp"
 #include "common/system_info.hpp"
@@ -91,11 +92,31 @@ TEST_CASE("astlStatusString", "[matches header definition][wrapper]") {
   REQUIRE(std::string(error_string) == "BAD_ARGUMENT");
 
   REQUIRE(std::string(astlStatusString(ASTL_STATUS_NO_DATA_COLLECTED)) == "NO_DATA_COLLECTED");
-  REQUIRE(std::string(astlStatusString(ASTL_STATUS_UNKNOWN_ERROR)) == "UNKNOWN_ERROR");
+  REQUIRE(std::string(astlStatusString(astl::kInternalUnknownError)) == "UNKNOWN_ERROR");
   REQUIRE(std::string(astlStatusString(ASTL_STATUS_INTERNAL_ERROR)) == "INTERNAL_ERROR");
   // for now at least, anything about ASTL_STATUS_INTERNAL_ERROR is unknown
   astl_status_code truly_unknown = static_cast<astl_status_code>(ASTL_STATUS_INTERNAL_ERROR + ASTL_STATUS_BAD_ARGUMENT);
   REQUIRE(std::string(astlStatusString(truly_unknown)) == "UNKNOWN_ERROR");
+}
+
+TEST_CASE("astlGetLastStatusString", "[wrapper]") {
+  astl_platform_props_t system_info{};
+  system_info.size = sizeof(astl_platform_props_t);
+  REQUIRE(AstlGetSystemInfo(&system_info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::string(astlGetLastStatusString()).empty());
+
+  REQUIRE(AstlGetSystemInfo(static_cast<astl_platform_props_t*>(nullptr)) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(std::string(astlGetLastStatusString()) == "BAD_ARGUMENT");
+
+  astl_collection_params_t collection_params{};
+  const int                fake_metric    = 0;
+  collection_params.size                  = sizeof(astl_collection_params_t);
+  astl_metric_handle_t fake_metric_handle = static_cast<astl_metric_handle_t>(&fake_metric);
+  REQUIRE(ConfigureMetricCollection(&collection_params, &fake_metric_handle, 1) == ASTL_STATUS_INTERNAL_ERROR);
+  REQUIRE(std::string(astlGetLastStatusString()) == "NOT_IMPLEMENTED");
+
+  REQUIRE(AstlGetSystemInfo(&system_info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::string(astlGetLastStatusString()).empty());
 }
 
 TEST_CASE("astlGetSystemInfo", "[wrapper][SystemInfo]") {
@@ -838,7 +859,7 @@ TEST_CASE("astlConfigureCounterCollection", "[Test wrapper C->C++ wrapper code][
 
   // Not implemented yet
   REQUIRE(ConfigureCounterCollection(&collection_params, counter_handles.data(),
-                                     static_cast<uint32_t>(counter_handles.size())) == ASTL_STATUS_NOT_IMPLEMENTED);
+                                     static_cast<uint32_t>(counter_handles.size())) == ASTL_STATUS_INTERNAL_ERROR);
 }
 
 TEST_CASE("astlConfigureMetricCollectionOnTarget", "[bad parameters][wrapper]") {
@@ -860,7 +881,7 @@ TEST_CASE("astlConfigureMetricCollection", "[unimplemented for now][wrapper]") {
   const int                fake_metric    = 0;
   collection_params.size                  = sizeof(astl_collection_params_t);
   astl_metric_handle_t fake_metric_handle = static_cast<astl_metric_handle_t>(&fake_metric);
-  REQUIRE(ConfigureMetricCollection(&collection_params, &fake_metric_handle, 1) == ASTL_STATUS_NOT_IMPLEMENTED);
+  REQUIRE(ConfigureMetricCollection(&collection_params, &fake_metric_handle, 1) == ASTL_STATUS_INTERNAL_ERROR);
 }
 
 TEST_CASE("astlReadImmediateOnTarget", "[1 works, one doesn't][wrapper]") {

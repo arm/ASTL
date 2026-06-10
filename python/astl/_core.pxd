@@ -17,7 +17,6 @@ cdef extern from "astl/astl_errors.h":
         ASTL_STATUS_INVALID_COUNTER_HANDLE
         ASTL_STATUS_INVALID_METRIC_HANDLE
         ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE
-        ASTL_STATUS_NOT_IMPLEMENTED
         ASTL_STATUS_NOT_SUPPORTED
         ASTL_STATUS_DEPRECATED_API
         ASTL_STATUS_NO_TARGET_FOUND
@@ -49,15 +48,14 @@ cdef extern from "astl/astl_errors.h":
         ASTL_STATUS_FILE_OPEN_FAILED
         ASTL_STATUS_FILE_ERROR
         ASTL_STATUS_OUT_OF_MEMORY
-        ASTL_STATUS_DIVIDE_BY_ZERO
         ASTL_STATUS_INVALID_VALUE_TYPE
         ASTL_STATUS_INVALID_STATE_TRANSITION
         ASTL_STATUS_PAUSE_UNSUPPORTED
         ASTL_STATUS_RESUME_UNSUPPORTED
         ASTL_STATUS_INTERNAL_ERROR
-        ASTL_STATUS_UNKNOWN_ERROR
     ctypedef int astl_status_code
     const char* astlStatusString(astl_status_code status)
+    const char* astlGetLastStatusString()
 
 cdef extern from "astl/astl_version.h":
     cdef struct _astl_version_t:

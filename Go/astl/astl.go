@@ -40,7 +40,6 @@ const (
 	StatusInvalidCounterHandle            Status = Status(C.ASTL_STATUS_INVALID_COUNTER_HANDLE)
 	StatusInvalidMetricHandle             Status = Status(C.ASTL_STATUS_INVALID_METRIC_HANDLE)
 	StatusInvalidMetricGroupHandle        Status = Status(C.ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE)
-	StatusNotImplemented                  Status = Status(C.ASTL_STATUS_NOT_IMPLEMENTED)
 	StatusNotSupported                    Status = Status(C.ASTL_STATUS_NOT_SUPPORTED)
 	StatusDeprecatedAPI                   Status = Status(C.ASTL_STATUS_DEPRECATED_API)
 	StatusNoTargetFound                   Status = Status(C.ASTL_STATUS_NO_TARGET_FOUND)
@@ -72,13 +71,11 @@ const (
 	StatusFileOpenFailed                  Status = Status(C.ASTL_STATUS_FILE_OPEN_FAILED)
 	StatusFileError                       Status = Status(C.ASTL_STATUS_FILE_ERROR)
 	StatusOutOfMemory                     Status = Status(C.ASTL_STATUS_OUT_OF_MEMORY)
-	StatusDivideByZero                    Status = Status(C.ASTL_STATUS_DIVIDE_BY_ZERO)
 	StatusInvalidValueType                Status = Status(C.ASTL_STATUS_INVALID_VALUE_TYPE)
 	StatusInvalidStateTransition          Status = Status(C.ASTL_STATUS_INVALID_STATE_TRANSITION)
 	StatusPauseUnsupported                Status = Status(C.ASTL_STATUS_PAUSE_UNSUPPORTED)
 	StatusResumeUnsupported               Status = Status(C.ASTL_STATUS_RESUME_UNSUPPORTED)
 	StatusInternalError                   Status = Status(C.ASTL_STATUS_INTERNAL_ERROR)
-	StatusUnknownError                    Status = ^Status(0)
 )
 
 func (s Status) String() string {
@@ -87,6 +84,10 @@ func (s Status) String() string {
 
 func StatusName(status Status) string {
 	return status.String()
+}
+
+func LastStatusString() string {
+	return C.GoString(C.astlGetLastStatusString())
 }
 
 type Error struct {
@@ -1474,7 +1475,7 @@ func metricListQuery() targetListQuery[C.astl_metric_props_t, Metric] {
 }
 
 func metricGroupListQueryOnTarget() targetListQuery[C.astl_metric_group_props_t, MetricGroup] {
-	tolerated := []Status{StatusNoMetricGroupsFound, StatusNotImplemented}
+	tolerated := []Status{StatusNoMetricGroupsFound}
 	return targetListQuery[C.astl_metric_group_props_t, MetricGroup]{
 		op:             "GetMetricGroups",
 		countOp:        "astlGetMetricGroupCountOnTarget",
@@ -1490,7 +1491,7 @@ func metricGroupListQueryOnTarget() targetListQuery[C.astl_metric_group_props_t,
 }
 
 func metricGroupListQuery() listQuery[C.astl_metric_group_props_t, MetricGroup] {
-	tolerated := []Status{StatusNoMetricGroupsFound, StatusNotImplemented}
+	tolerated := []Status{StatusNoMetricGroupsFound}
 	return listQuery[C.astl_metric_group_props_t, MetricGroup]{
 		countOp:        "astlGetMetricGroupCount",
 		toleratedCount: tolerated,

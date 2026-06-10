@@ -20,7 +20,7 @@ Mapping policy:
 """
 from __future__ import annotations
 
-from typing import Type, Dict
+from typing import Dict, Type
 
 try:  # Avoid circular import during _core initialization
     from ._core import ASTLError, Status  # type: ignore
@@ -46,7 +46,7 @@ class InitializationError(ASTLError):
 
 
 class NotImplementedErrorASTL(ASTLError):  # distinguish from built-in NotImplementedError
-    """Raised for NOT_IMPLEMENTED status when not suppressed."""
+    """Retained for backward compatibility; no public ASTL status maps here now."""
 
 
 class InvalidArgumentError(ASTLError):
@@ -87,7 +87,6 @@ def _build_status_map() -> None:
         return
     # Mapping table (attribute name on Status -> exception subclass)
     spec: Dict[str, Type[ASTLError]] = {
-        'NOT_IMPLEMENTED': NotImplementedErrorASTL,
         'INVALID_ARGUMENT': InvalidArgumentError,
         'BAD_ARGUMENT': BadArgumentError,
         'OUT_OF_MEMORY': OutOfMemoryError,

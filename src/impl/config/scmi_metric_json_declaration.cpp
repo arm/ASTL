@@ -13,6 +13,7 @@
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
+#include "astl_internal_status.hpp"
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
 #include "common/capabilities.hpp"
@@ -29,7 +30,7 @@ auto ParseScmiMetricJsonCollectionSettings(const MetricJsonCollectionSettings& c
     -> std::expected<ScmiMetricJsonCollectionSettings, astl_status_code> {
   if (ToLowerCopy(collection_setting.protocol) != "scmi") {
     ASTL_LOG_ERROR("SCMI collection parser received unsupported protocol '{}'", collection_setting.protocol);
-    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+    return std::unexpected(astl::kInternalNotImplemented);
   }
 
   ScmiMetricJsonCollectionSettings settings;
@@ -167,7 +168,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   if (!collector_type) {
     ASTL_LOG_ERROR("Unsupported collector type '{}' for finite set metric {}", metric_declaration.collection.protocol,
                    metric_key_name);
-    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+    return std::unexpected(astl::kInternalNotImplemented);
   }
   auto scmi_collection = ParseScmiMetricJsonCollectionSettings(metric_declaration.collection);
   if (!scmi_collection.has_value()) {
@@ -299,7 +300,7 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   if (!collector_type || collector_type != CollectorType::SCMI) {
     ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection.protocol,
                    metric_key_name);
-    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+    return std::unexpected(astl::kInternalNotImplemented);
   }
   auto scmi_collection = ParseScmiMetricJsonCollectionSettings(metric_declaration.collection);
   if (!scmi_collection.has_value()) {
@@ -348,7 +349,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
   if (!collector_type || collector_type != CollectorType::SCMI) {
     ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection.protocol,
                    metric_key_name);
-    return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+    return std::unexpected(astl::kInternalNotImplemented);
   }
   auto scmi_collection = ParseScmiMetricJsonCollectionSettings(metric_declaration.collection);
   if (!scmi_collection.has_value()) {
@@ -454,7 +455,7 @@ auto CreateScmiMetricConfigs(std::string_view metric_key_name, MetricJsonDeclara
     default:
       ASTL_LOG_ERROR("Unsupported or unknown metric type '{}' for metric {}", metric_declaration.metric_type,
                      metric_key_name);
-      return std::unexpected(ASTL_STATUS_NOT_IMPLEMENTED);
+      return std::unexpected(astl::kInternalNotImplemented);
   }
 }
 

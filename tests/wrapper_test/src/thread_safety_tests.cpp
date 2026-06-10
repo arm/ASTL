@@ -160,7 +160,7 @@ TEST_CASE("C interface supports valid-handle configure/start/stop interleavings"
       }
 
       for (int i = 0; i < k_iterations; ++i) {
-        astl_status_code status = ASTL_STATUS_UNKNOWN_ERROR;
+        astl_status_code status = ASTL_STATUS_INTERNAL_ERROR;
         switch ((thread_index + i) % 3) {
           case 0:
             status = ConfigureCounterCollectionOnTarget(valid_target, &collection_params, &fake_counter_handle, 1);
@@ -253,7 +253,7 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings", "[wrap
       }
 
       for (int i = 0; i < k_iterations; ++i) {
-        astl_status_code status = ASTL_STATUS_UNKNOWN_ERROR;
+        astl_status_code status = ASTL_STATUS_INTERNAL_ERROR;
         switch ((thread_index + i) % 5) {
           case 0:
             status = ConfigureCounterCollectionOnTarget(valid_target, &collection_params, &fake_counter_handle, 1);
@@ -366,7 +366,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
       }
 
       for (int i = 0; i < k_iterations; ++i) {
-        astl_status_code status = ASTL_STATUS_UNKNOWN_ERROR;
+        astl_status_code status = ASTL_STATUS_INTERNAL_ERROR;
         switch ((thread_index + i) % 21) {
           case 0:
             status = ConfigureCounterCollectionOnTarget(valid_target, &collection_params, &fake_counter_handle, 1);
@@ -376,7 +376,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             break;
           case 1:
             status = ConfigureCounterCollection(&collection_params, &fake_counter_handle, 1);
-            if (!is_allowed(status, {ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_INTERNAL_ERROR})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
@@ -388,7 +388,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
             break;
           case 3:
             status = ConfigureMetricCollection(&collection_params, &fake_metric_handle, 1);
-            if (!is_allowed(status, {ASTL_STATUS_NOT_IMPLEMENTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_INTERNAL_ERROR})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
