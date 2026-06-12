@@ -27,7 +27,7 @@ runs:
   steps:
     # Detect number of available cores for job parallelization
     - name: 🧠 Detect Core Count
-      uses: SimenB/github-actions-cpu-cores@v2
+      uses: SimenB/github-actions-cpu-cores@v3
       id: cpu-cores
 
     - name: ⤵️ Install apt-get Dependencies (ubuntu)
@@ -46,9 +46,8 @@ runs:
       if: inputs.os == 'macos-15'
       shell: bash
       run: |
-        brew update
-        brew install llvm
-        echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+        echo "$(brew --prefix llvm@18)/bin" >> "$GITHUB_PATH"
+
 
     - name: ⤵️ VCPKG - Restore Cache
       id: vcpkg-cache
@@ -67,7 +66,7 @@ runs:
 
     - name: ⤵️ Setup MSVC Environment (windows)
       if: contains(inputs.os, 'windows')
-      uses: ilammy/msvc-dev-cmd@v1
+      uses: egor-tensin/vs-shell@v2
 
     - name: ⚙️ CMake - Configure
       if: inputs.os != 'macos-15'
