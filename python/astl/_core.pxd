@@ -4,7 +4,7 @@
 
 """Cython declarations for a subset of the ASTL C API."""
 
-from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t
+from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int64_t
 from libc.stddef cimport size_t
 from libc.stdlib cimport calloc, free
 
@@ -88,6 +88,19 @@ cdef extern from "astl/astl_telemetry.h":
         const char* firmware_version
         const char* hostname
         const char* architecture
+        const char* cpu_type
+        const char* cpu_features
+        const char* cache_info
+        uint32_t core_count
+        uint32_t numa_node_count
+        uint32_t socket_count
+        uint32_t cache_line_size_bytes
+        uint64_t memory_total_bytes
+        const char* libc_version
+        const char* boot_info
+        int64_t huge_pages_total
+        int64_t huge_page_size_kb
+        const char* transparent_huge_pages
     ctypedef _astl_platform_props_t astl_platform_props_t
 
     # Units

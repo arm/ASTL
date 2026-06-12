@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string_view>
 
+#include "common/key_value_text_utils.hpp"
 #include "common/procfs_utils_readers_primitives.hpp"
 
 namespace astl::procfs::detail {
@@ -30,11 +31,9 @@ auto ReadKeyValueField(std::string_view contents, const KeyValueField& field)
   while (position <= contents.size()) {
     const size_t end = contents.find('\n', position);
     auto line = contents.substr(position, end == std::string_view::npos ? std::string_view::npos : end - position);
-    const auto colon = line.find(':');
-    if (colon != std::string_view::npos) {
-      const auto key = Trim(line.substr(0, colon));
-      if (key == field.field_name) {
-        auto value_tokens = SplitWhitespace(line.substr(colon + 1));
+    if (const auto parsed = text::ParseKeyValueLine(line); parsed.has_value()) {
+      if (parsed->key == field.field_name) {
+        auto value_tokens = SplitWhitespace(parsed->value);
         if (value_tokens.empty()) {
           return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
         }

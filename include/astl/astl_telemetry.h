@@ -107,6 +107,19 @@ typedef struct _astl_platform_props_t {
   const char* firmware_version;  //!< Firmware or BIOS version if available
   const char* hostname;          //!< Host name
   const char* architecture;      //!< Machine architecture (for example, "aarch64")
+  const char* cpu_type;          //!< CPU model/type summary if available
+  const char* cpu_features;      //!< CPU feature flags if available
+  const char* cache_info;        //!< Cache hierarchy summary if available
+  uint32_t    core_count;        //!< Number of configured CPU cores, or 0 when unavailable
+  uint32_t    numa_node_count;   //!< Number of NUMA nodes, or 0 when unavailable
+  uint32_t    socket_count;      //!< Number of physical CPU packages/sockets, or 0 when unavailable
+  uint32_t    cache_line_size_bytes;   //!< Data cache line size in bytes, or 0 when unavailable
+  uint64_t    memory_total_bytes;      //!< Total system memory in bytes, or 0 when unavailable
+  const char* libc_version;            //!< C library version if available
+  const char* boot_info;               //!< Boot environment summary if available
+  int64_t     huge_pages_total;        //!< Number of huge pages, or -1 when unavailable
+  int64_t     huge_page_size_kb;       //!< Huge page size in KiB, or -1 when unavailable
+  const char* transparent_huge_pages;  //!< Transparent huge page mode if available
 } astl_platform_props_t;
 
 typedef enum _astl_system_info_flags_t {

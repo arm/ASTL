@@ -40,9 +40,11 @@ constexpr size_t kFirstPtrOffset = AlignUp(sizeof(size_t) + sizeof(uint32_t), al
 static_assert(IsStdLayout<astl_platform_props_t>());
 static_assert(offsetof(astl_platform_props_t, size) == 0);
 static_assert(offsetof(astl_platform_props_t, flags) == kFlagsOffset);
-static_assert(sizeof(astl_platform_props_t) ==
-              StructLayoutSize<size_t, uint32_t, const char*, const char*, const char*, const char*, const char*,
-                               const char*, const char*, const char*, const char*>());
+static_assert(
+    sizeof(astl_platform_props_t) ==
+    StructLayoutSize<size_t, uint32_t, const char*, const char*, const char*, const char*, const char*, const char*,
+                     const char*, const char*, const char*, const char*, const char*, const char*, uint32_t, uint32_t,
+                     uint32_t, uint32_t, uint64_t, const char*, const char*, int64_t, int64_t, const char*>());
 
 static_assert(IsStdLayout<astl_target_props_t>());
 static_assert(offsetof(astl_target_props_t, size) == 0);

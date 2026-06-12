@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "astl_logger.hpp"
+#include "common/key_value_text_utils.hpp"
 #include "common/procfs_utils.hpp"
 
 namespace astl::procfs {
@@ -113,21 +114,18 @@ auto DiscoverMeminfoCounterDescriptors(const FileInterface& file_interface) -> s
     const size_t end = contents->find('\n', position);
     const auto   line =
         std::string_view{*contents}.substr(position, end == std::string::npos ? std::string::npos : end - position);
-    const auto colon = line.find(':');
-    if (colon != std::string_view::npos) {
-      const auto                     field_name_sv = Trim(line.substr(0, colon));
-      const auto                     rest          = line.substr(colon + 1);
-      const std::vector<std::string> tokens        = SplitWhitespace(rest);
-      if (!field_name_sv.empty() && !tokens.empty()) {
+    if (const auto parsed = text::ParseKeyValueLine(line); parsed.has_value()) {
+      const std::vector<std::string> tokens = SplitWhitespace(parsed->value);
+      if (!tokens.empty()) {
         MetricDescriptor descriptor{
-            .metric_name      = "meminfo." + std::string{field_name_sv},
-            .metric_id_suffix = "meminfo::" + std::string{field_name_sv},
-            .description      = "Procfs /proc/meminfo field " + std::string{field_name_sv},
+            .metric_name      = "meminfo." + std::string{parsed->key},
+            .metric_id_suffix = "meminfo::" + std::string{parsed->key},
+            .description      = "Procfs /proc/meminfo field " + std::string{parsed->key},
             .units            = ASTL_UNITS_NONE,
             .value_type       = ASTL_VALUE_UINT64,
             .input_value_type = ASTL_VALUE_UINT64,
             .identifier       = ASTL_METRIC_IDENTIFIER_COUNT,
-            .field_descriptor = KeyValueField{"meminfo", std::string{field_name_sv}, ASTL_VALUE_UINT64},
+            .field_descriptor = KeyValueField{"meminfo", std::string{parsed->key}, ASTL_VALUE_UINT64},
         };
 
         if (tokens.size() > 1 && tokens[1] == "kB") {

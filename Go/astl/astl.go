@@ -215,16 +215,30 @@ type Version struct {
 }
 
 type SystemInfo struct {
-	Flags           uint32
-	SoCName         string
-	VendorID        string
-	OSName          string
-	KernelName      string
-	KernelVersion   string
-	KernelRelease   string
-	FirmwareVersion string
-	Hostname        string
-	Architecture    string
+	Flags                uint32
+	SoCName              string
+	VendorID             string
+	OSName               string
+	KernelName           string
+	KernelVersion        string
+	KernelRelease        string
+	FirmwareVersion      string
+	Hostname             string
+	Architecture         string
+	CPUType              string
+	CPUFeatures          string
+	CacheInfo            string
+	CoreCount            uint32
+	NUMANodeCount        uint32
+	SocketCount          uint32
+	CacheLineSize        uint32
+	MemoryTotal          uint64
+	DistroName           string
+	LibcVersion          string
+	BootInfo             string
+	HugePagesTotal       int64
+	HugePageSizeKB       int64
+	TransparentHugePages string
 }
 
 type Target struct {
@@ -333,16 +347,29 @@ func GetSystemInfoWithFlags(flags SystemInfoFlags) (SystemInfo, error) {
 	}
 
 	return SystemInfo{
-		Flags:           uint32(info.flags),
-		SoCName:         goString(info.soc_name),
-		VendorID:        goString(info.vendor_id),
-		OSName:          goString(info.os_name),
-		KernelName:      goString(info.kernel_name),
-		KernelVersion:   goString(info.kernel_version),
-		KernelRelease:   goString(info.kernel_release),
-		FirmwareVersion: goString(info.firmware_version),
-		Hostname:        goString(info.hostname),
-		Architecture:    goString(info.architecture),
+		Flags:                uint32(info.flags),
+		SoCName:              goString(info.soc_name),
+		VendorID:             goString(info.vendor_id),
+		OSName:               goString(info.os_name),
+		KernelName:           goString(info.kernel_name),
+		KernelVersion:        goString(info.kernel_version),
+		KernelRelease:        goString(info.kernel_release),
+		FirmwareVersion:      goString(info.firmware_version),
+		Hostname:             goString(info.hostname),
+		Architecture:         goString(info.architecture),
+		CPUType:              goString(info.cpu_type),
+		CPUFeatures:          goString(info.cpu_features),
+		CacheInfo:            goString(info.cache_info),
+		CoreCount:            uint32(info.core_count),
+		NUMANodeCount:        uint32(info.numa_node_count),
+		SocketCount:          uint32(info.socket_count),
+		CacheLineSizeBytes:   uint32(info.cache_line_size_bytes),
+		MemoryTotalBytes:     uint64(info.memory_total_bytes),
+		LibcVersion:          goString(info.libc_version),
+		BootInfo:             goString(info.boot_info),
+		HugePagesTotal:       int64(info.huge_pages_total),
+		HugePageSizeKB:       int64(info.huge_page_size_kb),
+		TransparentHugePages: goString(info.transparent_huge_pages),
 	}, nil
 }
 

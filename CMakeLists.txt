@@ -378,12 +378,8 @@ if(ENABLE_VALGRIND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Configure CTest memory checking integration.
     set(MEMORYCHECK_TYPE "Valgrind")
 
-    set(ASTL_VALGRIND_OPTIONS
-      "--leak-check=full"
-      "--show-leak-kinds=definite,possible"
-      "--errors-for-leak-kinds=definite,possible"
-      "--track-origins=yes"
-    )
+    set(ASTL_VALGRIND_OPTIONS "--leak-check=full" "--show-leak-kinds=definite,possible"
+                              "--errors-for-leak-kinds=definite,possible" "--track-origins=yes")
     list(JOIN ASTL_VALGRIND_OPTIONS " " ASTL_VALGRIND_OPTIONS)
     set(VALGRIND_COMMAND "${VALGRIND_PATH}")
     set(VALGRIND_COMMAND_OPTIONS "${ASTL_VALGRIND_OPTIONS}")

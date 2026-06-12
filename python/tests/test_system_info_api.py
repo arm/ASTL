@@ -22,5 +22,18 @@ def test_get_system_info_api_exists_and_returns_mapping():
         "firmware_version",
         "hostname",
         "architecture",
+        "cpu_type",
+        "cpu_features",
+        "cache_info",
+        "core_count",
+        "numa_node_count",
+        "socket_count",
+        "cache_line_size_bytes",
+        "memory_total_bytes",
+        "libc_version",
+        "boot_info",
+        "huge_pages_total",
+        "huge_page_size_kb",
+        "transparent_huge_pages",
     }
     assert set(info.keys()) == expected_keys

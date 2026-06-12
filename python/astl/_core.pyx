@@ -226,6 +226,19 @@ cpdef dict get_system_info():
         "firmware_version": info.firmware_version.decode() if info.firmware_version != NULL else None,
         "hostname": info.hostname.decode() if info.hostname != NULL else None,
         "architecture": info.architecture.decode() if info.architecture != NULL else None,
+        "cpu_type": info.cpu_type.decode() if info.cpu_type != NULL else None,
+        "cpu_features": info.cpu_features.decode() if info.cpu_features != NULL else None,
+        "cache_info": info.cache_info.decode() if info.cache_info != NULL else None,
+        "core_count": info.core_count,
+        "numa_node_count": info.numa_node_count,
+        "socket_count": info.socket_count,
+        "cache_line_size_bytes": info.cache_line_size_bytes,
+        "memory_total_bytes": info.memory_total_bytes,
+        "libc_version": info.libc_version.decode() if info.libc_version != NULL else None,
+        "boot_info": info.boot_info.decode() if info.boot_info != NULL else None,
+        "huge_pages_total": info.huge_pages_total,
+        "huge_page_size_kb": info.huge_page_size_kb,
+        "transparent_huge_pages": info.transparent_huge_pages.decode() if info.transparent_huge_pages != NULL else None,
     }
 
 cpdef list get_counters(Target target):

@@ -942,16 +942,30 @@ auto ResolveSystemInfoSource(uint32_t request_flags) noexcept
 
 auto PopulateSystemInfo(astl_platform_props_t* system_info, const astl::PlatformInfoData& info, uint32_t selected_flag)
     -> void {
-  system_info->flags            = selected_flag;
-  system_info->soc_name         = info.soc_name.empty() ? nullptr : info.soc_name.c_str();
-  system_info->vendor_id        = info.vendor_id.empty() ? nullptr : info.vendor_id.c_str();
-  system_info->os_name          = info.os_name.empty() ? nullptr : info.os_name.c_str();
-  system_info->kernel_name      = info.kernel_name.empty() ? nullptr : info.kernel_name.c_str();
-  system_info->kernel_version   = info.kernel_version.empty() ? nullptr : info.kernel_version.c_str();
-  system_info->kernel_release   = info.kernel_release.empty() ? nullptr : info.kernel_release.c_str();
-  system_info->firmware_version = info.firmware_version.empty() ? nullptr : info.firmware_version.c_str();
-  system_info->hostname         = info.hostname.empty() ? nullptr : info.hostname.c_str();
-  system_info->architecture     = info.architecture.empty() ? nullptr : info.architecture.c_str();
+  system_info->flags                 = selected_flag;
+  system_info->soc_name              = info.soc_name.empty() ? nullptr : info.soc_name.c_str();
+  system_info->vendor_id             = info.vendor_id.empty() ? nullptr : info.vendor_id.c_str();
+  system_info->os_name               = info.os_name.empty() ? nullptr : info.os_name.c_str();
+  system_info->kernel_name           = info.kernel_name.empty() ? nullptr : info.kernel_name.c_str();
+  system_info->kernel_version        = info.kernel_version.empty() ? nullptr : info.kernel_version.c_str();
+  system_info->kernel_release        = info.kernel_release.empty() ? nullptr : info.kernel_release.c_str();
+  system_info->firmware_version      = info.firmware_version.empty() ? nullptr : info.firmware_version.c_str();
+  system_info->hostname              = info.hostname.empty() ? nullptr : info.hostname.c_str();
+  system_info->architecture          = info.architecture.empty() ? nullptr : info.architecture.c_str();
+  system_info->cpu_type              = info.cpu_type.empty() ? nullptr : info.cpu_type.c_str();
+  system_info->cpu_features          = info.cpu_features.empty() ? nullptr : info.cpu_features.c_str();
+  system_info->cache_info            = info.cache_info.empty() ? nullptr : info.cache_info.c_str();
+  system_info->core_count            = info.core_count;
+  system_info->numa_node_count       = info.numa_node_count;
+  system_info->socket_count          = info.socket_count;
+  system_info->cache_line_size_bytes = info.cache_line_size_bytes;
+  system_info->memory_total_bytes    = info.memory_total_bytes;
+  system_info->libc_version          = info.libc_version.empty() ? nullptr : info.libc_version.c_str();
+  system_info->boot_info             = info.boot_info.empty() ? nullptr : info.boot_info.c_str();
+  system_info->huge_pages_total      = info.huge_pages_total;
+  system_info->huge_page_size_kb     = info.huge_page_size_kb;
+  system_info->transparent_huge_pages =
+      info.transparent_huge_pages.empty() ? nullptr : info.transparent_huge_pages.c_str();
 }
 
 template <typename ParamsT>

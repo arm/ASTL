@@ -12,6 +12,7 @@
 
 #include "astl_logger.hpp"
 #include "common/procfs_utils_readers.hpp"
+#include "common/text_parse_utils.hpp"
 
 namespace astl::procfs::detail {
 
@@ -115,15 +116,11 @@ auto ParseAstlValue(std::string_view token, astl_value_type_t raw_value_type)
 }
 
 auto ParseUint64Token(std::string_view token) -> std::expected<uint64_t, astl_status_code> {
-  auto value_or_error = ParseAstlValue(token, ASTL_VALUE_UINT64);
-  if (!value_or_error.has_value()) {
-    return std::unexpected(value_or_error.error());
+  auto value = text::ParseUint64(token);
+  if (!value.has_value()) {
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
-  auto value_as_int = value_or_error->ToInt64();
-  if (!value_as_int.has_value() || *value_as_int < 0) {
-    return std::unexpected(value_as_int.has_value() ? ASTL_STATUS_BAD_CONFIGURATION : value_as_int.error());
-  }
-  return static_cast<uint64_t>(*value_as_int);
+  return *value;
 }
 
 auto ReadPrefixedLineTokens(std::string_view contents, std::string_view line_prefix)

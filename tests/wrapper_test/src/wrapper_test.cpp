@@ -2053,7 +2053,20 @@ TEST_CASE("astlLoadCollection smoke test", "[wrapper][cache]") {
   "kernel_release": "kernel-release-from-session",
   "firmware_version": "firmware-from-session",
   "hostname": "host-from-session",
-  "architecture": "arch-from-session"
+  "architecture": "arch-from-session",
+  "cpu_type": "cpu-type-from-session",
+  "cpu_features": "feature-a feature-b",
+  "cache_info": "L1 Data 64K",
+  "core_count": 128,
+  "numa_node_count": 4,
+  "socket_count": 2,
+  "cache_line_size_bytes": 64,
+  "memory_total_bytes": 1099511627776,
+  "libc_version": "libc-from-session",
+  "boot_info": "UEFI",
+  "huge_pages_total": 0,
+  "huge_page_size_kb": 2048,
+  "transparent_huge_pages": "always [madvise] never"
 })";
   }
 
@@ -2086,6 +2099,12 @@ TEST_CASE("astlLoadCollection smoke test", "[wrapper][cache]") {
   REQUIRE(std::string(platform_info.soc_name) == "soc-from-session");
   REQUIRE(std::string(platform_info.vendor_id) == "vendor-from-session");
   REQUIRE(std::string(platform_info.kernel_version) == "kernel-version-from-session");
+  REQUIRE(platform_info.cpu_type != nullptr);
+  REQUIRE(std::string(platform_info.cpu_type) == "cpu-type-from-session");
+  REQUIRE(platform_info.core_count == 128);
+  REQUIRE(platform_info.memory_total_bytes == 1099511627776ULL);
+  REQUIRE(platform_info.huge_pages_total == 0);
+  REQUIRE(platform_info.huge_page_size_kb == 2048);
 }
 
 TEST_CASE("astlGetSystemInfo switches to host info after configure following load", "[wrapper][cache][system-info]") {
