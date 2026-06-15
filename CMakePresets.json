@@ -30,6 +30,18 @@
       }
     },
     {
+      "name": "debug-make",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_COVERAGE": "OFF",
+        "ENABLE_VALGRIND": "OFF",
+        "JSON_DIAGNOSTICS": "1"
+      },
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
       "name": "release",
       "generator": "Ninja",
       "cacheVariables": {
@@ -53,6 +65,11 @@
       "configuration": "Debug"
     },
     {
+      "name": "debug-make",
+      "configurePreset": "debug-make",
+      "configuration": "Debug"
+    },
+    {
       "name": "release",
       "configurePreset": "release",
       "configuration": "Release"
@@ -70,6 +87,14 @@
     {
       "name": "debug-valgrind-coverage",
       "configurePreset": "debug-valgrind-coverage",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug-make",
+      "configurePreset": "debug-make",
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true

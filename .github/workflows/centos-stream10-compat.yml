@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: CentOS Stream 10 Compatibility
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/centos/centos:stream10
+
+    steps:
+      - name: ⤵️ Install build dependencies
+        shell: bash
+        run: |
+          dnf install -y \
+            ca-certificates \
+            cmake \
+            curl \
+            gcc \
+            gcc-c++ \
+            git \
+            jq \
+            make \
+            pkgconf-pkg-config \
+            python3 \
+            tar \
+            unzip \
+            zip
+
+      - name: ⤵️ Checkout code
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: ⚙️ CMake - Configure
+        shell: bash
+        run: |
+          cmake --version
+          cmake -S "${{ github.workspace }}" --preset debug-make
+
+      - name: 🏗️ CMake - Build
+        shell: bash
+        run: cmake --build --preset debug-make --parallel "$(nproc)" --verbose
+
+      - name: 🧪 CTest - Non-integration tests
+        shell: bash
+        run: ctest -LE "integration|time_sensitive" --preset debug-make
+
+      - name: 🧪 CTest - Time-sensitive tests
+        shell: bash
+        run: ctest -L "time_sensitive" --preset debug-make
