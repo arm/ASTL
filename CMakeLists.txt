@@ -320,8 +320,8 @@ target_include_directories(
   PRIVATE # where the library itself will look for its internal headers
           ${CMAKE_CURRENT_SOURCE_DIR}
   PUBLIC # where top-level project will look for the library's public headers
-         ${PROJECT_SOURCE_DIR}/include
-         ${PROJECT_SOURCE_DIR}/utils
+         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/utils>
          $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
          $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
          $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -343,7 +343,7 @@ find_package(spdlog CONFIG REQUIRED)
 target_link_libraries(${LIBRARY_NAME} PRIVATE spdlog::spdlog_header_only)
 
 set(PUBLIC_HEADERS include/astl/astl.h include/astl/astl_errors.h include/astl/astl_telemetry.h
-                   include/astl/astl_version.h)
+                   ${PROJECT_BINARY_DIR}/include/astl/astl_version.h)
 
 # public headers
 set_target_properties(
