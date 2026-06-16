@@ -249,10 +249,10 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   auto RollbackStartedCollectionToConfigured(const ITarget *target) -> astl_status_code;
 
   /**
-   * @brief Collect one sample of data on a target with an active configured collection
+   * @brief Collect one sample of data on a target with a configured collection.
    *
    * @param target The target with an active collection configuration
-   * @note ConfigureCounterCollection or similar should be called before ReadImmediate
+   * @note ConfigureCounterCollection or similar should be called before ReadImmediate.
    * @return error status code:
    *   - ASTL_STATUS_SUCCESS: success
    *   - ASTL_STATUS_INVALID_TARGET_HANDLE: the given target is unrecognized

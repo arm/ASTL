@@ -25,12 +25,13 @@ auto ProcfsCollector::SetRawSampleSink(IRawSampleSink* raw_sample_sink) -> void 
 
 auto ProcfsCollector::ConfigureCollection(CollectionConfiguration&& configuration) -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::STOPPED) {
+  if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::CONFIGURED &&
+      _collection_state != CollectionState::STOPPED) {
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
   _previous_cpu_snapshots.clear();
   _configuration    = std::move(configuration);
-  _collection_state = CollectionState::STOPPED;
+  _collection_state = CollectionState::CONFIGURED;
   return ExecuteCollectionOperations(_configuration->Operations().operationsBeforeStart);
 }
 
@@ -39,7 +40,8 @@ auto ProcfsCollector::StartCollection() -> astl_status_code {
   if (_collection_state == CollectionState::STARTED) {
     return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
   }
-  if (_collection_state != CollectionState::STOPPED || !_configuration.has_value()) {
+  if ((_collection_state != CollectionState::CONFIGURED && _collection_state != CollectionState::STOPPED) ||
+      !_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
   _previous_cpu_snapshots.clear();
@@ -92,7 +94,8 @@ auto ProcfsCollector::StopCollection() -> astl_status_code {
 
 auto ProcfsCollector::ReadImmediate() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  if (_collection_state != CollectionState::STARTED || !_configuration.has_value()) {
+  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::CONFIGURED) ||
+      !_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
   return ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
@@ -220,7 +223,8 @@ auto ProcfsCollector::ExecuteStopModeOperations() -> astl_status_code {
 }
 
 auto ProcfsCollector::StartIntervalSampling() -> astl_status_code {
-  if (_collection_state != CollectionState::STOPPED && _collection_state != CollectionState::PAUSED) {
+  if (_collection_state != CollectionState::CONFIGURED && _collection_state != CollectionState::STOPPED &&
+      _collection_state != CollectionState::PAUSED) {
     return ASTL_STATUS_INTERNAL_ERROR;
   }
   if (!_configuration.has_value()) {

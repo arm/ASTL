@@ -74,7 +74,7 @@ class LibsensorsCollector : public ICollector {
   astl_status_code StopCollection() override;
 
   /*
-   * @brief Collect a single sample of all the configured metics.
+   * @brief Collect a single sample of all the configured metrics.
    */
   astl_status_code ReadImmediate() override;
 
@@ -88,7 +88,7 @@ class LibsensorsCollector : public ICollector {
  private:
   // internal classes + enums
 
-  enum class CollectionState { UNCONFIGURED, STOPPED, STARTED, PAUSED };
+  enum class CollectionState { UNCONFIGURED, CONFIGURED, STARTED, PAUSED, STOPPED };
   enum class PauseResumeMarker { PAUSE, RESUME };
 
   // data members
@@ -114,6 +114,7 @@ class LibsensorsCollector : public ICollector {
    * @brief Initialize any threads or async tasks needed for interval sampling.
    */
   astl_status_code StartIntervalSampling();
+  auto             CheckStartIntervalSampling() const -> astl_status_code;
 
   /*
    * @brief Emit a pause or resume marker sample to the raw-sample sink.

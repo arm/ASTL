@@ -129,7 +129,6 @@ TEST_CASE("ProcfsCollector reads procfs-backed operations in immediate mode", "[
 
   REQUIRE(collector.ConfigureCollection(astl::CollectionConfiguration{&target, std::move(operations), params}) ==
           ASTL_STATUS_SUCCESS);
-  REQUIRE(collector.StartCollection() == ASTL_STATUS_SUCCESS);
   REQUIRE(collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
 
   REQUIRE(sink.last_target == &target);
@@ -209,6 +208,7 @@ TEST_CASE("ProcfsCollector enforces lifecycle state transitions", "[procfs_colle
   REQUIRE(collector.ConfigureCollection(astl::CollectionConfiguration{
               &target, MakeCollectionOperations({}, {}, std::move(replacement_operations), {}),
               MakeImmediateParams()}) == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
 
   REQUIRE(collector.StartCollection() == ASTL_STATUS_SUCCESS);
   REQUIRE(collector.StartCollection() == ASTL_STATUS_COLLECTION_ALREADY_RUNNING);

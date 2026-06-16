@@ -31,6 +31,35 @@
 
 using trompeloeil::_;
 
+namespace astl {
+auto operator==(const CollectionOperations& lhs, std::nullptr_t rhs) -> bool {
+  (void)lhs;
+  (void)rhs;
+  return false;
+}
+auto operator==(std::nullptr_t lhs, const CollectionOperations& rhs) -> bool {
+  (void)lhs;
+  (void)rhs;
+  return false;
+}
+}  // namespace astl
+
+namespace std {
+template <typename T, std::size_t Extent>
+auto operator==(span<T, Extent> lhs, std::nullptr_t rhs) -> bool {
+  (void)lhs;
+  (void)rhs;
+  return false;
+}
+
+template <typename T, std::size_t Extent>
+auto operator==(std::nullptr_t lhs, span<T, Extent> rhs) -> bool {
+  (void)lhs;
+  (void)rhs;
+  return false;
+}
+}  // namespace std
+
 template <typename T>
 auto AllocateAstlVector(size_t count) -> std::vector<T> {
   std::vector<T> objects{count};
@@ -928,20 +957,43 @@ TEST_CASE("astlReadImmediate", "[with 0 targets][wrapper]") {
 
 TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
   // mock 2 targets
-  auto mock_target_1          = std::make_unique<MockTarget>();
-  auto mock_target_2          = std::make_unique<MockTarget>();
-  auto mock_collector_manager = std::make_unique<MockCollectorManager>();
+  auto  mock_target_1          = std::make_unique<MockTarget>();
+  auto  mock_target_2          = std::make_unique<MockTarget>();
+  auto* mock_target_1_ptr      = mock_target_1.get();
+  auto* mock_target_2_ptr      = mock_target_2.get();
+  auto  mock_collector_manager = std::make_unique<MockCollectorManager>();
+  REQUIRE_CALL(*mock_collector_manager, ConfigureCollectionOnTarget(_, _, _)).TIMES(2).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*mock_collector_manager, GetNativeClockSnapshot(_))
+      .TIMES(2)
+      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   REQUIRE_CALL(*mock_collector_manager, ReadImmediateOnTarget(_)).TIMES(2).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*mock_collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*mock_collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target_1, GetProperties(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target_2, GetProperties(_)).RETURN(ASTL_STATUS_SUCCESS);
+  static const std::string target_1_name = "read_immediate_target_1";
+  static const std::string target_2_name = "read_immediate_target_2";
+  ALLOW_CALL(*mock_target_1, Name()).RETURN(target_1_name);
+  ALLOW_CALL(*mock_target_2, Name()).RETURN(target_2_name);
+  ALLOW_CALL(*mock_target_1, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
+  ALLOW_CALL(*mock_target_2, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
 
   std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
   mock_targets.push_back(std::move(mock_target_1));
   mock_targets.push_back(std::move(mock_target_2));
-  auto topology_manager = std::make_unique<MockTopologyManager>();
-  auto metric_manager   = std::make_unique<MockMetricManager>();
+  auto                               topology_manager      = std::make_unique<MockTopologyManager>();
+  auto                               metric_manager        = std::make_unique<MockMetricManager>();
+  static int                         dummy_counter_storage = 0;
+  astl_counter_handle_t              counter_handle        = &dummy_counter_storage;
+  std::vector<astl_counter_handle_t> available_counters{counter_handle};
+  ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
+      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+  ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
+      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+          astl::CollectionOperations{
+                                     {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
+  });
+  ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   REQUIRE_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
@@ -950,6 +1002,14 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
       std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(mock_collector_manager),
                                            std::move(metric_manager), std::move(output_manager), "");
   orchestrator->SetTargets(std::move(mock_targets));
+
+  astl_collection_params_t params{};
+  params.size  = sizeof(params);
+  params.flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY;
+  std::array<astl_counter_handle_t, 1> counters{counter_handle};
+  REQUIRE(orchestrator->ConfigureCounterCollection(mock_target_1_ptr, &params, counters) == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator->ConfigureCounterCollection(mock_target_2_ptr, &params, counters) == ASTL_STATUS_SUCCESS);
+
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   REQUIRE(ReadImmediate() == ASTL_STATUS_SUCCESS);

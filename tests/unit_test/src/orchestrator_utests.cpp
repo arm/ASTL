@@ -890,8 +890,9 @@ TEST_CASE("Orchestrator-ConfigureCounterCollection transitions target to configu
   EnvVarGuard perfetto_guard(astl::EnvVar::ASTL_OUTPUT_PERFETTO, "");
   EnvVarGuard interval_guard(astl::EnvVar::ASTL_OUTPUT_INTERVAL_CSV, "");
   EnvVarGuard summary_guard(astl::EnvVar::ASTL_OUTPUT_SUMMARY_CSV, "");
-  auto        topology_manager  = std::make_unique<MockTopologyManager>();
-  auto        collector_manager = std::make_unique<MockCollectorManager>();
+  auto        topology_manager      = std::make_unique<MockTopologyManager>();
+  auto        collector_manager     = std::make_unique<MockCollectorManager>();
+  auto*       collector_manager_ptr = collector_manager.get();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
@@ -941,6 +942,10 @@ TEST_CASE("Orchestrator-ConfigureCounterCollection transitions target to configu
   params.flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY;
   std::array<astl_counter_handle_t, 1> counters{counter_handle};
   REQUIRE(orchestrator.ConfigureCounterCollection(target, &params, counters) == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator.GetTargetCollectionState(target).value() == State::CONFIGURED);
+
+  REQUIRE_CALL(*collector_manager_ptr, ReadImmediateOnTarget(target)).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator.ReadImmediate(target) == ASTL_STATUS_SUCCESS);
   REQUIRE(orchestrator.GetTargetCollectionState(target).value() == State::CONFIGURED);
 
   REQUIRE(orchestrator.StartCollection(target) == ASTL_STATUS_SUCCESS);

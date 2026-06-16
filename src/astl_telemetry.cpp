@@ -111,6 +111,29 @@ auto GetConfiguredTargets(astl::Orchestrator& orchestrator) noexcept -> std::vec
   return configured_targets;
 }
 
+auto GetReadImmediateTargets(astl::Orchestrator& orchestrator) noexcept -> std::vector<const astl::ITarget*> {
+  std::vector<const astl::ITarget*> readable_targets;
+  const auto                        target_states = orchestrator.GetAllTargetCollectionStates();
+  for (const auto& target : orchestrator.GetTargets()) {
+    auto state_it = target_states.find(target.get());
+    if (state_it == target_states.end()) {
+      continue;
+    }
+    switch (state_it->second) {
+      case astl::Orchestrator::TargetCollectionState::CONFIGURED:
+      case astl::Orchestrator::TargetCollectionState::STARTED:
+        readable_targets.push_back(target.get());
+        break;
+      case astl::Orchestrator::TargetCollectionState::UNCONFIGURED:
+      case astl::Orchestrator::TargetCollectionState::STARTING:
+      case astl::Orchestrator::TargetCollectionState::PAUSED:
+      case astl::Orchestrator::TargetCollectionState::STOPPED:
+        break;
+    }
+  }
+  return readable_targets;
+}
+
 auto StartConfiguredTargets(astl::Orchestrator& orchestrator, bool start_paused) noexcept -> astl_status_code {
   const auto configured_targets = GetConfiguredTargets(orchestrator);
   if (configured_targets.empty()) {
@@ -2427,10 +2450,10 @@ auto astlReadImmediate(const astl_read_immediate_params_t* params) noexcept -> a
     if (!orchestrator_or_error) {
       return orchestrator_or_error.error();
     }
-    const auto& orchestrator      = orchestrator_or_error->get();
-    const auto& available_targets = orchestrator->GetTargets();
-    for (const auto& target : available_targets) {
-      auto result = orchestrator->ReadImmediate(target.get());
+    const auto& orchestrator     = orchestrator_or_error->get();
+    const auto  readable_targets = GetReadImmediateTargets(*orchestrator);
+    for (const auto* target : readable_targets) {
+      auto result = orchestrator->ReadImmediate(target);
       if (result != ASTL_STATUS_SUCCESS) {
         return result;
       }

@@ -43,7 +43,7 @@ class ProcfsCollector : public ICollector {
   auto ReadImmediate() -> astl_status_code override;
 
  private:
-  enum class CollectionState { UNCONFIGURED, STOPPED, STARTED, PAUSED };
+  enum class CollectionState { UNCONFIGURED, CONFIGURED, STARTED, PAUSED, STOPPED };
 
   auto ReadOperationSample(const ProcfsReadOperation& operation)
       -> std::expected<std::optional<AstlValue>, astl_status_code>;

@@ -498,6 +498,27 @@ auto Orchestrator::ReadImmediate(const ITarget *target) -> astl_status_code {
     ASTL_LOG_ERROR("Orchestrator::ReadImmediate called with null CollectorManager");
     return ASTL_STATUS_INTERNAL_ERROR;
   }
+  if (!_metric_manager) {
+    ASTL_LOG_ERROR("Orchestrator::ReadImmediate called with null MetricManager");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  auto should_capture_clock_correlation = false;
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    const auto      state_iterator   = _target_collection_states.find(target);
+    should_capture_clock_correlation = state_iterator != _target_collection_states.end() &&
+                                       state_iterator->second == TargetCollectionState::CONFIGURED;
+  }
+
+  if (should_capture_clock_correlation) {
+    auto clock_correlations = _collector_manager->GetNativeClockSnapshot(target);
+    if (!clock_correlations) {
+      return clock_correlations.error();
+    }
+    _metric_manager->SetClockCorrelations(*clock_correlations);
+  }
+
   return _collector_manager->ReadImmediateOnTarget(target);
 }
 

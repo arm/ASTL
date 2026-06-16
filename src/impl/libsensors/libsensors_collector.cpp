@@ -45,11 +45,12 @@ auto LibsensorsCollector::SetRawSampleSink(IRawSampleSink* raw_sample_sink) -> v
  */
 auto LibsensorsCollector::ConfigureCollection(CollectionConfiguration&& configuration) -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::STOPPED) {
+  if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::CONFIGURED &&
+      _collection_state != CollectionState::STOPPED) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot reconfigure while already started
   }
   _configuration    = std::move(configuration);
-  _collection_state = CollectionState::STOPPED;
+  _collection_state = CollectionState::CONFIGURED;
   return ExecuteCollectionOperations(_configuration->Operations().operationsBeforeStart);
 }
 
@@ -58,40 +59,36 @@ auto LibsensorsCollector::ConfigureCollection(CollectionConfiguration&& configur
  */
 auto LibsensorsCollector::StartCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
+  auto             result = ASTL_STATUS_SUCCESS;
   if (_collection_state == CollectionState::STARTED) {
-    return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
-  }
-  if (_collection_state != CollectionState::STOPPED || !_configuration.has_value()) {
-    return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot start while already started or unconfigured
-  }
-
-  auto result = ExecuteCollectionOperations(_configuration->Operations().operationsAtStart);
-  if (result != ASTL_STATUS_SUCCESS) {
-    return result;  // Propagate the error code from the operation
-  }
-
-  switch (_configuration->CollectionParams().collection_mode) {
-    case ASTL_COLLECTION_MODE_IMMEDIATE:
-      // Immediate mode does not require any special setup, we will collect data on ReadImmediate calls
-      break;
-    case ASTL_COLLECTION_MODE_SNAPSHOT:
-      // Snapshot mode samples data on Start and Stop calls
-      result = ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
-      if (result != ASTL_STATUS_SUCCESS) {
-        return result;
+    result = ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+  } else if ((_collection_state != CollectionState::CONFIGURED && _collection_state != CollectionState::STOPPED) ||
+             !_configuration.has_value()) {
+    result = ASTL_STATUS_BAD_CONFIGURATION;  // Cannot start while already started or unconfigured
+  } else {
+    result = ExecuteCollectionOperations(_configuration->Operations().operationsAtStart);
+    if (result == ASTL_STATUS_SUCCESS) {
+      switch (_configuration->CollectionParams().collection_mode) {
+        case ASTL_COLLECTION_MODE_IMMEDIATE:
+          // Immediate mode does not require any special setup, we will collect data on ReadImmediate calls
+          break;
+        case ASTL_COLLECTION_MODE_SNAPSHOT:
+          // Snapshot mode samples data on Start and Stop calls
+          result = ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
+          break;
+        case ASTL_COLLECTION_MODE_SAMPLING:
+          // Sampling mode requires setting up a timer or similar mechanism to periodically collect data
+          result = StartIntervalSampling();
+          break;
+        default:
+          result = ASTL_STATUS_BAD_CONFIGURATION;  // Unsupported collection mode
+          break;
       }
-      break;
-    case ASTL_COLLECTION_MODE_SAMPLING:
-      // Sampling mode requires setting up a timer or similar mechanism to periodically collect data
-      result = StartIntervalSampling();
-      if (result != ASTL_STATUS_SUCCESS) {
-        return result;
-      }
-      break;
-    default:
-      return ASTL_STATUS_BAD_CONFIGURATION;  // Unsupported collection mode
+    }
+    if (result == ASTL_STATUS_SUCCESS) {
+      _collection_state = CollectionState::STARTED;
+    }
   }
-  _collection_state = CollectionState::STARTED;
   return result;
 }
 
@@ -169,12 +166,13 @@ auto LibsensorsCollector::StopCollection() -> astl_status_code {
 }
 
 /*
- * @brief Collect a single sample of all the configured metics.
+ * @brief Collect a single sample of all the configured metrics.
  */
 auto LibsensorsCollector::ReadImmediate() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  if (_collection_state != CollectionState::STARTED) {
-    return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot read while not started
+  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::CONFIGURED) ||
+      !_configuration.has_value()) {
+    return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot read while unconfigured or stopped
   }
   return ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
 }
@@ -238,26 +236,21 @@ auto LibsensorsCollector::ExecuteCollectionOperations(OperationSequence const& o
   return ASTL_STATUS_SUCCESS;  // Successfully read and sent the samples
 }
 
+auto LibsensorsCollector::CheckStartIntervalSampling() const -> astl_status_code {
+  return CheckPeriodicSamplerStart(_collection_state, _configuration,
+                                   {CollectionState::CONFIGURED, CollectionState::STOPPED, CollectionState::PAUSED},
+                                   "Interval sampling");
+}
+
 /*
  * @brief Initialize any threads or async tasks needed for interval sampling.
  */
 auto LibsensorsCollector::StartIntervalSampling() -> astl_status_code {
-  if (_collection_state != CollectionState::STOPPED && _collection_state != CollectionState::PAUSED) {
-    ASTL_LOG_ERROR("Interval sampling started when collection state is not stopped or paused");
-    return ASTL_STATUS_INTERNAL_ERROR;
+  auto status = CheckStartIntervalSampling();
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
   }
-  if (!_configuration.has_value()) {
-    ASTL_LOG_ERROR("Interval sampling start attempted with no configuration!");
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-  if (_periodic_sampler) {
-    ASTL_LOG_ERROR("Interval sampling started _periodic_sampler is already initialized");
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-
-  auto interval     = std::chrono::milliseconds{_configuration.value().CollectionParams().sampling_interval};
-  _periodic_sampler = std::make_unique<PeriodicSampler>(this, interval);
-  return ASTL_STATUS_SUCCESS;
+  return StartPeriodicSamplerForCollector(this, *_configuration, _periodic_sampler, "Interval sampling");
 }
 
 auto LibsensorsCollector::EmitPauseResumeSample(PauseResumeMarker marker_type, ProcessedSampleTimestamp timestamp)

@@ -5,14 +5,20 @@
 #ifndef PERIODIC_SAMPLER_HPP_
 #define PERIODIC_SAMPLER_HPP_
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <initializer_list>
+#include <memory>
+#include <optional>
+#include <string_view>
 #include <thread>
 
 // Enable native extensions for OS-level thread priority
 #define BS_THREAD_POOL_NATIVE_EXTENSIONS
 #include "BS_thread_pool.hpp"  // BS::thread_pool, BS::this_thread, BS::os_thread_priority
 #undef BS_THREAD_POOL_NATIVE_EXTENSIONS
+#include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
 
 namespace astl {
@@ -69,6 +75,36 @@ class PeriodicSampler {
   std::atomic<bool>               _cancel, _paused;
   BS::thread_pool<BS::tp::none>   _pool;
 };
+
+template <typename CollectorT>
+auto StartPeriodicSamplerForCollector(CollectorT* collector, CollectionConfiguration const& configuration,
+                                      std::unique_ptr<PeriodicSampler>& periodic_sampler, std::string_view log_prefix)
+    -> astl_status_code {
+  if (periodic_sampler) {
+    ASTL_LOG_ERROR("{} started _periodic_sampler is already initialized", log_prefix);
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto interval = std::chrono::milliseconds{configuration.CollectionParams().sampling_interval};
+  periodic_sampler    = std::make_unique<PeriodicSampler>(collector, interval);
+  return ASTL_STATUS_SUCCESS;
+}
+
+template <typename CollectionStateT>
+auto CheckPeriodicSamplerStart(CollectionStateT                              collection_state,
+                               std::optional<CollectionConfiguration> const& configuration,
+                               std::initializer_list<CollectionStateT> startable_states, std::string_view log_prefix)
+    -> astl_status_code {
+  if (std::ranges::find(startable_states, collection_state) == startable_states.end()) {
+    ASTL_LOG_ERROR("{} started when collection state is not configured, stopped, or paused", log_prefix);
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  if (!configuration.has_value()) {
+    ASTL_LOG_ERROR("{} start attempted with no configuration!", log_prefix);
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
 
 }  // namespace astl
 

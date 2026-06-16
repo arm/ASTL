@@ -484,8 +484,10 @@ main fields are:
 
 ### Collection Lifecycle
 
-- `astlReadImmediateOnTarget`: Trigger an immediate read on one target.
-- `astlReadImmediate`: Trigger immediate reads across the active scope.
+- `astlReadImmediateOnTarget`: Trigger an immediate read on one target with
+  configured counters or metrics.
+- `astlReadImmediate`: Trigger immediate reads across targets with configured
+  or started counters or metrics in the active scope.
 - `astlStartCollectionOnTarget`: Start one configured target.
 - `astlStartCollection`: Start collection across the active scope.
 - `astlStartCollectionOnTargetPaused`: Start one target paused.
@@ -543,6 +545,17 @@ main fields are:
 5. Optionally pause and resume
 6. Call `astlStopCollectionOnTarget`
 7. Retrieve samples or statistics
+
+### Flow 2a: Configure And Read Immediately
+
+1. Discover targets and counters, metrics, or metric groups
+2. Fill `astl_collection_params_t`
+3. Call one of the collection-configuration entry points
+4. Call `astlReadImmediateOnTarget` or `astlReadImmediate`
+5. Retrieve the captured samples
+
+Immediate reads are available as soon as the target counters or metrics have
+been configured.
 
 ### Flow 3: Save And Reload
 

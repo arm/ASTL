@@ -91,7 +91,7 @@ class ScmiSysfsCollector : public ICollector {
   astl_status_code StopCollection() override;
 
   /*
-   * @brief Collect a single sample of all the configured metics.
+   * @brief Collect a single sample of all the configured metrics.
    */
   astl_status_code ReadImmediate() override;
 
@@ -105,7 +105,7 @@ class ScmiSysfsCollector : public ICollector {
  private:
   // internal classes + enums
 
-  enum class CollectionState { UNCONFIGURED, STOPPED, STARTED, PAUSED };
+  enum class CollectionState { UNCONFIGURED, CONFIGURED, STARTED, PAUSED, STOPPED };
   enum class PauseResumeMarker { PAUSE, RESUME };
 
   // data members
@@ -172,6 +172,7 @@ class ScmiSysfsCollector : public ICollector {
    * @brief Initialize any threads or async tasks needed for interval sampling.
    */
   astl_status_code StartIntervalSampling();
+  auto             CheckStartIntervalSampling() const -> astl_status_code;
 
   /*
    * @brief Emit a pause or resume marker sample to the raw-sample sink.
@@ -313,8 +314,12 @@ template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfiguration&& configuration)
     -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::STOPPED) {
+  if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::CONFIGURED &&
+      _collection_state != CollectionState::STOPPED) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot reconfigure while already started
+  }
+  if (_collection_state == CollectionState::CONFIGURED) {
+    RollbackConfigurationState("ConfigureCollection replacement");
   }
   _use_software_clock_timestamps = IsEnvVarSet(EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS);
   ASTL_LOG_INFO("ScmiSysfsCollector: use_software_clock_timestamps={}", _use_software_clock_timestamps);
@@ -333,7 +338,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
   }
 
   _configuration          = std::move(configuration);
-  _collection_state       = CollectionState::STOPPED;
+  _collection_state       = CollectionState::CONFIGURED;
   auto all_data_event_ids = scmi_detail::GetUniqueDataEventsIds(_configuration->Operations());
   auto data_events        = EnableDataEvents(all_data_event_ids);
   if (!data_events) {
@@ -370,43 +375,39 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
 template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::StartCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
+  auto             result = ASTL_STATUS_SUCCESS;
   if (_collection_state == CollectionState::STARTED) {
-    return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
-  }
-  if (_collection_state != CollectionState::STOPPED || !_configuration.has_value()) {
-    return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot start while already started or unconfigured
-  }
+    result = ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+  } else if ((_collection_state != CollectionState::CONFIGURED && _collection_state != CollectionState::STOPPED) ||
+             !_configuration.has_value()) {
+    result = ASTL_STATUS_BAD_CONFIGURATION;  // Cannot start while already started or unconfigured
+  } else {
+    // Clear previous timestamps from any previous collection cycles
+    _previous_timestamps.clear();
 
-  // Clear previous timestamps from any previous collection cycles
-  _previous_timestamps.clear();
-
-  auto result = ExecuteCollectionOperations(_configuration->Operations().operationsAtStart);
-  if (result != ASTL_STATUS_SUCCESS) {
-    return result;  // Propagate the error code from the operation
-  }
-
-  switch (_configuration->CollectionParams().collection_mode) {
-    case ASTL_COLLECTION_MODE_IMMEDIATE:
-      // Immediate mode does not require any special setup, we will collect data on ReadImmediate calls
-      break;
-    case ASTL_COLLECTION_MODE_SNAPSHOT:
-      // Snapshot mode samples data on Start and Stop calls
-      result = ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
-      if (result != ASTL_STATUS_SUCCESS) {
-        return result;
+    result = ExecuteCollectionOperations(_configuration->Operations().operationsAtStart);
+    if (result == ASTL_STATUS_SUCCESS) {
+      switch (_configuration->CollectionParams().collection_mode) {
+        case ASTL_COLLECTION_MODE_IMMEDIATE:
+          // Immediate mode does not require any special setup, we will collect data on ReadImmediate calls
+          break;
+        case ASTL_COLLECTION_MODE_SNAPSHOT:
+          // Snapshot mode samples data on Start and Stop calls
+          result = ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
+          break;
+        case ASTL_COLLECTION_MODE_SAMPLING:
+          // Sampling mode requires setting up a timer or similar mechanism to periodically collect data
+          result = StartIntervalSampling();
+          break;
+        default:
+          result = ASTL_STATUS_BAD_CONFIGURATION;  // Unsupported collection mode
+          break;
       }
-      break;
-    case ASTL_COLLECTION_MODE_SAMPLING:
-      // Sampling mode requires setting up a timer or similar mechanism to periodically collect data
-      result = StartIntervalSampling();
-      if (result != ASTL_STATUS_SUCCESS) {
-        return result;
-      }
-      break;
-    default:
-      return ASTL_STATUS_BAD_CONFIGURATION;  // Unsupported collection mode
+    }
+    if (result == ASTL_STATUS_SUCCESS) {
+      _collection_state = CollectionState::STARTED;
+    }
   }
-  _collection_state = CollectionState::STARTED;
   return result;
 }
 
@@ -492,13 +493,14 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StopCollection() {
 }
 
 /*
- * @brief Collect a single sample of all the configured metics.
+ * @brief Collect a single sample of all the configured metrics.
  */
 template <typename FileInterfaceT>
 astl_status_code ScmiSysfsCollector<FileInterfaceT>::ReadImmediate() {
   std::scoped_lock lock{_collection_mutex};
-  if (_collection_state != CollectionState::STARTED) {
-    return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot read while not started
+  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::CONFIGURED) ||
+      !_configuration.has_value()) {
+    return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot read while unconfigured or stopped
   }
   return ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
 }
@@ -810,27 +812,23 @@ auto ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(ScmiReadOperat
   return ASTL_STATUS_SUCCESS;  // Successfully read and sent the sample
 }
 
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::CheckStartIntervalSampling() const -> astl_status_code {
+  return CheckPeriodicSamplerStart(_collection_state, _configuration,
+                                   {CollectionState::CONFIGURED, CollectionState::STOPPED, CollectionState::PAUSED},
+                                   "SCMI interval sampling");
+}
+
 /*
  * @brief Initialize any threads or async tasks needed for interval sampling.
  */
 template <typename FileInterfaceT>
 astl_status_code ScmiSysfsCollector<FileInterfaceT>::StartIntervalSampling() {
-  if (_collection_state != CollectionState::STOPPED && _collection_state != CollectionState::PAUSED) {
-    ASTL_LOG_ERROR("SCMI interval sampling started when collection state is not stopped or paused");
-    return ASTL_STATUS_INTERNAL_ERROR;
+  auto status = CheckStartIntervalSampling();
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
   }
-  if (!_configuration.has_value()) {
-    ASTL_LOG_ERROR("SCMI interval sampling start attempted with no configuration!");
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-  if (_periodic_sampler) {
-    ASTL_LOG_ERROR("SCMI interval sampling started _periodic_sampler is already initialized");
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-
-  auto interval     = std::chrono::milliseconds{_configuration.value().CollectionParams().sampling_interval};
-  _periodic_sampler = std::make_unique<PeriodicSampler>(this, interval);
-  return ASTL_STATUS_SUCCESS;
+  return StartPeriodicSamplerForCollector(this, *_configuration, _periodic_sampler, "SCMI interval sampling");
 }
 
 template <typename FileInterfaceT>
