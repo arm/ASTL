@@ -319,7 +319,10 @@ struct MockMetricManager : public astl::IMetricManager {
    */
   MAKE_MOCK1(ProcessRawSamples, auto(astl::RawSamplesMap&)->astl_status_code, override);
 
-  MAKE_MOCK1(GetPauseResumeEventMetricOnTarget, const astl::IMetric*(const astl::ITarget*), const noexcept override);
+  MAKE_MOCK1(GetLifecycleEventMetricOnTarget, const astl::IMetric*(const astl::ITarget*), const noexcept override);
+
+  MAKE_MOCK3(InjectLifecycleEvent,
+             auto(const astl::ITarget*, uint64_t, astl::ProcessedSampleTimestamp)->astl_status_code, override);
 
   MAKE_MOCK1(SetClockCorrelations, auto(const astl::ClockCorrelationMap& correlations)->void, override);
 

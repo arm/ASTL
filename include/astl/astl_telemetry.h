@@ -388,6 +388,27 @@ typedef enum _astl_metric_type_t {
                                       //!< Power as energy/s
 } astl_metric_type_t;
 
+/** Identifies the specific type of lifecycle event emitted by ASTL into the synthetic
+ *  @c astl_lifecycle_events.<target-name> metric.
+ *
+ *  Consumers retrieve these events via astlGetMetricSamplesOnTarget() using the handle for the
+ *  @c astl_lifecycle_events.<target-name> metric; the @c value field of each returned
+ *  @c astl_sample_t will be one of the values below, cast to @c uint64_t.
+ *
+ *  The @c astl_lifecycle_events.<target-name> metric is created lazily, the first time a lifecycle
+ *  event actually occurs for the target (i.e. on the first pause, resume, or crop).
+ *  Because of this, the metric handle may not appear in a metric list retrieved via
+ *  astlGetMetricsOnTarget() before the first lifecycle event; callers that cached the metric list
+ *  earlier must rediscover the metrics for the target (call astlGetMetricCountOnTarget() then
+ *  astlGetMetricsOnTarget() again) after the first pause/resume/crop to obtain the handle.
+ */
+typedef enum _astl_lifecycle_event_type_t {
+  ASTL_LIFECYCLE_EVENT_PAUSE      = 0,  //!< Collection paused on this target
+  ASTL_LIFECYCLE_EVENT_RESUME     = 1,  //!< Collection resumed on this target
+  ASTL_LIFECYCLE_EVENT_CROP_BEGIN = 2,  //!< Start boundary of a sample crop window applied to this target
+  ASTL_LIFECYCLE_EVENT_CROP_END   = 3,  //!< End boundary of a sample crop window applied to this target
+} astl_lifecycle_event_type_t;
+
 /** High-level identifier of a metric. Derived from configuration JSON "identifier" string. */
 typedef enum _astl_metric_identifier_t {
   ASTL_METRIC_IDENTIFIER_UNKNOWN       = -1,  //!< Unknown or unmapped identifier

@@ -114,13 +114,29 @@ struct IMetricManager {
       -> std::expected<IMetric*, astl_status_code> = 0;
 
   /**
-   * @brief Return the pause-event EventMetric instance for the given target, or nullptr if none is registered.
+   * @brief Return the lifecycle-event EventMetric instance for the given target, or nullptr if none is registered.
    *
    * MetricManager records this pointer when an ASTL_NATIVE + ASTL_METRIC_EVENT metric is registered
    * via RegisterMetric.  Callers (e.g. Orchestrator::GetPauseMarkersSnapshot) use it to locate the
-   * pause-event metric's ProcessedSampledData in the processed-samples store.
+   * lifecycle-event metric's ProcessedSampledData in the processed-samples store.
    */
-  [[nodiscard]] virtual auto GetPauseResumeEventMetricOnTarget(const ITarget* target) const -> const IMetric* = 0;
+  [[nodiscard]] virtual auto GetLifecycleEventMetricOnTarget(const ITarget* target) const -> const IMetric* = 0;
+
+  /**
+   * @brief Inject a lifecycle event into the ASTL_NATIVE lifecycle-event metric for the given target.
+   *
+   * Directly emits one processed sample with @p event_value into the synthetic
+   * astl_lifecycle_events.<target> metric so that lifecycle transitions (pause, resume,
+   * crop boundaries) appear in the timeline returned by astlGetMetricSamplesOnTarget().
+   * This is a no-op (returns SUCCESS) if no lifecycle-event metric is registered for @p target
+   *
+   * @param target      Target whose lifecycle-event metric should receive the event.
+   * @param event_value uint64_t encoding of the lifecycle event type (see astl_lifecycle_event_type_t).
+   * @param timestamp   Timestamp of the event (CLOCK_MONOTONIC_RAW).
+   * @return ASTL_STATUS_SUCCESS or an error status.
+   */
+  [[nodiscard]] virtual auto InjectLifecycleEvent(const ITarget* target, uint64_t event_value,
+                                                  ProcessedSampleTimestamp timestamp) -> astl_status_code = 0;
 
   /**
    * @brief Register a sink to receive processed samples produced by metrics.

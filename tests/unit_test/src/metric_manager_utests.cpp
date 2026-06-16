@@ -184,7 +184,7 @@ TEST_CASE("MetricManager::RegisterMetric succeeds for ASTL-native event metric",
 
   REQUIRE(mgr.RegisterMetric(std::move(cfg), {&target}) == ASTL_STATUS_SUCCESS);
   REQUIRE(mgr.GetAvailableMetrics(&target).value().size() == 1);
-  REQUIRE(mgr.GetPauseResumeEventMetricOnTarget(&target) != nullptr);
+  REQUIRE(mgr.GetLifecycleEventMetricOnTarget(&target) != nullptr);
 }
 
 TEST_CASE("MetricManager::RegisterMetric fails when collector unsupported", "[MetricManager]") {

@@ -43,7 +43,9 @@ static auto BuildTestOrchestrator(std::unique_ptr<MockTarget>        mock_target
   expectations.push_back(
       NAMED_ALLOW_CALL(*mock_metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
   expectations.push_back(NAMED_ALLOW_CALL(*mock_metric_manager, RemoveAllMetrics()));
-  expectations.push_back(NAMED_ALLOW_CALL(*mock_metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr));
+  expectations.push_back(NAMED_ALLOW_CALL(*mock_metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr));
+  expectations.push_back(
+      NAMED_ALLOW_CALL(*mock_metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS));
   auto output_manager = std::make_unique<astl::OutputManager>();
   ALLOW_CALL(*mock_target, GetCollectorType()).RETURN(astl::CollectorType::UNKNOWN);
 

@@ -45,6 +45,7 @@ set(UNIT_TEST_SRCS
     protobuf_serdes_utests.cpp
     archive_utests.cpp
     pause_marker_utests.cpp
+    lifecycle_events_utests.cpp
     ${CMAKE_SOURCE_DIR}/tests/test_utilities.cpp)
 if(ASTL_HAVE_LIBSENSORS)
   find_library(SENSORS_LIB sensors)

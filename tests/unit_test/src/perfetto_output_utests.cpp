@@ -782,6 +782,7 @@ TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[
   ALLOW_CALL(*metric_manager, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<astl::OutputManager>();
 
@@ -843,6 +844,7 @@ TEST_CASE("PerfettoOutput deferred emission empty map", "[perfetto_output]") {  
   ALLOW_CALL(*metric_manager, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<astl::OutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
@@ -893,6 +895,7 @@ TEST_CASE("PerfettoOutput deferred emission env var unset", "[perfetto_output]")
   ALLOW_CALL(*metric_manager, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<astl::OutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),

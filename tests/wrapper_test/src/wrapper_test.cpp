@@ -672,7 +672,8 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
-  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto collector_manager = std::make_unique<MockCollectorManager>();
@@ -1009,7 +1010,8 @@ TEST_CASE("astlStartCollection", "[wrapper]") {
   ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
-  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
@@ -1077,6 +1079,9 @@ TEST_CASE("astlStartCollection starts counter-configured targets", "[wrapper]") 
   ALLOW_CALL(*metric_mgr, GetCounterRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+  ALLOW_CALL(*metric_mgr, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_mgr, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
@@ -1177,7 +1182,8 @@ TEST_CASE("astlStartCollectionPaused", "[wrapper]") {
   ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
-  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
@@ -1247,6 +1253,9 @@ TEST_CASE("astlStartCollectionPaused starts counter-configured targets", "[wrapp
   ALLOW_CALL(*metric_mgr, GetCounterRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+  ALLOW_CALL(*metric_mgr, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_mgr, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
@@ -1314,7 +1323,8 @@ TEST_CASE("astlStartCollection rolls back previously started targets when a late
   ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
-  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto  output_manager = std::make_unique<MockOutputManager>();
@@ -1392,7 +1402,8 @@ TEST_CASE("astlStartCollectionPaused rolls back previously started targets when 
   ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
-  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto  output_manager = std::make_unique<MockOutputManager>();
@@ -2439,7 +2450,8 @@ TEST_CASE("astlPauseCollection and astlResumeCollection route through orchestrat
   ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
-  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto  output_manager = std::make_unique<MockOutputManager>();
@@ -2509,7 +2521,8 @@ TEST_CASE("astlStopCollection routes through orchestrator", "[wrapper]") {
   ALLOW_CALL(*metric_mgr, GetRequiredOperations(_, _))
       .RETURN(astl::CollectionOperations{
           {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
-  ALLOW_CALL(*metric_mgr, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_mgr, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_mgr, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();

@@ -339,7 +339,10 @@ auto BuildCropOrchestrator(std::vector<expectation>& out_expectations, const std
   out_expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
   out_expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
   out_expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, RemoveAllMetrics()));
-  out_expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr));
+  out_expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr));
+  out_expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS));
+  // CropSamplesOnTarget lazily registers the lifecycle-event metric before injecting crop events.
+  out_expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS));
   out_expectations.push_back(
       NAMED_ALLOW_CALL(*mm_raw, GetAvailableMetrics(_)).RETURN(std::span<const astl_metric_handle_t>{}));
   out_expectations.push_back(

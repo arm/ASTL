@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl/astl_telemetry.h"
 #include "astl_defines.hpp"
 #include "astl_internal_status.hpp"
 #include "astl_logger.hpp"
@@ -245,6 +246,7 @@ auto Orchestrator::ConfigureCounterCollection(const ITarget *target, const astl_
     std::lock_guard state_lock(_collection_state_mutex);
     _target_collection_states[target] = TargetCollectionState::CONFIGURED;
   }
+
   return status;
 }
 
@@ -298,15 +300,6 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_c
   {
     std::lock_guard state_lock(_collection_state_mutex);
     _target_collection_states[target] = TargetCollectionState::CONFIGURED;
-  }
-
-  // Register the synthetic pause-event metric for this target (no-op if already registered).
-  const auto pause_metric_status = RegisterPauseResumeEventMetricForTarget(target);
-  if (pause_metric_status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_WARNING(
-        "Orchestrator: pause-event metric registration failed for '{}' ({}); samples during this pause/resume window "
-        "will not be ignored as expected.",
-        target->Name(), astlStatusString(pause_metric_status));
   }
 
   return status;
@@ -429,6 +422,8 @@ auto Orchestrator::StartCollectionImpl(const ITarget *target, bool start_paused)
 
   auto pause_status = _collector_manager->PauseOnTarget(target);
   if (pause_status == ASTL_STATUS_SUCCESS) {
+    // A pause event is about to be recorded; ensure the lifecycle-event metric exists for it.
+    EnsureLifecycleEventMetricForTarget(target);
     std::lock_guard state_lock(_collection_state_mutex);
     auto            it = _target_collection_states.find(target);
     if (it != _target_collection_states.end() && it->second == TargetCollectionState::STARTING) {
@@ -527,6 +522,8 @@ auto Orchestrator::PauseCollection(const ITarget *target) -> astl_status_code {
       return ASTL_STATUS_COLLECTION_NOT_RUNNING;
     }
   }
+  // A pause event is about to be recorded; ensure the lifecycle-event metric exists for it.
+  EnsureLifecycleEventMetricForTarget(target);
   collector_status = _collector_manager->PauseOnTarget(target);
   if (collector_status != ASTL_STATUS_SUCCESS) {
     if (collector_status == astl::kInternalNotImplemented) {
@@ -563,6 +560,8 @@ auto Orchestrator::ResumeCollection(const ITarget *target) -> astl_status_code {
       return ASTL_STATUS_COLLECTION_NOT_PAUSED;
     }
   }
+  // A resume event is about to be recorded; ensure the lifecycle-event metric exists for it.
+  EnsureLifecycleEventMetricForTarget(target);
   collector_status = _collector_manager->ResumeOnTarget(target);
   if (collector_status != ASTL_STATUS_SUCCESS) {
     if (collector_status == astl::kInternalNotImplemented) {
@@ -884,7 +883,7 @@ auto Orchestrator::GetPauseMarkersSnapshot() const -> PauseMarkersMap {
     std::lock_guard state_lock{_collection_state_mutex};
     for (const auto &[target, collection_state] : _target_collection_states) {
       static_cast<void>(collection_state);
-      if (const auto *pause_metric = _metric_manager->GetPauseResumeEventMetricOnTarget(target);
+      if (const auto *pause_metric = _metric_manager->GetLifecycleEventMetricOnTarget(target);
           pause_metric != nullptr) {
         target_to_pause_metric[target] = pause_metric;
       }
@@ -917,33 +916,43 @@ auto Orchestrator::GetPauseMarkersSnapshot() const -> PauseMarkersMap {
   return result;
 }
 
-auto Orchestrator::RegisterPauseResumeEventMetricForTarget(const ITarget *target) -> astl_status_code {
+auto Orchestrator::RegisterLifecycleEventMetricForTarget(const ITarget *target) -> astl_status_code {
   if (!target || !_metric_manager) {
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   // Already registered for this target — MetricManager will reject the duplicate metric id
   // gracefully, but we can skip work by checking the dedicated map.
-  if (_metric_manager->GetPauseResumeEventMetricOnTarget(target) != nullptr) {
+  if (_metric_manager->GetLifecycleEventMetricOnTarget(target) != nullptr) {
     return ASTL_STATUS_SUCCESS;
   }
 
-  // Use a target-scoped ID to avoid conflicts when multiple targets are configured.
-  const std::string metric_name = std::string{"astl_pause_events."} + target->Name();
-  auto              cfg = std::make_unique<MetricConfig>(metric_name, "Pause events emitted during collection pauses",
-                                                         ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
-                                                         ASTL_METRIC_EVENT, CollectorType::ASTL_NATIVE, NullOperationBuilder{});
+  // Use a target-scoped name to avoid conflicts when multiple targets are configured.
+  const std::string metric_name = std::string{"astl_lifecycle_events."} + target->Name();
+  auto cfg = std::make_unique<MetricConfig>(metric_name, "ASTL lifecycle events (pause, resume, crop boundary)",
+                                            ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                            ASTL_METRIC_EVENT, CollectorType::ASTL_NATIVE, NullOperationBuilder{});
 
   const auto status = _metric_manager->RegisterMetric(std::move(cfg), {target});
   if (status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("Orchestrator: failed to register pause-event metric for target '{}': {}", target->Name(),
+    ASTL_LOG_ERROR("Orchestrator: failed to register lifecycle-event metric for target '{}': {}", target->Name(),
                    astlStatusString(status));
     return status;
   }
 
-  // MetricManager::RegisterMetric stores the IMetric* in _target_to_pause_resume_event_metric;
-  // no need to locate the handle — GetPauseResumeEventMetricOnTarget provides direct access.
-  ASTL_LOG_DEBUG("Orchestrator: registered pause-event metric '{}' for target '{}'", metric_name, target->Name());
+  // MetricManager::RegisterMetric stores the IMetric* in _target_to_lifecycle_event_metric;
+  // no need to locate the handle — GetLifecycleEventMetricOnTarget provides direct access.
+  ASTL_LOG_DEBUG("Orchestrator: registered lifecycle-event metric '{}' for target '{}'", metric_name, target->Name());
   return ASTL_STATUS_SUCCESS;
+}
+
+void Orchestrator::EnsureLifecycleEventMetricForTarget(const ITarget *target) {
+  const auto status = RegisterLifecycleEventMetricForTarget(target);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_WARNING(
+        "Orchestrator: lifecycle-event metric registration failed for '{}' ({}); lifecycle events for this target "
+        "will not be recorded.",
+        target ? target->Name() : "<null>", astlStatusString(status));
+  }
 }
 
 /**
@@ -1416,7 +1425,39 @@ auto Orchestrator::CropSamplesOnTarget(const ITarget *target, std::span<const as
   FilterRawSamplesOnTarget(target, correlations, windows);
 
   // Step 4: Filter the on-disk raw sample cache file.
-  return FilterRawSampleCacheFile(target, correlations, windows);
+  const auto cache_filter_status = FilterRawSampleCacheFile(target, correlations, windows);
+  if (cache_filter_status != ASTL_STATUS_SUCCESS) {
+    return cache_filter_status;
+  }
+
+  // Step 5: Inject CROP_BEGIN / CROP_END lifecycle events for each window boundary.
+  // Injected after filtering so the crop events themselves are never cropped out.
+  // (see astl_lifecycle_event_type_t in astl_telemetry.h).
+  // Ensure the lifecycle-event metric exists before recording any crop boundary events.
+  EnsureLifecycleEventMetricForTarget(target);
+  for (const auto &window : consolidated_windows) {
+    if (window.start_ts != 0U) {
+      const ProcessedSampleTimestamp begin_ts{
+          std::chrono::duration<int64_t, std::nano>{static_cast<int64_t>(window.start_ts)}};
+      const auto inject_status = _metric_manager->InjectLifecycleEvent(
+          target, static_cast<uint64_t>(ASTL_LIFECYCLE_EVENT_CROP_BEGIN), begin_ts);
+      if (inject_status != ASTL_STATUS_SUCCESS) {
+        ASTL_LOG_WARNING("CropSamplesOnTarget: failed to inject crop-begin event for '{}' ({})", target->Name(),
+                         astlStatusString(inject_status));
+      }
+    }
+    if (window.end_ts != 0U) {
+      const ProcessedSampleTimestamp end_ts{
+          std::chrono::duration<int64_t, std::nano>{static_cast<int64_t>(window.end_ts)}};
+      const auto inject_status =
+          _metric_manager->InjectLifecycleEvent(target, static_cast<uint64_t>(ASTL_LIFECYCLE_EVENT_CROP_END), end_ts);
+      if (inject_status != ASTL_STATUS_SUCCESS) {
+        ASTL_LOG_WARNING("CropSamplesOnTarget: failed to inject crop-end event for '{}' ({})", target->Name(),
+                         astlStatusString(inject_status));
+      }
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
 }
 
 auto Orchestrator::CropMetricSamplesOnTarget(const ITarget *target, const IMetric *metric,

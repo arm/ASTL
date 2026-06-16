@@ -69,6 +69,7 @@ TEST_CASE("Orchestrator ctor", "[Orchestrator]") {
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, ProcessRawSamples(_)).RETURN(ASTL_STATUS_COLLECTION_ALREADY_STOPPED);
   auto output_manager   = std::make_unique<MockOutputManager>();
   auto topology_manager = std::make_unique<MockTopologyManager>();
@@ -120,6 +121,7 @@ TEST_CASE("Orchestrator-Collection", "[Orchestrator]") {
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
@@ -188,6 +190,7 @@ TEST_CASE("Orchestrator-BulkStateQuery", "[Orchestrator]") {
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
@@ -284,6 +287,7 @@ TEST_CASE("Orchestrator-StopCollection", "[Orchestrator]") {
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
 
@@ -308,6 +312,7 @@ TEST_CASE("Orchestrator::ReadImmediate delegates to CollectorManager", "[Orchest
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
@@ -327,6 +332,7 @@ TEST_CASE("Orchestrator::GetProcessedMetricSamples validates inputs and uses fas
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
@@ -368,6 +374,7 @@ TEST_CASE("Orchestrator::GetProcessedMetricSamples returns empty when cache is a
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
@@ -396,6 +403,7 @@ TEST_CASE("Orchestrator::LoadFromFile short-circuits when instance already exist
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   auto output_manager = std::make_unique<MockOutputManager>();
 
   auto orchestrator = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
@@ -417,6 +425,7 @@ TEST_CASE("Orchestrator-SinkRawSamples empty span no-op", "[Orchestrator]") {
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
@@ -448,6 +457,7 @@ TEST_CASE("Orchestrator-SinkRawSamples bulk growth then skip reserve", "[Orchest
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
                                            std::move(metric_manager), std::move(output_manager), "");
@@ -498,6 +508,7 @@ TEST_CASE("Orchestrator-SinkRawSamples serializes rollover batches using the sta
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   auto output_manager = std::make_unique<MockOutputManager>();
   auto orchestrator   = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
                                            std::move(metric_manager), std::move(output_manager), cache_dir);
@@ -545,6 +556,7 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV only emission", "[Orchestrat
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
   REQUIRE_CALL(*output_manager, OutputProcessedSamples(_, astl::OutputType::INTERVAL_CSV, _, _))
@@ -583,6 +595,7 @@ TEST_CASE("Orchestrator-StopCollection PERFETTO only emission", "[Orchestrator][
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
   REQUIRE_CALL(*output_manager, OutputProcessedSamples(_, astl::OutputType::PERFETTO, _, _))
@@ -625,6 +638,7 @@ TEST_CASE("Orchestrator-StopCollection dual PERFETTO+INTERVAL_CSV ordered emissi
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
   REQUIRE_CALL(*output_manager, OutputProcessedSamples(_, astl::OutputType::PERFETTO, _, _))
@@ -668,6 +682,7 @@ TEST_CASE("Orchestrator-StopCollection INTERVAL_CSV idempotent emission", "[Orch
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
   REQUIRE_CALL(*output_manager, OutputProcessedSamples(_, astl::OutputType::INTERVAL_CSV, _, _))
@@ -724,6 +739,7 @@ TEST_CASE("Orchestrator-StopCollection PERFETTO emission is synchronized across 
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   std::atomic<int> perfetto_output_calls{0};
   auto             output_manager           = std::make_unique<MockOutputManager>();
@@ -788,6 +804,7 @@ TEST_CASE("Orchestrator-FullLifecyclePositive", "[Orchestrator][lifecycle]") {
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
       .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
@@ -796,7 +813,8 @@ TEST_CASE("Orchestrator-FullLifecyclePositive", "[Orchestrator][lifecycle]") {
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
-  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
@@ -891,7 +909,10 @@ TEST_CASE("Orchestrator-ConfigureCounterCollection transitions target to configu
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
+  ALLOW_CALL(*metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
       .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
   ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
@@ -951,6 +972,7 @@ TEST_CASE("Orchestrator-ConfigureMetricCollection resets per-target cached artif
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
       .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
@@ -958,7 +980,8 @@ TEST_CASE("Orchestrator-ConfigureMetricCollection resets per-target cached artif
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
-  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_metric, Name()).RETURN(metric_name);
 
@@ -1021,6 +1044,7 @@ TEST_CASE("Orchestrator-StartCollectionPaused transitions directly to paused", "
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
       .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
@@ -1029,7 +1053,8 @@ TEST_CASE("Orchestrator-StartCollectionPaused transitions directly to paused", "
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
-  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
@@ -1080,6 +1105,7 @@ TEST_CASE("Orchestrator-StartCollectionPaused rolls back when pause is unsupport
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
       .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
@@ -1088,7 +1114,8 @@ TEST_CASE("Orchestrator-StartCollectionPaused rolls back when pause is unsupport
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
-  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
@@ -1135,6 +1162,7 @@ TEST_CASE("Orchestrator-StartFailureDoesNotStickStartedState", "[Orchestrator][l
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
       .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
@@ -1143,7 +1171,8 @@ TEST_CASE("Orchestrator-StartFailureDoesNotStickStartedState", "[Orchestrator][l
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
-  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto               output_manager = std::make_unique<MockOutputManager>();
@@ -1193,6 +1222,7 @@ TEST_CASE("Orchestrator-StartSetsStartingStateDuringCollectorStart", "[Orchestra
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
       .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
@@ -1201,7 +1231,8 @@ TEST_CASE("Orchestrator-StartSetsStartingStateDuringCollectorStart", "[Orchestra
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
-  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
@@ -1265,6 +1296,7 @@ TEST_CASE("Orchestrator-StopDuringStartingReturnsInvalidStateTransition", "[Orch
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
       .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
@@ -1273,7 +1305,8 @@ TEST_CASE("Orchestrator-StopDuringStartingReturnsInvalidStateTransition", "[Orch
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
-  ALLOW_CALL(*metric_manager, GetPauseResumeEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
 
   auto output_manager = std::make_unique<MockOutputManager>();
@@ -1334,6 +1367,7 @@ TEST_CASE("Orchestrator::ConfigureMetricCollection preserves state on operation-
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
       .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
 
@@ -1391,6 +1425,7 @@ TEST_CASE("Orchestrator::ConfigureCounterCollection propagates collector errors"
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
       .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
   ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
@@ -1460,6 +1495,7 @@ TEST_CASE("Orchestrator::SaveToFile round-trip", "[Orchestrator][cache]") {
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   auto output_manager = std::make_unique<MockOutputManager>();
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;

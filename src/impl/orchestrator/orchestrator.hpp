@@ -505,10 +505,21 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   auto RebuildProcessedSamplesForAllTargets() const -> void;
 
   /**
-   * @brief Register (once per target) a synthetic ASTL_METRIC_EVENT metric that records pause events.
+   * @brief Register (once per target) a synthetic ASTL_METRIC_EVENT metric that records lifecycle events.
    *
+   * The metric is registered lazily, the first time a lifecycle event (pause, resume, or crop
+   * boundary) actually occurs for the target, rather than eagerly at configuration time.
    */
-  auto RegisterPauseResumeEventMetricForTarget(const ITarget *target) -> astl_status_code;
+  auto RegisterLifecycleEventMetricForTarget(const ITarget *target) -> astl_status_code;
+
+  /**
+   * @brief Lazily ensure the lifecycle-event metric exists for a target just before recording a
+   *        lifecycle event (pause, resume, crop boundary).
+   *
+   * Wraps RegisterLifecycleEventMetricForTarget and logs a warning on failure, but never fails the
+   * caller. No-op if the metric is already registered for the target.
+   */
+  void EnsureLifecycleEventMetricForTarget(const ITarget *target);
 
   /**
    * @brief Global singleton initialization mutex.
