@@ -691,7 +691,13 @@ static auto DeserializeClockCorrelations(const astl::protobuf::MetricManager& pr
         proto_corr.native_at_start_ticks(), NativeToMonotonicRawRatio{proto_ratio.num(),             proto_ratio.den()                                 }
     };
 
-    result[entry.operation_id()] = corr;
+    const auto operation_id_u32 = entry.operation_id();
+    if (operation_id_u32 >= std::numeric_limits<OperationId>::max()) {
+      // checking if operation_id can fit in the OperationId type and is not reserved invalid id.
+      ASTL_LOG_ERROR("Clock correlation OperationId value out of range: {}", operation_id_u32);
+      continue;
+    }
+    result[static_cast<OperationId>(operation_id_u32)] = corr;
   }
 
   return result;

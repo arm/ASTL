@@ -122,6 +122,16 @@ class Counter : public RawMetric, public virtual ICounter {
     return RawMetric::SinkProcessedSample(processed_sample);
   }
 
+  /**
+   * @brief Forward pause markers to RawMetric to avoid multiple-inheritance ambiguity
+   *
+   * @param pause_timestamp
+   * @return astl_status_code
+   */
+  auto ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code override {
+    return RawMetric::ProcessPauseSample(pause_timestamp);
+  }
+
  private:
   // note we have a MetricConfig base class members _configuration and _targetfrom RawMetric
 };
