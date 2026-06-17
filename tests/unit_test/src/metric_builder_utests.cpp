@@ -229,6 +229,10 @@ TEST_CASE("MetricBuilder::BuildMetricManager with SCMI target but no config", "[
 }
 
 TEST_CASE("MetricBuilder::BuildMetricManager with libsensors target", "[MetricBuilder]") {
+#if !defined(ASTL_INCLUDE_LIBSENSORS)
+  SKIP("Negative tests around libsensors are hard to trigger properly with no libsensors-dev support");
+#endif
+
   std::vector<std::unique_ptr<astl::ITarget>> targets;
 
   auto                     mock_target      = std::make_unique<MockTarget>();
@@ -248,6 +252,10 @@ TEST_CASE("MetricBuilder::BuildMetricManager with libsensors target", "[MetricBu
 }
 
 TEST_CASE("MetricBuilder::BuildMetricManager with mixed collector types", "[MetricBuilder]") {
+#if !defined(ASTL_INCLUDE_LIBSENSORS)
+  SKIP("Negative tests around libsensors are hard to trigger properly with no libsensors-dev support");
+#endif
+
   std::vector<std::unique_ptr<astl::ITarget>> targets;
 
   auto                     scmi_target      = std::make_unique<MockTarget>();

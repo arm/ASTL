@@ -84,6 +84,8 @@ catch_discover_tests(
   unit_test
   DISCOVERY_MODE
   PRE_TEST
+  EXTRA_ARGS
+  --allow-running-no-tests
   ADD_TAGS_AS_LABELS
   PROPERTIES
   ENVIRONMENT

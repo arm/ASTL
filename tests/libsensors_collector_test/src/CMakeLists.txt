@@ -41,6 +41,8 @@ if(ASTL_HAVE_LIBSENSORS)
     ${TARGET}
     DISCOVERY_MODE
     PRE_TEST
+    EXTRA_ARGS
+    --allow-running-no-tests
     ADD_TAGS_AS_LABELS
     PROPERTIES
     ENVIRONMENT

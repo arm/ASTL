@@ -78,6 +78,10 @@ struct ScopedDropRoot {
     }
   }
 };
+
+static auto RunningAsUndroppableRoot() -> bool {
+  return (geteuid() == 0) && astl::GetEnvVar(astl::EnvVar::SUDO_UID).empty();
+}
 #endif
 
 #ifdef __linux__
@@ -151,6 +155,11 @@ TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") 
         no_perm_file.Path(),
         std::filesystem::perms::owner_read | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
         std::filesystem::perm_options::remove);
+    if (RunningAsUndroppableRoot()) {
+      SKIP(
+          "Permission-denied file open behavior cannot be exercised when tests run as container root without "
+          "SUDO_UID.");
+    }
     ScopedDropRoot drop_root;
 
     // The permission-denied failure must not evict the already-cached handle
@@ -246,6 +255,11 @@ TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") 
         no_read_perm_file.Path(),
         std::filesystem::perms::owner_read | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
         std::filesystem::perm_options::remove);
+    if (RunningAsUndroppableRoot()) {
+      SKIP(
+          "Permission-denied file open behavior cannot be exercised when tests run as container root without "
+          "SUDO_UID.");
+    }
     ScopedDropRoot drop_root_perms;
     REQUIRE(sysfs.Read(no_read_perm_file.Path(), output) == ASTL_STATUS_FILE_OPEN_FAILED);
 #endif
@@ -267,6 +281,11 @@ TEST_CASE("FileInterface functionality with absolute path", "[file_interface]") 
                                  std::filesystem::perms::owner_write | std::filesystem::perms::group_write |
                                      std::filesystem::perms::others_write,
                                  std::filesystem::perm_options::remove);
+    if (RunningAsUndroppableRoot()) {
+      SKIP(
+          "Permission-denied file open behavior cannot be exercised when tests run as container root without "
+          "SUDO_UID.");
+    }
     ScopedDropRoot drop_sudo;
     REQUIRE(sysfs.Write(no_write_perm_file.Path(), new_content) == ASTL_STATUS_FILE_OPEN_FAILED);
 #endif

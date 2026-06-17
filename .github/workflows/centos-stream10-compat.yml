@@ -6,6 +6,7 @@ name: CentOS Stream 10 Compatibility
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -44,7 +45,7 @@ jobs:
         shell: bash
         run: |
           cmake --version
-          cmake -S "${{ github.workspace }}" --preset debug-make
+          cmake --preset debug-make
 
       - name: 🏗️ CMake - Build
         shell: bash
