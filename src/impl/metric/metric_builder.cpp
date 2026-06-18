@@ -8,7 +8,6 @@
 #include <memory>
 #include <optional>
 #include <string_view>
-#include <unordered_set>
 #include <vector>
 
 #include "astl_logger.hpp"
@@ -279,18 +278,6 @@ static auto ApplyConfiguredNameForScmiTarget(Target&                            
   return ASTL_STATUS_SUCCESS;
 }
 
-static auto ValidateUniqueTargetNames(const std::vector<std::unique_ptr<ITarget>>& targets) -> astl_status_code {
-  std::unordered_set<std::string> seen_names;
-  for (const auto& target_ptr : targets) {
-    const auto insert_result = seen_names.emplace(target_ptr->Name());
-    if (!insert_result.second) {
-      ASTL_LOG_ERROR("Configured target names must be unique; duplicate target name '{}'", target_ptr->Name());
-      return ASTL_STATUS_BAD_CONFIGURATION;
-    }
-  }
-  return ASTL_STATUS_SUCCESS;
-}
-
 struct ScmiSpecificationLookupContext {
   const scmi::spec::RepoMeta*          repo_meta;
   const metrics::spec::PlatformLookup* platform_lookup;
@@ -329,9 +316,6 @@ static auto ApplyConfiguredScmiTargetNames(const AstlConfiguration&             
     }
   }
 
-  if (status == ASTL_STATUS_SUCCESS) {
-    status = ValidateUniqueTargetNames(targets);
-  }
   return status;
 }
 

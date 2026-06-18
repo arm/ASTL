@@ -5,6 +5,7 @@
 #include <expected>
 #include <filesystem>
 #include <memory>
+#include <unordered_set>
 
 #include "astl/astl_errors.h"
 #include "libsensors/libsensors_topology_plugin.hpp"
@@ -29,10 +30,25 @@ auto ActivatePlugin(std::vector<std::unique_ptr<ITarget>>& targets, const AstlCo
 
   auto validated_new_targets = std::move(targets_detected_from_this_plugin.value());
 
+  // Target names must be globally unique because they seed metric/target identifiers downstream.
+  // Discard any newly discovered target whose name collides with one we have already accepted,
+  // emitting a warning and continuing rather than failing the whole build.
+  std::unordered_set<std::string> seen_names;
+  seen_names.reserve(targets.size() + validated_new_targets.size());
+  for (const auto& existing_target : targets) {
+    seen_names.insert(existing_target->Name());
+  }
+
   // std::vector::append_range() would be better,
   // but g++ 13.1.0 doesn't seem to implement __cpp_lib_containers_ even when using -std=c++23
   targets.reserve(targets.size() + validated_new_targets.size());
   for (size_t ix = 0; ix < validated_new_targets.size(); ix++) {
+    const auto insert_result = seen_names.insert(validated_new_targets[ix]->Name());
+    if (!insert_result.second) {
+      ASTL_LOG_WARNING("Duplicate target name '{}'; discarding the duplicate target and continuing",
+                       validated_new_targets[ix]->Name());
+      continue;
+    }
     targets.push_back(std::move(validated_new_targets[ix]));
   }
 }

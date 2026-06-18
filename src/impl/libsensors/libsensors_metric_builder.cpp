@@ -1367,6 +1367,11 @@ auto RegisterLibsensorsMetrics(
   int                                                              chip_index = 0;
   std::vector<DiscoveredSensorMetric>                              discovered_sensors;
   std::unordered_map<std::string, std::unordered_set<std::string>> observed_register_names_by_chip;
+  // Chip names must be globally unique because they seed the libsensors metric ids. The live
+  // libsensors library can expose several physical chips that share a name (e.g. two
+  // "power_meter-acpi-0" instances). Topology discovery already discards the duplicate target, so
+  // walk only the first chip of each name here to stay consistent and avoid duplicate metric ids.
+  std::unordered_set<std::string> processed_chip_names;
   while ((chip = sensors_api->get_detected_chips(nullptr, &chip_index))) {
     std::string                     chip_name;
     std::unordered_set<std::string> observed_register_names;
@@ -1374,6 +1379,11 @@ auto RegisterLibsensorsMetrics(
         DiscoverSensorsFromChip(configuration, chip, sensors_api.get(), chip_name, observed_register_names);
     if (!discovered_or_error.has_value()) {
       return discovered_or_error.error();
+    }
+    if (!processed_chip_names.insert(chip_name).second) {
+      ASTL_LOG_WARNING("Duplicate libsensors chip name '{}'; discarding the duplicate chip's metrics and continuing",
+                       chip_name);
+      continue;
     }
     observed_register_names_by_chip[chip_name].insert(observed_register_names.begin(), observed_register_names.end());
     auto& chip_sensors = discovered_or_error.value();
