@@ -53,9 +53,10 @@ TEST_CASE("AstlConfiguration::CreateConfiguration rejects invalid ASTL_CONFIG_DI
   REQUIRE(configuration_result.error() == ASTL_STATUS_BAD_CONFIGURATION);
 }
 
-TEST_CASE("AstlConfiguration::CreateConfiguration falls back to XDG_DATA_HOME/astl on Linux", "[AstlConfiguration]") {
+TEST_CASE("AstlConfiguration::CreateConfiguration falls back to XDG_DATA_HOME/astl/config on Linux",
+          "[AstlConfiguration]") {
   const fs::path xdg_root   = fs::temp_directory_path() / "astl_xdg_data_home";
-  const fs::path config_dir = xdg_root / "astl";
+  const fs::path config_dir = xdg_root / "astl" / "config";
   TempFileGuard  xdg_guard(xdg_root);
   CreateConfigTree(config_dir);
 
@@ -68,10 +69,10 @@ TEST_CASE("AstlConfiguration::CreateConfiguration falls back to XDG_DATA_HOME/as
   REQUIRE(configuration_result->config_dir_path == config_dir);
 }
 
-TEST_CASE("AstlConfiguration::CreateConfiguration falls back to HOME/.local/share/astl on Linux",
+TEST_CASE("AstlConfiguration::CreateConfiguration falls back to HOME/.local/share/astl/config on Linux",
           "[AstlConfiguration]") {
   const fs::path home_root  = fs::temp_directory_path() / "astl_home_data_home";
-  const fs::path config_dir = home_root / ".local" / "share" / "astl";
+  const fs::path config_dir = home_root / ".local" / "share" / "astl" / "config";
   TempFileGuard  home_guard(home_root);
   CreateConfigTree(config_dir);
 

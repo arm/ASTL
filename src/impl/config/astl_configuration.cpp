@@ -35,9 +35,9 @@ static auto ValidateAstlConfigDirPath(const std::filesystem::path& config_dir_pa
 }
 
 /** @brief Helper to locate the OS-specific expected location of the user-level astl config dir
- * Linux:    $XDG_DATA_HOME/astl/ or ~/.local/share/astl
- * Mac:      ~/Library/Application Support/astl/
- * Windows:  %LOCALAPPDATA%\astl\
+ * Linux:    $XDG_DATA_HOME/astl/config or ~/.local/share/astl/config
+ * Mac:      ~/Library/Application Support/astl/config
+ * Windows:  %LOCALAPPDATA%\astl\config
  *  @return optional path if found and valid, else nullopt
  */
 static auto GetUserConfigDirPath() -> std::optional<std::filesystem::path> {
@@ -48,26 +48,26 @@ static auto GetUserConfigDirPath() -> std::optional<std::filesystem::path> {
     ASTL_LOG_ERROR("LOCALAPPDATA environment variable not set, cannot determine user config dir path");
     return std::nullopt;
   }
-  user_config_dir_path = std::filesystem::path(local_app_data) / "astl";
+  user_config_dir_path = std::filesystem::path(local_app_data) / "astl" / "config";
 #elif __APPLE__
   const auto home_dir = astl::GetEnvVar(astl::EnvVar::HOME);
   if (home_dir.empty()) {
     ASTL_LOG_ERROR("HOME environment variable not set, cannot determine user config dir path");
     return std::nullopt;
   }
-  user_config_dir_path = std::filesystem::path(home_dir) / "Library" / "Application Support" / "astl";
+  user_config_dir_path = std::filesystem::path(home_dir) / "Library" / "Application Support" / "astl" / "config";
 #else  // Linux and other Unix-like
   // first check if XDG_DATA_HOME is set, if not use ~/.local/share/
   const auto xdg_data_home = astl::GetEnvVar(astl::EnvVar::XDG_DATA_HOME);
   if (!xdg_data_home.empty()) {
-    user_config_dir_path = std::filesystem::path(xdg_data_home) / "astl";
+    user_config_dir_path = std::filesystem::path(xdg_data_home) / "astl" / "config";
   } else {
     const auto home_dir = astl::GetEnvVar(astl::EnvVar::HOME);
     if (home_dir.empty()) {
       ASTL_LOG_ERROR("HOME environment variable not set, cannot determine user config dir path");
       return std::nullopt;
     }
-    user_config_dir_path = std::filesystem::path(home_dir) / ".local" / "share" / "astl";
+    user_config_dir_path = std::filesystem::path(home_dir) / ".local" / "share" / "astl" / "config";
   }
 #endif
   const auto validate_result = ValidateAstlConfigDirPath(user_config_dir_path);
@@ -78,9 +78,9 @@ static auto GetUserConfigDirPath() -> std::optional<std::filesystem::path> {
 }
 
 /** @brief Helper to locate the OS-specific expected location of the system-level astl config dir
- * Linux:   /usr/local/share/astl/
- * Mac:     /Library/Application Support/astl/
- * Windows: %PROGRAMDATA%\astl\
+ * Linux:   /usr/local/share/astl/config
+ * Mac:     /Library/Application Support/astl/config
+ * Windows: %PROGRAMDATA%\astl\config
  * @return optional path if found and valid, else nullopt
  */
 static auto GetSystemConfigDirPath() -> std::optional<std::filesystem::path> {
@@ -91,11 +91,11 @@ static auto GetSystemConfigDirPath() -> std::optional<std::filesystem::path> {
     ASTL_LOG_ERROR("PROGRAMDATA environment variable not set, cannot determine user config dir path");
     return std::nullopt;
   }
-  system_config_dir_path = std::filesystem::path(program_data) / "astl";
+  system_config_dir_path = std::filesystem::path(program_data) / "astl" / "config";
 #elif __APPLE__
-  system_config_dir_path = std::filesystem::path("/Library/Application Support/astl");
+  system_config_dir_path = std::filesystem::path("/Library/Application Support/astl/config");
 #else  // Linux and other Unix-like
-  system_config_dir_path = std::filesystem::path("/usr/local/share/astl");
+  system_config_dir_path = std::filesystem::path("/usr/local/share/astl/config");
 #endif
   const auto validate_result = ValidateAstlConfigDirPath(system_config_dir_path);
   if (validate_result == ASTL_STATUS_SUCCESS) {

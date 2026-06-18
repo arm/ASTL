@@ -914,9 +914,9 @@ Current search order:
 
 1. `ASTL_CONFIG_DIR`
 2. User config directory
-   - Linux: `$XDG_DATA_HOME/astl` or `~/.local/share/astl`
+   - Linux: `$XDG_DATA_HOME/astl/config` or `~/.local/share/astl/config`
 3. System config directory
-   - Linux: `/usr/local/share/astl`
+   - Linux: `/usr/local/share/astl/config`
 4. Relative to the ASTL library location
    - `<libdir>/config`
 
