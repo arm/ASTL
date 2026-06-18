@@ -187,9 +187,11 @@ TEST_CASE("LibsensorsCollector Pause and Resume", "[libsensors_collector]") {
   collector.ConfigureCollection(std::move(config));
   collector.StartCollection();
 
-  // Pause and Resume should succeed even if no periodic sampler is present
   REQUIRE(collector.PauseCollection() == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector.ReadImmediate() == ASTL_STATUS_BAD_CONFIGURATION);
   REQUIRE(collector.ResumeCollection() == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector.StopCollection() == ASTL_STATUS_SUCCESS);
 }
 
 TEST_CASE("LibsensorsCollector StopCollection is idempotent", "[libsensors_collector]") {

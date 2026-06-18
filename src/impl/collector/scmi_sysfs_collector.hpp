@@ -422,6 +422,9 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::PauseCollection() {
   } else {
     _periodic_sampler->Pause();
   }
+  if (_collection_state == CollectionState::STARTED) {
+    _collection_state = CollectionState::PAUSED;
+  }
   auto pause_timestamp = ClockMonotonicRaw::now();
   return EmitPauseResumeSample(PauseResumeMarker::PAUSE, pause_timestamp);
 };
@@ -441,6 +444,9 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ResumeCollection() {
   } else {
     _periodic_sampler->Resume();
   }
+  if (_collection_state == CollectionState::PAUSED) {
+    _collection_state = CollectionState::STARTED;
+  }
   return emit_status;
 };
 
@@ -458,8 +464,9 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StopCollection() {
   if (_collection_state == CollectionState::STOPPED) {
     return ASTL_STATUS_COLLECTION_ALREADY_STOPPED;  // stop is idempotent
   }
-  if (_collection_state != CollectionState::STARTED || !_configuration.has_value()) {
-    return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot stop while not started or unconfigured
+  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::PAUSED) ||
+      !_configuration.has_value()) {
+    return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot stop while not started, paused, or unconfigured
   }
   switch (_configuration->CollectionParams().collection_mode) {
     case ASTL_COLLECTION_MODE_IMMEDIATE:

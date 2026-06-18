@@ -60,6 +60,9 @@ auto ProcfsCollector::PauseCollection() -> astl_status_code {
   } else {
     ASTL_LOG_WARNING("ProcfsCollector: PauseCollection called without an active periodic sampler");
   }
+  if (_collection_state == CollectionState::STARTED) {
+    _collection_state = CollectionState::PAUSED;
+  }
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -69,6 +72,9 @@ auto ProcfsCollector::ResumeCollection() -> astl_status_code {
     _periodic_sampler->Resume();
   } else {
     ASTL_LOG_WARNING("ProcfsCollector: ResumeCollection called without an active periodic sampler");
+  }
+  if (_collection_state == CollectionState::PAUSED) {
+    _collection_state = CollectionState::STARTED;
   }
   return ASTL_STATUS_SUCCESS;
 }
@@ -80,7 +86,8 @@ auto ProcfsCollector::StopCollection() -> astl_status_code {
   if (_collection_state == CollectionState::STOPPED) {
     return ASTL_STATUS_COLLECTION_ALREADY_STOPPED;
   }
-  if (_collection_state != CollectionState::STARTED || !_configuration.has_value()) {
+  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::PAUSED) ||
+      !_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
 

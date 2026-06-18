@@ -962,6 +962,7 @@ TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[s
   REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
   REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
   REQUIRE(ASTL_STATUS_SUCCESS == collector.PauseCollection());
+  REQUIRE(ASTL_STATUS_BAD_CONFIGURATION == collector.ReadImmediate());
   REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
 }
 
