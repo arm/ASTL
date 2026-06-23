@@ -174,12 +174,6 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   if (!scmi_collection.has_value()) {
     return std::unexpected(scmi_collection.error());
   }
-  auto metric_registers = scmi::spec::GetMetricRegistersScmiData(metric_declaration, scmi_spec);
-  if (metric_registers.empty()) {
-    ASTL_LOG_ERROR("No Data Event IDs found for finite set metric {} (register '{}')", metric_key_name,
-                   scmi_collection->register_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
 
   FiniteSetMetricConfig::FiniteSet      finite_set;
   FiniteSetMetricConfig::ValueToInfoMap value_to_info;
@@ -220,13 +214,23 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   MetricConfigOnTargets metric_configs_on_targets;
   const auto            identifier       = ParseMetricIdentifier(metric_declaration.identifier);
   const auto            input_value_type = ParseValueType();
-  for (const auto& scmi_metric_declaration : metric_registers) {
-    const auto              units                = scmi_metric_declaration.units;
-    const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
-    const astl_value_type_t value_type           = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
-    const auto&             de_id                = scmi_metric_declaration.de_id;
+  // Per-target loop: each tlm-N target gets globally-unique instance labels and DE ids
+  // (GetMetricRegistersScmiData derives the DE id from the global instance index
+  // target_index * count + local_instance).
+  for (std::size_t target_index = 0; target_index < applicable_targets.size(); ++target_index) {
+    const auto* target           = applicable_targets[target_index];
+    auto        metric_registers = scmi::spec::GetMetricRegistersScmiData(metric_declaration, scmi_spec, target_index);
+    if (target_index == 0 && metric_registers.empty()) {
+      ASTL_LOG_ERROR("No Data Event IDs found for finite set metric {} (register '{}')", metric_key_name,
+                     scmi_collection->register_name);
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+    for (const auto& scmi_metric_declaration : metric_registers) {
+      const auto              units                = scmi_metric_declaration.units;
+      const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
+      const astl_value_type_t value_type           = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
+      const auto&             de_id                = scmi_metric_declaration.de_id;
 
-    for (const auto* target : applicable_targets) {
       const auto           metric_name = BuildScmiUniqueMetricName(metric_key_name, scmi_metric_declaration);
       auto                 metric_id   = BuildScmiMetricId(metric_name, *target);
       ScmiOperationBuilder operation_builder{de_id};
@@ -313,30 +317,42 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   const auto value_type       = ParseValueType();
   const auto input_value_type = value_type;
 
-  for (scmi::spec::InstanceId instance = 0; instance < matching_scmi_register_definitions->count; ++instance) {
-    if (scmi_collection->scmi_instance_filter.has_value() &&
-        std::to_string(instance) != scmi_collection->scmi_instance_filter.value()) {
-      continue;
-    }
-    std::string name = matching_scmi_register_definitions->count > 1 ? std::format("{}.{}", metric_key_name, instance)
-                                                                     : std::string{metric_key_name};
-    auto        state_to_info_map_result = GetResidencyMetricStateToInfoMapForInstance(
-        metric_key_name, *matching_scmi_register_definitions, instance, metric_declaration);
-    if (!state_to_info_map_result.has_value()) {
-      return std::unexpected(state_to_info_map_result.error());
-    }
+  // Per-target loop so each tlm-N target gets DE ids referring to its own sysfs entries (local
+  // instance index 0..count-1) while the published metric name uses the globally-unique label
+  // (`target_index * count + local_instance`).
+  const auto local_count = matching_scmi_register_definitions->count;
+  for (std::size_t target_index = 0; target_index < applicable_targets.size(); ++target_index) {
+    const auto* target = applicable_targets[target_index];
+    for (scmi::spec::InstanceId local_instance = 0; local_instance < local_count; ++local_instance) {
+      const std::size_t global_instance        = (target_index * local_count) + local_instance;
+      const std::string global_instance_string = std::to_string(global_instance);
+      if (scmi_collection->scmi_instance_filter.has_value() &&
+          global_instance_string != scmi_collection->scmi_instance_filter.value()) {
+        continue;
+      }
+      // For multi-target configurations the metric name always includes the instance suffix so
+      // PSS.0..(N*count-1) remain unique across all targets.
+      std::string name                     = (local_count > 1 || applicable_targets.size() > 1)
+                                                 ? std::format("{}.{}", metric_key_name, global_instance_string)
+                                                 : std::string{metric_key_name};
+      auto        state_to_info_map_result = GetResidencyMetricStateToInfoMapForInstance(
+          metric_key_name, *matching_scmi_register_definitions, local_instance, metric_declaration);
+      if (!state_to_info_map_result.has_value()) {
+        return std::unexpected(state_to_info_map_result.error());
+      }
 
-    auto formula_result = BuildFormula(metric_declaration.formula);
-    if (!formula_result.has_value()) {
-      return std::unexpected(formula_result.error());
+      auto formula_result = BuildFormula(metric_declaration.formula);
+      if (!formula_result.has_value()) {
+        return std::unexpected(formula_result.error());
+      }
+
+      auto new_config = std::make_unique<ResidencyMetricConfig>(
+          name, metric_declaration.description, ParseUnits(metric_declaration.unit.value_or("")), value_type,
+          ASTL_METRIC_RESIDENCY, identifier, collector_type.value(), std::move(state_to_info_map_result.value()),
+          metric_declaration.inferred_state, std::move(formula_result.value()), input_value_type, name);
+
+      metric_configs_on_targets.emplace(std::move(new_config), std::vector<const ITarget*>{target});
     }
-
-    auto new_config = std::make_unique<ResidencyMetricConfig>(
-        name, metric_declaration.description, ParseUnits(metric_declaration.unit.value_or("")), value_type,
-        ASTL_METRIC_RESIDENCY, identifier, collector_type.value(), std::move(state_to_info_map_result.value()),
-        metric_declaration.inferred_state, std::move(formula_result.value()), input_value_type, name);
-
-    metric_configs_on_targets.emplace(std::move(new_config), applicable_targets);
   }
   return metric_configs_on_targets;
 }
@@ -355,23 +371,28 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
   if (!scmi_collection.has_value()) {
     return std::unexpected(scmi_collection.error());
   }
-  auto metric_registers = scmi::spec::GetMetricRegistersScmiData(metric_declaration, scmi_spec);
-  if (metric_registers.empty()) {
-    ASTL_LOG_INFO("No Data Event IDs found for metric {} (register '{}')", metric_key_name,
-                  scmi_collection->register_name);
-  }
   MetricConfigOnTargets metric_configs_on_targets;
   const auto            identifier       = ParseMetricIdentifier(metric_declaration.identifier);
   const auto            input_value_type = ParseValueType();
 
-  for (const auto& scmi_metric_declaration : metric_registers) {
-    const auto              units                = scmi_metric_declaration.units;
-    const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
-    const astl_value_type_t value_type           = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
-    for (const auto* target : applicable_targets) {
-      const auto           metric_name = BuildScmiUniqueMetricName(metric_key_name, scmi_metric_declaration);
-      auto                 metric_id   = BuildScmiMetricId(metric_name, *target);
-      ScmiOperationBuilder operation_builder{scmi_metric_declaration.de_id};
+  // Per-target loop: each tlm-N target produces globally-unique instance labels and DE ids
+  // (GetMetricRegistersScmiData derives the DE id from the global instance index
+  // target_index * count + local_instance) so that, e.g., PSS.0..2 appear on tlm-0 and PSS.3..5 on
+  // tlm-1 when count=3.
+  for (std::size_t target_index = 0; target_index < applicable_targets.size(); ++target_index) {
+    const auto* target           = applicable_targets[target_index];
+    auto        metric_registers = scmi::spec::GetMetricRegistersScmiData(metric_declaration, scmi_spec, target_index);
+    if (target_index == 0 && metric_registers.empty()) {
+      ASTL_LOG_INFO("No Data Event IDs found for metric {} (register '{}')", metric_key_name,
+                    scmi_collection->register_name);
+    }
+    for (const auto& scmi_metric_declaration : metric_registers) {
+      const auto              units                = scmi_metric_declaration.units;
+      const int32_t           base10_unit_modifier = scmi_metric_declaration.base10_unit_modifier;
+      const astl_value_type_t value_type           = ParseScmiOutputValueType(input_value_type, base10_unit_modifier);
+      const auto              metric_name = BuildScmiUniqueMetricName(metric_key_name, scmi_metric_declaration);
+      auto                    metric_id   = BuildScmiMetricId(metric_name, *target);
+      ScmiOperationBuilder    operation_builder{scmi_metric_declaration.de_id};
 
       auto formula_result = BuildFormula(metric_declaration.formula);
       if (!formula_result.has_value()) {

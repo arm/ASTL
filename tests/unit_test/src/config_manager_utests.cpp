@@ -756,14 +756,17 @@ TEST_CASE("CreateScmiMetricConfigs scopes SCMI metric ids per target", "[ConfigM
   REQUIRE(metric_configs_result);
 
   std::unordered_set<std::string> metric_ids;
+  std::unordered_set<std::string> metric_names;
   for (auto& [config, scoped_targets] : *metric_configs_result) {
-    REQUIRE(config->Name() == "AP.0.CPU Power");
     REQUIRE(scoped_targets.size() == 1);
     REQUIRE(metric_ids.insert(config->Id()).second);
+    metric_names.insert(config->Name());
   }
 
+  REQUIRE(metric_names.contains("AP.0.CPU Power"));
+  REQUIRE(metric_names.contains("AP.1.CPU Power"));
   REQUIRE(metric_ids.contains("AP.0.CPU Power__scmi__tlm-0"));
-  REQUIRE(metric_ids.contains("AP.0.CPU Power__scmi__tlm-1"));
+  REQUIRE(metric_ids.contains("AP.1.CPU Power__scmi__tlm-1"));
 }
 
 TEST_CASE("CreateScmiMetricConfigs maps Count units to ASTL_UNITS_COUNT", "[ConfigManager][Units]") {

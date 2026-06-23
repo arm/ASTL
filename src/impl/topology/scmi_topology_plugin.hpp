@@ -5,8 +5,14 @@
 #ifndef SCMI_TOPOLOGY_PLUGIN_HPP_
 #define SCMI_TOPOLOGY_PLUGIN_HPP_
 
+#include <algorithm>
+#include <cctype>
 #include <expected>
+#include <filesystem>
 #include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "astl/astl_errors.h"
@@ -88,16 +94,54 @@ auto DetectTarget(FileInterfaceType& scmi_sysfs_file_interface, std::string cons
 }
 
 /**
- * @brief Returns a list of targets accessible via SCMI on this platform
+ * @brief Natural-order comparison for telemetry target directory names.
  *
- * @param configuration The ASTL configuration containing SCMI sysfs path overrides
- * @param scmi_sysfs_file_interface A FileInterface (or mock) to use for exploring the SCMI targets
+ * Plain lexicographic ordering mis-sorts multi-digit indices (e.g. `tlm-10` would sort before
+ * `tlm-2`), which would shift each target's position and therefore the derived
+ * `global_instance = target_index * count + local_instance` numbering. This splits each name into a
+ * leading non-numeric prefix and an optional trailing decimal suffix; when both names share the same
+ * prefix and end in digits the numeric suffixes are compared, otherwise it falls back to a plain
+ * string comparison for non `tlm-N` directory names.
+ */
+static auto CompareTelemetryDirectoryNames(const std::string& lhs, const std::string& rhs) -> bool {
+  // Split a name into its leading non-digit prefix and its trailing run of digits.
+  const auto split = [](const std::string& name) -> std::pair<std::string_view, std::string_view> {
+    std::size_t digits_begin = name.size();
+    while (digits_begin > 0 && std::isdigit(static_cast<unsigned char>(name[digits_begin - 1])) != 0) {
+      --digits_begin;
+    }
+    const std::string_view view{name};
+    return {view.substr(0, digits_begin), view.substr(digits_begin)};
+  };
+  const auto [lhs_prefix, lhs_digits] = split(lhs);
+  const auto [rhs_prefix, rhs_digits] = split(rhs);
+  if (!lhs_digits.empty() && !rhs_digits.empty() && lhs_prefix == rhs_prefix) {
+    // Compare the digit runs numerically without converting to an integer, so arbitrarily large
+    // suffixes are handled without overflow: drop leading zeros, then the shorter run is the smaller
+    // number, and equal-length runs compare lexicographically.
+    const auto strip_leading_zeros = [](std::string_view digits) -> std::string_view {
+      const auto first_significant = digits.find_first_not_of('0');
+      return first_significant == std::string_view::npos ? std::string_view{} : digits.substr(first_significant);
+    };
+    const std::string_view lhs_significant = strip_leading_zeros(lhs_digits);
+    const std::string_view rhs_significant = strip_leading_zeros(rhs_digits);
+    if (lhs_significant.size() != rhs_significant.size()) {
+      return lhs_significant.size() < rhs_significant.size();
+    }
+    return lhs_significant < rhs_significant;
+  }
+  return lhs < rhs;
+}
+
+/**
+ * @brief Validate the SCMI telemetry root and return its immediate subdirectories in natural order.
+ *
+ * Returns an empty list (success) when the telemetry root does not exist or cannot be listed, and an
+ * error only when the root path itself cannot be validated.
  */
 template <typename FileInterfaceType>
-auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileInterfaceType scmi_sysfs_file_interface)
-    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
-  std::vector<std::unique_ptr<ITarget> > targets;
-  (void)configuration;  // currently unused
+auto ListSortedTelemetryDirectories(FileInterfaceType& scmi_sysfs_file_interface)
+    -> std::expected<std::vector<std::filesystem::directory_entry>, astl_status_code> {
   const auto telemetry_root_is_valid = scmi_sysfs_file_interface.IsValid(scmi_sysfs_file_interface.GetBasePath());
   if (!telemetry_root_is_valid) {
     ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to check SCMI sysfs telemetry root path");
@@ -107,15 +151,36 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
     ASTL_LOG_WARNING(
         "ScmiTopologyPlugin::ScanForTargets: SCMI sysfs telemetry root path does not exist; "
         "skipping SCMI target discovery");
-    return {};
+    return std::vector<std::filesystem::directory_entry>{};
   }
   auto telemetry_root_children = scmi_sysfs_file_interface.GetSubdirectories();
   if (!telemetry_root_children) {
     ASTL_LOG_WARNING("ScmiTopologyPlugin::ScanForTargets: Failed to list children of SCMI sysfs telemetry root");
-    return {};
+    return std::vector<std::filesystem::directory_entry>{};
   }
 
-  for (const auto& entry : telemetry_root_children.value()) {
+  // Sort children by filename so multi-instance SCMI targets (e.g. tlm-0, tlm-1, ...) are
+  // discovered in a deterministic order. Downstream metric generation uses each target's position
+  // as the per-target instance offset (global_instance = target_index * count + local_instance),
+  // so this ordering is what guarantees e.g. PSS.0..2 land on tlm-0 and PSS.3..5 land on tlm-1.
+  // A natural-order comparison is used so multi-digit indices (e.g. tlm-10) don't sort before
+  // lower-numbered targets (e.g. tlm-2) and shift the offsets.
+  std::sort(telemetry_root_children->begin(), telemetry_root_children->end(),
+            [](const std::filesystem::directory_entry& lhs, const std::filesystem::directory_entry& rhs) {
+              return CompareTelemetryDirectoryNames(lhs.path().filename().string(), rhs.path().filename().string());
+            });
+  return std::move(telemetry_root_children.value());
+}
+
+/**
+ * @brief Detect and collect SCMI targets from the given (already ordered) telemetry directories.
+ */
+template <typename FileInterfaceType>
+auto BuildTargetsFromDirectories(FileInterfaceType&                                   scmi_sysfs_file_interface,
+                                 const std::vector<std::filesystem::directory_entry>& telemetry_directories)
+    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
+  std::vector<std::unique_ptr<ITarget> > targets;
+  for (const auto& entry : telemetry_directories) {
     auto target = DetectTarget(scmi_sysfs_file_interface, entry.path().filename().string());
     if (!target) {
       if (target.error() == ASTL_STATUS_SUCCESS) {
@@ -131,6 +196,23 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
     }
   }
   return targets;
+}
+
+/**
+ * @brief Returns a list of targets accessible via SCMI on this platform
+ *
+ * @param configuration The ASTL configuration containing SCMI sysfs path overrides
+ * @param scmi_sysfs_file_interface A FileInterface (or mock) to use for exploring the SCMI targets
+ */
+template <typename FileInterfaceType>
+auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileInterfaceType scmi_sysfs_file_interface)
+    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
+  (void)configuration;  // currently unused
+  auto sorted_directories = ListSortedTelemetryDirectories(scmi_sysfs_file_interface);
+  if (!sorted_directories) {
+    return std::unexpected(sorted_directories.error());
+  }
+  return BuildTargetsFromDirectories(scmi_sysfs_file_interface, *sorted_directories);
 }
 
 }  // namespace detail

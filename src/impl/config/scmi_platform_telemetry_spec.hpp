@@ -328,13 +328,25 @@ struct ScmiMetricDeclaration {
 /**
  * @brief Get the collection of fully-qualified SCMI register definitions (i.e. PSS_BMU.0.ENERGY_COUNTER)
  * that match the given metric declaration and their corresponding data event ids.
- * @param register_name The register name to look up (i.e. ENERGY_COUNTER)
+ *
+ * The SCMI JSON spec's `count` field expresses the number of repeated instances per *telemetry target*
+ * (i.e. per `tlm-N` sysfs directory). For multi-target platforms the metric instance numbering is
+ * globally unique across targets, computed as `global_instance = target_index * count + local_instance`,
+ * and the data event IDs are derived from that same global instance index (encoded in the upper 16 bits
+ * of the DE id). This mirrors the SCP/LCP cluster layout where, e.g., PSS instances 0..2 live in `tlm-0`
+ * (DE ids 0..2) and 3..5 live in `tlm-1` (DE ids 3..5).
+ *
+ * @param metric_declaration The generic metric declaration to match against
  * @param scmi_specification The Scmi specification containing the Data Event IDs
+ * @param target_index Zero-based index of the target (within the ordered list of targets sharing the
+ *        same SCMI UUID) for which to generate per-target instance labels. Defaults to 0 for
+ *        single-target callers/tests.
  * @return A collection of ScmiMetricDeclaration entries listing all registers matching generic 'register_name'
  *         and details like the specific component+instance name (e.g. PSS_BMU.1.ENERGY_COUNTER) and DE_ID
  */
 auto GetMetricRegistersScmiData(astl::metrics::spec::MetricJsonDeclaration const& metric_declaration,
-                                ScmiSpecification const& scmi_specification) -> std::vector<ScmiMetricDeclaration>;
+                                ScmiSpecification const& scmi_specification, std::size_t target_index = 0)
+    -> std::vector<ScmiMetricDeclaration>;
 
 /**
  * @brief A helper to hold SCMI json spec data matching a residency metric's required registers

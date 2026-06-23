@@ -56,16 +56,21 @@ inline auto GetUnitsIfCompatible(metrics::spec::MetricJsonDeclaration const& met
  *        given metric_declaration.
  * @param metric_declaration The generic metric declaration to match against
  * @param scmi_spec_layout_member The SCMI spec layout member to check for a match
- * @param scmi_spec_layout_member_instance_count The number of times this data event is duplicated in the spec
- *                                               (the containing json block's 'count' field.)
+ * @param scmi_spec_layout_member_instance_count The per-target number of times this data event is
+ *        duplicated in the spec (the containing json block's 'count' field).
+ * @param target_index Zero-based index of the telemetry target (e.g. position of `tlm-N` in the
+ *        ordered target list) so that the produced instance labels and the data event IDs derived
+ *        from them are globally unique across targets (`global_instance = target_index * count +
+ *        local_instance`), matching the per-target descriptor IDs the SCMI firmware exposes under
+ *        each `tlm-N`.
  * @param metric_declarations The collection to extend with new fully-qualified metric declarations if a match is found
  */
 static auto AddMetricInstancesIfScmiElementMatches(
     metrics::spec::MetricJsonDeclaration const&            metric_declaration,
     metrics::spec::ScmiMetricJsonCollectionSettings const& collection_settings,
     scmi::spec::DataEvent const& scmi_spec_layout_member, uint32_t scmi_spec_layout_member_instance_count,
-    std::unordered_map<std::string, std::string> const& aliases,
-    std::vector<ScmiMetricDeclaration>&                 metric_declarations) -> void {
+    std::size_t target_index, std::unordered_map<std::string, std::string> const& aliases,
+    std::vector<ScmiMetricDeclaration>& metric_declarations) -> void {
   if (!collection_settings.register_name.empty() && scmi_spec_layout_member.name != collection_settings.register_name) {
     return;  // metric's specified register name doesn't match this scmi register, move along.
   }
@@ -86,29 +91,41 @@ static auto AddMetricInstancesIfScmiElementMatches(
     return;
   }
 
-  // we've found a match, so create entries with the data event id based on the count, and base_de_id
+  // we've found a match, so create entries with the data event id based on the count, and base_de_id.
+  // `instance_index` iterates over the *local* (per-target) instances exposed by this layout member;
+  // the produced label is offset by `target_index * count` so that instance numbering is unique
+  // across all targets sharing this SCMI specification.
+  const std::size_t global_instance_offset = target_index * scmi_spec_layout_member_instance_count;
   metric_declarations.reserve(metric_declarations.size() + scmi_spec_layout_member_instance_count);
   for (InstanceId instance_index = 0; instance_index < scmi_spec_layout_member_instance_count; ++instance_index) {
-    if (collection_settings.scmi_instance_filter.has_value()) {
-      // check if instance index matches the filter
-      std::ostringstream sstream;
-      sstream << instance_index;
-      if (sstream.str() != collection_settings.scmi_instance_filter.value()) {
-        continue;  // instance index doesn't match filter, move along.
-      }
+    const std::size_t global_instance_index = global_instance_offset + instance_index;
+    std::string       instance_string       = std::to_string(global_instance_index);
+    if (collection_settings.scmi_instance_filter.has_value() &&
+        instance_string != collection_settings.scmi_instance_filter.value()) {
+      continue;  // instance index doesn't match filter, move along.
     }
-    // compute the data event id for this instance
-    ScmiDataEventId de_id = GetDataEventId(scmi_spec_layout_member.base_de_id, instance_index);
+    // Compute the data event id for this instance using the *global* instance index.
+    // The SCMI firmware encodes the per-target descriptor IDs with the globally-unique instance number
+    // in the upper 16 bits of the DE id (e.g. on a 2-target/count=3 layout tlm_0 exposes DE ids
+    // 0x..0000.., 0x..0001.., 0x..0002.. and tlm_1 exposes 0x..0003.., 0x..0004.., 0x..0005..),
+    // so the published metric labels (which use the global instance index) line up directly with
+    // the sysfs `des/` entries on each `tlm-N`.
+    if (global_instance_index > std::numeric_limits<InstanceId>::max()) {
+      ASTL_LOG_ERROR("SCMI global instance index {} exceeds maximum supported instances {}", global_instance_index,
+                     std::numeric_limits<InstanceId>::max());
+      continue;
+    }
+    ScmiDataEventId de_id =
+        GetDataEventId(scmi_spec_layout_member.base_de_id, static_cast<InstanceId>(global_instance_index));
     // check to see if there is a more descriptive name for this component+instance in the aliases map,
-    // and use that if so. e.g. "VOLTAGE_RAIL.0" -> "VCPU_C0"
+    // and use that if so. e.g. "VOLTAGE_RAIL.0" -> "VCPU_C0". Aliases are keyed by the global instance
+    // label so that platforms can name each per-target instance distinctly (e.g. tlm-1's VOLTAGE_RAIL.3).
     std::string component_string = scmi_spec_layout_member.component;
-    std::string instance_string  = std::to_string(instance_index);
     std::string alias_key        = std::format("{}.{}", component_string, instance_string);
     if (auto iter = aliases.find(alias_key); iter != aliases.end()) {
       component_string = iter->second;
     }
 
-    // const auto [descriptive_name, descriptive_instance] = aliases.
     // create the full metric type name, e.g. 'PSS_BMU.0.ENERGY_COUNTER'
     metric_declarations.emplace_back(scmi_spec_layout_member.name, component_string, instance_string, units.value(),
                                      scmi_spec_layout_member.base10_unit_modifier, de_id);
@@ -124,18 +141,22 @@ static auto AddMetricInstancesIfScmiElementMatches(
  *         and details like the specific component+instance name (e.g. PSS_BMU.1.ENERGY_COUNTER) and DE_ID
  */
 auto GetMetricRegistersScmiData(metrics::spec::MetricJsonDeclaration const& metric_declaration,
-                                ScmiSpecification const& scmi_specification) -> std::vector<ScmiMetricDeclaration> {
+                                ScmiSpecification const& scmi_specification, std::size_t target_index)
+    -> std::vector<ScmiMetricDeclaration> {
   std::vector<ScmiMetricDeclaration> metric_declarations;
   auto collection_settings = metrics::spec::ParseScmiMetricJsonCollectionSettings(metric_declaration.collection);
   if (!collection_settings.has_value()) {
     return metric_declarations;
   }
 
-  // each member consists of a count, which indicates how many times to repeat the metrics in the 'metrics' list
+  // each member consists of a count, which indicates how many times the metrics in the 'metrics' list
+  // are repeated *per target* (i.e. per tlm-N sysfs directory). Instance labels are offset by
+  // `target_index * count` so they remain unique across targets sharing the same SCMI UUID.
   for (const auto& layout_member : scmi_specification.members) {
     for (const auto& block_member : layout_member.metrics) {
       AddMetricInstancesIfScmiElementMatches(metric_declaration, *collection_settings, block_member.second,
-                                             layout_member.count, scmi_specification.aliases, metric_declarations);
+                                             layout_member.count, target_index, scmi_specification.aliases,
+                                             metric_declarations);
     }
   }
   return metric_declarations;

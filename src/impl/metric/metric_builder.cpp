@@ -4,9 +4,11 @@
 
 #include <algorithm>
 #include <expected>
+#include <format>
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string_view>
 #include <vector>
 
@@ -198,34 +200,43 @@ static auto CreateScmiConfigurationsForCounters(const AstlConfiguration&        
                                                 const std::vector<const ITarget*>&       applicable_targets)
     -> std::expected<MetricConfigOnTargets, astl_status_code> {
   MetricConfigOnTargets configurations_on_targets;
-  std::set<std::string> processed_counter_ids;  // ensure we don't repeat counters, even if used in multiple metrics
+  // ensure we don't repeat counters, even if used in multiple metrics; per-target dedup (keyed by the
+  // counter's fully-qualified name plus the target's stable key).
+  std::set<std::string> processed_counter_id_target_pairs;
   // create counter MetricConfig objects for each underlying counter in the SCMI spec
   for (const auto& [metric_name, metric_declaration] : metric_declarations.metrics) {
-    auto metric_registers = scmi::spec::GetMetricRegistersScmiData(metric_declaration, scmi_specification);
-    for (const auto& register_declaration : metric_registers) {
-      const std::string counter_id   = register_declaration.GetFullyQualifiedName();
-      const std::string counter_name = register_declaration.name;
-      if (processed_counter_ids.contains(counter_id)) {
-        // already processed this counter, skip it
-        continue;
+    auto collector_type = metrics::spec::ParseCollectorType(metric_declaration);
+    if (!collector_type || collector_type != CollectorType::SCMI) {
+      continue;
+    }
+    for (std::size_t target_index = 0; target_index < applicable_targets.size(); ++target_index) {
+      const auto* target = applicable_targets[target_index];
+      auto        metric_registers =
+          scmi::spec::GetMetricRegistersScmiData(metric_declaration, scmi_specification, target_index);
+      for (const auto& register_declaration : metric_registers) {
+        const std::string counter_id   = register_declaration.GetFullyQualifiedName();
+        const std::string counter_name = register_declaration.name;
+        const std::string dedup_key    = std::format("{}__{}", counter_id, GetStableTargetKey(*target));
+        if (!processed_counter_id_target_pairs.insert(dedup_key).second) {
+          continue;
+        }
+        std::string description = metric_declaration.description.empty() ? BuildDefaultCounterDescription(metric_name)
+                                                                         : metric_declaration.description;
+        // Normalize SCMI base10 metadata into formula-space so collectors remain raw-only.
+        auto scaling_formula =
+            metrics::spec::BuildScalingFormulaFromBase10Modifier(register_declaration.base10_unit_modifier);
+        // SCMI raw payload values are always uint64.
+        constexpr astl_value_type_t input_value_type = ASTL_VALUE_UINT64;
+        // Keep counter ValueType aligned with on-wire samples; scaling remains in formula-space only.
+        const astl_value_type_t value_type = input_value_type;
+
+        auto new_counter_config = std::make_unique<MetricConfig>(
+            counter_name, std::move(description), ASTL_UNITS_UNKNOWN, value_type, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+            ASTL_METRIC_VALUE, CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id},
+            std::move(scaling_formula), input_value_type, std::vector<std::string>{}, counter_id);
+
+        configurations_on_targets.emplace(std::move(new_counter_config), std::vector<const ITarget*>{target});
       }
-      processed_counter_ids.insert(counter_id);
-      std::string description = metric_declaration.description.empty() ? BuildDefaultCounterDescription(metric_name)
-                                                                       : metric_declaration.description;
-      // Normalize SCMI base10 metadata into formula-space so collectors remain raw-only.
-      auto scaling_formula =
-          metrics::spec::BuildScalingFormulaFromBase10Modifier(register_declaration.base10_unit_modifier);
-      // SCMI raw payload values are always uint64.
-      constexpr astl_value_type_t input_value_type = ASTL_VALUE_UINT64;
-      // Keep counter ValueType aligned with on-wire samples; scaling remains in formula-space only.
-      const astl_value_type_t value_type = input_value_type;
-
-      auto new_counter_config = std::make_unique<MetricConfig>(
-          counter_name, std::move(description), ASTL_UNITS_UNKNOWN, value_type, ASTL_METRIC_IDENTIFIER_UNKNOWN,
-          ASTL_METRIC_VALUE, CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id},
-          std::move(scaling_formula), input_value_type, std::vector<std::string>{}, counter_id);
-
-      configurations_on_targets.emplace(std::move(new_counter_config), applicable_targets);
     }
   }
   FilterUnavailableScmiMetricConfigs(configuration, configurations_on_targets);
@@ -328,13 +339,6 @@ static auto AddScmiSpecificationInfoForTarget(std::vector<ScmiUuidSpecificationI
   }
   const auto uuid = *uuid_result;
 
-  auto existing_entry = std::find_if(platform_specifications.begin(), platform_specifications.end(),
-                                     [&](const ScmiUuidSpecificationInfo& info) { return info.uuid == uuid; });
-  if (existing_entry != platform_specifications.end()) {
-    existing_entry->applicable_targets.push_back(target);
-    return;
-  }
-
   auto spec_file = FindSpecFileByUuid(*lookup_context.repo_meta, uuid);
   if (!spec_file) {
     ASTL_LOG_WARNING("No SCMI specification found for UUID {}", uuid.normalized_value);
@@ -347,11 +351,28 @@ static auto AddScmiSpecificationInfoForTarget(std::vector<ScmiUuidSpecificationI
     return;
   }
 
-  platform_specifications.emplace_back(ScmiUuidSpecificationInfo{
-      .uuid                    = uuid,
-      .specification_file      = *lookup_context.scmi_specification_dir / spec_file->specification_file,
-      .metric_declaration_file = *lookup_context.metrics_declaration_dir / metric_file_element->metrics_file,
-      .applicable_targets      = {target}});
+  auto resolved_specification_file      = *lookup_context.scmi_specification_dir / spec_file->specification_file;
+  auto resolved_metric_declaration_file = *lookup_context.metrics_declaration_dir / metric_file_element->metrics_file;
+
+  // Group by the resolved specification/metric-declaration file pair rather than by the target's
+  // full UUID. Targets that share the same spec (e.g. tlm_0/tlm_1 whose `de_implementation_version`
+  // UUIDs differ only in non-significant bytes) must land in the same entry so their per-target
+  // instance offsets (target_index * count) produce globally-unique instance labels.
+  auto existing_entry = std::find_if(platform_specifications.begin(), platform_specifications.end(),
+                                     [&](const ScmiUuidSpecificationInfo& info) {
+                                       return info.specification_file == resolved_specification_file &&
+                                              info.metric_declaration_file == resolved_metric_declaration_file;
+                                     });
+  if (existing_entry != platform_specifications.end()) {
+    existing_entry->applicable_targets.push_back(target);
+    return;
+  }
+
+  platform_specifications.emplace_back(
+      ScmiUuidSpecificationInfo{.uuid                    = uuid,
+                                .specification_file      = std::move(resolved_specification_file),
+                                .metric_declaration_file = std::move(resolved_metric_declaration_file),
+                                .applicable_targets      = {target}});
 }
 
 /**
