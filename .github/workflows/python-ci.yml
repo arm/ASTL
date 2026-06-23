@@ -25,7 +25,7 @@ jobs:
     # Minimal permissions; only needs read access.
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install build tooling
         run: |
@@ -59,7 +59,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: astl-native-${{ github.sha }}
@@ -114,7 +114,7 @@ jobs:
     # Must match build-native architecture; this job links against downloaded libastl-*.so
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: astl-native-${{ github.sha }}
@@ -174,7 +174,7 @@ jobs:
     if: github.event_name == 'schedule' && !cancelled() && needs.build-test.result == 'success'
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
