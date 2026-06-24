@@ -399,9 +399,16 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   // Coarse-grained mutex for all shared registries/maps used by API and ingestion paths.
   mutable std::mutex _mutex;
 
+  // Serializes ProcessRawSamples calls so timestamp check/update remains ordered across batches.
+  std::mutex _process_raw_samples_mutex;
+
   // Per-operation clock correlations set at collection-start time.
   // Used by ProcessRawSamples to translate native-clock timestamps to CLOCK_MONOTONIC_RAW.
   ClockCorrelationMap _clock_correlations;
+
+  // Last successfully processed timestamp per metric. ProcessRawSamples sorts each call internally; this map identifies
+  // timestamp regressions across multiple calls, such as streamed raw-sample batch replay, so they can be dropped.
+  std::unordered_map<IMetric*, ProcessedSampleTimestamp> _last_processed_timestamp_by_metric;
 };
 
 }  // namespace astl

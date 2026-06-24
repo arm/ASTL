@@ -9,6 +9,7 @@
 #include <functional>  // for std::reference_wrapper in expected return types
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -432,10 +433,61 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
 
  private:
   auto StartCollectionImpl(const ITarget *target, bool start_paused) -> astl_status_code;
+
+  /**
+   * @brief Return already-materialized processed samples for a target/metric pair.
+   *
+   * This is the fast path for sample retrieval. It only inspects the in-memory processed sample map and does not
+   * attempt to rebuild samples from the raw cache.
+   *
+   * @return A span over retained processed samples when the entry exists, or std::nullopt when the entry is absent.
+   */
+  auto LookupProcessedMetricSamples(const IMetric *metric, const ITarget *target) const
+      -> std::optional<std::span<const astl::ProcessedSampledData>>;
+
+  /**
+   * @brief Rebuild processed samples for a target from its on-disk raw sample cache file.
+   *
+   * Missing cache directories/files are treated as a successful no-op. Existing cache files are validated, opened, and
+   * replayed through ProcessRawSampleCacheStream().
+   */
+  auto ReplayRawSampleCacheForTarget(const ITarget *target) const -> astl_status_code;
+
+  /**
+   * @brief Deserialize raw sample batches from an open cache stream and process them for one target.
+   *
+   * The target's metric state and in-memory processed samples are reset before replay. Each non-empty serialized batch
+   * is passed to MetricManager::ProcessRawSamples(), and metrics are summarized after all batches replay successfully.
+   */
+  auto ProcessRawSampleCacheStream(const ITarget *target, std::istream &file_stream) const -> astl_status_code;
+
+  /**
+   * @brief Ensure processed samples are loaded for every available metric and counter on a target.
+   *
+   * Used before cropping so the in-memory processed sample store reflects any raw samples that only exist in the
+   * on-disk cache.
+   */
   auto EnsureProcessedSamplesLoadedForTarget(const ITarget *target) -> void;
+
+  /**
+   * @brief Crop in-memory processed samples for every metric on a target.
+   */
   auto FilterProcessedSamplesOnTarget(const ITarget *target, std::span<const astl_crop_window_t> windows) -> void;
+
+  /**
+   * @brief Crop buffered in-memory raw samples for a target.
+   *
+   * Raw timestamps are normalized with the supplied clock correlations before applying the crop windows.
+   */
   auto FilterRawSamplesOnTarget(const ITarget *target, const ClockCorrelationMap &correlations,
                                 std::span<const astl_crop_window_t> windows) -> void;
+
+  /**
+   * @brief Rewrite or remove a target's on-disk raw sample cache after cropping.
+   *
+   * The cache is streamed batch-by-batch through a temporary file. If no raw samples remain after filtering, the
+   * original cache file is removed.
+   */
   auto FilterRawSampleCacheFile(const ITarget *target, const ClockCorrelationMap &correlations,
                                 std::span<const astl_crop_window_t> windows) -> astl_status_code;
 

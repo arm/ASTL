@@ -25,6 +25,9 @@
 
 #include <expected>
 #include <filesystem>
+#include <iosfwd>
+#include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "i_raw_sample_sink.hpp"
@@ -52,6 +55,29 @@ namespace ProtobufSerDes {
 auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_stream) -> astl_status_code;
 
 /**
+ * @brief Reads raw samples one serialized protobuf batch at a time from a stream.
+ *
+ * Each ReadNext() call parses at most one RawSampleBatch. An empty vector means clean EOF or an empty batch.
+ */
+class RawSampleBatchReader {
+ public:
+  explicit RawSampleBatchReader(std::istream& input_stream);
+  ~RawSampleBatchReader();
+
+  RawSampleBatchReader(RawSampleBatchReader&&) noexcept;
+  auto operator=(RawSampleBatchReader&&) noexcept -> RawSampleBatchReader&;
+
+  RawSampleBatchReader(const RawSampleBatchReader&)                    = delete;
+  auto operator=(const RawSampleBatchReader&) -> RawSampleBatchReader& = delete;
+
+  auto ReadNext() -> std::expected<std::vector<RawSampledData>, astl_status_code>;
+
+ private:
+  class Impl;
+  std::unique_ptr<Impl> _impl;
+};
+
+/**
  * @brief Deserializes protobuf-encoded data into a supported type `T`.
  *
  * Converts a protobuf binary stream into a C++ object of type `T`. Supported
@@ -68,12 +94,19 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
  * @return std::expected<T, astl_status_code>
  *         Returns the decoded payload on success, or an error code on failure.
  */
-template <typename T>
-concept StdVector = requires { typename T::value_type; } && std::same_as<T, std::vector<typename T::value_type>>;
+namespace detail {
+template <typename T, template <typename...> class Template>
+struct IsSpecializationOf : std::false_type {};
+
+template <template <typename...> class Template, typename... Args>
+struct IsSpecializationOf<Template<Args...>, Template> : std::true_type {};
+}  // namespace detail
 
 template <typename T>
-concept StdUniquePtr =
-    requires { typename T::element_type; } && std::same_as<T, std::unique_ptr<typename T::element_type>>;
+concept StdVector = detail::IsSpecializationOf<T, std::vector>::value;
+
+template <typename T>
+concept StdUniquePtr = detail::IsSpecializationOf<T, std::unique_ptr>::value;
 
 template <typename T>
 concept DeserializableBase = requires {

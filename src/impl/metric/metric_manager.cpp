@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "astl/astl_errors.h"
@@ -138,6 +139,43 @@ auto EnqueueTargetSamples(const MetricManager::TargetOperationToMetricMap& targe
   }
 
   return ASTL_STATUS_SUCCESS;
+}
+
+auto IsTimestampRegression(std::mutex&                                                   mutex,
+                           const std::unordered_map<IMetric*, ProcessedSampleTimestamp>& last_processed_timestamps,
+                           IMetric* metric, const NormalizedSampledData& sample) -> bool {
+  std::lock_guard<std::mutex> lock(mutex);
+  const auto                  last_it = last_processed_timestamps.find(metric);
+  if (last_it != last_processed_timestamps.end() && sample.timestamp < last_it->second) {
+    ASTL_LOG_WARNING("ProcessRawSamples: dropping out-of-order sample for metric '{}': {} < {}", metric->Name(),
+                     sample.timestamp.time_since_epoch().count(), last_it->second.time_since_epoch().count());
+    return true;
+  }
+  return false;
+}
+
+auto DispatchNormalizedSample(IMetric* metric, const NormalizedSampledData& sample) -> astl_status_code {
+  const auto status =
+      sample.IsPauseResumeMarker() ? metric->ProcessPauseSample(sample.timestamp) : metric->ReceiveRawSample(sample);
+  if (status == ASTL_STATUS_SUCCESS) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  if (sample.IsPauseResumeMarker()) {
+    ASTL_LOG_ERROR("ProcessData: Failed to process pause sample on metric '{}' with status {}", metric->Name(),
+                   astlStatusString(status));
+  } else {
+    ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} on metric '{}' with status {}",
+                   sample.operation_id, metric->Name(), astlStatusString(status));
+  }
+  return status;
+}
+
+auto RememberMetricTimestamp(std::mutex&                                             mutex,
+                             std::unordered_map<IMetric*, ProcessedSampleTimestamp>& last_processed_timestamps,
+                             IMetric* metric, ProcessedSampleTimestamp timestamp) -> void {
+  std::lock_guard<std::mutex> lock(mutex);
+  last_processed_timestamps[metric] = timestamp;
 }
 
 }  // namespace
@@ -711,8 +749,9 @@ auto MetricManager::GetClockCorrelations() const -> ClockCorrelationMap {
 }
 
 auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code {
-  ProcessingQueue  processing_queue;
-  astl_status_code enqueue_status = ASTL_STATUS_SUCCESS;
+  std::lock_guard<std::mutex> process_lock(_process_raw_samples_mutex);
+  ProcessingQueue             processing_queue;
+  astl_status_code            enqueue_status = ASTL_STATUS_SUCCESS;
   {
     std::lock_guard<std::mutex> lock(_mutex);
     for (const auto& [target, samples] : raw_samples) {
@@ -736,22 +775,16 @@ auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status
   });
 
   for (const auto& [metric_handle, normalized_sample] : processing_queue) {
-    astl_status_code status = ASTL_STATUS_SUCCESS;
-    if (normalized_sample.IsPauseResumeMarker()) [[unlikely]] {
-      status = metric_handle->ProcessPauseSample(normalized_sample.timestamp);
-    } else {
-      status = metric_handle->ReceiveRawSample(normalized_sample);
+    if (IsTimestampRegression(_mutex, _last_processed_timestamp_by_metric, metric_handle, normalized_sample)) {
+      continue;
     }
+
+    const auto status = DispatchNormalizedSample(metric_handle, normalized_sample);
     if (status != ASTL_STATUS_SUCCESS) {
-      if (normalized_sample.IsPauseResumeMarker()) {
-        ASTL_LOG_ERROR("ProcessData: Failed to process pause sample on metric '{}' with status {}",
-                       metric_handle->Name(), astlStatusString(status));
-      } else {
-        ASTL_LOG_ERROR("ProcessData: Failed to process sample for operation ID {} on metric '{}' with status {}",
-                       normalized_sample.operation_id, metric_handle->Name(), astlStatusString(status));
-      }
       return status;
     }
+
+    RememberMetricTimestamp(_mutex, _last_processed_timestamp_by_metric, metric_handle, normalized_sample.timestamp);
   }
   return enqueue_status;
 }
@@ -767,6 +800,7 @@ auto MetricManager::ResetMetricsOnTarget(const ITarget* target) -> astl_status_c
     auto counter_it = counter_handle->target_to_counter_map.find(target);
     if (counter_it != counter_handle->target_to_counter_map.end() && counter_it->second) {
       counter_it->second->Reset();
+      _last_processed_timestamp_by_metric.erase(counter_it->second.get());
     }
   }
 
@@ -774,6 +808,7 @@ auto MetricManager::ResetMetricsOnTarget(const ITarget* target) -> astl_status_c
     auto metric_it = metric_handle->target_to_metric_map.find(target);
     if (metric_it != metric_handle->target_to_metric_map.end() && metric_it->second) {
       metric_it->second->Reset();
+      _last_processed_timestamp_by_metric.erase(metric_it->second.get());
     }
   }
 
@@ -853,6 +888,7 @@ auto MetricManager::RemoveAllMetrics() -> void {
   _target_to_metrics_map.clear();
   _target_to_metric_groups_map.clear();
   _target_to_operation_to_metric_map.clear();
+  _last_processed_timestamp_by_metric.clear();
   _target_to_lifecycle_event_metric.clear();
 }
 

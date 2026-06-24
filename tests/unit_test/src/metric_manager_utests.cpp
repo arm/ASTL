@@ -1646,6 +1646,122 @@ TEST_CASE("MetricManager::ProcessRawSamples accepts samples with equal timestamp
   REQUIRE(metric->received[1].timestamp == metric->received[2].timestamp);
 }
 
+TEST_CASE("MetricManager::ProcessRawSamples drops timestamp regressions across calls",
+          "[MetricManager][monotonicity]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto           owner  = std::make_unique<TestMetric>();
+  TestMetric*    metric = owner.get();
+  constexpr auto op_id  = astl::OperationId{4};
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner),
+      std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({op_id}));
+
+  astl::RawSamplesMap first_batch;
+  first_batch[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{300}}, MakeTs(300)),
+  };
+  REQUIRE(mgr.ProcessRawSamples(first_batch) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->received.size() == 1);
+
+  astl::RawSamplesMap older_batch;
+  older_batch[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{200}}, MakeTs(200)),
+  };
+  REQUIRE(mgr.ProcessRawSamples(older_batch) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->received.size() == 1);
+  REQUIRE(metric->received[0].get<uint64_t>() == 300);
+}
+
+TEST_CASE("MetricManager::ProcessRawSamples drops only regressing samples after a timestamp regression",
+          "[MetricManager][monotonicity]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto           owner  = std::make_unique<TestMetric>();
+  TestMetric*    metric = owner.get();
+  constexpr auto op_id  = astl::OperationId{6};
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner),
+      std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({op_id}));
+
+  astl::RawSamplesMap first_batch;
+  first_batch[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{100}}, MakeTs(100)),
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{300}}, MakeTs(300)),
+  };
+  REQUIRE(mgr.ProcessRawSamples(first_batch) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->received.size() == 2);
+
+  astl::RawSamplesMap regressing_batch;
+  regressing_batch[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{400}}, MakeTs(400)),
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{250}}, MakeTs(250)),
+  };
+  REQUIRE(mgr.ProcessRawSamples(regressing_batch) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->received.size() == 3);
+  REQUIRE(metric->received[0].get<uint64_t>() == 100);
+  REQUIRE(metric->received[1].get<uint64_t>() == 300);
+  REQUIRE(metric->received[2].get<uint64_t>() == 400);
+
+  astl::RawSamplesMap follow_up_batch;
+  follow_up_batch[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{450}}, MakeTs(450)),
+  };
+  REQUIRE(mgr.ProcessRawSamples(follow_up_batch) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->received.size() == 4);
+  REQUIRE(metric->received[3].get<uint64_t>() == 450);
+}
+
+TEST_CASE("MetricManager::ResetMetricsOnTarget clears timestamp ordering state", "[MetricManager][monotonicity]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto           owner  = std::make_unique<TestMetric>();
+  TestMetric*    metric = owner.get();
+  constexpr auto op_id  = astl::OperationId{5};
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner),
+      std::make_unique<MetricConfig>("m", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, op_id, metric);
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({op_id}));
+
+  astl::RawSamplesMap first_batch;
+  first_batch[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{300}}, MakeTs(300)),
+  };
+  REQUIRE(mgr.ProcessRawSamples(first_batch) == ASTL_STATUS_SUCCESS);
+
+  REQUIRE(mgr.ResetMetricsOnTarget(&target) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->resetCount == 1);
+  REQUIRE(metric->received.empty());
+
+  astl::RawSamplesMap replay_batch;
+  replay_batch[&target] = {
+      astl::RawSampledData(op_id, astl::AstlValue{uint64_t{200}}, MakeTs(200)),
+  };
+  REQUIRE(mgr.ProcessRawSamples(replay_batch) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->received.size() == 1);
+  REQUIRE(metric->received[0].get<uint64_t>() == 200);
+}
+
 // ---------------------------------------------------------------------------
 // Clock correlation tests
 // ---------------------------------------------------------------------------

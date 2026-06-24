@@ -6,10 +6,14 @@
 #include <google/protobuf/message_lite.h>
 #include <google/protobuf/util/delimited_message_util.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <istream>
+#include <iterator>
+#include <limits>
+#include <memory>
 #include <ostream>
 
 #include "astl/astl_errors.h"
@@ -23,6 +27,32 @@ namespace {
 auto ShutdownProtobufLibraryAtExit() noexcept -> void { google::protobuf::ShutdownProtobufLibrary(); }
 
 [[maybe_unused]] const bool kRegisteredProtobufShutdown = std::atexit(ShutdownProtobufLibraryAtExit) == 0;
+
+auto ConvertRawSampleBatch(const astl::protobuf::RawSampleBatch& batch, std::vector<RawSampledData>& result)
+    -> astl_status_code {
+  const auto num_new_samples = static_cast<size_t>(batch.samples_size());
+  result.reserve(result.size() + num_new_samples);
+
+  for (const auto& proto_sample : batch.samples()) {
+    auto value_or = detail::DeserializeAstlValue(proto_sample.value());
+    if (!value_or.has_value()) {
+      ASTL_LOG_ERROR("Failed to convert protobuf AstlValue in RawSample");
+      return value_or.error();
+    }
+
+    auto operation_id_or_error = detail::DeserializeOperationId(proto_sample.operation_id(), "RawSample");
+    if (!operation_id_or_error.has_value()) {
+      return operation_id_or_error.error();
+    }
+
+    RawSampledData sample{*operation_id_or_error, std::move(*value_or)};
+    sample.raw_tick = proto_sample.timestamp_us();
+
+    result.emplace_back(std::move(sample));
+  }
+
+  return ASTL_STATUS_SUCCESS;
+}
 }  // namespace
 
 namespace fs = std::filesystem;
@@ -60,54 +90,69 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
 template <>
 auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
     -> std::expected<std::vector<RawSampledData>, astl_status_code> {
-  using google::protobuf::io::IstreamInputStream;
-  using google::protobuf::util::ParseDelimitedFromZeroCopyStream;
+  std::vector<RawSampledData> result;
+  RawSampleBatchReader        reader{input_stream};
 
-  IstreamInputStream zero_copy_input(&input_stream);
+  while (true) {
+    auto batch_or_error = reader.ReadNext();
+    if (!batch_or_error) {
+      return std::unexpected(batch_or_error.error());
+    }
+    auto& batch_samples = *batch_or_error;
+    if (batch_samples.empty()) {
+      break;
+    }
 
-  std::vector<RawSampledData>    result;
-  astl::protobuf::RawSampleBatch batch;
-
-  bool clean_eof = false;
-  while (ParseDelimitedFromZeroCopyStream(&batch, &zero_copy_input, &clean_eof)) {
-    // Convert one batch
-    // ensure sufficient capacity. at least geometric growth to avoid O(n^2) copies,
-    // and also enough for all the new samples
-    const auto num_new_samples = static_cast<size_t>(batch.samples_size());
-    if (result.capacity() < result.size() + num_new_samples) {
-      auto new_size = std::max(result.capacity() * 2, result.size() + num_new_samples);
+    if (result.capacity() < result.size() + batch_samples.size()) {
+      auto new_size = std::max(result.capacity() * 2, result.size() + batch_samples.size());
       result.reserve(new_size);
     }
-    for (const auto& proto_sample : batch.samples()) {
-      auto value_or = detail::DeserializeAstlValue(proto_sample.value());
-      if (!value_or.has_value()) {
-        ASTL_LOG_ERROR("Failed to convert protobuf AstlValue in RawSample");
-        return std::unexpected(value_or.error());
-      }
-
-      const uint64_t op_id64 = proto_sample.operation_id();
-      if (op_id64 > std::numeric_limits<OperationId>::max()) {
-        ASTL_LOG_ERROR("OperationId value out of range: {}", op_id64);
-        return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-      }
-      const OperationId op_id = static_cast<OperationId>(op_id64);
-
-      RawSampledData sample{op_id, std::move(*value_or)};
-      sample.raw_tick = proto_sample.timestamp_us();
-
-      result.emplace_back(std::move(sample));
-    }
-
-    batch.Clear();
+    result.insert(result.end(), std::make_move_iterator(batch_samples.begin()),
+                  std::make_move_iterator(batch_samples.end()));
   }
 
-  if (!clean_eof) {
-    // Loop exited due to parse failure rather than clean EOF
+  return result;
+}
+
+class RawSampleBatchReader::Impl {
+ public:
+  explicit Impl(std::istream& input_stream) : zero_copy_input{&input_stream} {}
+
+  google::protobuf::io::IstreamInputStream zero_copy_input;
+};
+
+RawSampleBatchReader::RawSampleBatchReader(std::istream& input_stream) : _impl{std::make_unique<Impl>(input_stream)} {}
+
+RawSampleBatchReader::~RawSampleBatchReader() = default;
+
+RawSampleBatchReader::RawSampleBatchReader(RawSampleBatchReader&&) noexcept = default;
+
+auto RawSampleBatchReader::operator=(RawSampleBatchReader&&) noexcept -> RawSampleBatchReader& = default;
+
+auto RawSampleBatchReader::ReadNext() -> std::expected<std::vector<RawSampledData>, astl_status_code> {
+  using google::protobuf::util::ParseDelimitedFromZeroCopyStream;
+
+  if (!_impl) {
+    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+  }
+
+  astl::protobuf::RawSampleBatch batch;
+  bool                           clean_eof = false;
+  if (!ParseDelimitedFromZeroCopyStream(&batch, &_impl->zero_copy_input, &clean_eof)) {
+    if (clean_eof) {
+      return std::vector<RawSampledData>{};
+    }
     ASTL_LOG_ERROR("Failed to parse RawSampleBatch from input stream");
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
-  return result;
+  std::vector<RawSampledData> batch_samples;
+  auto                        conversion_status = ConvertRawSampleBatch(batch, batch_samples);
+  if (conversion_status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(conversion_status);
+  }
+
+  return batch_samples;
 }
 
 auto SerializeCurrentBatch(const std::string& target_name, const std::vector<RawSampledData>& samples,

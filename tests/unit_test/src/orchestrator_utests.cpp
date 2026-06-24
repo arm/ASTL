@@ -19,8 +19,12 @@
 #include "astl/astl_test_hooks.h"
 #include "astl_internal_status.hpp"
 #include "common/capabilities.hpp"
+#include "common/clock_correlation.hpp"
 #include "common/i_raw_sample_sink.hpp"
+#include "common/metric_config.hpp"
+#include "metric/delta_metric.hpp"
 #include "metric/metric_manager.hpp"
+#include "operation/operation_builder.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "serdes/archive_utils.hpp"
 #include "serdes/protobuf_serdes.hpp"
@@ -390,6 +394,181 @@ TEST_CASE("Orchestrator::GetProcessedMetricSamples returns empty when cache is a
   auto           samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
   REQUIRE(samples_or_err.has_value());
   REQUIRE(samples_or_err->empty());
+}
+
+TEST_CASE("Orchestrator::GetProcessedMetricSamples returns error when raw cache cannot be read", "[Orchestrator]") {
+  const auto      cache_dir = std::filesystem::temp_directory_path() / "astl_unreadable_processed_cache";
+  TempFileGuard   cache_guard(cache_dir);
+  std::error_code create_error_code;
+  std::filesystem::create_directories(cache_dir, create_error_code);
+  REQUIRE_FALSE(create_error_code);
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto               output_manager = std::make_unique<MockOutputManager>();
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), cache_dir);
+
+  auto                                        target_uptr = std::make_unique<TestTargetBase>("unreadable-cache-target");
+  auto*                                       target      = target_uptr.get();
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(target_uptr));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+
+  const auto cache_file_path = cache_dir / (astl::GetStableTargetKey(*target) + astl::kAstlFileExtension);
+  std::filesystem::create_directories(cache_file_path, create_error_code);
+  REQUIRE_FALSE(create_error_code);
+
+  TestMetricBase metric{"unreadable-cache-metric"};
+  auto           samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
+  REQUIRE_FALSE(samples_or_err.has_value());
+  REQUIRE(samples_or_err.error() == ASTL_STATUS_INTERNAL_ERROR);
+}
+
+TEST_CASE("Orchestrator::GetProcessedMetricSamples replays raw cache in serialized batches", "[Orchestrator]") {
+  const auto      cache_dir = std::filesystem::temp_directory_path() / "astl_batch_replay_processed_cache";
+  TempFileGuard   cache_guard(cache_dir);
+  std::error_code create_error_code;
+  std::filesystem::create_directories(cache_dir, create_error_code);
+  REQUIRE_FALSE(create_error_code);
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  auto  metric_manager     = std::make_unique<MockMetricManager>();
+  auto* metric_manager_raw = metric_manager.get();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+
+  auto               output_manager = std::make_unique<MockOutputManager>();
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), cache_dir);
+
+  auto                                        target_uptr = std::make_unique<TestTargetBase>("batch-replay-target");
+  auto*                                       target      = target_uptr.get();
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(target_uptr));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+
+  const std::vector<astl::RawSampledData> batch1{
+      astl::RawSampledData{astl::OperationId{1}, astl::AstlValue{uint64_t{10}}, uint64_t{100}},
+      astl::RawSampledData{astl::OperationId{1}, astl::AstlValue{uint64_t{20}}, uint64_t{200}},
+  };
+  const std::vector<astl::RawSampledData> batch2{
+      astl::RawSampledData{astl::OperationId{1}, astl::AstlValue{uint64_t{30}}, uint64_t{300}},
+  };
+
+  const auto    cache_file_path = cache_dir / (astl::GetStableTargetKey(*target) + astl::kAstlFileExtension);
+  std::ofstream cache_file(cache_file_path, std::ios::binary);
+  REQUIRE(cache_file.good());
+  REQUIRE(astl::ProtobufSerDes::Serialize(batch1, cache_file) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::ProtobufSerDes::Serialize(batch2, cache_file) == ASTL_STATUS_SUCCESS);
+  cache_file.close();
+
+  std::vector<std::vector<astl::RawSampledData>> replayed_batches;
+  const auto                                     record_replayed_batch = [&](astl::RawSamplesMap& raw_samples) {
+    REQUIRE(raw_samples.size() == 1);
+    const auto target_samples_it = raw_samples.find(target);
+    REQUIRE(target_samples_it != raw_samples.end());
+    replayed_batches.push_back(target_samples_it->second);
+  };
+
+  trompeloeil::sequence replay_sequence;
+  REQUIRE_CALL(*metric_manager_raw, ResetMetricsOnTarget(target))
+      .IN_SEQUENCE(replay_sequence)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*metric_manager_raw, ProcessRawSamples(_))
+      .TIMES(2)
+      .IN_SEQUENCE(replay_sequence)
+      .LR_SIDE_EFFECT(record_replayed_batch(_1))
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*metric_manager_raw, SummarizeMetrics()).IN_SEQUENCE(replay_sequence).RETURN(ASTL_STATUS_SUCCESS);
+
+  TestMetricBase metric{"batch-replay-metric"};
+  auto           samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
+  REQUIRE(samples_or_err.has_value());
+  REQUIRE(samples_or_err->empty());
+
+  REQUIRE(replayed_batches.size() == 2);
+  REQUIRE(replayed_batches[0].size() == 2);
+  REQUIRE(replayed_batches[1].size() == 1);
+  REQUIRE(replayed_batches[0][0].value == astl::AstlValue{uint64_t{10}});
+  REQUIRE(replayed_batches[0][1].value == astl::AstlValue{uint64_t{20}});
+  REQUIRE(replayed_batches[1][0].value == astl::AstlValue{uint64_t{30}});
+}
+
+TEST_CASE("Orchestrator::GetProcessedMetricSamples computes delta across serialized raw cache batches",
+          "[Orchestrator]") {
+  constexpr auto  op_id     = astl::OperationId{17};
+  const auto      cache_dir = std::filesystem::temp_directory_path() / "astl_delta_cross_batch_replay_processed_cache";
+  TempFileGuard   cache_guard(cache_dir);
+  std::error_code create_error_code;
+  std::filesystem::create_directories(cache_dir, create_error_code);
+  REQUIRE_FALSE(create_error_code);
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+
+  astl::Capabilities caps{{astl::CollectorCapability{astl::CollectorType::SCMI}}, {astl::SystemCapability{}}};
+  auto               metric_manager     = std::make_unique<astl::MetricManager>(caps);
+  auto*              metric_manager_raw = metric_manager.get();
+
+  auto               output_manager = std::make_unique<MockOutputManager>();
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), cache_dir);
+
+  auto  target_uptr = std::make_unique<TestTargetBase>("delta-cross-batch-target");
+  auto* target      = target_uptr.get();
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(target_uptr));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+
+  auto delta_config = std::make_unique<astl::MetricConfig>(
+      "energy_delta", "Energy delta", ASTL_UNITS_JOULES, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+      ASTL_METRIC_DELTA, astl::CollectorType::SCMI, astl::NullOperationBuilder{});
+  auto  delta_metric     = std::make_unique<astl::DeltaMetric>(delta_config.get(), target, metric_manager_raw);
+  auto* delta_metric_raw = delta_metric.get();
+  astl::MetricManagerTestAccessor::InjectMetric(*metric_manager_raw, std::move(delta_metric), std::move(delta_config),
+                                                target);
+  astl::MetricManagerTestAccessor::InjectOperation(*metric_manager_raw, target, op_id, delta_metric_raw);
+  metric_manager_raw->SetClockCorrelations({
+      {op_id,
+       astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}},
+                                       astl::HwClockTicks{0}, astl::MakeTickRatio<astl::SampleMicroseconds>()}}
+  });
+
+  const std::vector<astl::RawSampledData> batch1{
+      astl::RawSampledData{op_id, astl::AstlValue{uint64_t{100}}, uint64_t{100}},
+  };
+  const std::vector<astl::RawSampledData> batch2{
+      astl::RawSampledData{op_id, astl::AstlValue{uint64_t{175}}, uint64_t{200}},
+  };
+
+  const auto    cache_file_path = cache_dir / (astl::GetStableTargetKey(*target) + astl::kAstlFileExtension);
+  std::ofstream cache_file(cache_file_path, std::ios::binary);
+  REQUIRE(cache_file.good());
+  REQUIRE(astl::ProtobufSerDes::Serialize(batch1, cache_file) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::ProtobufSerDes::Serialize(batch2, cache_file) == ASTL_STATUS_SUCCESS);
+  cache_file.close();
+
+  auto samples_or_err = orchestrator.GetProcessedMetricSamples(delta_metric_raw, target);
+  REQUIRE(samples_or_err.has_value());
+  REQUIRE(samples_or_err->size() == 1);
+  REQUIRE(samples_or_err->front().value == astl::AstlValue{uint64_t{75}});
 }
 
 TEST_CASE("Orchestrator::LoadFromFile short-circuits when instance already exists", "[Orchestrator][cache]") {

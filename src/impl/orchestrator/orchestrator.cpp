@@ -978,11 +978,99 @@ void Orchestrator::EnsureLifecycleEventMetricForTarget(const ITarget *target) {
 
 /**
  * @brief Retrieve the collected samples for the given target and metric,
- *        or an error if the target+metric combination isn't valid.
- *
- * If we don't have processed samples in-memory yet, attempt to rebuild them
- * by deserializing raw samples from a temporary file and re-processing.
+ *        if they have already been materialized in memory.
  */
+auto Orchestrator::LookupProcessedMetricSamples(const IMetric *metric, const ITarget *target) const
+    -> std::optional<std::span<const astl::ProcessedSampledData>> {
+  std::scoped_lock lock{_processed_samples_mtx};
+
+  const auto target_it = _processed_samples.find(target);
+  if (target_it == _processed_samples.end()) {
+    return std::nullopt;
+  }
+
+  const auto &metric_map = target_it->second;
+  const auto  metric_it  = metric_map.find(metric);
+  if (metric_it == metric_map.end()) {
+    return std::nullopt;
+  }
+
+  return std::span<const astl::ProcessedSampledData>(metric_it->second);
+}
+
+auto Orchestrator::ProcessRawSampleCacheStream(const ITarget *target, std::istream &file_stream) const
+    -> astl_status_code {
+  ProtobufSerDes::RawSampleBatchReader reader{file_stream};
+
+  // Rebuild processed samples from raw cache using a clean per-target metric state.
+  // This avoids replaying into delta/rate metrics that still hold an old "previous sample".
+  const auto reset_status = _metric_manager->ResetMetricsOnTarget(target);
+  if (reset_status != ASTL_STATUS_SUCCESS) {
+    return reset_status;
+  }
+
+  {
+    std::scoped_lock lock{_processed_samples_mtx};
+    _processed_samples.erase(target);
+  }
+
+  while (true) {
+    auto raw_batch_or_error = reader.ReadNext();
+    if (!raw_batch_or_error) {
+      return raw_batch_or_error.error();
+    }
+    if (raw_batch_or_error->empty()) {
+      break;
+    }
+
+    // ProcessRawSamples sinks results back via SinkProcessedSamples() - don't hold the mutex here.
+    RawSamplesMap raw_samples;
+    raw_samples.emplace(target, std::move(*raw_batch_or_error));
+    const auto replay_status = _metric_manager->ProcessRawSamples(raw_samples);
+    if (replay_status != ASTL_STATUS_SUCCESS) {
+      return replay_status;
+    }
+  }
+
+  if (auto summarize_status = _metric_manager->SummarizeMetrics(); summarize_status != ASTL_STATUS_SUCCESS) {
+    return summarize_status;
+  }
+
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::ReplayRawSampleCacheForTarget(const ITarget *target) const -> astl_status_code {
+  const fs::path file_path = _cache_dir / (GetStableTargetKey(*target) + kAstlFileExtension);
+
+  if (!fs::exists(fs::path(_cache_dir))) {
+    ASTL_LOG_DEBUG("No cache directory exists; skipping raw sample deserialization for target {}", target->Name());
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  if (!fs::exists(file_path)) {
+    ASTL_LOG_INFO("No cached raw sample file exists for target {}; returning no samples", target->Name());
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  if (!fs::is_regular_file(file_path)) {
+    ASTL_LOG_ERROR("Raw sample cache path {} is not a regular file", file_path.string());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  std::ifstream file_stream(file_path, std::ios::binary);
+  if (!file_stream) {
+    ASTL_LOG_ERROR("Failed to open {} for reading", file_path.string());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto replay_status = ProcessRawSampleCacheStream(target, file_stream);
+  if (replay_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to replay raw sample batches from {}: {}", file_path.string(),
+                   astlStatusString(replay_status));
+  }
+  return replay_status;
+}
+
 auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarget *target) const
     -> std::expected<std::span<const astl::ProcessedSampledData>, astl_status_code> {
   if (!metric || !target) {
@@ -992,83 +1080,21 @@ auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarge
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
-  auto lookup = [&]() -> std::optional<std::span<const astl::ProcessedSampledData>> {
-    std::scoped_lock lock{_processed_samples_mtx};
-
-    const auto target_it = _processed_samples.find(target);
-    if (target_it == _processed_samples.end()) {
-      return std::nullopt;
-    }
-
-    const auto &metric_map = target_it->second;
-    const auto  metric_it  = metric_map.find(metric);
-    if (metric_it == metric_map.end()) {
-      return std::nullopt;
-    }
-
-    return std::span<const astl::ProcessedSampledData>(metric_it->second);
-  };
-
   // 1) Fast path
-  if (auto samples = lookup()) {
+  auto samples = LookupProcessedMetricSamples(metric, target);
+  if (samples.has_value()) {
     return *samples;
   }
 
-  // 2) Rebuild from tmp/<target>.astl (if it exists)
-  // TODO(ASTL-224): Support batch processing. Currently we just hardcode tmp/ as the location.
-  const fs::path file_path = _cache_dir / (GetStableTargetKey(*target) + kAstlFileExtension);
-
-  if (!fs::exists(fs::path(_cache_dir))) {
-    ASTL_LOG_DEBUG("No cache directory exists; skipping raw sample deserialization for target {}", target->Name());
-    return {};
-  }
-
-  if (!fs::exists(file_path)) {
-    ASTL_LOG_INFO("No cached raw sample file exists for target {}; returning no samples", target->Name());
-    return {};
-  }
-
-  std::ifstream file_stream(file_path, std::ios::binary);
-  if (!file_stream) {
-    ASTL_LOG_ERROR("Failed to open {} for reading", file_path.string());
-    return {};
-  }
-
-  auto raw = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(file_stream);
-  if (!raw) {
-    ASTL_LOG_ERROR("Failed to deserialize samples from {}: {}", file_path.string(), astlStatusString(raw.error()));
-    return std::unexpected(raw.error());
-  }
-
-  if (!raw->empty()) {
-    // Rebuild processed samples from raw cache using a clean per-target metric state.
-    // This avoids replaying into delta/rate metrics that still hold an old "previous sample".
-    auto reset_status = _metric_manager->ResetMetricsOnTarget(target);
-    if (reset_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(reset_status);
-    }
-
-    {
-      std::scoped_lock lock{_processed_samples_mtx};
-      _processed_samples.erase(target);
-    }
-
-    // ProcessRawSamples sinks results back via SinkProcessedSamples() - don't hold the mutex here.
-    RawSamplesMap raw_samples{
-        {target, std::move(*raw)}
-    };
-
-    if (auto process_status = _metric_manager->ProcessRawSamples(raw_samples); process_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(process_status);
-    }
-
-    if (auto summarize_status = _metric_manager->SummarizeMetrics(); summarize_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(summarize_status);
-    }
+  // 2) Rebuild from the raw-sample cache file if it exists.
+  const auto replay_status = ReplayRawSampleCacheForTarget(target);
+  if (replay_status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(replay_status);
   }
 
   // 3) Retry
-  if (auto samples = lookup()) {
+  samples = LookupProcessedMetricSamples(metric, target);
+  if (samples.has_value()) {
     return *samples;
   }
 
@@ -1312,6 +1338,87 @@ auto FilterRawSamples(std::vector<RawSampledData> &raw_samples, const ClockCorre
   raw_samples.erase(remove_it, raw_samples.end());
 }
 
+auto RemoveCacheFile(const fs::path &cache_file_path, const char *description) -> astl_status_code {
+  std::error_code error_code;
+  fs::remove(cache_file_path, error_code);
+  if (error_code) {
+    ASTL_LOG_ERROR("RemoveCacheFile: failed to remove {} {}: {}", description, cache_file_path.string(),
+                   error_code.message());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto WriteFilteredRawSampleBatch(std::ofstream &out_stream, const fs::path &temp_cache_file_path,
+                                 const std::vector<RawSampledData> &raw_samples) -> astl_status_code {
+  if (!out_stream.is_open()) {
+    out_stream.open(temp_cache_file_path, std::ios::binary | std::ios::out);
+    if (!out_stream) {
+      ASTL_LOG_ERROR("WriteFilteredRawSampleBatch: failed to create filtered cache file {}",
+                     temp_cache_file_path.string());
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+  }
+
+  const auto write_status = ProtobufSerDes::Serialize(raw_samples, out_stream);
+  if (write_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("WriteFilteredRawSampleBatch: failed to serialize filtered raw samples to {}: {}",
+                   temp_cache_file_path.string(), astlStatusString(write_status));
+  }
+  return write_status;
+}
+
+auto WriteFilteredRawSampleBatches(std::istream &in_stream, const fs::path &temp_cache_file_path,
+                                   const ClockCorrelationMap &correlations, std::span<const astl_crop_window_t> windows)
+    -> std::expected<bool, astl_status_code> {
+  std::ofstream                        out_stream;
+  bool                                 wrote_filtered_samples = false;
+  ProtobufSerDes::RawSampleBatchReader reader{in_stream};
+
+  while (true) {
+    auto raw_samples_or_error = reader.ReadNext();
+    if (!raw_samples_or_error) {
+      return std::unexpected(raw_samples_or_error.error());
+    }
+    if (raw_samples_or_error->empty()) {
+      return wrote_filtered_samples;
+    }
+
+    auto raw_samples = std::move(*raw_samples_or_error);
+    FilterRawSamples(raw_samples, correlations, windows);
+    if (raw_samples.empty()) {
+      continue;
+    }
+
+    const auto write_status = WriteFilteredRawSampleBatch(out_stream, temp_cache_file_path, raw_samples);
+    if (write_status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(write_status);
+    }
+
+    wrote_filtered_samples = true;
+  }
+}
+
+auto ReplaceRawSampleCacheFile(const fs::path &cache_file_path, const fs::path &temp_cache_file_path)
+    -> astl_status_code {
+  const auto remove_status = RemoveCacheFile(cache_file_path, "raw sample cache file");
+  if (remove_status != ASTL_STATUS_SUCCESS) {
+    (void)RemoveCacheFile(temp_cache_file_path, "stale temp cache file");
+    return remove_status;
+  }
+
+  std::error_code error_code;
+  fs::rename(temp_cache_file_path, cache_file_path, error_code);
+  if (error_code) {
+    ASTL_LOG_ERROR("ReplaceRawSampleCacheFile: failed to replace raw sample cache file {}: {}",
+                   cache_file_path.string(), error_code.message());
+    (void)RemoveCacheFile(temp_cache_file_path, "stale temp cache file");
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  return ASTL_STATUS_SUCCESS;
+}
+
 }  // namespace
 
 auto Orchestrator::EnsureProcessedSamplesLoadedForTarget(const ITarget *target) -> void {
@@ -1367,44 +1474,32 @@ auto Orchestrator::FilterRawSampleCacheFile(const ITarget *target, const ClockCo
 
   std::ifstream in_stream(cache_file_path, std::ios::binary);
   if (!in_stream) {
-    ASTL_LOG_ERROR("CropSamplesOnTarget: failed to open raw sample cache file {}", cache_file_path.string());
+    ASTL_LOG_ERROR("FilterRawSampleCacheFile: failed to open raw sample cache file {}", cache_file_path.string());
     return ASTL_STATUS_INTERNAL_ERROR;
   }
-  auto raw_result = ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(in_stream);
+
+  auto temp_cache_file_path = cache_file_path;
+  temp_cache_file_path += ".tmp";
+
+  const auto remove_status = RemoveCacheFile(temp_cache_file_path, "stale temp cache file");
+  if (remove_status != ASTL_STATUS_SUCCESS) {
+    return remove_status;
+  }
+
+  auto wrote_filtered_samples = WriteFilteredRawSampleBatches(in_stream, temp_cache_file_path, correlations, windows);
   in_stream.close();
-
-  if (!raw_result) {
-    ASTL_LOG_ERROR("CropSamplesOnTarget: failed to deserialize raw samples from {}: {}", cache_file_path.string(),
-                   astlStatusString(raw_result.error()));
-    return raw_result.error();
+  if (!wrote_filtered_samples) {
+    ASTL_LOG_ERROR("FilterRawSampleCacheFile: failed to filter raw sample cache file {}: {}", cache_file_path.string(),
+                   astlStatusString(wrote_filtered_samples.error()));
+    (void)RemoveCacheFile(temp_cache_file_path, "stale temp cache file");
+    return wrote_filtered_samples.error();
   }
 
-  FilterRawSamples(*raw_result, correlations, windows);
-
-  std::error_code error_code;
-  fs::remove(cache_file_path, error_code);
-  if (error_code) {
-    ASTL_LOG_ERROR("CropSamplesOnTarget: failed to remove old cache file {}: {}", cache_file_path.string(),
-                   error_code.message());
-    return ASTL_STATUS_INTERNAL_ERROR;
+  if (!*wrote_filtered_samples) {
+    return RemoveCacheFile(cache_file_path, "raw sample cache file");
   }
 
-  if (raw_result->empty()) {
-    return ASTL_STATUS_SUCCESS;
-  }
-
-  std::ofstream out_stream(cache_file_path, std::ios::binary | std::ios::out);
-  if (!out_stream) {
-    ASTL_LOG_ERROR("CropSamplesOnTarget: failed to create filtered cache file {}", cache_file_path.string());
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-
-  const auto write_status = ProtobufSerDes::Serialize(*raw_result, out_stream);
-  if (write_status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("CropSamplesOnTarget: failed to serialize filtered raw samples to {}: {}", cache_file_path.string(),
-                   astlStatusString(write_status));
-  }
-  return write_status;
+  return ReplaceRawSampleCacheFile(cache_file_path, temp_cache_file_path);
 }
 
 auto Orchestrator::CropSamplesOnTarget(const ITarget *target, std::span<const astl_crop_window_t> windows)

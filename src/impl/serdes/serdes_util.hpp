@@ -7,11 +7,15 @@
 
 #include <cstdint>
 #include <expected>
+#include <limits>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
+#include "astl/astl_errors.h"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
+#include "operation/operation.hpp"
 #include "serdes/serdes_common.pb.h"
 
 namespace astl::ProtobufSerDes::detail {
@@ -70,6 +74,21 @@ inline std::expected<AstlValue, astl_status_code> DeserializeAstlValue(const Pro
 
 inline void SerializeAstlValue(const AstlValue& src, astl::protobuf::AstlValue& dst) {
   std::visit([&](const auto& val) { SetOneOf(dst, val); }, src.value);
+}
+
+inline auto DeserializeOperationId(std::uint64_t raw_operation_id, std::string_view context)
+    -> std::expected<OperationId, astl_status_code> {
+  if (raw_operation_id == kOperationIdInvalid) {
+    ASTL_LOG_ERROR("{} OperationId value is reserved invalid id: {}", context, raw_operation_id);
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  if (raw_operation_id > std::numeric_limits<OperationId>::max()) {
+    ASTL_LOG_ERROR("{} OperationId value out of range: {}", context, raw_operation_id);
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  return static_cast<OperationId>(raw_operation_id);
 }
 
 }  // namespace astl::ProtobufSerDes::detail

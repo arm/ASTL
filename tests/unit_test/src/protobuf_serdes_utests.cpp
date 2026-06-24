@@ -8,7 +8,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <random>
+#include <sstream>
 #include <string_view>
 
 #include "../../mock_classes.hpp"
@@ -196,6 +198,54 @@ TEST_CASE("SerializeCurrentBatch writes one batch that Deserialize can read") {
 // NOLINTEND(readability-magic-numbers,readability-function-cognitive-complexity)
 
 // NOLINTBEGIN(readability-magic-numbers)
+TEST_CASE("RawSampleBatchReader reads each serialized batch separately") {
+  const std::vector<RawSampledData> batch1{
+      MakeSample(1, AstlValue{uint64_t{10}}, 100),
+      MakeSample(1, AstlValue{uint64_t{20}}, 200),
+  };
+  const std::vector<RawSampledData> batch2{
+      MakeSample(2, AstlValue{uint64_t{30}}, 300),
+  };
+
+  std::stringstream str_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(astl::ProtobufSerDes::Serialize(batch1, str_stream) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::ProtobufSerDes::Serialize(batch2, str_stream) == ASTL_STATUS_SUCCESS);
+
+  str_stream.seekg(0);
+  astl::ProtobufSerDes::RawSampleBatchReader reader{str_stream};
+
+  auto first_batch = reader.ReadNext();
+  REQUIRE(first_batch.has_value());
+  REQUIRE(first_batch->size() == 2);
+  REQUIRE(first_batch->at(0).operation_id == 1);
+  REQUIRE(first_batch->at(0).value == AstlValue{uint64_t{10}});
+  REQUIRE(first_batch->at(1).value == AstlValue{uint64_t{20}});
+
+  auto second_batch = reader.ReadNext();
+  REQUIRE(second_batch.has_value());
+  REQUIRE(second_batch->size() == 1);
+  REQUIRE(second_batch->at(0).operation_id == 2);
+  REQUIRE(second_batch->at(0).value == AstlValue{uint64_t{30}});
+
+  auto eof = reader.ReadNext();
+  REQUIRE(eof.has_value());
+  REQUIRE(eof->empty());
+}
+
+TEST_CASE("RawSampleBatchReader returns parse errors") {
+  std::stringstream str_stream(std::ios::in | std::ios::out | std::ios::binary);
+  str_stream << "not a protobuf";
+
+  str_stream.seekg(0);
+  astl::ProtobufSerDes::RawSampleBatchReader reader{str_stream};
+  const auto                                 result = reader.ReadNext();
+
+  REQUIRE_FALSE(result.has_value());
+  REQUIRE(result.error() == ASTL_STATUS_INTERNAL_ERROR);
+}
+// NOLINTEND(readability-magic-numbers)
+
+// NOLINTBEGIN(readability-magic-numbers)
 TEST_CASE("Deserialize errors when VALUE_NOT_SET") {
   // Craft a RawSampleBatch with one sample missing the oneof value.
   astl::protobuf::RawSampleBatch batch;
@@ -219,6 +269,25 @@ TEST_CASE("Deserialize errors on operation_id overflow") {
   astl::protobuf::RawSampleBatch batch;
   auto*                          sample = batch.add_samples();
   sample->set_operation_id(std::numeric_limits<uint32_t>::max());  // likely > OperationId max
+  sample->set_timestamp_us(1);
+  auto* value = sample->mutable_value();
+  value->set_uint32_value(7);
+
+  std::stringstream str_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(google::protobuf::util::SerializeDelimitedToOstream(batch, &str_stream));
+
+  str_stream.seekg(0);
+  auto out_or = astl::ProtobufSerDes::Deserialize<std::vector<RawSampledData>>(str_stream);
+  REQUIRE_FALSE(out_or.has_value());
+  REQUIRE(out_or.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+}
+// NOLINTEND(readability-magic-numbers)
+
+// NOLINTBEGIN(readability-magic-numbers)
+TEST_CASE("Deserialize errors on invalid operation_id marker") {
+  astl::protobuf::RawSampleBatch batch;
+  auto*                          sample = batch.add_samples();
+  sample->set_operation_id(astl::kOperationIdInvalid);
   sample->set_timestamp_us(1);
   auto* value = sample->mutable_value();
   value->set_uint32_value(7);

@@ -20,6 +20,7 @@
 #include "serdes/metrics.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/serdes_metrics_detail.hpp"
+#include "serdes/serdes_util.hpp"
 
 namespace astl::ProtobufSerDes {
 
@@ -691,13 +692,11 @@ static auto DeserializeClockCorrelations(const astl::protobuf::MetricManager& pr
         proto_corr.native_at_start_ticks(), NativeToMonotonicRawRatio{proto_ratio.num(),             proto_ratio.den()                                 }
     };
 
-    const auto operation_id_u32 = entry.operation_id();
-    if (operation_id_u32 >= std::numeric_limits<OperationId>::max()) {
-      // checking if operation_id can fit in the OperationId type and is not reserved invalid id.
-      ASTL_LOG_ERROR("Clock correlation OperationId value out of range: {}", operation_id_u32);
+    auto operation_id_or_error = DeserializeOperationId(entry.operation_id(), "Clock correlation");
+    if (!operation_id_or_error.has_value()) {
       continue;
     }
-    result[static_cast<OperationId>(operation_id_u32)] = corr;
+    result[*operation_id_or_error] = corr;
   }
 
   return result;
