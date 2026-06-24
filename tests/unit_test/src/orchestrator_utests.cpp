@@ -364,6 +364,62 @@ TEST_CASE("Orchestrator::GetProcessedMetricSamples validates inputs and uses fas
   REQUIRE(samples_or_err->front().value == astl::AstlValue{uint64_t{9}});
 }
 
+TEST_CASE("Orchestrator::ConsumeProcessedMetricSamplesIfUncached only consumes no-cache targets", "[Orchestrator]") {
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+
+  TestMetricBase                    metric{"consumable-metric"};
+  std::vector<astl_metric_handle_t> available_metrics{&metric};
+  auto                              metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
+      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+  ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
+      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+          astl::CollectionOperations{
+                                     {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
+  });
+
+  auto               output_manager = std::make_unique<MockOutputManager>();
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), "");
+
+  auto                                        target_uptr = std::make_unique<TestTargetBase>("consume-target");
+  auto*                                       target      = target_uptr.get();
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(target_uptr));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+
+  astl_collection_params_t params{};
+  params.size            = sizeof(params);
+  params.collection_mode = ASTL_COLLECTION_MODE_IMMEDIATE;
+  std::array<astl_metric_handle_t, 1> metrics{&metric};
+
+  const std::vector<astl::ProcessedSampledData> processed_samples{
+      {astl::AstlValue{uint64_t{13}}, astl::ProcessedSampleTimestamp{}}
+  };
+
+  REQUIRE(orchestrator.ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, processed_samples) == ASTL_STATUS_SUCCESS);
+  orchestrator.ConsumeProcessedMetricSamplesIfUncached(&metric, target);
+  auto cached_samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
+  REQUIRE(cached_samples_or_err.has_value());
+  REQUIRE(cached_samples_or_err->size() == 1);
+
+  params.flags = ASTL_NO_CACHING;
+  REQUIRE(orchestrator.ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, processed_samples) == ASTL_STATUS_SUCCESS);
+  orchestrator.ConsumeProcessedMetricSamplesIfUncached(&metric, target);
+  auto consumed_samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
+  REQUIRE(consumed_samples_or_err.has_value());
+  REQUIRE(consumed_samples_or_err->empty());
+}
+
 TEST_CASE("Orchestrator::GetProcessedMetricSamples returns empty when cache is absent", "[Orchestrator]") {
   const auto      cache_dir = std::filesystem::temp_directory_path() / "astl_missing_processed_cache";
   std::error_code remove_error_code;
@@ -715,6 +771,136 @@ TEST_CASE("Orchestrator-SinkRawSamples serializes rollover batches using the sta
   const std::filesystem::path display_name_file = cache_dir / "scmi-display-target.astl";
   REQUIRE(std::filesystem::exists(stable_batch_file));
   REQUIRE_FALSE(std::filesystem::exists(display_name_file));
+}
+
+TEST_CASE("Orchestrator-ReadImmediate can process samples without caching raw samples", "[Orchestrator][cache]") {
+  const std::filesystem::path cache_dir = std::filesystem::temp_directory_path() / "astl_read_immediate_no_cache";
+  TempFileGuard               cache_guard(cache_dir);
+
+  auto  topology_manager  = std::make_unique<MockTopologyManager>();
+  auto  collector_manager = std::make_unique<MockCollectorManager>();
+  auto* collector_ptr     = collector_manager.get();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
+      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+  ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
+
+  auto                               metric_manager        = std::make_unique<MockMetricManager>();
+  auto*                              metric_ptr            = metric_manager.get();
+  static int                         dummy_counter_storage = 0;
+  astl_counter_handle_t              counter_handle        = &dummy_counter_storage;
+  std::vector<astl_counter_handle_t> available_counters{counter_handle};
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
+  ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
+      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+  ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
+      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+          astl::CollectionOperations{
+                                     {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
+  });
+  auto  output_manager   = std::make_unique<MockOutputManager>();
+  auto  orchestrator     = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
+                                              std::move(metric_manager), std::move(output_manager), cache_dir);
+  auto* orchestrator_ptr = &orchestrator;
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(
+      std::make_unique<astl::Target>("no-cache-target", "", astl::CollectorType::SCMI, nullptr, std::nullopt, "tlm-0"));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  auto* target = orchestrator.GetTargets()[0].get();
+
+  astl_collection_params_t params{};
+  params.size            = sizeof(params);
+  params.flags           = ASTL_NO_CACHING;
+  params.collection_mode = ASTL_COLLECTION_MODE_IMMEDIATE;
+  std::array<astl_counter_handle_t, 1> counters{counter_handle};
+  REQUIRE(orchestrator.ConfigureCounterCollection(target, &params, counters) == ASTL_STATUS_SUCCESS);
+
+  auto processed_sample_count = std::make_shared<std::size_t>(0);
+  REQUIRE_CALL(*metric_ptr, ProcessRawSamples(_))
+      .SIDE_EFFECT(*processed_sample_count = _1.at(target).size())
+      .RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*collector_ptr, ReadImmediateOnTarget(target))
+      .SIDE_EFFECT({
+        std::vector<astl::RawSampledData> samples{
+            astl::RawSampledData{astl::kFirstAssignableOperationId, astl::AstlValue{uint64_t{7}}}
+        };
+        REQUIRE(orchestrator_ptr->SinkRawSamples(target, samples) == ASTL_STATUS_SUCCESS);
+      })
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  REQUIRE(orchestrator.ReadImmediate(target) == ASTL_STATUS_SUCCESS);
+  REQUIRE(*processed_sample_count == 1U);
+  REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
+  REQUIRE_FALSE(std::filesystem::exists(cache_dir / (astl::GetStableTargetKey(*target) + astl::kAstlFileExtension)));
+}
+
+TEST_CASE("Orchestrator-ReadImmediate keeps default cached samples unavailable until stop", "[Orchestrator][cache]") {
+  const std::filesystem::path cache_dir = std::filesystem::temp_directory_path() / "astl_read_immediate_cached";
+  TempFileGuard               cache_guard(cache_dir);
+
+  auto  topology_manager  = std::make_unique<MockTopologyManager>();
+  auto  collector_manager = std::make_unique<MockCollectorManager>();
+  auto* collector_ptr     = collector_manager.get();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
+      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+  ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
+
+  auto                               metric_manager        = std::make_unique<MockMetricManager>();
+  static int                         dummy_counter_storage = 0;
+  astl_counter_handle_t              counter_handle        = &dummy_counter_storage;
+  std::vector<astl_counter_handle_t> available_counters{counter_handle};
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
+  ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
+      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+  ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
+      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+          astl::CollectionOperations{
+                                     {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
+  });
+  auto  output_manager   = std::make_unique<MockOutputManager>();
+  auto  orchestrator     = astl::Orchestrator(std::move(topology_manager), std::move(collector_manager),
+                                              std::move(metric_manager), std::move(output_manager), cache_dir);
+  auto* orchestrator_ptr = &orchestrator;
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(
+      std::make_unique<astl::Target>("cached-target", "", astl::CollectorType::SCMI, nullptr, std::nullopt, "tlm-0"));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+  auto* target = orchestrator.GetTargets()[0].get();
+
+  astl_collection_params_t params{};
+  params.size            = sizeof(params);
+  params.flags           = 0;
+  params.collection_mode = ASTL_COLLECTION_MODE_IMMEDIATE;
+  std::array<astl_counter_handle_t, 1> counters{counter_handle};
+  REQUIRE(orchestrator.ConfigureCounterCollection(target, &params, counters) == ASTL_STATUS_SUCCESS);
+
+  REQUIRE_CALL(*collector_ptr, ReadImmediateOnTarget(target))
+      .SIDE_EFFECT({
+        std::vector<astl::RawSampledData> samples{
+            astl::RawSampledData{astl::kFirstAssignableOperationId, astl::AstlValue{uint64_t{11}}}
+        };
+        REQUIRE(orchestrator_ptr->SinkRawSamples(target, samples) == ASTL_STATUS_SUCCESS);
+      })
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  REQUIRE(orchestrator.ReadImmediate(target) == ASTL_STATUS_SUCCESS);
+  REQUIRE(orchestrator.StopCollection(target) == ASTL_STATUS_SUCCESS);
+  REQUIRE(std::filesystem::exists(cache_dir / (astl::GetStableTargetKey(*target) + astl::kAstlFileExtension)));
 }
 
 // Refactored: individual test cases for each emission scenario reduce cognitive complexity

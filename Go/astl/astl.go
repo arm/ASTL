@@ -192,6 +192,7 @@ const (
 	CollectionParameterFlagOptimizeOverhead     CollectionParameterFlags = CollectionParameterFlags(C.ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD)
 	CollectionParameterFlagOptimizeMemory       CollectionParameterFlags = CollectionParameterFlags(C.ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY)
 	CollectionParameterFlagOptimizeInterference CollectionParameterFlags = CollectionParameterFlags(C.ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE)
+	CollectionParameterFlagNoCaching            CollectionParameterFlags = CollectionParameterFlags(C.ASTL_NO_CACHING)
 )
 
 type MetricStatisticsFlags uint32

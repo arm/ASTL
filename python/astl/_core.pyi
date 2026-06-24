@@ -48,6 +48,13 @@ class CollectionMode:  # minimal enum-like stub
     SAMPLING: int
     SNAPSHOT: int
 
+class CollectionParameterFlags:  # minimal enum-like stub
+    NONE: int
+    OPTIMIZE_OVERHEAD: int
+    OPTIMIZE_MEMORY: int
+    OPTIMIZE_INTERFERENCE: int
+    NO_CACHING: int
+
 class MetricIdentifier:
     COUNT: int
     TEMPERATURE: int

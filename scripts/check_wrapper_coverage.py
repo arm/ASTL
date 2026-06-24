@@ -25,7 +25,7 @@ MAPPING_FILE = REPO_ROOT / "scripts" / "wrapper_coverage.json"
 
 FUNCTION_PATTERN = re.compile(r"ASTL_API\s+[^;]*?\b(astl[A-Z][A-Za-z0-9_]+)\s*\(", re.DOTALL)
 ENUM_TYPEDEF_PATTERN = re.compile(r"typedef enum _(?P<tag>[A-Za-z0-9_]+)\s*{(?P<body>.*?)}\s*(?P<name>[A-Za-z0-9_]+)\s*;", re.DOTALL)
-ENUM_ENTRY_PATTERN_TEMPLATE = r"\b({prefix}[A-Z0-9_]+)\b\s*=\s*([^,\n/]+)"
+ENUM_ENTRY_PATTERN_TEMPLATE = r"\b({symbols})\b\s*=\s*([^,\n/]+)"
 PYTHON_FUNCTION_PATTERN = r"\b(?:cpdef|def)\s+(?:[A-Za-z_][A-Za-z0-9_]*\s+)?{name}\s*\("
 GO_FUNCTION_PATTERN = r"\bfunc\s+(?:\([^)]*\)\s*)?{name}\s*\("
 PYTHON_STATUS_PATTERN = re.compile(r"^\s+([A-Z][A-Z0-9_]+)\s*=\s*ASTL_STATUS_[A-Z0-9_]+", re.MULTILINE)
@@ -92,6 +92,7 @@ GO_COLLECTION_PARAMETER_FLAGS_CONSTANTS = {
     "CollectionParameterFlagOptimizeOverhead": "ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD",
     "CollectionParameterFlagOptimizeMemory": "ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY",
     "CollectionParameterFlagOptimizeInterference": "ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE",
+    "CollectionParameterFlagNoCaching": "ASTL_NO_CACHING",
 }
 
 GO_METRIC_STATISTICS_FLAGS_CONSTANTS = {
@@ -274,13 +275,15 @@ def extract_c_public_status_constants() -> dict[str, str]:
     return public_statuses
 
 
-def extract_c_enum_constants(enum_name: str, prefix: str) -> dict[str, str]:
+def extract_c_enum_constants(enum_name: str, prefix: str, extra_symbols: tuple[str, ...] = ()) -> dict[str, str]:
     for header in HEADERS:
         text = load_text(header)
         for match in ENUM_TYPEDEF_PATTERN.finditer(text):
             if match.group("name") != enum_name:
                 continue
-            entry_pattern = re.compile(ENUM_ENTRY_PATTERN_TEMPLATE.format(prefix=re.escape(prefix)))
+            symbol_patterns = [re.escape(prefix) + r"[A-Z0-9_]+"]
+            symbol_patterns.extend(re.escape(symbol) for symbol in extra_symbols)
+            entry_pattern = re.compile(ENUM_ENTRY_PATTERN_TEMPLATE.format(symbols="|".join(symbol_patterns)))
             return {name: value.strip() for name, value in entry_pattern.findall(match.group("body"))}
     # Do not raise here so that callers can report a structured wrapper-coverage  
     # failure instead of terminating with a traceback in CI.  
@@ -490,7 +493,8 @@ def validate_go_enum_coverage(
     if c_enum_name == "astl_status_code":
         c_enum_constants = extract_c_public_status_constants()
     else:
-        c_enum_constants = extract_c_enum_constants(c_enum_name, c_prefix)
+        extra_symbols = tuple(symbol for symbol in expected_constants.values() if not symbol.startswith(c_prefix))
+        c_enum_constants = extract_c_enum_constants(c_enum_name, c_prefix, extra_symbols)
     go_constants = go_typed_constants(type_name)
     errors = validate_constant_mapping_inventory(
         set(c_enum_constants),

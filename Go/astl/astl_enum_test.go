@@ -206,6 +206,7 @@ func TestCollectionParameterFlagsABIParity(t *testing.T) {
 		{"optimize_overhead", CollectionParameterFlagOptimizeOverhead, 1 << 0},
 		{"optimize_memory", CollectionParameterFlagOptimizeMemory, 1 << 1},
 		{"optimize_interference", CollectionParameterFlagOptimizeInterference, 1 << 2},
+		{"no_caching", CollectionParameterFlagNoCaching, 1 << 3},
 	}
 
 	for _, testCase := range testCases {

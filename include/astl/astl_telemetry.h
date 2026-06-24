@@ -795,13 +795,15 @@ typedef enum _astl_collection_parameters_flags_t {
   ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY       = (1U << 1),  //!< Minimize memory usage
   ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE = (1U << 2),  //!< Minimize disruption of normal behavior
                                                                       //!< of the system
+  ASTL_NO_CACHING = (1U << 3),  //!< Keep samples in memory for retrieval without retaining raw samples for
+                                //!< ASTL serialization.
 } astl_collection_parameters_flags_t;
 
 /** collection parameter structure describes parameters for the collection
  */
 typedef struct _astl_collection_params_t {
   size_t   size;               //!< Size of this struct for versioning; set size to sizeof(astl_collection_params_t).
-  uint32_t flags;              //!< Optimization preference flags (ASTL_COLLECTION_PARAMETERS_FLAG_* masks).
+  uint32_t flags;              //!< Collection behavior flags (ASTL_COLLECTION_PARAMETERS_FLAG_* and ASTL_NO_CACHING).
   uint32_t sampling_interval;  //!< optional, used to set the sampling interval in ms if the
                                //!< collection mode is set to ASTL_COLLECTION_MODE_SAMPLING.
   astl_collection_mode_t collection_mode;  //!< SAMPLING, SNAPSHOT, IMMEDIATE.

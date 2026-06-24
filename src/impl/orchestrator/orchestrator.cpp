@@ -191,6 +191,10 @@ auto Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets)
     }
     _target_collection_states.swap(updated_states);
   }
+  {
+    std::lock_guard raw_samples_lock(_raw_samples_mtx);
+    _no_cache_targets.clear();
+  }
   _metric_manager->RemoveAllMetrics();
   return ASTL_STATUS_SUCCESS;
 }
@@ -242,6 +246,14 @@ auto Orchestrator::ConfigureCounterCollection(const ITarget *target, const astl_
     return status;
   }
   ResetFinalOutputEmissionState();
+  {
+    std::lock_guard raw_samples_lock(_raw_samples_mtx);
+    if ((collection_params->flags & ASTL_NO_CACHING) != 0U) {
+      _no_cache_targets.insert(target);
+    } else {
+      _no_cache_targets.erase(target);
+    }
+  }
   {
     std::lock_guard state_lock(_collection_state_mutex);
     _target_collection_states[target] = TargetCollectionState::CONFIGURED;
@@ -297,6 +309,14 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_c
     return status;
   }
   ResetFinalOutputEmissionState();
+  {
+    std::lock_guard raw_samples_lock(_raw_samples_mtx);
+    if ((collection_params->flags & ASTL_NO_CACHING) != 0U) {
+      _no_cache_targets.insert(target);
+    } else {
+      _no_cache_targets.erase(target);
+    }
+  }
   {
     std::lock_guard state_lock(_collection_state_mutex);
     _target_collection_states[target] = TargetCollectionState::CONFIGURED;
@@ -816,30 +836,45 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
   const auto stable_target_key = GetStableTargetKey(*target);
 
   if (!raw_samples.empty()) [[likely]] {
+    std::vector<RawSampledData> samples_to_process{raw_samples.begin(), raw_samples.end()};
     std::vector<RawSampledData> batch_samples{};
-    std::scoped_lock            lock{_raw_samples_mtx};
-    auto                       &target_samples_vec = _raw_samples[target];
-
-    if (target_samples_vec.size() >= kMaxSamplesPerBatch) {
-      ASTL_LOG_DEBUG("target_sample_vec size {} exceeded max batch size {}, serializing current batch",
-                     target_samples_vec.size(), kMaxSamplesPerBatch);
-      batch_samples.swap(target_samples_vec);
+    bool                        cache_suppressed = false;
+    {
+      std::scoped_lock lock{_raw_samples_mtx};
+      cache_suppressed = _no_cache_targets.contains(target);
+    }
+    if (cache_suppressed) {
+      RawSamplesMap uncached_samples{
+          {target, std::move(samples_to_process)}
+      };
+      return _metric_manager->ProcessRawSamples(uncached_samples);
     }
 
-    // Bulk reserve once based on total required size rather than per-sample growth decisions.
-    // We keep the 1.5x + bias heuristic but ensure we always meet the exact required size.
-    const auto required_size = target_samples_vec.size() + raw_samples.size();
-    if (target_samples_vec.capacity() < required_size) {
-      auto current       = target_samples_vec.size();
-      auto heuristic_cap = static_cast<size_t>((current * kRawSampleGrowthNumerator / kRawSampleGrowthDenominator) +
-                                               kRawSampleGrowthBias);
-      // Guarantee capacity is at least the immediate requirement (heuristic may be smaller when current==0).
-      auto new_cap = std::max(required_size, heuristic_cap);
-      target_samples_vec.reserve(new_cap);
-    }
+    {
+      std::scoped_lock lock{_raw_samples_mtx};
+      auto            &target_samples_vec = _raw_samples[target];
 
-    // Single bulk insert instead of repeated push_back calls.
-    target_samples_vec.insert(target_samples_vec.end(), raw_samples.begin(), raw_samples.end());
+      if (target_samples_vec.size() >= kMaxSamplesPerBatch) {
+        ASTL_LOG_DEBUG("target_sample_vec size {} exceeded max batch size {}, serializing current batch",
+                       target_samples_vec.size(), kMaxSamplesPerBatch);
+        batch_samples.swap(target_samples_vec);
+      }
+
+      // Bulk reserve once based on total required size rather than per-sample growth decisions.
+      // We keep the 1.5x + bias heuristic but ensure we always meet the exact required size.
+      const auto required_size = target_samples_vec.size() + raw_samples.size();
+      if (target_samples_vec.capacity() < required_size) {
+        auto current       = target_samples_vec.size();
+        auto heuristic_cap = static_cast<size_t>((current * kRawSampleGrowthNumerator / kRawSampleGrowthDenominator) +
+                                                 kRawSampleGrowthBias);
+        // Guarantee capacity is at least the immediate requirement (heuristic may be smaller when current==0).
+        auto new_cap = std::max(required_size, heuristic_cap);
+        target_samples_vec.reserve(new_cap);
+      }
+
+      // Single bulk insert instead of repeated push_back calls.
+      target_samples_vec.insert(target_samples_vec.end(), raw_samples.begin(), raw_samples.end());
+    }
 
     // Preserve per-sample debug logging (separate pass keeps insertion branch-predictable / cache-friendly).
     for (const auto &sample : raw_samples) {
@@ -857,6 +892,28 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
   }
 
   return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::ConsumeProcessedMetricSamplesIfUncached(const IMetric *metric, const ITarget *target) -> void {
+  if (!metric || !target) {
+    return;
+  }
+  {
+    std::scoped_lock raw_lock{_raw_samples_mtx};
+    if (!_no_cache_targets.contains(target)) {
+      return;
+    }
+  }
+
+  std::scoped_lock processed_lock{_processed_samples_mtx};
+  auto             target_it = _processed_samples.find(target);
+  if (target_it == _processed_samples.end()) {
+    return;
+  }
+  target_it->second.erase(metric);
+  if (target_it->second.empty()) {
+    _processed_samples.erase(target_it);
+  }
 }
 
 auto Orchestrator::SinkProcessedSamples(const ITarget *target, const IMetric *metric,

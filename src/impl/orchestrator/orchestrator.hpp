@@ -11,6 +11,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <unordered_set>
 #include <vector>
 
 #include "astl/astl.h"
@@ -391,6 +392,13 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
       -> std::expected<std::span<const astl::ProcessedSampledData>, astl_status_code>;
 
   /**
+   * @brief Drop processed samples for metrics populated by ASTL_NO_CACHING configured collection.
+   *
+   * This is used after a successful samples API copy-out so no-cache immediate samples are consumable.
+   */
+  auto ConsumeProcessedMetricSamplesIfUncached(const IMetric *metric, const ITarget *target) -> void;
+
+  /**
    * @brief Implementation of the IProcessedSampleSink interface - Receives processed samples from MetricManager
    */
   auto SinkProcessedSamples(const ITarget *target, const IMetric *metric,
@@ -594,6 +602,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   std::unique_ptr<IOutputManager>       _output_manager;     // manages the output of processed samples
   RawSamplesMap                         _raw_samples;        // collected raw samples, organized by target
   mutable std::mutex                    _raw_samples_mtx;    // protect the _raw_samples container
+  std::unordered_set<const ITarget *>   _no_cache_targets;
   mutable ProcessedSamplesMap           _processed_samples;  // processed metric samples, organized by target and metric
   mutable std::mutex                    _processed_samples_mtx;  // protect the _processed_samples container
   std::atomic<FinalOutputEmissionState> _perfetto_emission_state{FinalOutputEmissionState::NOT_EMITTED};

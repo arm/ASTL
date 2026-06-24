@@ -221,6 +221,16 @@ auto GetProcessedMetricSamples(const astl::IMetric* metric, const astl::ITarget*
   return samples_result;
 }
 
+auto ConsumeProcessedMetricSamplesIfUncached(const astl::IMetric* metric, const astl::ITarget* target) noexcept
+    -> void {
+  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
+  if (!orchestrator_or_error) {
+    return;
+  }
+  const auto& orchestrator = orchestrator_or_error->get();
+  orchestrator->ConsumeProcessedMetricSamplesIfUncached(metric, target);
+}
+
 auto ValidateTimestampRange(const char* api_name, uint64_t start_ts, uint64_t end_ts) noexcept -> astl_status_code {
   if (start_ts != 0 && end_ts != 0 && start_ts > end_ts) {
     ASTL_LOG_ERROR("{}: start_ts ({}) must be <= end_ts ({})", api_name, start_ts, end_ts);
@@ -328,13 +338,17 @@ auto ValidateApiParams(const ParamsT* params) noexcept -> astl_status_code {
 auto ValidateCollectionParamsFlags(const astl_collection_params_t* collection_params) noexcept -> astl_status_code {
   const uint32_t k_allowed_collection_flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD |
                                               ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY |
-                                              ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE;
+                                              ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE | ASTL_NO_CACHING;
+  const uint32_t k_optimization_flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD |
+                                        ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY |
+                                        ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE;
   const uint32_t request_flags = collection_params->flags;
   if ((request_flags & ~k_allowed_collection_flags) != 0U) {
     return ASTL_STATUS_INVALID_FLAG_VALUE;
   }
   // Optimization flags are mutually exclusive.
-  if (request_flags != 0U && ((request_flags & (request_flags - 1U)) != 0U)) {
+  const uint32_t optimization_request_flags = request_flags & k_optimization_flags;
+  if (optimization_request_flags != 0U && ((optimization_request_flags & (optimization_request_flags - 1U)) != 0U)) {
     return ASTL_STATUS_INVALID_FLAG_VALUE;
   }
   return ASTL_STATUS_SUCCESS;
@@ -791,6 +805,7 @@ auto PopulateCounterSamplesOutput(const CounterSamplesRequest& request, uint64_t
   }
 
   CopyProcessedSamplesToOutput(filtered_samples, request.output_samples);
+  ConsumeProcessedMetricSamplesIfUncached(request.counter, request.target);
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -2845,6 +2860,7 @@ auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params
         status = ValidateMetricSamplesOutputCapacity(request, filtered_samples);
         if (status == ASTL_STATUS_SUCCESS) {
           CopyProcessedSamplesToOutput(filtered_samples, request.output_samples);
+          ConsumeProcessedMetricSamplesIfUncached(request.metric, request.target);
         }
       }
     }

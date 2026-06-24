@@ -773,6 +773,25 @@ TEST_CASE("astlConfigureMetricCollectionOnTarget", "[Orchestrator][wrapper]") {
             ASTL_STATUS_SUCCESS);
   }
 
+  SECTION("[valid no-caching flag][wrapper]") {
+    collection_params.flags = ASTL_NO_CACHING | ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY;
+    REQUIRE_CALL(*collector_manager_ptr_for_require_calls, ConfigureCollectionOnTarget(_, _, _))
+        .RETURN(ASTL_STATUS_SUCCESS);
+    REQUIRE(ConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles.data(), 1) ==
+            ASTL_STATUS_SUCCESS);
+  }
+
+  SECTION("[invalid collection flags][wrapper]") {
+    collection_params.flags =
+        ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD | ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY;
+    REQUIRE(ConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles.data(), 1) ==
+            ASTL_STATUS_INVALID_FLAG_VALUE);
+
+    collection_params.flags = 0x80000000U;
+    REQUIRE(ConfigureMetricCollectionOnTarget(target_handle, &collection_params, metric_handles.data(), 1) ==
+            ASTL_STATUS_INVALID_FLAG_VALUE);
+  }
+
   SECTION("[valid input][wrapper][deduplicates repeated metric handles]") {
     REQUIRE_CALL(*metric_manager_ptr, GetRequiredOperations(_, _))
         .LR_WITH(_1.size() == 1)
@@ -953,6 +972,13 @@ TEST_CASE("astlReadImmediate", "[with 0 targets][wrapper]") {
   auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));
   REQUIRE(ReadImmediate() == ASTL_STATUS_SUCCESS);
+
+  ASTL_INIT_STRUCT(astl_read_immediate_params_t, invalid_params, .flags = 1U);
+  REQUIRE(astlReadImmediate(&invalid_params) == ASTL_STATUS_INVALID_FLAG_VALUE);
+
+  ASTL_INIT_STRUCT(astl_read_immediate_on_target_params_t, invalid_on_target_params, .flags = 1U,
+                   .target_handle = nullptr);
+  REQUIRE(astlReadImmediateOnTarget(&invalid_on_target_params) == ASTL_STATUS_INVALID_FLAG_VALUE);
 }
 
 TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {

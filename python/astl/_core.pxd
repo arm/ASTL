@@ -237,6 +237,7 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD = (1 << 0)
         ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_MEMORY = (1 << 1)
         ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_INTERFERENCE = (1 << 2)
+        ASTL_NO_CACHING = (1 << 3)
     ctypedef int astl_collection_parameters_flags_t
 
     cdef struct _astl_collection_params_t:
