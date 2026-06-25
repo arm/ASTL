@@ -12,43 +12,38 @@ path = "VERSION.md"
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
-
 # Annotate all .json config files with the Apache-2.0 license
 [[annotations]]
 path = "**/*.json"
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
-# generaged images from documentation
+# documentation
 [[annotations]]
-path = "doc/design/*.svg"
+path = ["doc/*.pdf", "tools/ATX/doc/*.pdf", "doc/**/*.svg"]
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = "doc/*.svg"
-SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
-SPDX-License-Identifier = "Apache-2.0"
-
-
-
 
 # Test output files for comparison with expected output, but ignore them for linting
 [[annotations]]
-path = "tools/mock_sysfs/unit_tests/**/expected.txt"
+path = ["tools/ATX/tests/kernel_tests/**/expected.txt", "tools/mock_sysfs/**/**/expected.txt"]
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
-# Test config
+# Test, demo config
 [[annotations]]
-path = "tools/mock_sysfs/config/*.csv"
+path = ["tools/mock_sysfs/config/*.csv", "tests/demo/data/*.csv"]
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
-# demo config
+# function test cases gold files
 [[annotations]]
-path = "tests/demo/data/*.csv"
+path = "tests/functional/cases/atx/**/*.gold"
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
-
+# .astl files are binary. they mostly live in function test cases
+[[annotations]]
+path = "**/*.astl"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
