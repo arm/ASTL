@@ -4,7 +4,10 @@
 
 package astl
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestVersionStringNonEmpty(t *testing.T) {
 	if VersionString() == "" {
@@ -19,8 +22,50 @@ func TestStatusNameNonEmpty(t *testing.T) {
 }
 
 func TestGetSystemInfo(t *testing.T) {
-	if _, err := GetSystemInfo(); err != nil {
+	info, err := GetSystemInfo()
+	if err != nil {
 		t.Fatalf("GetSystemInfo failed: %v", err)
+	}
+	if info.Flags != SystemInfoFlagHost && info.Flags != SystemInfoFlagLoadedSession {
+		t.Fatalf("SystemInfo.Flags = %#x, want host or loaded-session", info.Flags)
+	}
+}
+
+func TestSystemInfoFieldsMatchCPlatformProps(t *testing.T) {
+	gotType := reflect.TypeOf(SystemInfo{})
+	gotFields := make([]string, 0, gotType.NumField())
+	for index := 0; index < gotType.NumField(); index++ {
+		gotFields = append(gotFields, gotType.Field(index).Name)
+	}
+
+	wantFields := []string{
+		"Flags",
+		"SoCName",
+		"VendorID",
+		"OSName",
+		"KernelName",
+		"KernelVersion",
+		"KernelRelease",
+		"FirmwareVersion",
+		"Hostname",
+		"Architecture",
+		"CPUType",
+		"CPUFeatures",
+		"CacheInfo",
+		"CoreCount",
+		"NUMANodeCount",
+		"SocketCount",
+		"CacheLineSizeBytes",
+		"MemoryTotalBytes",
+		"LibcVersion",
+		"BootInfo",
+		"HugePagesTotal",
+		"HugePageSizeKB",
+		"TransparentHugePages",
+	}
+
+	if !reflect.DeepEqual(gotFields, wantFields) {
+		t.Fatalf("SystemInfo fields = %#v, want %#v", gotFields, wantFields)
 	}
 }
 

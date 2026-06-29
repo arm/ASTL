@@ -216,7 +216,7 @@ type Version struct {
 }
 
 type SystemInfo struct {
-	Flags                uint32
+	Flags                SystemInfoFlags
 	SoCName              string
 	VendorID             string
 	OSName               string
@@ -232,9 +232,8 @@ type SystemInfo struct {
 	CoreCount            uint32
 	NUMANodeCount        uint32
 	SocketCount          uint32
-	CacheLineSize        uint32
-	MemoryTotal          uint64
-	DistroName           string
+	CacheLineSizeBytes   uint32
+	MemoryTotalBytes     uint64
 	LibcVersion          string
 	BootInfo             string
 	HugePagesTotal       int64
@@ -336,10 +335,11 @@ func GetSystemInfoWithFlags(flags SystemInfoFlags) (SystemInfo, error) {
 		return SystemInfo{}, err
 	}
 	defer release()
+	info.flags = C.uint32_t(flags)
 
 	params := C.astl_get_system_info_params_t{
 		size:        C.size_t(C.sizeof_astl_get_system_info_params_t),
-		flags:       C.uint32_t(flags),
+		flags:       0,
 		system_info: info,
 	}
 
@@ -348,7 +348,7 @@ func GetSystemInfoWithFlags(flags SystemInfoFlags) (SystemInfo, error) {
 	}
 
 	return SystemInfo{
-		Flags:                uint32(info.flags),
+		Flags:                SystemInfoFlags(info.flags),
 		SoCName:              goString(info.soc_name),
 		VendorID:             goString(info.vendor_id),
 		OSName:               goString(info.os_name),

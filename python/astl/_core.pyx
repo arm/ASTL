@@ -217,6 +217,7 @@ cpdef dict get_system_info():
     params.system_info = &info
     _check(astlGetSystemInfo(&params))
     return {
+        "flags": info.flags,
         "soc_name": info.soc_name.decode() if info.soc_name != NULL else None,
         "vendor_id": info.vendor_id.decode() if info.vendor_id != NULL else None,
         "os_name": info.os_name.decode() if info.os_name != NULL else None,

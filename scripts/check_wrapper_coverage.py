@@ -26,8 +26,16 @@ MAPPING_FILE = REPO_ROOT / "scripts" / "wrapper_coverage.json"
 FUNCTION_PATTERN = re.compile(r"ASTL_API\s+[^;]*?\b(astl[A-Z][A-Za-z0-9_]+)\s*\(", re.DOTALL)
 ENUM_TYPEDEF_PATTERN = re.compile(r"typedef enum _(?P<tag>[A-Za-z0-9_]+)\s*{(?P<body>.*?)}\s*(?P<name>[A-Za-z0-9_]+)\s*;", re.DOTALL)
 ENUM_ENTRY_PATTERN_TEMPLATE = r"\b({symbols})\b\s*=\s*([^,\n/]+)"
+STRUCT_TYPEDEF_PATTERN_TEMPLATE = r"typedef struct _{tag}\s*{{(?P<body>.*?)}}\s*{name}\s*;"
+STRUCT_FIELD_PATTERN = re.compile(
+    r"^\s*(?:const\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\*?\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*;",
+    re.MULTILINE,
+)
 PYTHON_FUNCTION_PATTERN = r"\b(?:cpdef|def)\s+(?:[A-Za-z_][A-Za-z0-9_]*\s+)?{name}\s*\("
+PYTHON_DICT_KEY_PATTERN = re.compile(r"^\s+\"([A-Za-z_][A-Za-z0-9_]*)\"\s*:", re.MULTILINE)
 GO_FUNCTION_PATTERN = r"\bfunc\s+(?:\([^)]*\)\s*)?{name}\s*\("
+GO_STRUCT_PATTERN_TEMPLATE = r"type\s+{name}\s+struct\s*{{(?P<body>.*?)^}}"
+GO_STRUCT_FIELD_PATTERN = re.compile(r"^\s*([A-Z][A-Za-z0-9_]*)\s+", re.MULTILINE)
 PYTHON_STATUS_PATTERN = re.compile(r"^\s+([A-Z][A-Z0-9_]+)\s*=\s*ASTL_STATUS_[A-Z0-9_]+", re.MULTILINE)
 GO_STATUS_PATTERN = re.compile(r"^\s*(Status[A-Za-z0-9]+)\s+Status\s*=", re.MULTILINE)
 PYTHON_CLASS_PATTERN_TEMPLATE = r"^class {name}:\n(?P<body>(?:^(?:    |\t).*\n)+)"
@@ -121,6 +129,32 @@ GO_UNITS_CONSTANTS = {
     "UnitsRPM": "ASTL_UNITS_RPM",
     "UnitsCount": "ASTL_UNITS_COUNT",
     "UnitsPercent": "ASTL_UNITS_PERCENT",
+}
+
+GO_SYSTEM_INFO_FIELD_NAMES = {
+    "flags": "Flags",
+    "soc_name": "SoCName",
+    "vendor_id": "VendorID",
+    "os_name": "OSName",
+    "kernel_name": "KernelName",
+    "kernel_version": "KernelVersion",
+    "kernel_release": "KernelRelease",
+    "firmware_version": "FirmwareVersion",
+    "hostname": "Hostname",
+    "architecture": "Architecture",
+    "cpu_type": "CPUType",
+    "cpu_features": "CPUFeatures",
+    "cache_info": "CacheInfo",
+    "core_count": "CoreCount",
+    "numa_node_count": "NUMANodeCount",
+    "socket_count": "SocketCount",
+    "cache_line_size_bytes": "CacheLineSizeBytes",
+    "memory_total_bytes": "MemoryTotalBytes",
+    "libc_version": "LibcVersion",
+    "boot_info": "BootInfo",
+    "huge_pages_total": "HugePagesTotal",
+    "huge_page_size_kb": "HugePageSizeKB",
+    "transparent_huge_pages": "TransparentHugePages",
 }
 
 
@@ -291,6 +325,25 @@ def extract_c_enum_constants(enum_name: str, prefix: str, extra_symbols: tuple[s
     return {}  
 
 
+def strip_c_comments(text: str) -> str:
+    without_block_comments = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    return re.sub(r"//.*", "", without_block_comments)
+
+
+def extract_c_struct_fields(struct_tag: str, typedef_name: str) -> list[str]:
+    pattern = re.compile(
+        STRUCT_TYPEDEF_PATTERN_TEMPLATE.format(tag=re.escape(struct_tag), name=re.escape(typedef_name)),
+        re.DOTALL,
+    )
+    for header in HEADERS:
+        match = pattern.search(load_text(header))
+        if match is None:
+            continue
+        return STRUCT_FIELD_PATTERN.findall(strip_c_comments(match.group("body")))
+    sys.stderr.write(f"error: struct typedef '{typedef_name}' not found in public headers\n")
+    return []
+
+
 def load_mapping() -> dict[str, dict[str, dict[str, str]]]:
     data = json.loads(load_text(MAPPING_FILE))
     return data["functions"]
@@ -327,6 +380,29 @@ def go_typed_constants(type_name: str) -> dict[str, str]:
         if declared_type == type_name:
             constants[name] = value.strip()
     return constants
+
+
+def python_returned_dict_keys(function_name: str) -> set[str]:
+    text = load_text(PYTHON_CORE)
+    match = re.search(
+        rf"\bcpdef\s+dict\s+{re.escape(function_name)}\s*\([^)]*\):(?P<body>.*?)(?=^cpdef\s+|^def\s+|\Z)",
+        text,
+        re.DOTALL | re.MULTILINE,
+    )
+    if match is None:
+        return set()
+    return set(PYTHON_DICT_KEY_PATTERN.findall(match.group("body")))
+
+
+def go_struct_fields(struct_name: str) -> set[str]:
+    match = re.search(
+        GO_STRUCT_PATTERN_TEMPLATE.format(name=re.escape(struct_name)),
+        load_text(GO_WRAPPER),
+        re.DOTALL | re.MULTILINE,
+    )
+    if match is None:
+        return set()
+    return set(GO_STRUCT_FIELD_PATTERN.findall(match.group("body")))
 
 
 def normalize_go_constant_value(value: str) -> str:
@@ -527,6 +603,43 @@ def validate_go_enums() -> list[str]:
     return errors
 
 
+def validate_system_info_field_coverage() -> list[str]:
+    c_fields = [
+        field
+        for field in extract_c_struct_fields("astl_platform_props_t", "astl_platform_props_t")
+        if field != "size"
+    ]
+    expected_python_fields = set(c_fields)
+    expected_go_fields = {
+        GO_SYSTEM_INFO_FIELD_NAMES[field]
+        for field in c_fields
+        if field in GO_SYSTEM_INFO_FIELD_NAMES
+    }
+
+    errors = validate_symbol_sets(
+        expected_python_fields,
+        python_returned_dict_keys("get_system_info"),
+        "Python get_system_info() is missing astl_platform_props_t fields: ",
+        "Python get_system_info() has stale fields not present in astl_platform_props_t: ",
+    )
+
+    missing_go_mappings = sorted(set(c_fields) - set(GO_SYSTEM_INFO_FIELD_NAMES))
+    append_message(
+        errors,
+        "Wrapper coverage script is missing Go SystemInfo field-name mappings for C fields: ",
+        missing_go_mappings,
+    )
+    errors.extend(
+        validate_symbol_sets(
+            expected_go_fields,
+            go_struct_fields("SystemInfo"),
+            "Go SystemInfo wrapper is missing astl_platform_props_t fields: ",
+            "Go SystemInfo wrapper has stale fields not present in astl_platform_props_t: ",
+        )
+    )
+    return errors
+
+
 def print_success_summary(c_functions: list[str]) -> None:
     summary = [
         ("Public C functions covered or annotated", len(c_functions)),
@@ -542,6 +655,10 @@ def print_success_summary(c_functions: list[str]) -> None:
         ("Go CollectionParameterFlags constants mirrored", len(GO_COLLECTION_PARAMETER_FLAGS_CONSTANTS)),
         ("Go MetricStatisticsFlags constants mirrored", len(GO_METRIC_STATISTICS_FLAGS_CONSTANTS)),
         ("Go SystemInfoFlags constants mirrored", len(GO_SYSTEM_INFO_FLAGS_CONSTANTS)),
+        (
+            "SystemInfo fields mirrored in Python and Go",
+            len(extract_c_struct_fields("astl_platform_props_t", "astl_platform_props_t")) - 1,
+        ),
     ]
     print("Wrapper coverage check passed.")
     for label, count in summary:
@@ -557,7 +674,12 @@ def main() -> int:
     mapping_errors, mapping_warnings = validate_function_mapping(c_functions, mapping)
     errors.extend(mapping_errors)
     warnings.extend(mapping_warnings)
-    for validator in (validate_status_coverage, validate_python_metric_identifier_coverage, validate_go_enums):
+    for validator in (
+        validate_status_coverage,
+        validate_python_metric_identifier_coverage,
+        validate_go_enums,
+        validate_system_info_field_coverage,
+    ):
         errors.extend(validator())
 
     for warning in warnings:

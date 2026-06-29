@@ -13,6 +13,7 @@ def test_get_system_info_api_exists_and_returns_mapping():
     assert isinstance(info, dict)
 
     expected_keys = {
+        "flags",
         "soc_name",
         "vendor_id",
         "os_name",
