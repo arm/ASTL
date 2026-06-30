@@ -344,6 +344,100 @@ inline auto UnitsToString(astl_units_t units) -> std::string_view {
   return units_text;
 }
 
+/**
+ * @brief Compare the digit runs starting at @p lhs[left_index] and @p rhs[right_index].
+ *
+ * Leading zeros are ignored so numeric magnitude drives the comparison. Both
+ * indices are advanced past their entire digit runs (including any leading
+ * zeros). Returns a negative, zero, or positive value mirroring the numeric
+ * ordering of the two runs.
+ *
+ * @param lhs          Left-hand string.
+ * @param left_index   In/out cursor into @p lhs; advanced past the digit run.
+ * @param rhs          Right-hand string.
+ * @param right_index  In/out cursor into @p rhs; advanced past the digit run.
+ * @return Negative if the left run is smaller, positive if larger, zero if equal.
+ */
+inline auto CompareDigitRuns(std::string_view lhs, std::size_t& left_index, std::string_view rhs,
+                             std::size_t& right_index) -> int {
+  const auto is_digit = [](char character) { return character >= '0' && character <= '9'; };
+
+  // Skip leading zeros so numeric magnitude drives the comparison.
+  std::size_t left_start = left_index;
+  while (left_start < lhs.size() && lhs[left_start] == '0') {
+    ++left_start;
+  }
+  std::size_t right_start = right_index;
+  while (right_start < rhs.size() && rhs[right_start] == '0') {
+    ++right_start;
+  }
+
+  std::size_t left_end = left_start;
+  while (left_end < lhs.size() && is_digit(lhs[left_end])) {
+    ++left_end;
+  }
+  std::size_t right_end = right_start;
+  while (right_end < rhs.size() && is_digit(rhs[right_end])) {
+    ++right_end;
+  }
+
+  // Advance the caller's cursors past both digit runs (including any zeros).
+  while (left_index < lhs.size() && is_digit(lhs[left_index])) {
+    ++left_index;
+  }
+  while (right_index < rhs.size() && is_digit(rhs[right_index])) {
+    ++right_index;
+  }
+
+  const std::size_t left_len  = left_end - left_start;
+  const std::size_t right_len = right_end - right_start;
+  if (left_len != right_len) {
+    return left_len < right_len ? -1 : 1;
+  }
+  return lhs.compare(left_start, left_len, rhs, right_start, right_len);
+}
+
+/**
+ * @brief Compare two strings using natural (human) ordering.
+ *
+ * Splits each string into runs of digits and non-digits. Digit runs are
+ * compared by numeric value (ignoring leading zeros) so that, for example,
+ * "core 2" sorts before "core 10". Non-digit runs are compared
+ * lexicographically. This avoids the purely lexicographic ordering that would
+ * otherwise place "core 10" and "core 100" before "core 2".
+ *
+ * @param lhs  Left-hand string.
+ * @param rhs  Right-hand string.
+ * @return true if @p lhs should be ordered before @p rhs.
+ */
+inline auto NaturalLess(std::string_view lhs, std::string_view rhs) -> bool {
+  const auto is_digit = [](char character) { return character >= '0' && character <= '9'; };
+
+  std::size_t left_index  = 0;
+  std::size_t right_index = 0;
+  while (left_index < lhs.size() && right_index < rhs.size()) {
+    const char left_char  = lhs[left_index];
+    const char right_char = rhs[right_index];
+
+    if (is_digit(left_char) && is_digit(right_char)) {
+      if (const int digit_cmp = CompareDigitRuns(lhs, left_index, rhs, right_index); digit_cmp != 0) {
+        return digit_cmp < 0;
+      }
+      continue;
+    }
+
+    if (left_char != right_char) {
+      return left_char < right_char;
+    }
+    ++left_index;
+    ++right_index;
+  }
+
+  // The loop exits once at least one string is exhausted; the shorter remaining
+  // suffix sorts first (e.g. "core" before "core 1").
+  return left_index >= lhs.size() && right_index < rhs.size();
+}
+
 inline auto ParseMetricType(std::string const& metric_type_str) -> astl_metric_type_t {
   auto metric_type_lower = ToLowerCopy(metric_type_str);
   if (metric_type_lower == "val" || metric_type_lower == "value") {
