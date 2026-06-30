@@ -505,7 +505,8 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::StopCollection() {
 template <typename FileInterfaceT>
 astl_status_code ScmiSysfsCollector<FileInterfaceT>::ReadImmediate() {
   std::scoped_lock lock{_collection_mutex};
-  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::CONFIGURED) ||
+  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::CONFIGURED &&
+       _collection_state != CollectionState::PAUSED) ||
       !_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot read while unconfigured or stopped
   }

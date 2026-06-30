@@ -122,11 +122,11 @@ auto GetReadImmediateTargets(astl::Orchestrator& orchestrator) noexcept -> std::
     switch (state_it->second) {
       case astl::Orchestrator::TargetCollectionState::CONFIGURED:
       case astl::Orchestrator::TargetCollectionState::STARTED:
+      case astl::Orchestrator::TargetCollectionState::PAUSED:
         readable_targets.push_back(target.get());
         break;
       case astl::Orchestrator::TargetCollectionState::UNCONFIGURED:
       case astl::Orchestrator::TargetCollectionState::STARTING:
-      case astl::Orchestrator::TargetCollectionState::PAUSED:
       case astl::Orchestrator::TargetCollectionState::STOPPED:
         break;
     }

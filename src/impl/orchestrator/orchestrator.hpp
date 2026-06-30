@@ -251,7 +251,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   auto RollbackStartedCollectionToConfigured(const ITarget *target) -> astl_status_code;
 
   /**
-   * @brief Collect one sample of data on a target with a configured collection.
+   * @brief Collect one sample of data on a target with a configured, started, or paused collection.
    *
    * @param target The target with an active collection configuration
    * @note ConfigureCounterCollection or similar should be called before ReadImmediate.

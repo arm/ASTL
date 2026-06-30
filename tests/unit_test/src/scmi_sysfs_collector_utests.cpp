@@ -920,6 +920,10 @@ TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[s
   REQUIRE_CALL(mock_file_interface, IsValid(std::filesystem::path{"des/0x00001234/tstamp_rate"}))
       .IN_SEQUENCE(seq)
       .RETURN(false);
+  REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/value"}, _))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(_2 = "1234567890 42")
+      .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(mock_file_interface, Read(std::filesystem::path{"des/0x00001234/enable"}, _))
       .IN_SEQUENCE(seq)
       .SIDE_EFFECT(_2 = "1")
@@ -934,6 +938,11 @@ TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[s
       .WITH(_2[0].operation_id == astl::kPauseResumeOperationId)
       .WITH(std::get<uint64_t>(_2[0].value.value) == 0)
       .WITH(_2[0].raw_tick > 0)
+      .RETURN(ASTL_STATUS_SUCCESS);
+  const astl::AstlValue expected_value{uint64_t{0x42}};
+  REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
+      .WITH(_2.size() == 1)
+      .WITH(_2[0].value == expected_value)
       .RETURN(ASTL_STATUS_SUCCESS);
 
   astl::ScmiSysfsCollector<MockFileInterface> collector(std::move(mock_file_interface));
@@ -962,7 +971,7 @@ TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[s
   REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
   REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
   REQUIRE(ASTL_STATUS_SUCCESS == collector.PauseCollection());
-  REQUIRE(ASTL_STATUS_BAD_CONFIGURATION == collector.ReadImmediate());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ReadImmediate());
   REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
 }
 

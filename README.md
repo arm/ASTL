@@ -434,7 +434,7 @@ status = astlResumeCollectionOnTarget(&resume_params);  // back to STARTED
 ASTL_INIT_STRUCT(astl_read_immediate_on_target_params_t, immediate_params,
                  .flags = 0,
                  .target_handle = target_properties.handle);
-status = astlReadImmediateOnTarget(&immediate_params);     // useful while CONFIGURED or STARTED
+status = astlReadImmediateOnTarget(&immediate_params);     // useful while CONFIGURED, STARTED, or PAUSED
 ASTL_INIT_STRUCT(astl_stop_collection_on_target_params_t, stop_params,
                  .flags = 0,
                  .target_handle = target_properties.handle);

@@ -217,7 +217,7 @@ TEST_CASE("ProcfsCollector enforces lifecycle state transitions", "[procfs_colle
           ASTL_STATUS_BAD_CONFIGURATION);
   REQUIRE(collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
   REQUIRE(collector.PauseCollection() == ASTL_STATUS_SUCCESS);
-  REQUIRE(collector.ReadImmediate() == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
   REQUIRE(collector.ResumeCollection() == ASTL_STATUS_SUCCESS);
   REQUIRE(collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
   REQUIRE(collector.StopCollection() == ASTL_STATUS_SUCCESS);

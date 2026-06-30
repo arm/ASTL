@@ -975,7 +975,7 @@ typedef struct astl_read_immediate_on_target_params_t {
 /**
  * @brief Do an immediate sample capture of configured counters or metrics on a specific target
  *
- * This can be called after collection configuration.
+ * This can be called while collection is configured, started, or paused.
  *
  * @param params Parameters for this call (see astl_read_immediate_on_target_params_t).
  * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
@@ -993,7 +993,7 @@ typedef struct astl_read_immediate_params_t {
 /**
  * @brief Do an immediate sample capture of configured counters or metrics on all configured targets
  *
- * This reads targets with configured or started collection state.
+ * This reads targets with configured, started, or paused collection state.
  *
  * @param params Parameters for this call (see astl_read_immediate_params_t).
  *

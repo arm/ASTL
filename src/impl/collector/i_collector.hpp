@@ -78,7 +78,7 @@ struct ICollector {
   virtual auto GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> = 0;
 
   /*
-   * @brief Collect a single sample of all the configured metrics without requiring an active collection session.
+   * @brief Collect a single sample of all the configured metrics, including while a collection is paused.
    */
   virtual auto ReadImmediate() -> astl_status_code = 0;
 };

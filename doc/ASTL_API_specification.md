@@ -490,8 +490,8 @@ main fields are:
 
 - `astlReadImmediateOnTarget`: Trigger an immediate read on one target with
   configured counters or metrics.
-- `astlReadImmediate`: Trigger immediate reads across targets with configured
-  or started counters or metrics in the active scope.
+- `astlReadImmediate`: Trigger immediate reads across targets with configured,
+  started, or paused counters or metrics in the active scope.
 - `astlStartCollectionOnTarget`: Start one configured target.
 - `astlStartCollection`: Start collection across the active scope.
 - `astlStartCollectionOnTargetPaused`: Start one target paused.
@@ -559,7 +559,7 @@ main fields are:
 5. Retrieve the captured samples
 
 Immediate reads are available as soon as the target counters or metrics have
-been configured.
+been configured, and remain available while collection is started or paused.
 
 ### Flow 3: Save And Reload
 

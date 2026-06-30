@@ -101,7 +101,8 @@ auto ProcfsCollector::StopCollection() -> astl_status_code {
 
 auto ProcfsCollector::ReadImmediate() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::CONFIGURED) ||
+  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::CONFIGURED &&
+       _collection_state != CollectionState::PAUSED) ||
       !_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
