@@ -6,6 +6,12 @@ path = "**/gplot++.h"
 SPDX-FileCopyrightText = "Copyright 2020 Maurizio Tomasi"
 SPDX-License-Identifier = "MIT"
 
+# Annotate PR template (because the license header winds up in the PR body if we put it in the .md file)
+[[annotations]]
+path = ".github/PULL_REQUEST_TEMPLATE.md"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
 # Version file is imported directly to cmake, so don't annotate it in-text
 [[annotations]]
 path = "VERSION.md"
