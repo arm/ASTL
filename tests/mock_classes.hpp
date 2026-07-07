@@ -147,6 +147,7 @@ struct MockCollectorManager : public astl::ICollectorManager {
              astl_status_code(const astl::ITarget* target, astl_collection_params_t const& collection_params,
                               astl::CollectionOperations&& configuration),
              override);
+  auto ClearConfiguredCollections() -> astl_status_code override { return ASTL_STATUS_SUCCESS; }
 
   MAKE_MOCK1(StartOnTarget, astl_status_code(const astl::ITarget* target), override);
   using ClockSnapshotRtype = std::expected<astl::ClockCorrelationMap, astl_status_code>;
@@ -162,6 +163,8 @@ struct MockCollectorManager : public astl::ICollectorManager {
 
 struct MockCollector : public astl::ICollector {
   static constexpr bool trompeloeil_movable_mock = true;
+
+  MockCollector() { ALLOW_CALL(*this, ClearCollectionState()).RETURN(ASTL_STATUS_SUCCESS); }
 
   /* @brief Get the capabilities of this collector, including the collector type. */
   MAKE_MOCK0(GetCapabilities, astl::CollectorCapability (), const override);
@@ -179,6 +182,9 @@ struct MockCollector : public astl::ICollector {
    *        the interval to sample at.
    */
   MAKE_MOCK1(ConfigureCollection, astl_status_code(astl::CollectionConfiguration&& configuration), override);
+
+  /* @brief Clear configured collection operations without active collection. */
+  MAKE_MOCK0(ClearCollectionState, astl_status_code(), override);
 
   /* @brief Start the collection of data, performing any setup operations, starting sampling async tasks, etc. */
   MAKE_MOCK0(StartCollection, astl_status_code(), override);
@@ -327,6 +333,15 @@ struct MockMetricManager : public astl::IMetricManager {
   MAKE_MOCK1(SetClockCorrelations, auto(const astl::ClockCorrelationMap& correlations)->void, override);
 
   MAKE_MOCK0(GetClockCorrelations, auto()->astl::ClockCorrelationMap, const override);
+
+  auto ClearStaleOperationStateForTarget(const astl::ITarget* target,
+                                     std::span<const astl::OperationId> active_operation_ids) -> astl_status_code override {
+    (void)target;
+    (void)active_operation_ids;
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  auto ClearCollectionOperationState() -> void override {}
 
   MAKE_MOCK1(ResetMetricsOnTarget, auto(const astl::ITarget* target)->astl_status_code, override);
 

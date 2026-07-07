@@ -74,20 +74,23 @@ auto SwitchSystemInfoToHostCapture() noexcept -> void { astl::ClearLoadedPlatfor
 // Invoke the given closure that implements a public C API function,
 // handling common concerns such as setting the last status string
 // and normalizing internal error codes to `ASTL_STATUS_INTERNAL_ERROR`.
+auto NormalizePublicApiStatus(astl_status_code status) noexcept -> astl_status_code {
+  auto public_status = status;
+  if (status == ASTL_STATUS_SUCCESS) {
+    astl::ClearLastStatusString();
+  } else if (astl::IsInternalStatus(status)) {
+    astl::MaybeSetLastStatusFallback(status);
+    public_status = ASTL_STATUS_INTERNAL_ERROR;
+  } else {
+    astl::MaybeSetLastStatusFallback(status);
+  }
+  return public_status;
+}
+
 template <typename Closure>
 auto RunPublicApi(Closure&& func) noexcept -> astl_status_code {
   astl::ClearLastStatusString();
-  const auto status = std::forward<Closure>(func)();
-  if (status == ASTL_STATUS_SUCCESS) {
-    astl::ClearLastStatusString();
-    return ASTL_STATUS_SUCCESS;
-  }
-  if (astl::IsInternalStatus(status)) {
-    astl::MaybeSetLastStatusFallback(status);
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-  astl::MaybeSetLastStatusFallback(status);
-  return status;
+  return NormalizePublicApiStatus(std::forward<Closure>(func)());
 }
 
 auto GetCApiMutex() noexcept -> std::mutex& {
@@ -333,6 +336,20 @@ auto ValidateApiParams(const ParamsT* params) noexcept -> astl_status_code {
     return ASTL_STATUS_INVALID_FLAG_VALUE;
   }
   return ASTL_STATUS_SUCCESS;
+}
+
+template <typename ParamsT>
+auto ResolveTargetFromApiParams(const ParamsT* params) noexcept
+    -> std::expected<const astl::ITarget*, astl_status_code> {
+  const auto params_status = ValidateApiParams(params);
+  if (params_status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected{params_status};
+  }
+  const auto* target_handle = params->target_handle;
+  if (!target_handle) {
+    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
+  return GetTargetFromHandle(target_handle);
 }
 
 auto ValidateCollectionParamsFlags(const astl_collection_params_t* collection_params) noexcept -> astl_status_code {
@@ -2092,6 +2109,11 @@ struct MetricGroupCollectionContext {
   astl::IMetricManager* metric_manager{nullptr};
 };
 
+struct TargetMetricHandles {
+  const astl::ITarget*              target{nullptr};
+  std::vector<astl_metric_handle_t> metric_handles;
+};
+
 auto ResolveMetricGroupCollectionContext() -> std::expected<MetricGroupCollectionContext, astl_status_code> {
   auto orchestrator_or_error = GetOrchestratorInstance();
   if (!orchestrator_or_error) {
@@ -2107,28 +2129,6 @@ auto ResolveMetricGroupCollectionContext() -> std::expected<MetricGroupCollectio
       .orchestrator   = *orchestrator_or_error,
       .metric_manager = *get_metric_manager_result,
   };
-}
-
-auto ConfigureMetricGroupCollectionOnTarget(const MetricGroupCollectionContext&         context,
-                                            const astl_collection_params_t*             collection_params,
-                                            std::span<const astl_metric_group_handle_t> metric_group_handles,
-                                            const astl::ITarget* target) -> std::expected<bool, astl_status_code> {
-  auto metric_handles_or_error =
-      ExpandMetricGroupHandlesForTarget(context.metric_manager, target, metric_group_handles, false);
-  if (!metric_handles_or_error) {
-    return std::unexpected(metric_handles_or_error.error());
-  }
-  if (metric_handles_or_error->empty()) {
-    return false;
-  }
-
-  std::span<const astl_metric_handle_t> metric_handle_span{*metric_handles_or_error};
-  const auto                            configure_status =
-      context.orchestrator->ConfigureMetricCollection(target, collection_params, metric_handle_span);
-  if (configure_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(configure_status);
-  }
-  return true;
 }
 
 auto ParseConfigureCounterCollectionOnTargetRequest(const astl_configure_counter_collection_on_target_params_t& params)
@@ -2168,30 +2168,65 @@ auto ParseConfigureCounterCollectionOnTargetRequest(const astl_configure_counter
   }();
 }
 
+auto ResolveMetricGroupHandlesOnTargets(const MetricGroupCollectionContext&         context,
+                                        std::span<const astl_metric_group_handle_t> metric_group_handles)
+    -> std::expected<std::vector<TargetMetricHandles>, astl_status_code> {
+  const auto& targets = context.orchestrator->GetTargets();
+  if (targets.empty()) {
+    return std::unexpected{ASTL_STATUS_NO_TARGET_FOUND};
+  }
+
+  std::vector<TargetMetricHandles> target_metric_handles;
+  target_metric_handles.reserve(targets.size());
+  for (const auto& target_ptr : targets) {
+    auto metric_handles_or_error =
+        ExpandMetricGroupHandlesForTarget(context.metric_manager, target_ptr.get(), metric_group_handles, false);
+    if (!metric_handles_or_error) {
+      return std::unexpected{metric_handles_or_error.error()};
+    }
+    if (!metric_handles_or_error->empty()) {
+      target_metric_handles.push_back(
+          TargetMetricHandles{.target = target_ptr.get(), .metric_handles = std::move(*metric_handles_or_error)});
+    }
+  }
+  if (target_metric_handles.empty()) {
+    return std::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
+  }
+  return target_metric_handles;
+}
+
+auto ConfigureResolvedMetricGroupsOnTargets(const MetricGroupCollectionContext&     context,
+                                            const astl_collection_params_t*         collection_params,
+                                            const std::vector<TargetMetricHandles>& target_metric_handles)
+    -> astl_status_code {
+  auto status = ASTL_STATUS_SUCCESS;
+  for (const auto& target_config : target_metric_handles) {
+    std::span<const astl_metric_handle_t> metric_handle_span{target_config.metric_handles};
+    status =
+        context.orchestrator->ConfigureMetricCollection(target_config.target, collection_params, metric_handle_span);
+    if (status != ASTL_STATUS_SUCCESS) {
+      break;
+    }
+  }
+  return status;
+}
+
 auto ConfigureMetricGroupCollectionOnAllTargets(const astl_collection_params_t*             collection_params,
                                                 std::span<const astl_metric_group_handle_t> metric_group_handles)
     -> astl_status_code {
   auto context_or_error = ResolveMetricGroupCollectionContext();
-  if (!context_or_error) {
-    return context_or_error.error();
-  }
-
-  const auto& targets = context_or_error->orchestrator->GetTargets();
-  if (targets.empty()) {
-    return ASTL_STATUS_NO_TARGET_FOUND;
-  }
-
-  bool any_target_configured = false;
-  for (const auto& target_ptr : targets) {
-    auto configured_target_or_error = ConfigureMetricGroupCollectionOnTarget(*context_or_error, collection_params,
-                                                                             metric_group_handles, target_ptr.get());
-    if (!configured_target_or_error) {
-      return configured_target_or_error.error();
+  auto status           = context_or_error ? ASTL_STATUS_SUCCESS : context_or_error.error();
+  if (status == ASTL_STATUS_SUCCESS) {
+    auto target_metric_handles = ResolveMetricGroupHandlesOnTargets(*context_or_error, metric_group_handles);
+    status                     = target_metric_handles ? ASTL_STATUS_SUCCESS : target_metric_handles.error();
+    if (status == ASTL_STATUS_SUCCESS) {
+      status = context_or_error->orchestrator->ResetCollectionStateForCleanConfigure();
     }
-    any_target_configured = any_target_configured || *configured_target_or_error;
+    if (status == ASTL_STATUS_SUCCESS) {
+      status = ConfigureResolvedMetricGroupsOnTargets(*context_or_error, collection_params, *target_metric_handles);
+    }
   }
-
-  return any_target_configured ? ASTL_STATUS_SUCCESS : ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET;
+  return status;
 }
 
 }  // namespace
@@ -2431,19 +2466,11 @@ auto astlConfigureMetricGroupCollection(const astl_configure_metric_group_collec
 auto astlReadImmediateOnTarget(const astl_read_immediate_on_target_params_t* params) noexcept -> astl_status_code {
   return RunPublicApi([&]() noexcept -> astl_status_code {
     std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-    const auto                  params_status = ValidateApiParams(params);
-    if (params_status != ASTL_STATUS_SUCCESS) {
-      return params_status;
+    auto                        target_or_error = ResolveTargetFromApiParams(params);
+    if (!target_or_error) {
+      return target_or_error.error();
     }
-    const auto* target_handle = params->target_handle;
-    if (!target_handle) {
-      return ASTL_STATUS_BAD_ARGUMENT;
-    }
-    auto result = GetTargetFromHandle(target_handle);
-    if (!result) {
-      return result.error();
-    }
-    const auto* target = *result;
+    const auto* target = *target_or_error;
 
     auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
     if (!orchestrator_or_error) {
@@ -2480,21 +2507,12 @@ auto astlReadImmediate(const astl_read_immediate_params_t* params) noexcept -> a
 auto astlStartCollectionOnTarget(const astl_start_collection_on_target_params_t* params) noexcept -> astl_status_code {
   return RunPublicApi([&]() noexcept -> astl_status_code {
     std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-    const auto                  params_status = ValidateApiParams(params);
-    if (params_status != ASTL_STATUS_SUCCESS) {
-      return params_status;
-    }
-    const auto* target_handle = params->target_handle;
-    if (!target_handle) {
-      return ASTL_STATUS_BAD_ARGUMENT;
+    auto                        target_or_error = ResolveTargetFromApiParams(params);
+    if (!target_or_error) {
+      return target_or_error.error();
     }
 
-    auto result = GetTargetFromHandle(target_handle);
-    if (!result) {
-      return result.error();
-    }
-
-    const auto* target                = *result;
+    const auto* target                = *target_or_error;
     auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
     if (!orchestrator_or_error) {
       return orchestrator_or_error.error();
@@ -2524,21 +2542,12 @@ auto astlStartCollectionOnTargetPaused(const astl_start_collection_on_target_pau
     -> astl_status_code {
   return RunPublicApi([&]() noexcept -> astl_status_code {
     std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-    const auto                  params_status = ValidateApiParams(params);
-    if (params_status != ASTL_STATUS_SUCCESS) {
-      return params_status;
-    }
-    const auto* target_handle = params->target_handle;
-    if (!target_handle) {
-      return ASTL_STATUS_BAD_ARGUMENT;
+    auto                        target_or_error = ResolveTargetFromApiParams(params);
+    if (!target_or_error) {
+      return target_or_error.error();
     }
 
-    auto result = GetTargetFromHandle(target_handle);
-    if (!result) {
-      return result.error();
-    }
-
-    const auto* target                = *result;
+    const auto* target                = *target_or_error;
     auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
     if (!orchestrator_or_error) {
       return orchestrator_or_error.error();
@@ -2567,19 +2576,11 @@ auto astlStartCollectionPaused(const astl_start_collection_paused_params_t* para
 auto astlPauseCollectionOnTarget(const astl_pause_collection_on_target_params_t* params) noexcept -> astl_status_code {
   return RunPublicApi([&]() noexcept -> astl_status_code {
     std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-    const auto                  params_status = ValidateApiParams(params);
-    if (params_status != ASTL_STATUS_SUCCESS) {
-      return params_status;
+    auto                        target_or_error = ResolveTargetFromApiParams(params);
+    if (!target_or_error) {
+      return target_or_error.error();
     }
-    const auto* target_handle = params->target_handle;
-    if (!target_handle) {
-      return ASTL_STATUS_BAD_ARGUMENT;
-    }
-    auto target_result = GetTargetFromHandle(target_handle);
-    if (!target_result) {
-      return target_result.error();
-    }
-    const auto* target                = *target_result;
+    const auto* target                = *target_or_error;
     auto        orchestrator_or_error = astl::Orchestrator::GetInstance();
     if (!orchestrator_or_error) {
       return orchestrator_or_error.error();
@@ -2631,19 +2632,11 @@ auto astlResumeCollectionOnTarget(const astl_resume_collection_on_target_params_
     -> astl_status_code {
   return RunPublicApi([&]() noexcept -> astl_status_code {
     std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-    const auto                  params_status = ValidateApiParams(params);
-    if (params_status != ASTL_STATUS_SUCCESS) {
-      return params_status;
+    auto                        target_or_error = ResolveTargetFromApiParams(params);
+    if (!target_or_error) {
+      return target_or_error.error();
     }
-    const auto* target_handle = params->target_handle;
-    if (!target_handle) {
-      return ASTL_STATUS_BAD_ARGUMENT;
-    }
-    auto target_result = GetTargetFromHandle(target_handle);
-    if (!target_result) {
-      return target_result.error();
-    }
-    const auto* target                = *target_result;
+    const auto* target                = *target_or_error;
     auto        orchestrator_or_error = astl::Orchestrator::GetInstance();
     if (!orchestrator_or_error) {
       return orchestrator_or_error.error();
@@ -2673,21 +2666,12 @@ auto astlResumeCollection(const astl_resume_collection_params_t* params) noexcep
 auto astlStopCollectionOnTarget(const astl_stop_collection_on_target_params_t* params) noexcept -> astl_status_code {
   return RunPublicApi([&]() noexcept -> astl_status_code {
     std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-    const auto                  params_status = ValidateApiParams(params);
-    if (params_status != ASTL_STATUS_SUCCESS) {
-      return params_status;
-    }
-    const auto* target_handle = params->target_handle;
-    if (!target_handle) {
-      return ASTL_STATUS_BAD_ARGUMENT;
+    auto                        target_or_error = ResolveTargetFromApiParams(params);
+    if (!target_or_error) {
+      return target_or_error.error();
     }
 
-    auto result = GetTargetFromHandle(target_handle);
-    if (!result) {
-      return result.error();
-    }
-
-    const auto* target                = *result;
+    const auto* target                = *target_or_error;
     auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
     if (!orchestrator_or_error) {
       return orchestrator_or_error.error();

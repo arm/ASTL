@@ -748,6 +748,81 @@ auto MetricManager::GetClockCorrelations() const -> ClockCorrelationMap {
   return _clock_correlations;
 }
 
+auto MetricManager::ClearStaleOperationStateForTarget(const ITarget*               target,
+                                                      std::span<const OperationId> active_operation_ids)
+    -> astl_status_code {
+  std::lock_guard<std::mutex> lock(_mutex);
+  if (target == nullptr) {
+    ASTL_LOG_ERROR("ClearStaleOperationStateForTarget: target is null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  std::unordered_set<OperationId> active_ids{active_operation_ids.begin(), active_operation_ids.end()};
+  auto                            target_iter = _target_to_operation_to_metric_map.find(target);
+  std::vector<OperationId>        removed_ids;
+  if (target_iter != _target_to_operation_to_metric_map.end()) {
+    for (auto it = target_iter->second.begin(); it != target_iter->second.end();) {
+      const auto operation_id = static_cast<OperationId>(it->first);
+      if (active_ids.contains(operation_id)) {
+        ++it;
+        continue;
+      }
+      removed_ids.push_back(operation_id);
+      it = target_iter->second.erase(it);
+    }
+
+    if (target_iter->second.empty()) {
+      _target_to_operation_to_metric_map.erase(target_iter);
+    }
+  }
+  for (const auto operation_id : removed_ids) {
+    _clock_correlations.erase(operation_id);
+  }
+
+  for (const auto& counter_handle : _counter_handles) {
+    auto counter_it = counter_handle->target_to_counter_map.find(target);
+    if (counter_it != counter_handle->target_to_counter_map.end() && counter_it->second) {
+      counter_it->second->Reset();
+      _last_processed_timestamp_by_metric.erase(counter_it->second.get());
+    }
+  }
+
+  for (auto& metric_handle : _metric_handles) {
+    auto metric_it = metric_handle->target_to_metric_map.find(target);
+    if (metric_it != metric_handle->target_to_metric_map.end() && metric_it->second) {
+      metric_it->second->Reset();
+      _last_processed_timestamp_by_metric.erase(metric_it->second.get());
+    }
+  }
+
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto MetricManager::ClearCollectionOperationState() -> void {
+  std::lock_guard<std::mutex> lock(_mutex);
+  _target_to_operation_to_metric_map.clear();
+  _clock_correlations.clear();
+  _last_processed_timestamp_by_metric.clear();
+
+  for (const auto& counter_handle : _counter_handles) {
+    for (const auto& [target, counter] : counter_handle->target_to_counter_map) {
+      (void)target;
+      if (counter) {
+        counter->Reset();
+      }
+    }
+  }
+
+  for (auto& metric_handle : _metric_handles) {
+    for (const auto& [target, metric] : metric_handle->target_to_metric_map) {
+      (void)target;
+      if (metric) {
+        metric->Reset();
+      }
+    }
+  }
+}
+
 auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code {
   std::lock_guard<std::mutex> process_lock(_process_raw_samples_mutex);
   ProcessingQueue             processing_queue;
@@ -888,6 +963,7 @@ auto MetricManager::RemoveAllMetrics() -> void {
   _target_to_metrics_map.clear();
   _target_to_metric_groups_map.clear();
   _target_to_operation_to_metric_map.clear();
+  _clock_correlations.clear();
   _last_processed_timestamp_by_metric.clear();
   _target_to_lifecycle_event_metric.clear();
 }

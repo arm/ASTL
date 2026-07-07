@@ -8,11 +8,14 @@
 #include <astl_logger.hpp>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <expected>
 #include <limits>
 #include <memory>
 #include <stdexcept>
 #include <vector>
+
+#include "astl_internal_status.hpp"
 
 namespace astl {
 
@@ -27,6 +30,15 @@ using OperationId = uint16_t;
 constexpr OperationId kPauseResumeOperationId{0};
 constexpr OperationId kFirstAssignableOperationId{kPauseResumeOperationId + 1};
 constexpr size_t      kOperationIdInvalid = std::numeric_limits<OperationId>::max();
+
+class OperationIdExhausted : public std::runtime_error {
+ public:
+  OperationIdExhausted()
+      : std::runtime_error{
+            "ASTL has run out of unique OperationIds. Configure from a clean stopped state to reset the allocator"} {}
+
+  [[nodiscard]] static auto Status() noexcept -> astl_status_code { return kInternalOperationIdExhausted; }
+};
 
 /**
  * @brief Base class for concrete operations executed by collectors to enable or sample metrics.
@@ -55,25 +67,46 @@ class Operation {
    */
   OperationId GetId() const { return operation_id; }
 
+  /**
+   * @brief Reset the process-local OperationId allocator back to the first assignable id.
+   *
+   * This must only be called at a global collection boundary where no configured or active
+   * collection can still emit, process, or route samples using older OperationIds.
+   */
+  static auto ResetOperationIdAllocator() -> void {
+    NextOperationId().store(kFirstAssignableOperationId, std::memory_order_relaxed);
+  }
+
  private:
   OperationId operation_id{kOperationIdInvalid};
+
+  static auto NextOperationId() -> std::atomic<uint32_t>& {
+    static std::atomic<uint32_t> next_operation_id{kFirstAssignableOperationId};
+    return next_operation_id;
+  }
 
   /**
    * @brief Atomically fetch-and-increment the global operation ID counter.
    *
-   * Since this is used in the constructor, this simply raises an exception if it gets all the way up to
-   * an invalid kOperationIdInvalid value.
+   * Since this is used in the constructor, this raises an exception if it would allocate the
+   * invalid kOperationIdInvalid value. The counter saturates at kOperationIdInvalid instead of wrapping.
    *
-   * @throws std::runtime_error if the counter reaches kOperationIdInvalid.
+   * @throws OperationIdExhausted if the counter reaches kOperationIdInvalid.
    */
   static OperationId GetNextOperationId() {
-    static std::atomic<OperationId> next_operation_id{kFirstAssignableOperationId};
-    auto                            this_id = next_operation_id.fetch_add(1, std::memory_order_relaxed);
-    if (this_id == kOperationIdInvalid) {
-      ASTL_LOG_CRITICAL("ASTL has run out of unique OperationIds. This error is currently unrecoverable");
-      throw std::runtime_error("ASTL has run out of unique OperationIds. This error is currently unrecoverable");
+    auto& next_operation_id = NextOperationId();
+    auto  this_id           = next_operation_id.load(std::memory_order_relaxed);
+    while (true) {
+      if (this_id >= kOperationIdInvalid) {
+        ASTL_LOG_CRITICAL(
+            "ASTL has run out of unique OperationIds. Configure from a clean stopped state to reset the allocator");
+        throw OperationIdExhausted{};
+      }
+      if (next_operation_id.compare_exchange_weak(this_id, this_id + 1U, std::memory_order_relaxed,
+                                                  std::memory_order_relaxed)) {
+        return static_cast<OperationId>(this_id);
+      }
     }
-    return this_id;
   }
 };
 

@@ -769,11 +769,14 @@ astlGetMetricGroupMetricsOnTarget(const astl_get_metric_group_metrics_on_target_
 
 /* Collection configuration and control section. Users are expected to use an
  * `astl_collection_params_t` instance to set the parameters and pass the structure to the
- * configure API. Any subsequent configure collection call using any of the configure API would
- * overwrite previous configurations. Configurations would persist per session: Once configured,
- * multiple start/stop collection calls can be made until data is processed. Collection
- * configurations are per target: Only one of the three ways to collect is possible for a given
- * target at any given time; i.e. Either counter, metric or metric group collection per target
+ * configure API. Any subsequent configure collection call using any of the configure API starts a
+ * clean collection session when collection is not running. If a previous collection has reached
+ * STOPPED, retrieve or save any samples you still need before configuring again. The next
+ * configure call clears collection-scoped data such as cached samples, processed samples, clock
+ * correlations, and operation mappings. Target discovery, metric definitions, and metric handles
+ * remain available. Collection configurations are per target: Only one of the three ways to
+ * collect is possible for a given target at any given time; i.e. Either counter, metric or metric
+ * group collection per target.
  */
 
 /** The collection mode. The mode configures how and when telemetry data is read

@@ -109,6 +109,7 @@ TEST_CASE("C interface supports valid-handle configure/start/stop interleavings"
 
   auto mock_collector = std::make_unique<MockCollector>();
   ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
+  ALLOW_CALL(*mock_collector, ClearCollectionState()).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_collector, StopCollection()).RETURN(ASTL_STATUS_COLLECTION_NOT_RUNNING);
   std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
   collectors_map[target_raw].push_back(std::move(mock_collector));
@@ -202,6 +203,7 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings", "[wrap
 
   auto mock_collector = std::make_unique<MockCollector>();
   ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
+  ALLOW_CALL(*mock_collector, ClearCollectionState()).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_collector, StopCollection()).RETURN(ASTL_STATUS_COLLECTION_NOT_RUNNING);
   std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
   collectors_map[target_raw].push_back(std::move(mock_collector));
@@ -307,6 +309,7 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", 
 
   auto mock_collector = std::make_unique<MockCollector>();
   ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
+  ALLOW_CALL(*mock_collector, ClearCollectionState()).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_collector, StopCollection()).RETURN(ASTL_STATUS_COLLECTION_NOT_RUNNING);
   std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors_map;
   collectors_map[target_raw].push_back(std::move(mock_collector));

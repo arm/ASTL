@@ -35,6 +35,18 @@ auto ProcfsCollector::ConfigureCollection(CollectionConfiguration&& configuratio
   return ExecuteCollectionOperations(_configuration->Operations().operationsBeforeStart);
 }
 
+auto ProcfsCollector::ClearCollectionState() -> astl_status_code {
+  std::scoped_lock lock{_collection_mutex};
+  if (_collection_state == CollectionState::STARTED || _collection_state == CollectionState::PAUSED) {
+    return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+  }
+  StopIntervalSampling();
+  _previous_cpu_snapshots.clear();
+  _configuration.reset();
+  _collection_state = CollectionState::UNCONFIGURED;
+  return ASTL_STATUS_SUCCESS;
+}
+
 auto ProcfsCollector::StartCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (_collection_state == CollectionState::STARTED) {

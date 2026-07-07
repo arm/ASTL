@@ -246,6 +246,32 @@ struct IMetricManager {
   [[nodiscard]] virtual auto GetClockCorrelations() const -> ClockCorrelationMap = 0;
 
   /**
+   * @brief Clear stale operation routing, clock correlations, and metric state for one target.
+   *
+   * Reconfiguration assigns fresh OperationIds. After the collector accepts the new configuration,
+   * the metric manager removes any previous target-local OperationIds that are not present in
+   * active_operation_ids so stale mappings from previous configurations do not accumulate.
+   *
+   * Passing an empty active_operation_ids span clears all operation routing for this target only.
+   * ClearCollectionOperationState() is broader: it clears operation state for every target.
+   *
+   * @param target Target whose stale operation state should be cleared.
+   * @param active_operation_ids OperationIds present in the accepted replacement configuration.
+   * @return ASTL_STATUS_SUCCESS on success, or ASTL_STATUS_BAD_ARGUMENT if target is null.
+   */
+  [[nodiscard]] virtual auto ClearStaleOperationStateForTarget(const ITarget*               target,
+                                                               std::span<const OperationId> active_operation_ids)
+      -> astl_status_code = 0;
+
+  /**
+   * @brief Drop collection-scoped operation routing, clock correlations, and metric previous-sample state.
+   *
+   * This does not unregister metric/counter definitions. It is intended for a global clean
+   * collection boundary before OperationIds are reused.
+   */
+  virtual auto ClearCollectionOperationState() -> void = 0;
+
+  /**
    * @brief Reset all metric and counter instances associated with a target.
    *
    * This is primarily used before replaying cached raw samples back through the

@@ -48,6 +48,14 @@ struct ICollector {
   virtual auto ConfigureCollection(CollectionConfiguration&& configuration) -> astl_status_code = 0;
 
   /*
+   * @brief Discard any configured collection operations and return to an unconfigured state.
+   *
+   * This must only succeed when collection is not actively started or paused. It is used at
+   * global configure reset boundaries before OperationIds are reused.
+   */
+  virtual auto ClearCollectionState() -> astl_status_code = 0;
+
+  /*
    * @brief Start the collection of data, performing any setup operations, starting sampling async tasks, etc.
    */
   virtual auto StartCollection() -> astl_status_code = 0;

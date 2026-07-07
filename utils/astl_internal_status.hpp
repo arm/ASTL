@@ -13,28 +13,32 @@
 namespace astl {
 
 enum class InternalStatusCode : int {
-  UNKNOWN_ERROR   = -1,
-  NOT_IMPLEMENTED = -2,
-  DIVIDE_BY_ZERO  = -3,
+  UNKNOWN_ERROR          = -1,
+  NOT_IMPLEMENTED        = -2,
+  DIVIDE_BY_ZERO         = -3,
+  OPERATION_ID_EXHAUSTED = -4,
 };
 
 constexpr auto ToStatusCode(InternalStatusCode code) noexcept -> astl_status_code {
   return static_cast<astl_status_code>(static_cast<int>(code));
 }
 
-constexpr astl_status_code kInternalUnknownError   = ToStatusCode(InternalStatusCode::UNKNOWN_ERROR);
-constexpr astl_status_code kInternalNotImplemented = ToStatusCode(InternalStatusCode::NOT_IMPLEMENTED);
-constexpr astl_status_code kInternalDivideByZero   = ToStatusCode(InternalStatusCode::DIVIDE_BY_ZERO);
+constexpr astl_status_code kInternalUnknownError         = ToStatusCode(InternalStatusCode::UNKNOWN_ERROR);
+constexpr astl_status_code kInternalNotImplemented       = ToStatusCode(InternalStatusCode::NOT_IMPLEMENTED);
+constexpr astl_status_code kInternalDivideByZero         = ToStatusCode(InternalStatusCode::DIVIDE_BY_ZERO);
+constexpr astl_status_code kInternalOperationIdExhausted = ToStatusCode(InternalStatusCode::OPERATION_ID_EXHAUSTED);
 
 static_assert(static_cast<int>(InternalStatusCode::UNKNOWN_ERROR) < 0);
 static_assert(static_cast<int>(InternalStatusCode::NOT_IMPLEMENTED) < 0);
 static_assert(static_cast<int>(InternalStatusCode::DIVIDE_BY_ZERO) < 0);
+static_assert(static_cast<int>(InternalStatusCode::OPERATION_ID_EXHAUSTED) < 0);
 
 constexpr auto IsInternalStatus(astl_status_code status) noexcept -> bool {
   switch (static_cast<int>(status)) {
     case static_cast<int>(InternalStatusCode::UNKNOWN_ERROR):
     case static_cast<int>(InternalStatusCode::NOT_IMPLEMENTED):
     case static_cast<int>(InternalStatusCode::DIVIDE_BY_ZERO):
+    case static_cast<int>(InternalStatusCode::OPERATION_ID_EXHAUSTED):
       return true;
     default:
       return false;
@@ -55,6 +59,8 @@ constexpr auto InternalStatusString(astl_status_code status) noexcept -> const c
       return "NOT_IMPLEMENTED";
     case static_cast<int>(InternalStatusCode::DIVIDE_BY_ZERO):
       return "DIVIDE_BY_ZERO";
+    case static_cast<int>(InternalStatusCode::OPERATION_ID_EXHAUSTED):
+      return "OPERATION_ID_EXHAUSTED";
     default:
       return "UNKNOWN_ERROR";
   }

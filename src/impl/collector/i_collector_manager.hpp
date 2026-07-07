@@ -48,6 +48,14 @@ struct ICollectorManager {
                                                          astl_collection_params_t const& collection_params,
                                                          CollectionOperations&& configuration) -> astl_status_code = 0;
 
+  /**
+   * @brief Discard configured collection operations from every collector.
+   *
+   * This is only valid when no target is actively collecting. It is used at global configure
+   * reset boundaries before OperationIds are reused.
+   */
+  [[nodiscard]] virtual auto ClearConfiguredCollections() -> astl_status_code = 0;
+
   /* Start the configured collection for the given target */
   [[nodiscard]] virtual auto StartOnTarget(const ITarget* target) -> astl_status_code = 0;
 

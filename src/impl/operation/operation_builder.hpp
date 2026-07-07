@@ -59,11 +59,16 @@ concept AnyOperationBuilderCompatible = std::constructible_from<AnyOperationBuil
  */
 inline auto BuildOperations(const AnyOperationBuilder& builder, const ITarget* target)
     -> std::expected<OperationSequence, astl_status_code> {
-  return std::visit(
-      [target](const auto& bldr) -> std::expected<OperationSequence, astl_status_code> {
-        return bldr.BuildOperations(target);
-      },
-      builder);
+  try {
+    return std::visit(
+        [target](const auto& bldr) -> std::expected<OperationSequence, astl_status_code> {
+          return bldr.BuildOperations(target);
+        },
+        builder);
+  } catch (const OperationIdExhausted& ex) {
+    ASTL_LOG_ERROR("BuildOperations: {}", ex.what());
+    return std::unexpected{OperationIdExhausted::Status()};
+  }
 }
 
 }  // namespace astl

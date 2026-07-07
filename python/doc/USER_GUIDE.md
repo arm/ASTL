@@ -127,6 +127,11 @@ Call order (typical):
 6. (optional) `crop_samples` to permanently trim the in-memory dataset to a time window
 7. (optional) `save_collection` to persist a `.astl` archive
 
+After `stop_collection`, read, crop, or save any samples you still need before configuring again.
+The next configure call starts a clean collection session and clears previous collection data,
+including cached samples, processed samples, clock correlations, and operation mappings. Target
+discovery, metric definitions, and metric handles remain available.
+
 Note that initialization of ASTL's internal state is done automatically
 
 ### Session Helper

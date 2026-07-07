@@ -35,6 +35,7 @@ class ProcfsCollector : public ICollector {
   auto GetCapabilities() const -> CollectorCapability override;
   auto SetRawSampleSink(IRawSampleSink* raw_sample_sink) -> void override;
   auto ConfigureCollection(CollectionConfiguration&& configuration) -> astl_status_code override;
+  auto ClearCollectionState() -> astl_status_code override;
   auto StartCollection() -> astl_status_code override;
   auto PauseCollection() -> astl_status_code override;
   auto ResumeCollection() -> astl_status_code override;

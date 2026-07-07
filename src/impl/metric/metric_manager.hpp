@@ -225,6 +225,17 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   [[nodiscard]] auto GetClockCorrelations() const -> ClockCorrelationMap override;
 
   /**
+   * @brief Clear stale operation mappings and clock correlations for a target.
+   */
+  auto ClearStaleOperationStateForTarget(const ITarget* target, std::span<const OperationId> active_operation_ids)
+      -> astl_status_code override;
+
+  /**
+   * @brief Clear collection-scoped operation routing and state while keeping registered metrics.
+   */
+  auto ClearCollectionOperationState() -> void override;
+
+  /**
    * @brief Reset all metric/counter instances associated with a target.
    *
    * Stateful metrics such as delta/rate metrics retain previous-sample state.

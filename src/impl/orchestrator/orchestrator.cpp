@@ -47,6 +47,17 @@ constexpr std::size_t kProcSampleGrowthBias        = 8;
 
 // TODO(ASTL-242): Investigate optimal max batch size
 constexpr std::size_t kMaxSamplesPerBatch = 1024;
+
+auto GetSampleOperationIds(const CollectionOperations &operations) -> std::vector<OperationId> {
+  std::vector<OperationId> operation_ids;
+  operation_ids.reserve(operations.operationsOnSample.size());
+  for (const auto &operation : operations.operationsOnSample) {
+    if (operation) {
+      operation_ids.push_back(operation->GetId());
+    }
+  }
+  return operation_ids;
+}
 }  // namespace
 
 namespace fs = std::filesystem;
@@ -201,6 +212,7 @@ auto Orchestrator::SetTargets(std::vector<std::unique_ptr<ITarget>> new_targets)
 
 auto Orchestrator::ConfigureCounterCollection(const ITarget *target, const astl_collection_params_t *collection_params,
                                               std::span<const astl_counter_handle_t> counters) -> astl_status_code {
+  std::lock_guard                              configure_lock(_configure_mutex);
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
@@ -230,14 +242,24 @@ auto Orchestrator::ConfigureCounterCollection(const ITarget *target, const astl_
       return ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET;
     }
   }
+  auto reset_status = ResetOperationIdsForCleanConfigure(target);
+  if (reset_status != ASTL_STATUS_SUCCESS) {
+    return reset_status;
+  }
   auto operations = _metric_manager->GetCounterRequiredOperations(counters, target);
   if (!operations) {
-    return ASTL_STATUS_INTERNAL_ERROR;
+    return IsInternalStatus(operations.error()) ? operations.error() : ASTL_STATUS_INTERNAL_ERROR;
   }
+  const auto       active_operation_ids = GetSampleOperationIds(operations.value());
   astl_status_code status =
       _collector_manager->ConfigureCollectionOnTarget(target, *collection_params, std::move(operations.value()));
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Failed to configure collection on target: {}", astlStatusString(status));
+    return status;
+  }
+  status = _metric_manager->ClearStaleOperationStateForTarget(target, active_operation_ids);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to prune stale operation state on target {}: {}", target->Name(), astlStatusString(status));
     return status;
   }
   status = ResetTargetCollectionArtifacts(target);
@@ -264,6 +286,7 @@ auto Orchestrator::ConfigureCounterCollection(const ITarget *target, const astl_
 
 auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_collection_params_t *collection_params,
                                              std::span<const astl_metric_handle_t> metrics) -> astl_status_code {
+  std::lock_guard                              configure_lock(_configure_mutex);
   const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
   auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
                                                                       [target](auto const &owned_target) { return owned_target.get() == target; });
@@ -293,14 +316,24 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_c
       return ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET;
     }
   }
+  auto reset_status = ResetOperationIdsForCleanConfigure(target);
+  if (reset_status != ASTL_STATUS_SUCCESS) {
+    return reset_status;
+  }
   auto operations = _metric_manager->GetRequiredOperations(metrics, target);
   if (!operations) {
-    return ASTL_STATUS_INTERNAL_ERROR;
+    return IsInternalStatus(operations.error()) ? operations.error() : ASTL_STATUS_INTERNAL_ERROR;
   }
+  const auto       active_operation_ids = GetSampleOperationIds(operations.value());
   astl_status_code status =
       _collector_manager->ConfigureCollectionOnTarget(target, *collection_params, std::move(operations.value()));
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Failed to configure collection on target: {}", astlStatusString(status));
+    return status;
+  }
+  status = _metric_manager->ClearStaleOperationStateForTarget(target, active_operation_ids);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to prune stale operation state on target {}: {}", target->Name(), astlStatusString(status));
     return status;
   }
   status = ResetTargetCollectionArtifacts(target);
@@ -353,6 +386,103 @@ auto Orchestrator::ResetTargetCollectionArtifacts(const ITarget *target) -> astl
   }
 
   return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::ResetAllCollectionArtifacts() -> astl_status_code {
+  for (const auto &target : _topology_manager->GetTargets()) {
+    const auto status = ResetTargetCollectionArtifacts(target.get());
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+  }
+
+  {
+    std::lock_guard raw_lock(_raw_samples_mtx);
+    _raw_samples.clear();
+    _no_cache_targets.clear();
+  }
+  {
+    std::lock_guard processed_lock(_processed_samples_mtx);
+    _processed_samples.clear();
+  }
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    _target_pause_timestamps.clear();
+    _target_resume_timestamps.clear();
+  }
+
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::ResetOperationIdsForCleanConfigure(const ITarget *target) -> astl_status_code {
+  if (_clean_configure_reset_pending) {
+    _clean_configure_reset_pending = false;
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  bool should_reset = true;
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    for (const auto &[configured_target, state] : _target_collection_states) {
+      if (state == TargetCollectionState::STARTING || state == TargetCollectionState::STARTED ||
+          state == TargetCollectionState::PAUSED) {
+        return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+      }
+      if (state == TargetCollectionState::CONFIGURED && configured_target != target) {
+        should_reset = false;
+      }
+    }
+  }
+
+  if (!should_reset) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  const auto reset_status        = ResetCollectionStateForCleanConfigureLocked();
+  _clean_configure_reset_pending = false;
+  return reset_status;
+}
+
+auto Orchestrator::ResetCollectionStateForCleanConfigure() -> astl_status_code {
+  std::lock_guard configure_lock(_configure_mutex);
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    for (const auto &[target, state] : _target_collection_states) {
+      (void)target;
+      if (state == TargetCollectionState::STARTING || state == TargetCollectionState::STARTED ||
+          state == TargetCollectionState::PAUSED) {
+        return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+      }
+    }
+  }
+
+  const auto reset_status        = ResetCollectionStateForCleanConfigureLocked();
+  _clean_configure_reset_pending = reset_status == ASTL_STATUS_SUCCESS;
+  return reset_status;
+}
+
+auto Orchestrator::ResetCollectionStateForCleanConfigureLocked() -> astl_status_code {
+  const auto collector_reset_status = _collector_manager->ClearConfiguredCollections();
+  if (collector_reset_status != ASTL_STATUS_SUCCESS) {
+    return collector_reset_status;
+  }
+  MarkAllTargetsUnconfigured();
+  const auto reset_status = ResetAllCollectionArtifacts();
+  if (reset_status != ASTL_STATUS_SUCCESS) {
+    return reset_status;
+  }
+  _metric_manager->ClearCollectionOperationState();
+  Operation::ResetOperationIdAllocator();
+  ResetFinalOutputEmissionState();
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::MarkAllTargetsUnconfigured() -> void {
+  std::lock_guard state_lock(_collection_state_mutex);
+  for (auto &[target, state] : _target_collection_states) {
+    (void)target;
+    state = TargetCollectionState::UNCONFIGURED;
+  }
 }
 
 auto Orchestrator::ResetFinalOutputEmissionState() -> void {

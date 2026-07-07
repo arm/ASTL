@@ -70,6 +70,8 @@ class ScmiSysfsCollector : public ICollector {
    */
   astl_status_code ConfigureCollection(CollectionConfiguration&& configuration) override;
 
+  astl_status_code ClearCollectionState() override;
+
   /*
    * @brief Start the collection of data, performing any setup operations, starting sampling async tasks, etc.
    */
@@ -366,6 +368,17 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
     rollback_configuration_state();
     return result;
   }
+  return ASTL_STATUS_SUCCESS;
+}
+
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::ClearCollectionState() -> astl_status_code {
+  std::scoped_lock lock{_collection_mutex};
+  if (_collection_state == CollectionState::STARTED || _collection_state == CollectionState::PAUSED) {
+    return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+  }
+  StopIntervalSampling();
+  RollbackConfigurationState("ClearCollectionState");
   return ASTL_STATUS_SUCCESS;
 }
 

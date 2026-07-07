@@ -104,10 +104,16 @@ auto ProcfsCompositeMetric::GetOperations() -> std::expected<OperationSequence, 
 
   OperationSequence operations;
   operations.reserve(_procfs_configuration->Inputs().size());
-  for (const auto& input : _procfs_configuration->Inputs()) {
-    auto operation = std::make_unique<ProcfsReadOperation>(input.field_descriptor);
-    _operation_id_to_input_name.emplace(operation->GetId(), input.name);
-    operations.push_back(std::move(operation));
+  try {
+    for (const auto& input : _procfs_configuration->Inputs()) {
+      auto operation = std::make_unique<ProcfsReadOperation>(input.field_descriptor);
+      _operation_id_to_input_name.emplace(operation->GetId(), input.name);
+      operations.push_back(std::move(operation));
+    }
+  } catch (const OperationIdExhausted& ex) {
+    ASTL_LOG_ERROR("ProcfsCompositeMetric::GetOperations: {}", ex.what());
+    _operation_id_to_input_name.clear();
+    return std::unexpected{OperationIdExhausted::Status()};
   }
   return operations;
 }

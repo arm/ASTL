@@ -763,16 +763,12 @@ TEST_CASE(
   REQUIRE(orchestrator->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
   auto* orch_raw = orchestrator.get();
 
-  // Sink 5 processed samples on the stopped target
   auto                 mh_stopped         = std::make_unique<astl::MetricHandle>();
   astl_metric_handle_t metric_hdl_stopped = static_cast<astl_metric_handle_t>(mh_stopped.get());
   TestMetricBase       stopped_metric{"crop-stopped-metric"};
   astl::IMetric*       stopped_metric_iface = &stopped_metric;
   expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, GetMetricOnTarget(metric_hdl_stopped, target_stopped_ptr))
                              .RETURN(stopped_metric_iface));
-  const std::vector<astl::ProcessedSampledData> proc_samples{
-      MakeProcSample(100), MakeProcSample(200), MakeProcSample(300), MakeProcSample(400), MakeProcSample(500)};
-  REQUIRE(orch_raw->SinkProcessedSamples(target_stopped_ptr, &stopped_metric, proc_samples) == ASTL_STATUS_SUCCESS);
 
   // Bring target_active to STARTED state via ConfigureMetricCollection + StartCollection
   static int                        dummy_active_metric_storage{};
@@ -802,6 +798,11 @@ TEST_CASE(
   REQUIRE(orch_raw->ConfigureMetricCollection(target_active_ptr, &collection_params, active_metrics_span) ==
           ASTL_STATUS_SUCCESS);
   REQUIRE(orch_raw->StartCollection(target_active_ptr) == ASTL_STATUS_SUCCESS);
+
+  // Sink 5 processed samples on the stopped target after configure has cleared stale session data.
+  const std::vector<astl::ProcessedSampledData> proc_samples{
+      MakeProcSample(100), MakeProcSample(200), MakeProcSample(300), MakeProcSample(400), MakeProcSample(500)};
+  REQUIRE(orch_raw->SinkProcessedSamples(target_stopped_ptr, &stopped_metric, proc_samples) == ASTL_STATUS_SUCCESS);
 
   TestOrchestratorInjector injector(std::move(orchestrator));
 

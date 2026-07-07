@@ -53,6 +53,8 @@ class LibsensorsCollector : public ICollector {
    */
   astl_status_code ConfigureCollection(CollectionConfiguration&& configuration) override;
 
+  astl_status_code ClearCollectionState() override;
+
   /*
    * @brief Start the collection of data, performing any setup operations, starting sampling async tasks, etc.
    */

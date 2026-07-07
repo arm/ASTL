@@ -216,6 +216,15 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
                                  std::span<const astl_metric_handle_t> metrics) -> astl_status_code;
 
   /**
+   * @brief Reset collection-scoped state before a multi-target configure sequence.
+   *
+   * This is intended for wrapper flows that configure several targets as one user operation. It
+   * clears stale stopped/configured state once so OperationIds can be reused safely across the new
+   * batch.
+   */
+  auto ResetCollectionStateForCleanConfigure() -> astl_status_code;
+
+  /**
    * @brief Apply the previously configured collection on the given target
    *
    * Attempts to enable any data sources set up by ConfigureCounterCollection or similar, and may take initial sample
@@ -544,6 +553,10 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    * configuration.
    */
   auto        ResetTargetCollectionArtifacts(const ITarget *target) -> astl_status_code;
+  auto        ResetAllCollectionArtifacts() -> astl_status_code;
+  auto        ResetOperationIdsForCleanConfigure(const ITarget *target) -> astl_status_code;
+  auto        ResetCollectionStateForCleanConfigureLocked() -> astl_status_code;
+  auto        MarkAllTargetsUnconfigured() -> void;
   auto        ResetFinalOutputEmissionState() -> void;
   static auto TryBeginFinalOutputEmission(std::atomic<FinalOutputEmissionState> &emission_state) -> bool;
   static auto FinishFinalOutputEmission(std::atomic<FinalOutputEmissionState> &emission_state, bool emission_succeeded)
@@ -595,6 +608,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   std::unordered_map<const ITarget *, std::chrono::steady_clock::time_point>
                      _target_resume_timestamps;  // last resume time
   mutable std::mutex _collection_state_mutex;    // protects lifecycle state and pause/resume timestamp maps
+  std::mutex         _configure_mutex;           // serializes configure-time global reset decisions
+  bool               _clean_configure_reset_pending{false};
 
   std::unique_ptr<ITopologyManager>     _topology_manager;   // manages the set of Targets
   std::unique_ptr<ICollectorManager>    _collector_manager;  // manages the collection of raw samples

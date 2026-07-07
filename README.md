@@ -297,6 +297,12 @@ astl_target_props_t target_properties = target_properties_buffer[0];
 
 4. Configure collection
 
+Calling any `astlConfigure*Collection*` API starts a clean collection session when collection is not
+running. If a previous collection has reached `STOPPED`, retrieve or save any samples you still need
+before configuring again. The next configure call clears previous collection-scoped data such as
+cached samples, processed samples, clock correlations, and operation mappings. Target discovery,
+metric definitions, and metric handles remain available.
+
 ```cpp
 uint32_t metric_count{};
 ASTL_INIT_STRUCT(astl_get_metric_count_params_t, get_metric_count_params,
@@ -451,6 +457,8 @@ Key rules:
 - Always set the struct `size` field to `sizeof(struct)`.
 - `flags` must be `0` (reserved for future use).
 - Call `astlSaveCollection()` after stopping collection.
+- Save before calling any configure API for a new collection if you need to keep the stopped
+  session's samples.
 - After `astlLoadCollection()`, collection control APIs are disabled; only post-processing/output generation is possible.
 
 #### Save
