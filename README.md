@@ -12,7 +12,6 @@ SPDX-License-Identifier: Apache-2.0
 <a href="https://arm.app.blackduck.com/api/projects/bb3f58ac-a952-4b1c-8561-61a04d23bf57">
 <img src="https://github.com/Arm-Debug/ASTL/actions/workflows/blackduck.yaml/badge.svg" alt="Blackduck"/>
 </a>
-[![Coverity](https://img.shields.io/badge/Coverity-Report-blue)](https://coverity.geo.arm.com/#/project-view/11501/10027)
 
 Arm SoC Telemetry Library
 

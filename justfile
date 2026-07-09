@@ -440,9 +440,3 @@ python-package-and-benchmark:
       echo "Diagnostics time (ms): ${DIAG_TIME_MS}"
     } > benchmark_output.log
     echo "[python-package-and-benchmark] COMPLETE"
-
-
-# note, you need coverity/bin on your PATH, and you need an auth file setup.
-# https://confluence.arm.com/display/ITINFRA/Cloud+Native+Coverity+User+Guide
-scan:
-    coverity scan
