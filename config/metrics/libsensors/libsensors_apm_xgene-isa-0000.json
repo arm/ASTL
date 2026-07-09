@@ -1,0 +1,41 @@
+{
+  "_comment": "Metrics definitions for libsensors target libsensors_apm_xgene-isa-0000",
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "SoC_Temperature": {
+      "description": "SoC temperature reported by the APM X-Gene platform sensor",
+      "unit": "celsius",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal", "soc"],
+      "collection": {
+        "register": "SoC Temperature",
+        "protocol": "libsensors"
+      }
+    },
+    "CPU_power": {
+      "description": "CPU power draw reported by the APM X-Gene platform sensor",
+      "unit": "watts",
+      "metric_type": "value",
+      "identifier": "POWER",
+      "metric_groups": ["power", "cpu"],
+      "collection": {
+        "register": "CPU power",
+        "protocol": "libsensors"
+      }
+    },
+    "IO_power": {
+      "description": "I/O power draw reported by the APM X-Gene platform sensor",
+      "unit": "watts",
+      "metric_type": "value",
+      "identifier": "POWER",
+      "metric_groups": ["power", "io"],
+      "collection": {
+        "register": "IO power",
+        "protocol": "libsensors"
+      }
+    }
+  }
+}

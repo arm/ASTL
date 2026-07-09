@@ -1,0 +1,104 @@
+{
+  "_type": "metrics_specification",
+  "document": {
+    "timestamp": "2026-01-13",
+    "copyright": "Copyright 2026 Arm Ltd.",
+    "confidential": false,
+    "quality": "Test",
+    "license": "Apache-2.0",
+    "description": "Telemetry data capture format layout specification"
+  },
+  "uuid": "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000/14",
+  "description": "Mock SCMI SYSFS Platform Telemetry Data Capture Format Specification",
+  "tdcf_instance_id": "[7:0]",
+  "chiplet_id": "[15:8]",
+  "size": 96,
+  "members": [
+    {
+      "count": 1,
+      "start_offset": 0,
+      "block_size": 32,
+      "metrics": {
+        "TEMP_PRESENT": {
+          "description": "Temperature Present",
+          "type": "Gauge",
+          "unit": "celsius",
+          "base10_unit_modifier": -3,
+          "name": "TEMP_PRESENT",
+          "component": "PSS",
+          "base_de_id": "0x00009441",
+          "line_size": 16,
+          "rel_offset": "0x0028"
+        }
+      }
+    },
+    {
+      "count": 1,
+      "start_offset": 0,
+      "block_size": 32,
+      "metrics": {
+        "CORE_1_TEMP": {
+          "base_de_id": "0x00000000",
+          "name": "CORE_1_TEMP",
+          "component": "CORE",
+          "description": "Dummy Core 1 Temperature",
+          "unit": "Celsius",
+          "unit_exponent": 0,
+          "rel_offset": "0x0000"
+        },
+        "P_STATE": {
+          "base_de_id": "0x00000016",
+          "name": "P_STATE",
+          "component": "CORE",
+          "description": "Dummy Core 0 P-State",
+          "unit": "Count",
+          "unit_exponent": 0,
+          "rel_offset": "0x0000"
+        }
+      }
+    },
+    {
+      "count": 1,
+      "start_offset": 32,
+      "block_size": 64,
+      "metrics": {
+        "FREQUENCY": {
+          "base_de_id": "0x00001A68",
+          "name": "FREQUENCY",
+          "component": "CORE",
+          "description": "Mock sysfs cpu frequency",
+          "unit": "MHz",
+          "unit_exponent": 0,
+          "rel_offset": "0x0000"
+        },
+        "CORE_0_TEMP": {
+          "base_de_id": "0x00007A9B",
+          "name": "CORE_0_TEMP",
+          "component": "CORE",
+          "description": "Mock sysfs cpu 1 temp",
+          "unit": "Celsius",
+          "unit_exponent": 0,
+          "rel_offset": "0x0000"
+        },
+        "THROTTLE_EVENTS": {
+          "base_de_id": "0x00008C3D",
+          "name": "THROTTLE_EVENTS",
+          "component": "CORE",
+          "description": "Mock sysfs cpu 1 throttle events",
+          "unit": "Count",
+          "unit_exponent": 0,
+          "rel_offset": "0x0000"
+        },
+        "ENERGY_COUNTER": {
+          "base_de_id": "0x00009E4F",
+          "name": "ENERGY_COUNTER",
+          "component": "SOC",
+          "description": "Mock sysfs soc energy counter",
+          "unit": "Watts",
+          "unit_exponent": 0,
+          "rel_offset": "0x0000"
+        }
+      }
+    }
+  ]
+}

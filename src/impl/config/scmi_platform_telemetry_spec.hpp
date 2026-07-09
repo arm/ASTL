@@ -5,6 +5,7 @@
 #ifndef SCMI_PLATFORM_TELEMETRY_SPEC_HPP_
 #define SCMI_PLATFORM_TELEMETRY_SPEC_HPP_
 
+#include <filesystem>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -65,9 +66,10 @@ inline int32_t ParseToInt32(const json& json_data, std::string_view field_name) 
 
 /** @brief A members of the `uuid_mapping` table in repometa.json */
 struct TelemetrySpecFile {
-  std::string last_updated;
-  std::string description;
-  std::string specification_file;
+  std::string           last_updated;
+  std::string           description;
+  std::string           specification_file;
+  std::filesystem::path resolved_specification_file;
 };
 
 inline void from_json(const json& json_data, TelemetrySpecFile& spec_file) {

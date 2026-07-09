@@ -60,24 +60,24 @@ auto MakeConfigurationForTestRoot(const fs::path& config_root) -> astl::AstlConf
 
 void WriteMinimalScmiFixture(const fs::path&       config_root,
                              ScmiDeDirectoryFormat de_directory_format = ScmiDeDirectoryFormat::K_NARROW) {
-  WriteTextFile(config_root / "scmi" / "public" / "repometa.json", R"json({
+  WriteTextFile(config_root / "scmi" / "public" / "unit" / "repometa.json", R"json({
   "last_updated": "2026-03-16",
   "uuid_mapping": {
     "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000": {
       "last_updated": "2026-03-16",
       "description": "Unit test SCMI specification",
-      "specification_file": "unit/test_scmi.json"
+      "specification_file": "test_scmi.json"
     }
   }
 })json");
 
-  WriteTextFile(config_root / "metrics" / "platform_lookup.json", R"json({
+  WriteTextFile(config_root / "metrics" / "unit" / "platform_lookup.json", R"json({
   "last_updated": "2026-03-16",
   "scmi_uuid_mapping": {
     "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000": {
       "last_updated": "2026-03-16",
       "description": "Unit test metric declarations",
-      "metrics_file": "unit/test_metrics.json",
+      "metrics_file": "test_metrics.json",
       "name": "{telemetry_subdirectory}"
     }
   }

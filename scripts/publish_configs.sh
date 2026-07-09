@@ -21,29 +21,27 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Default values
 OUTPUT_DIR=""
 INCLUDE_CONFIDENTIAL=false
-INCLUDE_MOCKSYSFS=false
 
 # Usage function
 usage() {
 	cat <<EOF
 Usage: $0 -o OUTPUT_DIR [OPTIONS]
 
-Publish ASTL config directory with filtering and SCMI spec version selection.
+Publish ASTL config directory with filtering.
 
 Required arguments:
   -o OUTPUT_DIR             Output directory to copy config/ to (with modifications)
 
 Optional arguments:
   --confidential            Include confidential content (default: exclude confidential content)
-  --mocksysfs               Include mock scmi sysfs metrics and scmi spec for testing
   -h, --help                Show this help message
 
 Examples:
   # Publish spec for non-confidential/public use
   $0 -o /path/to/output
 
-  # Publish spec including confidential content and mocksysfs targets
-  $0 -o /path/to/output --confidential --mocksysfs
+  # Publish spec including confidential content
+  $0 -o /path/to/output --confidential
 
 EOF
 	exit 1
@@ -58,10 +56,6 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--confidential)
 		INCLUDE_CONFIDENTIAL=true
-		shift
-		;;
-	--mocksysfs)
-		INCLUDE_MOCKSYSFS=true
 		shift
 		;;
 	-h | --help)
@@ -177,9 +171,10 @@ copy_and_filter_json_files() {
 	done
 }
 
-# Create output directory
+# Create output directory and clear generated config subtrees from previous publishes.
 echo "Creating output directory: $OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
+rm -rf "$OUTPUT_DIR/metrics" "$OUTPUT_DIR/groups" "$OUTPUT_DIR/scmi"
 
 # Copy .gitignore if it exists
 if [[ -f "$CONFIG_DIR/.gitignore" ]]; then
@@ -211,35 +206,6 @@ mkdir -p "$SCMI_OUTPUT"
 
 # Copy and filter SCMI files
 copy_and_filter_json_files "$SCMI_SOURCE" "$SCMI_OUTPUT" "SCMI"
-
-if [[ $INCLUDE_MOCKSYSFS == true ]]; then
-	echo ""
-	echo "Including MockSysfs SCMI metrics and spec for testing..."
-
-	MOCKSYSFS_SCMI_SPEC_SOURCE="$CONFIG_DIR/scmi/mocksysfs/mocksysfs"
-	MOCKSYSFS_SCMI_SPEC_OUTPUT="$OUTPUT_DIR/scmi/public/mocksysfs"
-
-	if [[ ! -d $MOCKSYSFS_SCMI_SPEC_SOURCE ]]; then
-		echo "Error: MockSysfs source directory not found: $MOCKSYSFS_SCMI_SPEC_SOURCE" >&2
-		exit 1
-	fi
-
-	mkdir -p "$MOCKSYSFS_SCMI_SPEC_OUTPUT"
-	# Copy and filter MockSysfs SCMI files
-	copy_and_filter_json_files "$MOCKSYSFS_SCMI_SPEC_SOURCE" "$MOCKSYSFS_SCMI_SPEC_OUTPUT" "MockSysfs SCMI"
-
-	# merge the mocksysfs uuid_mapping with the scmi spec repometa.json uuid_mapping
-	REPO_META_SOURCE="$CONFIG_DIR/scmi/mocksysfs/repometa.json"
-	REPO_META_OUTPUT="$OUTPUT_DIR/scmi/public/repometa.json"
-	if [[ -f $REPO_META_SOURCE ]]; then
-		echo "Merging uuid_mapping from MockSysfs repometa.json..."
-		jq -s '.[0] * {uuid_mapping: (.[0].uuid_mapping + .[1].uuid_mapping)}' \
-			"$OUTPUT_DIR/scmi/public/repometa.json" "$REPO_META_SOURCE" >"$REPO_META_OUTPUT.tmp"
-		mv "$REPO_META_OUTPUT.tmp" "$REPO_META_OUTPUT"
-	else
-		echo "Warning: MockSysfs repometa.json not found: $REPO_META_SOURCE" >&2
-	fi
-fi
 
 echo ""
 echo "Publishing complete!"

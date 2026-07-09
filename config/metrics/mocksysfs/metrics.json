@@ -1,0 +1,66 @@
+{
+  "_comment": "Metrics definitions for Mock SCMI sysfs telemetry target",
+
+  "document": {
+    "confidential": false
+  },
+
+  "metrics": {
+    "Temperature Present Mock": {
+      "description": "Temperature reading for mock SoC",
+      "unit": "C",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal", "cpu"],
+      "collection": {
+        "register": "TEMP_PRESENT",
+        "protocol": "scmi"
+      }
+    },
+    "SoC Temperature Mock": {
+      "description": "Temperature reading for mock core 0",
+      "unit": "C",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal", "soc"],
+      "collection": {
+        "register": "CORE_0_TEMP",
+        "protocol": "scmi"
+      }
+    },
+    "Throttle Counts Mock": {
+      "description": "Throttling events count reading for mock CPU",
+      "unit": "Count",
+      "metric_type": "delta",
+      "identifier": "COUNT",
+      "metric_groups": ["throttling", "core"],
+      "collection": {
+        "register": "THROTTLE_EVENTS",
+        "protocol": "scmi"
+      }
+    },
+    "SoC Power Mock": {
+      "description": "Power reading for mock package",
+      "unit": "W",
+      "metric_type": "rate",
+      "identifier": "POWER",
+      "metric_groups": ["power", "soc"],
+      "formula": "value / 1000000",
+      "collection": {
+        "register": "ENERGY_COUNTER",
+        "protocol": "scmi"
+      }
+    },
+    "Core Frequency Mock": {
+      "description": "Frequency reading for mock CPU",
+      "unit": "MHz",
+      "metric_type": "value",
+      "identifier": "FREQUENCY",
+      "metric_groups": ["frequency", "core"],
+      "collection": {
+        "register": "FREQUENCY",
+        "protocol": "scmi"
+      }
+    }
+  }
+}

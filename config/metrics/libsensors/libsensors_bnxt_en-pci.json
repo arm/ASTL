@@ -1,0 +1,7 @@
+{
+  "_comment": "Metrics definitions for bnxt_en PCI libsensors targets",
+  "extends": "templates/bnxt_en_pci_temperature.json",
+  "document": {
+    "confidential": false
+  }
+}

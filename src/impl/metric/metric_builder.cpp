@@ -14,6 +14,7 @@
 
 #include "astl_logger.hpp"
 #include "config/astl_configuration.hpp"
+#include "config/config_lookup_loader.hpp"
 #include "config/json_file_utils.hpp"
 #include "config/metric_group_json_declaration.hpp"
 #include "config/metric_json_declaration.hpp"
@@ -292,8 +293,6 @@ static auto ApplyConfiguredNameForScmiTarget(Target&                            
 struct ScmiSpecificationLookupContext {
   const scmi::spec::RepoMeta*          repo_meta;
   const metrics::spec::PlatformLookup* platform_lookup;
-  const std::filesystem::path*         scmi_specification_dir;
-  const std::filesystem::path*         metrics_declaration_dir;
 };
 
 static auto ApplyConfiguredScmiTargetNames(const AstlConfiguration&                     configuration,
@@ -304,8 +303,7 @@ static auto ApplyConfiguredScmiTargetNames(const AstlConfiguration&             
     return ASTL_STATUS_SUCCESS;
   }
 
-  const auto& platform_lookup_json_path = configuration.metrics_dir_path / "platform_lookup.json";
-  auto        platform_lookup = config::TryParseJsonFile<metrics::spec::PlatformLookup>(platform_lookup_json_path);
+  auto platform_lookup = config::LoadPlatformLookupFragments(configuration.metrics_dir_path);
   if (!platform_lookup.has_value()) {
     return platform_lookup.error();
   }
@@ -351,8 +349,12 @@ static auto AddScmiSpecificationInfoForTarget(std::vector<ScmiUuidSpecificationI
     return;
   }
 
-  auto resolved_specification_file      = *lookup_context.scmi_specification_dir / spec_file->specification_file;
-  auto resolved_metric_declaration_file = *lookup_context.metrics_declaration_dir / metric_file_element->metrics_file;
+  auto resolved_specification_file      = spec_file->resolved_specification_file.empty()
+                                              ? std::filesystem::path{spec_file->specification_file}
+                                              : spec_file->resolved_specification_file;
+  auto resolved_metric_declaration_file = metric_file_element->resolved_metrics_file.empty()
+                                              ? std::filesystem::path{metric_file_element->metrics_file}
+                                              : metric_file_element->resolved_metrics_file;
 
   // Group by the resolved specification/metric-declaration file pair rather than by the target's
   // full UUID. Targets that share the same spec (e.g. tlm_0/tlm_1 whose `de_implementation_version`
@@ -381,18 +383,13 @@ static auto AddScmiSpecificationInfoForTarget(std::vector<ScmiUuidSpecificationI
 static auto LookUpSpecificationFiles(const AstlConfiguration&           configuration,
                                      const std::vector<const ITarget*>& scmi_targets)
     -> std::expected<std::vector<ScmiUuidSpecificationInfo>, astl_status_code> {
-  // parse the 'repometa' json file that maps UUIDs to SCMI specification file paths
   const auto& scmi_specification_dir = configuration.scmi_specification_dir;
-  const auto& repometa_json_path     = scmi_specification_dir / "repometa.json";
-  auto        repo_meta              = config::TryParseJsonFile<scmi::spec::RepoMeta>(repometa_json_path);
+  auto        repo_meta              = config::LoadRepoMetaFragments(scmi_specification_dir);
   if (!repo_meta.has_value()) {
     return std::unexpected(repo_meta.error());
   }
 
-  // parse the 'platform_lookup' json file that maps UUIDs to metric declaration file paths
-  const auto& metrics_declaration_dir   = configuration.metrics_dir_path;
-  const auto& platform_lookup_json_path = metrics_declaration_dir / "platform_lookup.json";
-  auto        platform_lookup = config::TryParseJsonFile<metrics::spec::PlatformLookup>(platform_lookup_json_path);
+  auto platform_lookup = config::LoadPlatformLookupFragments(configuration.metrics_dir_path);
   if (!platform_lookup.has_value()) {
     return std::unexpected(platform_lookup.error());
   }
@@ -400,10 +397,8 @@ static auto LookUpSpecificationFiles(const AstlConfiguration&           configur
   std::vector<ScmiUuidSpecificationInfo> platform_specifications;
   platform_specifications.reserve(scmi_targets.size());
   const ScmiSpecificationLookupContext lookup_context{
-      .repo_meta               = &(*repo_meta),
-      .platform_lookup         = &(*platform_lookup),
-      .scmi_specification_dir  = &scmi_specification_dir,
-      .metrics_declaration_dir = &metrics_declaration_dir,
+      .repo_meta       = &(*repo_meta),
+      .platform_lookup = &(*platform_lookup),
   };
 
   for (const auto* target : scmi_targets) {

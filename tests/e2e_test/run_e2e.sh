@@ -66,7 +66,7 @@ echo ""
 # Copy metrics + scmi spec config/ directory to build directory #
 ###############################################################
 echo "Publishing config files..."
-./scripts/publish_configs.sh -o "$BUILD_DIR/lib/config" --confidential --mocksysfs
+./scripts/publish_configs.sh -o "$BUILD_DIR/lib/config" --confidential
 echo ""
 
 ########################################
@@ -138,8 +138,12 @@ if [[ $ALREADY_RUNNING == "false" ]]; then
 	echo "✓ Mount point accessible: $TELEMETRY_ROOT"
 
 	# Setup cleanup to stop MockSysfs when script exits
+	# shellcheck disable=SC2329
 	cleanup_mocksysfs() {
+		# used indirectly in trap, so ignore 'unreachable' warnings
+		# shellcheck disable=2317
 		echo ""
+		# shellcheck disable=2317
 		bash "$CLEANUP_MOCKSYSFS_SCRIPT" "$MOUNT_POINT"
 	}
 	trap cleanup_mocksysfs EXIT

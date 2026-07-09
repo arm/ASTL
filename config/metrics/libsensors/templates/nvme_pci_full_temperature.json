@@ -1,0 +1,76 @@
+{
+  "_comment": "Shared metrics definitions for NVMe PCI libsensors targets with composite and per-sensor temperatures",
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "Composite": {
+      "description": "Composite NVMe drive temperature reported by the controller sensor",
+      "unit": "celsius",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal", "nvme"],
+      "derived_metrics": {
+        "low": {
+          "description": "Configured low composite temperature threshold for the NVMe drive",
+          "identifier": "THERMAL_LIMIT",
+          "metric_groups": ["nvme"]
+        },
+        "high": {
+          "description": "Configured high composite temperature threshold for the NVMe drive",
+          "identifier": "THERMAL_LIMIT",
+          "metric_groups": ["nvme"]
+        },
+        "critical": {
+          "description": "Configured critical composite temperature threshold for the NVMe drive",
+          "identifier": "THERMAL_LIMIT",
+          "metric_groups": ["nvme"]
+        },
+        "alarm": {
+          "description": "Composite thermal alarm status reported by the NVMe drive",
+          "metric_type": "value",
+          "unit": "none",
+          "identifier": "STATUS",
+          "metric_groups": ["nvme"]
+        }
+      },
+      "collection": {
+        "register": "Composite",
+        "protocol": "libsensors"
+      }
+    },
+    "Sensor_1": {
+      "description": "Additional NVMe drive temperature reported by sensor 1",
+      "unit": "celsius",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal", "nvme"],
+      "collection": {
+        "register": "Sensor 1",
+        "protocol": "libsensors"
+      }
+    },
+    "Sensor_2": {
+      "description": "Additional NVMe drive temperature reported by sensor 2",
+      "unit": "celsius",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal", "nvme"],
+      "collection": {
+        "register": "Sensor 2",
+        "protocol": "libsensors"
+      }
+    },
+    "Sensor_3": {
+      "description": "Additional NVMe drive temperature reported by sensor 3",
+      "unit": "celsius",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal", "nvme"],
+      "collection": {
+        "register": "Sensor 3",
+        "protocol": "libsensors"
+      }
+    }
+  }
+}

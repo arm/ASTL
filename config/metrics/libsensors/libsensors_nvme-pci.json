@@ -1,0 +1,7 @@
+{
+  "_comment": "Metrics definitions for NVMe PCI libsensors targets",
+  "extends": "templates/nvme_pci_full_temperature.json",
+  "document": {
+    "confidential": false
+  }
+}

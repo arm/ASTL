@@ -132,7 +132,7 @@ echo "✅ MockSysfs mounted at ${MOUNT_POINT}"
 ###############################################################
 # Copy metrics + scmi spec config/ directory to build directory #
 ###############################################################
-./scripts/publish_configs.sh -o "${BUILD_DIR}/lib/config" --confidential --mocksysfs
+./scripts/publish_configs.sh -o "${BUILD_DIR}/lib/config" --confidential
 
 ###############
 # Demo action #

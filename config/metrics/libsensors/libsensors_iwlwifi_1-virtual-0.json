@@ -1,0 +1,19 @@
+{
+  "_comment": "Metrics definitions for libsensors target libsensors_iwlwifi_1-virtual-0",
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "temp1": {
+      "description": "Wi-Fi adapter temperature reported by the iwlwifi sensor",
+      "unit": "celsius",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal", "nic"],
+      "collection": {
+        "register": "temp1",
+        "protocol": "libsensors"
+      }
+    }
+  }
+}

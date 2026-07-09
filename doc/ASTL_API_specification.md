@@ -792,9 +792,9 @@ For live SCMI discovery to work, the following must exist:
 4. The contents of that file must contain a UUID that ASTL can normalize.
 5. ASTL must be able to locate its configuration directory.
 6. The config directory must contain:
-   - `scmi/public/repometa.json`
+   - one or more `scmi/public/**/repometa.json` fragments
    - The referenced SCMI specification JSON
-   - `metrics/platform_lookup.json`
+   - one or more `metrics/**/platform_lookup.json` fragments
    - The referenced metrics declaration JSON
 
 #### How ASTL Discovers SCMI Targets
@@ -814,10 +814,10 @@ At runtime, ASTL:
 SCMI target discovery alone is not enough for processed metric discovery.
 ASTL also needs shipped configuration metadata:
 
-- `scmi/public/repometa.json`
-  - Maps UUID to SCMI specification file
-- `metrics/platform_lookup.json`
-  - Maps UUID to metrics declaration file
+- `scmi/public/**/repometa.json`
+  - Maps UUID to SCMI specification file, with paths relative to the fragment directory
+- `metrics/**/platform_lookup.json`
+  - Maps UUID to metrics declaration file, with paths relative to the fragment directory
 
 The SCMI specification file tells ASTL what raw counters exist.
 The metrics declaration file tells ASTL how to present processed metrics on top of them.

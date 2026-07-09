@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <expected>
+#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
@@ -30,6 +31,7 @@ struct MetricsDeclarationFileElement {
   std::string                last_updated;
   std::string                description;
   std::string                metrics_file;
+  std::filesystem::path      resolved_metrics_file;
   std::optional<std::string> name;
 };
 

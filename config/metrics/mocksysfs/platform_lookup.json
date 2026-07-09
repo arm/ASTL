@@ -1,0 +1,13 @@
+{
+  "last_updated": "2025-12-18",
+
+  "scmi_uuid_mapping": {
+    "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000/14": {
+      "last_updated": "2025-12-18",
+      "description": "Mock SCMI Sysfs - Test harness for ASTL development",
+      "metrics_file": "metrics.json",
+      "name": "scmi-mocksysfs-{telemetry_subdirectory}",
+      "confidential": false
+    }
+  }
+}

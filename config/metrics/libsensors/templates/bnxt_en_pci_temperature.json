@@ -1,0 +1,30 @@
+{
+  "_comment": "Shared metrics definitions for bnxt_en PCI libsensors targets with temperature limits",
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "temp1": {
+      "description": "NIC temperature reported by the bnxt_en PCI sensor",
+      "unit": "celsius",
+      "metric_type": "value",
+      "identifier": "TEMPERATURE",
+      "metric_groups": ["thermal", "nic"],
+      "derived_metrics": {
+        "high": {
+          "description": "Configured high temperature threshold for the bnxt_en PCI sensor"
+        },
+        "critical": {
+          "description": "Configured critical temperature threshold for the bnxt_en PCI sensor"
+        },
+        "emergency": {
+          "description": "Configured emergency temperature threshold for the bnxt_en PCI sensor"
+        }
+      },
+      "collection": {
+        "register": "temp1",
+        "protocol": "libsensors"
+      }
+    }
+  }
+}

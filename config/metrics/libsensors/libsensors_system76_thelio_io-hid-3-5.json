@@ -1,0 +1,52 @@
+{
+  "_comment": "Metrics definitions for libsensors target libsensors_system76_thelio_io-hid-3-5",
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "CPU_Fan": {
+      "description": "CPU cooling fan speed reported by the System76 Thelio I/O controller",
+      "unit": "RPM",
+      "metric_type": "value",
+      "identifier": "FAN_SPEED",
+      "metric_groups": ["fan", "cpu"],
+      "collection": {
+        "register": "CPU Fan",
+        "protocol": "libsensors"
+      }
+    },
+    "Intake_Fan": {
+      "description": "Chassis intake fan speed reported by the System76 Thelio I/O controller",
+      "unit": "RPM",
+      "metric_type": "value",
+      "identifier": "FAN_SPEED",
+      "metric_groups": ["fan"],
+      "collection": {
+        "register": "Intake Fan",
+        "protocol": "libsensors"
+      }
+    },
+    "GPU_Fan": {
+      "description": "GPU cooling fan speed reported by the System76 Thelio I/O controller",
+      "unit": "RPM",
+      "metric_type": "value",
+      "identifier": "FAN_SPEED",
+      "metric_groups": ["fan", "gpu"],
+      "collection": {
+        "register": "GPU Fan",
+        "protocol": "libsensors"
+      }
+    },
+    "Aux_Fan": {
+      "description": "Auxiliary chassis fan speed reported by the System76 Thelio I/O controller",
+      "unit": "RPM",
+      "metric_type": "value",
+      "identifier": "FAN_SPEED",
+      "metric_groups": ["fan", "auxiliary"],
+      "collection": {
+        "register": "Aux Fan",
+        "protocol": "libsensors"
+      }
+    }
+  }
+}

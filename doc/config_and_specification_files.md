@@ -33,7 +33,9 @@ Import [`config/scmi/alpha/`](../config/scmi/alpha/) and [`config/scmi/beta/`](.
 
 ## Platform Detection for SCMI Specification
 
-Each platform supports different sensors. ASTL first reads the telemetry source's UUID from the SCMI Sysfs interface. The file [`config/scmi/beta/public/repometa.json`](../config/scmi/beta/public/repometa.json) maps UUIDs to their specification files:
+Each platform supports different sensors. ASTL first reads the telemetry source's UUID from the SCMI Sysfs interface.
+Files named `repometa.json` under [`config/scmi/public/`](../config/scmi/public/) map UUIDs to their specification
+files. Paths are resolved relative to the directory containing the `repometa.json` fragment:
 
 ```json
 {
@@ -42,8 +44,8 @@ Each platform supports different sensors. ASTL first reads the telemetry source'
     "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000": {
       "last_updated": "2025-12-18",
       "description": "Mock SCMI Sysfs - Test harness for ASTL development",
-      "specification_file": "mocksysfs/mockscmi.json",
-      "confidential": true
+      "specification_file": "mockscmi.json",
+      "confidential": false
     }
   }
 }
@@ -188,7 +190,9 @@ The metrics declaration files are created by the ASTL development team and defin
 
 ### Platform Lookup
 
-The file [`config/metrics/platform_lookup.json`](../config/metrics/platform_lookup.json) maps target UUIDs to metrics declarations, similar to [`config/scmi/*/repometa.json`](../config/scmi/):
+Files named `platform_lookup.json` under [`config/metrics/`](../config/metrics/) map target UUIDs to metrics
+declarations, similar to `config/scmi/public/**/repometa.json`. Paths are resolved relative to the directory
+containing the `platform_lookup.json` fragment:
 
 ```json
 {
@@ -198,8 +202,8 @@ The file [`config/metrics/platform_lookup.json`](../config/metrics/platform_look
     "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000": {
       "last_updated": "2025-12-18",
       "description": "Mock SCMI Sysfs - Test harness for ASTL development",
-      "metrics_file": "mocksysfs/metrics.json",
-      "confidential": true
+      "metrics_file": "metrics.json",
+      "confidential": false
     }
   }
 }
@@ -302,24 +306,22 @@ So we need a mechanism to select and move a subset of files and elements to an o
 
  OUTPUT_DIR [OPTIONS]
 
-Publish ASTL config directory with filtering and SCMI spec version selection.
+Publish ASTL config directory with filtering.
 
 Required arguments:
   -o OUTPUT_DIR             Output directory to copy config/ to (with modifications)
 
 Optional arguments:
-  --scmi-spec-version VER   SCMI spec version to use: 'alpha' or 'beta' (default: beta)
   --confidential            Include confidential content (default: exclude confidential content)
-  --mocksysfs               Include mock scmi sysfs metrics and scmi spec for testing
   -h, --help                Show this help message
 
 Examples:
 
-  # Publish beta spec for non-confidential/public use
-  ./scripts/publish_configs.sh -o /path/to/output --scmi-spec-version beta
+  # Publish config for non-confidential/public use
+  ./scripts/publish_configs.sh -o /path/to/output
 
-  # Publish alpha spec including confidential content
-  ./scripts/publish_configs.sh -o /path/to/output --scmi-spec-version alpha --confidential
+  # Publish config including confidential content
+  ./scripts/publish_configs.sh -o /path/to/output --confidential
 ```
 
 Our demo.sh script uses publish_configs.sh to set up the config files in the build/debug/lib directory today.

@@ -1,0 +1,115 @@
+{
+  "document": {
+    "confidential": false
+  },
+  "metrics": {
+    "meminfo.MemTotal": {
+      "description": "Total memory available in the system",
+      "unit": "bytes",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": ["memory"],
+      "formula": "value * 1024",
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "key_value",
+        "relative_path": "meminfo",
+        "field_name": "MemTotal",
+        "raw_value_type": "uint64"
+      }
+    },
+    "meminfo.MemUsed": {
+      "description": "Total used memory",
+      "unit": "bytes",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": ["memory"],
+      "formula": "max(mem_total - mem_available, 0) * 1024",
+      "collection": {
+        "protocol": "procfs",
+        "inputs": [
+          {
+            "name": "mem_total",
+            "field_type": "key_value",
+            "relative_path": "meminfo",
+            "field_name": "MemTotal",
+            "raw_value_type": "uint64"
+          },
+          {
+            "name": "mem_available",
+            "field_type": "key_value",
+            "relative_path": "meminfo",
+            "field_name": "MemAvailable",
+            "raw_value_type": "uint64"
+          }
+        ]
+      }
+    },
+    "meminfo.utilization": {
+      "description": "Average memory utilization percentage",
+      "unit": "percent",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": ["memory"],
+      "formula": "if(mem_total == 0, 0, max(mem_total - mem_available, 0) * 100 / mem_total)",
+      "collection": {
+        "protocol": "procfs",
+        "inputs": [
+          {
+            "name": "mem_total",
+            "field_type": "key_value",
+            "relative_path": "meminfo",
+            "field_name": "MemTotal",
+            "raw_value_type": "uint64"
+          },
+          {
+            "name": "mem_available",
+            "field_type": "key_value",
+            "relative_path": "meminfo",
+            "field_name": "MemAvailable",
+            "raw_value_type": "uint64"
+          }
+        ]
+      }
+    },
+    "stat.{label}.utilization": {
+      "description": "Average {label} utilization percentage",
+      "unit": "percent",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": ["cpu"],
+      "formula": "clamp(if(delta_total == 0, 0, max(delta_total - delta_idle, 0) * 100 / delta_total), 0, 100)",
+      "collection": {
+        "protocol": "procfs",
+        "expand": {
+          "relative_path": "stat",
+          "match_pattern": "^cpu[0-9]*$",
+          "label_token_index": 0
+        },
+        "requires_previous": true,
+        "inputs": [
+          {
+            "name": "total",
+            "field_type": "token_sum",
+            "relative_path": "stat",
+            "line_prefix": "{label}",
+            "token_start_index": 1,
+            "token_end_index": 8
+          },
+          {
+            "name": "idle",
+            "field_type": "token_sum",
+            "relative_path": "stat",
+            "line_prefix": "{label}",
+            "token_start_index": 4,
+            "token_end_index": 5
+          }
+        ]
+      }
+    }
+  }
+}

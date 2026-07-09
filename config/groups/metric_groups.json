@@ -1,0 +1,60 @@
+{
+  "_comment": "High-level ASTL metric group definitions",
+
+  "metric_groups": {
+    "auxiliary": {
+      "description": "Metrics commonly used to monitor auxiliary platform components and support functions."
+    },
+    "bandwidth": {
+      "description": "Metrics commonly used to monitor bandwidth and data-transfer activity."
+    },
+    "core": {
+      "description": "Metrics commonly used to monitor individual CPU cores and core-local behavior."
+    },
+    "cpu": {
+      "description": "Metrics commonly used to monitor CPU subsystems and processor-wide behavior."
+    },
+    "current": {
+      "description": "Metrics commonly used to monitor electrical current draw."
+    },
+    "fan": {
+      "description": "Metrics commonly used to monitor fan speed and cooling airflow control."
+    },
+    "frequency": {
+      "description": "Metrics commonly used to monitor clock frequency and rate-related behavior."
+    },
+    "gpu": {
+      "description": "Metrics commonly used to monitor GPU subsystems and graphics processors."
+    },
+    "io": {
+      "description": "Metrics commonly used to monitor I/O subsystems and data movement."
+    },
+    "memory": {
+      "description": "Metrics commonly used to monitor memory capacity, usage, and utilization."
+    },
+    "nic": {
+      "description": "Metrics commonly used to monitor network interface controllers and network links."
+    },
+    "nvme": {
+      "description": "Metrics commonly used to monitor NVMe storage devices and controllers."
+    },
+    "performance": {
+      "description": "Metrics commonly used to monitor performance-related operating characteristics."
+    },
+    "power": {
+      "description": "Metrics commonly used to monitor power draw and energy behavior."
+    },
+    "soc": {
+      "description": "Metrics commonly used to monitor SoC-wide behavior and shared platform resources."
+    },
+    "thermal": {
+      "description": "Metrics commonly used to monitor temperatures and thermal conditions."
+    },
+    "throttling": {
+      "description": "Metrics commonly used to detect throttling events and performance limiting behavior."
+    },
+    "voltage": {
+      "description": "Metrics commonly used to monitor electrical voltage levels."
+    }
+  }
+}

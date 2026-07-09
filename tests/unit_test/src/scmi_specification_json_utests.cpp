@@ -2,15 +2,44 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <string_view>
+
 #include "../../test_includes.hpp"  // include before catch2
+#include "../../test_utilities.hpp"
 #include "astl/astl_errors.h"
 #include "astl_internal_status.hpp"
 #include "common/scmi/uuid.hpp"
+#include "config/config_lookup_loader.hpp"
 #include "config/metric_json_declaration.hpp"
 #include "config/scmi_metric_json_declaration.hpp"
 #include "config/scmi_platform_telemetry_spec.hpp"
 
 using json = nlohmann::json;
+
+namespace {
+
+auto MakeTempDir(std::string_view prefix) -> std::filesystem::path {
+  const auto unique_suffix = std::chrono::steady_clock::now().time_since_epoch().count();
+  auto       path = std::filesystem::temp_directory_path() / (std::string{prefix} + std::to_string(unique_suffix));
+  std::filesystem::create_directories(path);
+  return path;
+}
+
+void WriteTextFile(const std::filesystem::path& path, std::string_view contents) {
+  std::error_code ec;
+  std::filesystem::create_directories(path.parent_path(), ec);
+  REQUIRE(!ec);
+
+  std::ofstream out(path, std::ios::out | std::ios::trunc);
+  REQUIRE(out.good());
+  out << contents;
+  REQUIRE(out.good());
+}
+
+}  // namespace
 
 TEST_CASE("ScmiSpecification::NormalizeUUID", "[ConfigManager]") {
   SECTION("Typical lowercase uuid") {
@@ -363,6 +392,90 @@ TEST_CASE("PlatformLookup parses optional SCMI target name template", "[ConfigMa
   REQUIRE(metrics_file.has_value());
   REQUIRE(metrics_file->name.has_value());
   REQUIRE(*metrics_file->name == "{telemetry_subdirectory}");
+}
+
+TEST_CASE("LoadPlatformLookupFragments merges recursive platform lookup files", "[ConfigManager]") {
+  const auto    config_root = MakeTempDir("astl_platform_lookup_test_");
+  TempFileGuard temp_guard{config_root};
+
+  WriteTextFile(config_root / "metrics" / "vendor_a" / "platform_lookup.json", R"json({
+  "last_updated": "2026-03-16",
+  "scmi_uuid_mapping": {
+    "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000": {
+      "last_updated": "2026-03-16",
+      "description": "first platform",
+      "metrics_file": "metrics_a.json",
+      "name": "first"
+    }
+  }
+}
+)json");
+  WriteTextFile(config_root / "metrics" / "vendor_b" / "platform_lookup.json", R"json({
+  "last_updated": "2026-03-17",
+  "scmi_uuid_mapping": {
+    "DEADBEEF-CAFE-BABE-CAFE-BABEBEEF0000": {
+      "last_updated": "2026-03-17",
+      "description": "second platform",
+      "metrics_file": "nested/metrics_b.json"
+    }
+  }
+}
+)json");
+  WriteTextFile(config_root / "metrics" / "vendor_c" / "metrics.json", R"json({"metrics": {}})json");
+
+  auto platform_lookup = astl::config::LoadPlatformLookupFragments(config_root / "metrics");
+
+  REQUIRE(platform_lookup.has_value());
+  REQUIRE(platform_lookup->metric_files_by_platform_uuid.size() == 2);
+  auto first_uuid = astl::scmi::spec::GetNormalizedUuid("CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000").value();
+  auto first      = astl::metrics::spec::FindMetricsFileElementByUuid(*platform_lookup, first_uuid);
+  REQUIRE(first.has_value());
+  REQUIRE(first->resolved_metrics_file == config_root / "metrics" / "vendor_a" / "metrics_a.json");
+
+  auto second_uuid = astl::scmi::spec::GetNormalizedUuid("DEADBEEF-CAFE-BABE-CAFE-BABEBEEF0000").value();
+  auto second      = astl::metrics::spec::FindMetricsFileElementByUuid(*platform_lookup, second_uuid);
+  REQUIRE(second.has_value());
+  REQUIRE(second->resolved_metrics_file == config_root / "metrics" / "vendor_b" / "nested" / "metrics_b.json");
+}
+
+TEST_CASE("LoadRepoMetaFragments merges recursive repometa files", "[ConfigManager]") {
+  const auto    config_root = MakeTempDir("astl_repometa_lookup_test_");
+  TempFileGuard temp_guard{config_root};
+
+  WriteTextFile(config_root / "scmi" / "public" / "generic" / "repometa.json", R"json({
+  "last_updated": "2026-03-16",
+  "uuid_mapping": {
+    "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000/8": {
+      "last_updated": "2026-03-16",
+      "description": "generic",
+      "specification_file": "generic.json"
+    }
+  }
+}
+)json");
+  WriteTextFile(config_root / "scmi" / "public" / "specific" / "repometa.json", R"json({
+  "last_updated": "2026-03-17",
+  "uuid_mapping": {
+    "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000/16": {
+      "last_updated": "2026-03-17",
+      "description": "specific",
+      "specification_file": "nested/specific.json"
+    }
+  }
+}
+)json");
+  WriteTextFile(config_root / "scmi" / "public" / "empty" / "scp.json", R"json({"members": []})json");
+
+  auto repo_meta = astl::config::LoadRepoMetaFragments(config_root / "scmi" / "public");
+
+  REQUIRE(repo_meta.has_value());
+  REQUIRE(repo_meta->spec_files_by_uuid.size() == 2);
+  auto uuid      = astl::scmi::spec::GetNormalizedUuid("CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000").value();
+  auto spec_file = astl::scmi::spec::FindSpecFileByUuid(*repo_meta, uuid);
+  REQUIRE(spec_file.has_value());
+  REQUIRE(spec_file->description == "specific");
+  REQUIRE(spec_file->resolved_specification_file ==
+          config_root / "scmi" / "public" / "specific" / "nested" / "specific.json");
 }
 
 TEST_CASE("GetMetricRegistersScmiData applies unit, component, and instance filters", "[ConfigManager]") {
