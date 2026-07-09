@@ -7,11 +7,15 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <optional>
+#include <span>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
-#if defined(__linux__)
+#ifdef __linux__
 #  include <sys/wait.h>
 #  include <unistd.h>
 #endif
@@ -120,7 +124,142 @@ auto PrepareProcessLockTestPaths(const fs::path& base_path, const fs::path& proc
   WriteTextFileWithWorldRWX(base_path / "de_implementation_version", "0.0.0");
   WriteTextFileWithWorldRWX(base_path / "version", "0.0.1");
 }
+
+struct MapScmiFileInterface {
+  std::unordered_map<std::string, std::string> files;
+  std::filesystem::path                        base_path{"."};
+
+  static auto Key(const std::filesystem::path& path) -> std::string { return path.lexically_normal().generic_string(); }
+
+  auto IsValid(const std::filesystem::path& path) const noexcept -> std::expected<bool, astl_status_code> {
+    return files.contains(Key(path));
+  }
+
+  auto GetSubdirectories() const -> std::expected<std::vector<std::filesystem::directory_entry>, astl_status_code> {
+    std::unordered_set<std::string>               seen;
+    std::vector<std::filesystem::directory_entry> subdirectories;
+    for (const auto& [file_path, contents] : files) {
+      static_cast<void>(contents);
+      const auto parent_path = std::filesystem::path{file_path}.parent_path();
+      if (parent_path.empty() || !seen.insert(Key(parent_path)).second) {
+        continue;
+      }
+      std::error_code error_code;
+      subdirectories.emplace_back(parent_path, error_code);
+    }
+    return subdirectories;
+  }
+
+  auto HasReadPermission(const std::filesystem::path& path) const noexcept -> std::expected<bool, astl_status_code> {
+    return IsValid(path);
+  }
+
+  static auto HasWritePermission(const std::filesystem::path& /*path*/) noexcept
+      -> std::expected<bool, astl_status_code> {
+    return true;
+  }
+
+  auto Read(const std::filesystem::path& path, std::string& output) -> astl_status_code {
+    auto file_it = files.find(Key(path));
+    if (file_it == files.end()) {
+      return ASTL_STATUS_FILE_ERROR;
+    }
+    output = file_it->second;
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  auto Write(const std::filesystem::path& path, const std::string_view value) -> astl_status_code {
+    files[Key(path)] = std::string{value};
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  auto GetBasePath() const -> const std::filesystem::path& { return base_path; }
+};
+
+struct CapturingRawSampleSink : astl::IRawSampleSink {
+  auto SinkRawSamples(const astl::ITarget* /*target*/, std::span<astl::RawSampledData> raw_samples)
+      -> astl_status_code override {
+    samples.insert(samples.end(), raw_samples.begin(), raw_samples.end());
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  std::vector<astl::RawSampledData> samples;
+};
+
+auto DataEventPath(astl::ScmiDataEventId data_event_id, std::string_view file_name) -> std::filesystem::path {
+  const auto data_event_dir = astl::scmi_detail::GetDataEventDirPath(data_event_id);
+  REQUIRE(data_event_dir.has_value());
+  return *data_event_dir / file_name;
+}
+
+auto AddCommonScmiFiles(MapScmiFileInterface& file_interface) -> void {
+  file_interface.files[MapScmiFileInterface::Key("tlm_enable")]                = "0";
+  file_interface.files[MapScmiFileInterface::Key("de_implementation_version")] = "0.0.0";
+  file_interface.files[MapScmiFileInterface::Key("version")]                   = "0.0.1";
+}
+
+auto AddScmiDataEvent(MapScmiFileInterface& file_interface, astl::ScmiDataEventId data_event_id,
+                      std::optional<std::string_view> timestamp_rate, std::string_view value) -> void {
+  file_interface.files[MapScmiFileInterface::Key(DataEventPath(data_event_id, "enable"))]        = "0";
+  file_interface.files[MapScmiFileInterface::Key(DataEventPath(data_event_id, "tstamp_enable"))] = "0";
+  file_interface.files[MapScmiFileInterface::Key(DataEventPath(data_event_id, "value"))]         = std::string{value};
+  if (timestamp_rate.has_value()) {
+    file_interface.files[MapScmiFileInterface::Key(DataEventPath(data_event_id, "tstamp_rate"))] =
+        std::string{*timestamp_rate};
+  }
+}
+
+auto MakeImmediateScmiConfiguration(std::initializer_list<astl::ScmiDataEventId> data_event_ids)
+    -> astl::CollectionConfiguration {
+  astl::OperationSequence operations_on_sample;
+  for (const auto data_event_id : data_event_ids) {
+    operations_on_sample.push_back(std::make_unique<astl::ScmiReadOperation>(data_event_id, astl::kilohertz{1}));
+  }
+
+  astl::CollectionOperations operations{.operationsBeforeStart{},
+                                        .operationsAtStart{},
+                                        .operationsOnSample{std::move(operations_on_sample)},
+                                        .operationsAtStop{},
+                                        .samplingInterval{},
+                                        .requirements{astl::CollectorCapability{astl::CollectorType::SCMI}}};
+  astl_collection_params_t   collection_params{
+        .size              = sizeof(astl_collection_params_t),
+        .flags             = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
+        .sampling_interval = 0,
+        .collection_mode   = ASTL_COLLECTION_MODE_IMMEDIATE,
+  };
+  return astl::CollectionConfiguration{nullptr, std::move(operations), collection_params};
+}
+
+auto CheckTimestampRateFallback(std::string_view timestamp_rate) -> void {
+  MapScmiFileInterface file_interface;
+  AddCommonScmiFiles(file_interface);
+  AddScmiDataEvent(file_interface, astl::ScmiDataEventId{0x1234}, timestamp_rate, "1234567890 42");
+
+  CapturingRawSampleSink                         sample_sink;
+  astl::ScmiSysfsCollector<MapScmiFileInterface> collector(std::move(file_interface));
+  collector.SetRawSampleSink(&sample_sink);
+
+  auto configuration = MakeImmediateScmiConfiguration({astl::ScmiDataEventId{0x1234}});
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
+  const auto before_ns = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ReadImmediate());
+  const auto after_ns = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
+
+  REQUIRE(sample_sink.samples.size() == 1);
+  CHECK(sample_sink.samples[0].raw_tick != uint64_t{1234567890});
+  CHECK(sample_sink.samples[0].raw_tick >= before_ns);
+  CHECK(sample_sink.samples[0].raw_tick <= after_ns);
+}
 }  // namespace
+
+TEST_CASE("ParseDataEventValue extracts the final value token", "[scmi_sysfs_collector]") {
+  CHECK(astl::scmi_detail::ParseDataEventValue("42")->value == uint64_t{0x42});
+  CHECK(astl::scmi_detail::ParseDataEventValue("1234567890:   42\n")->value == uint64_t{0x42});
+  CHECK_FALSE(astl::scmi_detail::ParseDataEventValue(" \t\n:").has_value());
+}
 
 TEST_CASE("ScmiSysfsCollector::GetCapabilities", "[scmi_sysfs_collector]") {
   MockFileInterface                           mock_file_interface;
@@ -268,7 +407,7 @@ TEST_CASE("ScmiSysfsCollector allows multiple collectors in one process", "[scmi
   fs::remove_all(process_lock_dir, ec);
 }
 
-#if defined(__linux__)
+#ifdef __linux__
 TEST_CASE("ScmiSysfsCollector blocks configure from second process", "[scmi_sysfs_collector][process_lock]") {
   namespace fs = std::filesystem;
 
@@ -488,6 +627,8 @@ TEST_CASE("ScmiSysfsCollector breaks stale process lock", "[scmi_sysfs_collector
  * Then it'll read the "value" file once before writing a "0" back to the enable file.
  */
 TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]") {
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "0");
+
   // ensure that configuring an empty set of operations doesn't touch the file system
   MockFileInterface mock_file_interface;
   // assume very friendly file interface
@@ -602,12 +743,139 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - one", "[scmi_sysfs_collector]
   REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
 }
 
+TEST_CASE("ScmiSysfsCollector uses hardware timestamps only after validation succeeds",
+          "[scmi_sysfs_collector][hardware_timestamp]") {
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "0");
+
+  MapScmiFileInterface file_interface;
+  AddCommonScmiFiles(file_interface);
+  AddScmiDataEvent(file_interface, astl::ScmiDataEventId{0x1234}, std::string_view{"4"}, "1234567890 42");
+
+  CapturingRawSampleSink                         sample_sink;
+  astl::ScmiSysfsCollector<MapScmiFileInterface> collector(std::move(file_interface));
+  collector.SetRawSampleSink(&sample_sink);
+
+  auto configuration = MakeImmediateScmiConfiguration({astl::ScmiDataEventId{0x1234}});
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ReadImmediate());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
+
+  REQUIRE(sample_sink.samples.size() == 1);
+  CHECK(sample_sink.samples[0].raw_tick == uint64_t{1234567890});
+  CHECK(sample_sink.samples[0].value == astl::AstlValue{uint64_t{0x42}});
+}
+
+TEST_CASE("ScmiSysfsCollector falls back when timestamp rate is missing",
+          "[scmi_sysfs_collector][hardware_timestamp]") {
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "0");
+
+  MapScmiFileInterface file_interface;
+  AddCommonScmiFiles(file_interface);
+  AddScmiDataEvent(file_interface, astl::ScmiDataEventId{0x1234}, std::nullopt, "1234567890 42");
+
+  CapturingRawSampleSink                         sample_sink;
+  astl::ScmiSysfsCollector<MapScmiFileInterface> collector(std::move(file_interface));
+  collector.SetRawSampleSink(&sample_sink);
+
+  auto configuration = MakeImmediateScmiConfiguration({astl::ScmiDataEventId{0x1234}});
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
+  const auto before_ns = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ReadImmediate());
+  const auto after_ns = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
+
+  REQUIRE(sample_sink.samples.size() == 1);
+  CHECK(sample_sink.samples[0].value == astl::AstlValue{uint64_t{0x42}});
+  CHECK(sample_sink.samples[0].raw_tick != uint64_t{1234567890});
+  CHECK(sample_sink.samples[0].raw_tick >= before_ns);
+  CHECK(sample_sink.samples[0].raw_tick <= after_ns);
+}
+
+TEST_CASE("ScmiSysfsCollector falls back when timestamp rate is zero or invalid",
+          "[scmi_sysfs_collector][hardware_timestamp]") {
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "0");
+
+  SECTION("zero timestamp rate") { CheckTimestampRateFallback("0"); }
+
+  SECTION("invalid timestamp rate") { CheckTimestampRateFallback("bad-rate"); }
+}
+
+TEST_CASE("ScmiSysfsCollector falls back when hardware timestamp value is missing",
+          "[scmi_sysfs_collector][hardware_timestamp]") {
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "0");
+
+  MapScmiFileInterface file_interface;
+  AddCommonScmiFiles(file_interface);
+  AddScmiDataEvent(file_interface, astl::ScmiDataEventId{0x1234}, std::string_view{"1"}, "42");
+
+  CapturingRawSampleSink                         sample_sink;
+  astl::ScmiSysfsCollector<MapScmiFileInterface> collector(std::move(file_interface));
+  collector.SetRawSampleSink(&sample_sink);
+
+  auto configuration = MakeImmediateScmiConfiguration({astl::ScmiDataEventId{0x1234}});
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
+  const auto before_ns = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ReadImmediate());
+  const auto after_ns = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
+
+  REQUIRE(sample_sink.samples.size() == 1);
+  CHECK(sample_sink.samples[0].value == astl::AstlValue{uint64_t{0x42}});
+  CHECK(sample_sink.samples[0].raw_tick != uint64_t{42});
+  CHECK(sample_sink.samples[0].raw_tick >= before_ns);
+  CHECK(sample_sink.samples[0].raw_tick <= after_ns);
+}
+
+TEST_CASE("ScmiSysfsCollector applies per-DE_ID validation failure to all DE_ID",
+          "[scmi_sysfs_collector][hardware_timestamp]") {
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "0");
+
+  constexpr astl::ScmiDataEventId valid_de_id{0x1234};
+  constexpr astl::ScmiDataEventId missing_rate_de_id{0x5678};
+
+  MapScmiFileInterface file_interface;
+  AddCommonScmiFiles(file_interface);
+  AddScmiDataEvent(file_interface, valid_de_id, std::string_view{"1"}, "100 10");
+  AddScmiDataEvent(file_interface, missing_rate_de_id, std::nullopt, "200 20");
+
+  CapturingRawSampleSink                         sample_sink;
+  astl::ScmiSysfsCollector<MapScmiFileInterface> collector(std::move(file_interface));
+  collector.SetRawSampleSink(&sample_sink);
+
+  auto configuration = MakeImmediateScmiConfiguration({valid_de_id, missing_rate_de_id});
+
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ConfigureCollection(std::move(configuration)));
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StartCollection());
+  const auto before_ns = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.ReadImmediate());
+  const auto after_ns = static_cast<uint64_t>(astl::ClockMonotonicRaw::now().time_since_epoch().count());
+  REQUIRE(ASTL_STATUS_SUCCESS == collector.StopCollection());
+
+  REQUIRE(sample_sink.samples.size() == 2);
+  CHECK(sample_sink.samples[0].value == astl::AstlValue{uint64_t{0x10}});
+  CHECK(sample_sink.samples[1].value == astl::AstlValue{uint64_t{0x20}});
+  CHECK(sample_sink.samples[0].raw_tick != uint64_t{100});
+  CHECK(sample_sink.samples[1].raw_tick != uint64_t{200});
+  CHECK(sample_sink.samples[0].raw_tick >= before_ns);
+  CHECK(sample_sink.samples[0].raw_tick <= after_ns);
+  CHECK(sample_sink.samples[1].raw_tick >= before_ns);
+  CHECK(sample_sink.samples[1].raw_tick <= after_ns);
+}
+
 /* In this test we enable periodic sampling, exercising the 'happy path'.
  * We expect the collector to read the "enable" file for the data event, write "1" to it, and then read the
  * "tstamp_enable" file to determine how to parse timestamps.
  * Then it'll read the "value" file once before writing a "0" back to the enable file.
  */
 TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_collector][time_sensitive]") {
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "0");
+
   // ensure that configuring an empty set of operations doesn't touch the file system
   MockFileInterface mock_file_interface;
   // assume very friendly file interface
@@ -744,6 +1012,8 @@ TEST_CASE("ScmiSysfsCollector::ConfigureAndStart - Sampling", "[scmi_sysfs_colle
 }
 
 TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "0");
+
   // test that the collector scales timestamps for us based on tstamp_rate, which indicates the rate in KHz that the
   // tstamps are updated
   MockFileInterface mock_file_interface;
@@ -884,6 +1154,8 @@ TEST_CASE("ScmiSysfsCollector::TstampRateScaling", "[scmi_sysfs_collector]") {
 }
 
 TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[scmi_sysfs_collector]") {
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "0");
+
   MockFileInterface mock_file_interface;
   ALLOW_CALL(mock_file_interface, IsValid(_)).RETURN(true);
   ALLOW_CALL(mock_file_interface, HasWritePermission(_)).RETURN(true);
@@ -976,14 +1248,12 @@ TEST_CASE("ScmiSysfsCollector::PauseCollection emits reserved pause sample", "[s
 }
 
 /*
- * When ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS is set, the collector must:
+ * When enabled, the collector must use software clock timestamps:
  *  - never touch tstamp_enable or tstamp_rate sysfs files
  *  - record a CLOCK_MONOTONIC_RAW timestamp (not the hardware tick from the value file) in raw_tick
  */
-TEST_CASE("ScmiSysfsCollector uses software clock timestamp when env var is set",
-          "[scmi_sysfs_collector][software_clock]") {
-  astl::SetEnvVar(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "1");
-  std::scope_exit env_cleanup{[] { astl::SetEnvVar(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, ""); }};
+TEST_CASE("ScmiSysfsCollector uses software clock timestamp when enabled", "[scmi_sysfs_collector][software_clock]") {
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "1");
 
   MockFileInterface mock_file_interface;
   ALLOW_CALL(mock_file_interface, IsValid(_)).RETURN(true);
@@ -1079,13 +1349,12 @@ TEST_CASE("ScmiSysfsCollector uses software clock timestamp when env var is set"
 }
 
 /*
- * When ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS is set, GetNativeClockSnapshot must return correlations
+ * When enabled, GetNativeClockSnapshot must return correlations
  * with a 1:1 tick ratio and native_at_start equal to the CLOCK_MONOTONIC_RAW snapshot timestamp.
  */
-TEST_CASE("ScmiSysfsCollector::GetNativeClockSnapshot uses software clock when env var is set",
+TEST_CASE("ScmiSysfsCollector::GetNativeClockSnapshot uses software clock when enabled",
           "[scmi_sysfs_collector][software_clock]") {
-  astl::SetEnvVar(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "1");
-  std::scope_exit env_cleanup{[] { astl::SetEnvVar(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, ""); }};
+  EnvVarGuard software_clock_guard(astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "1");
 
   MockFileInterface mock_file_interface;
   ALLOW_CALL(mock_file_interface, IsValid(_)).RETURN(true);

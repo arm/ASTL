@@ -100,7 +100,8 @@ class ScmiSysfsCollector : public ICollector {
   /**
    * @brief Take a paired per-operation clock snapshot (CLOCK_MONOTONIC_RAW + SCMI hardware counter)
    *        for every operation in operationsOnSample.  Each SCMI data event has its own hardware timer,
-   *        so each OperationId receives an independent correlation entry.
+   *        so each OperationId receives an independent correlation entry. If any hardware clock is unavailable
+   *        or invalid, all operations use software-clock correlations to keep one consistent clock domain.
    */
   std::expected<ClockCorrelationMap, astl_status_code> GetNativeClockSnapshot() override;
 
@@ -124,13 +125,27 @@ class ScmiSysfsCollector : public ICollector {
       _collection_mutex;  // prevent the collection configuration from being accessed by two threads at once
   std::unique_ptr<PeriodicSampler> _periodic_sampler;
   std::unordered_map<ScmiDataEventId, HwClockTicks>
-       _previous_timestamps;            //!< Track previous raw_tick per data event ID to detect duplicates
+       _previous_timestamps;            //!< Track previous raw_tick per data event ID. Guarded by _collection_mutex.
   bool _holds_process_lock_ref{false};  //!< True when this collector instance has retained one shared lock reference.
-  //!< When true (ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS is set), use CLOCK_MONOTONIC_RAW instead of the SCMI
-  //!< hardware counter for all sample timestamps. tstamp_enable is not written to sysfs in this mode.
-  bool _use_software_clock_timestamps{false};
+  //!< When true, use CLOCK_MONOTONIC_RAW instead of the SCMI hardware counter for all sample timestamps.
+  //!< This defaults to false and can be enabled by setting ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS. tstamp_enable is
+  //!< not written in this mode.
+  bool _use_software_clock_timestamps{false};  //!< Guarded by _collection_mutex.
 
   // private methods
+
+  /*
+   * @brief Switch all SCMI timestamp handling to CLOCK_MONOTONIC_RAW after hardware timestamp validation fails.
+   * @pre The caller holds _collection_mutex.
+   */
+  void FallBackToSoftwareClockTimestamps(ScmiDataEventId data_event_id, std::string_view reason);
+
+  /** @brief Build software-clock correlations for all configured sample operations. */
+  auto MakeSoftwareClockCorrelations() const -> ClockCorrelationMap;
+
+  /** @brief Validate and correlate one SCMI operation's hardware clock. */
+  auto MakeHardwareClockCorrelation(ScmiReadOperation const& operation)
+      -> std::expected<OperationClockCorrelation, std::string_view>;
 
   /*
    * @brief Enable a given data event, and return whether it was originally enabled before we enabled it.
@@ -236,7 +251,7 @@ namespace scmi_detail {
 inline constexpr std::string_view kScmiProcessLockFileName = ".astl_scmi_sysfs.lock";
 
 inline auto GetProcessLockTempDirectory(std::error_code& error_code) -> std::filesystem::path {
-#if defined(ASTL_TEST_GET_TEMP_DIRECTORY_PATH)
+#ifdef ASTL_TEST_GET_TEMP_DIRECTORY_PATH
   return ASTL_TEST_GET_TEMP_DIRECTORY_PATH(error_code);
 #else
   return std::filesystem::temp_directory_path(error_code);
@@ -255,6 +270,9 @@ auto ParseScmiTimeStamp(std::string_view text)
 auto ParseDataEventValueWithTimestamp(std::string_view data_read)
     -> std::expected<std::pair<HwClockTicks, ScmiDataEventValue>, astl_status_code>;
 
+// Accept either "<timestamp> <value>" or "<value>".
+auto ParseDataEventValue(std::string_view data_read) -> std::expected<ScmiDataEventValue, astl_status_code>;
+
 auto GetUniqueDataEventsIds(CollectionOperations const& operations) -> std::unordered_set<ScmiDataEventId>;
 
 /*
@@ -265,6 +283,8 @@ auto GetUniqueDataEventsIds(CollectionOperations const& operations) -> std::unor
  */
 auto UpdateSampleOperationsWithTstampRates(std::vector<ScmiDataEvent> const& data_events,
                                            CollectionOperations const&       operations) -> void;
+
+auto MakeSoftwareClockCorrelation() -> OperationClockCorrelation;
 
 }  // namespace scmi_detail
 
@@ -306,6 +326,66 @@ auto ScmiSysfsCollector<FileInterfaceT>::SetRawSampleSink(IRawSampleSink* raw_sa
   _raw_sample_sink = raw_sample_sink;
 };
 
+template <typename FileInterfaceT>
+void ScmiSysfsCollector<FileInterfaceT>::FallBackToSoftwareClockTimestamps(ScmiDataEventId  data_event_id,
+                                                                           std::string_view reason) {
+  if (!_use_software_clock_timestamps) {
+    ASTL_LOG_WARNING(
+        "ScmiSysfsCollector: falling back to software timestamps for all SCMI data events after DE_ID {:08X} "
+        "hardware timestamp validation failed: {}",
+        data_event_id, reason);
+  }
+  _use_software_clock_timestamps = true;
+  _previous_timestamps.clear();
+}
+
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::MakeSoftwareClockCorrelations() const -> ClockCorrelationMap {
+  ClockCorrelationMap result;
+  for (const auto& operation_ptr : _configuration->Operations().operationsOnSample) {
+    const auto* scmi_operation = dynamic_cast<const ScmiReadOperation*>(operation_ptr.get());
+    if (scmi_operation != nullptr) {
+      result[scmi_operation->GetId()] = scmi_detail::MakeSoftwareClockCorrelation();
+    }
+  }
+  return result;
+}
+
+template <typename FileInterfaceT>
+auto ScmiSysfsCollector<FileInterfaceT>::MakeHardwareClockCorrelation(ScmiReadOperation const& operation)
+    -> std::expected<OperationClockCorrelation, std::string_view> {
+  const auto data_event_it = std::find_if(
+      _data_events.begin(), _data_events.end(),
+      [&operation](const ScmiDataEvent& data_event) { return data_event.id == operation.scmi_data_event_id; });
+  if (data_event_it == _data_events.end()) {
+    return std::unexpected{"timestamp metadata is not associated with this DE_ID"};
+  }
+  if (!data_event_it->timestamp_rate.has_value() || data_event_it->timestamp_rate.value() == 0 ||
+      operation.tstamp_rate == 0) {
+    return std::unexpected{"timestamp rate is missing or zero"};
+  }
+
+  const auto data_event_dir_path = scmi_detail::GetDataEventDirPath(operation.scmi_data_event_id);
+  if (!data_event_dir_path) {
+    return std::unexpected{"could not resolve data event sysfs path"};
+  }
+
+  std::string data_read;
+  const auto  read_result = _scmi_file_interface.Read(*data_event_dir_path / kScmiDataEventValueFileName, data_read);
+  // Take CLOCK_MONOTONIC_RAW immediately after the sysfs read to minimise inter-clock drift.
+  const auto raw_now = ClockMonotonicRaw::now();
+  if (read_result != ASTL_STATUS_SUCCESS) {
+    return std::unexpected{"hardware timestamp value could not be read"};
+  }
+
+  const auto parsed_timestamp = scmi_detail::ParseScmiTimeStamp(data_read);
+  if (!parsed_timestamp) {
+    return std::unexpected{"hardware timestamp value is missing or invalid"};
+  }
+  const auto raw_ratio = NativeToMonotonicRawRatio{1'000'000LL, static_cast<intmax_t>(operation.tstamp_rate)};
+  return OperationClockCorrelation{raw_now, parsed_timestamp->first, raw_ratio};
+}
+
 /*
  * @brief Configure the collector to collect data, but don't start sampling it yet.
  *
@@ -325,6 +405,9 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
   }
   _use_software_clock_timestamps = IsEnvVarSet(EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS);
   ASTL_LOG_INFO("ScmiSysfsCollector: use_software_clock_timestamps={}", _use_software_clock_timestamps);
+  if (_use_software_clock_timestamps) {
+    ASTL_LOG_WARNING("ScmiSysfsCollector: using software timer clock for timestamps");
+  }
   auto rollback_configuration_state = [this]() { RollbackConfigurationState("ConfigureCollection failure"); };
 
   // enable the telemetry subsystem
@@ -539,47 +622,22 @@ auto ScmiSysfsCollector<FileInterfaceT>::GetNativeClockSnapshot()
     ASTL_LOG_WARNING("ScmiSysfsCollector::GetNativeClockSnapshot called without configuration; returning empty map");
     return {};
   }
+  if (_use_software_clock_timestamps) {
+    return MakeSoftwareClockCorrelations();
+  }
+
   ClockCorrelationMap result;
   for (const auto& operation_ptr : _configuration->Operations().operationsOnSample) {
     const auto* scmi_op = dynamic_cast<const ScmiReadOperation*>(operation_ptr.get());
     if (!scmi_op) {
       continue;
     }
-    if (_use_software_clock_timestamps) {
-      const auto raw_now       = ClockMonotonicRaw::now();
-      const auto native_anchor = static_cast<HwClockTicks>(raw_now.time_since_epoch().count());
-      result[scmi_op->GetId()] = OperationClockCorrelation{
-          raw_now, native_anchor, NativeToMonotonicRawRatio{1, 1}
-      };
-      continue;
+    const auto correlation = MakeHardwareClockCorrelation(*scmi_op);
+    if (!correlation) {
+      FallBackToSoftwareClockTimestamps(scmi_op->scmi_data_event_id, correlation.error());
+      return MakeSoftwareClockCorrelations();
     }
-    auto data_event_dir_path = scmi_detail::GetDataEventDirPath(scmi_op->scmi_data_event_id);
-    if (!data_event_dir_path) {
-      ASTL_LOG_WARNING(
-          "ScmiSysfsCollector::GetNativeClockSnapshot: could not resolve path for DE_ID {:04X}, using zero anchor",
-          scmi_op->scmi_data_event_id);
-      const auto raw_ratio     = NativeToMonotonicRawRatio{1'000'000LL, static_cast<intmax_t>(scmi_op->tstamp_rate)};
-      result[scmi_op->GetId()] = OperationClockCorrelation{ClockMonotonicRaw::now(), HwClockTicks{0}, raw_ratio};
-      continue;
-    }
-    std::string data_read;
-    auto        read_result = _scmi_file_interface.Read(*data_event_dir_path / kScmiDataEventValueFileName, data_read);
-    // Take CLOCK_MONOTONIC_RAW immediately after the sysfs read to minimise inter-clock drift
-    auto raw_now = ClockMonotonicRaw::now();
-    if (read_result != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("ScmiSysfsCollector::GetNativeClockSnapshot: sysfs read failed for DE_ID {:04X}, returning error",
-                     scmi_op->scmi_data_event_id);
-      return std::unexpected{read_result};
-    }
-    auto parsed = scmi_detail::ParseScmiTimeStamp(data_read);
-    if (!parsed) {
-      ASTL_LOG_ERROR(
-          "ScmiSysfsCollector::GetNativeClockSnapshot: timestamp parse failed for DE_ID {:04X}, returning error",
-          scmi_op->scmi_data_event_id);
-      return std::unexpected{ASTL_STATUS_FILE_ERROR};
-    }
-    const auto raw_ratio     = NativeToMonotonicRawRatio{1'000'000LL, static_cast<intmax_t>(scmi_op->tstamp_rate)};
-    result[scmi_op->GetId()] = OperationClockCorrelation{raw_now, parsed->first, raw_ratio};
+    result[scmi_op->GetId()] = correlation.value();
   }
   return result;
 }
@@ -712,10 +770,14 @@ std::expected<std::vector<ScmiDataEvent>, astl_status_code> ScmiSysfsCollector<F
 
       const auto expected_timestamp_rate = ReadTimestampRate(data_event_dir_path);
       if (!expected_timestamp_rate) {
-        static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
-        return std::unexpected{expected_timestamp_rate.error()};
+        FallBackToSoftwareClockTimestamps(data_event_id, "timestamp rate could not be read or parsed");
+      } else if (!expected_timestamp_rate->has_value()) {
+        FallBackToSoftwareClockTimestamps(data_event_id, "timestamp rate file is missing");
+      } else if (expected_timestamp_rate->value() == 0) {
+        FallBackToSoftwareClockTimestamps(data_event_id, "timestamp rate is zero");
+      } else {
+        configured_data_event.timestamp_rate = expected_timestamp_rate.value();
       }
-      configured_data_event.timestamp_rate = expected_timestamp_rate.value();
     }
   }
   return enabled_data_events;
@@ -799,14 +861,26 @@ auto ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(ScmiReadOperat
   }
   // TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen
   // optimization flags
-  auto parsed_value = scmi_detail::ParseDataEventValueWithTimestamp(data_read);
-  if (!parsed_value) {
-    return parsed_value.error();
+  std::expected<ScmiDataEventValue, astl_status_code> parsed_raw_value = std::unexpected(ASTL_STATUS_FILE_ERROR);
+  HwClockTicks                                        timestamp{};
+  if (_use_software_clock_timestamps) {
+    parsed_raw_value = scmi_detail::ParseDataEventValue(data_read);
+    timestamp        = static_cast<HwClockTicks>(ClockMonotonicRaw::now().time_since_epoch().count());
+  } else {
+    auto parsed_value_with_timestamp = scmi_detail::ParseDataEventValueWithTimestamp(data_read);
+    if (parsed_value_with_timestamp) {
+      timestamp        = parsed_value_with_timestamp->first;
+      parsed_raw_value = parsed_value_with_timestamp->second;
+    } else {
+      FallBackToSoftwareClockTimestamps(operation.scmi_data_event_id, "hardware timestamp value is missing or invalid");
+      parsed_raw_value = scmi_detail::ParseDataEventValue(data_read);
+      timestamp        = static_cast<HwClockTicks>(ClockMonotonicRaw::now().time_since_epoch().count());
+    }
   }
-  const auto timestamp = _use_software_clock_timestamps
-                             ? static_cast<HwClockTicks>(ClockMonotonicRaw::now().time_since_epoch().count())
-                             : parsed_value->first;
-  auto       raw_value = AstlValue{parsed_value->second.value};
+  if (!parsed_raw_value) {
+    return parsed_raw_value.error();
+  }
+  auto raw_value = AstlValue{parsed_raw_value->value};
 
   /**
    * @brief Discard samples that arrive with the same timestamp as the previous one.

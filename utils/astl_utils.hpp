@@ -85,9 +85,10 @@ enum class EnvVar {
      feature) */
   ASTL_LOG_RAW_SAMPLES,
 
-  /* set to any value other than empty, 0, off, no, or false to make the SCMI collector use software clock
-   * (CLOCK_MONOTONIC_RAW) timestamps instead of the SCMI hardware counter. When set, tstamp_enable is not
-   * written to sysfs at all. Useful when hardware timestamps are unavailable or unreliable. */
+  /* set to any value other than empty, "0", "off", "no", or "false" (case-insensitive) to make the SCMI collector
+   * use software clock (CLOCK_MONOTONIC_RAW) timestamps instead of the SCMI hardware counter.
+   * When enabled, tstamp_enable is not written to sysfs at all.
+   * Defaults to off (hardware counter). Useful when hardware timestamps are unavailable or unreliable. */
   ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS,
 };
 
@@ -112,8 +113,7 @@ inline astl_status_code SetEnvVar(EnvVar env_var, const std::string& var_value) 
 #ifndef _WIN32  // Linux
   status = (setenv(var_name.c_str(), var_value.c_str(), 1) != 0) ? status : ASTL_STATUS_SUCCESS;
 #else  // Windows
-  std::string env_value = var_name + "=" + var_value;
-  status                = (_putenv(env_value.c_str()) != 0) ? status : ASTL_STATUS_SUCCESS;
+  status = (_putenv_s(var_name.c_str(), var_value.c_str()) != 0) ? status : ASTL_STATUS_SUCCESS;
 #endif
 
   return status;
@@ -461,15 +461,12 @@ inline auto ParseMetricType(std::string const& metric_type_str) -> astl_metric_t
   return ASTL_METRIC_UNKNOWN;
 }
 
-}  // namespace astl
-
-namespace std {
 inline auto to_string(astl_units_t units) -> std::string {
   std::string_view name = magic_enum::enum_name(units);
   // ignore the first part of the name, which is "ASTL_UNITS_";
   constexpr size_t prefix_length = 11;  // length of "ASTL_UNITS_";
   return name.empty() ? "UNKNOWN" : std::string(name.substr(prefix_length));
 }
-}  // namespace std
+}  // namespace astl
 
 #endif /* INCLUDE_ASTL_UTILS_HPP_ */

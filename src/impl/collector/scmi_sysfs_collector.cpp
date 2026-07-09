@@ -76,6 +76,19 @@ auto ParseDataEventValueWithTimestamp(std::string_view data_read)
   return std::make_pair(timestamp, value.value());
 }
 
+auto ParseDataEventValue(std::string_view data_read) -> std::expected<ScmiDataEventValue, astl_status_code> {
+  constexpr std::string_view delimiters{" \t\n\r\f\v:"};
+  const auto                 value_end = data_read.find_last_not_of(delimiters);
+  if (value_end == std::string_view::npos) {
+    ASTL_LOG_ERROR("No value found in data read: {}", data_read);
+    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+  }
+  const auto value_delimiter = data_read.find_last_of(delimiters, value_end);
+  const auto value_begin     = value_delimiter == std::string_view::npos ? size_t{0} : value_delimiter + 1;
+  const auto value_text      = data_read.substr(value_begin, value_end - value_begin + 1);
+  return ScmiDataEventValue::FromString(value_text);
+}
+
 // TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen optimization
 
 auto GetUniqueDataEventsIds(CollectionOperations const& operations) -> std::unordered_set<ScmiDataEventId> {
@@ -110,8 +123,10 @@ auto UpdateSampleOperationsWithTstampRates(std::vector<ScmiDataEvent> const& dat
             std::find_if(data_events.begin(), data_events.end(), [&scmi_operation](const ScmiDataEvent& data_event) {
               return data_event.id == scmi_operation->scmi_data_event_id;
             });
-        if (data_event_it != data_events.end()) {
-          scmi_operation->tstamp_rate = data_event_it->timestamp_rate.value_or(kilohertz{1});
+        // A missing timestamp rate switches the whole collector to software-clock timestamps during configuration.
+        // Preserve the operation's existing rate in that case because it is no longer used for timestamp conversion.
+        if (data_event_it != data_events.end() && data_event_it->timestamp_rate.has_value()) {
+          scmi_operation->tstamp_rate = data_event_it->timestamp_rate.value();
         }
       }
     }
@@ -121,6 +136,16 @@ auto UpdateSampleOperationsWithTstampRates(std::vector<ScmiDataEvent> const& dat
   update_list(operations.operationsAtStart);
   update_list(operations.operationsOnSample);
   update_list(operations.operationsAtStop);
+}
+
+auto MakeSoftwareClockCorrelation() -> OperationClockCorrelation {
+  const auto raw_now = ClockMonotonicRaw::now();
+  // Software-clock native ticks are explicitly nanoseconds, matching ClockMonotonicRaw::duration and the 1:1 ratio.
+  const auto native_anchor = static_cast<HwClockTicks>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(raw_now.time_since_epoch()).count());
+  return OperationClockCorrelation{
+      raw_now, native_anchor, NativeToMonotonicRawRatio{1, 1}
+  };
 }
 
 }  // namespace astl::scmi_detail
