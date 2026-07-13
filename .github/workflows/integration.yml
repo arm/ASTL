@@ -122,7 +122,7 @@ jobs:
             echo 'Running unit tests without Valgrind.'
           fi
 
-          ctest --parallel ${{ steps.cpu-cores.outputs.count }} -LE "integration|time_sensitive" "${MEMCHECK_PARAMS[@]}" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
+          ctest --parallel -LE "integration|time_sensitive" "${MEMCHECK_PARAMS[@]}" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
           echo 'Running time_sensitive tests without parallelization or memcheck.'
           ctest -L "time_sensitive" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
 
@@ -153,9 +153,19 @@ jobs:
         if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage'
         run: ${{ github.workspace }}/scripts/create_coverage_report.sh --xml
 
+      - name: Qlty Token Exists?
+        id: qlty-token
+        shell: bash
+        run: |
+          if [ "${{ secrets.QLTY_COVERAGE_TOKEN }}" != "" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: ⤴️ Code Coverage - Publish to Qlty
         # project overview: https://qlty.sh/gh/Arm-Debug/projects/ASTL
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage' && steps.qlty-token.outputs.exists == 'true'
         uses: qltysh/qlty-action/coverage@v2
         with:
           token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
