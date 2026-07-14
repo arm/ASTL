@@ -1,0 +1,37 @@
+%% SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+
+%% SPDX-License-Identifier: Apache-2.0
+
+sequenceDiagram
+  actor Dev as Developer
+  participant PubInt as Arm-Debug/ASTL
+  participant Priv as Arm-Debug/ASTL-confidential
+  participant Checks as GitHub Checks
+  participant OSS as Arm/ASTL
+  participant Art as Internal Artifact Store
+
+  Dev->>PubInt: Push commits A, B, C
+  Dev->>PubInt: Open pull request
+
+  PubInt->>PubInt: Run public-safe CI
+  PubInt->>PubInt: Run IP sensitivity checks
+
+  PubInt-->>Priv: PR event / webhook / GitHub App trigger
+  Priv->>PubInt: Checkout PR head SHA
+  Priv->>Priv: Overlay NDA configs and private test fixtures
+  Priv->>Priv: Run confidential CI flows
+  Priv-->>Checks: Report internal check results to PR
+
+  PubInt-->>Checks: Report public CI + IP check results
+  Checks-->>PubInt: Required checks pass
+
+  PubInt->>PubInt: Merge PR to main as commit M
+  PubInt->>OSS: Mirror commit M to Arm/ASTL
+
+  alt Release requested
+    Priv->>PubInt: Checkout release tag or merged commit M
+    Priv->>Priv: Build compiled content
+    Priv->>Priv: Add internal configs
+    Priv->>Art: Publish internal release package
+    PubInt->>OSS: Optionally publish public-safe package
+  end
