@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "astl_logger.hpp"
 #include "common/scmi/uuid.hpp"
 #include "operation/scmi_read_operation.hpp"
 
@@ -245,12 +246,36 @@ struct SpecificationDocument {
 };
 
 inline void from_json(const json& json_data, SpecificationDocument& spec_doc) {
-  json_data.at("timestamp").get_to(spec_doc.timestamp);
-  json_data.at("copyright").get_to(spec_doc.copyright);
-  json_data.at("confidential").get_to(spec_doc.confidential);
-  json_data.at("quality").get_to(spec_doc.quality);
-  json_data.at("license").get_to(spec_doc.license);
-  json_data.at("description").get_to(spec_doc.description);
+  if (json_data.contains("timestamp")) {
+    json_data.at("timestamp").get_to(spec_doc.timestamp);
+  } else {
+    ASTL_LOG_DEBUG("SCMI specification document is missing optional field 'timestamp'");
+  }
+  if (json_data.contains("copyright")) {
+    json_data.at("copyright").get_to(spec_doc.copyright);
+  } else {
+    ASTL_LOG_DEBUG("SCMI specification document is missing optional field 'copyright'");
+  }
+  if (json_data.contains("confidential")) {
+    json_data.at("confidential").get_to(spec_doc.confidential);
+  } else {
+    ASTL_LOG_DEBUG("SCMI specification document is missing optional field 'confidential'");
+  }
+  if (json_data.contains("quality")) {
+    json_data.at("quality").get_to(spec_doc.quality);
+  } else {
+    ASTL_LOG_DEBUG("SCMI specification document is missing optional field 'quality'");
+  }
+  if (json_data.contains("license")) {
+    json_data.at("license").get_to(spec_doc.license);
+  } else {
+    ASTL_LOG_DEBUG("SCMI specification document is missing optional field 'license'");
+  }
+  if (json_data.contains("description")) {
+    json_data.at("description").get_to(spec_doc.description);
+  } else {
+    ASTL_LOG_DEBUG("SCMI specification document is missing optional field 'description'");
+  }
 }
 
 struct ScmiSpecification {

@@ -154,7 +154,7 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
   "_type": "metrics_specification",
   "document": {
     "timestamp": "2025-11-19",
-    "copyright": "Copyright 2025 Arm Ltd.",
+    "copyright": "2025 Arm Ltd.",
     "confidential": false,
     "quality": "Test",
     "license": "Apache-2.0",
@@ -233,6 +233,43 @@ TEST_CASE("ScmiSpecification::ParseSimple", "[ConfigManager]") {
     REQUIRE(members[0].count == 1);
     REQUIRE(members[0].start_offset == 0);
     REQUIRE(members[0].block_size == 24);
+  }
+}
+
+TEST_CASE("SpecificationDocument parses optional metadata", "[ConfigManager]") {
+  SECTION("Present fields are parsed") {
+    const json json_data = {
+        {"timestamp",    "2026-07-13"                     },
+        {"copyright",    "2026 Arm Limited"               },
+        {"confidential", true                             },
+        {"quality",      "Release"                        },
+        {"license",      "Apache-2.0"                     },
+        {"description",  "Confidential SCMI specification"},
+    };
+
+    const auto document = json_data.get<astl::scmi::spec::SpecificationDocument>();
+
+    REQUIRE(document.timestamp == "2026-07-13");
+    REQUIRE(document.copyright == "2026 Arm Limited");
+    REQUIRE(document.confidential);
+    REQUIRE(document.quality == "Release");
+    REQUIRE(document.license == "Apache-2.0");
+    REQUIRE(document.description == "Confidential SCMI specification");
+  }
+
+  SECTION("Missing fields retain their defaults") {
+    const json json_data = {
+        {"description", "Minimal SCMI specification"}
+    };
+
+    const auto document = json_data.get<astl::scmi::spec::SpecificationDocument>();
+
+    REQUIRE(document.timestamp.empty());
+    REQUIRE(document.copyright.empty());
+    REQUIRE_FALSE(document.confidential);
+    REQUIRE(document.quality.empty());
+    REQUIRE(document.license.empty());
+    REQUIRE(document.description == "Minimal SCMI specification");
   }
 }
 
