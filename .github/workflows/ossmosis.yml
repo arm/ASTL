@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: IP Scan
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ossmosis-ip-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out target repository
+        uses: actions/checkout@v7
+        with:
+          path: target
+          fetch-depth: 0
+
+      - name: Create ossmosis checkout token
+        id: ossmosis-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ossmosis
+
+      - name: Check out ossmosis
+        uses: actions/checkout@v7
+        with:
+          repository: Arm-Debug/ossmosis
+          path: ossmosis
+          token: ${{ steps.ossmosis-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install ossmosis
+        run: python -m pip install ./ossmosis
+
+      - name: Scan PR
+        working-directory: target
+        run: |
+          ossmosis scan-history \
+            --repo . \
+            --max-class public \
+            --range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
