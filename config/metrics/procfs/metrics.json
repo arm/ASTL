@@ -82,33 +82,15 @@
       "metric_type": "value",
       "identifier": "unknown",
       "metric_groups": ["cpu"],
-      "formula": "clamp(if(delta_total == 0, 0, max(delta_total - delta_idle, 0) * 100 / delta_total), 0, 100)",
       "collection": {
         "protocol": "procfs",
+        "field_type": "cpu_utilization",
+        "relative_path": "stat",
         "expand": {
           "relative_path": "stat",
           "match_pattern": "^cpu[0-9]*$",
           "label_token_index": 0
-        },
-        "requires_previous": true,
-        "inputs": [
-          {
-            "name": "total",
-            "field_type": "token_sum",
-            "relative_path": "stat",
-            "line_prefix": "{label}",
-            "token_start_index": 1,
-            "token_end_index": 8
-          },
-          {
-            "name": "idle",
-            "field_type": "token_sum",
-            "relative_path": "stat",
-            "line_prefix": "{label}",
-            "token_start_index": 4,
-            "token_end_index": 5
-          }
-        ]
+        }
       }
     }
   }

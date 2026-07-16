@@ -8,6 +8,7 @@
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 #include "astl_file_interface.hpp"
 #include "collector/collection_configuration.hpp"
@@ -46,7 +47,19 @@ class ProcfsCollector : public ICollector {
  private:
   enum class CollectionState { UNCONFIGURED, CONFIGURED, STARTED, PAUSED, STOPPED };
 
-  auto ReadOperationSample(const ProcfsReadOperation& operation)
+  using CpuSnapshotCache = std::unordered_map<std::filesystem::path, procfs::CpuSnapshotMap>;
+
+  struct PreparedOperations {
+    std::vector<const ProcfsReadOperation*> operations;
+    CpuSnapshotCache                        cpu_snapshots;
+  };
+
+  auto PrepareOperations(const OperationSequence& operations) -> std::expected<PreparedOperations, astl_status_code>;
+  static auto FindCpuSnapshot(const procfs::CpuUtilizationField& cpu_field, const CpuSnapshotCache& cpu_snapshot_cache)
+      -> std::expected<const procfs::CpuSnapshot*, astl_status_code>;
+  auto ReadCpuUtilizationSample(const ProcfsReadOperation& operation, const procfs::CpuUtilizationField& cpu_field,
+                                const procfs::CpuSnapshot& cpu_snapshot) -> std::optional<AstlValue>;
+  auto ReadOperationSample(const ProcfsReadOperation& operation, const CpuSnapshotCache& cpu_snapshot_cache)
       -> std::expected<std::optional<AstlValue>, astl_status_code>;
   auto ExecuteCollectionOperations(OperationSequence const& operations) -> astl_status_code;
   auto ExecuteStartModeOperations() -> astl_status_code;

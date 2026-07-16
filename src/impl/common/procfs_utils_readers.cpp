@@ -4,26 +4,12 @@
 
 #include "common/procfs_utils_readers.hpp"
 
-#include <algorithm>
 #include <string_view>
 
 #include "common/key_value_text_utils.hpp"
 #include "common/procfs_utils_readers_primitives.hpp"
 
 namespace astl::procfs::detail {
-
-namespace {
-
-constexpr size_t kCpuSnapshotRequiredTokenCount = 5;
-constexpr size_t kCpuIdleTokenIndex             = 4;
-constexpr size_t kCpuIoWaitTokenIndex           = 5;
-
-auto ParseCpuTickToken(const std::vector<std::string>& tokens, size_t token_index)
-    -> std::expected<uint64_t, astl_status_code> {
-  return ParseUint64Token(tokens[token_index]);
-}
-
-}  // namespace
 
 auto ReadKeyValueField(std::string_view contents, const KeyValueField& field)
     -> std::expected<AstlValue, astl_status_code> {
@@ -127,59 +113,6 @@ auto ReadMemUsedPercentField(std::string_view contents, const MemUsedPercentFiel
   const auto used_percent =
       (static_cast<double>(usage_or_error->used_kb) / static_cast<double>(usage_or_error->total_kb)) * 100.0;
   return AstlValue{used_percent};
-}
-
-auto ParseCpuSnapshotFromContents(std::string_view contents, std::string_view line_prefix)
-    -> std::expected<CpuSnapshot, astl_status_code> {
-  auto tokens_or_error = ReadPrefixedLineTokens(contents, line_prefix);
-  if (!tokens_or_error.has_value()) {
-    return std::unexpected(tokens_or_error.error());
-  }
-
-  const auto& tokens = *tokens_or_error;
-  if (tokens.size() < kCpuSnapshotRequiredTokenCount) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-
-  uint64_t         total_ticks{0};
-  uint64_t         idle_ticks{0};
-  astl_status_code parse_error = ASTL_STATUS_SUCCESS;
-
-  // Sum only the canonical CPU fields: user, nice, system, idle, iowait, irq, softirq, steal.
-  // This avoids double-counting guest and guest_nice, which are already included in user/nice.
-  const size_t max_total_field_index = std::min(tokens.size() - 1, static_cast<size_t>(8));
-  for (size_t token_index = 1; token_index <= max_total_field_index; ++token_index) {
-    auto token_value = ParseCpuTickToken(tokens, token_index);
-    if (!token_value.has_value()) {
-      parse_error = token_value.error();
-      break;
-    }
-    total_ticks += token_value.value();
-  }
-
-  if (parse_error == ASTL_STATUS_SUCCESS) {
-    auto idle_ticks_or_error = ParseCpuTickToken(tokens, kCpuIdleTokenIndex);
-    if (!idle_ticks_or_error.has_value()) {
-      parse_error = idle_ticks_or_error.error();
-    } else {
-      idle_ticks = idle_ticks_or_error.value();
-    }
-  }
-
-  if (parse_error == ASTL_STATUS_SUCCESS && tokens.size() > kCpuIoWaitTokenIndex) {
-    auto iowait_ticks_or_error = ParseCpuTickToken(tokens, kCpuIoWaitTokenIndex);
-    if (!iowait_ticks_or_error.has_value()) {
-      parse_error = iowait_ticks_or_error.error();
-    } else {
-      idle_ticks += iowait_ticks_or_error.value();
-    }
-  }
-
-  if (parse_error != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(parse_error);
-  }
-
-  return CpuSnapshot{.total = total_ticks, .idle = idle_ticks};
 }
 
 }  // namespace astl::procfs::detail

@@ -140,47 +140,19 @@ auto ProcfsCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelation
   return result;
 }
 
-auto ProcfsCollector::ReadOperationSample(const ProcfsReadOperation& operation)
-    -> std::expected<std::optional<AstlValue>, astl_status_code> {
-  if (const auto* cpu_utilization_field = std::get_if<procfs::CpuUtilizationField>(&operation.field_descriptor)) {
-    auto snapshot_or_error = procfs::ReadCpuSnapshot(_procfs_file_interface, *cpu_utilization_field);
-    if (!snapshot_or_error.has_value()) {
-      return std::unexpected(snapshot_or_error.error());
-    }
-
-    const auto operation_id = operation.GetId();
-    const auto previous_it  = _previous_cpu_snapshots.find(operation_id);
-    if (previous_it == _previous_cpu_snapshots.end()) {
-      _previous_cpu_snapshots.emplace(operation_id, *snapshot_or_error);
-      return std::optional<AstlValue>{std::nullopt};
-    }
-
-    const auto utilization = procfs::CalculateCpuUtilization(previous_it->second, *snapshot_or_error);
-    previous_it->second    = *snapshot_or_error;
-    return std::optional<AstlValue>{AstlValue{utilization}};
-  }
-
-  auto value_or_error = procfs::ReadField(_procfs_file_interface, operation.field_descriptor);
-  if (!value_or_error.has_value()) {
-    return std::unexpected(value_or_error.error());
-  }
-  return std::optional<AstlValue>{std::move(*value_or_error)};
-}
-
 auto ProcfsCollector::ExecuteCollectionOperations(OperationSequence const& operations) -> astl_status_code {
+  auto prepared_or_error = PrepareOperations(operations);
+  if (!prepared_or_error.has_value()) {
+    return prepared_or_error.error();
+  }
+
   std::vector<RawSampledData> collected_samples;
   collected_samples.reserve(operations.size());
   const auto native_tick = static_cast<uint64_t>(
       std::chrono::time_point_cast<SampleMicroseconds>(std::chrono::steady_clock::now()).time_since_epoch().count());
 
-  for (const auto& operation_ptr : operations) {
-    const auto* procfs_operation = dynamic_cast<const ProcfsReadOperation*>(operation_ptr.get());
-    if (!procfs_operation) {
-      ASTL_LOG_ERROR("ProcfsCollector: invalid operation type");
-      return ASTL_STATUS_BAD_ARGUMENT;
-    }
-
-    auto value_or_error = ReadOperationSample(*procfs_operation);
+  for (const auto* operation : prepared_or_error->operations) {
+    auto value_or_error = ReadOperationSample(*operation, prepared_or_error->cpu_snapshots);
     if (!value_or_error.has_value()) {
       ASTL_LOG_ERROR("ProcfsCollector: failed to read procfs field");
       return value_or_error.error();
@@ -189,7 +161,7 @@ auto ProcfsCollector::ExecuteCollectionOperations(OperationSequence const& opera
       continue;
     }
 
-    collected_samples.emplace_back(operation_ptr->GetId(), std::move(**value_or_error), native_tick);
+    collected_samples.emplace_back(operation->GetId(), std::move(**value_or_error), native_tick);
   }
 
   if (!collected_samples.empty() && _sample_sink != nullptr) {

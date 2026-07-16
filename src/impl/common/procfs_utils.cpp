@@ -87,6 +87,16 @@ auto ReadCpuSnapshot(const FileInterface& file_interface, const CpuUtilizationFi
   return detail::ParseCpuSnapshotFromContents(contents, field_descriptor.line_prefix);
 }
 
+auto ReadCpuSnapshots(const FileInterface& file_interface, const std::filesystem::path& relative_path)
+    -> std::expected<CpuSnapshotMap, astl_status_code> {
+  std::string contents;
+  const auto  status = file_interface.Read(relative_path, contents);
+  if (status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
+  }
+  return detail::ParseCpuSnapshotsFromContents(contents);
+}
+
 auto CalculateCpuUtilization(const CpuSnapshot& previous, const CpuSnapshot& current) -> double {
   if (current.total <= previous.total) {
     return 0.0;

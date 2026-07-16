@@ -33,6 +33,8 @@ auto ReadMemUsedPercentField(std::string_view contents, const MemUsedPercentFiel
 auto ParseCpuSnapshotFromContents(std::string_view contents, std::string_view line_prefix)
     -> std::expected<CpuSnapshot, astl_status_code>;
 
+auto ParseCpuSnapshotsFromContents(std::string_view contents) -> std::expected<CpuSnapshotMap, astl_status_code>;
+
 }  // namespace astl::procfs::detail
 
 #endif  // PROCFS_UTILS_READERS_HPP_

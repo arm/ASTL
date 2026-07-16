@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -70,6 +71,8 @@ struct CpuSnapshot {
   uint64_t idle{0};
 };
 
+using CpuSnapshotMap = std::unordered_map<std::string, CpuSnapshot>;
+
 using FieldDescriptor = std::variant<KeyValueField, TokenField, SplitTokenField, TokenSumField, CpuUtilizationField,
                                      MemUsedField, MemUsedPercentField>;
 
@@ -91,6 +94,9 @@ auto ReadField(const FileInterface& file_interface, const FieldDescriptor& field
 
 auto ReadCpuSnapshot(const FileInterface& file_interface, const CpuUtilizationField& field_descriptor)
     -> std::expected<CpuSnapshot, astl_status_code>;
+
+auto ReadCpuSnapshots(const FileInterface& file_interface, const std::filesystem::path& relative_path)
+    -> std::expected<CpuSnapshotMap, astl_status_code>;
 
 auto CalculateCpuUtilization(const CpuSnapshot& previous, const CpuSnapshot& current) -> double;
 

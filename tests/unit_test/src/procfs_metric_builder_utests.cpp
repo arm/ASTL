@@ -17,6 +17,7 @@
 #include "config/astl_configuration.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/procfs_metric_builder.hpp"
+#include "operation/procfs_read_operation.hpp"
 #include "topology/procfs_target.hpp"
 
 namespace fs = std::filesystem;
@@ -61,7 +62,7 @@ auto CollectMetricNames(astl::IMetricManager& metric_manager, const astl::ITarge
 
 }  // namespace
 
-TEST_CASE("RegisterProcfsMetrics loads config-defined procfs composite metrics", "[procfs_metric_builder]") {
+TEST_CASE("RegisterProcfsMetrics loads config-defined procfs metrics", "[procfs_metric_builder]") {
   const fs::path config_dir  = fs::temp_directory_path() / "astl_procfs_metric_builder_config";
   const fs::path procfs_root = fs::temp_directory_path() / "astl_procfs_metric_builder_root";
   TempFileGuard  config_guard(config_dir);
@@ -164,33 +165,15 @@ TEST_CASE("RegisterProcfsMetrics loads config-defined procfs composite metrics",
       "metric_type": "value",
       "identifier": "unknown",
       "metric_groups": ["cpu"],
-      "formula": "clamp(if(delta_total == 0, 0, max(delta_total - delta_idle, 0) * 100 / delta_total), 0, 100)",
       "collection": {
         "protocol": "procfs",
+        "field_type": "cpu_utilization",
+        "relative_path": "stat",
         "expand": {
           "relative_path": "stat",
           "match_pattern": "^cpu[0-9]*$",
           "label_token_index": 0
-        },
-        "requires_previous": true,
-        "inputs": [
-          {
-            "name": "total",
-            "field_type": "token_sum",
-            "relative_path": "stat",
-            "line_prefix": "{label}",
-            "token_start_index": 1,
-            "token_end_index": 8
-          },
-          {
-            "name": "idle",
-            "field_type": "token_sum",
-            "relative_path": "stat",
-            "line_prefix": "{label}",
-            "token_start_index": 4,
-            "token_end_index": 5
-          }
-        ]
+        }
       }
     }
   }
@@ -223,6 +206,29 @@ TEST_CASE("RegisterProcfsMetrics loads config-defined procfs composite metrics",
   REQUIRE(metric_names == std::vector<std::string>{"meminfo.MemTotal", "meminfo.MemUsed", "meminfo.utilization",
                                                    "stat.cpu.utilization", "stat.cpu0.utilization",
                                                    "stat.cpu1.utilization"});
+
+  auto metrics = metric_manager.GetAvailableMetrics(target.get());
+  REQUIRE(metrics.has_value());
+  for (const auto* const metric_handle : *metrics) {
+    astl_metric_props_t props{};
+    REQUIRE(metric_manager.GetProperties(metric_handle, &props) == ASTL_STATUS_SUCCESS);
+    const std::string_view metric_name{props.name == nullptr ? "" : props.name};
+    if (!metric_name.starts_with("stat.")) {
+      continue;
+    }
+
+    auto operations = metric_manager.GetRequiredOperations({&metric_handle, 1}, target.get());
+    REQUIRE(operations.has_value());
+    REQUIRE(operations->operationsOnSample.size() == 1);
+
+    const auto* read_operation =
+        dynamic_cast<const astl::ProcfsReadOperation*>(operations->operationsOnSample.front().get());
+    REQUIRE(read_operation != nullptr);
+    const auto* field = std::get_if<astl::procfs::CpuUtilizationField>(&read_operation->field_descriptor);
+    REQUIRE(field != nullptr);
+    REQUIRE(field->relative_path == "stat");
+    REQUIRE(metric_name == "stat." + field->line_prefix + ".utilization");
+  }
 
   auto groups_or_error = metric_manager.GetMetricGroups(target.get());
   REQUIRE(groups_or_error.has_value());
