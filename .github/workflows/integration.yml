@@ -74,7 +74,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
 
@@ -191,3 +191,34 @@ jobs:
         env:
           ASTL_LOG_LEVEL: "DEBUG"
           ASTL_LOG_CONSOLE: 1
+
+  static-atx:
+    name: Fully static ATX
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: ⤵️ Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
+
+      - name: 🏗️ Build fully static ATX
+        uses: ./.github/actions/build
+        with:
+          os: ubuntu-24.04-arm
+          cmake_preset: release
+          c_compiler: gcc
+          cpp_compiler: g++
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          atx_static_link: true
+
+      - name: 🧪 Verify fully static ATX
+        shell: bash
+        run: |
+          ASTL_BUILD_ARCH="$(${{ github.workspace }}/scripts/host_arch.sh)"
+          ATX_BINARY="${{ github.workspace }}/build/release/${ASTL_BUILD_ARCH}/bin/atx-static"
+          ${{ github.workspace }}/scripts/verify_static_executable.sh "${ATX_BINARY}"
+          "${ATX_BINARY}" --version

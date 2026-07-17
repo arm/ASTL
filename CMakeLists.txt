@@ -213,6 +213,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 option(ASTL_BUILD_TESTING "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(ASTL_BUILD_TOOLS "Build tools" ${PROJECT_IS_TOP_LEVEL})
 option(ASTL_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
+option(ATX_STATIC_LINK "Also build ATX as a fully static Linux executable" OFF)
 # option(ASTL_INSTALL "Install library when invoking --install" ON) option(ASTL_ENABLE_LOGGING "Enable logging" OFF)
 
 # Enable code coverage - typically on debug builds
@@ -258,6 +259,16 @@ if(NOT ASTL_LIBSENSORS STREQUAL "AUTO"
    AND NOT ASTL_LIBSENSORS STREQUAL "ON"
    AND NOT ASTL_LIBSENSORS STREQUAL "OFF")
   message(FATAL_ERROR "ASTL_LIBSENSORS must be one of: AUTO, ON, OFF")
+endif()
+
+if(ATX_STATIC_LINK)
+  if(NOT ASTL_LIBSENSORS STREQUAL "OFF")
+    message(STATUS "ATX_STATIC_LINK=ON requires ASTL_LIBSENSORS=OFF; disabling libsensors support")
+  endif()
+  set(ASTL_LIBSENSORS "OFF")
+  set(ASTL_LIBSENSORS
+      "OFF"
+      CACHE STRING "libsensors support: AUTO, ON, or OFF" FORCE)
 endif()
 
 set(ASTL_HAVE_LIBSENSORS OFF)

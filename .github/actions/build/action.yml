@@ -21,6 +21,10 @@ inputs:
   github_token:
     description: 'GitHub token used by actions inside this composite action'
     required: true
+  atx_static_link:
+    description: 'Build ATX as a fully static Linux executable'
+    required: false
+    default: 'false'
 
 runs:
   using: "composite"
@@ -31,11 +35,11 @@ runs:
       id: cpu-cores
 
     - name: ⤵️ Install apt-get Dependencies (ubuntu)
-      if: contains(matrix.os, 'ubuntu')
+      if: contains(inputs.os, 'ubuntu')
       shell: bash
       run: |
         sudo apt-get -o DPkg::Lock::Timeout=300 update
-        sudo apt-get -o DPkg::Lock::Timeout=300 install -y build-essential clang-20 clang-format-20 clang-tidy-20 cmake cppcheck g++ gcc gcovr jq libclang-rt-20-dev libsensors-dev ninja-build parallel pkg-config python3 python3-pip valgrind yamllint
+        sudo apt-get -o DPkg::Lock::Timeout=300 install -y binutils build-essential clang-20 clang-format-20 clang-tidy-20 cmake cppcheck file g++ gcc gcovr jq libclang-rt-20-dev libsensors-dev ninja-build parallel pkg-config python3 python3-pip valgrind yamllint
         sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-20 200
         sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 200
         sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-20 200
@@ -76,7 +80,12 @@ runs:
         VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
       run: |
         cmake --version
-        cmake -DCMAKE_CXX_COMPILER=${{ inputs.cpp_compiler }} -DCMAKE_C_COMPILER=${{ inputs.c_compiler }} -S "${{ github.workspace }}" --preset ${{ inputs.cmake_preset }}
+        cmake \
+          -DCMAKE_CXX_COMPILER=${{ inputs.cpp_compiler }} \
+          -DCMAKE_C_COMPILER=${{ inputs.c_compiler }} \
+          -DATX_STATIC_LINK=${{ inputs.atx_static_link }} \
+          -S "${{ github.workspace }}" \
+          --preset ${{ inputs.cmake_preset }}
 
     - name: ⚙️ CMake - Configure (macos-15)
       if: inputs.os == 'macos-15'
@@ -86,7 +95,7 @@ runs:
         VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
       run: |
         cmake --version
-        cmake -S "${{ github.workspace }}" --preset ${{ inputs.cmake_preset }}
+        cmake -DATX_STATIC_LINK=${{ inputs.atx_static_link }} -S "${{ github.workspace }}" --preset ${{ inputs.cmake_preset }}
 
     - name: 🏗️ CMake - Build
       shell: bash
