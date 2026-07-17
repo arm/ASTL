@@ -411,7 +411,7 @@ endif()
 
 if(UNIX AND NOT APPLE)
   if(ASTL_BUILD_TOOLS)
-    astl_add_optional_subdirectory(tools/mock_scmi mock_scmi)
+    add_subdirectory(tools/mock_scmi)
   else()
     message(STATUS "Skipping MockScmi because ASTL_BUILD_TOOLS is disabled")
   endif()

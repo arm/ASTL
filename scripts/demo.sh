@@ -15,9 +15,11 @@ ASTL_HOST_ARCH="$("${ASTL_ROOT}/scripts/host_arch.sh")"
 echo "ASTL_ROOT = ${ASTL_ROOT}"
 
 ########################################
-# Launch MockScmi (FUSE) demo         #
+# Launch MockScmi (FUSE) demo          #
 ########################################
-export ASTL_MOCKSCMI_TLM_JSON_PATH="${ASTL_ROOT}/tools/mock_scmi/config/tlm.json"
+DEFAULT_TLM_JSON="${ASTL_ROOT}/tools/mock_scmi/config/tlm.json"
+: "${ASTL_MOCKSCMI_TLM_JSON_PATH:=${DEFAULT_TLM_JSON}}"
+export ASTL_MOCKSCMI_TLM_JSON_PATH
 echo "ASTL_MOCKSCMI_TLM_JSON_PATH = ${ASTL_MOCKSCMI_TLM_JSON_PATH}"
 BUILD_PRESET="${ASTL_BUILD_PRESET:-debug}"
 BUILD_DIR="${ASTL_BUILD_DIR:-${ASTL_ROOT}/build/${BUILD_PRESET}/${ASTL_HOST_ARCH}}"
@@ -172,9 +174,6 @@ export ASTL_CONFIG_DIR="${BUILD_DIR}/lib/config"
 echo "ASTL_CONFIG_DIR = ${ASTL_CONFIG_DIR}"
 
 # Set CSV output file for summary data
-export ASTL_OUTPUT_SUMMARY_CSV="${LOG_DIR}/astl_summary.csv"
-echo "CSV output will be written to: ${ASTL_OUTPUT_SUMMARY_CSV}"
-
 export ASTL_OUTPUT_SUMMARY_CSV="${LOG_DIR}/astl_summary.csv"
 echo "CSV output will be written to: ${ASTL_OUTPUT_SUMMARY_CSV}"
 

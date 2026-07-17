@@ -515,6 +515,55 @@ TEST_CASE("LoadRepoMetaFragments merges recursive repometa files", "[ConfigManag
           config_root / "scmi" / "public" / "specific" / "nested" / "specific.json");
 }
 
+TEST_CASE("MockScmi lookup fragments resolve through mockscmi directories", "[ConfigManager]") {
+  const auto    config_root = MakeTempDir("astl_mockscmi_lookup_test_");
+  TempFileGuard temp_guard{config_root};
+
+  WriteTextFile(config_root / "scmi" / "public" / "mockscmi" / "repometa.json", R"json({
+  "last_updated": "2026-01-13",
+  "uuid_mapping": {
+    "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000": {
+      "last_updated": "2025-12-18",
+      "description": "MockScmi test harness for ASTL development",
+      "specification_file": "mockscmi.json",
+      "confidential": false
+    }
+  }
+}
+)json");
+  WriteTextFile(config_root / "metrics" / "mockscmi" / "platform_lookup.json", R"json({
+  "last_updated": "2025-12-18",
+  "scmi_uuid_mapping": {
+    "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000/14": {
+      "last_updated": "2025-12-18",
+      "description": "MockScmi test harness for ASTL development",
+      "metrics_file": "metrics.json",
+      "name": "scmi-mockscmi-{telemetry_subdirectory}",
+      "confidential": false
+    }
+  }
+}
+)json");
+
+  auto repo_meta       = astl::config::LoadRepoMetaFragments(config_root / "scmi" / "public");
+  auto platform_lookup = astl::config::LoadPlatformLookupFragments(config_root / "metrics");
+
+  REQUIRE(repo_meta.has_value());
+  REQUIRE(platform_lookup.has_value());
+
+  auto uuid         = astl::scmi::spec::GetNormalizedUuid("CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000").value();
+  auto spec_file    = astl::scmi::spec::FindSpecFileByUuid(*repo_meta, uuid);
+  auto metrics_file = astl::metrics::spec::FindMetricsFileElementByUuid(*platform_lookup, uuid);
+
+  REQUIRE(spec_file.has_value());
+  REQUIRE(spec_file->resolved_specification_file == config_root / "scmi" / "public" / "mockscmi" / "mockscmi.json");
+
+  REQUIRE(metrics_file.has_value());
+  REQUIRE(metrics_file->resolved_metrics_file == config_root / "metrics" / "mockscmi" / "metrics.json");
+  REQUIRE(metrics_file->name.has_value());
+  REQUIRE(*metrics_file->name == "scmi-mockscmi-{telemetry_subdirectory}");
+}
+
 TEST_CASE("GetMetricRegistersScmiData applies unit, component, and instance filters", "[ConfigManager]") {
   std::string raw_scmi_spec = R"json(
   {

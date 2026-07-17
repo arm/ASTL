@@ -12,11 +12,36 @@ set -euo pipefail
 ########################################
 
 MOUNT_POINT="${1:-$HOME/tmp/fuse}"
+SCMI_INTERFACE_HINT="${ASTL_SCMI_INTERFACE:-}"
+SCMI_INTERFACE_HINT="${SCMI_INTERFACE_HINT,,}"
 
+detect_scmi_interface() {
+	if [[ -e $MOUNT_POINT/tlm_0 ]]; then
+		echo "ioctl"
+	elif [[ -d $MOUNT_POINT/arm_telemetry/tlm-0 ]]; then
+		echo "sysfs"
+	else
+		case "$SCMI_INTERFACE_HINT" in
+		ioctl)
+			echo "ioctl"
+			;;
+		auto | sysfs)
+			echo "sysfs"
+			;;
+		*)
+			echo "unknown"
+			;;
+		esac
+	fi
+}
+
+SCMI_INTERFACE="$(detect_scmi_interface)"
+echo "MockScmi interface: $SCMI_INTERFACE"
 echo "Stopping MockScmi..."
 
-# Find and kill MockScmi processes
-PIDS=$(pgrep -x MockScmi || true)
+# Find and kill MockScmi processes.
+PIDS="$(pgrep -x MockScmi || true)"
+PIDS="$(echo "$PIDS" | xargs || true)"
 
 if [[ -z $PIDS ]]; then
 	echo "No MockScmi processes found"
@@ -43,10 +68,10 @@ else
 	echo "MockScmi processes stopped"
 fi
 
-# Unmount if still mounted (Linux only - uses fusermount)
-if [[ -d $MOUNT_POINT ]] && mount | grep -q "$MOUNT_POINT"; then
+# Both sysfs and ioctl interfaces use the same FUSE mount.
+if [[ -d $MOUNT_POINT ]] && mountpoint -q "$MOUNT_POINT"; then
 	echo "Unmounting $MOUNT_POINT..."
-	fusermount -u "$MOUNT_POINT" 2>/dev/null || true
+	fusermount3 -u "$MOUNT_POINT" 2>/dev/null || fusermount -u "$MOUNT_POINT" 2>/dev/null || true
 fi
 
 echo "Cleanup complete"

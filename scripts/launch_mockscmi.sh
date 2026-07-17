@@ -15,10 +15,27 @@ ASTL_HOST_ARCH="$("${ASTL_ROOT}/scripts/host_arch.sh")"
 echo "ASTL_ROOT = $ASTL_ROOT"
 
 ########################################
-# Launch MockScmi (FUSE) demo         #
+# Launch MockScmi (FUSE) demo          #
 ########################################
-export ASTL_MOCKSCMI_TLM_JSON_PATH="$ASTL_ROOT/tools/mock_scmi/config/tlm.json"
+DEFAULT_TLM_JSON="$ASTL_ROOT/tools/mock_scmi/config/tlm.json"
+: "${ASTL_MOCKSCMI_TLM_JSON_PATH:=$DEFAULT_TLM_JSON}"
+export ASTL_MOCKSCMI_TLM_JSON_PATH
 echo "ASTL_MOCKSCMI_TLM_JSON_PATH = $ASTL_MOCKSCMI_TLM_JSON_PATH"
+
+# Select the MockScmi interface. Keep sysfs as the default for backwards
+# compatibility with existing callers of this script.
+: "${ASTL_SCMI_INTERFACE:=sysfs}"
+ASTL_SCMI_INTERFACE="${ASTL_SCMI_INTERFACE,,}"
+case "$ASTL_SCMI_INTERFACE" in
+auto | sysfs | ioctl) ;;
+*)
+	echo "❌ ASTL_SCMI_INTERFACE must be one of: auto, sysfs, ioctl" >&2
+	exit 1
+	;;
+esac
+export ASTL_SCMI_INTERFACE
+echo "ASTL_SCMI_INTERFACE = $ASTL_SCMI_INTERFACE"
+
 BUILD_PRESET="${ASTL_BUILD_PRESET:-debug}"
 ASTL_HOST_ARCH="$("${ASTL_ROOT}/scripts/host_arch.sh")"
 BUILD_DIR="${ASTL_BUILD_DIR:-$ASTL_ROOT/build/$BUILD_PRESET/$ASTL_HOST_ARCH}"
@@ -69,8 +86,7 @@ PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 		exit 1
 	}
 
-TELEMETRY_ROOT="$MOUNT_POINT/arm_telemetry"
-mkdir -p "$TELEMETRY_ROOT"
+mkdir -p "$MOUNT_POINT"
 
 echo "Logs Directory = $SCMI_LOG"
 
@@ -102,14 +118,22 @@ wait_for() {
 
 wait_for "$SCMI_LOG" "MockScmi startup log" "$PATTERN_READY"
 
-# Verify that the mounted filesystem accepts control writes.
-TLM_ENABLE_FILE="$TELEMETRY_ROOT/tlm-0/tlm_enable"
-if ! printf '1' >"$TLM_ENABLE_FILE"; then
-	echo "❌ MockScmi mounted, but $TLM_ENABLE_FILE is not writable" >&2
-	exit 1
-fi
-
 echo "✅ MockScmi mounted at $MOUNT_POINT"
-echo "✅ Verified writable control file: $TLM_ENABLE_FILE"
+if [[ $ASTL_SCMI_INTERFACE == "ioctl" ]]; then
+	TLM_DEVICE="$MOUNT_POINT/tlm_0"
+	if [[ ! -r $TLM_DEVICE || ! -w $TLM_DEVICE ]]; then
+		echo "❌ MockScmi mounted, but ioctl device $TLM_DEVICE is not both readable and writable" >&2
+		exit 1
+	fi
+	echo "✅ Verified ioctl device: $TLM_DEVICE"
+else
+	# Verify that the mounted sysfs interface accepts control writes.
+	TLM_ENABLE_FILE="$MOUNT_POINT/arm_telemetry/tlm-0/tlm_enable"
+	if ! printf '1' >"$TLM_ENABLE_FILE"; then
+		echo "❌ MockScmi mounted, but $TLM_ENABLE_FILE is not writable" >&2
+		exit 1
+	fi
+	echo "✅ Verified writable control file: $TLM_ENABLE_FILE"
+fi
 echo "🧵 To stop MockScmi (PID=$SCMI_PID)..."
 echo "kill -SIGTERM $SCMI_PID 2>/dev/null || true"
