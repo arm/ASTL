@@ -745,9 +745,9 @@ TEST_CASE("CreateScmiMetricConfigs scopes SCMI metric ids per target", "[ConfigM
                           .rel_offset           = 0x00}}}}
   };
 
-  astl::Target target_tlm0("scmi-mocksysfs-tlm-0", "test target 0", astl::CollectorType::SCMI, nullptr, std::nullopt,
+  astl::Target target_tlm0("scmi-mockscmi-tlm-0", "test target 0", astl::CollectorType::SCMI, nullptr, std::nullopt,
                            std::string{"tlm-0"});
-  astl::Target target_tlm1("scmi-mocksysfs-tlm-1", "test target 1", astl::CollectorType::SCMI, nullptr, std::nullopt,
+  astl::Target target_tlm1("scmi-mockscmi-tlm-1", "test target 1", astl::CollectorType::SCMI, nullptr, std::nullopt,
                            std::string{"tlm-1"});
   std::vector<const astl::ITarget*> targets{&target_tlm0, &target_tlm1};
 
@@ -785,7 +785,7 @@ TEST_CASE("CreateScmiMetricConfigs maps Count units to ASTL_UNITS_COUNT", "[Conf
                          {.base_de_id           = 0x8C3D,
                           .name                 = "THROTTLE_EVENTS",
                           .component            = "CORE",
-                          .description          = "Mock sysfs cpu 1 throttle events",
+                          .description          = "MockScmi CPU 1 throttle events",
                           .unit                 = "Count",
                           .base10_unit_modifier = 0,
                           .rel_offset           = 0x00}}}}

@@ -6,7 +6,7 @@
 
 ########################################
 # run_e2e.sh
-# Launch MockSysfs and run E2E tests
+# Launch MockScmi and run E2E tests
 # Usage: ./run_e2e.sh [debug|release]
 ########################################
 set -euo pipefail
@@ -29,8 +29,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASTL_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BUILD_DIR="$ASTL_ROOT/build/$BUILD_TYPE"
 E2E_TEST_BIN="$BUILD_DIR/bin/multithreaded_e2e_test"
-LAUNCH_MOCKSYSFS_SCRIPT="$ASTL_ROOT/scripts/launch_mocksysfs.sh"
-CLEANUP_MOCKSYSFS_SCRIPT="$ASTL_ROOT/scripts/cleanup_mocksysfs.sh"
+LAUNCH_MOCKSCMI_SCRIPT="$ASTL_ROOT/scripts/launch_mockscmi.sh"
+CLEANUP_MOCKSCMI_SCRIPT="$ASTL_ROOT/scripts/cleanup_mockscmi.sh"
 MOUNT_POINT="$HOME/tmp/fuse"
 TELEMETRY_ROOT="$MOUNT_POINT/arm_telemetry"
 
@@ -43,13 +43,13 @@ echo "========================================"
 ########################################
 echo "[1/5] Checking prerequisites..."
 
-if [[ ! -f $LAUNCH_MOCKSYSFS_SCRIPT ]]; then
-	echo "❌ launch_mocksysfs.sh not found at: $LAUNCH_MOCKSYSFS_SCRIPT"
+if [[ ! -f $LAUNCH_MOCKSCMI_SCRIPT ]]; then
+	echo "❌ launch_mockscmi.sh not found at: $LAUNCH_MOCKSCMI_SCRIPT"
 	exit 1
 fi
 
-if [[ ! -f $CLEANUP_MOCKSYSFS_SCRIPT ]]; then
-	echo "❌ cleanup_mocksysfs.sh not found at: $CLEANUP_MOCKSYSFS_SCRIPT"
+if [[ ! -f $CLEANUP_MOCKSCMI_SCRIPT ]]; then
+	echo "❌ cleanup_mockscmi.sh not found at: $CLEANUP_MOCKSCMI_SCRIPT"
 	exit 1
 fi
 
@@ -70,64 +70,64 @@ echo "Publishing config files..."
 echo ""
 
 ########################################
-# Check if MockSysfs is already running#
+# Check if MockScmi is already running#
 ########################################
-echo "[2/5] Checking MockSysfs status..."
+echo "[2/5] Checking MockScmi status..."
 
 ALREADY_RUNNING=false
-if pgrep -x MockSysfs >/dev/null; then
-	echo "✓ MockSysfs is already running"
+if pgrep -x MockScmi >/dev/null; then
+	echo "✓ MockScmi is already running"
 	ALREADY_RUNNING=true
 
 	# Verify mount point is accessible
 	if [[ ! -d $TELEMETRY_ROOT ]]; then
-		echo "❌ MockSysfs running but $TELEMETRY_ROOT not accessible"
-		echo "💡 Try: killall MockSysfs && sleep 2"
+		echo "❌ MockScmi running but $TELEMETRY_ROOT not accessible"
+		echo "💡 Try: killall MockScmi && sleep 2"
 		exit 1
 	fi
 else
-	echo "MockSysfs not running, will start it"
+	echo "MockScmi not running, will start it"
 fi
 echo ""
 
 ########################################
-# Launch MockSysfs if needed           #
+# Launch MockScmi if needed           #
 ########################################
 if [[ $ALREADY_RUNNING == "false" ]]; then
-	echo "[3/5] Starting MockSysfs using launch_mocksysfs.sh..."
+	echo "[3/5] Starting MockScmi using launch_mockscmi.sh..."
 
-	# Launch MockSysfs using the standard script
+	# Launch MockScmi using the standard script
 	cd "$ASTL_ROOT"
-	bash "$LAUNCH_MOCKSYSFS_SCRIPT" &
-	MOCKSYSFS_SCRIPT_PID=$!
+	bash "$LAUNCH_MOCKSCMI_SCRIPT" &
+	MOCKSCMI_SCRIPT_PID=$!
 
-	echo "MockSysfs launcher PID: $MOCKSYSFS_SCRIPT_PID"
+	echo "MockScmi launcher PID: $MOCKSCMI_SCRIPT_PID"
 
-	# Wait for MockSysfs to be ready by checking for GUID in log
-	SYSFS_LOG="$ASTL_ROOT/sysfs.log"
-	MOCKSYSFS_GUID="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
+	# Wait for MockScmi to be ready by checking for GUID in log
+	SCMI_LOG="$ASTL_ROOT/mock_scmi.log"
+	MOCKSCMI_GUID="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 	TIMEOUT=30
 
-	echo "⏱️  Waiting (up to ${TIMEOUT}s) for MockSysfs to be ready..."
-	if timeout "$TIMEOUT" bash -c "tail -n +0 -F '$SYSFS_LOG' 2>/dev/null | grep -m1 -F '$MOCKSYSFS_GUID' >/dev/null"; then
-		echo "✅ MockSysfs is ready (detected GUID)"
+	echo "⏱️  Waiting (up to ${TIMEOUT}s) for MockScmi to be ready..."
+	if timeout "$TIMEOUT" bash -c "tail -n +0 -F '$SCMI_LOG' 2>/dev/null | grep -m1 -F '$MOCKSCMI_GUID' >/dev/null"; then
+		echo "✅ MockScmi is ready (detected GUID)"
 	else
-		echo "❌ MockSysfs failed to start within ${TIMEOUT}s"
-		echo "Check logs in: $SYSFS_LOG"
+		echo "❌ MockScmi failed to start within ${TIMEOUT}s"
+		echo "Check logs in: $SCMI_LOG"
 		exit 1
 	fi
 
-	# Find the actual MockSysfs process
-	MOCKSYSFS_PID=$(pgrep -x MockSysfs || echo "")
+	# Find the actual MockScmi process
+	MOCKSCMI_PID=$(pgrep -x MockScmi || echo "")
 
-	if [[ -z $MOCKSYSFS_PID ]]; then
-		echo "❌ MockSysfs process not found"
-		echo "Check logs in: $SYSFS_LOG"
+	if [[ -z $MOCKSCMI_PID ]]; then
+		echo "❌ MockScmi process not found"
+		echo "Check logs in: $SCMI_LOG"
 		exit 1
 	fi
 
-	echo "MockSysfs PID: $MOCKSYSFS_PID"
-	echo "✓ MockSysfs started successfully"
+	echo "MockScmi PID: $MOCKSCMI_PID"
+	echo "✓ MockScmi started successfully"
 
 	# Verify mount point
 	if [[ ! -d $TELEMETRY_ROOT ]]; then
@@ -137,18 +137,18 @@ if [[ $ALREADY_RUNNING == "false" ]]; then
 
 	echo "✓ Mount point accessible: $TELEMETRY_ROOT"
 
-	# Setup cleanup to stop MockSysfs when script exits
+	# Setup cleanup to stop MockScmi when script exits
 	# shellcheck disable=SC2329
-	cleanup_mocksysfs() {
+	cleanup_mockscmi() {
 		# used indirectly in trap, so ignore 'unreachable' warnings
 		# shellcheck disable=2317
 		echo ""
 		# shellcheck disable=2317
-		bash "$CLEANUP_MOCKSYSFS_SCRIPT" "$MOUNT_POINT"
+		bash "$CLEANUP_MOCKSCMI_SCRIPT" "$MOUNT_POINT"
 	}
-	trap cleanup_mocksysfs EXIT
+	trap cleanup_mockscmi EXIT
 else
-	echo "[3/5] Using existing MockSysfs instance"
+	echo "[3/5] Using existing MockScmi instance"
 fi
 echo ""
 
@@ -160,7 +160,7 @@ export ASTL_CONFIG_DIR="$BUILD_DIR/lib/config"
 export ASTL_VERBOSE=0
 echo "ASTL_CONFIG_DIR: $ASTL_CONFIG_DIR"
 
-# force ASTL to read SCMI telemetry from our mocksysfs mount point
+# force ASTL to read SCMI telemetry from our MockScmi mount point
 export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="$TELEMETRY_ROOT"
 echo "ASTL_SCMI_SYSFS_TELEMETRY_ROOT: $ASTL_SCMI_SYSFS_TELEMETRY_ROOT"
 echo ""

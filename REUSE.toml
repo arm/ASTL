@@ -32,13 +32,13 @@ SPDX-License-Identifier = "Apache-2.0"
 
 # Test output files for comparison with expected output, but ignore them for linting
 [[annotations]]
-path = ["tools/ATX/tests/kernel_tests/**/expected.txt", "tools/mock_sysfs/**/**/expected.txt"]
+path = ["tools/ATX/tests/kernel_tests/**/expected.txt", "tools/mock_scmi/**/**/expected.txt"]
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
 # Test, demo config
 [[annotations]]
-path = ["tools/mock_sysfs/config/*.csv", "tests/demo/data/*.csv"]
+path = ["tools/mock_scmi/config/*.csv", "tests/demo/data/*.csv"]
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
 

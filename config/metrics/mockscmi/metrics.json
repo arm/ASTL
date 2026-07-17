@@ -1,5 +1,5 @@
 {
-  "_comment": "Metrics definitions for Mock SCMI sysfs telemetry target",
+  "_comment": "Metrics definitions for MockScmi telemetry target",
 
   "document": {
     "confidential": false

@@ -15,26 +15,26 @@ ASTL_HOST_ARCH="$("${ASTL_ROOT}/scripts/host_arch.sh")"
 echo "ASTL_ROOT = ${ASTL_ROOT}"
 
 ########################################
-# Launch MockSysfs (FUSE) demo         #
+# Launch MockScmi (FUSE) demo         #
 ########################################
-export ASTL_MOCKSYSFS_TLM_JSON_PATH="${ASTL_ROOT}/tools/mock_sysfs/config/tlm.json"
-echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = ${ASTL_MOCKSYSFS_TLM_JSON_PATH}"
+export ASTL_MOCKSCMI_TLM_JSON_PATH="${ASTL_ROOT}/tools/mock_scmi/config/tlm.json"
+echo "ASTL_MOCKSCMI_TLM_JSON_PATH = ${ASTL_MOCKSCMI_TLM_JSON_PATH}"
 BUILD_PRESET="${ASTL_BUILD_PRESET:-debug}"
 BUILD_DIR="${ASTL_BUILD_DIR:-${ASTL_ROOT}/build/${BUILD_PRESET}/${ASTL_HOST_ARCH}}"
-MOCK_SYSFS="${ASTL_MOCKSYSFS_BIN:-${BUILD_DIR}/bin/MockSysfs}"
+MOCK_SCMI="${ASTL_MOCKSCMI_BIN:-${BUILD_DIR}/bin/MockScmi}"
 echo "ASTL_BUILD_PRESET = ${BUILD_PRESET}"
 echo "BUILD_DIR = ${BUILD_DIR}"
-echo "MOCK_SYSFS = ${MOCK_SYSFS}"
-MOUNT_POINT="${ASTL_MOCKSYSFS_MOUNT_POINT:-${TMPDIR:-/tmp}/astl-mocksysfs}"
+echo "MOCK_SCMI = ${MOCK_SCMI}"
+MOUNT_POINT="${ASTL_MOCKSCMI_MOUNT_POINT:-${TMPDIR:-/tmp}/astl-mockscmi}"
 
 # Constants for startup detection
 TIMEOUT=30
 PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 
 # Basic sanity checks
-[[ -x ${MOCK_SYSFS} ]] ||
+[[ -x ${MOCK_SCMI} ]] ||
 	{
-		echo "❌ MockSysfs not found or not executable at ${MOCK_SYSFS}" >&2
+		echo "❌ MockScmi not found or not executable at ${MOCK_SCMI}" >&2
 		exit 1
 	}
 
@@ -49,7 +49,7 @@ DURATION=10
 INTERVAL=500
 SAVE_PATH=""
 LOAD_PATH=""
-TARGET_NAME="${SCMI_TLM_CHIP_TARGET:-scmi-mocksysfs-tlm-0}"
+TARGET_NAME="${SCMI_TLM_CHIP_TARGET:-scmi-mockscmi-tlm-0}"
 
 # Parse command-line arguments for mode, interval, and duration (using '=' syntax)
 while [[ $# -gt 0 ]]; do
@@ -88,23 +88,23 @@ done
 mkdir -p "${MOUNT_POINT}"
 
 LOG_DIR="${ASTL_ROOT}"
-SYSFS_LOG="${LOG_DIR}/sysfs.log"
+SCMI_LOG="${LOG_DIR}/mock_scmi.log"
 
 echo "Logs Directory = ${LOG_DIR}"
 
-echo "🚀 Launching MockSysfs..."
-"${MOCK_SYSFS}" -f -s "${MOUNT_POINT}" &>"${SYSFS_LOG}" &
-SYSFS_PID=$!
+echo "🚀 Launching MockScmi..."
+"${MOCK_SCMI}" -f -s "${MOUNT_POINT}" &>"${SCMI_LOG}" &
+SCMI_PID=$!
 
-# Note, if not mocksysfs, use
+# Note, if not mockscmi, use
 # `	mount -t stlmfs none /sys/fs/arm_telemetry/ `
 # to mount the real sysfs interface
 
 # Always clean up on exit
 cleanup() {
-	echo "🛑 Stopping MockSysfs (PID=${SYSFS_PID})..."
-	kill -SIGTERM "${SYSFS_PID}" 2>/dev/null || true
-	wait "${SYSFS_PID}" 2>/dev/null || true
+	echo "🛑 Stopping MockScmi (PID=${SCMI_PID})..."
+	kill -SIGTERM "${SCMI_PID}" 2>/dev/null || true
+	wait "${SCMI_PID}" 2>/dev/null || true
 	if mount | grep -q "on ${MOUNT_POINT} "; then
 		fusermount3 -u "${MOUNT_POINT}" 2>/dev/null || fusermount -u "${MOUNT_POINT}" 2>/dev/null || true
 	fi
@@ -120,14 +120,14 @@ wait_for() {
 	timeout "${TIMEOUT}" bash -c \
 		"stdbuf -oL tail -n +0 -F '${file}' | grep -m1 -F '${pattern}'" ||
 		{
-			echo '❌ Timeout waiting for MockSysfs' >&2
+			echo '❌ Timeout waiting for MockScmi' >&2
 			exit 1
 		}
 	echo "✅ Detected '${pattern}' in ${desc}"
 }
 
-wait_for "${SYSFS_LOG}" "MockSysfs startup log" "${PATTERN_READY}"
-echo "✅ MockSysfs mounted at ${MOUNT_POINT}"
+wait_for "${SCMI_LOG}" "MockScmi startup log" "${PATTERN_READY}"
+echo "✅ MockScmi mounted at ${MOUNT_POINT}"
 
 ###############################################################
 # Copy metrics + scmi spec config/ directory to build directory #
@@ -166,7 +166,7 @@ if [[ -n ${SAVE_PATH} ]]; then
 	RUN_ARGS+=(--save="${SAVE_PATH}")
 fi
 
-# force ASTL to use our mocksysfs mount point for the SCMI sysfs rather than the default /sys/fs/arm_telemetry
+# force ASTL to use our MockScmi mount point for the SCMI sysfs rather than the default /sys/fs/arm_telemetry
 export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="${TELEMETRY_ROOT}"
 export ASTL_CONFIG_DIR="${BUILD_DIR}/lib/config"
 echo "ASTL_CONFIG_DIR = ${ASTL_CONFIG_DIR}"

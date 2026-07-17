@@ -8,13 +8,13 @@
 
 Examples:
   python3 scripts/scmi_json_to_metrics.py \
-      --input config/scmi/public/mockscmi/scp.json \
-      --output config/metrics/mockscmi/scp_metrics.generated.json
+      --input config/scmi/public/mockscmi/mockscmi.json \
+      --output config/metrics/mockscmi/metrics.json
 
   # Merge into existing output file while preserving existing metrics and metadata:
   python3 scripts/scmi_json_to_metrics.py \
-      --input config/scmi/public/mockscmi/scp.json \
-      --output config/metrics/mockscmi/scp_metrics.json \
+      --input config/scmi/public/mockscmi/mockscmi.json \
+      --output config/metrics/mockscmi/metrics.json \
       --merge
 """
 

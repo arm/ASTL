@@ -3,7 +3,7 @@
   "uuid_mapping": {
     "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000": {
       "last_updated": "2025-12-18",
-      "description": "Mock SCMI Sysfs - Test harness for ASTL development",
+      "description": "MockScmi test harness for ASTL development",
       "specification_file": "mockscmi.json",
       "confidential": false
     }

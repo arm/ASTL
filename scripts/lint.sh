@@ -38,7 +38,7 @@ INCLUDE_PATHS+=(-I"${BUILD_DIR}"/include)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/utils)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/src/impl)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/src/impl/common)
-INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/tools/mock_sysfs/include)
+INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/tools/mock_scmi/include)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/third_party/tinyexpr-plusplus)
 
 echo "Running clang-tidy to lint code..."
@@ -184,8 +184,8 @@ for FILE in "${FILES[@]+"${FILES[@]}"}"; do
 	elif [[ $FILE == *.h.in ]]; then
 		# skip files used to generate C code
 		continue
-	elif [[ $FILE == *tools/mock_sysfs* && "$(uname -s)" != "Linux" ]]; then
-		# mock_sysfs code only compiles on Linux, so skip these files if on other OS
+	elif [[ $FILE == *tools/mock_scmi* && "$(uname -s)" != "Linux" ]]; then
+		# mock_scmi code only compiles on Linux, so skip these files if on other OS
 		continue
 	elif [[ $FILE == *.c ]]; then
 		C_SOURCE_FILES_TO_LINT+=("$FILE")
@@ -311,7 +311,7 @@ EXTRA_ARGS=()
 EXTRA_ARGS+=(-std=c++23)
 # enable std::expected in clang-tidy
 EXTRA_ARGS+=(-D__cpp_concepts=202002L)
-# set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_sysfs/CMakeLists.txt
+# set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_scmi/CMakeLists.txt
 EXTRA_ARGS+=(-DFUSE_USE_VERSION=316)
 # if on x86_64, disable mmx intrinsics for linting to avoid issues with some CI runners
 if [[ "$(uname -m)" == "x86_64" ]]; then

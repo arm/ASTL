@@ -46,7 +46,7 @@ gcovr -r . --verbose \
 	--exclude 'build/*' \
 	--exclude 'third_party/*' \
 	--exclude 'tools/ATX' \
-	--exclude 'tools/mock_sysfs' \
+	--exclude 'tools/mock_scmi' \
 	--exclude-unreachable-branches \
 	--exclude-throw-branches \
 	"${output_args[@]}"

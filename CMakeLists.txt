@@ -105,8 +105,8 @@ function(astl_set_default_output_directory variable_name subdirectory)
   endforeach()
 endfunction()
 
-# Add a subdirectory only when the source tree is present. This keeps partial
-# checkouts or intentionally removed optional tools buildable.
+# Add a subdirectory only when the source tree is present. This keeps partial checkouts or intentionally removed
+# optional tools buildable.
 function(astl_add_optional_subdirectory relative_dir component_name)
   if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${relative_dir}")
     add_subdirectory(${relative_dir})
@@ -400,12 +400,12 @@ endif()
 
 if(UNIX AND NOT APPLE)
   if(ASTL_BUILD_TOOLS)
-    astl_add_optional_subdirectory(tools/mock_sysfs mock_sysfs)
+    astl_add_optional_subdirectory(tools/mock_scmi mock_scmi)
   else()
-    message(STATUS "Skipping mock_sysfs because ASTL_BUILD_TOOLS is disabled")
+    message(STATUS "Skipping MockScmi because ASTL_BUILD_TOOLS is disabled")
   endif()
 else()
-  message(STATUS "Skipping mock_sysfs on this platform")
+  message(STATUS "Skipping MockScmi on this platform")
 endif()
 
 # define a CLI application to use the library

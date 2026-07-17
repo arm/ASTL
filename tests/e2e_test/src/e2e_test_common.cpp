@@ -18,13 +18,13 @@ namespace fs = std::filesystem;
 
 namespace astl_test {
 
-auto CheckMockSysfs(const std::string& sysfs_root) -> bool {
+auto CheckMockScmi(const std::string& sysfs_root) -> bool {
   if (!fs::exists(sysfs_root)) {
-    std::cerr << "❌ MockSysfs not found: " << sysfs_root << std::endl;
-    std::cerr << "Please start MockSysfs: ./scripts/launch_mocksysfs.sh" << std::endl;
+    std::cerr << "❌ MockScmi not found: " << sysfs_root << std::endl;
+    std::cerr << "Please start MockScmi: ./scripts/launch_mockscmi.sh" << std::endl;
     return false;
   }
-  std::cout << "✓ MockSysfs accessible at " << sysfs_root << std::endl;
+  std::cout << "✓ MockScmi accessible at " << sysfs_root << std::endl;
   return true;
 }
 

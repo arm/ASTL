@@ -12,7 +12,7 @@ rm -r coverage*
 find . | grep -E "\.gcda|\.gcov" | xargs rm
 
 # run the tests
-ctest --parallel 8 -LE "integration|mocksysfs" --preset debug-valgrind-coverage
+ctest --parallel 8 -LE "integration|mockscmi" --preset debug-valgrind-coverage
 
 # make directories at the places merge_coverage expects them to be?
 mkdir -p build/debug-valgrind-coverage/CMakeFiles/astl.dir/src/

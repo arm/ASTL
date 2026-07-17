@@ -25,12 +25,12 @@ target_link_libraries(multithreaded_e2e_test PRIVATE Astl::astl Catch2::Catch2Wi
 add_custom_target(
   run_multithreaded_e2e_test
   COMMAND multithreaded_e2e_test
-  COMMENT "Run multi-threaded E2E test with MockSysfs")
+  COMMENT "Run multi-threaded E2E test with MockScmi")
 
-# Add the test to CTest but disable by default (requires MockSysfs)
+# Add the test to CTest but disable by default (requires MockScmi)
 include(CTest)
 add_test(NAME multithreaded_e2e_test COMMAND multithreaded_e2e_test)
 
-# Set test properties - mark as E2E test that requires MockSysfs DISABLED by default - use run_e2e.sh script to run with
+# Set test properties - mark as E2E test that requires MockScmi DISABLED by default - use run_e2e.sh script to run with
 # proper environment setup
-set_tests_properties(multithreaded_e2e_test PROPERTIES LABELS "e2e;multithreaded;mocksysfs" TIMEOUT 60 DISABLED TRUE)
+set_tests_properties(multithreaded_e2e_test PROPERTIES LABELS "e2e;multithreaded;mockscmi" TIMEOUT 60 DISABLED TRUE)

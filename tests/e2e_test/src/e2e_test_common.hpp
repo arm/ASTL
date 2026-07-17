@@ -70,11 +70,11 @@ struct ThreadSyncHelper {
 };
 
 /**
- * @brief Check if MockSysfs is accessible at the given path
- * @param sysfs_root Path to the MockSysfs mount point
+ * @brief Check if MockScmi is accessible at the given path
+ * @param sysfs_root Path to the MockScmi mount point
  * @return true if accessible, false otherwise
  */
-auto CheckMockSysfs(const std::string& sysfs_root) -> bool;
+auto CheckMockScmi(const std::string& sysfs_root) -> bool;
 
 /**
  * @brief Get a target by name from ASTL

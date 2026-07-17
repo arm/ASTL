@@ -76,7 +76,7 @@ auto UnitsToString(astl_units_t units) -> std::string {
 }
 
 auto NormalizeTargetName(std::string_view target_name) -> std::string_view {
-  constexpr std::array<std::string_view, 3> known_prefixes = {"scmi-mocksysfs-", "scmi_", "scmi-"};
+  constexpr std::array<std::string_view, 3> known_prefixes = {"scmi-mockscmi-", "scmi_", "scmi-"};
   for (const auto prefix : known_prefixes) {
     if (target_name.starts_with(prefix)) {
       return target_name.substr(prefix.size());
@@ -508,7 +508,7 @@ auto RetrieveSamples(astl_target_handle_t target_handle, const std::vector<astl_
       continue;  // skip nameless metrics
     }
     if (std::strncmp(metric_props.name, "AP1", 3) == 0) {
-      continue;  // skip AP1 as mock sysfs doesn't implement the AP1 events as listed in example_scmi_specification.json
+      continue;  // skip AP1 as MockScmi doesn't implement the AP1 events listed in example_scmi_specification.json
     }
     uint32_t sample_count{};
     ASTL_INIT_STRUCT(astl_get_metric_sample_count_on_target_params_t, get_metric_sample_count_params, .flags = 0,
@@ -556,7 +556,7 @@ auto PrintMinMaxAvgSummary(astl_target_handle_t target_handle, const std::vector
       continue;  // skip nameless metrics
     }
     if (std::strncmp(metric_props.name, "AP1", 3) == 0) {
-      continue;  // skip AP1 as mock sysfs doesn't implement the AP1 events
+      continue;  // skip AP1 as MockScmi doesn't implement the AP1 events
     }
     astl_metric_statistics_t summary{};
     summary.size  = sizeof(astl_metric_statistics_t);
@@ -705,9 +705,9 @@ auto main(int argc, char* argv[]) -> int {
     status = GetMetricsOnTarget(target_properties, metric_buffer, metric_count);
     if (status != ASTL_STATUS_SUCCESS) {
       std::cout << "Masking error code " << status
-                << " from GetMetricsOnTarget so sample integration tests will pass w/out mock sysfs\n";
+                << " from GetMetricsOnTarget so sample integration tests will pass w/out MockScmi\n";
       // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
-      // even without mock sysfs running
+      // even without MockScmi running
       return 0;
     }
   }
@@ -723,7 +723,7 @@ auto main(int argc, char* argv[]) -> int {
                                        sampling_interval_ms);
     if (status != ASTL_STATUS_SUCCESS) {
       // Note - this is masking error codes, but our CTest integration tests expect these sample tests to function
-      // even without mock sysfs running
+      // even without MockScmi running
       return 0;
     }
   }

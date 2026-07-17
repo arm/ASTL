@@ -180,7 +180,7 @@ jobs:
         # because we don't want to include them for coverage.
         run: ctest -L "integration" --preset ${{ matrix.cmake_preset }}
 
-      - name: 📽️ Run Demo with MockSysFs
+      - name: 📽️ Run Demo with MockScmi
         if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage'
         run: |
           set -o pipefail

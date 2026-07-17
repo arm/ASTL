@@ -26,15 +26,15 @@ subgraph clusterLegend {
   legendNode3 -> legendNode6 [ style = solid ];
   legendNode0 -> legendNode7;
 }
-    "node0" [ label = "MockSysfs", shape = egg ];
+    "node0" [ label = "MockScmi", shape = egg ];
     "node1" [ label = "dl", shape = septagon ];
-    "node0" -> "node1" [ style = dotted ] // MockSysfs -> dl
+    "node0" -> "node1" [ style = dotted ] // MockScmi -> dl
     "node2" [ label = "fuse3", shape = septagon ];
-    "node0" -> "node2" [ style = dotted ] // MockSysfs -> fuse3
+    "node0" -> "node2" [ style = dotted ] // MockScmi -> fuse3
     "node3" [ label = "pthread", shape = septagon ];
-    "node0" -> "node3" [ style = dotted ] // MockSysfs -> pthread
+    "node0" -> "node3" [ style = dotted ] // MockScmi -> pthread
     "node4" [ label = "rt", shape = septagon ];
-    "node0" -> "node4" [ style = dotted ] // MockSysfs -> rt
+    "node0" -> "node4" [ style = dotted ] // MockScmi -> rt
     "node5" [ label = "astl\n(Astl::astl)", shape = doubleoctagon ];
     "node6" [ label = "astl_static\n(Astl::astl_static)", shape = octagon ];
     "node7" [ label = "nlohmann_json::nlohmann_json", shape = pentagon ];

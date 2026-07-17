@@ -9,7 +9,7 @@
     "description": "Telemetry data capture format layout specification"
   },
   "uuid": "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000/14",
-  "description": "Mock SCMI SYSFS Platform Telemetry Data Capture Format Specification",
+  "description": "MockScmi Platform Telemetry Data Capture Format Specification",
   "tdcf_instance_id": "[7:0]",
   "chiplet_id": "[15:8]",
   "size": 96,
@@ -66,7 +66,7 @@
           "base_de_id": "0x00001A68",
           "name": "FREQUENCY",
           "component": "CORE",
-          "description": "Mock sysfs cpu frequency",
+          "description": "MockScmi CPU frequency",
           "unit": "MHz",
           "unit_exponent": 0,
           "rel_offset": "0x0000"
@@ -75,7 +75,7 @@
           "base_de_id": "0x00007A9B",
           "name": "CORE_0_TEMP",
           "component": "CORE",
-          "description": "Mock sysfs cpu 1 temp",
+          "description": "MockScmi CPU 1 temperature",
           "unit": "Celsius",
           "unit_exponent": 0,
           "rel_offset": "0x0000"
@@ -84,7 +84,7 @@
           "base_de_id": "0x00008C3D",
           "name": "THROTTLE_EVENTS",
           "component": "CORE",
-          "description": "Mock sysfs cpu 1 throttle events",
+          "description": "MockScmi CPU 1 throttle events",
           "unit": "Count",
           "unit_exponent": 0,
           "rel_offset": "0x0000"
@@ -93,7 +93,7 @@
           "base_de_id": "0x00009E4F",
           "name": "ENERGY_COUNTER",
           "component": "SOC",
-          "description": "Mock sysfs soc energy counter",
+          "description": "MockScmi SoC energy counter",
           "unit": "Watts",
           "unit_exponent": 0,
           "rel_offset": "0x0000"

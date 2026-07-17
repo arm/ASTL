@@ -16,7 +16,7 @@
 #include "e2e_test_common.hpp"
 #include "multithreaded_e2e_test.hpp"
 
-using astl_test::CheckMockSysfs;
+using astl_test::CheckMockScmi;
 
 // Global telemetry root path passed from command line
 // Mutable global is necessary here because Catch2 TEST_CASE macros are defined at file scope
@@ -29,14 +29,14 @@ static std::string g_telemetry_root;
  */
 TEST_CASE("Multi-threaded phased execution", "[e2e][multithreaded][nominal]") {
   REQUIRE(!g_telemetry_root.empty());
-  REQUIRE(CheckMockSysfs(g_telemetry_root));
+  REQUIRE(CheckMockScmi(g_telemetry_root));
 
   astl_test::TestMultiThreadedEndToEnd();
 }
 
 TEST_CASE("Multiple concurrent configure attempts after start", "[e2e][multithreaded][negative]") {
   REQUIRE(!g_telemetry_root.empty());
-  REQUIRE(CheckMockSysfs(g_telemetry_root));
+  REQUIRE(CheckMockScmi(g_telemetry_root));
 
   astl_test::TestMultipleConfigureAfterStart();
 }

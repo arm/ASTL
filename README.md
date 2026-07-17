@@ -1157,9 +1157,9 @@ import pandas as pd
 df_summary = pd.read_csv("/tmp/astl_summary.csv")
 ```
 
-## Running the Mock SCMI Sysfs Generator
+## Running MockScmi
 
-To run the mock SCMI sysfs generator:
+To run MockScmi:
 
 1. **Create a Mount Directory**
 
@@ -1169,10 +1169,10 @@ Create a directory to serve as the mount point (e.g., `/tmp/scmi`):
 mkdir -p /tmp/scmi
 ```
 
-2. **Run Mock Sysfs**
+2. **Run MockScmi**
 
 ```sh
-ASTL/build/debug/bin/MockSysfs /tmp/scmi
+ASTL/build/debug/bin/MockScmi /tmp/scmi
 ```
 
 ### Optional Flags
@@ -1181,7 +1181,7 @@ ASTL/build/debug/bin/MockSysfs /tmp/scmi
 - Single-threaded operation: -s
 - Run in foreground: -f
 
-3. **Terminating Mock Sysfs**
+3. **Terminating MockScmi**
 
 - Foreground mode: Simply press Ctrl+C to exit.
 - Background mode: kill -SIGINT \<PID\>

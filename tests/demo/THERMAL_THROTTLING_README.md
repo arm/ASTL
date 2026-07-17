@@ -23,17 +23,17 @@ The ASTL (Arm SoC Telemetry Library) thermal throttling demo simulates real-worl
    ```
 
 2. **Required Binaries**: The demo requires these executables to be built:
-   - `MockSysfs`: FUSE-based mock SCMI sysfs generator
+   - `MockScmi`: FUSE-based MockScmi telemetry generator
    - `sample_test`: ASTL sample application
 
 3. **Dependencies**: Ensure you have the following installed:
-   - FUSE libraries (for MockSysfs)
+   - FUSE libraries (for MockScmi)
 
 ## Thermal Throttling Data
 
 The thermal throttling simulation uses the CSV file located at:
 
-```
+```text
 tests/demo/data/SoC_Throttling_Simulation.csv
 ```
 
@@ -64,7 +64,7 @@ To run the thermal throttling demo with the default CSV file:
 ```bash
 # From the ASTL root directory
 # Set the environment variable to point to default CSV file
-export ASTL_MOCKSYSFS_CSV_FILE_PATH="./tests/demo/data/SoC_Throttling_Simulation.csv"
+export ASTL_MOCKSCMI_CSV_FILE_PATH="./tests/demo/data/SoC_Throttling_Simulation.csv"
 ./scripts/demo.sh
 ```
 
@@ -76,11 +76,11 @@ By default, ASTL runs for 10 seconds with a 500 ms sampling interval, during whi
 
 ### Using Custom CSV File
 
-To use a custom thermal simulation CSV file, set the `ASTL_MOCKSYSFS_CSV_FILE_PATH` environment variable:
+To use a custom thermal simulation CSV file, set the `ASTL_MOCKSCMI_CSV_FILE_PATH` environment variable:
 
 ```bash
 # Set the environment variable to point to your custom CSV file
-export ASTL_MOCKSYSFS_CSV_FILE_PATH="/path/to/your/thermal_data.csv"
+export ASTL_MOCKSCMI_CSV_FILE_PATH="/path/to/your/thermal_data.csv"
 
 # Run the demo
 ./scripts/demo.sh
@@ -114,7 +114,7 @@ Collects samples at regular intervals:
 
 When running the thermal throttling demo, you'll see:
 
-1. **MockSysfs Startup**: The FUSE-based mock filesystem mounts at `~/tmp/fuse/arm_telemetry`
+1. **MockScmi Startup**: The FUSE-based mock filesystem mounts at `~/tmp/fuse/arm_telemetry`
 2. **SCMI Telemetry Structure**: Creates the mock SCMI telemetry hierarchy
 3. **Sample Collection**: The `sample_test` application collects telemetry data
 4. **Thermal Data**: Real-time simulation of thermal throttling events
@@ -134,7 +134,7 @@ The thermal throttling demo exposes these telemetry data events:
 
 During demo execution, the following structure is created:
 
-```
+```text
 ~/tmp/fuse/arm_telemetry/
 ├── des/
 │   ├── 0x00007A9B/      # Temperature data event
@@ -164,7 +164,7 @@ To create your own thermal throttling scenario:
 2. **Set the environment variable**:
 
    ```bash
-   export ASTL_MOCKSYSFS_CSV_FILE_PATH="/path/to/your/custom_thermal.csv"
+   export ASTL_MOCKSCMI_CSV_FILE_PATH="/path/to/your/custom_thermal.csv"
    ```
 
 3. **Run the demo**:
@@ -177,7 +177,7 @@ To create your own thermal throttling scenario:
 
 ### Common Issues
 
-1. **MockSysfs not found**: Ensure you've built the project:
+1. **MockScmi not found**: Ensure you've built the project:
 
    ```bash
    cmake --build build/debug
@@ -189,18 +189,18 @@ To create your own thermal throttling scenario:
    sudo modprobe fuse
    ```
 
-3. **CSV file not found**: Verify the path in `ASTL_MOCKSYSFS_CSV_FILE_PATH`:
+3. **CSV file not found**: Verify the path in `ASTL_MOCKSCMI_CSV_FILE_PATH`:
 
    ```bash
-   echo $ASTL_MOCKSYSFS_CSV_FILE_PATH
-   ls -la "$ASTL_MOCKSYSFS_CSV_FILE_PATH"
+   echo $ASTL_MOCKSCMI_CSV_FILE_PATH
+   ls -la "$ASTL_MOCKSCMI_CSV_FILE_PATH"
    ```
 
 ### Log Files
 
 Demo logs are written to:
 
-- **MockSysfs log**: `$ASTL_ROOT/sysfs.log`
+- **MockScmi log**: `$ASTL_ROOT/sysfs.log`
 - **ASTL library logs**: Check console output
 
 ### Cleanup
@@ -208,8 +208,8 @@ Demo logs are written to:
 The demo automatically cleans up on exit, but if needed, manually unmount:
 
 ```bash
-# If MockSysfs is still running
-killall MockSysfs
+# If MockScmi is still running
+killall MockScmi
 
 # If mount point is stuck
 fusermount -u ~/tmp/fuse/arm_telemetry
@@ -217,12 +217,12 @@ fusermount -u ~/tmp/fuse/arm_telemetry
 
 ## Environment Variables Reference
 
-| Variable                       | Description                                              | Default Value                     |
-| ------------------------------ | -------------------------------------------------------- | --------------------------------- |
-| `ASTL_MOCKSYSFS_CSV_FILE_PATH` | Path to CSV file containing thermal simulation data      | `./SoC_Throttling_Simulation.csv` |
-| `ASTL_LOG_LEVEL`               | ASTL library log level (trace, debug, info, warn, error) | info                              |
-| `ASTL_LOG_NAME`                | Custom log file name                                     | (console output)                  |
-| `ASTL_LOG_CONSOLE`             | Enable console logging (true/false)                      | true                              |
+| Variable                      | Description                                              | Default Value                     |
+| ----------------------------- | -------------------------------------------------------- | --------------------------------- |
+| `ASTL_MOCKSCMI_CSV_FILE_PATH` | Path to CSV file containing thermal simulation data      | `./SoC_Throttling_Simulation.csv` |
+| `ASTL_LOG_LEVEL`              | ASTL library log level (trace, debug, info, warn, error) | info                              |
+| `ASTL_LOG_NAME`               | Custom log file name                                     | (console output)                  |
+| `ASTL_LOG_CONSOLE`            | Enable console logging (true/false)                      | true                              |
 
 The `ASTL_LOG_*` environment variables are defined in [`utils/astl_logger.hpp`]. The ASTL logging system utilizes the spdlog library for high-performance, asynchronous logging capabilities.
 
@@ -236,12 +236,12 @@ watch -n 0.5 "cat ~/tmp/fuse/arm_telemetry/tlm-0/des/0x00007A9B/value"
 watch -n 0.5 "cat ~/tmp/fuse/arm_telemetry/tlm-0/des/0x00008C3D/value"
 ```
 
-#### Viewing MockSysfs Log
+### Viewing MockScmi Log
 
-To view the `sysfs.log` data written by MockSysfs use:
+To view the `sysfs.log` data written by MockScmi use:
 
 ```bash
-# Display MockSysfs logs
+# Display MockScmi logs
 tail -f sysfs.log
 ```
 

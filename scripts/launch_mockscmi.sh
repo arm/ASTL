@@ -15,33 +15,33 @@ ASTL_HOST_ARCH="$("${ASTL_ROOT}/scripts/host_arch.sh")"
 echo "ASTL_ROOT = $ASTL_ROOT"
 
 ########################################
-# Launch MockSysfs (FUSE) demo         #
+# Launch MockScmi (FUSE) demo         #
 ########################################
-export ASTL_MOCKSYSFS_TLM_JSON_PATH="$ASTL_ROOT/tools/mock_sysfs/config/tlm.json"
-echo "ASTL_MOCKSYSFS_TLM_JSON_PATH = $ASTL_MOCKSYSFS_TLM_JSON_PATH"
+export ASTL_MOCKSCMI_TLM_JSON_PATH="$ASTL_ROOT/tools/mock_scmi/config/tlm.json"
+echo "ASTL_MOCKSCMI_TLM_JSON_PATH = $ASTL_MOCKSCMI_TLM_JSON_PATH"
 BUILD_PRESET="${ASTL_BUILD_PRESET:-debug}"
 ASTL_HOST_ARCH="$("${ASTL_ROOT}/scripts/host_arch.sh")"
 BUILD_DIR="${ASTL_BUILD_DIR:-$ASTL_ROOT/build/$BUILD_PRESET/$ASTL_HOST_ARCH}"
-MOCK_SYSFS="${ASTL_MOCKSYSFS_BIN:-}"
-if [[ -z $MOCK_SYSFS && -n ${ATX_BIN_PATH:-} ]]; then
+MOCK_SCMI="${ASTL_MOCKSCMI_BIN:-}"
+if [[ -z $MOCK_SCMI && -n ${ATX_BIN_PATH:-} ]]; then
 	ATX_BIN_DIR="$(dirname "$(realpath "${ATX_BIN_PATH}")")"
-	ATX_ADJACENT_MOCKSYSFS="${ATX_BIN_DIR}/MockSysfs"
-	if [[ -x $ATX_ADJACENT_MOCKSYSFS ]]; then
-		MOCK_SYSFS="$ATX_ADJACENT_MOCKSYSFS"
+	ATX_ADJACENT_MOCKSCMI="${ATX_BIN_DIR}/MockScmi"
+	if [[ -x $ATX_ADJACENT_MOCKSCMI ]]; then
+		MOCK_SCMI="$ATX_ADJACENT_MOCKSCMI"
 	fi
 fi
-if [[ -z $MOCK_SYSFS ]]; then
-	MOCK_SYSFS="$BUILD_DIR/bin/MockSysfs"
+if [[ -z $MOCK_SCMI ]]; then
+	MOCK_SCMI="$BUILD_DIR/bin/MockScmi"
 fi
 echo "ASTL_BUILD_PRESET = $BUILD_PRESET"
 echo "BUILD_DIR = $BUILD_DIR"
-echo "MOCK_SYSFS = $MOCK_SYSFS"
+echo "MOCK_SCMI = $MOCK_SCMI"
 
-# Allow optional arguments to override MOUNT_POINT and SYSFS_LOG.
+# Allow optional arguments to override MOUNT_POINT and SCMI_LOG.
 MOUNT_POINT="${HOME}/tmp/fuse"
-SYSFS_LOG="$ASTL_ROOT/sysfs.log"
+SCMI_LOG="$ASTL_ROOT/mock_scmi.log"
 if [[ $# -gt 2 ]]; then
-	echo "❌ Usage: $(basename "$0") [MOUNT_POINT] [SYSFS_LOG]" >&2
+	echo "❌ Usage: $(basename "$0") [MOUNT_POINT] [SCMI_LOG]" >&2
 	exit 1
 fi
 if [[ $# -ge 1 ]]; then
@@ -55,7 +55,7 @@ if [[ $# -ge 1 ]]; then
 	fi
 fi
 if [[ $# -eq 2 ]]; then
-	SYSFS_LOG="$2"
+	SCMI_LOG="$2"
 fi
 
 # Constants for startup detection
@@ -63,23 +63,23 @@ TIMEOUT=30
 PATTERN_READY="eccf4f7c-d1b1-47f0-9d23-159f6d38b661"
 
 # Basic sanity checks
-[[ -x $MOCK_SYSFS ]] ||
+[[ -x $MOCK_SCMI ]] ||
 	{
-		echo "❌ MockSysfs not found or not executable at $MOCK_SYSFS" >&2
+		echo "❌ MockScmi not found or not executable at $MOCK_SCMI" >&2
 		exit 1
 	}
 
 TELEMETRY_ROOT="$MOUNT_POINT/arm_telemetry"
 mkdir -p "$TELEMETRY_ROOT"
 
-echo "Logs Directory = $SYSFS_LOG"
+echo "Logs Directory = $SCMI_LOG"
 
-echo "🚀 Launching MockSysfs..."
-# Keep MockSysfs alive after this launcher script exits.
-nohup "$MOCK_SYSFS" -f -s "$MOUNT_POINT" >"$SYSFS_LOG" 2>&1 &
-SYSFS_PID=$!
+echo "🚀 Launching MockScmi..."
+# Keep MockScmi alive after this launcher script exits.
+nohup "$MOCK_SCMI" -f -s "$MOUNT_POINT" >"$SCMI_LOG" 2>&1 &
+SCMI_PID=$!
 
-# Note, if not mocksysfs, use
+# Note, if not mockscmi, use
 # `	mount -t stlmfs none /sys/fs/arm_telemetry/ `
 # to mount the real sysfs interface
 
@@ -94,22 +94,22 @@ wait_for() {
 	timeout "$TIMEOUT" bash -c \
 		"stdbuf -oL tail -n +0 -F '$file' | grep -m1 -F '$pattern'" ||
 		{
-			echo '❌ Timeout waiting for MockSysfs' >&2
+			echo '❌ Timeout waiting for MockScmi' >&2
 			exit 1
 		}
 	echo "✅ Detected '$pattern' in $desc"
 }
 
-wait_for "$SYSFS_LOG" "MockSysfs startup log" "$PATTERN_READY"
+wait_for "$SCMI_LOG" "MockScmi startup log" "$PATTERN_READY"
 
 # Verify that the mounted filesystem accepts control writes.
 TLM_ENABLE_FILE="$TELEMETRY_ROOT/tlm-0/tlm_enable"
 if ! printf '1' >"$TLM_ENABLE_FILE"; then
-	echo "❌ MockSysfs mounted, but $TLM_ENABLE_FILE is not writable" >&2
+	echo "❌ MockScmi mounted, but $TLM_ENABLE_FILE is not writable" >&2
 	exit 1
 fi
 
-echo "✅ MockSysfs mounted at $MOUNT_POINT"
+echo "✅ MockScmi mounted at $MOUNT_POINT"
 echo "✅ Verified writable control file: $TLM_ENABLE_FILE"
-echo "🧵 To stop MockSysfs (PID=$SYSFS_PID)..."
-echo "kill -SIGTERM $SYSFS_PID 2>/dev/null || true"
+echo "🧵 To stop MockScmi (PID=$SCMI_PID)..."
+echo "kill -SIGTERM $SCMI_PID 2>/dev/null || true"

@@ -45,7 +45,7 @@ the directory containing the `repometa.json` fragment:
   "uuid_mapping": {
     "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000": {
       "last_updated": "2025-12-18",
-      "description": "Mock SCMI Sysfs - Test harness for ASTL development",
+      "description": "MockScmi test harness for ASTL development",
       "specification_file": "mockscmi.json",
       "confidential": false
     }
@@ -66,7 +66,7 @@ These files enumerate the in-band telemetry sensors accessible through SCMI.
    "base_de_id": "0x00001A68",
    "name": "FREQUENCY",
    "component": "CORE",
-   "description": "Mock sysfs cpu frequency",
+   "description": "MockScmi CPU frequency",
    "unit": "MHz",
    "base10_unit_modifier": 0,
    "rel_offset": "0x0000"
@@ -203,15 +203,16 @@ containing the `platform_lookup.json` fragment:
   "scmi_uuid_mapping": {
     "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000": {
       "last_updated": "2025-12-18",
-      "description": "Mock SCMI Sysfs - Test harness for ASTL development",
+      "description": "MockScmi test harness for ASTL development",
       "metrics_file": "metrics.json",
+      "name": "scmi-mockscmi-{telemetry_subdirectory}",
       "confidential": false
     }
   }
 }
 ```
 
-When ConfigManager encounters the `CAFEBABE` UUID, it builds metrics using [`config/metrics/mocksysfs/metrics.json`](../config/metrics/mocksysfs/metrics.json).
+When ConfigManager encounters the `CAFEBABE` UUID, it builds metrics using [`config/metrics/mockscmi/metrics.json`](../config/metrics/mockscmi/metrics.json).
 
 ### Libsensors Declaration Lookup
 
@@ -235,7 +236,7 @@ not PCI-address-specific wrappers.
 
 ### Metrics Declaration Format
 
-Metrics declaration files (e.g., [`config/metrics/mocksysfs/metrics.json`](../config/metrics/mocksysfs/metrics.json)) specify which telemetry counters are available and their processing methods:
+Metrics declaration files (e.g., [`config/metrics/mockscmi/metrics.json`](../config/metrics/mockscmi/metrics.json)) specify which telemetry counters are available and their processing methods:
 
 ```json
   "metrics": {
