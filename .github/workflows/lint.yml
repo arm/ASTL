@@ -84,7 +84,8 @@ jobs:
 
       - name: 🧹 YAML Lint
         if: matrix.os == 'ubuntu-latest'
-        run: yamllint ${{ github.workspace }}/.github/workflows/*.yaml
+        shell: bash
+        run: find .github -type f \( -iname '*.yml' -o -iname '*.yaml' \) | xargs yamllint
 
       - name: 🧹 Check Formatting
         run: ${{ github.workspace }}/scripts/check_format.sh
