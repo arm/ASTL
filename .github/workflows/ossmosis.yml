@@ -47,10 +47,10 @@ jobs:
       - name: Install ossmosis
         run: python -m pip install ./ossmosis
 
-      - name: Scan PR
+      - name: Scan PR Snapshot
         working-directory: target
         run: |
-          ossmosis scan-history \
-            --repo . \
-            --max-class public \
-            --range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          ossmosis scan \
+            --root . \
+            --manifest .ossmosis.json \
+            --max-class public
