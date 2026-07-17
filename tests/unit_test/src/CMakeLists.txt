@@ -19,6 +19,8 @@ set(UNIT_TEST_SRCS
     formula_utests.cpp
     logger_utests.cpp
     orchestrator_utests.cpp
+    scmi_ioctl_collector_utests.cpp
+    scmi_ioctl_interface_utests.cpp
     scmi_sysfs_collector_utests.cpp
     sampled_value_metric_utests.cpp
     delta_metric_utests.cpp

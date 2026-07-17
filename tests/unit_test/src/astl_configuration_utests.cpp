@@ -2,7 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <expected>
 #include <filesystem>
+#include <string_view>
 
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
@@ -20,6 +22,19 @@ void CreateConfigTree(const fs::path& config_dir) {
   REQUIRE(!ec);
   fs::create_directories(config_dir / "scmi" / "public", ec);
   REQUIRE(!ec);
+}
+
+auto CreateConfigurationWithRootOverride(std::string_view config_dir_name, astl::EnvVar root_env_var,
+                                         const fs::path& root_override)
+    -> std::expected<astl::AstlConfiguration, astl_status_code> {
+  const fs::path config_dir = fs::temp_directory_path() / std::string{config_dir_name};
+  TempFileGuard  config_guard(config_dir);
+  CreateConfigTree(config_dir);
+
+  EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, config_dir.string());
+  EnvVarGuard root_guard(root_env_var, root_override.string());
+
+  return astl::AstlConfiguration::CreateConfiguration();
 }
 
 }  // namespace
@@ -88,16 +103,11 @@ TEST_CASE("AstlConfiguration::CreateConfiguration falls back to HOME/.local/shar
 
 TEST_CASE("AstlConfiguration::CreateConfiguration honors ASTL_SCMI_SYSFS_TELEMETRY_ROOT override",
           "[AstlConfiguration]") {
-  const fs::path config_dir = fs::temp_directory_path() / "astl_config_sysfs_override";
   const fs::path sysfs_root = fs::temp_directory_path() / "astl_fake_scmi_sysfs";
-  TempFileGuard  config_guard(config_dir);
   TempFileGuard  sysfs_guard(sysfs_root);
-  CreateConfigTree(config_dir);
 
-  EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, config_dir.string());
-  EnvVarGuard sysfs_guard_var(astl::EnvVar::ASTL_SCMI_SYSFS_TELEMETRY_ROOT, sysfs_root.string());
-
-  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  auto configuration_result = CreateConfigurationWithRootOverride(
+      "astl_config_sysfs_override", astl::EnvVar::ASTL_SCMI_SYSFS_TELEMETRY_ROOT, sysfs_root);
 
   REQUIRE(configuration_result.has_value());
   REQUIRE(configuration_result->scmi_sysfs_telemetry_root_path == sysfs_root);
@@ -116,4 +126,15 @@ TEST_CASE("AstlConfiguration::CreateConfiguration uses default SCMI sysfs root w
 
   REQUIRE(configuration_result.has_value());
   REQUIRE(configuration_result->scmi_sysfs_telemetry_root_path == astl::kDefaultScmiSysfsTelemetryRootPath);
+}
+
+TEST_CASE("AstlConfiguration::CreateConfiguration honors ASTL_SCMI_IOCTL_DEV_ROOT override", "[AstlConfiguration]") {
+  const fs::path ioctl_device_dir = fs::temp_directory_path() / "astl_fake_scmi_ioctl";
+  TempFileGuard  ioctl_guard(ioctl_device_dir);
+
+  auto configuration_result = CreateConfigurationWithRootOverride(
+      "astl_config_ioctl_override", astl::EnvVar::ASTL_SCMI_IOCTL_DEV_ROOT, ioctl_device_dir);
+
+  REQUIRE(configuration_result.has_value());
+  REQUIRE(configuration_result->scmi_ioctl_device_root_path == ioctl_device_dir);
 }

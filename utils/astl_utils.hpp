@@ -29,6 +29,12 @@ enum class EnvVar {
   /* optional override for scmi sysfs telemetry root path */
   ASTL_SCMI_SYSFS_TELEMETRY_ROOT,
 
+  /** @brief Optional override for the SCMI ioctl device root path. */
+  ASTL_SCMI_IOCTL_DEV_ROOT,
+
+  /** @brief Optional SCMI interface selection. Accepted values are auto, ioctl, and sysfs. */
+  ASTL_SCMI_INTERFACE,
+
   /* optional override for astl config directory */
   ASTL_CONFIG_DIR,
 

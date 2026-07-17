@@ -60,7 +60,7 @@ and retrieval interface.
 Current stack:
 
 1. Low-level telemetry backends
-   - SCMI via Linux SCMI sysfs
+   - SCMI via Linux SCMI telemetry ioctl and legacy sysfs
    - Hwmon telemetry via libsensors
 2. ASTL internal discovery and metric-building layers
 3. Public C API
@@ -770,7 +770,8 @@ Current in-repo caveat:
 
 Current ASTL discovery is centered on two backend families:
 
-- `SCMI sysfs`: Status `primary`. Discovery source: Linux SCMI telemetry sysfs.
+- `SCMI`: Status `primary`. Discovery source: Linux SCMI telemetry ioctl
+  character devices, with fallback to the legacy SCMI telemetry sysfs interface.
   Notes: main implementation focus.
 - `libsensors`: Status `supported`. Discovery source: lm-sensors / hwmon
   through libsensors. Notes: dynamic library dependency.
@@ -778,20 +779,27 @@ Current ASTL discovery is centered on two backend families:
 ### SCMI
 
 ASTL currently focuses on the SCMI telemetry specification as surfaced through the
-Linux SCMI sysfs interface.
+Linux SCMI telemetry ioctl interface and the legacy Linux SCMI sysfs interface.
 
 #### What SCMI Requires On The System
 
 For live SCMI discovery to work, the following must exist:
 
-1. A mounted SCMI telemetry sysfs root.
-   - Default: `/sys/fs/arm_telemetry`
-   - Override: `ASTL_SCMI_SYSFS_TELEMETRY_ROOT`
-2. One or more telemetry subdirectories under that root.
-3. In each candidate subdirectory, a readable `de_implementation_version` file.
-4. The contents of that file must contain a UUID that ASTL can normalize.
-5. ASTL must be able to locate its configuration directory.
-6. The config directory must contain:
+1. At least one usable SCMI telemetry backend:
+   - ioctl telemetry character devices under `/dev/scmi`, with device names
+     such as `tlm_0`; override with `ASTL_SCMI_IOCTL_DEV_ROOT`.
+   - Or a mounted legacy sysfs telemetry root under `/sys/fs/arm_telemetry`;
+     override with `ASTL_SCMI_SYSFS_TELEMETRY_ROOT`.
+2. A backend preference selected by `ASTL_SCMI_INTERFACE`, if the default is not
+   desired.
+   - `auto`: prefer ioctl when usable, otherwise fall back to sysfs.
+   - `ioctl`: force the ioctl backend.
+   - `sysfs`: force the legacy sysfs backend.
+3. A telemetry implementation UUID that ASTL can normalize.
+   - For ioctl, ASTL reads this through `SCMI_TLM_GET_INFO`.
+   - For sysfs, ASTL reads `de_implementation_version`.
+4. ASTL must be able to locate its configuration directory.
+5. The config directory must contain:
    - one or more `scmi/public/**/repometa.json` fragments
    - The referenced SCMI specification JSON
    - one or more `metrics/**/platform_lookup.json` fragments
@@ -801,13 +809,19 @@ For live SCMI discovery to work, the following must exist:
 
 At runtime, ASTL:
 
-1. Picks the SCMI sysfs root path,
-2. Lists subdirectories under that root,
-3. Treats a subdirectory as an SCMI target candidate only if
-   `de_implementation_version` exists and is readable,
-4. Reads and normalizes the UUID from that file,
-5. Constructs a target named `scmi_<telemetry-subdirectory>`,
-6. Uses the UUID to locate specification and metric metadata.
+1. Reads `ASTL_SCMI_INTERFACE`; unset, `auto`, or unknown values use automatic
+   selection.
+2. In automatic mode, probes ioctl devices first. If one or more usable ioctl
+   targets are discovered, ASTL uses ioctl for SCMI discovery and collection.
+3. If automatic ioctl discovery finds no usable targets, ASTL falls back to
+   legacy sysfs discovery.
+4. In forced `ioctl` mode, only ioctl devices are considered.
+5. In forced `sysfs` mode, only legacy sysfs telemetry directories are
+   considered.
+6. Constructs targets named `scmi_<telemetry-subdirectory>`. ASTL keeps the
+   stable target path in the legacy `tlm-N` form even when the kernel ioctl
+   character device is named `tlm_N`.
+7. Uses the normalized UUID to locate specification and metric metadata.
 
 #### SCMI Metadata Required For Dynamic Metric Discovery
 
@@ -824,8 +838,10 @@ The metrics declaration file tells ASTL how to present processed metrics on top 
 
 #### Operational Note
 
-If the SCMI sysfs root does not exist, ASTL skips SCMI discovery rather than treating it as
-a fatal process-wide condition.
+In automatic mode, a missing ioctl device root is treated as "no ioctl targets"
+so ASTL can fall back to legacy sysfs. If the legacy sysfs root also does not
+exist, ASTL skips SCMI discovery rather than treating it as a fatal process-wide
+condition. Forced `ioctl` or forced `sysfs` mode disables the other backend.
 
 ### Libsensors
 
@@ -913,6 +929,14 @@ That means:
 ## ASTL Runtime Configuration Resolution
 
 For live discovery, ASTL must find its configuration directory.
+
+SCMI backend paths are resolved independently from the configuration directory:
+
+- `ASTL_SCMI_INTERFACE`: `auto`, `ioctl`, or `sysfs`. Defaults to `auto`.
+- `ASTL_SCMI_IOCTL_DEV_ROOT`: ioctl telemetry character-device root. Defaults
+  to `/dev/scmi`.
+- `ASTL_SCMI_SYSFS_TELEMETRY_ROOT`: legacy sysfs telemetry root. Defaults to
+  `/sys/fs/arm_telemetry`.
 
 Current search order:
 
@@ -1123,8 +1147,9 @@ Raw ASTL metrics:
 
 ## Release Notes
 
-- ASTL 0.0.1 currently supports dynamic discovery from SCMI sysfs and
-  libsensors-backed targets, plus offline replay through `.astl` session files.
+- ASTL 0.0.1 currently supports dynamic discovery from SCMI telemetry ioctl,
+  legacy SCMI sysfs, and libsensors-backed targets, plus offline replay through
+  `.astl` session files.
 - For address-bearing libsensors devices such as NVMe and `bnxt_en` NICs, raw
   target names may still include the discovered chip name or PCI address, while
   metric names use stable family-instance tokens when family-level declarations

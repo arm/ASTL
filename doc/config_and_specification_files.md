@@ -33,9 +33,11 @@ Import [`config/scmi/alpha/`](../config/scmi/alpha/) and [`config/scmi/beta/`](.
 
 ## Platform Detection for SCMI Specification
 
-Each platform supports different sensors. ASTL first reads the telemetry source's UUID from the SCMI Sysfs interface.
-Files named `repometa.json` under [`config/scmi/public/`](../config/scmi/public/) map UUIDs to their specification
-files. Paths are resolved relative to the directory containing the `repometa.json` fragment:
+Each platform supports different sensors. ASTL first reads the telemetry source's UUID from the selected SCMI backend.
+In automatic mode, ASTL prefers SCMI telemetry ioctl devices under `/dev/scmi` and falls back to the legacy SCMI sysfs
+interface under `/sys/fs/arm_telemetry` when no usable ioctl target is found. Files named `repometa.json` under
+[`config/scmi/public/`](../config/scmi/public/) map UUIDs to their specification files. Paths are resolved relative to
+the directory containing the `repometa.json` fragment:
 
 ```json
 {

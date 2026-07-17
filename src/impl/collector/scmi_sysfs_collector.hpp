@@ -24,6 +24,7 @@
 #include "collector/i_collector.hpp"
 #include "collector/periodic_sampler.hpp"
 #include "collector/scmi_data_event.hpp"
+#include "collector/scmi_operation_helpers.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "common/scmi/scmi_constants.hpp"
@@ -273,17 +274,6 @@ auto ParseDataEventValueWithTimestamp(std::string_view data_read)
 // Accept either "<timestamp> <value>" or "<value>".
 auto ParseDataEventValue(std::string_view data_read) -> std::expected<ScmiDataEventValue, astl_status_code>;
 
-auto GetUniqueDataEventsIds(CollectionOperations const& operations) -> std::unordered_set<ScmiDataEventId>;
-
-/*
- * @brief For each ScmiReadOperation in the given operations, look up its corresponding data event
- *        and copy the timestamp rate.
- *        This is needed so that when we execute a ScmiReadOperation and get a timestamp back,
- *        we know how to interpret it based on the rate at which it increments.
- */
-auto UpdateSampleOperationsWithTstampRates(std::vector<ScmiDataEvent> const& data_events,
-                                           CollectionOperations const&       operations) -> void;
-
 auto MakeSoftwareClockCorrelation() -> OperationClockCorrelation;
 
 }  // namespace scmi_detail
@@ -424,7 +414,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
 
   _configuration          = std::move(configuration);
   _collection_state       = CollectionState::CONFIGURED;
-  auto all_data_event_ids = scmi_detail::GetUniqueDataEventsIds(_configuration->Operations());
+  auto all_data_event_ids = scmi_operation_helpers::GetUniqueDataEventIds(_configuration->Operations());
   auto data_events        = EnableDataEvents(all_data_event_ids);
   if (!data_events) {
     rollback_configuration_state();
@@ -434,7 +424,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::ConfigureCollection(CollectionConfigura
 
   // copy the tstamp rate for each data event into its corresponding Read operation
   // so we know how to interpret timestamps on sample
-  scmi_detail::UpdateSampleOperationsWithTstampRates(_data_events, _configuration->Operations());
+  scmi_operation_helpers::UpdateReadOperationTimestampRates(_data_events, _configuration->Operations());
 
   // log some version info
   std::string de_implementation_version;

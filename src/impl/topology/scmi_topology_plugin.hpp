@@ -6,21 +6,17 @@
 #define SCMI_TOPOLOGY_PLUGIN_HPP_
 
 #include <algorithm>
-#include <cctype>
 #include <expected>
 #include <filesystem>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "astl/astl_errors.h"
-#include "astl_file_interface.hpp"
-#include "common/scmi/scmi_constants.hpp"
+#include "astl_logger.hpp"
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
-#include "topology/scmi_target.hpp"
 
 namespace astl {
 
@@ -28,9 +24,11 @@ namespace ScmiTopologyPlugin {
 
 namespace detail {
 
-static auto BuildTargetName(const std::string& telemetry_subdirectory) -> std::string {
-  return ScmiTarget::NameForTelemetrySubdirectory(telemetry_subdirectory);
-}
+auto BuildTargetName(const std::string& telemetry_subdirectory) -> std::string;
+
+auto BuildSysfsTargetFromImplementationVersion(const std::string& implementation_version,
+                                               const std::string& telemetry_subdirectory)
+    -> std::expected<std::unique_ptr<ITarget>, astl_status_code>;
 
 /**
  * @brief Returns a Target (e.g. named "scmi_tlm-0") accessible via SCMI from the given subdirectory scmi_telemetry
@@ -42,55 +40,45 @@ static auto BuildTargetName(const std::string& telemetry_subdirectory) -> std::s
 template <typename FileInterfaceType>
 auto DetectTarget(FileInterfaceType& scmi_sysfs_file_interface, std::string const& telemetry_subdirectory)
     -> std::expected<std::unique_ptr<ITarget>, astl_status_code> {
-  auto de_implementation_version_path =
+  std::expected<std::unique_ptr<ITarget>, astl_status_code> target;
+  auto                                                      de_implementation_version_path =
       scmi_sysfs_file_interface.GetBasePath() / telemetry_subdirectory / "de_implementation_version";
 
   auto is_valid = scmi_sysfs_file_interface.IsValid(de_implementation_version_path);
   if (!is_valid) {
     ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to check existence of de_implementation_version");
-    return std::unexpected(is_valid.error());
-  }
-  if (!(is_valid.value())) {
+    target = std::unexpected(is_valid.error());
+  } else if (!(is_valid.value())) {
     ASTL_LOG_INFO(
         "ScmiTopologyPlugin::ScanForTargets: Info file de_implementation_version did not exist.  "
         "skipping target directory {}",
         telemetry_subdirectory);
-    return {};
+  } else {
+    auto has_read_permission = scmi_sysfs_file_interface.HasReadPermission(de_implementation_version_path);
+    if (!has_read_permission) {
+      ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to check permissions of de_implementation_version");
+      target = std::unexpected(has_read_permission.error());
+    } else if (!(has_read_permission.value())) {
+      ASTL_LOG_INFO(
+          "ScmiTopologyPlugin::ScanForTargets: Info file de_implementation_version did not have read permissions.  "
+          "skipping target directory {}",
+          telemetry_subdirectory);
+    } else {
+      std::string read_content;
+      auto        read_status = scmi_sysfs_file_interface.Read(de_implementation_version_path, read_content);
+      if (read_status != ASTL_STATUS_SUCCESS) {
+        ASTL_LOG_ERROR(
+            "ScmiTopologyPlugin::ScanForTargets: Failed to read content of de_implementation_version "
+            "for target {}",
+            telemetry_subdirectory);
+        target = std::unexpected(read_status);
+      } else {
+        target = BuildSysfsTargetFromImplementationVersion(read_content, telemetry_subdirectory);
+      }
+    }
   }
 
-  auto has_read_permission = scmi_sysfs_file_interface.HasReadPermission(de_implementation_version_path);
-  if (!has_read_permission) {
-    ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to check permissions of de_implementation_version");
-    return std::unexpected(has_read_permission.error());
-  }
-  if (!(has_read_permission.value())) {
-    ASTL_LOG_INFO(
-        "ScmiTopologyPlugin::ScanForTargets: Info file de_implementation_version did not have read permissions.  "
-        "skipping target directory {}",
-        telemetry_subdirectory);
-    return {};
-  }
-
-  std::string read_content;
-  auto        read_status = scmi_sysfs_file_interface.Read(de_implementation_version_path, read_content);
-  if (read_status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR(
-        "ScmiTopologyPlugin::ScanForTargets: Failed to read content of de_implementation_version "
-        "for target {}",
-        telemetry_subdirectory);
-    return std::unexpected(read_status);
-  }
-  const auto uuid_result = scmi::spec::GetNormalizedUuid(read_content);
-  if (!uuid_result) {
-    return std::unexpected(uuid_result.error());
-  }
-  const auto uuid = uuid_result.value();
-  ASTL_LOG_INFO("ScmiTopologyPlugin::ScanForTargets: Successfully detected SCMI/SysFS target with UUID {}",
-                uuid.normalized_value);
-  const auto target_name = BuildTargetName(telemetry_subdirectory);
-  auto target_ptr = std::make_unique<ScmiTarget>(target_name, "Target discovered via SCMI", telemetry_subdirectory,
-                                                 nullptr, uuid.normalized_value);
-  return target_ptr;
+  return target;
 }
 
 /**
@@ -103,35 +91,7 @@ auto DetectTarget(FileInterfaceType& scmi_sysfs_file_interface, std::string cons
  * prefix and end in digits the numeric suffixes are compared, otherwise it falls back to a plain
  * string comparison for non `tlm-N` directory names.
  */
-static auto CompareTelemetryDirectoryNames(const std::string& lhs, const std::string& rhs) -> bool {
-  // Split a name into its leading non-digit prefix and its trailing run of digits.
-  const auto split = [](const std::string& name) -> std::pair<std::string_view, std::string_view> {
-    std::size_t digits_begin = name.size();
-    while (digits_begin > 0 && std::isdigit(static_cast<unsigned char>(name[digits_begin - 1])) != 0) {
-      --digits_begin;
-    }
-    const std::string_view view{name};
-    return {view.substr(0, digits_begin), view.substr(digits_begin)};
-  };
-  const auto [lhs_prefix, lhs_digits] = split(lhs);
-  const auto [rhs_prefix, rhs_digits] = split(rhs);
-  if (!lhs_digits.empty() && !rhs_digits.empty() && lhs_prefix == rhs_prefix) {
-    // Compare the digit runs numerically without converting to an integer, so arbitrarily large
-    // suffixes are handled without overflow: drop leading zeros, then the shorter run is the smaller
-    // number, and equal-length runs compare lexicographically.
-    const auto strip_leading_zeros = [](std::string_view digits) -> std::string_view {
-      const auto first_significant = digits.find_first_not_of('0');
-      return first_significant == std::string_view::npos ? std::string_view{} : digits.substr(first_significant);
-    };
-    const std::string_view lhs_significant = strip_leading_zeros(lhs_digits);
-    const std::string_view rhs_significant = strip_leading_zeros(rhs_digits);
-    if (lhs_significant.size() != rhs_significant.size()) {
-      return lhs_significant.size() < rhs_significant.size();
-    }
-    return lhs_significant < rhs_significant;
-  }
-  return lhs < rhs;
-}
+auto CompareTelemetryDirectoryNames(const std::string& lhs, const std::string& rhs) -> bool;
 
 /**
  * @brief Validate the SCMI telemetry root and return its immediate subdirectories in natural order.
@@ -198,6 +158,18 @@ auto BuildTargetsFromDirectories(FileInterfaceType&                             
   return targets;
 }
 
+auto DetectIoctlTarget(const std::filesystem::path& device_path)
+    -> std::expected<std::unique_ptr<ITarget>, astl_status_code>;
+
+auto ListSortedIoctlDevices(const std::filesystem::path& device_root)
+    -> std::expected<std::vector<std::filesystem::directory_entry>, astl_status_code>;
+
+auto BuildTargetsFromIoctlDevices(const std::vector<std::filesystem::directory_entry>& ioctl_devices)
+    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code>;
+
+auto ScanForIoctlTargets(const AstlConfiguration& configuration)
+    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code>;
+
 /**
  * @brief Returns a list of targets accessible via SCMI on this platform
  *
@@ -219,12 +191,16 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
 
 /**
  * @brief Returns a list of targets accessible via SCMI on this platform
+ *
+ * In automatic mode, ioctl targets are preferred when any are usable. If ioctl
+ * discovery finds no targets, discovery falls back to the legacy sysfs backend.
+ * Forced ioctl or forced sysfs mode disables the other backend.
+ *
+ * @param configuration ASTL configuration containing SCMI sysfs and ioctl path overrides.
+ * @return Discovered SCMI targets, or an ASTL status on discovery failure.
  */
-inline auto ScanForTargets(const AstlConfiguration& configuration)
-    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
-  FileInterface scmi_sysfs_file_interface{configuration.scmi_sysfs_telemetry_root_path};
-  return detail::ScanForTargetsOnFileInterface(configuration, std::move(scmi_sysfs_file_interface));
-}
+auto ScanForTargets(const AstlConfiguration& configuration)
+    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code>;
 
 }  // namespace ScmiTopologyPlugin
 

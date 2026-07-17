@@ -2,12 +2,17 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <expected>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include "astl_file_interface.hpp"
 #include "collector/collector_manager.hpp"
 #include "collector/i_collector.hpp"
+#include "collector/scmi_backend_selection.hpp"
+#include "collector/scmi_ioctl_collector.hpp"
+#include "collector/scmi_ioctl_interface.hpp"
 #include "collector/scmi_sysfs_collector.hpp"
 #if defined(ASTL_INCLUDE_LIBSENSORS)
 #  include "libsensors/libsensors_collector.hpp"
@@ -18,7 +23,134 @@
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
 #include "topology/procfs_target.hpp"
+
 namespace astl {
+namespace {
+
+using CollectorList          = std::vector<std::unique_ptr<ICollector>>;
+using CollectorMap           = std::unordered_map<const ITarget*, CollectorList>;
+using ScmiSysfsFileCollector = ScmiSysfsCollector<FileInterface>;
+
+/**
+ * @brief Wraps a single collector in the list shape consumed by CollectorManager.
+ *
+ * @param collector Collector to move into the list.
+ * @return List containing the provided collector.
+ */
+auto MakeCollectorList(std::unique_ptr<ICollector> collector) -> CollectorList {
+  CollectorList collectors;
+  collectors.push_back(std::move(collector));
+  return collectors;
+}
+
+/**
+ * @brief Builds an SCMI collector using the selected backend preference.
+ *
+ * @param target SCMI target requiring a collector.
+ * @param configuration Runtime paths and backend configuration.
+ * @return Collector instance, or an ASTL error when target metadata is invalid.
+ */
+auto BuildScmiCollector(const ITarget& target, const AstlConfiguration& configuration)
+    -> std::expected<std::unique_ptr<ICollector>, astl_status_code> {
+  const auto scmi_target_directory = target.CollectorTargetPath();
+  if (!scmi_target_directory.has_value() || scmi_target_directory->empty()) {
+    ASTL_LOG_ERROR("BuildCollectorManager: SCMI target '{}' is missing collector path metadata", target.Name());
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  const auto backend_preference = GetScmiBackendPreference();
+  const auto ioctl_device_path  = ScmiIoctlInterface::DevicePathFromTelemetrySubdirectory(
+      configuration.scmi_ioctl_device_root_path, *scmi_target_directory);
+  const auto ioctl_available = ScmiPreferenceAllowsIoctl(backend_preference)
+                                   ? ScmiIoctlTargetAvailable(ioctl_device_path)
+                                   : std::expected<bool, astl_status_code>{false};
+
+  if ((ioctl_available && *ioctl_available) || backend_preference == ScmiBackendPreference::IOCTL) {
+    ASTL_LOG_INFO("BuildCollectorManager: using SCMI ioctl collector for target '{}' at {}", target.Name(),
+                  ioctl_device_path.string());
+    return std::make_unique<ScmiIoctlCollector>(ioctl_device_path);
+  }
+
+  const std::filesystem::path scmi_target_path =
+      configuration.scmi_sysfs_telemetry_root_path / std::string{*scmi_target_directory};
+  FileInterface scmi_target_file_interface{scmi_target_path};
+  ASTL_LOG_INFO("BuildCollectorManager: using SCMI sysfs collector for target '{}' at {}", target.Name(),
+                scmi_target_path.string());
+  return std::make_unique<ScmiSysfsFileCollector>(std::move(scmi_target_file_interface));
+}
+
+/**
+ * @brief Builds the collector list for an SCMI target.
+ *
+ * @param target SCMI target requiring a collector.
+ * @param configuration Runtime paths and backend configuration.
+ * @return Collector list, or an ASTL error when the SCMI collector cannot be built.
+ */
+auto BuildScmiCollectors(const ITarget& target, const AstlConfiguration& configuration)
+    -> std::expected<CollectorList, astl_status_code> {
+  auto collector = BuildScmiCollector(target, configuration);
+  if (!collector.has_value()) {
+    return std::unexpected(collector.error());
+  }
+  return MakeCollectorList(std::move(*collector));
+}
+
+/**
+ * @brief Builds the collector list for a libsensors target when libsensors support is compiled in.
+ *
+ * @param target Target that may contain libsensors API sharing state.
+ * @return Collector list; empty when libsensors support is unavailable or target metadata is not libsensors-specific.
+ */
+auto BuildLibsensorsCollectors([[maybe_unused]] const ITarget& target) -> CollectorList {
+  CollectorList collectors;
+#if defined(ASTL_INCLUDE_LIBSENSORS)
+  if (const auto* libsensors_target = dynamic_cast<const LibsensorsTarget*>(&target)) {
+    collectors.push_back(std::make_unique<LibsensorsCollector>(libsensors_target->ShareApi()));
+  }
+#endif
+  return collectors;
+}
+
+/**
+ * @brief Builds the collector list for a procfs target.
+ *
+ * @param target Procfs target, optionally carrying an overridden procfs root path.
+ * @return Collector list containing one procfs collector.
+ */
+auto BuildProcfsCollectors(const ITarget& target) -> CollectorList {
+  auto procfs_root_path = procfs::kDefaultProcfsRootPath;
+  if (const auto* procfs_target = dynamic_cast<const ProcfsTarget*>(&target)) {
+    procfs_root_path = procfs_target->ProcfsRootPath();
+  }
+
+  FileInterface procfs_file_interface{procfs_root_path};
+  return MakeCollectorList(std::make_unique<ProcfsCollector>(std::move(procfs_file_interface)));
+}
+
+/**
+ * @brief Dispatches collector construction based on target collector type.
+ *
+ * @param target Target requiring collectors.
+ * @param configuration Runtime paths and backend configuration.
+ * @return Collector list, or an ASTL error for unsupported or invalid targets.
+ */
+auto BuildCollectorsForTarget(const ITarget& target, const AstlConfiguration& configuration)
+    -> std::expected<CollectorList, astl_status_code> {
+  switch (target.GetCollectorType()) {
+    case CollectorType::SCMI:
+      return BuildScmiCollectors(target, configuration);
+    case CollectorType::LIBSENSORS:
+      return BuildLibsensorsCollectors(target);
+    case CollectorType::PROCFS:
+      return BuildProcfsCollectors(target);
+    default:
+      ASTL_LOG_ERROR("BuildCollectorManager: Unsupported collector type for target {}", target.Name());
+      return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+  }
+}
+
+}  // namespace
+
 /**
  * @brief Builds collectors for the given targets based on the provided configuration.
  *
@@ -29,47 +161,15 @@ namespace astl {
  */
 auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration)
     -> std::expected<std::unique_ptr<ICollectorManager>, astl_status_code> {
-  std::unordered_map<const ITarget*, std::vector<std::unique_ptr<ICollector>>> collectors;
-
-  std::filesystem::path scmi_sysfs_root_path{configuration.scmi_sysfs_telemetry_root_path};
-
-  using ScmiCollector = astl::ScmiSysfsCollector<astl::FileInterface>;
+  CollectorMap collectors;
 
   for (const auto& cur_target : targets) {
-    if (cur_target->GetCollectorType() == CollectorType::SCMI) {
-      const auto scmi_target_directory = cur_target->CollectorTargetPath();
-      if (!scmi_target_directory.has_value() || scmi_target_directory->empty()) {
-        ASTL_LOG_ERROR("BuildCollectorManager: SCMI target '{}' is missing collector path metadata",
-                       cur_target->Name());
-        return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-      }
-      std::filesystem::path             scmi_target_path = scmi_sysfs_root_path / std::string{*scmi_target_directory};
-      astl::FileInterface               scmi_target_file_interface{scmi_target_path};
-      std::unique_ptr<astl::ICollector> scmi_collector =
-          std::make_unique<ScmiCollector>(std::move(scmi_target_file_interface));
-      std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
-      collectors_for_target.push_back(std::move(scmi_collector));
-      collectors.emplace(cur_target.get(), std::move(collectors_for_target));
-    } else if (cur_target->GetCollectorType() == CollectorType::LIBSENSORS) {
-#if defined(ASTL_INCLUDE_LIBSENSORS)
-      if (const auto* libsensors_target = dynamic_cast<const astl::LibsensorsTarget*>(cur_target.get())) {
-        std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
-        collectors_for_target.push_back(std::make_unique<astl::LibsensorsCollector>(libsensors_target->ShareApi()));
-        collectors.emplace(cur_target.get(), std::move(collectors_for_target));
-      }
-#endif
-    } else if (cur_target->GetCollectorType() == CollectorType::PROCFS) {
-      auto procfs_root_path = procfs::kDefaultProcfsRootPath;
-      if (const auto* procfs_target = dynamic_cast<const astl::ProcfsTarget*>(cur_target.get())) {
-        procfs_root_path = procfs_target->ProcfsRootPath();
-      }
-      astl::FileInterface                            procfs_file_interface{procfs_root_path};
-      std::vector<std::unique_ptr<astl::ICollector>> collectors_for_target;
-      collectors_for_target.push_back(std::make_unique<astl::ProcfsCollector>(std::move(procfs_file_interface)));
-      collectors.emplace(cur_target.get(), std::move(collectors_for_target));
-    } else {
-      ASTL_LOG_ERROR("BuildCollectorManager: Unsupported collector type for target {}", cur_target->Name());
-      return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+    auto collectors_for_target = BuildCollectorsForTarget(*cur_target, configuration);
+    if (!collectors_for_target.has_value()) {
+      return std::unexpected(collectors_for_target.error());
+    }
+    if (!collectors_for_target->empty()) {
+      collectors.emplace(cur_target.get(), std::move(*collectors_for_target));
     }
   }
 

@@ -28,7 +28,7 @@ See the dedicated "Output Formats" section near the end of this document for ful
 currently supported output mechanisms (in-memory buffer, Perfetto trace, Interval CSV, and Summary CSV).
 
 The initial implementation focuses on the System Control and Management Interface (SCMI)
-specification through the Linux SCMI sysfs interface. It also supports
+specification through the Linux SCMI telemetry ioctl and legacy sysfs interfaces. It also supports
 hwmon telemetry through libsensors. It may eventually be expanded to add support for other
 interfaces such as: BIOS mailboxes, PCIe configuration spaces, direct register accesses,
 PROCFS, OS provided data or other sources of data.
@@ -141,7 +141,14 @@ The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_
 `astl_telemetry.h` is self-contained for pure C consumers as well. The helper macros
 `ASTL_INIT_STRUCT`, `ASTL_ALLOC_ARRAY`, and `ASTL_FREE_ARRAY` are intended to work in both C and C++ translation units.
 
-1. Mount the Sysfs interface:
+1. Provide an SCMI telemetry interface.
+
+By default, ASTL automatically probes SCMI telemetry ioctl character devices under
+`/dev/scmi` and uses them when available. If no usable ioctl target is found,
+ASTL falls back to the legacy SCMI telemetry sysfs interface under
+`/sys/fs/arm_telemetry`.
+
+For legacy sysfs-only systems, mount the sysfs interface:
 
 ```bash
 mount -t stlmfs none /sys/fs/arm_telemetry/
@@ -149,13 +156,22 @@ mount -t stlmfs none /sys/fs/arm_telemetry/
 
 2. Initialize ASTL
 
-First, if needed, use the environment variable ASTL_SCMI_SYSFS_TELEMETRY_ROOT
-to redirect the library to use a non-default path for scmi sysfs.
+If needed, use these environment variables to choose or redirect the SCMI backend:
+
+- `ASTL_SCMI_INTERFACE`: SCMI backend preference. Accepted values are `auto`,
+  `ioctl`, and `sysfs`; unset or unknown values use `auto`.
+- `ASTL_SCMI_IOCTL_DEV_ROOT`: ioctl device root. Defaults to `/dev/scmi`.
+- `ASTL_SCMI_SYSFS_TELEMETRY_ROOT`: legacy sysfs telemetry root. Defaults to
+  `/sys/fs/arm_telemetry`.
 
 Some developers might have a reason to use modified platform definition and metrics config files.
 You can use ASTL_CONFIG_DIR for this.
 
 ```bash
+# optional - force the legacy sysfs backend, for example when using MockSysfs
+export ASTL_SCMI_INTERFACE="sysfs"
+# optional - if SCMI ioctl devices are not under /dev/scmi
+export ASTL_SCMI_IOCTL_DEV_ROOT="/path/to/scmi-devices"
 # optional - if your SCMI sysfs is not in the expected mount point
 export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="/sys/fs/arm_telemetry"
 # optional - if you're hacking around with metric definitions

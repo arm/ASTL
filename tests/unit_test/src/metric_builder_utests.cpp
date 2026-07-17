@@ -481,6 +481,38 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from wide-on
   REQUIRE(std::string{counter_props.name} == "ENERGY_COUNTER");
 }
 
+TEST_CASE("MetricBuilder::BuildMetricManager skips SCMI metrics when sysfs DE directory is missing",
+          "[MetricBuilder]") {
+  EnvVarGuard backend_guard(astl::EnvVar::ASTL_SCMI_INTERFACE, "sysfs");
+
+  const fs::path config_root = fs::temp_directory_path() / "astl_metric_builder_missing_scmi_de_fixture";
+  TempFileGuard  config_guard(config_root);
+  WriteMinimalScmiFixture(config_root);
+
+  std::error_code ec;
+  fs::remove_all(config_root / "scmi_sysfs" / "tlm-0" / "des", ec);
+  REQUIRE(!ec);
+
+  auto configuration = MakeConfigurationForTestRoot(config_root);
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "unit-test target", "tlm-0", nullptr,
+                                                       "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
+
+  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+
+  REQUIRE(result.has_value());
+  REQUIRE(result.value() != nullptr);
+
+  auto metrics_or_error = result.value()->GetAvailableMetrics(targets[0].get());
+  REQUIRE(metrics_or_error.has_value());
+  REQUIRE(metrics_or_error->empty());
+
+  auto counters_or_error = result.value()->GetAvailableCounters(targets[0].get());
+  REQUIRE(counters_or_error.has_value());
+  REQUIRE(counters_or_error->empty());
+}
+
 TEST_CASE("MetricBuilder::BuildMetricManager applies SCMI target name template from platform lookup",
           "[MetricBuilder]") {
   const fs::path config_root = fs::temp_directory_path() / "astl_metric_builder_scmi_target_name_fixture";

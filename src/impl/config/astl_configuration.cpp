@@ -25,6 +25,22 @@ static auto GetScmiSysFsTelemetryRootPath() -> std::filesystem::path {
   return std::filesystem::path{kDefaultScmiSysfsTelemetryRootPath};
 }
 
+/**
+ * @brief Resolves the SCMI ioctl device root path.
+ *
+ * ASTL_SCMI_IOCTL_DEV_ROOT overrides the default `/dev/scmi` device root used
+ * for telemetry character devices.
+ *
+ * @return Configured SCMI ioctl device root path.
+ */
+static auto GetScmiIoctlDeviceRootPath() -> std::filesystem::path {
+  auto env_var_value = astl::GetEnvVar(astl::EnvVar::ASTL_SCMI_IOCTL_DEV_ROOT);
+  if (!env_var_value.empty()) {
+    return std::filesystem::path{env_var_value};
+  }
+  return std::filesystem::path{kDefaultScmiIoctlDeviceRootPath};
+}
+
 static auto ValidateAstlConfigDirPath(const std::filesystem::path& config_dir_path) -> astl_status_code {
   if (!std::filesystem::is_directory(config_dir_path)) {
     ASTL_LOG_INFO("ASTL config directory does not exist: {}", config_dir_path.string());
@@ -156,9 +172,11 @@ static auto GetAstlConfigDirPath() -> std::expected<std::filesystem::path, astl_
 }
 
 AstlConfiguration::AstlConfiguration(std::filesystem::path const&                scmi_sysfs_path,
+                                     std::filesystem::path const&                scmi_ioctl_device_root,
                                      std::filesystem::path const&                config_dir_path,
                                      std::optional<std::filesystem::path> const& load_file_path)
     : scmi_sysfs_telemetry_root_path{scmi_sysfs_path},
+      scmi_ioctl_device_root_path{scmi_ioctl_device_root},
       config_dir_path{config_dir_path},
       metrics_dir_path{config_dir_path / "metrics"},
       groups_dir_path{config_dir_path / "groups"},
@@ -167,12 +185,13 @@ AstlConfiguration::AstlConfiguration(std::filesystem::path const&               
 
 /* Create a AstlConfiguration instance, depending on env variables, and file system paths found. */
 [[nodiscard]] auto AstlConfiguration::CreateConfiguration() -> std::expected<AstlConfiguration, astl_status_code> {
-  auto scmi_sysfs_path = GetScmiSysFsTelemetryRootPath();
-  auto config_dir_path = GetAstlConfigDirPath();
+  auto scmi_sysfs_path        = GetScmiSysFsTelemetryRootPath();
+  auto scmi_ioctl_device_root = GetScmiIoctlDeviceRootPath();
+  auto config_dir_path        = GetAstlConfigDirPath();
   if (!config_dir_path) {
     return std::unexpected<astl_status_code>(config_dir_path.error());
   }
-  return AstlConfiguration(scmi_sysfs_path, *config_dir_path, std::nullopt);
+  return AstlConfiguration(scmi_sysfs_path, scmi_ioctl_device_root, *config_dir_path, std::nullopt);
 }
 
 }  // namespace astl

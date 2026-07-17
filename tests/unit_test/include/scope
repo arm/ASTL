@@ -4,16 +4,16 @@
 #pragma once
 
 #if defined(__has_include)
-#if __has_include(<scope>) && !defined(ASTL_SCOPE_SHIM_IMPORTING_STD_SCOPE)
-#define ASTL_SCOPE_SHIM_IMPORTING_STD_SCOPE
-#include <scope>
-#undef ASTL_SCOPE_SHIM_IMPORTING_STD_SCOPE
-#endif
+#  if __has_include(<scope>) && !defined(ASTL_SCOPE_SHIM_IMPORTING_STD_SCOPE)
+#    define ASTL_SCOPE_SHIM_IMPORTING_STD_SCOPE
+#    include <scope>
+#    undef ASTL_SCOPE_SHIM_IMPORTING_STD_SCOPE
+#  endif
 #endif
 
 #ifndef __cpp_lib_scope_exit
-#include <type_traits>
-#include <utility>
+#  include <type_traits>
+#  include <utility>
 
 namespace std {
 
@@ -23,7 +23,7 @@ class scope_exit {
   constexpr explicit scope_exit(ExitFunction&& function) noexcept(std::is_nothrow_move_constructible_v<ExitFunction>)
       : function_(std::forward<ExitFunction>(function)), active_(true) {}
 
-  scope_exit(const scope_exit&) = delete;
+  scope_exit(const scope_exit&)                    = delete;
   auto operator=(const scope_exit&) -> scope_exit& = delete;
 
   constexpr scope_exit(scope_exit&& other) noexcept(std::is_nothrow_move_constructible_v<ExitFunction>)

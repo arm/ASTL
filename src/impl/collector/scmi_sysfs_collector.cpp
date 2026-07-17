@@ -12,12 +12,9 @@
 #include <format>
 #include <string_view>
 #include <system_error>
-#include <unordered_set>
 
 #include "astl_logger.hpp"
 #include "collector/scmi_data_event.hpp"
-#include "operation/operation.hpp"
-#include "operation/scmi_read_operation.hpp"
 
 namespace astl::scmi_detail {
 
@@ -87,55 +84,6 @@ auto ParseDataEventValue(std::string_view data_read) -> std::expected<ScmiDataEv
   const auto value_begin     = value_delimiter == std::string_view::npos ? size_t{0} : value_delimiter + 1;
   const auto value_text      = data_read.substr(value_begin, value_end - value_begin + 1);
   return ScmiDataEventValue::FromString(value_text);
-}
-
-// TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen optimization
-
-auto GetUniqueDataEventsIds(CollectionOperations const& operations) -> std::unordered_set<ScmiDataEventId> {
-  // just get a unique set of all data events in all the operations
-  std::unordered_set<ScmiDataEventId> all_data_events;
-  auto                                insert_unique_event_ids = [&all_data_events](const auto& operations_list) {
-    for (const auto& operation : operations_list) {
-      if (const auto* scmi_operation = dynamic_cast<ScmiReadOperation const*>(operation.get())) {
-        all_data_events.insert(scmi_operation->scmi_data_event_id);
-      }
-    }
-  };
-  insert_unique_event_ids(operations.operationsBeforeStart);
-  insert_unique_event_ids(operations.operationsAtStart);
-  insert_unique_event_ids(operations.operationsOnSample);
-  insert_unique_event_ids(operations.operationsAtStop);
-  return all_data_events;
-}
-
-/*
- * @brief For each ScmiReadOperation in the given operations, look up its corresponding data event
- *        and copy the timestamp rate.
- *        This is needed so that when we execute a ScmiReadOperation and get a timestamp back,
- *        we know how to interpret it based on the rate at which it increments.
- */
-auto UpdateSampleOperationsWithTstampRates(std::vector<ScmiDataEvent> const& data_events,
-                                           CollectionOperations const&       operations) -> void {
-  auto update_list = [&data_events](const auto& operations_list) {
-    for (const auto& operation : operations_list) {
-      if (auto* scmi_operation = dynamic_cast<ScmiReadOperation*>(operation.get())) {
-        auto data_event_it =
-            std::find_if(data_events.begin(), data_events.end(), [&scmi_operation](const ScmiDataEvent& data_event) {
-              return data_event.id == scmi_operation->scmi_data_event_id;
-            });
-        // A missing timestamp rate switches the whole collector to software-clock timestamps during configuration.
-        // Preserve the operation's existing rate in that case because it is no longer used for timestamp conversion.
-        if (data_event_it != data_events.end() && data_event_it->timestamp_rate.has_value()) {
-          scmi_operation->tstamp_rate = data_event_it->timestamp_rate.value();
-        }
-      }
-    }
-  };
-
-  update_list(operations.operationsBeforeStart);
-  update_list(operations.operationsAtStart);
-  update_list(operations.operationsOnSample);
-  update_list(operations.operationsAtStop);
 }
 
 auto MakeSoftwareClockCorrelation() -> OperationClockCorrelation {

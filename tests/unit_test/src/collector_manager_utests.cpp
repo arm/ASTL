@@ -219,6 +219,28 @@ TEST_CASE("CollectorManager::BuildCollectorManager uses SCMI target metadata for
   REQUIRE(capabilities_map.at(target).front().collector_type == astl::CollectorType::SCMI);
 }
 
+TEST_CASE("CollectorManager::BuildCollectorManager honors forced SCMI ioctl backend", "[collector_manager]") {
+  EnvVarGuard backend_guard(astl::EnvVar::ASTL_SCMI_INTERFACE, "ioctl");
+
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration                        = configuration_result.value();
+  configuration.scmi_ioctl_device_root_path = std::filesystem::temp_directory_path() / "astl_forced_ioctl_collectors";
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  auto* target = new astl::ScmiTarget{"scmi_tlm-0", "forced ioctl test target", "tlm-0", nullptr};
+  targets.emplace_back(target);
+
+  auto collector_manager = astl::BuildCollectorManager(targets, configuration);
+
+  REQUIRE(collector_manager.has_value());
+  auto capabilities_map = collector_manager.value()->ReportCollectionCapabilities();
+  REQUIRE(capabilities_map.size() == 1);
+  REQUIRE(capabilities_map.contains(target));
+  REQUIRE(capabilities_map.at(target).size() == 1);
+  REQUIRE(capabilities_map.at(target).front().collector_type == astl::CollectorType::SCMI);
+}
+
 TEST_CASE("CollectorManager::BuildCollectorManager rejects SCMI targets without SCMI-specific metadata",
           "[collector_manager]") {
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();

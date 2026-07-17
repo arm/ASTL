@@ -25,6 +25,11 @@ struct AstlConfiguration {
    */
   std::filesystem::path scmi_sysfs_telemetry_root_path;
 
+  /** @brief Path to SCMI ioctl character devices. Defaults to /dev/scmi,
+   * but can be overridden with env var ASTL_SCMI_IOCTL_DEV_ROOT.
+   */
+  std::filesystem::path scmi_ioctl_device_root_path;
+
   /** @brief Path to the directory containing ASTL metric definitions and platform-specific SCMI specifications
    * initialized from ASTL_CONFIG_DIR
    */
@@ -49,8 +54,19 @@ struct AstlConfiguration {
   [[nodiscard]] static auto CreateConfiguration() -> std::expected<AstlConfiguration, astl_status_code>;
 
  private:
-  // private ctor - use CreateConfiguration factory method instead
-  AstlConfiguration(std::filesystem::path const& scmi_sysfs_path, std::filesystem::path const& config_dir_path,
+  /**
+   * @brief Constructs an ASTL configuration from already resolved paths.
+   *
+   * Use CreateConfiguration() so environment overrides and path validation are
+   * applied consistently.
+   *
+   * @param scmi_sysfs_path Root of the SCMI sysfs telemetry tree.
+   * @param scmi_ioctl_device_root Root containing SCMI ioctl telemetry devices.
+   * @param config_dir_path Root of ASTL's runtime configuration files.
+   * @param load_file_path Optional ASTL session file to load.
+   */
+  AstlConfiguration(std::filesystem::path const& scmi_sysfs_path, std::filesystem::path const& scmi_ioctl_device_root,
+                    std::filesystem::path const&                config_dir_path,
                     std::optional<std::filesystem::path> const& load_file_path = std::nullopt);
 };
 

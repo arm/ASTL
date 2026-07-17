@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <expected>
+#include <string_view>
+
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "../../test_utilities.hpp"
@@ -21,6 +24,42 @@ using trompeloeil::re;
 namespace fs = std::filesystem;
 
 namespace {
+
+void WriteTextFile(const fs::path& path, std::string_view contents) {
+  std::error_code ec;
+  fs::create_directories(path.parent_path(), ec);
+  REQUIRE(!ec);
+
+  std::ofstream out(path, std::ios::out | std::ios::trunc);
+  REQUIRE(out.good());
+  out << contents;
+  REQUIRE(out.good());
+}
+
+struct ScriptedScmiFileInterface {
+  fs::path                                                          base_path;
+  std::expected<bool, astl_status_code>                             is_valid_result{true};
+  std::expected<bool, astl_status_code>                             has_read_permission_result{true};
+  astl_status_code                                                  read_status{ASTL_STATUS_SUCCESS};
+  std::string                                                       read_content{"CAFEBABECAFEBABECAFEBABEBEEF0000"};
+  std::expected<std::vector<fs::directory_entry>, astl_status_code> subdirectories_result{
+      std::vector<fs::directory_entry>{}};
+
+  auto GetBasePath() const -> const fs::path& { return base_path; }
+  auto IsValid(const fs::path& /*path*/) const noexcept -> std::expected<bool, astl_status_code> {
+    return is_valid_result;
+  }
+  auto HasReadPermission(const fs::path& /*path*/) const noexcept -> std::expected<bool, astl_status_code> {
+    return has_read_permission_result;
+  }
+  auto Read(const fs::path& /*path*/, std::string& output) const -> astl_status_code {
+    output = read_content;
+    return read_status;
+  }
+  auto GetSubdirectories() const -> std::expected<std::vector<fs::directory_entry>, astl_status_code> {
+    return subdirectories_result;
+  }
+};
 
 void WriteSerializedTopologyCache(const fs::path& cache_dir) {
   std::error_code ec;
@@ -80,6 +119,187 @@ TEST_CASE("Topology::ScmiPlugin", "[TopologyManager]") {
   REQUIRE(dynamic_cast<astl::ScmiTarget*>((*targets)[1].get()) != nullptr);
   REQUIRE(dynamic_cast<astl::ScmiTarget*>((*targets)[0].get())->TelemetrySubdirectory() == "tlm-0");
   REQUIRE(dynamic_cast<astl::ScmiTarget*>((*targets)[1].get())->TelemetrySubdirectory() == "tlm-1");
+}
+
+TEST_CASE("Topology::ScmiPlugin handles sysfs target metadata failures", "[TopologyManager]") {
+  const fs::path scmi_sysfs_path{"/tmp/fake/scmi/sysfs"};
+
+  SECTION("validity check error is returned") {
+    ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
+    file_interface.is_valid_result = std::unexpected(ASTL_STATUS_FILE_ERROR);
+
+    auto target = astl::ScmiTopologyPlugin::detail::DetectTarget(file_interface, "tlm-0");
+
+    REQUIRE_FALSE(target.has_value());
+    REQUIRE(target.error() == ASTL_STATUS_FILE_ERROR);
+  }
+
+  SECTION("missing implementation version file is skipped") {
+    ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
+    file_interface.is_valid_result = false;
+
+    auto target = astl::ScmiTopologyPlugin::detail::DetectTarget(file_interface, "tlm-0");
+
+    REQUIRE(target.has_value());
+    REQUIRE(target.value() == nullptr);
+  }
+
+  SECTION("permission check error is returned") {
+    ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
+    file_interface.has_read_permission_result = std::unexpected(ASTL_STATUS_FILE_ERROR);
+
+    auto target = astl::ScmiTopologyPlugin::detail::DetectTarget(file_interface, "tlm-0");
+
+    REQUIRE_FALSE(target.has_value());
+    REQUIRE(target.error() == ASTL_STATUS_FILE_ERROR);
+  }
+
+  SECTION("unreadable implementation version file is skipped") {
+    ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
+    file_interface.has_read_permission_result = false;
+
+    auto target = astl::ScmiTopologyPlugin::detail::DetectTarget(file_interface, "tlm-0");
+
+    REQUIRE(target.has_value());
+    REQUIRE(target.value() == nullptr);
+  }
+
+  SECTION("read error is returned") {
+    ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
+    file_interface.read_status = ASTL_STATUS_FILE_ERROR;
+
+    auto target = astl::ScmiTopologyPlugin::detail::DetectTarget(file_interface, "tlm-0");
+
+    REQUIRE_FALSE(target.has_value());
+    REQUIRE(target.error() == ASTL_STATUS_FILE_ERROR);
+  }
+
+  SECTION("invalid UUID content is returned as an error") {
+    ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
+    file_interface.read_content = "   ";
+
+    auto target = astl::ScmiTopologyPlugin::detail::DetectTarget(file_interface, "tlm-0");
+
+    REQUIRE_FALSE(target.has_value());
+  }
+}
+
+TEST_CASE("Topology::ScmiPlugin handles sysfs root listing outcomes", "[TopologyManager]") {
+  const fs::path scmi_sysfs_path{"/tmp/fake/scmi/sysfs"};
+
+  SECTION("root validity check error is returned") {
+    ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
+    file_interface.is_valid_result = std::unexpected(ASTL_STATUS_FILE_ERROR);
+
+    auto directories = astl::ScmiTopologyPlugin::detail::ListSortedTelemetryDirectories(file_interface);
+
+    REQUIRE_FALSE(directories.has_value());
+    REQUIRE(directories.error() == ASTL_STATUS_FILE_ERROR);
+  }
+
+  SECTION("missing root returns an empty list") {
+    ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
+    file_interface.is_valid_result = false;
+
+    auto directories = astl::ScmiTopologyPlugin::detail::ListSortedTelemetryDirectories(file_interface);
+
+    REQUIRE(directories.has_value());
+    REQUIRE(directories->empty());
+  }
+
+  SECTION("child listing failure returns an empty list") {
+    ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
+    file_interface.subdirectories_result = std::unexpected(ASTL_STATUS_FILE_ERROR);
+
+    auto directories = astl::ScmiTopologyPlugin::detail::ListSortedTelemetryDirectories(file_interface);
+
+    REQUIRE(directories.has_value());
+    REQUIRE(directories->empty());
+  }
+
+  SECTION("telemetry directories are sorted in natural order") {
+    ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
+    file_interface.subdirectories_result = std::vector<fs::directory_entry>{
+        fs::directory_entry{scmi_sysfs_path / "tlm-10"},
+        fs::directory_entry{scmi_sysfs_path / "tlm-1"},
+        fs::directory_entry{scmi_sysfs_path / "tlm-2"},
+    };
+
+    auto directories = astl::ScmiTopologyPlugin::detail::ListSortedTelemetryDirectories(file_interface);
+
+    REQUIRE(directories.has_value());
+    REQUIRE(directories->size() == 3);
+    REQUIRE((*directories)[0].path().filename() == "tlm-1");
+    REQUIRE((*directories)[1].path().filename() == "tlm-2");
+    REQUIRE((*directories)[2].path().filename() == "tlm-10");
+  }
+}
+
+TEST_CASE("Topology::ScmiPlugin lists ioctl devices in deterministic order", "[TopologyManager]") {
+  const fs::path ioctl_root = fs::temp_directory_path() / "astl_topology_ioctl_device_list";
+  TempFileGuard  ioctl_guard(ioctl_root);
+
+  WriteTextFile(ioctl_root / "tlm_10", "regular file, not a device");
+  WriteTextFile(ioctl_root / "tlm_1", "regular file, not a device");
+  WriteTextFile(ioctl_root / "tlm_2", "regular file, not a device");
+  WriteTextFile(ioctl_root / "tlm_a", "not a telemetry device");
+  WriteTextFile(ioctl_root / "other", "not a telemetry device");
+
+  auto devices = astl::ScmiTopologyPlugin::detail::ListSortedIoctlDevices(ioctl_root);
+
+  REQUIRE(devices.has_value());
+  REQUIRE(devices->size() == 3);
+  REQUIRE((*devices)[0].path().filename() == "tlm_1");
+  REQUIRE((*devices)[1].path().filename() == "tlm_2");
+  REQUIRE((*devices)[2].path().filename() == "tlm_10");
+
+  auto targets = astl::ScmiTopologyPlugin::detail::BuildTargetsFromIoctlDevices(*devices);
+  REQUIRE(targets.has_value());
+  REQUIRE(targets->empty());
+}
+
+TEST_CASE("Topology::ScmiPlugin scans real sysfs fixtures through backend selection", "[TopologyManager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration = configuration_result.value();
+
+  const fs::path sysfs_root = fs::temp_directory_path() / "astl_topology_scmi_scan_sysfs";
+  const fs::path ioctl_root = fs::temp_directory_path() / "astl_topology_scmi_scan_ioctl";
+  TempFileGuard  sysfs_guard(sysfs_root);
+  TempFileGuard  ioctl_guard(ioctl_root);
+
+  configuration.scmi_sysfs_telemetry_root_path = sysfs_root;
+  configuration.scmi_ioctl_device_root_path    = ioctl_root;
+  WriteTextFile(sysfs_root / "tlm-0" / "de_implementation_version", "CAFEBABECAFEBABECAFEBABEBEEF0000");
+
+  SECTION("auto mode falls back to sysfs when no ioctl target is usable") {
+    EnvVarGuard backend_guard(astl::EnvVar::ASTL_SCMI_INTERFACE, "auto");
+
+    auto targets = astl::ScmiTopologyPlugin::ScanForTargets(configuration);
+
+    REQUIRE(targets.has_value());
+    REQUIRE(targets->size() == 1);
+    REQUIRE((*targets)[0]->Name() == "scmi_tlm-0");
+  }
+
+  SECTION("forced sysfs mode skips ioctl discovery") {
+    EnvVarGuard backend_guard(astl::EnvVar::ASTL_SCMI_INTERFACE, "sysfs");
+
+    auto targets = astl::ScmiTopologyPlugin::ScanForTargets(configuration);
+
+    REQUIRE(targets.has_value());
+    REQUIRE(targets->size() == 1);
+    REQUIRE((*targets)[0]->Name() == "scmi_tlm-0");
+  }
+
+  SECTION("forced ioctl mode does not fall back to sysfs") {
+    EnvVarGuard backend_guard(astl::EnvVar::ASTL_SCMI_INTERFACE, "ioctl");
+
+    auto targets = astl::ScmiTopologyPlugin::ScanForTargets(configuration);
+
+    REQUIRE(targets.has_value());
+    REQUIRE(targets->empty());
+  }
 }
 
 TEST_CASE("TopologyBuilder::BuildTopologyManager rejects load_file_path without cache dir", "[TopologyManager]") {

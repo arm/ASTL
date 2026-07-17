@@ -313,7 +313,7 @@ SamplerOperation --|> Operation
 
 %% any counter or metric has a set of strategies for creating operations to sample its data
 %% for instance, an SoC temperature metric might have two strategies for PROCFS and for SCMI.
-%% Those strategies would hold the specific collector like ScmiCollector, and parameters like offsets
+%% Those strategies would hold the specific collector like an SCMI sysfs or ioctl collector, and parameters like offsets
 CounterMetric "1" *-- "*" ISamplerStrategy: owns 
 
 %% inheritance hierarchy for metrics
@@ -403,25 +403,39 @@ CollectionConfiguration *-- CollectionOperations
 
 %% Group 5: SCMI specific collectors / strategies
 namespace Scmi{
-  class ScmiCollector{
+  class ScmiSysfsCollector{
     SysFsInterface sysfs
     +SampleScmi(Offset): SampledValue
-    +GetScmiMetrics()
+    +ReadImmediate()
+  }
+
+  class ScmiIoctlCollector{
+    ScmiIoctlInterface ioctl
+    +ReadImmediate()
+    +GetNativeClockSnapshot()
   }
 
   class ScmiTarget{
   }
 
   class ScmiSamplerStrategy{
-    +ScmiCollector collector
+    +ICollector collector
     +ScmiOffset scmi_offset
     +Sample() Operation
+  }
+
+  class ScmiIoctlInterface{
+    +fspath _device_path
+    +GetInfo()
+    +GetDataEventInfo()
+    +ReadDataEventValue()
   }
 }
 
 ScmiSamplerStrategy --|> ISamplerStrategy: implements
-ScmiSamplerStrategy *-- ScmiCollector: references
-ICollector <|.. ScmiCollector
+ScmiSamplerStrategy *-- ICollector: references
+ICollector <|.. ScmiSysfsCollector
+ICollector <|.. ScmiIoctlCollector
 
 class SysFsInterface{
     %% https://jira.arm.com/browse/ASTL-47
@@ -432,7 +446,8 @@ class SysFsInterface{
     +write(path: string, value: string)
 }
 
-SysFsInterface --* ScmiCollector
+SysFsInterface --* ScmiSysfsCollector
+ScmiIoctlInterface --* ScmiIoctlCollector
 
 %% Group 6: Topology & Configuration managers (placed near collector + metrics)
 namespace TopologyAndConfiguration {
@@ -448,4 +463,5 @@ namespace TopologyAndConfiguration {
 TopologyManager --|> ITopologyManager : implements
 ConfigurationManager--|> IConfigurationManager : implements
 ConfigurationManager ..> ScmiSamplerStrategy : creates
-ConfigurationManager ..> ScmiCollector : creates
+ConfigurationManager ..> ScmiSysfsCollector : creates
+ConfigurationManager ..> ScmiIoctlCollector : creates
