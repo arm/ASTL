@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -27,9 +27,9 @@ fi
 
 # use utils.sh's get_all_source_files to export SOURCE_FILES array
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck disable=SC1091
 
 echo 'Running utils.sh'
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}"/utils.sh
 get_all_source_files
 

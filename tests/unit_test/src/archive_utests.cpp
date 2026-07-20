@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+// SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -74,7 +74,7 @@ TEST_CASE("archive_dir_zip::zip_directory empty dir", "[zip_cache]") {
   REQUIRE(fs::exists(zip));
 
   std::vector<std::string> entries = astl::mz::ListEntries(zip).value();
-  REQUIRE(entries.size() == 0);  // empty dir should yield no entries
+  REQUIRE(entries.empty());  // empty dir should yield no entries
 
   REQUIRE(astl::mz::UnzipDirectory(zip, dst) == ASTL_STATUS_SUCCESS);
 

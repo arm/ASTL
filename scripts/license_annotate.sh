@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -18,11 +18,11 @@ if ! command -v reuse >/dev/null 2>&1; then
 	exit 1
 fi
 
-if ! reuse --help 2>&1 | grep -q "REUSE.toml"; then
-	echo "❌ reuse version 3.3 is required. Please upgrade to version 3.3 or later."
-	echo "👉 Please install it, maybe with pip!"
-	exit 1
-fi
+#if ! reuse --help 2>&1 | grep -q "REUSE.toml"; then
+#	echo "❌ reuse version 3.3 is required. Please upgrade to version 3.3 or later."
+#	echo "👉 Please install it, maybe with pip!"
+#	exit 1
+#fi
 
 # Check for `jq`
 if ! command -v jq >/dev/null 2>&1; then
@@ -41,6 +41,7 @@ annotate() {
 	annotate_args=(
 		--year="$(date +%Y)"
 		--copyright="Arm Limited and/or its affiliates <open-source-office@arm.com>"
+		--copyright-prefix spdx-string
 		--license="Apache-2.0"
 		--merge-copyrights
 		--recursive "$path"
