@@ -145,6 +145,10 @@ jobs:
             ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/Temporary/LastDynamicAnalysis*.log*
             ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/Temporary/MemoryChecker.*.log
 
+      - name: 🧪 Run ScmiBridge Coverage Tests
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage'
+        run: ctest -L "scmi_bridge" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
+
       - name: 📊 Code Coverage - Merge Coverage from Parallel Runs
         if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage'
         run: ${{ github.workspace }}/scripts/merge_coverage.sh ${{ github.workspace }}/build

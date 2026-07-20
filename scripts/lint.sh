@@ -38,7 +38,9 @@ INCLUDE_PATHS+=(-I"${BUILD_DIR}"/include)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/utils)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/src/impl)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/src/impl/common)
+INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/tools/include)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/tools/mock_scmi/include)
+INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/tools/scmi_bridge/include)
 INCLUDE_PATHS+=(-I"${REPO_ROOT_DIR}"/third_party/tinyexpr-plusplus)
 
 echo "Running clang-tidy to lint code..."
@@ -184,8 +186,8 @@ for FILE in "${FILES[@]+"${FILES[@]}"}"; do
 	elif [[ $FILE == *.h.in ]]; then
 		# skip files used to generate C code
 		continue
-	elif [[ $FILE == *tools/mock_scmi* && "$(uname -s)" != "Linux" ]]; then
-		# mock_scmi code only compiles on Linux, so skip these files if on other OS
+	elif [[ ($FILE == *tools/mock_scmi* || $FILE == *tools/scmi_bridge*) && "$(uname -s)" != "Linux" ]]; then
+		# FUSE tools only compile on Linux, so skip these files if on other OS
 		continue
 	elif [[ $FILE == *.c ]]; then
 		C_SOURCE_FILES_TO_LINT+=("$FILE")

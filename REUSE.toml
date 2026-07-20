@@ -32,7 +32,7 @@ SPDX-License-Identifier = "Apache-2.0"
 
 # Test output files for comparison with expected output, but ignore them for linting
 [[annotations]]
-path = ["tools/ATX/tests/kernel_tests/**/expected.txt", "tools/mock_scmi/**/**/expected.txt"]
+path = ["tools/ATX/tests/kernel_tests/**/expected.txt", "tools/mock_scmi/**/**/expected.txt", "tools/scmi_bridge/kernel_tests/**/expected.txt"]
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
