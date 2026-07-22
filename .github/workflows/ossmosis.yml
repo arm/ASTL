@@ -13,6 +13,7 @@ on:
 
 jobs:
   ossmosis-ip-scan:
+    if: github.repository_owner == 'Arm-Debug'
     runs-on: ubuntu-latest
 
     steps:
@@ -29,7 +30,7 @@ jobs:
           client-id: ${{ secrets.APAP_APP_APP_ID }}
           private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
           owner: Arm-Debug
-          repositories: ossmosis
+          repositories: ossmosis,ASTL-confidential
 
       - name: Check out ossmosis
         uses: actions/checkout@v7
@@ -37,6 +38,16 @@ jobs:
           repository: Arm-Debug/ossmosis
           path: ossmosis
           token: ${{ steps.ossmosis-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Download confidential ossmosis manifest
+        uses: actions/checkout@v7
+        with:
+          repository: Arm-Debug/ASTL-confidential
+          path: ossmosis-config
+          token: ${{ steps.ossmosis-token.outputs.token }}
+          sparse-checkout: .ossmosis.json
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       - name: Set up Python
@@ -52,5 +63,5 @@ jobs:
         run: |
           ossmosis scan \
             --root . \
-            --manifest .ossmosis.json \
+            --manifest ../ossmosis-config/.ossmosis.json \
             --max-class public

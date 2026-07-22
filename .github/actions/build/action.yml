@@ -25,6 +25,10 @@ inputs:
     description: 'Build ATX as a fully static Linux executable'
     required: false
     default: 'false'
+  source_dir:
+    description: 'ASTL source directory'
+    required: false
+    default: ${{ github.workspace }}
 
 runs:
   using: "composite"
@@ -65,7 +69,7 @@ runs:
         VCPKG_FEATURE_FLAGS: binarycaching
         VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
       with:
-        vcpkgDirectory: "${{ github.workspace }}/external/vcpkg"
+        vcpkgDirectory: "${{ inputs.source_dir }}/external/vcpkg"
         vcpkgJsonGlob: "**/vcpkg.json"
 
     - name: ⤵️ Setup MSVC Environment (windows)
@@ -75,6 +79,7 @@ runs:
     - name: ⚙️ CMake - Configure
       if: inputs.os != 'macos-15'
       shell: bash
+      working-directory: ${{ inputs.source_dir }}
       env:
         VCPKG_FEATURE_FLAGS: binarycaching
         VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
@@ -84,19 +89,21 @@ runs:
           -DCMAKE_CXX_COMPILER=${{ inputs.cpp_compiler }} \
           -DCMAKE_C_COMPILER=${{ inputs.c_compiler }} \
           -DATX_STATIC_LINK=${{ inputs.atx_static_link }} \
-          -S "${{ github.workspace }}" \
+          -S "${{ inputs.source_dir }}" \
           --preset ${{ inputs.cmake_preset }}
 
     - name: ⚙️ CMake - Configure (macos-15)
       if: inputs.os == 'macos-15'
       shell: bash
+      working-directory: ${{ inputs.source_dir }}
       env:
         VCPKG_FEATURE_FLAGS: binarycaching
         VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
       run: |
         cmake --version
-        cmake -DATX_STATIC_LINK=${{ inputs.atx_static_link }} -S "${{ github.workspace }}" --preset ${{ inputs.cmake_preset }}
+        cmake -DATX_STATIC_LINK=${{ inputs.atx_static_link }} -S "${{ inputs.source_dir }}" --preset ${{ inputs.cmake_preset }}
 
     - name: 🏗️ CMake - Build
       shell: bash
+      working-directory: ${{ inputs.source_dir }}
       run: cmake --build --parallel=${{ steps.cpu-cores.outputs.count }} --preset ${{ inputs.cmake_preset }} --verbose

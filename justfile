@@ -21,8 +21,24 @@ deep-clean: clean
     echo "[purge] Removing additional artifacts"
     rm -rf external/vcpkg doc/html python/doc/_build/ python/astl/__pycache__/ python/astl/__pycache__/ .mypy_cache .venv python/astl.egg-info/ python/dist/ python/astl/_core.cpp
 
+# Refresh an optional, machine-local source overlay before configuring.
+_overlay-refresh:
+    ./scripts/astl_overlay.sh refresh
+
+# Enable a generic source overlay for this checkout.
+overlay-enable path:
+    ./scripts/astl_overlay.sh enable {{quote(path)}}
+
+# Validate the configured source overlay and staged-file ownership.
+overlay-check:
+    ./scripts/astl_overlay.sh check
+
+# Remove the configured source overlay from this checkout.
+overlay-disable:
+    ./scripts/astl_overlay.sh disable
+
 # generate build files through cmake
-config preset='debug':
+config preset='debug': _overlay-refresh
     #!/usr/bin/env bash
     set -eu -o pipefail
     echo "[config] Using preset={{preset}}"

@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+name: Confidential CI Gate
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: confidential-ci-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  trusted:
+    name: Confidential CI
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    steps:
+      - name: Check out trusted base revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Create confidential CI token
+        id: confidential-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL-confidential
+
+      - name: Dispatch and await confidential CI
+        env:
+          GH_TOKEN: ${{ steps.confidential-token.outputs.token }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CORRELATION_ID: ${{ github.repository_id }}-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}
+        run: ./scripts/confidential_ci_gate.sh
+
+  fork:
+    name: Confidential CI
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    environment: confidential-ci-fork-approval
+    steps:
+      - name: Check out trusted base revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Create confidential CI token
+        id: confidential-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL-confidential
+
+      - name: Dispatch and await confidential CI
+        env:
+          GH_TOKEN: ${{ steps.confidential-token.outputs.token }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CORRELATION_ID: ${{ github.repository_id }}-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}
+        run: ./scripts/confidential_ci_gate.sh
