@@ -65,7 +65,7 @@ jobs:
           name: astl-native-${{ github.sha }}
           path: native-artifact
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - uses: actions/cache@v6
@@ -134,7 +134,7 @@ jobs:
           fi
           echo "[ci] Native artifact contents:"; ls -1 "${ASTL_LIB_DIR}" || true
       - name: Set up Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install build tooling
@@ -177,7 +177,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
