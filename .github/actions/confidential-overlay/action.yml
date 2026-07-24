@@ -1,0 +1,87 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Prepare confidential ASTL overlay
+description: Download and enable the Arm-Debug ASTL confidential source overlay
+
+inputs:
+  client_id:
+    description: APAP GitHub App client ID
+    required: true
+  private_key:
+    description: APAP GitHub App private key
+    required: true
+  source_dir:
+    description: ASTL source directory
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: 🔑 Create confidential checkout token
+      id: confidential-token
+      uses: actions/create-github-app-token@v3
+      with:
+        client-id: ${{ inputs.client_id }}
+        private-key: ${{ inputs.private_key }}
+        owner: Arm-Debug
+        repositories: ossmosis,ASTL-confidential
+        permission-contents: read
+
+    - name: ⤵️ Checkout ossmosis
+      uses: actions/checkout@v7
+      with:
+        repository: Arm-Debug/ossmosis
+        path: ossmosis
+        token: ${{ steps.confidential-token.outputs.token }}
+        persist-credentials: false
+
+    - name: 🔎 Select confidential branch
+      id: confidential-ref
+      shell: bash
+      env:
+        ASTL_BRANCH: ${{ github.head_ref || github.ref_name }}
+        GH_TOKEN: ${{ steps.confidential-token.outputs.token }}
+      run: |
+        default_branch="$(gh api repos/Arm-Debug/ASTL-confidential --jq '.default_branch')"
+        confidential_branch="${default_branch}"
+
+        while IFS= read -r branch; do
+          if [[ "${branch}" == "${ASTL_BRANCH}" ]]; then
+            confidential_branch="${ASTL_BRANCH}"
+            break
+          fi
+        done < <(
+          gh api --paginate repos/Arm-Debug/ASTL-confidential/branches \
+            --jq '.[].name'
+        )
+
+        echo "Using Arm-Debug/ASTL-confidential branch: ${confidential_branch}"
+        echo "ref=${confidential_branch}" >> "${GITHUB_OUTPUT}"
+
+    - name: ⤵️ Checkout confidential content
+      uses: actions/checkout@v7
+      with:
+        repository: Arm-Debug/ASTL-confidential
+        path: ASTL-confidential
+        ref: ${{ steps.confidential-ref.outputs.ref }}
+        token: ${{ steps.confidential-token.outputs.token }}
+        persist-credentials: false
+
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: "3.13"
+
+    - name: ⤵️ Install overlay tools
+      shell: bash
+      run: |
+        sudo apt-get -o DPkg::Lock::Timeout=300 update
+        sudo apt-get -o DPkg::Lock::Timeout=300 install -y just
+        python -m pip install ./ossmosis
+
+    - name: 🧩 Enable confidential overlay
+      shell: bash
+      working-directory: ${{ inputs.source_dir }}
+      run: just overlay-enable "${{ github.workspace }}/ASTL-confidential"

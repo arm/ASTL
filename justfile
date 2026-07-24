@@ -207,14 +207,20 @@ python-test preset='debug':
 go-test preset='debug':
     #!/usr/bin/env bash
     set -eu -o pipefail
-    if [ "{{preset}}" != "debug" ]; then
-        echo "[go-test][ERROR] Go wrapper tests currently require preset=debug because the cgo binding links against the debug ASTL library name." >&2
-        exit 2
-    fi
     echo "[go-test] Using preset={{preset}}"
+    case "{{preset}}" in
+        debug*) LIB_NAME="astl-0d" ;;
+        release) LIB_NAME="astl-0" ;;
+        *)
+            echo "[go-test][ERROR] Unsupported preset: {{preset}}" >&2
+            exit 2
+            ;;
+    esac
     ARCH="$(./scripts/host_arch.sh)"
+    INCLUDE_DIR="$PWD/build/{{preset}}/include"
     LIB_DIR="$PWD/build/{{preset}}/${ARCH}/lib"
-    export CGO_LDFLAGS="-L${LIB_DIR} -Wl,-rpath,${LIB_DIR} -lastl-0d${CGO_LDFLAGS:+ ${CGO_LDFLAGS}}"
+    export CGO_CFLAGS="-I${INCLUDE_DIR}${CGO_CFLAGS:+ ${CGO_CFLAGS}}"
+    export CGO_LDFLAGS="-L${LIB_DIR} -Wl,-rpath,${LIB_DIR} -l${LIB_NAME}${CGO_LDFLAGS:+ ${CGO_LDFLAGS}}"
     export LD_LIBRARY_PATH="${LIB_DIR}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     cd Go
     go test ./...

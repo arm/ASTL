@@ -39,14 +39,16 @@ export CGO_LDFLAGS="-L$PWD/build/debug/${ASTL_HOST_ARCH}/lib -Wl,-rpath,$PWD/bui
 export LD_LIBRARY_PATH="$PWD/build/debug/${ASTL_HOST_ARCH}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 ```
 
-The Go wrapper already adds repo-local ASTL header search paths via cgo, so
-only the linker path needs to be provided for the default in-repo workflow.
+The Go wrapper adds the repo-local source header path via cgo. Set
+`CGO_CFLAGS` when using generated headers from a build other than `debug`, and
+set `CGO_LDFLAGS` to the matching library (`astl-0d` for debug or `astl-0` for
+release).
 
 For an installed ASTL, point cgo directly at the install prefix:
 
 ```bash
 export CGO_CFLAGS="-I/path/to/prefix/include"
-export CGO_LDFLAGS="-L/path/to/prefix/lib -Wl,-rpath,/path/to/prefix/lib -lastl-0d"
+export CGO_LDFLAGS="-L/path/to/prefix/lib -Wl,-rpath,/path/to/prefix/lib -lastl-0"
 ```
 
 ## Running Tests

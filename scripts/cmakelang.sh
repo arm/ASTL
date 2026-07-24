@@ -28,10 +28,20 @@ CMAKE_PATHS=(
 	"${REPO_ROOT_DIR}/tests"
 )
 
-find "${CMAKE_PATHS[@]}" -type f -name 'CMakeLists.txt' | parallel -v cmake-lint --suppress-decorations -l error {} ||
-	{
-		echo "❌ cmake-lint found issues"
-		exit 1
-	}
+EXISTING_CMAKE_PATHS=()
+for path in "${CMAKE_PATHS[@]}"; do
+	if [[ -e ${path} ]]; then
+		EXISTING_CMAKE_PATHS+=("${path}")
+	fi
+done
+
+if ((${#EXISTING_CMAKE_PATHS[@]})); then
+	find "${EXISTING_CMAKE_PATHS[@]}" -type f -name 'CMakeLists.txt' |
+		parallel -v cmake-lint --suppress-decorations -l error {} ||
+		{
+			echo "❌ cmake-lint found issues"
+			exit 1
+		}
+fi
 
 echo "✅ All CMakeLists.txt files passed lint"

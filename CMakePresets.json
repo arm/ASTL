@@ -51,6 +51,12 @@
         "ENABLE_VALGRIND": "OFF"
       },
       "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "windows-release",
+      "inherits": "release",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64"
     }
   ],
   "buildPresets": [
@@ -72,6 +78,11 @@
     {
       "name": "release",
       "configurePreset": "release",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release",
       "configuration": "Release"
     }
   ],
@@ -103,6 +114,14 @@
     {
       "name": "release",
       "configurePreset": "release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true

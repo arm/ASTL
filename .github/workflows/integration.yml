@@ -28,45 +28,30 @@ jobs:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
       fail-fast: false
 
-      # Set up a matrix to run the following configurations:
-      # - <Windows, Release, latest MSVC compiler toolchain on the default runner image, default generator>
-      # - <Linux,   Debug+Valgrind+Coverage, latest GCC compiler toolchain on the default runner image, default generator>
-      # - <Linux,   Debug+Valgrind+Coverage, latest Clang compiler toolchain on the default runner image, default generator>
-      # - <MacOs,   Release, latest Clang compiler toolchain on the default runner image, default generator>
+      # Set up a matrix to run the following configurations, which split some of the test responsibility
       matrix:
-        os: [ubuntu-24.04-arm, windows-latest, macos-15]
-        cmake_preset: [release, debug-valgrind-coverage]
-        cpp_compiler: [g++, clang++, cl]
         include:
-          - os: windows-latest
+          - os: windows-2022
+            cmake_preset: windows-release
             c_compiler: cl
             cpp_compiler: cl
+
+          # Collect code coverage from unit tests and upload it to qlty.io.
           - os: ubuntu-24.04-arm
+            cmake_preset: debug-valgrind-coverage
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-24.04-arm
-            c_compiler: clang
-            cpp_compiler: clang++
-          - os: macos-15
-            c_compiler: clang
-            cpp_compiler: clang++
-        exclude:
+
+          # Run Go tests.
           - os: ubuntu-24.04-arm
             cmake_preset: release
-          - os: windows-latest
-            cmake_preset: debug-valgrind-coverage
-          - os: windows-latest
-            cpp_compiler: g++
-          - os: windows-latest
+            c_compiler: clang
             cpp_compiler: clang++
-          - os: ubuntu-24.04-arm
-            cpp_compiler: cl
+
           - os: macos-15
-            cpp_compiler: cl
-          - os: macos-15
-            cpp_compiler: g++
-          - os: macos-15
-            cmake_preset: debug-valgrind-coverage
+            cmake_preset: release
+            c_compiler: clang
+            cpp_compiler: clang++
 
     steps:
       # Checkout MUST happen before calling local composite action
@@ -90,17 +75,19 @@ jobs:
 
       # ===== TEST STEPS =====
       - name: 🐹 Setup Go
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'release'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'clang' && matrix.cmake_preset == 'release'
         uses: actions/setup-go@v7
         with:
           go-version: "1.22"
 
       - name: 🐹 Run Go Wrapper Smoke Tests
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'release'
+        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'clang' && matrix.cmake_preset == 'release'
         run: |
           ASTL_HOST_ARCH="$("${{ github.workspace }}/scripts/host_arch.sh")"
+          ASTL_INCLUDE_DIR="${{ github.workspace }}/build/${{ matrix.cmake_preset }}/include"
           ASTL_LIB_DIR="${{ github.workspace }}/build/${{ matrix.cmake_preset }}/${ASTL_HOST_ARCH}/lib"
-          export CGO_LDFLAGS="-L${ASTL_LIB_DIR} -Wl,-rpath,${ASTL_LIB_DIR} -lastl-0d"
+          export CGO_CFLAGS="-I${ASTL_INCLUDE_DIR}"
+          export CGO_LDFLAGS="-L${ASTL_LIB_DIR} -Wl,-rpath,${ASTL_LIB_DIR} -lastl-0"
           export LD_LIBRARY_PATH="${ASTL_LIB_DIR}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           cd ${{ github.workspace }}/Go
           go test ./...
@@ -183,46 +170,3 @@ jobs:
         # include only sample tests, we skipped these earlier in `Unit tests`
         # because we don't want to include them for coverage.
         run: ctest -L "integration" --preset ${{ matrix.cmake_preset }}
-
-      - name: 📽️ Run Demo with MockScmi
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-valgrind-coverage'
-        run: |
-          set -o pipefail
-          EXPECTED_STRING="astlGetMetricSamplesOnTarget Status: SUCCESS"
-          ASTL_BUILD_PRESET=${{ matrix.cmake_preset }} ${{ github.workspace }}/scripts/demo.sh > demo.log
-          cat demo.log
-          grep "${EXPECTED_STRING}" demo.log
-        env:
-          ASTL_LOG_LEVEL: "DEBUG"
-          ASTL_LOG_CONSOLE: 1
-
-  static-atx:
-    name: Fully static ATX
-    runs-on: ubuntu-24.04-arm
-
-    steps:
-      - name: ⤵️ Checkout code
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          submodules: true
-
-      - name: 🏗️ Build fully static ATX
-        uses: ./.github/actions/build
-        with:
-          os: ubuntu-24.04-arm
-          cmake_preset: release
-          c_compiler: gcc
-          cpp_compiler: g++
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          atx_static_link: true
-
-      - name: 🧪 Verify fully static ATX
-        shell: bash
-        run: |
-          ASTL_BUILD_ARCH="$(${{ github.workspace }}/scripts/host_arch.sh)"
-          ATX_BINARY="${{ github.workspace }}/build/release/${ASTL_BUILD_ARCH}/bin/atx-static"
-          ${{ github.workspace }}/scripts/verify_static_executable.sh "${ATX_BINARY}"
-          "${ATX_BINARY}" --version

@@ -7,10 +7,10 @@ description: 'Install dependencies, configure CMake, and build ASTL'
 
 inputs:
   os:
-    description: 'Operating system (ubuntu, windows-latest, macos-15)'
+    description: 'Operating system (ubuntu, windows-2022, macos-15)'
     required: true
   cmake_preset:
-    description: 'CMake preset (release, debug, debug-valgrind-coverage)'
+    description: 'CMake preset (release, windows-release, debug, debug-valgrind-coverage)'
     required: true
   c_compiler:
     description: 'C compiler'
@@ -76,8 +76,8 @@ runs:
       if: contains(inputs.os, 'windows')
       uses: egor-tensin/vs-shell@v2
 
-    - name: ⚙️ CMake - Configure
-      if: inputs.os != 'macos-15'
+    - name: ⚙️ CMake - Configure (Linux)
+      if: contains(inputs.os, 'ubuntu')
       shell: bash
       working-directory: ${{ inputs.source_dir }}
       env:
@@ -88,6 +88,20 @@ runs:
         cmake \
           -DCMAKE_CXX_COMPILER=${{ inputs.cpp_compiler }} \
           -DCMAKE_C_COMPILER=${{ inputs.c_compiler }} \
+          -DATX_STATIC_LINK=${{ inputs.atx_static_link }} \
+          -S "${{ inputs.source_dir }}" \
+          --preset ${{ inputs.cmake_preset }}
+
+    - name: ⚙️ CMake - Configure (Windows)
+      if: contains(inputs.os, 'windows')
+      shell: bash
+      working-directory: ${{ inputs.source_dir }}
+      env:
+        VCPKG_FEATURE_FLAGS: binarycaching
+        VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
+      run: |
+        cmake --version
+        cmake \
           -DATX_STATIC_LINK=${{ inputs.atx_static_link }} \
           -S "${{ inputs.source_dir }}" \
           --preset ${{ inputs.cmake_preset }}
