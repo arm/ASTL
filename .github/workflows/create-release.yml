@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Release
+
+permissions:
+  actions: write
+  contents: write
+  checks: write
+
+on:
+  schedule:
+    # Runs daily at 09:14 UTC = 03:14 CST
+    # This flow doesn't make a publicly visible release, it just publishes internally
+    # This ensures that issues are caught early.
+    - cron: "14 9 * * *"
+  workflow_dispatch:
+    inputs:
+      version_bump_type:
+        description: "Version bump type"
+        required: true
+        default: "NONE"
+        type: choice
+        options:
+          - NONE
+          - MAJOR
+          - MINOR
+          - PATCH
+
+concurrency:
+  # Cancel currently running release workflow if a new one is triggered
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
+      fail-fast: false
+
+      matrix:
+        # Artifactory can only be accessed from within the ARM network, so only run on self-hosted runners
+        # Refactor: split the artifactory upload into its own workflow so the bulk of this flow can run on any runner (ubuntu-latest)
+        os: [self-hosted-ubuntu-24.04-arm64]
+        c_compiler: [gcc]
+        cpp_compiler: [g++]
+    env:
+      VERSION_BUMP_TYPE: ${{ inputs.version_bump_type || 'NONE' }}
+
+    steps:
+      # Checkout MUST happen before calling local composite action
+      - name: ⤵️ Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
