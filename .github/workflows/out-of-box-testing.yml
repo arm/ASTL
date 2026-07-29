@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Out-Of-Box Testing
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag_name:
+        description: "The release tag name"
+        required: true
+        type: string
+
+jobs:
+  out_of_box_testing:
+    runs-on: [self-hosted-ubuntu-24.04-arm64]
+
+    steps:
+      - name: ⤵️ Checkout code
+        uses: actions/checkout@v7
