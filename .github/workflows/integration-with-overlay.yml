@@ -30,7 +30,7 @@ jobs:
       - name: ⤵️ Checkout ASTL
         uses: actions/checkout@v7
         with:
-          path: astl
+          path: ASTL
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -38,29 +38,29 @@ jobs:
           persist-credentials: false
 
       - name: 🧩 Prepare confidential overlay
-        uses: ./astl/.github/actions/confidential-overlay
+        uses: ./ASTL/.github/actions/confidential-overlay
         with:
           client_id: ${{ secrets.APAP_APP_APP_ID }}
           private_key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
-          source_dir: ${{ github.workspace }}/astl
+          source_dir: ${{ github.workspace }}/ASTL
 
       - name: 🏗️ Build ASTL
-        uses: ./astl/.github/actions/build
+        uses: ./ASTL/.github/actions/build
         with:
           os: ubuntu-24.04-arm
           cmake_preset: release
           c_compiler: gcc
           cpp_compiler: g++
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          source_dir: ${{ github.workspace }}/astl
+          source_dir: ${{ github.workspace }}/ASTL
 
       - name: 🧪 Run unit tests
-        working-directory: astl
+        working-directory: ASTL
         run: |
           ctest --parallel  --test-dir build/release --preset release
 
       - name: 📽️ Run demo with MockScmi
-        working-directory: astl
+        working-directory: ASTL
         run: |
           set -o pipefail
           EXPECTED_STRING="astlGetMetricSamplesOnTarget Status: SUCCESS"
@@ -82,7 +82,7 @@ jobs:
       - name: ⤵️ Checkout ASTL
         uses: actions/checkout@v7
         with:
-          path: astl
+          path: ASTL
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -90,14 +90,14 @@ jobs:
           persist-credentials: false
 
       - name: 🧩 Prepare confidential overlay
-        uses: ./astl/.github/actions/confidential-overlay
+        uses: ./ASTL/.github/actions/confidential-overlay
         with:
           client_id: ${{ secrets.APAP_APP_APP_ID }}
           private_key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
-          source_dir: ${{ github.workspace }}/astl
+          source_dir: ${{ github.workspace }}/ASTL
 
       - name: 🏗️ Build fully static ATX
-        uses: ./astl/.github/actions/build
+        uses: ./ASTL/.github/actions/build
         with:
           os: ubuntu-24.04-arm
           cmake_preset: release
@@ -105,13 +105,13 @@ jobs:
           cpp_compiler: g++
           github_token: ${{ secrets.GITHUB_TOKEN }}
           atx_static_link: true
-          source_dir: ${{ github.workspace }}/astl
+          source_dir: ${{ github.workspace }}/ASTL
 
       - name: 🧪 Verify fully static ATX
         shell: bash
-        working-directory: astl
+        working-directory: ASTL
         run: |
           ASTL_BUILD_ARCH="$(./scripts/host_arch.sh)"
-          ATX_BINARY="${{ github.workspace }}/astl/build/release/${ASTL_BUILD_ARCH}/bin/atx-static"
+          ATX_BINARY="${{ github.workspace }}/ASTL/build/release/${ASTL_BUILD_ARCH}/bin/atx-static"
           ./scripts/verify_static_executable.sh "${ATX_BINARY}"
           "${ATX_BINARY}" --version

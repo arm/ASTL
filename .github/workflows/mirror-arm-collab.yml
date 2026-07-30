@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+name: Mirror repo to Arm-Collaboration
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "**"
+  schedule:
+    - cron: "15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-arm-collaboration
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: self-hosted-ubuntu-latest
+
+    steps:
+      - name: Mirror main and tags
+        env:
+          SRC_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DST_TOKEN: ${{ secrets.MIRROR_DEBUG_TO_COLLAB }}
+        run: |
+          set -euo pipefail
+
+          mirror_dir="$(mktemp -d "${RUNNER_TEMP}/astl-mirror.XXXXXX")"
+          trap 'rm -rf -- "${mirror_dir}"' EXIT
+
+          git clone --bare \
+            "https://x-access-token:${SRC_TOKEN}@github.com/Arm-Debug/ASTL.git" \
+            "${mirror_dir}/repo.git"
+
+          cd "${mirror_dir}/repo.git"
+
+          git remote add target \
+            "https://x-access-token:${DST_TOKEN}@github.com/Arm-Collaboration/ASTL.git"
+
+          git push --force target 'refs/heads/main:refs/heads/main'
+          git push --prune target \
+            '+refs/tags/*:refs/tags/*' \
+            ':refs/tags/release/rolling'
