@@ -36,6 +36,8 @@ concurrency:
 jobs:
   release:
     runs-on: ${{ matrix.os }}
+    outputs:
+      tag_name: ${{ steps.set_tag_output.outputs.tag_name }}
 
     strategy:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
@@ -45,6 +47,7 @@ jobs:
         # Artifactory can only be accessed from within the ARM network, so only run on self-hosted runners
         # Refactor: split the artifactory upload into its own workflow so the bulk of this flow can run on any runner (ubuntu-latest)
         os: [self-hosted-ubuntu-24.04-arm64]
+        # os: [ubuntu-latest]
         c_compiler: [gcc]
         cpp_compiler: [g++]
     env:
@@ -59,3 +62,311 @@ jobs:
           ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
+
+      - name: 📈 Determine Final Version String
+        run: |
+          echo "Bumping type: ${{ env.VERSION_BUMP_TYPE }}"
+          INITIAL_VERSION_STRING=$(head -n 1 VERSION.md)
+          echo "INITIAL_VERSION_STRING=${INITIAL_VERSION_STRING}"
+          # If the bumping type is "NONE", bump_version.sh will only strip the ".post" suffix if present
+          BUMPED_VERSION_STRING=$(${{ github.workspace }}/scripts/bump_version.sh ${{ env.VERSION_BUMP_TYPE }} $INITIAL_VERSION_STRING)
+          echo "BUMPED_VERSION_STRING=${BUMPED_VERSION_STRING}" | tee -a $GITHUB_ENV
+
+          # Write VERSION.md early so when the build step runs --version is correct in the artifact executable
+          # This may get overwritten later when branches are forked
+          if [[ "${{ env.VERSION_BUMP_TYPE }}" == "NONE" ]]; then
+            echo "'NONE' bump type does not change VERSION.md"
+          else
+            echo "${BUMPED_VERSION_STRING}" > ${{ github.workspace }}/VERSION.md
+          fi
+
+      - name: ⤵️ Install apt-get Dependencies (ubuntu)
+        if: contains(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          sudo apt-get -o DPkg::Lock::Timeout=300 update
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y tree zip gh
+
+      # Build via GitHub composite action =====
+      - name: 🏗️ Build ASTL
+        uses: ./.github/actions/build
+        with:
+          os: ${{ matrix.os }}
+          cmake_preset: release
+          c_compiler: ${{ matrix.c_compiler }}
+          cpp_compiler: ${{ matrix.cpp_compiler }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📐 Determine Build Output Architecture
+        run: |
+          ASTL_BUILD_ARCH="$("${{ github.workspace }}/scripts/host_arch.sh")"
+          ASTL_BUILD_OUTPUT_DIR="${{ github.workspace }}/build/release/${ASTL_BUILD_ARCH}"
+          echo "ASTL_BUILD_ARCH=${ASTL_BUILD_ARCH}" | tee -a $GITHUB_ENV
+          echo "ASTL_BUILD_OUTPUT_DIR=${ASTL_BUILD_OUTPUT_DIR}" | tee -a $GITHUB_ENV
+
+      - name: 📄 Filter Config JSON Files
+        run: |
+          # Note: even though the script has "publish" in the name, it does not upload anything or cause side effects
+          ${{ github.workspace }}/scripts/publish_configs.sh --confidential -o "${{ env.ASTL_BUILD_OUTPUT_DIR }}/published_config"
+
+          # Sanity check - Verify that there's at least 1 .json file in the output
+          JSON_FILE_COUNT=$(find "${{ env.ASTL_BUILD_OUTPUT_DIR }}/published_config" -name "*.json" | wc -l)
+          if [[ "$JSON_FILE_COUNT" -eq 0 ]]; then
+            echo "❌ No JSON files found in published_config directory" >&2
+            exit 1
+          fi
+
+      - name: 📐 Determine Artifact Names
+        id: set_tag_output
+        run: |
+
+          if [[ "$(uname -s)" == "Linux" ]]; then
+              OS_TYPE="linux"
+          else
+            echo "❌ Could not detect Linux OS when creating release package"
+            echo "Detected OS: $(uname -s)"
+            exit 1
+          fi
+
+          ARCH='aarch64'
+          echo "OS_TYPE=${OS_TYPE}" | tee -a $GITHUB_ENV
+          echo "ARCH=${ARCH}" | tee -a $GITHUB_ENV
+
+          ARTIFACT_NAME_01_LIBRARY="astl_version_${{ env.BUMPED_VERSION_STRING }}_${OS_TYPE}_${ARCH}_library"
+          echo "ARTIFACT_NAME_01_LIBRARY=${ARTIFACT_NAME_01_LIBRARY}" | tee -a  $GITHUB_ENV
+
+          STAGING_PATH_01_LIBRARY="${{ github.workspace }}/${ARTIFACT_NAME_01_LIBRARY}"
+          echo "STAGING_PATH_01_LIBRARY=${STAGING_PATH_01_LIBRARY}" | tee -a $GITHUB_ENV
+
+          if [[ ${{ env.VERSION_BUMP_TYPE }} == "NONE" ]]; then
+            TAG_NAME="release/rolling"
+          else
+            TAG_NAME="release/${{ env.BUMPED_VERSION_STRING }}"
+          fi
+          echo "TAG_NAME=${TAG_NAME}" | tee -a $GITHUB_ENV
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+
+      - name: 📦 Create Library .zip Artifacts
+        run: |
+
+          mkdir -p "${{ env.STAGING_PATH_01_LIBRARY }}/lib/"
+
+          echo "Copying library binaries..."
+          cp -v "${{ env.ASTL_BUILD_OUTPUT_DIR }}/lib/libastl-0.so" "${{ env.STAGING_PATH_01_LIBRARY }}/lib/"
+          cp -v "${{ env.ASTL_BUILD_OUTPUT_DIR }}/lib/libastl_static-0.a" "${{ env.STAGING_PATH_01_LIBRARY }}/lib/"
+
+          echo "Copying headers..."
+          mkdir -p "${{ env.STAGING_PATH_01_LIBRARY }}/include/astl"
+          # Headers in the build directory are those rendered from .h.in files
+
+          cp -v ${{ github.workspace }}/build/release/include/astl/*.h "${{ env.STAGING_PATH_01_LIBRARY }}/include/astl/"
+          # Most of the non-rendered files are here.  Don't copy .h.in files, as these are templates
+          cp -v ${{ github.workspace }}/include/astl/*.h "${{ env.STAGING_PATH_01_LIBRARY }}/include/astl/"
+
+          echo "Copying config JSON..."
+          cp -vr "${{ env.ASTL_BUILD_OUTPUT_DIR }}/published_config" "${{ env.STAGING_PATH_01_LIBRARY }}/lib/config"
+
+          echo "Copying PDF documentation..."
+          mkdir -p "${{ env.STAGING_PATH_01_LIBRARY }}/doc"
+
+          root_pdf_count=$(find "${{ github.workspace }}/doc" -maxdepth 1 -type f -name "*.pdf" | wc -l)
+
+          echo "Found ${root_pdf_count} PDF(s) in ${{ github.workspace }}/doc"
+
+          if [ "${root_pdf_count}" -eq 0 ]; then
+            echo "❌ Error: No PDF documentation found to include in the release artifact." >&2
+            exit 1
+          fi
+          find "${{ github.workspace }}/doc" -maxdepth 1 -type f -name "*.pdf" -exec cp -v {} "${{ env.STAGING_PATH_01_LIBRARY }}/doc/" \;
+
+          echo "Copying installer metadata..."
+          install -m 0644 "${{ github.workspace }}/VERSION.md" "${{ env.STAGING_PATH_01_LIBRARY }}/VERSION.md"
+          install -m 0755 "${{ github.workspace }}/scripts/release/install.sh" "${{ env.STAGING_PATH_01_LIBRARY }}/install.sh"
+          install -m 0755 "${{ github.workspace }}/scripts/release/uninstall.sh" "${{ env.STAGING_PATH_01_LIBRARY }}/uninstall.sh"
+
+          echo "Generating release manifest..."
+          python3 "${{ github.workspace }}/scripts/generate_release_manifest.py" \
+            --staging-dir "${{ env.STAGING_PATH_01_LIBRARY }}" \
+            --version "${{ env.BUMPED_VERSION_STRING }}" \
+            --os "${OS_TYPE}" \
+            --arch "${ARCH}" \
+            --variant "library_only"
+
+          cd ${{ env.STAGING_PATH_01_LIBRARY }}/..
+          zip -r -9 "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip" "${{ env.ARTIFACT_NAME_01_LIBRARY }}"
+          sha256sum "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip" > "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip.sha256"
+          echo "Created release package:"
+          ls -sh $(realpath "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip")
+
+      - name: 🛠️ Prepare Bootstrap Installer Asset
+        run: |
+          install -m 0755 "${{ github.workspace }}/scripts/release/get_astl.sh" "${{ github.workspace }}/get_astl.sh"
+
+      - name: 🗑️ Delete Existing Rolling Release
+        # Technically the second condition in the IF is redundant,
+        # but it makes the intent clearer and adds an element of safety
+        if: ${{ env.VERSION_BUMP_TYPE == 'NONE' && env.TAG_NAME == 'release/rolling' }}
+        run: |
+          # Check if release exists before trying to delete
+          if gh release view "${{ env.TAG_NAME }}" &> /dev/null; then
+            echo "Deleting existing release: ${{ env.TAG_NAME }}"
+            gh release delete "${{ env.TAG_NAME }}" --yes --cleanup-tag
+          else
+            echo "No existing release found for ${{ env.TAG_NAME }}"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🌟 Create GitHub Release Page
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: "${{ env.TAG_NAME }}"
+          files: |
+            ${{ github.workspace }}/${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip
+            ${{ github.workspace }}/${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip.sha256
+            ${{ github.workspace }}/get_astl.sh
+          fail_on_unmatched_files: true
+          # generate_release_notes: true will use the commit history to initialize the release landing page automatically.
+          # This is not suitable as-is for external customers, the idea is to provide a starting point
+          # for a human to edit into the final release notes.
+          # You can make the edits directly in the GitHub UI.  No extra commits required.
+          generate_release_notes: true
+          # If you want to use a static release notes file, uncomment the line below and provide the path
+          # body_path: RELEASE_NOTES.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: jfrog/setup-jfrog-cli@v5
+        with:
+          version: 2.77.0
+
+      - name: 🐸 Upload to Internal Artifactory
+        shell: bash
+        run: |
+          echo "ARTIFACTORY_USER=${ARTIFACTORY_USER}"
+          CI=true jf config add \
+            --url "${ARTIFACTORY_URL}" \
+            --user "${ARTIFACTORY_USER}" \
+            --password "${ARTIFACTORY_TOKEN}"
+          # Uniquify artifact names
+          DATE_FOR_FILENAME=$(date '+%Y_%m_%d')
+          UPLOADED_ARTIFACT_NAME_01_LIBRARY=${{ env.ARTIFACT_NAME_01_LIBRARY }}_${DATE_FOR_FILENAME}.zip
+          echo "UPLOADED_ARTIFACT_NAME_01_LIBRARY=${UPLOADED_ARTIFACT_NAME_01_LIBRARY}"
+
+          # Some Artifactory deployments return 404 for JFrog CLI usage reporting
+          # (/artifactory/api/system/usage). Disable it so CI logs only show real upload failures.
+          if [[ ${{ env.VERSION_BUMP_TYPE }} == "NONE" ]]
+          then
+            RETENTION_POLICY="nightly"
+          else
+            RETENTION_POLICY="release"
+          fi
+          CI=true jf rt upload "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip" "its.astl/${UPLOADED_ARTIFACT_NAME_01_LIBRARY}" --target-props='retention=${RETENTION_POLICY}'
+
+        env:
+          ARTIFACTORY_URL: https://eu-west-1.artifactory.aws.arm.com
+          ARTIFACTORY_USER: svc_its_ci@arm.com
+          ARTIFACTORY_TOKEN: ${{ secrets.ITS_ARTIFACTORY_ARM_KEY }}
+          JFROG_CLI_REPORT_USAGE: "false"
+
+      # Create Release Branch
+      # For NONE bumps:
+      # - These are meant for frequently scheduled CI/CD releases that don't necessarily have any critical changes
+      # - VERSION.md is not updated
+      # - Does not create any PRs automatically
+      # - Does not merge to main nor any release branches
+      # - Redirect the "releases/rolling" branch to point to the commit in main that this workflow is currently running on
+      # For PATCH bumps:
+      # - These are meant for cherry-picked fixes on existing release branches
+      # - VERSION.md is updated with the bumped version
+      # - Creates a PR to merge back to whatever branch this flow was run on (usually a release branch)
+      # - "releases/rolling" branch is not touched
+      # - "main" is not touched
+      # For MAJOR or MINOR bumps:
+      # - These are meant to create a new release branch that doesn't already exist
+      # - Creates a PR to merge back to main which bumps VERSION.md with a ".post" suffix
+      # - Creates a parallel branch (without a PR) to start a new release branch which
+      #     bumps VERSION.md to be the same number as the main PR, but without the ".post" suffix
+      # - "releases/rolling" branch is not touched
+      - name: 🏷️ Bump Version, Create Branches, and Create PRs
+        run: |
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [[ "${{ env.VERSION_BUMP_TYPE }}" == "NONE" ]]; then
+
+            echo "No PRs/branches will be created for 'NONE' version bumps."
+
+          elif [[ "${{ env.VERSION_BUMP_TYPE }}" == "PATCH" ]]; then
+
+            echo "1 of 1: Create Branch + PR to bump VERSION.md on release branch"
+
+            BRANCH_NAME_FOR_PR_TO_MAIN="cicd/version_bump_release/${{ env.BUMPED_VERSION_STRING }}"
+            git checkout -b "$BRANCH_NAME_FOR_PR_TO_MAIN" ${{ github.ref_name }}
+            echo "${{ env.BUMPED_VERSION_STRING }}" > ${{ github.workspace }}/VERSION.md
+
+            git add ${{ github.workspace }}/VERSION.md
+            git commit -m "Bump version to ${{ env.BUMPED_VERSION_STRING }} for release branch"
+
+            git push origin "$BRANCH_NAME_FOR_PR_TO_MAIN"
+            # Create PR
+            gh pr create \
+              --base ${{ github.ref_name }} \
+              --head "$BRANCH_NAME_FOR_PR_TO_MAIN" \
+              --title "Bump version to ${{ env.BUMPED_VERSION_STRING }} for release branch" \
+              --body "Automated version bump to ${{ env.BUMPED_VERSION_STRING }} following ${{ env.VERSION_BUMP_TYPE }} release." \
+              --label "version-bump"
+
+          else
+
+            # MAJOR/MINOR version bump
+
+            echo "1 of 2 Create Branch + PR to bump VERSION.md on main"
+
+            # Create PR branch to merge back to main with .post suffix
+            BRANCH_NAME_FOR_PR_TO_MAIN="cicd/version_bump_main/${{ env.BUMPED_VERSION_STRING }}"
+            git checkout -b "$BRANCH_NAME_FOR_PR_TO_MAIN" main
+
+            # Update VERSION.md with .post suffix for main branch
+            echo "${{ env.BUMPED_VERSION_STRING }}.post" > ${{ github.workspace }}/VERSION.md
+
+            # Commit the VERSION.md change
+            git add ${{ github.workspace }}/VERSION.md
+            git commit -m "Bump version to ${{ env.BUMPED_VERSION_STRING }}.post for main branch"
+
+            # Push the branch
+            git push origin "$BRANCH_NAME_FOR_PR_TO_MAIN"
+
+            # Create PR to main
+            gh pr create \
+              --base main \
+              --head "$BRANCH_NAME_FOR_PR_TO_MAIN" \
+              --title "Bump version to ${{ env.BUMPED_VERSION_STRING }}.post for main branch" \
+              --body "Automated version bump to ${{ env.BUMPED_VERSION_STRING }}.post following ${{ env.VERSION_BUMP_TYPE }} release." \
+              --label "version-bump"
+
+            echo "2 of 2 Create Permanent Branch (no PR) for Release"
+
+            BRANCH_NAME_FOR_PERMANENT_RELEASE="release/${{ env.BUMPED_VERSION_STRING }}"
+            git checkout -b "release/${{ env.BUMPED_VERSION_STRING }}" main
+
+            echo "${{ env.BUMPED_VERSION_STRING }}" > ${{ github.workspace }}/VERSION.md
+
+            git add ${{ github.workspace }}/VERSION.md
+            git commit -m "Bump version to ${{ env.BUMPED_VERSION_STRING }} for release branch"
+
+            git push origin "$BRANCH_NAME_FOR_PERMANENT_RELEASE"
+
+          fi
+
+  # Call the out-of-box testing workflow as a separate job
+  # This creates a visible status line in the GitHub UI
+  # out_of_box_testing:
+  #  needs: release
+  #  uses: ./.github/workflows/out-of-box-testing.yml
+  #  with:
+  #    tag_name: ${{ needs.release.outputs.tag_name }}
+  #  permissions:
+  #    contents: read
