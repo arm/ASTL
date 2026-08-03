@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <cstring>
 #include <format>
+#include <iterator>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -54,6 +56,12 @@ auto ErrnoToStatus(int error_number) -> astl_status_code {
     case ENOMEM:
       status = ASTL_STATUS_OUT_OF_MEMORY;
       break;
+    case ENOSPC:
+      status = ASTL_STATUS_BUFFER_TOO_SMALL;
+      break;
+    case EMSGSIZE:
+      status = ASTL_STATUS_NEW_STRUCT_VERSION;
+      break;
     case ENOTTY:
       status = ASTL_STATUS_NOT_SUPPORTED;
       break;
@@ -97,7 +105,11 @@ ScmiIoctlInterface::~ScmiIoctlInterface() { Close(); }
  * @param other Interface to move from.
  */
 ScmiIoctlInterface::ScmiIoctlInterface(ScmiIoctlInterface&& other) noexcept
-    : _device_path{std::move(other._device_path)}, _fd{std::exchange(other._fd, -1)} {}
+    : _device_path{std::move(other._device_path)},
+      _fd{std::exchange(other._fd, -1)},
+      _abi_info{std::move(other._abi_info)} {
+  other._abi_info.reset();
+}
 
 /**
  * @brief Move-assigns an interface and transfers any open file descriptor.
@@ -114,6 +126,8 @@ auto ScmiIoctlInterface::operator=(ScmiIoctlInterface&& other) noexcept -> ScmiI
   Close();
   _device_path = std::move(other._device_path);
   _fd          = std::exchange(other._fd, -1);
+  _abi_info    = std::move(other._abi_info);
+  other._abi_info.reset();
   return *this;
 }
 
@@ -150,6 +164,7 @@ auto ScmiIoctlInterface::Close() noexcept -> void {
     _fd = -1;
   }
 #endif
+  _abi_info.reset();
 }
 
 /**
@@ -194,18 +209,61 @@ auto ScmiIoctlInterface::Ioctl(std::uint64_t request, void* arg) -> astl_status_
 }
 
 /**
- * @brief Reads telemetry protocol information with SCMI_TLM_GET_INFO.
+ * @brief Negotiates and caches telemetry ABI information with SCMI_TLM_GET_ABI_INFO.
  *
  * @param info Output structure populated by the driver.
  * @return ASTL_STATUS_SUCCESS on success, or an ASTL status mapped from ioctl failure.
  */
-auto ScmiIoctlInterface::GetInfo(scmi_tlm_base_info& info) -> astl_status_code {
-  info = {};
+auto ScmiIoctlInterface::GetAbiInfo(scmi_tlm_abi_info& info) -> astl_status_code {
+  if (_abi_info.has_value()) {
+    info = *_abi_info;
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  info      = {};
+  info.size = sizeof(info);
 #if defined(__linux__)
-  return Ioctl(SCMI_TLM_GET_INFO, &info);
+  const auto status = Ioctl(SCMI_TLM_GET_ABI_INFO, &info);
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  if (!ScmiTlmAbiInfoIsCompatible(info)) {
+    ASTL_LOG_ERROR("SCMI telemetry ioctl device '{}' returned incompatible ABI info: size={}, version={}",
+                   _device_path.string(), info.size, info.abi_version);
+    return ASTL_STATUS_NOT_SUPPORTED;
+  }
+  _abi_info = info;
+  return ASTL_STATUS_SUCCESS;
 #else
   return ASTL_STATUS_NOT_SUPPORTED;
 #endif
+}
+
+/**
+ * @brief Populates the ABI cache before issuing an operation other than GET_ABI_INFO.
+ */
+auto ScmiIoctlInterface::EnsureAbiInfo() -> astl_status_code {
+  scmi_tlm_abi_info info{};
+  return GetAbiInfo(info);
+}
+
+/**
+ * @brief Validates group-configuration support and issues a configuration ioctl.
+ *
+ * @param request SCMI_TLM_GET_CFG or SCMI_TLM_SET_CFG.
+ * @param config Configuration structure passed to the driver.
+ * @return ASTL_STATUS_SUCCESS on success, or an ABI, capability, or ioctl failure status.
+ */
+auto ScmiIoctlInterface::ConfigIoctl(std::uint64_t request, scmi_tlm_config& config) -> astl_status_code {
+  auto status = EnsureAbiInfo();
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  if (SCMI_TLM_CONFIG_IS_GROUP(config.flags) != 0 &&
+      !ScmiTlmHasInstanceFeature(*_abi_info, SCMI_TLM_BASE_SUPPORT_GROUP_CONFIG)) {
+    return ASTL_STATUS_NOT_SUPPORTED;
+  }
+  return Ioctl(request, &config);
 }
 
 /**
@@ -216,7 +274,7 @@ auto ScmiIoctlInterface::GetInfo(scmi_tlm_base_info& info) -> astl_status_code {
  */
 auto ScmiIoctlInterface::GetConfig(scmi_tlm_config& config) -> astl_status_code {
 #if defined(__linux__)
-  return Ioctl(SCMI_TLM_GET_CFG, &config);
+  return ConfigIoctl(SCMI_TLM_GET_CFG, config);
 #else
   (void)config;
   return ASTL_STATUS_NOT_SUPPORTED;
@@ -231,7 +289,7 @@ auto ScmiIoctlInterface::GetConfig(scmi_tlm_config& config) -> astl_status_code 
  */
 auto ScmiIoctlInterface::SetConfig(scmi_tlm_config& config) -> astl_status_code {
 #if defined(__linux__)
-  return Ioctl(SCMI_TLM_SET_CFG, &config);
+  return ConfigIoctl(SCMI_TLM_SET_CFG, config);
 #else
   (void)config;
   return ASTL_STATUS_NOT_SUPPORTED;
@@ -250,6 +308,10 @@ auto ScmiIoctlInterface::GetDataEventConfig(ScmiDataEventId data_event_id, scmi_
   config    = {};
   config.id = data_event_id;
 #if defined(__linux__)
+  auto status = EnsureAbiInfo();
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
   return Ioctl(SCMI_TLM_GET_DE_CFG, &config);
 #else
   return ASTL_STATUS_NOT_SUPPORTED;
@@ -266,6 +328,10 @@ auto ScmiIoctlInterface::SetDataEventConfig(scmi_tlm_de_config& config) -> astl_
   config.enable   = config.enable != 0 ? 1U : 0U;
   config.t_enable = config.t_enable != 0 ? 1U : 0U;
 #if defined(__linux__)
+  auto status = EnsureAbiInfo();
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
   return Ioctl(SCMI_TLM_SET_DE_CFG, &config);
 #else
   return ASTL_STATUS_NOT_SUPPORTED;
@@ -283,6 +349,10 @@ auto ScmiIoctlInterface::GetDataEventInfo(ScmiDataEventId data_event_id, scmi_tl
   info    = {};
   info.id = data_event_id;
 #if defined(__linux__)
+  auto status = EnsureAbiInfo();
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
   return Ioctl(SCMI_TLM_GET_DE_INFO, &info);
 #else
   return ASTL_STATUS_NOT_SUPPORTED;
@@ -290,7 +360,7 @@ auto ScmiIoctlInterface::GetDataEventInfo(ScmiDataEventId data_event_id, scmi_tl
 }
 
 /**
- * @brief Reads one data event value and timestamp with SCMI_TLM_GET_DE_VALUE.
+ * @brief Reads one data event value and timestamp with SCMI_TLM_DE_READ.
  *
  * @param data_event_id SCMI data event identifier.
  * @param sample Output sample containing the timestamp and value.
@@ -301,7 +371,62 @@ auto ScmiIoctlInterface::ReadDataEventValue(ScmiDataEventId data_event_id, scmi_
   sample    = {};
   sample.id = data_event_id;
 #if defined(__linux__)
-  return Ioctl(SCMI_TLM_GET_DE_VALUE, &sample);
+  auto status = EnsureAbiInfo();
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  return Ioctl(SCMI_TLM_DE_READ, &sample);
+#else
+  return ASTL_STATUS_NOT_SUPPORTED;
+#endif
+}
+
+/**
+ * @brief Triggers a platform-side update and reads all enabled data events.
+ */
+auto ScmiIoctlInterface::ReadSingle(std::span<scmi_tlm_de_sample> samples, uint32_t& sample_count) -> astl_status_code {
+  sample_count = 0;
+#if defined(__linux__)
+  auto status = EnsureAbiInfo();
+  if (status == ASTL_STATUS_SUCCESS) {
+    if (!ScmiTlmHasInstanceFeature(*_abi_info, SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE)) {
+      status = ASTL_STATUS_NOT_SUPPORTED;
+    } else if (samples.size() > std::numeric_limits<uint32_t>::max()) {
+      status = ASTL_STATUS_BAD_ARGUMENT;
+    } else {
+      scmi_tlm_data_read read{};
+      read.num_samples = static_cast<uint32_t>(samples.size());
+      read.samples = reinterpret_cast<uint64_t>(samples.data());  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+      status       = Ioctl(SCMI_TLM_SINGLE_READ, &read);
+      if (status == ASTL_STATUS_SUCCESS) {
+        if (read.num_samples > samples.size()) {
+          status = ASTL_STATUS_BUFFER_TOO_SMALL;
+        } else {
+          sample_count = read.num_samples;
+        }
+      }
+    }
+  }
+#else
+  (void)samples;
+  auto status = ASTL_STATUS_NOT_SUPPORTED;
+#endif
+  return status;
+}
+
+/**
+ * @brief Resets telemetry state when both ABI and instance support are advertised.
+ */
+auto ScmiIoctlInterface::Reset() -> astl_status_code {
+#if defined(__linux__)
+  auto status = EnsureAbiInfo();
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  if (!ScmiTlmCanReset(*_abi_info)) {
+    return ASTL_STATUS_NOT_SUPPORTED;
+  }
+  return Ioctl(SCMI_TLM_RESET, nullptr);
 #else
   return ASTL_STATUS_NOT_SUPPORTED;
 #endif
@@ -344,12 +469,16 @@ auto ScmiIoctlInterface::TelemetrySubdirectoryFromDeviceName(std::string_view de
 /**
  * @brief Formats the raw data-event implementation version as a UUID-compatible hex string.
  *
- * @param info Base telemetry information returned by SCMI_TLM_GET_INFO.
+ * @param info Telemetry information returned by SCMI_TLM_GET_ABI_INFO.
  * @return Uppercase hexadecimal data-event implementation identifier.
  */
-auto ScmiIoctlInterface::FormatDeImplementationVersion(const scmi_tlm_base_info& info) -> std::string {
-  return std::format("{:08X}{:08X}{:08X}{:08X}", info.de_impl_version[0], info.de_impl_version[1],
-                     info.de_impl_version[2], info.de_impl_version[3]);
+auto ScmiIoctlInterface::FormatDeImplementationVersion(const scmi_tlm_abi_info& info) -> std::string {
+  std::string result;
+  result.reserve(SCMI_TLM_DE_IMPL_UUID_MAX * 2);
+  for (uint8_t byte : info.de_impl_version) {
+    std::format_to(std::back_inserter(result), "{:02X}", byte);
+  }
+  return result;
 }
 
 /**
@@ -390,13 +519,13 @@ auto ScmiIoctlDataEventExists(const std::filesystem::path& device_path, ScmiData
  * @brief Checks whether an ioctl telemetry target can be opened and queried.
  *
  * @param device_path Path to the SCMI telemetry character device.
- * @return true when the target answers SCMI_TLM_GET_INFO, false when unavailable, or an ASTL status on unexpected
+ * @return true when the target answers SCMI_TLM_GET_ABI_INFO, false when unavailable, or an ASTL status on unexpected
  * failure.
  */
 auto ScmiIoctlTargetAvailable(const std::filesystem::path& device_path) -> std::expected<bool, astl_status_code> {
   ScmiIoctlInterface ioctl_interface{device_path};
-  scmi_tlm_base_info info{};
-  const auto         status = ioctl_interface.GetInfo(info);
+  scmi_tlm_abi_info  info{};
+  const auto         status = ioctl_interface.GetAbiInfo(info);
   if (status == ASTL_STATUS_SUCCESS) {
     return true;
   }

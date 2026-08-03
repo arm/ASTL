@@ -170,12 +170,27 @@ class ScmiIoctlCollector : public ICollector {
   auto ExecuteCollectionOperations(OperationSequence const& operations) -> astl_status_code;
 
   /**
+   * @brief Samples a sequence, using a platform-triggered single read when supported.
+   */
+  auto SampleCollectionOperations(OperationSequence const& operations) -> astl_status_code;
+
+  /**
+   * @brief Matches samples returned by SCMI_TLM_SINGLE_READ to configured read operations.
+   */
+  auto ExecuteSingleReadOperations(OperationSequence const& operations) -> astl_status_code;
+
+  /**
    * @brief Reads one SCMI data event and forwards the resulting sample to the raw sample sink.
    *
    * @param operation SCMI read operation describing the data event and output sample id.
    * @return ASTL_STATUS_SUCCESS on success, or an ioctl or sink failure status.
    */
   auto ExecuteScmiReadOperation(ScmiReadOperation const& operation) -> astl_status_code;
+
+  /**
+   * @brief Converts one ioctl sample into an ASTL raw sample and forwards it to the sink.
+   */
+  auto EmitScmiSample(ScmiReadOperation const& operation, const scmi_tlm_de_sample& sample) -> astl_status_code;
 
   /**
    * @brief Starts periodic sampling for sampling-mode collection.
@@ -226,6 +241,9 @@ class ScmiIoctlCollector : public ICollector {
 
   /** @brief Ioctl interface for the target telemetry device. */
   std::unique_ptr<IScmiIoctlInterface> _scmi_ioctl_interface;
+
+  /** @brief Negotiated V1 ABI prefix, including raw known and future capability bits. */
+  std::optional<scmi_tlm_abi_info> _abi_info;
 
   /** @brief Data events enabled by this collector and their original state. */
   std::vector<ScmiDataEvent> _data_events;

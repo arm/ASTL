@@ -95,7 +95,40 @@ auto ScmiIoctlCollector::ConfigureCollection(CollectionConfiguration&& configura
   _use_software_clock_timestamps = IsEnvVarSet(EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS);
   ASTL_LOG_INFO("ScmiIoctlCollector: use_software_clock_timestamps={}", _use_software_clock_timestamps);
 
-  auto result = EnableTelemetry();
+  scmi_tlm_abi_info abi_info{};
+  auto              result = _scmi_ioctl_interface->GetAbiInfo(abi_info);
+  if (result != ASTL_STATUS_SUCCESS || !ScmiTlmAbiInfoIsCompatible(abi_info)) {
+    if (result == ASTL_STATUS_SUCCESS) {
+      result = ASTL_STATUS_NOT_SUPPORTED;
+    }
+    ASTL_LOG_ERROR("Error {} negotiating the SCMI telemetry ioctl ABI for device '{}'", astl::to_string(result),
+                   _scmi_ioctl_interface->DevicePath().string());
+    RollbackConfigurationState("ConfigureCollection failure");
+    return result;
+  }
+  _abi_info = abi_info;
+
+  ASTL_LOG_INFO(
+      "SCMI telemetry ioctl ABI: version={}, abi_features=0x{:08X}, instance_features=0x{:08X}, "
+      "num_des={}, num_groups={}, num_intervals={}, num_shmtis={}, de_implementation_version={}",
+      abi_info.abi_version, abi_info.abi_features, abi_info.features, abi_info.num_des, abi_info.num_groups,
+      abi_info.num_intervals, abi_info.num_shmtis, ScmiIoctlInterface::FormatDeImplementationVersion(abi_info));
+  ASTL_LOG_INFO("SCMI telemetry ioctl capabilities: reset={}, single_read={}, group_config={}, update_notification={}",
+                ScmiTlmCanReset(abi_info), ScmiTlmHasInstanceFeature(abi_info, SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE),
+                ScmiTlmHasInstanceFeature(abi_info, SCMI_TLM_BASE_SUPPORT_GROUP_CONFIG),
+                ScmiTlmHasInstanceFeature(abi_info, SCMI_TLM_BASE_SUPPORT_UPDATE_NOTIFICATION));
+  if (abi_info.abi_version > SCMI_TLM_CURRENT_ABI_VERSION) {
+    ASTL_LOG_INFO("SCMI telemetry ioctl ABI version {} is newer than ASTL's version {}; using the compatible V1 prefix",
+                  abi_info.abi_version, SCMI_TLM_CURRENT_ABI_VERSION);
+  }
+  const auto unknown_abi_features      = abi_info.abi_features & ~kScmiTlmKnownAbiFeatures;
+  const auto unknown_instance_features = abi_info.features & ~kScmiTlmKnownInstanceFeatures;
+  if (unknown_abi_features != 0 || unknown_instance_features != 0) {
+    ASTL_LOG_INFO("SCMI telemetry ioctl exposes future capabilities: abi=0x{:08X}, instance=0x{:08X}",
+                  unknown_abi_features, unknown_instance_features);
+  }
+
+  result = EnableTelemetry();
   if (result != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Error {} enabling SCMI Telemetry ioctl device '{}'", astl::to_string(result),
                    _scmi_ioctl_interface->DevicePath().string());
@@ -115,20 +148,11 @@ auto ScmiIoctlCollector::ConfigureCollection(CollectionConfiguration&& configura
 
   scmi_operation_helpers::UpdateReadOperationTimestampRates(_data_events, _configuration->Operations());
 
-  scmi_tlm_base_info info{};
-  result = _scmi_ioctl_interface->GetInfo(info);
-  ASTL_LOG_INFO("de_implementation_version: {}", result == ASTL_STATUS_SUCCESS
-                                                     ? ScmiIoctlInterface::FormatDeImplementationVersion(info)
-                                                     : astl::to_string(result));
-  ASTL_LOG_INFO("version: {}",
-                result == ASTL_STATUS_SUCCESS ? std::format("0x{:08X}", info.version) : astl::to_string(result));
-
   result = ExecuteCollectionOperations(_configuration->Operations().operationsBeforeStart);
   if (result != ASTL_STATUS_SUCCESS) {
     RollbackConfigurationState("ConfigureCollection failure");
-    return result;
   }
-  return ASTL_STATUS_SUCCESS;
+  return result;
 }
 
 /**
@@ -168,7 +192,7 @@ auto ScmiIoctlCollector::StartCollection() -> astl_status_code {
         case ASTL_COLLECTION_MODE_IMMEDIATE:
           break;
         case ASTL_COLLECTION_MODE_SNAPSHOT:
-          result = ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
+          result = SampleCollectionOperations(_configuration->Operations().operationsOnSample);
           break;
         case ASTL_COLLECTION_MODE_SAMPLING:
           result = StartIntervalSampling();
@@ -243,7 +267,7 @@ auto ScmiIoctlCollector::StopCollection() -> astl_status_code {
       case ASTL_COLLECTION_MODE_IMMEDIATE:
         break;
       case ASTL_COLLECTION_MODE_SNAPSHOT:
-        result = ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
+        result = SampleCollectionOperations(_configuration->Operations().operationsOnSample);
         break;
       case ASTL_COLLECTION_MODE_SAMPLING:
         break;

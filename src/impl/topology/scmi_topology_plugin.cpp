@@ -76,8 +76,8 @@ auto CompareTelemetryDirectoryNames(const std::string& lhs, const std::string& r
 auto DetectIoctlTarget(const std::filesystem::path& device_path)
     -> std::expected<std::unique_ptr<ITarget>, astl_status_code> {
   ScmiIoctlInterface ioctl_interface{device_path};
-  scmi_tlm_base_info info{};
-  auto               status = ioctl_interface.GetInfo(info);
+  scmi_tlm_abi_info  info{};
+  auto               status = ioctl_interface.GetAbiInfo(info);
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_INFO("ScmiTopologyPlugin::ScanForTargets: skipping SCMI ioctl device {}: {}", device_path.string(),
                   astl::to_string(status));

@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -16,6 +18,35 @@
 #include "operation/scmi_read_operation.hpp"
 
 namespace astl {
+
+/** @brief ABI feature bits understood by this ASTL build. */
+inline constexpr uint32_t kScmiTlmKnownAbiFeatures = SCMI_TLM_ABI_FEAT_RESET;
+
+/** @brief Instance feature bits understood by this ASTL build. */
+inline constexpr uint32_t kScmiTlmKnownInstanceFeatures =
+    SCMI_TLM_BASE_SUPPORT_RESET | SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE | SCMI_TLM_BASE_SUPPORT_GROUP_CONFIG |
+    SCMI_TLM_BASE_SUPPORT_UPDATE_NOTIFICATION;
+
+/** @brief Checks whether ABI information contains the complete V1 prefix and a compatible version. */
+constexpr auto ScmiTlmAbiInfoIsCompatible(const scmi_tlm_abi_info& info) -> bool {
+  return info.size >= sizeof(scmi_tlm_abi_info) && info.abi_version >= SCMI_TLM_ABI_VERSION_V1;
+}
+
+/** @brief Checks one ABI capability while ignoring unknown capability bits. */
+constexpr auto ScmiTlmHasAbiFeature(const scmi_tlm_abi_info& info, uint32_t feature) -> bool {
+  return (info.abi_features & feature) == feature;
+}
+
+/** @brief Checks one instance capability while ignoring unknown capability bits. */
+constexpr auto ScmiTlmHasInstanceFeature(const scmi_tlm_abi_info& info, uint32_t feature) -> bool {
+  return (info.features & feature) == feature;
+}
+
+/** @brief Checks both layers of feature negotiation required before issuing reset. */
+constexpr auto ScmiTlmCanReset(const scmi_tlm_abi_info& info) -> bool {
+  return ScmiTlmHasAbiFeature(info, SCMI_TLM_ABI_FEAT_RESET) &&
+         ScmiTlmHasInstanceFeature(info, SCMI_TLM_BASE_SUPPORT_RESET);
+}
 
 struct IScmiIoctlInterface {
   virtual ~IScmiIoctlInterface() = default;
@@ -27,13 +58,15 @@ struct IScmiIoctlInterface {
   IScmiIoctlInterface& operator=(IScmiIoctlInterface&&)      = default;
 
   virtual auto DevicePath() const -> const std::filesystem::path&                                                = 0;
-  virtual auto GetInfo(scmi_tlm_base_info& info) -> astl_status_code                                             = 0;
+  virtual auto GetAbiInfo(scmi_tlm_abi_info& info) -> astl_status_code                                           = 0;
   virtual auto GetConfig(scmi_tlm_config& config) -> astl_status_code                                            = 0;
   virtual auto SetConfig(scmi_tlm_config& config) -> astl_status_code                                            = 0;
   virtual auto GetDataEventConfig(ScmiDataEventId data_event_id, scmi_tlm_de_config& config) -> astl_status_code = 0;
   virtual auto SetDataEventConfig(scmi_tlm_de_config& config) -> astl_status_code                                = 0;
   virtual auto GetDataEventInfo(ScmiDataEventId data_event_id, scmi_tlm_de_info& info) -> astl_status_code       = 0;
   virtual auto ReadDataEventValue(ScmiDataEventId data_event_id, scmi_tlm_de_sample& sample) -> astl_status_code = 0;
+  virtual auto ReadSingle(std::span<scmi_tlm_de_sample> samples, uint32_t& sample_count) -> astl_status_code     = 0;
+  virtual auto Reset() -> astl_status_code                                                                       = 0;
 };
 
 /**
@@ -105,12 +138,12 @@ class ScmiIoctlInterface : public IScmiIoctlInterface {
   auto DevicePath() const -> const std::filesystem::path& override;
 
   /**
-   * @brief Reads telemetry protocol information with SCMI_TLM_GET_INFO.
+   * @brief Negotiates and caches telemetry ABI information with SCMI_TLM_GET_ABI_INFO.
    *
    * @param info Output structure populated by the driver.
    * @return ASTL_STATUS_SUCCESS on success, or an ASTL status mapped from ioctl failure.
    */
-  auto GetInfo(scmi_tlm_base_info& info) -> astl_status_code override;
+  auto GetAbiInfo(scmi_tlm_abi_info& info) -> astl_status_code override;
 
   /**
    * @brief Reads target or group telemetry configuration with SCMI_TLM_GET_CFG.
@@ -155,13 +188,26 @@ class ScmiIoctlInterface : public IScmiIoctlInterface {
   auto GetDataEventInfo(ScmiDataEventId data_event_id, scmi_tlm_de_info& info) -> astl_status_code override;
 
   /**
-   * @brief Reads one data event value and timestamp with SCMI_TLM_GET_DE_VALUE.
+   * @brief Reads one data event value and timestamp with SCMI_TLM_DE_READ.
    *
    * @param data_event_id SCMI data event identifier.
    * @param sample Output sample containing the timestamp and value.
    * @return ASTL_STATUS_SUCCESS on success, or an ASTL status mapped from ioctl failure.
    */
   auto ReadDataEventValue(ScmiDataEventId data_event_id, scmi_tlm_de_sample& sample) -> astl_status_code override;
+
+  /**
+   * @brief Triggers a platform-side update and reads all enabled data events.
+   *
+   * The operation is issued only when SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE was
+   * advertised. `sample_count` is set to the number of returned samples.
+   */
+  auto ReadSingle(std::span<scmi_tlm_de_sample> samples, uint32_t& sample_count) -> astl_status_code override;
+
+  /**
+   * @brief Resets telemetry state when both ABI and instance support are advertised.
+   */
+  auto Reset() -> astl_status_code override;
 
   /**
    * @brief Converts an ASTL telemetry target path to the corresponding ioctl device path.
@@ -187,10 +233,10 @@ class ScmiIoctlInterface : public IScmiIoctlInterface {
   /**
    * @brief Formats the raw data-event implementation version as a UUID-compatible hex string.
    *
-   * @param info Base telemetry information returned by SCMI_TLM_GET_INFO.
+   * @param info Telemetry information returned by SCMI_TLM_GET_ABI_INFO.
    * @return Uppercase hexadecimal data-event implementation identifier.
    */
-  static auto FormatDeImplementationVersion(const scmi_tlm_base_info& info) -> std::string;
+  static auto FormatDeImplementationVersion(const scmi_tlm_abi_info& info) -> std::string;
 
   /**
    * @brief Checks whether a directory entry name looks like an SCMI telemetry ioctl device.
@@ -210,11 +256,26 @@ class ScmiIoctlInterface : public IScmiIoctlInterface {
    */
   auto Ioctl(std::uint64_t request, void* arg) -> astl_status_code;
 
+  /** @brief Populates the ABI cache before an operation other than GET_ABI_INFO. */
+  auto EnsureAbiInfo() -> astl_status_code;
+
+  /**
+   * @brief Validates and issues a target or group configuration ioctl.
+   *
+   * @param request SCMI_TLM_GET_CFG or SCMI_TLM_SET_CFG.
+   * @param config Configuration structure passed to the driver.
+   * @return ASTL_STATUS_SUCCESS on success, or an ABI, capability, or ioctl failure status.
+   */
+  auto ConfigIoctl(std::uint64_t request, scmi_tlm_config& config) -> astl_status_code;
+
   /** @brief Path to the SCMI telemetry character device. */
   std::filesystem::path _device_path;
 
   /** @brief Open file descriptor for _device_path, or -1 when closed. */
   int _fd{-1};
+
+  /** @brief ABI information cached for the lifetime of an open device descriptor. */
+  std::optional<scmi_tlm_abi_info> _abi_info;
 };
 
 /**
@@ -231,7 +292,7 @@ auto ScmiIoctlDataEventExists(const std::filesystem::path& device_path, ScmiData
  * @brief Checks whether an ioctl telemetry target can be opened and queried.
  *
  * @param device_path Path to the SCMI telemetry character device.
- * @return true when the target answers SCMI_TLM_GET_INFO, false when unavailable, or an ASTL status on unexpected
+ * @return true when the target answers SCMI_TLM_GET_ABI_INFO, false when unavailable, or an ASTL status on unexpected
  * failure.
  */
 auto ScmiIoctlTargetAvailable(const std::filesystem::path& device_path) -> std::expected<bool, astl_status_code>;

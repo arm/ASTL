@@ -15,22 +15,37 @@
 // same shape as the ABI instead of replacing them with C++ wrappers.
 // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-macro-usage,cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 
-/** @brief Number of 32-bit words used by the data-event implementation version. */
-#define SCMI_TLM_DE_IMPL_MAX_DWORDS 4
+/** @brief First SCMI telemetry userspace ABI version. */
+#define SCMI_TLM_ABI_VERSION_V1 1
+
+/** @brief Latest ABI version understood by this UAPI mirror. */
+#define SCMI_TLM_CURRENT_ABI_VERSION SCMI_TLM_ABI_VERSION_V1
+
+/** @brief Number of bytes used by the data-event implementation UUID. */
+#define SCMI_TLM_DE_IMPL_UUID_MAX 16
 
 /**
- * @brief Base information returned by SCMI_TLM_GET_INFO for one telemetry target.
+ * @brief ABI and instance information returned by SCMI_TLM_GET_ABI_INFO.
  *
  * This structure mirrors the SCMI telemetry kernel UAPI so ASTL can build
  * without requiring a kernel header that may not yet be available on the build
  * host.
  */
-struct scmi_tlm_base_info {
-  /** @brief SCMI telemetry protocol version. */
-  uint32_t version;
+struct scmi_tlm_abi_info {
+  /** @brief Size of this structure supplied by userspace and reported by the driver. */
+  uint32_t size;
 
-  /** @brief Data-event implementation identifier encoded as four 32-bit words. */
-  uint32_t de_impl_version[SCMI_TLM_DE_IMPL_MAX_DWORDS];
+  /** @brief Version of the ioctl ABI implemented by the driver. */
+  uint32_t abi_version;
+
+  /** @brief Capabilities of the ioctl ABI itself. */
+  uint32_t abi_features;
+
+/** @brief The ABI defines SCMI_TLM_RESET. */
+#define SCMI_TLM_ABI_FEAT_RESET (1U << 0)
+
+  /** @brief Data-event implementation UUID in wire byte order. */
+  uint8_t de_impl_version[SCMI_TLM_DE_IMPL_UUID_MAX];
 
   /** @brief Number of data events exposed by the target. */
   uint32_t num_des;
@@ -44,8 +59,23 @@ struct scmi_tlm_base_info {
   /** @brief Number of shared memory transport interfaces exposed by the target. */
   uint32_t num_shmtis;
 
-  /** @brief Target capability and state flags defined by the kernel UAPI. */
-  uint32_t flags;
+  /** @brief Capabilities reported by this SCMI telemetry instance. */
+  uint32_t features;
+
+/** @brief The instance implements reset. */
+#define SCMI_TLM_BASE_SUPPORT_RESET (1U << 0)
+
+/** @brief The instance implements platform-triggered single sampling. */
+#define SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE (1U << 1)
+
+/** @brief The instance supports per-group configuration. */
+#define SCMI_TLM_BASE_SUPPORT_GROUP_CONFIG (1U << 2)
+
+/** @brief The instance supports continuous-update notifications. */
+#define SCMI_TLM_BASE_SUPPORT_UPDATE_NOTIFICATION (1U << 3)
+
+  /** @brief Reserved for future ABI expansion. */
+  uint64_t reserved;
 };
 
 /**
@@ -56,7 +86,7 @@ struct scmi_tlm_update_interval {
   uint32_t secs;
 
   /** @brief Base-10 exponent applied to secs. */
-  uint32_t exp;
+  int32_t exp;
 };
 
 /**
@@ -71,6 +101,10 @@ struct scmi_tlm_config {
 
   /** @brief Configuration flags defined by the kernel UAPI. */
   uint8_t flags;
+
+#define SCMI_TLM_CONFIG_GROUP           (1U << 0)
+#define SCMI_TLM_CONFIG_FLAGS           SCMI_TLM_CONFIG_GROUP
+#define SCMI_TLM_CONFIG_IS_GROUP(flags) ((flags) & SCMI_TLM_CONFIG_GROUP)
 
   /** @brief Padding reserved by the kernel UAPI. */
   uint8_t pad;
@@ -92,6 +126,11 @@ struct scmi_tlm_intervals {
   /** @brief Query flags defined by the kernel UAPI. */
   uint8_t flags;
 
+#define SCMI_TLM_INTERV_GROUP           (1U << 0)
+#define SCMI_TLM_INTERV_DISCRETE        (1U << 1)
+#define SCMI_TLM_INTERV_FLAGS           (SCMI_TLM_INTERV_GROUP | SCMI_TLM_INTERV_DISCRETE)
+#define SCMI_TLM_INTERV_IS_GROUP(flags) ((flags) & SCMI_TLM_INTERV_GROUP)
+
   /** @brief Padding reserved by the kernel UAPI. */
   uint8_t pad[3];
 
@@ -104,6 +143,10 @@ struct scmi_tlm_intervals {
   /** @brief Userspace pointer to an array of scmi_tlm_update_interval entries. */
   uint64_t intervals;
 };
+
+#define SCMI_TLM_UPDATE_INTVL_SEGMENT_LOW  0
+#define SCMI_TLM_UPDATE_INTVL_SEGMENT_HIGH 1
+#define SCMI_TLM_UPDATE_INTVL_SEGMENT_STEP 2
 
 /**
  * @brief Per-data-event configuration used by SCMI_TLM_GET_DE_CFG and SCMI_TLM_SET_DE_CFG.
@@ -162,6 +205,10 @@ struct scmi_tlm_de_info {
   /** @brief Data event flags defined by the kernel UAPI. */
   uint8_t flags;
 
+#define SCMI_TLM_DEINFO_GROUP            (1U << 0)
+#define SCMI_TLM_DEINFO_FLAGS            SCMI_TLM_DEINFO_GROUP
+#define SCMI_TLM_DEINFO_HAS_GROUP(flags) ((flags) & SCMI_TLM_DEINFO_GROUP)
+
   /** @brief Padding reserved by the kernel UAPI. */
   uint8_t pad[2];
 
@@ -173,7 +220,7 @@ struct scmi_tlm_de_info {
 };
 
 /**
- * @brief User-buffer descriptor for listing data event identifiers.
+ * @brief User-buffer descriptor for listing data event metadata.
  */
 struct scmi_tlm_des_list {
   /** @brief Number of data events requested by or returned to userspace. */
@@ -182,12 +229,12 @@ struct scmi_tlm_des_list {
   /** @brief Padding reserved by the kernel UAPI. */
   uint32_t pad;
 
-  /** @brief Userspace pointer to an array of 32-bit data event identifiers. */
+  /** @brief Userspace pointer to an array of scmi_tlm_de_info entries. */
   uint64_t des;
 };
 
 /**
- * @brief Single data event sample returned by SCMI_TLM_GET_DE_VALUE and bulk read ioctls.
+ * @brief Single data event sample returned by SCMI_TLM_DE_READ and bulk read ioctls.
  */
 struct scmi_tlm_de_sample {
   /** @brief SCMI data event identifier. */
@@ -212,6 +259,10 @@ struct scmi_tlm_data_read {
 
   /** @brief Read flags defined by the kernel UAPI. */
   uint8_t flags;
+
+#define SCMI_TLM_READ_GROUP           (1U << 0)
+#define SCMI_TLM_READ_FLAGS           SCMI_TLM_READ_GROUP
+#define SCMI_TLM_READ_IS_GROUP(flags) ((flags) & SCMI_TLM_READ_GROUP)
 
   /** @brief Padding reserved by the kernel UAPI. */
   uint8_t pad[3];
@@ -244,7 +295,7 @@ struct scmi_tlm_grp_info {
 };
 
 /**
- * @brief User-buffer descriptor for listing data-event group identifiers.
+ * @brief User-buffer descriptor for listing data-event group metadata.
  */
 struct scmi_tlm_grps_list {
   /** @brief Number of groups requested by or returned to userspace. */
@@ -253,7 +304,7 @@ struct scmi_tlm_grps_list {
   /** @brief Padding reserved by the kernel UAPI. */
   uint32_t pad;
 
-  /** @brief Userspace pointer to an array of 32-bit group identifiers. */
+  /** @brief Userspace pointer to an array of scmi_tlm_grp_info entries. */
   uint64_t grps;
 };
 
@@ -267,7 +318,7 @@ struct scmi_tlm_grp_desc {
   /** @brief Number of composing data events requested by or returned to userspace. */
   uint32_t num_des;
 
-  /** @brief Userspace pointer to an array of 32-bit data event identifiers. */
+  /** @brief Userspace pointer to an array of scmi_tlm_de_info entries. */
   uint64_t composing_des;
 };
 
@@ -304,62 +355,80 @@ struct scmi_tlm_shmtis_list {
 
 #if defined(__linux__)
 /** @brief SCMI telemetry ioctl request magic value from the kernel UAPI. */
-#  define SCMI_IOCTL_MAGIC 0xF1
+#  define SCMI_TLM_IOCTL_MAGIC 0xF1
 
-/** @brief Get scmi_tlm_base_info for a telemetry target. */
-#  define SCMI_TLM_GET_INFO _IOR(SCMI_IOCTL_MAGIC, 0x00, struct scmi_tlm_base_info)
+/** @brief Negotiate the ABI and get scmi_tlm_abi_info for a telemetry target. */
+#  define SCMI_TLM_GET_ABI_INFO _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x00, struct scmi_tlm_abi_info)
 
 /** @brief Get target or group telemetry configuration. */
-#  define SCMI_TLM_GET_CFG _IOWR(SCMI_IOCTL_MAGIC, 0x01, struct scmi_tlm_config)
+#  define SCMI_TLM_GET_CFG _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x01, struct scmi_tlm_config)
 
 /** @brief Set target or group telemetry configuration. */
-#  define SCMI_TLM_SET_CFG _IOWR(SCMI_IOCTL_MAGIC, 0x02, struct scmi_tlm_config)
+#  define SCMI_TLM_SET_CFG _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x02, struct scmi_tlm_config)
 
 /** @brief Get supported target or group update intervals. */
-#  define SCMI_TLM_GET_INTRVS _IOWR(SCMI_IOCTL_MAGIC, 0x03, struct scmi_tlm_intervals)
+#  define SCMI_TLM_GET_INTRVS _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x03, struct scmi_tlm_intervals)
 
 /** @brief Get one data event's enable and timestamp-enable configuration. */
-#  define SCMI_TLM_GET_DE_CFG _IOWR(SCMI_IOCTL_MAGIC, 0x04, struct scmi_tlm_de_config)
+#  define SCMI_TLM_GET_DE_CFG _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x04, struct scmi_tlm_de_config)
 
 /** @brief Set one data event's enable and timestamp-enable configuration. */
-#  define SCMI_TLM_SET_DE_CFG _IOWR(SCMI_IOCTL_MAGIC, 0x05, struct scmi_tlm_de_config)
+#  define SCMI_TLM_SET_DE_CFG _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x05, struct scmi_tlm_de_config)
 
 /** @brief Get one data event's metadata. */
-#  define SCMI_TLM_GET_DE_INFO _IOWR(SCMI_IOCTL_MAGIC, 0x06, struct scmi_tlm_de_info)
+#  define SCMI_TLM_GET_DE_INFO _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x06, struct scmi_tlm_de_info)
 
 /** @brief List data event identifiers exposed by the target. */
-#  define SCMI_TLM_GET_DE_LIST _IOWR(SCMI_IOCTL_MAGIC, 0x07, struct scmi_tlm_des_list)
+#  define SCMI_TLM_GET_DE_LIST _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x07, struct scmi_tlm_des_list)
 
 /** @brief Read one data event sample immediately. */
-#  define SCMI_TLM_GET_DE_VALUE _IOWR(SCMI_IOCTL_MAGIC, 0x08, struct scmi_tlm_de_sample)
+#  define SCMI_TLM_DE_READ _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x08, struct scmi_tlm_de_sample)
 
 /** @brief Get all data-event configuration state. */
-#  define SCMI_TLM_GET_ALL_CFG _IOWR(SCMI_IOCTL_MAGIC, 0x09, struct scmi_tlm_de_config)
+#  define SCMI_TLM_GET_ALL_CFG _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x09, struct scmi_tlm_de_config)
 
 /** @brief Set all data-event configuration state. */
-#  define SCMI_TLM_SET_ALL_CFG _IOWR(SCMI_IOCTL_MAGIC, 0x0A, struct scmi_tlm_de_config)
+#  define SCMI_TLM_SET_ALL_CFG _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0A, struct scmi_tlm_de_config)
 
 /** @brief List data-event group identifiers exposed by the target. */
-#  define SCMI_TLM_GET_GRP_LIST _IOWR(SCMI_IOCTL_MAGIC, 0x0B, struct scmi_tlm_grps_list)
+#  define SCMI_TLM_GET_GRP_LIST _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0B, struct scmi_tlm_grps_list)
 
 /** @brief Get metadata for one data-event group. */
-#  define SCMI_TLM_GET_GRP_INFO _IOWR(SCMI_IOCTL_MAGIC, 0x0C, struct scmi_tlm_grp_info)
+#  define SCMI_TLM_GET_GRP_INFO _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0C, struct scmi_tlm_grp_info)
 
 /** @brief Get the data event identifiers composing one group. */
-#  define SCMI_TLM_GET_GRP_DESC _IOWR(SCMI_IOCTL_MAGIC, 0x0D, struct scmi_tlm_grp_desc)
+#  define SCMI_TLM_GET_GRP_DESC _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0D, struct scmi_tlm_grp_desc)
 
 /** @brief Read a single group sample set. */
-#  define SCMI_TLM_SINGLE_SAMPLE _IOWR(SCMI_IOCTL_MAGIC, 0x0E, struct scmi_tlm_data_read)
+#  define SCMI_TLM_SINGLE_READ _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0E, struct scmi_tlm_data_read)
 
 /** @brief Read a bulk group sample set. */
-#  define SCMI_TLM_BULK_READ _IOWR(SCMI_IOCTL_MAGIC, 0x0F, struct scmi_tlm_data_read)
+#  define SCMI_TLM_BULK_READ _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0F, struct scmi_tlm_data_read)
 
 /** @brief Read a batch group sample set. */
-#  define SCMI_TLM_BATCH_READ _IOWR(SCMI_IOCTL_MAGIC, 0x10, struct scmi_tlm_data_read)
+#  define SCMI_TLM_BATCH_READ _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x10, struct scmi_tlm_data_read)
 
 /** @brief List shared memory transport interfaces exposed by the target. */
-#  define SCMI_TLM_GET_SHMTI_LIST _IOWR(SCMI_IOCTL_MAGIC, 0x11, struct scmi_tlm_shmtis_list)
+#  define SCMI_TLM_GET_SHMTI_LIST _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x11, struct scmi_tlm_shmtis_list)
+
+/** @brief Reset telemetry state when both ABI and instance advertise reset support. */
+#  define SCMI_TLM_RESET _IO(SCMI_TLM_IOCTL_MAGIC, 0x12)
 #endif
+
+static_assert(sizeof(scmi_tlm_abi_info) == 56, "Unexpected SCMI telemetry ABI info layout");
+static_assert(sizeof(scmi_tlm_update_interval) == 8, "Unexpected SCMI telemetry interval layout");
+static_assert(sizeof(scmi_tlm_config) == 16, "Unexpected SCMI telemetry configuration layout");
+static_assert(sizeof(scmi_tlm_intervals) == 24, "Unexpected SCMI telemetry intervals layout");
+static_assert(sizeof(scmi_tlm_de_config) == 16, "Unexpected SCMI telemetry data-event configuration layout");
+static_assert(sizeof(scmi_tlm_de_info) == 64, "Unexpected SCMI telemetry data-event information layout");
+static_assert(sizeof(scmi_tlm_des_list) == 16, "Unexpected SCMI telemetry data-event list layout");
+static_assert(sizeof(scmi_tlm_de_sample) == 24, "Unexpected SCMI telemetry data-event sample layout");
+static_assert(sizeof(scmi_tlm_data_read) == 24, "Unexpected SCMI telemetry data-read layout");
+static_assert(sizeof(scmi_tlm_grp_info) == 16, "Unexpected SCMI telemetry group information layout");
+static_assert(sizeof(scmi_tlm_grps_list) == 16, "Unexpected SCMI telemetry group list layout");
+static_assert(sizeof(scmi_tlm_grp_desc) == 16, "Unexpected SCMI telemetry group descriptor layout");
+static_assert(sizeof(scmi_tlm_shmti_info) == 16, "Unexpected SCMI telemetry SHMTI information layout");
+static_assert(sizeof(scmi_tlm_shmtis_list) == 16, "Unexpected SCMI telemetry SHMTI list layout");
 
 // NOLINTEND(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-macro-usage,cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 

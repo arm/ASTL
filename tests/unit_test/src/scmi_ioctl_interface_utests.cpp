@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -116,13 +118,29 @@ TEST_CASE("ScmiIoctlInterface identifies likely telemetry ioctl device names", "
 }
 
 TEST_CASE("ScmiIoctlInterface formats data-event implementation version", "[scmi_ioctl_interface]") {
-  scmi_tlm_base_info info{};
-  info.de_impl_version[0] = 0x01234567U;
-  info.de_impl_version[1] = 0x89ABCDEFU;
-  info.de_impl_version[2] = 0x00000001U;
-  info.de_impl_version[3] = 0xFEDCBA98U;
+  scmi_tlm_abi_info                                        info{};
+  constexpr std::array<uint8_t, SCMI_TLM_DE_IMPL_UUID_MAX> implementation_uuid = {
+      0x01U, 0x23U, 0x45U, 0x67U, 0x89U, 0xABU, 0xCDU, 0xEFU, 0x00U, 0x00U, 0x00U, 0x01U, 0xFEU, 0xDCU, 0xBAU, 0x98U,
+  };
+  std::ranges::copy(implementation_uuid, std::ranges::begin(info.de_impl_version));
 
   REQUIRE(astl::ScmiIoctlInterface::FormatDeImplementationVersion(info) == "0123456789ABCDEF00000001FEDCBA98");
+}
+
+TEST_CASE("SCMI ioctl ABI capability helpers accept future compatible versions", "[scmi_ioctl_interface]") {
+  scmi_tlm_abi_info info{};
+  info.size         = sizeof(info);
+  info.abi_version  = SCMI_TLM_CURRENT_ABI_VERSION + 1;
+  info.abi_features = SCMI_TLM_ABI_FEAT_RESET | (1U << 31);
+  info.features     = SCMI_TLM_BASE_SUPPORT_RESET | SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE | (1U << 30);
+
+  CHECK(astl::ScmiTlmAbiInfoIsCompatible(info));
+  CHECK(astl::ScmiTlmHasAbiFeature(info, SCMI_TLM_ABI_FEAT_RESET));
+  CHECK(astl::ScmiTlmHasInstanceFeature(info, SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE));
+  CHECK(astl::ScmiTlmCanReset(info));
+
+  info.size = sizeof(info) - 1;
+  CHECK_FALSE(astl::ScmiTlmAbiInfoIsCompatible(info));
 }
 
 TEST_CASE("ScmiIoctlInterface reports a missing ioctl device without hardware", "[scmi_ioctl_interface]") {
@@ -183,8 +201,9 @@ TEST_CASE("ScmiIoctlInterface opens regular files but reports unsupported ioctl 
   REQUIRE(assigned_interface.IsOpen());
   REQUIRE_FALSE(moved_interface.IsOpen());
 
-  scmi_tlm_base_info info{};
-  REQUIRE(assigned_interface.GetInfo(info) == ASTL_STATUS_NOT_SUPPORTED);
+  scmi_tlm_abi_info info{};
+  REQUIRE(assigned_interface.GetAbiInfo(info) == ASTL_STATUS_NOT_SUPPORTED);
+  REQUIRE(info.size == sizeof(info));
 
   scmi_tlm_config config{};
   REQUIRE(assigned_interface.GetConfig(config) == ASTL_STATUS_NOT_SUPPORTED);
@@ -207,6 +226,12 @@ TEST_CASE("ScmiIoctlInterface opens regular files but reports unsupported ioctl 
   scmi_tlm_de_sample sample{};
   REQUIRE(assigned_interface.ReadDataEventValue(0x9ABCU, sample) == ASTL_STATUS_NOT_SUPPORTED);
   REQUIRE(sample.id == 0x9ABCU);
+
+  std::array<scmi_tlm_de_sample, 1> samples{};
+  uint32_t                          sample_count = 1;
+  REQUIRE(assigned_interface.ReadSingle(samples, sample_count) == ASTL_STATUS_NOT_SUPPORTED);
+  REQUIRE(sample_count == 0);
+  REQUIRE(assigned_interface.Reset() == ASTL_STATUS_NOT_SUPPORTED);
 
   auto target_available = astl::ScmiIoctlTargetAvailable(device_path);
   REQUIRE_FALSE(target_available.has_value());

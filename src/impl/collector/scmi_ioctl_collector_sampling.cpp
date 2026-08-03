@@ -4,6 +4,8 @@
 
 #include <cstdint>
 #include <expected>
+#include <unordered_map>
+#include <vector>
 
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
@@ -24,7 +26,7 @@ auto ScmiIoctlCollector::ReadImmediate() -> astl_status_code {
       !_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
-  return ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
+  return SampleCollectionOperations(_configuration->Operations().operationsOnSample);
 }
 
 /**
@@ -88,6 +90,55 @@ auto ScmiIoctlCollector::ExecuteCollectionOperations(OperationSequence const& op
 }
 
 /**
+ * @brief Samples a sequence, using a platform-triggered single read when supported.
+ */
+auto ScmiIoctlCollector::SampleCollectionOperations(OperationSequence const& operations) -> astl_status_code {
+  if (operations.empty()) {
+    return ASTL_STATUS_SUCCESS;
+  }
+  if (_abi_info.has_value() && ScmiTlmHasInstanceFeature(*_abi_info, SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE)) {
+    return ExecuteSingleReadOperations(operations);
+  }
+  return ExecuteCollectionOperations(operations);
+}
+
+/**
+ * @brief Matches samples returned by SCMI_TLM_SINGLE_READ to configured read operations.
+ */
+auto ScmiIoctlCollector::ExecuteSingleReadOperations(OperationSequence const& operations) -> astl_status_code {
+  std::vector<scmi_tlm_de_sample> samples(_abi_info->num_des);
+  uint32_t                        sample_count{};
+  auto                            result = _scmi_ioctl_interface->ReadSingle(samples, sample_count);
+  if (result != ASTL_STATUS_SUCCESS) {
+    return result;
+  }
+  samples.resize(sample_count);
+
+  std::unordered_map<ScmiDataEventId, scmi_tlm_de_sample> samples_by_id;
+  samples_by_id.reserve(samples.size());
+  for (const auto& sample : samples) {
+    samples_by_id.insert_or_assign(sample.id, sample);
+  }
+
+  for (const auto& operation_ptr : operations) {
+    const auto* operation = dynamic_cast<const ScmiReadOperation*>(operation_ptr.get());
+    if (operation == nullptr) {
+      return ASTL_STATUS_BAD_ARGUMENT;
+    }
+    const auto sample = samples_by_id.find(operation->scmi_data_event_id);
+    if (sample == samples_by_id.end()) {
+      ASTL_LOG_ERROR("SCMI_TLM_SINGLE_READ omitted enabled data event ID {:04X}", operation->scmi_data_event_id);
+      return ASTL_STATUS_NO_DATA_COLLECTED;
+    }
+    result = EmitScmiSample(*operation, sample->second);
+    if (result != ASTL_STATUS_SUCCESS) {
+      return result;
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+/**
  * @brief Reads one SCMI data event and forwards the resulting raw sample.
  *
  * @param operation SCMI read operation describing the data event and sample id.
@@ -103,6 +154,14 @@ auto ScmiIoctlCollector::ExecuteScmiReadOperation(ScmiReadOperation const& opera
     return result;
   }
 
+  return EmitScmiSample(operation, sample);
+}
+
+/**
+ * @brief Converts one ioctl sample into an ASTL raw sample and forwards it to the sink.
+ */
+auto ScmiIoctlCollector::EmitScmiSample(ScmiReadOperation const& operation, const scmi_tlm_de_sample& sample)
+    -> astl_status_code {
   const auto timestamp = _use_software_clock_timestamps
                              ? static_cast<HwClockTicks>(ClockMonotonicRaw::now().time_since_epoch().count())
                              : sample.tstamp;
