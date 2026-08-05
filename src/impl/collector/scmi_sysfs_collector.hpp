@@ -973,8 +973,10 @@ auto ScmiSysfsCollector<FileInterfaceT>::ScmiWrite(std::filesystem::path const& 
 
 template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::GetSharedProcessLockState() -> SharedProcessLockState& {
-  static SharedProcessLockState state;
-  return state;
+  // Process-wide owners can destroy collectors after function-local statics have begun teardown. Intentionally retain
+  // this bookkeeping through process teardown; the final collector still releases the filesystem lock.
+  static auto* state = new SharedProcessLockState{};  // NOLINT(cppcoreguidelines-owning-memory)
+  return *state;
 }
 
 template <typename FileInterfaceT>
