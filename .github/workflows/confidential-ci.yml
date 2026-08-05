@@ -31,7 +31,7 @@ jobs:
         id: confidential-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.APAP_APP_APP_ID }}
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
           private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
           owner: Arm-Debug
           repositories: ASTL-confidential
@@ -44,7 +44,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          CORRELATION_ID: ${{ github.repository_id }}-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}
+          CORRELATION_ID: ${{ github.repository_id }}-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: ./scripts/confidential_ci_gate.sh
 
   fork:
@@ -64,7 +64,7 @@ jobs:
         id: confidential-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.APAP_APP_APP_ID }}
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
           private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
           owner: Arm-Debug
           repositories: ASTL-confidential
@@ -77,5 +77,5 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          CORRELATION_ID: ${{ github.repository_id }}-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}
+          CORRELATION_ID: ${{ github.repository_id }}-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: ./scripts/confidential_ci_gate.sh
