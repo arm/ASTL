@@ -57,7 +57,18 @@ jobs:
       - name: 🧪 Run unit tests
         working-directory: ASTL
         run: |
-          ctest --parallel  --test-dir build/release --preset release
+          # basic ctest args used for parallel or serial config. specify the dir with tests and which build preset to use
+          CTEST_ARGS=(--test-dir ${{ github.workspace }}/build/release --preset release)
+
+          # those test labels that can't be run in parallel (might be worth making a special label for these)
+          # mostly these involve setting up some infrastructure like mock scmi
+          # that can't be done twice in parallel due to contention over /dev/fuse or some such.
+          UNPARALLELED_LABELS="integration|time_sensitive|scmi_bridge|mockscmi"
+
+          # run as much in parallel as possible, but exclude the tests that can't be run in parallel
+          ctest --parallel -LE "${UNPARALLELED_LABELS}" "${CTEST_ARGS[@]}"
+          # run the tests that can't be run in parallel
+          ctest -L "${UNPARALLELED_LABELS}" "${CTEST_ARGS[@]}"
 
       - name: 📽️ Run demo with MockScmi
         working-directory: ASTL
