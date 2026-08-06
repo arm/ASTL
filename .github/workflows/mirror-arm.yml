@@ -27,7 +27,7 @@ jobs:
         with:
           client-id: ${{ secrets.ITS_ARM_ORG_APP_ID }}
           private-key: ${{ secrets.ITS_ARM_ORG_APP_PK }}
-          owner: Arm-Debug
+          owner: Arm
 
       - name: Mirror main and tags
         env:
@@ -46,7 +46,7 @@ jobs:
           cd "${mirror_dir}/repo.git"
 
           git remote add target \
-            "https://x-access-token:${DST_TOKEN}@github.com/Arm/ASTL.git"
+            "https://x-access-token:${DST_TOKEN}@github.com/arm/ASTL.git"
 
           git push --force target 'refs/heads/main:refs/heads/main'
           git push --prune target \
