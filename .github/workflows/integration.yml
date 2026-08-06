@@ -19,6 +19,7 @@ permissions:
   actions: write
   contents: read
   checks: write
+  code-quality: write
 
 jobs:
   build-and-test:
@@ -36,7 +37,7 @@ jobs:
             c_compiler: cl
             cpp_compiler: cl
 
-          # Collect code coverage from unit tests and upload it to qlty.io.
+          # Collect code coverage from unit tests and upload it to GitHub and qlty.io.
           - os: ubuntu-24.04-arm
             cmake_preset: debug-valgrind-coverage
             c_compiler: gcc
@@ -59,7 +60,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
 
@@ -161,6 +162,19 @@ jobs:
         with:
           token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
           files: coverage.xml
+
+      - name: ⤴️ Code Coverage - Publish to GitHub
+        if: >-
+          contains(matrix.os, 'ubuntu') &&
+          matrix.c_compiler == 'gcc' &&
+          matrix.cmake_preset == 'debug-valgrind-coverage' &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository)
+        uses: actions/upload-code-coverage@v1
+        with:
+          file: coverage.xml
+          language: C++
+          label: code-coverage/gcovr
 
       - name: 🧪 Run Sample tests
         # Execute tests defined by the CMake configuration.
