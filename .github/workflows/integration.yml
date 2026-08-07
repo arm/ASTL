@@ -19,7 +19,8 @@ permissions:
   actions: write
   contents: read
   checks: write
-  code-quality: write
+  code-quality: write  # required by code coverage to upload code coverage data
+  pull-requests: read  # required by the code coverage upload to identify pr number
 
 jobs:
   build-and-test:
@@ -164,6 +165,8 @@ jobs:
           files: coverage.xml
 
       - name: ⤴️ Code Coverage - Publish to GitHub
+        # publish only coverage data from one build configuration
+        # also permit this upload from PRs in the repo but not from forks.
         if: >-
           contains(matrix.os, 'ubuntu') &&
           matrix.c_compiler == 'gcc' &&
