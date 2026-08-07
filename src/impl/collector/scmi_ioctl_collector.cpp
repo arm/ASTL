@@ -8,8 +8,6 @@
 #include <utility>
 
 #include "astl_logger.hpp"
-#include "astl_utils.hpp"
-#include "collector/scmi_operation_helpers.hpp"
 
 namespace astl {
 
@@ -75,84 +73,6 @@ auto ScmiIoctlCollector::EnableTelemetry() -> astl_status_code {
   }
   config.enable = 1;
   return _scmi_ioctl_interface->SetConfig(config);
-}
-
-/**
- * @brief Configures collection operations and enables their required SCMI data events.
- *
- * @param configuration Collection configuration containing the target, parameters, and operations.
- * @return ASTL_STATUS_SUCCESS on success, or the first setup failure.
- */
-auto ScmiIoctlCollector::ConfigureCollection(CollectionConfiguration&& configuration) -> astl_status_code {
-  std::scoped_lock lock{_collection_mutex};
-  if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::CONFIGURED &&
-      _collection_state != CollectionState::STOPPED) {
-    return ASTL_STATUS_BAD_CONFIGURATION;
-  }
-  if (_collection_state == CollectionState::CONFIGURED) {
-    RollbackConfigurationState("ConfigureCollection replacement");
-  }
-  _use_software_clock_timestamps = IsEnvVarSet(EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS);
-  ASTL_LOG_INFO("ScmiIoctlCollector: use_software_clock_timestamps={}", _use_software_clock_timestamps);
-
-  scmi_tlm_abi_info abi_info{};
-  auto              result = _scmi_ioctl_interface->GetAbiInfo(abi_info);
-  if (result != ASTL_STATUS_SUCCESS || !ScmiTlmAbiInfoIsCompatible(abi_info)) {
-    if (result == ASTL_STATUS_SUCCESS) {
-      result = ASTL_STATUS_NOT_SUPPORTED;
-    }
-    ASTL_LOG_ERROR("Error {} negotiating the SCMI telemetry ioctl ABI for device '{}'", astl::to_string(result),
-                   _scmi_ioctl_interface->DevicePath().string());
-    RollbackConfigurationState("ConfigureCollection failure");
-    return result;
-  }
-  _abi_info = abi_info;
-
-  ASTL_LOG_INFO(
-      "SCMI telemetry ioctl ABI: version={}, abi_features=0x{:08X}, instance_features=0x{:08X}, "
-      "num_des={}, num_groups={}, num_intervals={}, num_shmtis={}, de_implementation_version={}",
-      abi_info.abi_version, abi_info.abi_features, abi_info.features, abi_info.num_des, abi_info.num_groups,
-      abi_info.num_intervals, abi_info.num_shmtis, ScmiIoctlInterface::FormatDeImplementationVersion(abi_info));
-  ASTL_LOG_INFO("SCMI telemetry ioctl capabilities: reset={}, single_read={}, group_config={}, update_notification={}",
-                ScmiTlmCanReset(abi_info), ScmiTlmHasInstanceFeature(abi_info, SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE),
-                ScmiTlmHasInstanceFeature(abi_info, SCMI_TLM_BASE_SUPPORT_GROUP_CONFIG),
-                ScmiTlmHasInstanceFeature(abi_info, SCMI_TLM_BASE_SUPPORT_UPDATE_NOTIFICATION));
-  if (abi_info.abi_version > SCMI_TLM_CURRENT_ABI_VERSION) {
-    ASTL_LOG_INFO("SCMI telemetry ioctl ABI version {} is newer than ASTL's version {}; using the compatible V1 prefix",
-                  abi_info.abi_version, SCMI_TLM_CURRENT_ABI_VERSION);
-  }
-  const auto unknown_abi_features      = abi_info.abi_features & ~kScmiTlmKnownAbiFeatures;
-  const auto unknown_instance_features = abi_info.features & ~kScmiTlmKnownInstanceFeatures;
-  if (unknown_abi_features != 0 || unknown_instance_features != 0) {
-    ASTL_LOG_INFO("SCMI telemetry ioctl exposes future capabilities: abi=0x{:08X}, instance=0x{:08X}",
-                  unknown_abi_features, unknown_instance_features);
-  }
-
-  result = EnableTelemetry();
-  if (result != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("Error {} enabling SCMI Telemetry ioctl device '{}'", astl::to_string(result),
-                   _scmi_ioctl_interface->DevicePath().string());
-    RollbackConfigurationState("ConfigureCollection failure");
-    return result;
-  }
-
-  _configuration          = std::move(configuration);
-  _collection_state       = CollectionState::CONFIGURED;
-  auto all_data_event_ids = scmi_operation_helpers::GetUniqueDataEventIds(_configuration->Operations());
-  auto data_events        = EnableDataEvents(all_data_event_ids);
-  if (!data_events) {
-    RollbackConfigurationState("ConfigureCollection failure");
-    return data_events.error();
-  }
-  _data_events = *data_events;
-
-  scmi_operation_helpers::UpdateReadOperationTimestampRates(_data_events, _configuration->Operations());
-
-  result = ExecuteCollectionOperations(_configuration->Operations().operationsBeforeStart);
-  if (result != ASTL_STATUS_SUCCESS) {
-    RollbackConfigurationState("ConfigureCollection failure");
-  }
-  return result;
 }
 
 /**

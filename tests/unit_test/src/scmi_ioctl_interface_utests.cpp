@@ -117,30 +117,18 @@ TEST_CASE("ScmiIoctlInterface identifies likely telemetry ioctl device names", "
   REQUIRE_FALSE(astl::ScmiIoctlInterface::IsLikelyTelemetryDeviceName("tlm_1_extra"));
 }
 
-TEST_CASE("ScmiIoctlInterface formats data-event implementation version", "[scmi_ioctl_interface]") {
-  scmi_tlm_abi_info                                        info{};
-  constexpr std::array<uint8_t, SCMI_TLM_DE_IMPL_UUID_MAX> implementation_uuid = {
-      0x01U, 0x23U, 0x45U, 0x67U, 0x89U, 0xABU, 0xCDU, 0xEFU, 0x00U, 0x00U, 0x00U, 0x01U, 0xFEU, 0xDCU, 0xBAU, 0x98U,
-  };
-  std::ranges::copy(implementation_uuid, std::ranges::begin(info.de_impl_version));
-
-  REQUIRE(astl::ScmiIoctlInterface::FormatDeImplementationVersion(info) == "0123456789ABCDEF00000001FEDCBA98");
-}
-
-TEST_CASE("SCMI ioctl ABI capability helpers accept future compatible versions", "[scmi_ioctl_interface]") {
-  scmi_tlm_abi_info info{};
-  info.size         = sizeof(info);
-  info.abi_version  = SCMI_TLM_CURRENT_ABI_VERSION + 1;
-  info.abi_features = SCMI_TLM_ABI_FEAT_RESET | (1U << 31);
-  info.features     = SCMI_TLM_BASE_SUPPORT_RESET | SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE | (1U << 30);
-
-  CHECK(astl::ScmiTlmAbiInfoIsCompatible(info));
-  CHECK(astl::ScmiTlmHasAbiFeature(info, SCMI_TLM_ABI_FEAT_RESET));
-  CHECK(astl::ScmiTlmHasInstanceFeature(info, SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE));
-  CHECK(astl::ScmiTlmCanReset(info));
-
-  info.size = sizeof(info) - 1;
-  CHECK_FALSE(astl::ScmiTlmAbiInfoIsCompatible(info));
+TEST_CASE("SCMI ioctl UAPI mirrors the V7 layouts and request sizes", "[scmi_ioctl_interface]") {
+  CHECK(sizeof(scmi_tlm_config) == 24);
+  CHECK(sizeof(scmi_tlm_de_config) == 48);
+  CHECK(sizeof(scmi_tlm_de_info) == 72);
+  CHECK(sizeof(scmi_tlm_batch) == 32);
+#if defined(__linux__)
+  CHECK(_IOC_SIZE(SCMI_TLM_GET_CFG) == sizeof(scmi_tlm_config));
+  CHECK(_IOC_SIZE(SCMI_TLM_GET_DE_CFG) == sizeof(scmi_tlm_batch));
+  CHECK(_IOC_SIZE(SCMI_TLM_SET_DE_CFG) == sizeof(scmi_tlm_batch));
+  // V7 itself encodes data_read for BATCH_READ even though its handler consumes a batch.
+  CHECK(_IOC_SIZE(SCMI_TLM_BATCH_READ) == sizeof(scmi_tlm_data_read));
+#endif
 }
 
 TEST_CASE("ScmiIoctlInterface reports a missing ioctl device without hardware", "[scmi_ioctl_interface]") {
@@ -201,9 +189,10 @@ TEST_CASE("ScmiIoctlInterface opens regular files but reports unsupported ioctl 
   REQUIRE(assigned_interface.IsOpen());
   REQUIRE_FALSE(moved_interface.IsOpen());
 
-  scmi_tlm_abi_info info{};
-  REQUIRE(assigned_interface.GetAbiInfo(info) == ASTL_STATUS_NOT_SUPPORTED);
-  REQUIRE(info.size == sizeof(info));
+  REQUIRE(assigned_interface.Probe() == ASTL_STATUS_NOT_SUPPORTED);
+  REQUIRE_FALSE(assigned_interface.DeImplementationVersion().has_value());
+  REQUIRE_FALSE(assigned_interface.DataEventCount().has_value());
+  REQUIRE_FALSE(assigned_interface.SupportsSingleRead().has_value());
 
   scmi_tlm_config config{};
   REQUIRE(assigned_interface.GetConfig(config) == ASTL_STATUS_NOT_SUPPORTED);

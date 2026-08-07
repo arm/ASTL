@@ -145,6 +145,21 @@ class ScmiIoctlCollector : public ICollector {
   auto EnableTelemetry() -> astl_status_code;
 
   /**
+   * @brief Probes the ioctl device and logs the capabilities used by collection.
+   *
+   * @return ASTL_STATUS_SUCCESS on success, or the first probe failure.
+   */
+  auto ProbeCapabilities() -> astl_status_code;
+
+  /**
+   * @brief Enables telemetry and prepares the requested collection configuration.
+   *
+   * @param configuration Collection configuration to activate.
+   * @return ASTL_STATUS_SUCCESS on success, or the first setup failure.
+   */
+  auto PrepareConfiguration(CollectionConfiguration&& configuration) -> astl_status_code;
+
+  /**
    * @brief Enables each requested data event and records its original state.
    *
    * @param data_events_to_enable SCMI data event identifiers required by the configured operations.
@@ -178,6 +193,23 @@ class ScmiIoctlCollector : public ICollector {
    * @brief Matches samples returned by SCMI_TLM_SINGLE_READ to configured read operations.
    */
   auto ExecuteSingleReadOperations(OperationSequence const& operations) -> astl_status_code;
+
+  /**
+   * @brief Reads the samples returned by one SCMI_TLM_SINGLE_READ request.
+   *
+   * @return Returned samples, or an ioctl failure status.
+   */
+  auto ReadSingleSamples() -> std::expected<std::vector<scmi_tlm_de_sample>, astl_status_code>;
+
+  /**
+   * @brief Matches single-read samples to operations and emits them.
+   *
+   * @param operations Configured operations to satisfy.
+   * @param samples Samples returned by SCMI_TLM_SINGLE_READ.
+   * @return ASTL_STATUS_SUCCESS on success, or the first matching or sink failure.
+   */
+  auto EmitSingleReadSamples(OperationSequence const& operations, std::vector<scmi_tlm_de_sample> const& samples)
+      -> astl_status_code;
 
   /**
    * @brief Reads one SCMI data event and forwards the resulting sample to the raw sample sink.
@@ -241,9 +273,6 @@ class ScmiIoctlCollector : public ICollector {
 
   /** @brief Ioctl interface for the target telemetry device. */
   std::unique_ptr<IScmiIoctlInterface> _scmi_ioctl_interface;
-
-  /** @brief Negotiated V1 ABI prefix, including raw known and future capability bits. */
-  std::optional<scmi_tlm_abi_info> _abi_info;
 
   /** @brief Data events enabled by this collector and their original state. */
   std::vector<ScmiDataEvent> _data_events;

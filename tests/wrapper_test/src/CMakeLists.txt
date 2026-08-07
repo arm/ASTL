@@ -10,15 +10,27 @@ if(NOT CMAKE_BUILD_TYPE)
       CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif()
 
-add_executable(wrapper_test wrapper_test.cpp metric_groups_tests.cpp metric_state_discovery_tests.cpp
-                            summary_api_tests.cpp thread_safety_tests.cpp crop_api_tests.cpp
-                            resource_lifecycle_stress_tests.cpp)
+add_executable(
+  wrapper_test
+  wrapper_test.cpp
+  metric_groups_tests.cpp
+  metric_state_discovery_tests.cpp
+  summary_api_tests.cpp
+  thread_safety_tests.cpp
+  crop_api_tests.cpp
+  resource_lifecycle_stress_tests.cpp)
 
 if(MSVC)
   # Ensure third-party trompeloeil warning suppression is applied on every wrapper test TU.
-  foreach(wrapper_src IN ITEMS wrapper_test.cpp metric_groups_tests.cpp metric_state_discovery_tests.cpp
-                               summary_api_tests.cpp thread_safety_tests.cpp crop_api_tests.cpp
-                               resource_lifecycle_stress_tests.cpp)
+  foreach(
+    wrapper_src IN
+    ITEMS wrapper_test.cpp
+          metric_groups_tests.cpp
+          metric_state_discovery_tests.cpp
+          summary_api_tests.cpp
+          thread_safety_tests.cpp
+          crop_api_tests.cpp
+          resource_lifecycle_stress_tests.cpp)
     set_source_files_properties(${wrapper_src} APPEND_STRING PROPERTY COMPILE_FLAGS " /wd4172")
   endforeach()
 endif()

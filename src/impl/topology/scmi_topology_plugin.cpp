@@ -76,16 +76,18 @@ auto CompareTelemetryDirectoryNames(const std::string& lhs, const std::string& r
 auto DetectIoctlTarget(const std::filesystem::path& device_path)
     -> std::expected<std::unique_ptr<ITarget>, astl_status_code> {
   ScmiIoctlInterface ioctl_interface{device_path};
-  scmi_tlm_abi_info  info{};
-  auto               status = ioctl_interface.GetAbiInfo(info);
+  auto               status = ioctl_interface.Probe();
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_INFO("ScmiTopologyPlugin::ScanForTargets: skipping SCMI ioctl device {}: {}", device_path.string(),
                   astl::to_string(status));
     return {};
   }
 
-  const auto raw_uuid    = ScmiIoctlInterface::FormatDeImplementationVersion(info);
-  const auto uuid_result = scmi::spec::GetNormalizedUuid(raw_uuid);
+  const auto raw_uuid = ioctl_interface.DeImplementationVersion();
+  if (!raw_uuid) {
+    return std::unexpected(raw_uuid.error());
+  }
+  const auto uuid_result = scmi::spec::GetNormalizedUuid(*raw_uuid);
   if (!uuid_result) {
     return std::unexpected(uuid_result.error());
   }

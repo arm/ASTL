@@ -24,9 +24,11 @@ using trompeloeil::_;
 namespace {
 
 struct ScriptedScmiIoctlInterface : public astl::IScmiIoctlInterface {
-  std::filesystem::path                                         device_path{"/dev/scmi/tlm_0"};
-  scmi_tlm_config                                               telemetry_config{};
-  scmi_tlm_abi_info                                             abi_info{};
+  std::filesystem::path device_path{"/dev/scmi/tlm_0"};
+  scmi_tlm_config       telemetry_config{};
+  std::string           de_implementation_version{"00000000000000000000000000000000"};
+  uint32_t              data_event_count{};
+  bool                  supports_single_read{};
   std::unordered_map<astl::ScmiDataEventId, scmi_tlm_de_config> data_event_configs;
   std::unordered_map<astl::ScmiDataEventId, scmi_tlm_de_info>   data_event_infos;
   std::deque<scmi_tlm_de_sample>                                samples;
@@ -37,7 +39,7 @@ struct ScriptedScmiIoctlInterface : public astl::IScmiIoctlInterface {
   size_t                                                        single_read_count{};
   astl_status_code                                              get_config_status{ASTL_STATUS_SUCCESS};
   astl_status_code                                              set_config_status{ASTL_STATUS_SUCCESS};
-  astl_status_code                                              get_abi_info_status{ASTL_STATUS_SUCCESS};
+  astl_status_code                                              probe_status{ASTL_STATUS_SUCCESS};
   astl_status_code                                              get_data_event_config_status{ASTL_STATUS_SUCCESS};
   astl_status_code                                              set_data_event_config_status{ASTL_STATUS_SUCCESS};
   astl_status_code                                              get_data_event_info_status{ASTL_STATUS_SUCCESS};
@@ -45,16 +47,29 @@ struct ScriptedScmiIoctlInterface : public astl::IScmiIoctlInterface {
   astl_status_code                                              read_single_status{ASTL_STATUS_SUCCESS};
   astl_status_code                                              reset_status{ASTL_STATUS_SUCCESS};
 
-  ScriptedScmiIoctlInterface() {
-    abi_info.size        = sizeof(abi_info);
-    abi_info.abi_version = SCMI_TLM_ABI_VERSION_V1;
-  }
-
   auto DevicePath() const -> const std::filesystem::path& override { return device_path; }
 
-  auto GetAbiInfo(scmi_tlm_abi_info& info) -> astl_status_code override {
-    info = abi_info;
-    return get_abi_info_status;
+  auto Probe() -> astl_status_code override { return probe_status; }
+
+  auto DeImplementationVersion() -> std::expected<std::string, astl_status_code> override {
+    if (probe_status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(probe_status);
+    }
+    return de_implementation_version;
+  }
+
+  auto DataEventCount() -> std::expected<uint32_t, astl_status_code> override {
+    if (probe_status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(probe_status);
+    }
+    return data_event_count;
+  }
+
+  auto SupportsSingleRead() -> std::expected<bool, astl_status_code> override {
+    if (probe_status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(probe_status);
+    }
+    return supports_single_read;
   }
 
   auto GetConfig(scmi_tlm_config& config) -> astl_status_code override {
@@ -263,11 +278,10 @@ TEST_CASE("ScmiIoctlCollector rolls back configuration when a pre-start operatio
 
 TEST_CASE("ScmiIoctlCollector configures data events, reads immediate samples, and restores state",
           "[scmi_ioctl_collector]") {
-  auto  scripted_interface              = std::make_unique<ScriptedScmiIoctlInterface>();
-  auto& interface                       = *scripted_interface;
-  interface.telemetry_config.enable     = 0;
-  interface.abi_info.de_impl_version[0] = 0xCAU;
-  interface.abi_info.de_impl_version[1] = 0xFEU;
+  auto  scripted_interface            = std::make_unique<ScriptedScmiIoctlInterface>();
+  auto& interface                     = *scripted_interface;
+  interface.telemetry_config.enable   = 0;
+  interface.de_implementation_version = "CAFE0000000000000000000000000000";
 
   constexpr astl::ScmiDataEventId data_event_id{0x1234U};
   interface.data_event_configs[data_event_id] = MakeDataEventConfig(data_event_id, 0, 0);
@@ -372,14 +386,13 @@ TEST_CASE("ScmiIoctlCollector snapshots native clocks and reports ioctl read fai
   CHECK(failed_correlations.error() == ASTL_STATUS_FILE_ERROR);
 }
 
-TEST_CASE("ScmiIoctlCollector uses advertised V6 single-read support", "[scmi_ioctl_collector]") {
+TEST_CASE("ScmiIoctlCollector uses advertised V7 single-read support", "[scmi_ioctl_collector]") {
   auto  scripted_interface = std::make_unique<ScriptedScmiIoctlInterface>();
   auto& interface          = *scripted_interface;
 
   constexpr astl::ScmiDataEventId data_event_id{0x4567U};
-  interface.abi_info.abi_version              = SCMI_TLM_CURRENT_ABI_VERSION + 1;
-  interface.abi_info.features                 = SCMI_TLM_BASE_SUPPORT_SINGLE_SAMPLE | (1U << 31);
-  interface.abi_info.num_des                  = 1;
+  interface.supports_single_read              = true;
+  interface.data_event_count                  = 1;
   interface.telemetry_config.enable           = 1;
   interface.data_event_configs[data_event_id] = MakeDataEventConfig(data_event_id, 0, 0);
   interface.data_event_infos[data_event_id]   = MakeDataEventInfo(data_event_id, 4);
