@@ -72,14 +72,6 @@ jobs:
           BUMPED_VERSION_STRING=$(${{ github.workspace }}/scripts/bump_version.sh ${{ env.VERSION_BUMP_TYPE }} $INITIAL_VERSION_STRING)
           echo "BUMPED_VERSION_STRING=${BUMPED_VERSION_STRING}" | tee -a $GITHUB_ENV
 
-          # Write VERSION.md early so when the build step runs --version is correct in the artifact executable
-          # This may get overwritten later when branches are forked
-          if [[ "${{ env.VERSION_BUMP_TYPE }}" == "NONE" ]]; then
-            echo "'NONE' bump type does not change VERSION.md"
-          else
-            echo "${BUMPED_VERSION_STRING}" > ${{ github.workspace }}/VERSION.md
-          fi
-
       - name: ⤵️ Install apt-get Dependencies (ubuntu)
         if: contains(matrix.os, 'ubuntu')
         shell: bash
@@ -96,6 +88,7 @@ jobs:
           c_compiler: ${{ matrix.c_compiler }}
           cpp_compiler: ${{ matrix.cpp_compiler }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          version_override: ${{ env.BUMPED_VERSION_STRING }}
 
       - name: 📐 Determine Build Output Architecture
         run: |
@@ -103,18 +96,6 @@ jobs:
           ASTL_BUILD_OUTPUT_DIR="${{ github.workspace }}/build/release/${ASTL_BUILD_ARCH}"
           echo "ASTL_BUILD_ARCH=${ASTL_BUILD_ARCH}" | tee -a $GITHUB_ENV
           echo "ASTL_BUILD_OUTPUT_DIR=${ASTL_BUILD_OUTPUT_DIR}" | tee -a $GITHUB_ENV
-
-      - name: 📄 Filter Config JSON Files
-        run: |
-          # Note: even though the script has "publish" in the name, it does not upload anything or cause side effects
-          ${{ github.workspace }}/scripts/publish_configs.sh --confidential -o "${{ env.ASTL_BUILD_OUTPUT_DIR }}/published_config"
-
-          # Sanity check - Verify that there's at least 1 .json file in the output
-          JSON_FILE_COUNT=$(find "${{ env.ASTL_BUILD_OUTPUT_DIR }}/published_config" -name "*.json" | wc -l)
-          if [[ "$JSON_FILE_COUNT" -eq 0 ]]; then
-            echo "❌ No JSON files found in published_config directory" >&2
-            exit 1
-          fi
 
       - name: 📐 Determine Artifact Names
         id: set_tag_output
@@ -146,57 +127,12 @@ jobs:
           echo "TAG_NAME=${TAG_NAME}" | tee -a $GITHUB_ENV
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
 
-      - name: 📦 Create Library .zip Artifacts
+      - name: 📦 Test and stage public release
         run: |
-
-          mkdir -p "${{ env.STAGING_PATH_01_LIBRARY }}/lib/"
-
-          echo "Copying library binaries..."
-          cp -v "${{ env.ASTL_BUILD_OUTPUT_DIR }}/lib/libastl-0.so" "${{ env.STAGING_PATH_01_LIBRARY }}/lib/"
-          cp -v "${{ env.ASTL_BUILD_OUTPUT_DIR }}/lib/libastl_static-0.a" "${{ env.STAGING_PATH_01_LIBRARY }}/lib/"
-
-          echo "Copying headers..."
-          mkdir -p "${{ env.STAGING_PATH_01_LIBRARY }}/include/astl"
-          # Headers in the build directory are those rendered from .h.in files
-
-          cp -v ${{ github.workspace }}/build/release/include/astl/*.h "${{ env.STAGING_PATH_01_LIBRARY }}/include/astl/"
-          # Most of the non-rendered files are here.  Don't copy .h.in files, as these are templates
-          cp -v ${{ github.workspace }}/include/astl/*.h "${{ env.STAGING_PATH_01_LIBRARY }}/include/astl/"
-
-          echo "Copying config JSON..."
-          cp -vr "${{ env.ASTL_BUILD_OUTPUT_DIR }}/published_config" "${{ env.STAGING_PATH_01_LIBRARY }}/lib/config"
-
-          echo "Copying PDF documentation..."
-          mkdir -p "${{ env.STAGING_PATH_01_LIBRARY }}/doc"
-
-          root_pdf_count=$(find "${{ github.workspace }}/doc" -maxdepth 1 -type f -name "*.pdf" | wc -l)
-
-          echo "Found ${root_pdf_count} PDF(s) in ${{ github.workspace }}/doc"
-
-          if [ "${root_pdf_count}" -eq 0 ]; then
-            echo "❌ Error: No PDF documentation found to include in the release artifact." >&2
-            exit 1
-          fi
-          find "${{ github.workspace }}/doc" -maxdepth 1 -type f -name "*.pdf" -exec cp -v {} "${{ env.STAGING_PATH_01_LIBRARY }}/doc/" \;
-
-          echo "Copying installer metadata..."
-          install -m 0644 "${{ github.workspace }}/VERSION.md" "${{ env.STAGING_PATH_01_LIBRARY }}/VERSION.md"
-          install -m 0755 "${{ github.workspace }}/scripts/release/install.sh" "${{ env.STAGING_PATH_01_LIBRARY }}/install.sh"
-          install -m 0755 "${{ github.workspace }}/scripts/release/uninstall.sh" "${{ env.STAGING_PATH_01_LIBRARY }}/uninstall.sh"
-
-          echo "Generating release manifest..."
-          python3 "${{ github.workspace }}/scripts/generate_release_manifest.py" \
-            --staging-dir "${{ env.STAGING_PATH_01_LIBRARY }}" \
+          scripts/release/stage_release.sh \
+            --skip-build \
             --version "${{ env.BUMPED_VERSION_STRING }}" \
-            --os "${OS_TYPE}" \
-            --arch "${ARCH}" \
-            --variant "library_only"
-
-          cd ${{ env.STAGING_PATH_01_LIBRARY }}/..
-          zip -r -9 "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip" "${{ env.ARTIFACT_NAME_01_LIBRARY }}"
-          sha256sum "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip" > "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip.sha256"
-          echo "Created release package:"
-          ls -sh $(realpath "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip")
+            --output-dir "${{ github.workspace }}"
 
       - name: 🛠️ Prepare Bootstrap Installer Asset
         run: |

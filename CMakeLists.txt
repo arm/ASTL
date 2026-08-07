@@ -379,6 +379,25 @@ set_target_properties(${LIBRARY_NAME} PROPERTIES DEBUG_POSTFIX "d")
 # Definition of CMAKE_INSTALL_LIBDIR, etc
 include(GNUInstallDirs)
 
+# Publish filtered ASTL configuration files under the build lib directory so runtime config lookup can reuse the same
+# location as shared-library artifacts.
+if(UNIX)
+  find_program(BASH_PROGRAM bash REQUIRED)
+  set(ASTL_RUNTIME_CONFIG_DIR "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/config")
+  if(TARGET astl)
+    set(ASTL_RUNTIME_CONFIG_DIR "$<TARGET_FILE_DIR:astl>/config")
+  elseif(TARGET Astl::astl)
+    set(ASTL_RUNTIME_CONFIG_DIR "$<TARGET_FILE_DIR:Astl::astl>/config")
+  endif()
+  add_custom_target(
+    ${LIBRARY_NAME}_publish_configs ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${ASTL_RUNTIME_CONFIG_DIR}
+    COMMAND ${BASH_PROGRAM} ${CMAKE_SOURCE_DIR}/scripts/publish_configs.sh -o ${ASTL_RUNTIME_CONFIG_DIR}
+    COMMENT "Publishing ASTL config files to ${ASTL_RUNTIME_CONFIG_DIR}"
+    VERBATIM)
+  add_dependencies(${LIBRARY_NAME} ${LIBRARY_NAME}_publish_configs)
+endif()
+
 # install the target
 install(
   TARGETS ${PROJECT_NAME}

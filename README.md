@@ -1357,6 +1357,20 @@ Optional:
 python/scripts/vendor_headers.sh --build-dir build/debug
 ```
 
+## Staging a Release Locally
+
+On a Linux host with the normal build prerequisites, build, test, and create the
+public library release package with:
+
+```bash
+scripts/release/stage_release.sh
+```
+
+No source overlay or private repository is required. Use `--version` to stage a
+different version without editing `VERSION.md`, `--output-dir` to choose the
+artifact directory, or repeated `--variant` options to request other variants
+when their corresponding tools are present. Run `--help` for the full interface.
+
 ## Design Diagrams
 
 Mermaid source (`.mmd`) and rendered SVG documentation diagrams live in `doc/design/`.

@@ -217,6 +217,10 @@ if os.path.isfile(_pkg_license_path):
     package_data["astl"].append("LICENSE")
 
 def read_version():
+    override = os.environ.get('ASTL_VERSION_OVERRIDE', '').strip()
+    if override:
+        return override
+
     # Prefer top-level VERSION.md (first non-empty line). Fallback to 0.0.0 if absent.
     ver_file = os.path.join(ROOT, 'VERSION.md')
     try:

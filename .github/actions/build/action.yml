@@ -29,6 +29,10 @@ inputs:
     description: 'ASTL source directory'
     required: false
     default: ${{ github.workspace }}
+  version_override:
+    description: 'Optional ASTL version override'
+    required: false
+    default: ''
 
 runs:
   using: "composite"
@@ -89,6 +93,7 @@ runs:
           -DCMAKE_CXX_COMPILER=${{ inputs.cpp_compiler }} \
           -DCMAKE_C_COMPILER=${{ inputs.c_compiler }} \
           -DATX_STATIC_LINK=${{ inputs.atx_static_link }} \
+          -DASTL_VERSION_OVERRIDE=${{ inputs.version_override }} \
           -S "${{ inputs.source_dir }}" \
           --preset ${{ inputs.cmake_preset }}
 
@@ -103,6 +108,7 @@ runs:
         cmake --version
         cmake \
           -DATX_STATIC_LINK=${{ inputs.atx_static_link }} \
+          -DASTL_VERSION_OVERRIDE=${{ inputs.version_override }} \
           -S "${{ inputs.source_dir }}" \
           --preset ${{ inputs.cmake_preset }}
 
@@ -115,7 +121,9 @@ runs:
         VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
       run: |
         cmake --version
-        cmake -DATX_STATIC_LINK=${{ inputs.atx_static_link }} -S "${{ inputs.source_dir }}" --preset ${{ inputs.cmake_preset }}
+        cmake -DATX_STATIC_LINK=${{ inputs.atx_static_link }} \
+          -DASTL_VERSION_OVERRIDE=${{ inputs.version_override }} \
+          -S "${{ inputs.source_dir }}" --preset ${{ inputs.cmake_preset }}
 
     - name: 🏗️ CMake - Build
       shell: bash

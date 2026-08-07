@@ -96,11 +96,6 @@ copy_and_filter_json_files() {
 	local source_dir="$1"
 	local output_dir="$2"
 	local display_name="$3"
-	local -a find_options=()
-
-	if [[ $INCLUDE_CONFIDENTIAL == true ]]; then
-		find_options=(-L)
-	fi
 
 	if [[ ! -d $source_dir ]]; then
 		echo "Warning: Source directory not found: $source_dir" >&2
@@ -110,7 +105,7 @@ copy_and_filter_json_files() {
 	echo "Copying and filtering $display_name files..."
 
 	# Process JSON files
-	find "${find_options[@]}" "$source_dir" -type f -name "*.json" | while IFS= read -r json_file; do
+	find -L "$source_dir" -type f -name "*.json" | while IFS= read -r json_file; do
 		# Get relative path from source_dir
 		rel_path="${json_file#"$source_dir"/}"
 		output_file="$output_dir/$rel_path"
@@ -167,7 +162,7 @@ copy_and_filter_json_files() {
 	done
 
 	# Copy non-JSON files
-	find "${find_options[@]}" "$source_dir" -type f ! -name "*.json" | while IFS= read -r file; do
+	find -L "$source_dir" -type f ! -name "*.json" | while IFS= read -r file; do
 		rel_path="${file#"$source_dir"/}"
 		output_file="$output_dir/$rel_path"
 		mkdir -p "$(dirname "$output_file")"

@@ -63,7 +63,20 @@ def classify_destination(relative_path: str) -> dict[str, str] | None:
     return None
 
 
-def build_manifest(staging_dir: Path, version: str, os_name: str, arch: str, variant: str) -> dict:
+def build_manifest(
+    staging_dir: Path,
+    version: str,
+    os_name: str,
+    arch: str,
+    variant: str,
+    *,
+    release_profile: str | None = None,
+    products: list[str] | None = None,
+    astl_revision: str | None = None,
+    astl_dirty: bool = False,
+    overlay_revision: str | None = None,
+    overlay_dirty: bool = False,
+) -> dict:
     entries: list[dict] = []
 
     for path in sorted(staging_dir.rglob("*")):
@@ -132,7 +145,7 @@ def build_manifest(staging_dir: Path, version: str, os_name: str, arch: str, var
         },
     ]
 
-    return {
+    manifest = {
         "schema_version": 1,
         "package": {
             "name": "astl",
@@ -149,6 +162,22 @@ def build_manifest(staging_dir: Path, version: str, os_name: str, arch: str, var
         "installer_artifacts": installer_artifacts,
     }
 
+    if release_profile is not None or products:
+        manifest["release"] = {
+            "profile": release_profile,
+            "products": products or [],
+        }
+
+    sources = {}
+    if astl_revision is not None:
+        sources["astl"] = {"revision": astl_revision, "dirty": astl_dirty}
+    if overlay_revision is not None:
+        sources["overlay"] = {"revision": overlay_revision, "dirty": overlay_dirty}
+    if sources:
+        manifest["sources"] = sources
+
+    return manifest
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate a release manifest for an ASTL staging directory.")
@@ -157,9 +186,27 @@ def main() -> int:
     parser.add_argument("--os", required=True, dest="os_name")
     parser.add_argument("--arch", required=True)
     parser.add_argument("--variant", required=True)
+    parser.add_argument("--release-profile")
+    parser.add_argument("--product", action="append", default=[])
+    parser.add_argument("--astl-revision")
+    parser.add_argument("--astl-dirty", action="store_true")
+    parser.add_argument("--overlay-revision")
+    parser.add_argument("--overlay-dirty", action="store_true")
     args = parser.parse_args()
 
-    manifest = build_manifest(args.staging_dir, args.version, args.os_name, args.arch, args.variant)
+    manifest = build_manifest(
+        args.staging_dir,
+        args.version,
+        args.os_name,
+        args.arch,
+        args.variant,
+        release_profile=args.release_profile,
+        products=args.product,
+        astl_revision=args.astl_revision,
+        astl_dirty=args.astl_dirty,
+        overlay_revision=args.overlay_revision,
+        overlay_dirty=args.overlay_dirty,
+    )
     output_path = args.staging_dir / "manifest.json"
     output_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0

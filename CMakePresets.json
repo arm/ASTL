@@ -53,6 +53,14 @@
       "binaryDir": "${sourceDir}/build/${presetName}"
     },
     {
+      "name": "release-static",
+      "inherits": "release",
+      "cacheVariables": {
+        "ATX_STATIC_LINK": "ON"
+      },
+      "binaryDir": "${sourceDir}/build/release-static"
+    },
+    {
       "name": "windows-release",
       "inherits": "release",
       "generator": "Visual Studio 17 2022",
@@ -78,6 +86,11 @@
     {
       "name": "release",
       "configurePreset": "release",
+      "configuration": "Release"
+    },
+    {
+      "name": "release-static",
+      "configurePreset": "release-static",
       "configuration": "Release"
     },
     {

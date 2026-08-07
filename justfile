@@ -26,8 +26,8 @@ _overlay-refresh:
     ./scripts/astl_overlay.sh refresh
 
 # Enable a generic source overlay for this checkout.
-overlay-enable path:
-    ./scripts/astl_overlay.sh enable {{quote(path)}}
+overlay-enable path profile='astl-combined':
+    ./scripts/astl_overlay.sh enable {{quote(path)}} {{quote(profile)}}
 
 # Validate the configured source overlay and staged-file ownership.
 overlay-check:
