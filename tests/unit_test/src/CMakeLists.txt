@@ -95,6 +95,16 @@ catch_discover_tests(
   ENVIRONMENT
   "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
 
+include(AstlValgrindShards)
+astl_add_valgrind_shards(
+  unit_test
+  SHARD_COUNT
+  4
+  TEST_SPEC
+  "~[integration]~[time_sensitive]"
+  ENVIRONMENT
+  "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
+
 add_executable(pure_c_header_smoke pure_c_header_smoke.c)
 set_target_properties(
   pure_c_header_smoke

@@ -49,6 +49,16 @@ if(ASTL_HAVE_LIBSENSORS)
     # prevent valgrind from searching the web and hanging looking for debug symbols
     "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
 
+  include(AstlValgrindShards)
+  astl_add_valgrind_shards(
+    ${TARGET}
+    SHARD_COUNT
+    1
+    TEST_SPEC
+    "~[integration]~[time_sensitive]"
+    ENVIRONMENT
+    "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
+
 else()
   message(STATUS "libsensors support disabled, sensors_collector_utests will not be built")
 endif()

@@ -218,6 +218,7 @@ option(ATX_STATIC_LINK "Also build ATX as a fully static Linux executable" OFF)
 
 # Enable code coverage - typically on debug builds
 option(ENABLE_VALGRIND "Enable run-time memory checking on unit tests" OFF)
+option(ASTL_VALGRIND_TRACK_ORIGINS "Track origins of uninitialized values in Valgrind runs" OFF)
 option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
 if(ENABLE_COVERAGE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -419,7 +420,10 @@ if(ENABLE_VALGRIND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(MEMORYCHECK_TYPE "Valgrind")
 
     set(ASTL_VALGRIND_OPTIONS "--leak-check=full" "--show-leak-kinds=definite,possible"
-                              "--errors-for-leak-kinds=definite,possible" "--track-origins=yes")
+                              "--errors-for-leak-kinds=definite,possible")
+    if(ASTL_VALGRIND_TRACK_ORIGINS)
+      list(APPEND ASTL_VALGRIND_OPTIONS "--track-origins=yes")
+    endif()
     list(JOIN ASTL_VALGRIND_OPTIONS " " ASTL_VALGRIND_OPTIONS)
     set(VALGRIND_COMMAND "${VALGRIND_PATH}")
     set(VALGRIND_COMMAND_OPTIONS "${ASTL_VALGRIND_OPTIONS}")
@@ -459,6 +463,17 @@ if(BUILD_TESTING AND ASTL_BUILD_TESTING)
   add_subdirectory(tests/unit_test)
   if(ASTL_BUILD_TOOLS)
     astl_add_optional_subdirectory(tools/ATX/tests "ATX tests")
+    if(TARGET atx_unit_test)
+      include(AstlValgrindShards)
+      astl_add_valgrind_shards(
+        atx_unit_test
+        SHARD_COUNT
+        1
+        TEST_SPEC
+        "~[integration]~[time_sensitive]"
+        ENVIRONMENT
+        "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
+    endif()
     astl_add_optional_subdirectory(tools/AMX/tests "AMX tests")
   endif()
   add_subdirectory(tests/wrapper_test)
@@ -552,7 +567,7 @@ add_custom_target(
   valgrind
   COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/valgrind.sh ${CMAKE_CURRENT_BINARY_DIR}
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  COMMENT "Running unit tests with Valgrind (runtime memory leak checker)")
+  COMMENT "Running sharded unit tests with Valgrind (runtime memory leak checker)")
 
 # To generate pretty class diagrams and function call graphs with doxygen, run this target after configuring: cmake
 # --build build/debug/ --target doxygen firefox html/index.html

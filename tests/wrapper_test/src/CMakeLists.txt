@@ -70,3 +70,13 @@ catch_discover_tests(
   PROPERTIES
   ENVIRONMENT
   "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
+
+include(AstlValgrindShards)
+astl_add_valgrind_shards(
+  wrapper_test
+  SHARD_COUNT
+  2
+  TEST_SPEC
+  "~[integration]~[time_sensitive]"
+  ENVIRONMENT
+  "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
