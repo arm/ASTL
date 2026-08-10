@@ -177,6 +177,26 @@ auto ProcfsCompositeMetric::Reset() -> void {
 
 auto ProcfsCompositeMetric::Summarize() -> astl_status_code { return ASTL_STATUS_SUCCESS; }
 
+auto ProcfsCompositeMetric::RestoreOperationInputBindings(std::span<const OperationId> operation_ids)
+    -> astl_status_code {
+  if (operation_ids.size() != _procfs_configuration->Inputs().size()) {
+    ASTL_LOG_ERROR("ProcfsCompositeMetric: cannot restore {} operation bindings for metric {} with {} inputs",
+                   operation_ids.size(), _configuration->Name(), _procfs_configuration->Inputs().size());
+    return ASTL_STATUS_BAD_CONFIGURATION;
+  }
+
+  _operation_id_to_input_name.clear();
+  for (std::size_t index = 0; index < operation_ids.size(); ++index) {
+    if (!_operation_id_to_input_name.emplace(operation_ids[index], _procfs_configuration->Inputs()[index].name)
+             .second) {
+      ASTL_LOG_ERROR("ProcfsCompositeMetric: duplicate replay operation id {} for metric {}", operation_ids[index],
+                     _configuration->Name());
+      return ASTL_STATUS_BAD_CONFIGURATION;
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
 auto ProcfsCompositeMetric::EmitPendingBatch() -> astl_status_code {
   if (!_pending_batch.timestamp.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;

@@ -21,6 +21,7 @@
 #include "metric/event_metric.hpp"
 #include "metric/finite_set_metric.hpp"
 #include "metric/metric_manager.hpp"
+#include "metric/procfs_composite_metricconfig.hpp"
 #include "metric/rate_metric.hpp"
 #include "metric/sampled_value_metric.hpp"
 #include "operation/scmi_operation_builder.hpp"
@@ -723,6 +724,74 @@ TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[Metric
   REQUIRE(rebuilt_mgr->ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
 }
 
+TEST_CASE("Serialize(IMetricManager) round-trips procfs composite metrics", "[MetricManager][protobuf]") {
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(MakeTarget("procfs", "unit-test procfs target", astl::CollectorType::PROCFS));
+  const astl::ITarget* target = targets.front().get();
+  REQUIRE(target != nullptr);
+
+  std::vector<astl::ProcfsCompositeMetricConfig::InputBinding> inputs;
+  inputs.push_back({
+      "total", astl::procfs::KeyValueField{"meminfo", "MemTotal", ASTL_VALUE_UINT64}
+  });
+  inputs.push_back({
+      "available", astl::procfs::KeyValueField{"meminfo", "MemAvailable", ASTL_VALUE_UINT64}
+  });
+  auto config = std::make_unique<astl::ProcfsCompositeMetricConfig>(astl::ProcfsCompositeMetricConfig::CreateParams{
+      .name          = "memory-used",
+      .description   = "Memory used",
+      .units         = ASTL_UNITS_BYTES,
+      .value_type    = ASTL_VALUE_UINT64,
+      .identifier    = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+      .metric_type   = ASTL_METRIC_VALUE,
+      .inputs        = std::move(inputs),
+      .formula_text  = "max(total - available, 0)",
+      .metric_groups = {},
+      .metric_id     = "procfs::memory-used",
+  });
+
+  astl::MetricManager metric_manager{MakeCaps(astl::CollectorType::PROCFS)};
+  REQUIRE(metric_manager.RegisterMetric(std::move(config), {target}) == ASTL_STATUS_SUCCESS);
+  auto metrics = metric_manager.GetAvailableMetrics(target);
+  REQUIRE(metrics.has_value());
+  REQUIRE(metrics->size() == 1);
+
+  const auto* const metric_handle = metrics->front();
+  auto              operations    = metric_manager.GetRequiredOperations({&metric_handle, 1}, target);
+  REQUIRE(operations.has_value());
+  REQUIRE(operations->operationsOnSample.size() == 2);
+  const auto first_operation_id  = operations->operationsOnSample[0]->GetId();
+  const auto second_operation_id = operations->operationsOnSample[1]->GetId();
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(Serialize(static_cast<const astl::IMetricManager&>(metric_manager), cache_stream) == ASTL_STATUS_SUCCESS);
+  cache_stream.seekg(0);
+
+  auto rebuilt = Deserialize<std::unique_ptr<astl::IMetricManager>>(cache_stream, targets);
+  REQUIRE(rebuilt.has_value());
+  auto rebuilt_manager = std::move(*rebuilt);
+
+  auto rebuilt_metrics = rebuilt_manager->GetAvailableMetrics(target);
+  REQUIRE(rebuilt_metrics.has_value());
+  REQUIRE(rebuilt_metrics->size() == 1);
+  const auto* rebuilt_handle = static_cast<const astl::MetricHandle*>(rebuilt_metrics->front());
+  REQUIRE(dynamic_cast<const astl::ProcfsCompositeMetricConfig*>(rebuilt_handle->config.get()) != nullptr);
+
+  astl::ClockCorrelationMap correlations;
+  correlations[first_operation_id] =
+      astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}}, uint64_t{0},
+                                      astl::MakeTickRatio<astl::SampleMicroseconds>()};
+  correlations[second_operation_id] = correlations[first_operation_id];
+  rebuilt_manager->SetClockCorrelations(correlations);
+
+  astl::RawSamplesMap samples;
+  samples[target] = {
+      MakeSample(first_operation_id, AstlValue{uint64_t{100}}, 1000),
+      MakeSample(second_operation_id, AstlValue{uint64_t{25}}, 1000),
+  };
+  REQUIRE(rebuilt_manager->ProcessRawSamples(samples) == ASTL_STATUS_SUCCESS);
+}
+
 TEST_CASE("Serialize(IMetricManager) round-trips counters through MetricManager", "[MetricManager][protobuf]") {
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.push_back(
@@ -988,6 +1057,45 @@ TEST_CASE("Deserialize<MetricManager> rejects metric groups without top-level me
   auto mgr_or_err = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
   REQUIRE_FALSE(mgr_or_err.has_value());
   REQUIRE(mgr_or_err.error() == ASTL_STATUS_BAD_CONFIGURATION);
+}
+
+TEST_CASE("Deserialize<MetricManager> rejects malformed procfs composite metrics", "[MetricManager][protobuf]") {
+  InstallSingleScmiTargetTlm0();
+  const auto& targets = astl::Orchestrator::GetInstance()->get()->GetTargets();
+
+  const auto build_composite_proto = []() {
+    auto  proto_manager = BuildValidMetricManagerProto();
+    auto* config        = proto_manager.mutable_metrics()->mutable_metrics(0)->mutable_config();
+    config->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::PROCFS));
+    auto* composite = config->mutable_procfs_composite();
+    composite->add_input_names("first");
+    composite->add_input_names("second");
+    composite->set_formula("first + second");
+    return proto_manager;
+  };
+
+  const auto deserialize = [&targets](astl::protobuf::MetricManager& proto_manager) {
+    std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+    REQUIRE(proto_manager.SerializeToOstream(&cache_stream));
+    cache_stream.seekg(0);
+    return Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+  };
+
+  SECTION("duplicate input names") {
+    auto  proto_manager = build_composite_proto();
+    auto* composite = proto_manager.mutable_metrics()->mutable_metrics(0)->mutable_config()->mutable_procfs_composite();
+    composite->set_input_names(1, "first");
+    for (uint32_t operation_id : {41U, 42U}) {
+      auto* operation = proto_manager.add_operation_to_metric_map();
+      operation->set_operation_id(operation_id);
+      operation->set_metric_id("test_metric");
+      operation->set_target_id("tlm-0");
+    }
+
+    auto result = deserialize(proto_manager);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
 }
 
 TEST_CASE("Deserialize<MetricManager> rejects invalid operation map references", "[MetricManager][protobuf]") {

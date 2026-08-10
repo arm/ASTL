@@ -15,6 +15,7 @@
 #include "metric/finite_set_metric.hpp"
 #include "metric/formula_builder.hpp"
 #include "metric/metric_manager.hpp"
+#include "metric/procfs_composite_metricconfig.hpp"
 #include "metric/rate_metric.hpp"
 #include "metric/sampled_value_metric.hpp"
 #include "serdes/metrics.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
@@ -220,6 +221,15 @@ auto SerializeBasicMetricConfig(const MetricConfig& config)
   out.set_collector_type(ToProtoCollectorType(config.GetCollectorType()));
   SerializeFormula(config.GetFormula(), out.mutable_formula());
 
+  if (const auto* composite_config = dynamic_cast<const ProcfsCompositeMetricConfig*>(&config)) {
+    auto* proto_composite = out.mutable_procfs_composite();
+    for (const auto& input : composite_config->Inputs()) {
+      proto_composite->add_input_names(input.name);
+    }
+    proto_composite->set_requires_previous(composite_config->RequiresPrevious());
+    proto_composite->set_formula(composite_config->FormulaText());
+  }
+
   return out;
 }
 
@@ -323,6 +333,43 @@ auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& proto_cfg,
   return cfg;
 }
 
+static auto DeserializeProcfsCompositeMetricConfig(const astl::protobuf::MetricConfig& proto_cfg,
+                                                   const std::string&                  metric_id)
+    -> std::expected<std::unique_ptr<ProcfsCompositeMetricConfig>, astl_status_code> {
+  if (!proto_cfg.has_procfs_composite() || proto_cfg.procfs_composite().input_names().empty() ||
+      proto_cfg.procfs_composite().formula().empty()) {
+    ASTL_LOG_ERROR("DeserializeProcfsCompositeMetricConfig: incomplete composite payload for metric {}", metric_id);
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  std::unordered_set<std::string>                        input_names;
+  std::vector<ProcfsCompositeMetricConfig::InputBinding> inputs;
+  inputs.reserve(static_cast<std::size_t>(proto_cfg.procfs_composite().input_names_size()));
+  for (const auto& input_name : proto_cfg.procfs_composite().input_names()) {
+    if (input_name.empty() || !input_names.emplace(input_name).second) {
+      ASTL_LOG_ERROR("DeserializeProcfsCompositeMetricConfig: invalid or duplicate input name '{}' for metric {}",
+                     input_name, metric_id);
+      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    }
+    inputs.push_back(ProcfsCompositeMetricConfig::InputBinding{input_name, procfs::KeyValueField{}});
+  }
+
+  std::vector<std::string> groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
+  return std::make_unique<ProcfsCompositeMetricConfig>(ProcfsCompositeMetricConfig::CreateParams{
+      .name              = proto_cfg.metric_name(),
+      .description       = proto_cfg.description(),
+      .units             = FromProtoUnits(proto_cfg.units()),
+      .value_type        = FromProtoValueType(proto_cfg.value_type()),
+      .identifier        = FromProtoMetricIdentifier(proto_cfg.identifier()),
+      .metric_type       = FromProtoMetricType(proto_cfg.metric_type()),
+      .inputs            = std::move(inputs),
+      .requires_previous = proto_cfg.procfs_composite().requires_previous(),
+      .formula_text      = proto_cfg.procfs_composite().formula(),
+      .metric_groups     = std::move(groups),
+      .metric_id         = metric_id,
+  });
+}
+
 static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig& proto_cfg,
                                              const std::string&                  metric_id)
     -> std::expected<std::unique_ptr<FiniteSetMetricConfig>, astl_status_code> {
@@ -417,77 +464,64 @@ static auto DeserializeBasicMetric(const astl::protobuf::RawMetric& raw, ConfigT
   return result;
 }
 
+static auto DeserializeProcfsCompositeMetric(const astl::protobuf::RawMetric&             raw,
+                                             const std::vector<std::unique_ptr<ITarget>>& targets)
+    -> std::expected<MetricConfigAndResults, astl_status_code> {
+  auto config = DeserializeProcfsCompositeMetricConfig(raw.config(), raw.metric_id());
+  if (!config) {
+    return std::unexpected(config.error());
+  }
+
+  auto& composite_config = config.value();
+  auto  metrics =
+      DeserializeBasicMetric<ProcfsCompositeMetric, ProcfsCompositeMetricConfig>(raw, composite_config.get(), targets);
+  if (!metrics) {
+    ASTL_LOG_ERROR("DeserializeProcfsCompositeMetric: failed to deserialize metric {}", composite_config->Name());
+    return std::unexpected(metrics.error());
+  }
+
+  return MetricConfigAndResults{std::move(composite_config), std::move(metrics.value())};
+}
+
+template <typename MetricT>
+static auto DeserializeMetricWithBasicConfig(const astl::protobuf::RawMetric&             raw,
+                                             const std::vector<std::unique_ptr<ITarget>>& targets)
+    -> std::expected<MetricConfigAndResults, astl_status_code> {
+  auto config = DeserializeBasicMetricConfig(raw.config(), raw.metric_id());
+  if (!config) {
+    ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
+    return std::unexpected(config.error());
+  }
+
+  auto& metric_config = config.value();
+  auto  metrics       = DeserializeBasicMetric<MetricT>(raw, metric_config.get(), targets);
+  if (!metrics) {
+    ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", metric_config->Name());
+    return std::unexpected(metrics.error());
+  }
+
+  return MetricConfigAndResults{std::move(metric_config), std::move(metrics.value())};
+}
+
 static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl::protobuf::RawMetric& raw,
                                      const std::vector<std::unique_ptr<ITarget>>& targets)
     -> std::expected<MetricConfigAndResults, astl_status_code> {
   switch (metric_type) {
     case ASTL_METRIC_VALUE: {
-      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config(), raw.metric_id());
-      if (!cfg_or_err) {
-        ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
-        return std::unexpected(cfg_or_err.error());
+      if (raw.config().has_procfs_composite()) {
+        return DeserializeProcfsCompositeMetric(raw, targets);
       }
-
-      auto& cfg            = cfg_or_err.value();
-      auto  metrics_or_err = DeserializeBasicMetric<SampledValueMetric>(raw, cfg.get(), targets);
-      if (!metrics_or_err) {
-        ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
-        return std::unexpected(metrics_or_err.error());
-      }
-
-      return MetricConfigAndResults{std::move(cfg), std::move(metrics_or_err.value())};
+      return DeserializeMetricWithBasicConfig<SampledValueMetric>(raw, targets);
     }
 
-    case ASTL_METRIC_EVENT: {
-      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config(), raw.metric_id());
-      if (!cfg_or_err) {
-        ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
-        return std::unexpected(cfg_or_err.error());
-      }
+    case ASTL_METRIC_EVENT:
+      return DeserializeMetricWithBasicConfig<EventMetric>(raw, targets);
 
-      auto& cfg            = cfg_or_err.value();
-      auto  metrics_or_err = DeserializeBasicMetric<EventMetric>(raw, cfg.get(), targets);
-      if (!metrics_or_err) {
-        ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
-        return std::unexpected(metrics_or_err.error());
-      }
+    case ASTL_METRIC_DELTA:
+      return DeserializeMetricWithBasicConfig<DeltaMetric>(raw, targets);
 
-      return MetricConfigAndResults{std::move(cfg), std::move(metrics_or_err.value())};
-    }
-
-    case ASTL_METRIC_DELTA: {
-      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config(), raw.metric_id());
-      if (!cfg_or_err) {
-        ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
-        return std::unexpected(cfg_or_err.error());
-      }
-
-      auto& cfg            = cfg_or_err.value();
-      auto  metrics_or_err = DeserializeBasicMetric<DeltaMetric>(raw, cfg.get(), targets);
-      if (!metrics_or_err) {
-        ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
-        return std::unexpected(metrics_or_err.error());
-      }
-
-      return MetricConfigAndResults{std::move(cfg), std::move(metrics_or_err.value())};
-    }
-
-    case ASTL_METRIC_RATE: {
-      auto cfg_or_err = DeserializeBasicMetricConfig(raw.config(), raw.metric_id());
-      if (!cfg_or_err) {
-        ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
-        return std::unexpected(cfg_or_err.error());
-      }
-
-      auto& cfg            = cfg_or_err.value();
-      auto  metrics_or_err = DeserializeBasicMetric<RateMetric>(raw, cfg.get(), targets);
-      if (!metrics_or_err) {
-        ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", cfg->Name());
-        return std::unexpected(metrics_or_err.error());
-      }
-
-      return MetricConfigAndResults{std::move(cfg), std::move(metrics_or_err.value())};
-    }
+    case ASTL_METRIC_RATE:
+      return DeserializeMetricWithBasicConfig<RateMetric>(raw, targets);
 
     case ASTL_METRIC_FINITE_SET_VALUE: {
       auto cfg_or_err = DeserializeFiniteSetMetricConfig(raw.config(), raw.metric_id());
@@ -883,7 +917,8 @@ static auto RebuildOperationMap(const astl::protobuf::MetricManager&            
                                 const std::vector<std::unique_ptr<MetricHandle>>&  metric_handles,
                                 const std::vector<std::unique_ptr<CounterHandle>>& counter_handles)
     -> std::expected<MetricManager::TargetOperationToMetricMap, astl_status_code> {
-  MetricManager::TargetOperationToMetricMap target_to_operation_to_metric_map;
+  MetricManager::TargetOperationToMetricMap                            target_to_operation_to_metric_map;
+  std::unordered_map<ProcfsCompositeMetric*, std::vector<OperationId>> composite_operation_ids;
 
   for (const auto& entry : proto_manager.operation_to_metric_map()) {
     const uint32_t     op_id     = entry.operation_id();
@@ -905,6 +940,16 @@ static auto RebuildOperationMap(const astl::protobuf::MetricManager&            
     if (!op_map.emplace(op_id, found_metric).second) {
       ASTL_LOG_ERROR("Deserialize<MetricManager>: duplicate operation id {} on target '{}'", op_id, target_id);
       return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    }
+    if (auto* composite_metric = dynamic_cast<ProcfsCompositeMetric*>(found_metric)) {
+      composite_operation_ids[composite_metric].push_back(op_id);
+    }
+  }
+
+  for (auto& [metric, operation_ids] : composite_operation_ids) {
+    std::ranges::sort(operation_ids);
+    if (const auto status = metric->RestoreOperationInputBindings(operation_ids); status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(status);
     }
   }
 

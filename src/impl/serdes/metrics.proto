@@ -59,6 +59,12 @@ message MetricFormula {
   }
 }
 
+message ProcfsCompositeMetric {
+  repeated string input_names = 1;
+  bool requires_previous      = 2;
+  string formula              = 3;
+}
+
 message MetricConfig {
   string          metric_name   = 1;
   string          description   = 2;
@@ -76,6 +82,7 @@ message MetricConfig {
   oneof metric {
     ResidencyMetric residency_metric = 20;
     FiniteSetMetric finite_set       = 21;
+    ProcfsCompositeMetric procfs_composite = 22;
     // future derived metric messages go here
   }
 }

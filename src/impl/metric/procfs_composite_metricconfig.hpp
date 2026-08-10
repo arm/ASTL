@@ -8,6 +8,7 @@
 #include <expected>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -72,6 +73,7 @@ class ProcfsCompositeMetric final : public RawMetric {
   auto ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code override;
   auto Reset() -> void override;
   auto Summarize() -> astl_status_code override;
+  auto RestoreOperationInputBindings(std::span<const OperationId> operation_ids) -> astl_status_code;
 
  private:
   struct PendingBatch {
