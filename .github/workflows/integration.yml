@@ -19,8 +19,10 @@ permissions:
   actions: write
   contents: read
   checks: write
-  code-quality: write  # required by code coverage to upload code coverage data
-  pull-requests: read  # required by the code coverage upload to identify pr number
+  # required by code coverage to upload code coverage data
+  code-quality: write
+  # required by the code coverage upload to identify pr number
+  pull-requests: read
 
 jobs:
   build-and-test:

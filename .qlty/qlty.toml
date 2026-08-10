@@ -65,6 +65,9 @@ test_patterns = [
 [smells]
 mode = "comment"
 
+[plugins.definitions.actionlint]
+config_files = ["actionlint.yaml", "actionlint.yml"]
+
 [[source]]
 name = "default"
 default = true

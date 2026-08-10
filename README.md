@@ -1210,6 +1210,64 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
+### Development hooks
+
+ASTL uses the [pre-commit](https://pre-commit.com/) framework to format staged
+files and run local quality checks.
+
+To enable this, ensure you have the following dev tools installed:
+
+- `pre-commit`
+- the [Qlty CLI](https://docs.qlty.sh/cli/quickstart)
+- `clang-format`
+- `cmakelang`
+- `cppcheck`
+- REUSE 3.3 or later
+- `jq`.
+
+Configure the debug preset once so that cppcheck can
+`build/debug/compile_commands.json`, then install the hooks:
+
+```sh
+cmake -S . --preset debug
+./scripts/hooks/install_hooks.sh
+```
+
+The installer selects the Arm-Debug configuration only when `origin` is
+`github.com/Arm-Debug/ASTL`; all other clones use the public configuration. Use
+`--internal` or `--public` to override detection for a fork or unusual remote
+layout.
+
+Before each commit, staged files are formatted and re-staged, then Qlty and the
+license checks run. Cppcheck runs when staged C or C++ source or header files
+change. After those checks pass, the commit-message hook adds a
+`Pre-Commit-Ran: true` trailer. Pull requests report non-blocking warnings for
+non-merge commits without this trailer to help the team identify checkouts that
+have not installed the hooks. A bot comment makes the warning visible in the
+pull request conversation and is removed once every non-merge commit has the
+trailer. The Arm-Debug configuration also installs
+ossmosis staged-content and commit-message checks. Without the confidential
+overlay, ossmosis uses its zero-config public policy. If the overlay later
+supplies `.ossmosis.json`, the next commit automatically uses that policy
+without reinstalling the hooks. The public configuration never downloads or
+runs ossmosis.
+
+Run every public hook manually with:
+
+```sh
+pre-commit run --config .pre-commit-config.yaml --all-files
+```
+
+For an Arm-Debug checkout, substitute
+`.pre-commit-config-arm-debug.yaml`. Run one hook by appending its id, or skip
+selected hooks for one commit with a comma-separated list such as
+`SKIP=cppcheck,license-lint git commit`. To uninstall, run:
+
+```sh
+pre-commit uninstall --hook-type pre-commit
+pre-commit uninstall --hook-type commit-msg
+```
+
 ### Compile and test with specific compiler or build type
 
 If you want to choose a specific compiler that's not specified in `CMakePresets.json`, you

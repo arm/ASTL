@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  - repo: local
+    hooks:
+      - id: format-staged
+        name: format staged files
+        entry: ./scripts/format.sh --staged
+        language: system
+        pass_filenames: false
+        always_run: true
+        fail_fast: true
+        stages: [pre-commit]
+      - id: qlty-check
+        name: qlty check
+        entry: qlty check --no-fix
+        language: system
+        stages: [pre-commit]
+      - id: license-lint
+        name: license lint
+        entry: ./scripts/license_lint.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+      - id: cppcheck
+        name: cppcheck
+        entry: ./scripts/cppcheck.sh build/debug
+        language: system
+        pass_filenames: false
+        files: '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$'
+        stages: [pre-commit]
+      - id: cmake-lint
+        name: cmake lint
+        entry: ./scripts/cmake_lint.sh
+        language: system
+        files: '\.(cmake|CMakeLists.txt)$'
+        stages: [pre-commit]
+      - id: add-pre-commit-trailer
+        name: add pre-commit trailer
+        entry: ./scripts/hooks/add_pre_commit_trailer.sh
+        language: system
+        always_run: true
+        stages: [commit-msg]

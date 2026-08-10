@@ -4,75 +4,71 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# Install git hooks for auto-formatting and license linting
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-HOOKS_DIR="$REPO_ROOT/.git/hooks"
-PRE_COMMIT_HOOK_FILE="$HOOKS_DIR/pre-commit"
-
-echo "Installing git hooks..."
-
-# Check if .git directory exists
-if [ ! -d "$REPO_ROOT/.git" ]; then
-	echo "Error: Not a git repository. Run this from within the ASTL repository."
-	exit 1
-fi
-
-# Create hooks directory if it doesn't exist
-mkdir -p "$HOOKS_DIR"
-
-# Create the pre-commit hook
-cat >"$PRE_COMMIT_HOOK_FILE" <<'EOF'
-#!/bin/bash
-# Git hook to auto-format staged files and run license lint checks before commit
+# Install the appropriate pre-commit configuration for this checkout.
 
 set -euo pipefail
 
-HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$HOOKS_DIR/../.." && pwd)"
-FORMAT_SCRIPT="$REPO_ROOT/scripts/format.sh"
-LICENSE_LINT_SCRIPT="$REPO_ROOT/scripts/license_lint.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(git -C "$SCRIPT_DIR/../.." rev-parse --show-toplevel 2>/dev/null)" || {
+	echo "Error: ASTL hook installation requires a Git checkout." >&2
+	exit 2
+}
 
-if [ ! -x "$FORMAT_SCRIPT" ]; then
-	echo "❌ Missing executable format script: $FORMAT_SCRIPT"
-	exit 1
+usage() {
+	echo "Usage: $0 [--internal|--public]" >&2
+	exit 2
+}
+
+normalize_github_repo() {
+	local url="${1%.git}"
+	url="${url%/}"
+	case "$url" in
+	git@github.com:*) printf 'github.com/%s\n' "${url#git@github.com:}" ;;
+	ssh://git@github.com/*) printf 'github.com/%s\n' "${url#ssh://git@github.com/}" ;;
+	https://github.com/*) printf 'github.com/%s\n' "${url#https://github.com/}" ;;
+	http://github.com/*) printf 'github.com/%s\n' "${url#http://github.com/}" ;;
+	*) printf '%s\n' "$url" ;;
+	esac
+}
+
+mode="auto"
+case "${1:-}" in
+"") ;;
+--internal) mode="internal" ;;
+--public) mode="public" ;;
+*) usage ;;
+esac
+[[ $# -le 1 ]] || usage
+
+if ! command -v pre-commit >/dev/null 2>&1; then
+	echo "Error: pre-commit is required. Install it from https://pre-commit.com/." >&2
+	exit 2
 fi
 
-if [ ! -x "$LICENSE_LINT_SCRIPT" ]; then
-	echo "❌ Missing executable license lint script: $LICENSE_LINT_SCRIPT"
-	exit 1
+origin_url="$(git -C "$REPO_ROOT" config --get remote.origin.url 2>/dev/null || true)"
+normalized_origin="$(normalize_github_repo "$origin_url")"
+if [[ $mode == "auto" ]]; then
+	if [[ $normalized_origin == "github.com/Arm-Debug/ASTL" ]]; then
+		mode="internal"
+	else
+		mode="public"
+	fi
 fi
 
-STAGED_FILES=()
-while IFS= read -r file; do
-	STAGED_FILES+=("$file")
-done < <(git diff --cached --name-only --diff-filter=ACMR)
-
-if [ "${#STAGED_FILES[@]}" -gt 0 ]; then
-	echo "Running formatter before commit"
-	"$FORMAT_SCRIPT"
-
-	echo "Re-staging formatted files"
-	for file in "${STAGED_FILES[@]}"; do
-		if [ -e "$REPO_ROOT/$file" ]; then
-			git add -- "$file"
-		fi
-	done
+if [[ $mode == "internal" ]]; then
+	config=".pre-commit-config-arm-debug.yaml"
+else
+	config=".pre-commit-config.yaml"
 fi
 
-echo "Running license lint before commit"
+if [[ ! -f "$REPO_ROOT/$config" ]]; then
+	echo "Error: selected pre-commit configuration is missing: $config" >&2
+	exit 2
+fi
 
-"$LICENSE_LINT_SCRIPT"
-EOF
-
-# Make the hooks executable
-chmod +x "$PRE_COMMIT_HOOK_FILE"
-
-echo "✓ Auto-format and license pre-commit hook installed at: $PRE_COMMIT_HOOK_FILE"
-echo ""
-echo "The pre-commit hook will run scripts/format.sh, re-stage any staged files it changed,"
-echo "and then run scripts/license_lint.sh before each commit."
-echo ""
-echo "To uninstall:"
-echo "  rm $PRE_COMMIT_HOOK_FILE"
+echo "Installing $mode ASTL hooks from $config"
+(
+	cd "$REPO_ROOT"
+	pre-commit install --config "$config" --install-hooks --overwrite
+)
+echo "Installed ASTL pre-commit and commit-msg hooks."

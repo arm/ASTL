@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Path-specific configurations.
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    # https://github.com/rhysd/actionlint/pull/658
+    # actionlint 1.7.7 does not know about the code-quality permission scope.
+    ignore:
+      - 'unknown permission scope "code-quality"\.'

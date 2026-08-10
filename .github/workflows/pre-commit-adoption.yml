@@ -1,0 +1,106 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+name: Pre-commit Hook Adoption
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: pre-commit-adoption-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-trailers:
+    name: Check pre-commit hook adoption
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check trailers and update pull request comment
+        continue-on-error: true
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const marker = '<!-- astl-pre-commit-adoption -->';
+            const hasTrailer = (message) => {
+              const paragraphs = message.replace(/\r\n/g, '\n').trimEnd().split(/\n[ \t]*\n/);
+              return paragraphs.at(-1)?.split('\n').some((line) =>
+                line.trim() === 'Pre-Commit-Ran: true'
+              ) ?? false;
+            };
+
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              ...context.repo,
+              pull_number: context.issue.number,
+              per_page: 100,
+            });
+            const missing = commits.filter((commit) =>
+              commit.parents.length < 2 && !hasTrailer(commit.commit.message)
+            );
+
+            for (const commit of missing) {
+              core.warning(
+                `Commit ${commit.sha.slice(0, 7)} does not contain the pre-commit trailer`,
+                {title: 'Pre-commit hook not detected'}
+              );
+            }
+
+            core.summary.addHeading('Pre-commit hook adoption');
+            if (missing.length === 0) {
+              core.summary.addRaw(
+                'All non-merge commits in this pull request contain `Pre-Commit-Ran: true`.'
+              );
+            } else {
+              core.summary.addRaw(
+                `Warning: ${missing.length} non-merge commit(s) do not contain ` +
+                '`Pre-Commit-Ran: true`.\n\n' +
+                'Run `./scripts/hooks/install_hooks.sh` to install the ASTL pre-commit hooks.'
+              );
+            }
+            await core.summary.write();
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user?.login === 'github-actions[bot]' &&
+              comment.body?.includes(marker)
+            );
+
+            if (missing.length === 0) {
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  ...context.repo,
+                  comment_id: existing.id,
+                });
+              }
+              return;
+            }
+
+            const commitGrammar = missing.length === 1 ? 'commit does' : 'commits do';
+            const body = `${marker}
+            ### Pre-commit hook adoption
+
+            ⚠️ ${missing.length} non-merge ${commitGrammar} not contain \`Pre-Commit-Ran: true\`.
+
+            Run \`./scripts/hooks/install_hooks.sh\` to install the ASTL pre-commit hooks.`;
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

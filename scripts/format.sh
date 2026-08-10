@@ -8,6 +8,35 @@
 # run this from the repo root, or from CI
 set -eu -o pipefail
 
+mode="all"
+case "${1:-}" in
+"") ;;
+--staged) mode="staged" ;;
+*)
+	echo "Usage: $0 [--staged]" >&2
+	exit 2
+	;;
+esac
+if [[ $# -gt 1 ]]; then
+	echo "Usage: $0 [--staged]" >&2
+	exit 2
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
+STAGED_FILES=()
+if [[ $mode == "staged" ]]; then
+	while IFS= read -r -d '' file; do
+		STAGED_FILES+=("$file")
+	done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+	if [[ ${#STAGED_FILES[@]} -eq 0 ]]; then
+		echo "No staged files to format."
+		exit 0
+	fi
+fi
+
 # Check for clang-format
 if ! command -v clang-format >/dev/null 2>&1; then
 	echo "❌ clang-format is not installed."
@@ -18,16 +47,15 @@ if ! command -v clang-format >/dev/null 2>&1; then
 	exit 1
 fi
 
-if ! command -v cmake-lint >/dev/null 2>&1; then
-	echo "❌ cmake-lint is not installed."
-	echo "👉 Please install cmakelang (provides cmake-lint and cmake-format):"
-	echo "   python3 -m pip install --user cmakelang[YAML]    # any OS with Python"
+if ! command -v cmake-format >/dev/null 2>&1; then
+	echo "❌ cmake-format is not installed."
+	echo "👉 Please install the cmakelang Python package (not Homebrew's cmakelint):"
+	echo "   brew install pipx && pipx install 'cmakelang[YAML]' # recommended on macOS"
+	echo "   python3 -m pip install --user 'cmakelang[YAML]' # other Python setups"
 	exit 1
 fi
 
 # use utils.sh's get_all_source_files to export SOURCE_FILES array
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 echo 'Running utils.sh'
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}"/utils.sh
@@ -56,7 +84,9 @@ find . \( -path './CMakeLists.txt' \
 if ! command -v qlty >/dev/null 2>&1; then
 	echo "❌ qlty cli tool is not installed to auto-format .sh files."
 	echo "👉 Please install it with the instructions here: https://docs.qlty.sh/cli/quickstart"
-	exit 0
+	qlty_available=false
+else
+	qlty_available=true
 fi
 
 # https://confluence.arm.com/display/ITINFRA/Using+npm+Mirrors
@@ -64,7 +94,9 @@ fi
 
 PUBLIC_NPM="https://registry.npmjs.org/"
 
-echo 'Checking connectivity to public npm registry'
+if [[ $qlty_available == true ]]; then
+	echo 'Checking connectivity to public npm registry'
+fi
 probe() { # fast: 1s connect timeout, 2s overall, no output
 	curl --silent --head --fail \
 		--connect-timeout 1 --max-time 2 \
@@ -72,11 +104,22 @@ probe() { # fast: 1s connect timeout, 2s overall, no output
 }
 
 # if we can't connect to the public npm register, use the artifactory mirror
-if ! probe "$PUBLIC_NPM"; then
+if [[ $qlty_available == true ]] && ! probe "$PUBLIC_NPM"; then
 	npm config set registry https://artifactory.arm.com/artifactory/api/npm/mirrors.npmjs_org
 fi
 
-echo 'Running qlty'
-qlty fmt ./scripts/
-qlty fmt ./*.md
-qlty fmt ./.github/
+if [[ $qlty_available == true ]]; then
+	echo 'Running qlty'
+	qlty fmt ./scripts/
+	qlty fmt ./*.md
+	qlty fmt ./.github/
+fi
+
+if [[ $mode == "staged" ]]; then
+	echo 'Re-staging formatted files'
+	for file in "${STAGED_FILES[@]}"; do
+		if [[ -e "$REPO_ROOT/$file" ]]; then
+			git add -- "$file"
+		fi
+	done
+fi
