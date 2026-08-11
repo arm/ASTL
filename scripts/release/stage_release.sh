@@ -325,7 +325,8 @@ stage_everything() {
 		install -m 0644 "${REPO_ROOT}/tools/ATX/config/metric_definitions.json" "${staging_dir}/bin/config/atx/"
 	fi
 	if [[ -d ${REPO_ROOT}/samples/sample_test ]]; then
-		mkdir -p "${staging_dir}/samples"
+		mkdir -p "${staging_dir}/cmake" "${staging_dir}/samples"
+		cp -aL "${REPO_ROOT}/cmake/Modules" "${staging_dir}/cmake/"
 		cp -aL "${REPO_ROOT}/samples/sample_test" "${staging_dir}/samples/"
 	fi
 }
