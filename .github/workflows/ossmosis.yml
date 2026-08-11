@@ -7,6 +7,11 @@ name: IP Scan
 permissions:
   contents: read
 
+# run this workflow serially for each PR. Cancel stale runs. fall back on github.ref if non-PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
   workflow_dispatch:

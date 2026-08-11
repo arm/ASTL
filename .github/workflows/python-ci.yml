@@ -9,6 +9,11 @@ name: Python CI
 permissions:
   contents: read
 
+# run this workflow serially for each PR. Cancel stale runs. fall back on github.ref if non-PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -22,7 +27,7 @@ jobs:
   build-native:
     # Single native C++ build reused by all Python matrix jobs.
     runs-on: ubuntu-24.04-arm
-    # Minimal permissions; only needs read access.
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7

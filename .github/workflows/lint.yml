@@ -9,6 +9,11 @@ permissions:
   contents: read
   checks: write
 
+# run this workflow serially for each PR. Cancel stale runs. fall back on github.ref if non-PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -18,6 +23,7 @@ on:
 jobs:
   lint:
     runs-on: ${{ matrix.os }}
+
     strategy:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
       fail-fast: false
