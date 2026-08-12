@@ -45,7 +45,7 @@ jobs:
             c_compiler: cl
             cpp_compiler: cl
 
-          # Collect code coverage from unit tests and upload it to GitHub and qlty.io.
+          # Collect code coverage from unit tests and upload it to GitHub
           - os: ubuntu-24.04-arm
             cmake_preset: debug-coverage
             c_compiler: gcc
@@ -150,25 +150,6 @@ jobs:
       - name: 📊 Code Coverage - Generate Report with gcovr
         if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-coverage'
         run: ${{ github.workspace }}/scripts/create_coverage_report.sh --xml
-
-      - name: Qlty Token Exists?
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-coverage'
-        id: qlty-token
-        shell: bash
-        run: |
-          if [ "${{ secrets.QLTY_COVERAGE_TOKEN }}" != "" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: ⤴️ Code Coverage - Publish to Qlty
-        # project overview: https://qlty.sh/gh/Arm-Debug/projects/ASTL
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-coverage' && steps.qlty-token.outputs.exists == 'true'
-        uses: qltysh/qlty-action/coverage@v2
-        with:
-          token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
-          files: coverage.xml
 
       - name: ⤴️ Code Coverage - Publish to GitHub
         # publish only coverage data from one build configuration
