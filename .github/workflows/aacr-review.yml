@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: AACR Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: string
+      prompt_id:
+        description: OASIS prompt ID to use
+        required: false
+        default: ""
+        type: string
+      prompt_file:
+        description: Repository-relative prompt file to use
+        required: false
+        default: ""
+        type: string
+      review_file_patterns:
+        description: Comma-separated or newline-separated repository-relative glob patterns to review
+        required: false
+        default: ""
+        type: string
+      dry_run:
+        description: Run AACR without posting pull request comments
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: aacr-review-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aacr-review:
+    if: github.repository_owner == 'Arm-Debug'
+    uses: Arm-Debug/devops-workflows/.github/workflows/aacr-review.yml@b1ec66f88ab19472abe1bd0450ef0fea4750960b
+    with:
+      aacr_image_source: its--ai-enablement-docker-staging.artifactory.arm.com/aacr-ci/review-runtime@sha256:190cb8df5dcd853b3ea4a74b2a90cc8133eb4ff9334d78ff810524df30b99148
+      aacr_image_options: --user 1000:1000 --env AACR_COMMENT_TEMPLATE_FILE=.aacr/comment-template.md --env AACR_SUPPRESS_NO_ISSUES_COMMENT=1
+      aacr_codex_model: gpt-5.6-sol
+      aacr_review_dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+      aacr_prompt_id: ${{ inputs.prompt_id }}
+      aacr_prompt_file: ${{ github.event_name == 'pull_request' && '.github/workflows/aacr-prompt.txt' || inputs.prompt_file }}
+      aacr_review_file_patterns: ${{ github.event_name == 'pull_request' && '**/*.cpp,**/*.hpp,**/*.json,**/*.py,**/*.sh,**/*.txt,**/*.cmake,**/*.md,**/*.rst' || inputs.review_file_patterns }}
+      aacr_confidence_threshold: medium
+      aacr_max_comments: "30"
+      aacr_debug: "1"
+      aacr_post_failure_note: "0"
+      aacr_disable_results_upload: "1"
+      aacr_github_incremental_review: "1"
+      artifactory_user: "svc_its_ci@arm.com"
+      pr_number: ${{ inputs.pr_number }}
+    secrets:
+      openai_proxy_token_encryption_key: ${{ secrets.SPIFFE_SECRET_ENCRYPTION_KEY }}
+      artifactory_token: ${{ secrets.ITS_ARTIFACTORY_ARM_KEY }}
