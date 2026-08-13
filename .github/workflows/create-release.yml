@@ -197,7 +197,7 @@ jobs:
           else
             RETENTION_POLICY="release"
           fi
-          CI=true jf rt upload "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip" "its.astl/${UPLOADED_ARTIFACT_NAME_01_LIBRARY}" --target-props='retention=${RETENTION_POLICY}'
+          CI=true jf rt upload "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip" "its.astl/astl/${UPLOADED_ARTIFACT_NAME_01_LIBRARY}" --target-props='retention=${RETENTION_POLICY}'
 
         env:
           ARTIFACTORY_URL: https://eu-west-1.artifactory.aws.arm.com
