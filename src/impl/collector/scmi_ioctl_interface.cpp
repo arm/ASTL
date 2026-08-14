@@ -243,7 +243,7 @@ auto ScmiIoctlInterface::Probe() -> astl_status_code {
   }
   if (!AbiInfoIsCompatible(info)) {
     ASTL_LOG_ERROR(
-        "SCMI telemetry ioctl device '{}' returned incompatible V7 ABI info: size={}, version={}, features=0x{:08X}",
+        "SCMI telemetry ioctl device '{}' returned incompatible V8 ABI info: size={}, version={}, features=0x{:08X}",
         _device_path.string(), info.size, info.abi_version, info.abi_features);
     return ASTL_STATUS_NOT_SUPPORTED;
   }

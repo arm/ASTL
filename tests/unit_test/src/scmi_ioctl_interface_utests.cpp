@@ -117,17 +117,18 @@ TEST_CASE("ScmiIoctlInterface identifies likely telemetry ioctl device names", "
   REQUIRE_FALSE(astl::ScmiIoctlInterface::IsLikelyTelemetryDeviceName("tlm_1_extra"));
 }
 
-TEST_CASE("SCMI ioctl UAPI mirrors the V7 layouts and request sizes", "[scmi_ioctl_interface]") {
+TEST_CASE("SCMI ioctl UAPI mirrors the V8 layouts and request encodings", "[scmi_ioctl_interface]") {
   CHECK(sizeof(scmi_tlm_config) == 24);
   CHECK(sizeof(scmi_tlm_de_config) == 48);
   CHECK(sizeof(scmi_tlm_de_info) == 72);
   CHECK(sizeof(scmi_tlm_batch) == 32);
 #if defined(__linux__)
   CHECK(_IOC_SIZE(SCMI_TLM_GET_CFG) == sizeof(scmi_tlm_config));
+  CHECK(_IOC_DIR(SCMI_TLM_SET_CFG) == _IOC_WRITE);
+  CHECK(_IOC_DIR(SCMI_TLM_SET_ALL_CFG) == _IOC_WRITE);
   CHECK(_IOC_SIZE(SCMI_TLM_GET_DE_CFG) == sizeof(scmi_tlm_batch));
   CHECK(_IOC_SIZE(SCMI_TLM_SET_DE_CFG) == sizeof(scmi_tlm_batch));
-  // V7 itself encodes data_read for BATCH_READ even though its handler consumes a batch.
-  CHECK(_IOC_SIZE(SCMI_TLM_BATCH_READ) == sizeof(scmi_tlm_data_read));
+  CHECK(_IOC_SIZE(SCMI_TLM_BATCH_READ) == sizeof(scmi_tlm_batch));
 #endif
 }
 

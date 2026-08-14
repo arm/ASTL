@@ -111,7 +111,7 @@ class ScmiIoctlInterface : public IScmiIoctlInterface {
    */
   auto DevicePath() const -> const std::filesystem::path& override;
 
-  /** @brief Negotiates and caches the V7 telemetry ABI information. */
+  /** @brief Negotiates and caches the V8 telemetry ABI information. */
   auto Probe() -> astl_status_code override;
 
   /** @brief Returns the primary DE implementation UUID as uppercase hexadecimal. */

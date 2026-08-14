@@ -11,7 +11,7 @@
 #  include <sys/ioctl.h>
 #endif
 
-// This file mirrors include/uapi/linux/scmi.h from the V7 SCMI telemetry
+// This file mirrors include/uapi/linux/scmi.h from the V8 SCMI telemetry
 // patchset. Keep all layouts and ioctl argument types identical to that UAPI.
 // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-macro-usage,cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 
@@ -200,25 +200,24 @@ struct scmi_tlm_event {
 };
 
 #if defined(__linux__)
-#  define SCMI_TLM_IOCTL_MAGIC  0xF1
-#  define SCMI_TLM_GET_ABI_INFO _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x00, struct scmi_tlm_abi_info)
-#  define SCMI_TLM_GET_CFG      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x01, struct scmi_tlm_config)
-#  define SCMI_TLM_SET_CFG      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x02, struct scmi_tlm_config)
-#  define SCMI_TLM_GET_INTRVS   _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x03, struct scmi_tlm_intervals)
-#  define SCMI_TLM_GET_DE_CFG   _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x04, struct scmi_tlm_batch)
-#  define SCMI_TLM_SET_DE_CFG   _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x05, struct scmi_tlm_batch)
-#  define SCMI_TLM_GET_DE_INFO  _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x06, struct scmi_tlm_de_info)
-#  define SCMI_TLM_GET_DE_LIST  _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x07, struct scmi_tlm_des_list)
-#  define SCMI_TLM_DE_READ      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x08, struct scmi_tlm_de_sample)
-#  define SCMI_TLM_GET_ALL_CFG  _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x09, struct scmi_tlm_de_config)
-#  define SCMI_TLM_SET_ALL_CFG  _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0A, struct scmi_tlm_de_config)
-#  define SCMI_TLM_GET_GRP_LIST _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0B, struct scmi_tlm_grps_list)
-#  define SCMI_TLM_GET_GRP_INFO _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0C, struct scmi_tlm_grp_info)
-#  define SCMI_TLM_GET_GRP_DESC _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0D, struct scmi_tlm_grp_desc)
-#  define SCMI_TLM_SINGLE_READ  _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0E, struct scmi_tlm_data_read)
-#  define SCMI_TLM_BULK_READ    _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0F, struct scmi_tlm_data_read)
-// V7 encodes scmi_tlm_data_read here even though the ioctl consumes scmi_tlm_batch.
-#  define SCMI_TLM_BATCH_READ      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x10, struct scmi_tlm_data_read)
+#  define SCMI_TLM_IOCTL_MAGIC     0xF1
+#  define SCMI_TLM_GET_ABI_INFO    _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x00, struct scmi_tlm_abi_info)
+#  define SCMI_TLM_GET_CFG         _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x01, struct scmi_tlm_config)
+#  define SCMI_TLM_SET_CFG         _IOW(SCMI_TLM_IOCTL_MAGIC, 0x02, struct scmi_tlm_config)
+#  define SCMI_TLM_GET_INTRVS      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x03, struct scmi_tlm_intervals)
+#  define SCMI_TLM_GET_DE_CFG      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x04, struct scmi_tlm_batch)
+#  define SCMI_TLM_SET_DE_CFG      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x05, struct scmi_tlm_batch)
+#  define SCMI_TLM_GET_DE_INFO     _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x06, struct scmi_tlm_de_info)
+#  define SCMI_TLM_GET_DE_LIST     _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x07, struct scmi_tlm_des_list)
+#  define SCMI_TLM_DE_READ         _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x08, struct scmi_tlm_de_sample)
+#  define SCMI_TLM_GET_ALL_CFG     _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x09, struct scmi_tlm_de_config)
+#  define SCMI_TLM_SET_ALL_CFG     _IOW(SCMI_TLM_IOCTL_MAGIC, 0x0A, struct scmi_tlm_de_config)
+#  define SCMI_TLM_GET_GRP_LIST    _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0B, struct scmi_tlm_grps_list)
+#  define SCMI_TLM_GET_GRP_INFO    _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0C, struct scmi_tlm_grp_info)
+#  define SCMI_TLM_GET_GRP_DESC    _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0D, struct scmi_tlm_grp_desc)
+#  define SCMI_TLM_SINGLE_READ     _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0E, struct scmi_tlm_data_read)
+#  define SCMI_TLM_BULK_READ       _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0F, struct scmi_tlm_data_read)
+#  define SCMI_TLM_BATCH_READ      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x10, struct scmi_tlm_batch)
 #  define SCMI_TLM_GET_SHMTI_LIST  _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x11, struct scmi_tlm_shmtis_list)
 #  define SCMI_TLM_RESET           _IO(SCMI_TLM_IOCTL_MAGIC, 0x12)
 #  define SCMI_TLM_GET_UUID_LIST   _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x13, struct scmi_tlm_uuid_list)
