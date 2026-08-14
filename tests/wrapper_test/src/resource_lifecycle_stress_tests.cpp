@@ -149,7 +149,7 @@ TEST_CASE("ASTL wrapper validation paths tolerate repeated failure calls", "[wra
 }
 
 TEST_CASE("ASTL wrapper validation paths tolerate concurrent repeated failure calls",
-          "[wrapper][stress][lifecycle][thread_safety][failure]") {
+          "[wrapper][stress][lifecycle][thread_safety][failure][valgrind_isolated]") {
   auto [orchestrator, expectations] = MakeMinimalOrchestrator();
   TestOrchestratorInjector injector(std::move(orchestrator));
 

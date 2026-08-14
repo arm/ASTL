@@ -55,7 +55,7 @@ if(ASTL_HAVE_LIBSENSORS)
     SHARD_COUNT
     1
     TEST_SPEC
-    "~[integration]~[time_sensitive]"
+    "~[time_sensitive]~[valgrind_isolated]"
     ENVIRONMENT
     "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
 

@@ -39,7 +39,7 @@ auto AllocateAstlVector(size_t count) -> std::vector<T> {
 // imprecise constants for testing
 constexpr uint32_t kJunk = 13;
 
-TEST_CASE("C interface supports mixed concurrent calls", "[wrapper][thread_safety]") {
+TEST_CASE("C interface supports mixed concurrent calls", "[wrapper][thread_safety][valgrind_isolated]") {
   auto topology_manager  = std::make_unique<astl::TopologyManager>(std::vector<std::unique_ptr<astl::ITarget>>{});
   auto collector_manager = std::make_unique<astl::CollectorManager>(
       std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>>{});
@@ -103,7 +103,8 @@ TEST_CASE("C interface supports mixed concurrent calls", "[wrapper][thread_safet
   REQUIRE(all_ok.load(std::memory_order_acquire));
 }
 
-TEST_CASE("C interface supports valid-handle configure/start/stop interleavings", "[wrapper][thread_safety]") {
+TEST_CASE("C interface supports valid-handle configure/start/stop interleavings",
+          "[wrapper][thread_safety][valgrind_isolated]") {
   auto  target_uptr = std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt);
   auto* target_raw  = target_uptr.get();
 
@@ -197,7 +198,8 @@ TEST_CASE("C interface supports valid-handle configure/start/stop interleavings"
   REQUIRE(all_ok.load(std::memory_order_acquire));
 }
 
-TEST_CASE("C interface supports valid-handle pause/resume interleavings", "[wrapper][thread_safety]") {
+TEST_CASE("C interface supports valid-handle pause/resume interleavings",
+          "[wrapper][thread_safety][valgrind_isolated]") {
   auto  target_uptr = std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt);
   auto* target_raw  = target_uptr.get();
 
@@ -303,7 +305,8 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings", "[wrap
   REQUIRE(all_ok.load());
 }
 
-TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors", "[wrapper][thread_safety]") {
+TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors",
+          "[wrapper][thread_safety][valgrind_isolated]") {
   auto  target_uptr = std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt);
   auto* target_raw  = target_uptr.get();
 

@@ -27,7 +27,7 @@ function(astl_add_valgrind_shards target)
     set(test_name "${target}_valgrind_shard_${shard_index}")
     add_test(NAME ${test_name}
              COMMAND $<TARGET_FILE:${target}> --shard-index ${shard_index} --shard-count ${ASTL_MEMCHECK_SHARD_COUNT}
-                     --order lex "${ASTL_MEMCHECK_TEST_SPEC}" --allow-running-no-tests)
+                     --order lex --reporter TeamCity "${ASTL_MEMCHECK_TEST_SPEC}" --allow-running-no-tests)
     set_tests_properties(${test_name} PROPERTIES LABELS "valgrind" ENVIRONMENT "${ASTL_MEMCHECK_ENVIRONMENT}")
   endforeach()
 endfunction()

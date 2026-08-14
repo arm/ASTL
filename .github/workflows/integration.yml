@@ -115,14 +115,19 @@ jobs:
         # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
         # Exclude sample tests; coverage should measure tests that have assertions in them.
         run: |
-          ctest --parallel -LE "integration|time_sensitive|valgrind" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
-          echo 'Running time_sensitive tests without parallelization.'
-          ctest -L "time_sensitive" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
+          # Run ordinary tests in parallel, then tests that use timing or shared
+          # process-wide resources individually. Integration tests run in their
+          # dedicated step below.
+          ctest --parallel 4 -LE "integration|time_sensitive|valgrind_isolated|^valgrind$" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
+          ctest --parallel 1 -L "time_sensitive|valgrind_isolated" -LE "integration" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
 
       - name: 🧪 CMake - Run Sharded Unit Tests With Valgrind
         if: contains(matrix.os, 'ubuntu') && matrix.cmake_preset == 'debug-valgrind'
         run: |
           valgrind --version
+          # Run the suite-level shards with bounded concurrency. Tests tagged
+          # valgrind_isolated or time_sensitive are excluded by each shard's
+          # Catch2 filter and run without Memcheck in the ordinary test jobs.
           ctest --parallel 4 -L "valgrind" --test-action memcheck --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
           echo 'Checking Valgrind output for memory issues.'
           # Grep returns non-zero for a non-empty defect list and fails the CI job.
@@ -138,10 +143,6 @@ jobs:
             ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/**/DynamicAnalysis.xml
             ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/Temporary/LastDynamicAnalysis*.log*
             ${{ github.workspace }}/build/${{ matrix.cmake_preset }}/Testing/Temporary/MemoryChecker.*.log
-
-      - name: 🧪 Run ScmiBridge Coverage Tests
-        if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-coverage'
-        run: ctest -L "scmi_bridge" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
 
       - name: 📊 Code Coverage - Merge Coverage from Parallel Runs
         if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-coverage'

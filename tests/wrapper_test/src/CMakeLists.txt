@@ -77,6 +77,6 @@ astl_add_valgrind_shards(
   SHARD_COUNT
   2
   TEST_SPEC
-  "~[integration]~[time_sensitive]"
+  "~[time_sensitive]~[valgrind_isolated]"
   ENVIRONMENT
   "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
