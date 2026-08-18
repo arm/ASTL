@@ -1,0 +1,123 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+name: AMX Confidential CI Gate
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ASTL is mirrored publicly; only the canonical repository owns the dispatch credentials.
+  trusted:
+    name: AMX CI / aggregate
+    if: >-
+      github.repository == 'Arm-Debug/ASTL' &&
+      (github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    steps:
+      - name: Check out trusted gate revision
+        uses: actions/checkout@v7
+        with:
+          ref: >-
+            ${{ github.event_name == 'push'
+                && github.sha
+                || github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Test the AMX confidential CI gate
+        run: ./scripts/tests/amx_ci_gate_tests.sh
+
+      - name: Create AMX CI token
+        id: amx-ci-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL-confidential
+          permission-actions: read
+          permission-contents: write
+
+      - name: Dispatch and await AMX CI
+        env:
+          GH_TOKEN: ${{ steps.amx-ci-token.outputs.token }}
+          SOURCE_EVENT: ${{ github.event_name == 'push' && 'push' || 'pull_request' }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+          HEAD_REPOSITORY: >-
+            ${{ github.event_name == 'push'
+                && github.repository
+                || github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: >-
+            ${{ github.event_name == 'push'
+                && github.sha
+                || github.event.pull_request.head.sha }}
+          BASE_SHA: >-
+            ${{ github.event_name == 'push'
+                && github.event.before
+                || github.event.pull_request.base.sha }}
+          PR_NUMBER: >-
+            ${{ github.event_name == 'push'
+                && '0'
+                || github.event.pull_request.number }}
+          CORRELATION_ID: >-
+            public-${{ github.event_name }}-${{ github.repository_id }}-${{
+            github.event_name == 'push'
+            && github.sha
+            || github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: ./scripts/amx_ci_gate.sh
+
+  fork:
+    name: AMX CI / aggregate
+    if: >-
+      github.repository == 'Arm-Debug/ASTL' &&
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    environment: confidential-ci-fork-approval
+    steps:
+      - name: Check out trusted base revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Test the AMX confidential CI gate
+        run: ./scripts/tests/amx_ci_gate_tests.sh
+
+      - name: Create AMX CI token
+        id: amx-ci-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL-confidential
+          permission-actions: read
+          permission-contents: write
+
+      - name: Dispatch and await AMX CI
+        env:
+          GH_TOKEN: ${{ steps.amx-ci-token.outputs.token }}
+          SOURCE_EVENT: pull_request
+          TARGET_REPOSITORY: ${{ github.repository }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CORRELATION_ID: >-
+            public-pull-request-${{ github.repository_id }}-${{
+            github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: ./scripts/amx_ci_gate.sh
