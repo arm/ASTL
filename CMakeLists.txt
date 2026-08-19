@@ -108,7 +108,7 @@ endfunction()
 # Add a subdirectory only when the source tree is present. This keeps partial checkouts or intentionally removed
 # optional tools buildable.
 function(astl_add_optional_subdirectory relative_dir component_name)
-  if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${relative_dir}")
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${relative_dir}/CMakeLists.txt")
     add_subdirectory(${relative_dir})
   else()
     message(STATUS "Skipping ${component_name} because ${relative_dir} is missing")

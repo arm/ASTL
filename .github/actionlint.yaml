@@ -2,6 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# Custom labels assigned to ASTL self-hosted runners.
+self-hosted-runner:
+  labels:
+    - self-hosted-ubuntu-24.04-arm64
+
 # Path-specific configurations.
 paths:
   .github/workflows/**/*.{yml,yaml}:

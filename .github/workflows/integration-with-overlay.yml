@@ -32,6 +32,16 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04-arm
     steps:
+      - name: 🔑 Create source checkout token
+        id: source-checkout-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL,mock-SCMI
+          permission-contents: read
+
       # Note the checkout structure for this workflow is potentially different
       # from the checkout structure for developers. It looks like:
       # ${{ github.workspace }}/
@@ -44,7 +54,7 @@ jobs:
           path: ASTL
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
           persist-credentials: false
 
@@ -101,13 +111,23 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04-arm
     steps:
+      - name: 🔑 Create source checkout token
+        id: source-checkout-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL,mock-SCMI
+          permission-contents: read
+
       - name: ⤵️ Checkout ASTL
         uses: actions/checkout@v7
         with:
           path: ASTL
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
           persist-credentials: false
 

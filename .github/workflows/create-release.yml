@@ -54,13 +54,23 @@ jobs:
       VERSION_BUMP_TYPE: ${{ inputs.version_bump_type || 'NONE' }}
 
     steps:
+      - name: 🔑 Create source checkout token
+        id: source-checkout-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL,mock-SCMI
+          permission-contents: read
+
       # Checkout MUST happen before calling local composite action
       - name: ⤵️ Checkout code
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
 
       - name: 📈 Determine Final Version String

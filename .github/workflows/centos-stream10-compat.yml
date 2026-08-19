@@ -36,9 +36,20 @@ jobs:
             unzip \
             zip
 
+      - name: 🔑 Create source checkout token
+        id: source-checkout-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL,mock-SCMI
+          permission-contents: read
+
       - name: ⤵️ Checkout code
         uses: actions/checkout@v7
         with:
+          token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
 
       - name: ⚙️ CMake - Configure

@@ -35,13 +35,23 @@ jobs:
       _VCPKG_: ${{ github.workspace }}/external/vcpkg
 
     steps:
+      - name: 🔑 Create source checkout token
+        id: source-checkout-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL,mock-SCMI
+          permission-contents: read
+
       - name: ⤵️ Checkout code
         uses: actions/checkout@v7
         with:
           # fetch all history so we can git diff for clang-tidy relevant files
           fetch-depth: 0
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
 
       - name: ⤵️ Install Tools (ubuntu-latest)

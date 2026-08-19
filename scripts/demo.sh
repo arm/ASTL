@@ -18,9 +18,9 @@ echo "ASTL_ROOT = ${ASTL_ROOT}"
 # Launch MockScmi (FUSE) demo          #
 ########################################
 DEFAULT_TLM_JSON="${ASTL_ROOT}/tools/mock_scmi/config/tlm.json"
-: "${ASTL_MOCKSCMI_TLM_JSON_PATH:=${DEFAULT_TLM_JSON}}"
-export ASTL_MOCKSCMI_TLM_JSON_PATH
-echo "ASTL_MOCKSCMI_TLM_JSON_PATH = ${ASTL_MOCKSCMI_TLM_JSON_PATH}"
+: "${MOCK_SCMI_TLM_JSON_PATH:=${ASTL_MOCKSCMI_TLM_JSON_PATH:-${DEFAULT_TLM_JSON}}}"
+export MOCK_SCMI_TLM_JSON_PATH
+echo "MOCK_SCMI_TLM_JSON_PATH = ${MOCK_SCMI_TLM_JSON_PATH}"
 BUILD_PRESET="${ASTL_BUILD_PRESET:-debug}"
 BUILD_DIR="${ASTL_BUILD_DIR:-${ASTL_ROOT}/build/${BUILD_PRESET}/${ASTL_HOST_ARCH}}"
 MOCK_SCMI="${ASTL_MOCKSCMI_BIN:-${BUILD_DIR}/bin/MockScmi}"
@@ -95,7 +95,7 @@ SCMI_LOG="${LOG_DIR}/mock_scmi.log"
 echo "Logs Directory = ${LOG_DIR}"
 
 echo "🚀 Launching MockScmi..."
-"${MOCK_SCMI}" -f -s "${MOUNT_POINT}" &>"${SCMI_LOG}" &
+"${MOCK_SCMI}" -f -s --tlm-json-path "${MOCK_SCMI_TLM_JSON_PATH}" "${MOUNT_POINT}" &>"${SCMI_LOG}" &
 SCMI_PID=$!
 
 # Note, if not mockscmi, use
