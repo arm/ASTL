@@ -68,6 +68,7 @@ jobs:
       - name: ⤵️ Checkout code
         uses: actions/checkout@v7
         with:
+          path: ASTL
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ steps.source-checkout-token.outputs.token }}
@@ -76,10 +77,10 @@ jobs:
       - name: 📈 Determine Final Version String
         run: |
           echo "Bumping type: ${{ env.VERSION_BUMP_TYPE }}"
-          INITIAL_VERSION_STRING=$(head -n 1 VERSION.md)
+          INITIAL_VERSION_STRING=$(head -n 1 "${{ github.workspace }}/ASTL/VERSION.md")
           echo "INITIAL_VERSION_STRING=${INITIAL_VERSION_STRING}"
           # If the bumping type is "NONE", bump_version.sh will only strip the ".post" suffix if present
-          BUMPED_VERSION_STRING=$(${{ github.workspace }}/scripts/bump_version.sh ${{ env.VERSION_BUMP_TYPE }} $INITIAL_VERSION_STRING)
+          BUMPED_VERSION_STRING=$("${{ github.workspace }}/ASTL/scripts/bump_version.sh" "${{ env.VERSION_BUMP_TYPE }}" "${INITIAL_VERSION_STRING}")
           echo "BUMPED_VERSION_STRING=${BUMPED_VERSION_STRING}" | tee -a $GITHUB_ENV
 
       - name: ⤵️ Install apt-get Dependencies (ubuntu)
@@ -91,19 +92,20 @@ jobs:
 
       # Build via GitHub composite action =====
       - name: 🏗️ Build ASTL
-        uses: ./.github/actions/build
+        uses: ./ASTL/.github/actions/build
         with:
           os: ${{ matrix.os }}
           cmake_preset: release
           c_compiler: ${{ matrix.c_compiler }}
           cpp_compiler: ${{ matrix.cpp_compiler }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          source_dir: ${{ github.workspace }}/ASTL
           version_override: ${{ env.BUMPED_VERSION_STRING }}
 
       - name: 📐 Determine Build Output Architecture
         run: |
-          ASTL_BUILD_ARCH="$("${{ github.workspace }}/scripts/host_arch.sh")"
-          ASTL_BUILD_OUTPUT_DIR="${{ github.workspace }}/build/release/${ASTL_BUILD_ARCH}"
+          ASTL_BUILD_ARCH="$("${{ github.workspace }}/ASTL/scripts/host_arch.sh")"
+          ASTL_BUILD_OUTPUT_DIR="${{ github.workspace }}/ASTL/build/release/${ASTL_BUILD_ARCH}"
           echo "ASTL_BUILD_ARCH=${ASTL_BUILD_ARCH}" | tee -a $GITHUB_ENV
           echo "ASTL_BUILD_OUTPUT_DIR=${ASTL_BUILD_OUTPUT_DIR}" | tee -a $GITHUB_ENV
 
@@ -139,14 +141,14 @@ jobs:
 
       - name: 📦 Test and stage public release
         run: |
-          scripts/release/stage_release.sh \
+          "${{ github.workspace }}/ASTL/scripts/release/stage_release.sh" \
             --skip-build \
             --version "${{ env.BUMPED_VERSION_STRING }}" \
             --output-dir "${{ github.workspace }}"
 
       - name: 🛠️ Prepare Bootstrap Installer Asset
         run: |
-          install -m 0755 "${{ github.workspace }}/scripts/release/get_astl.sh" "${{ github.workspace }}/get_astl.sh"
+          install -m 0755 "${{ github.workspace }}/ASTL/scripts/release/get_astl.sh" "${{ github.workspace }}/get_astl.sh"
 
       - name: 🗑️ Delete Existing Rolling Release
         # Technically the second condition in the IF is redundant,
@@ -154,9 +156,9 @@ jobs:
         if: ${{ env.VERSION_BUMP_TYPE == 'NONE' && env.TAG_NAME == 'release/rolling' }}
         run: |
           # Check if release exists before trying to delete
-          if gh release view "${{ env.TAG_NAME }}" &> /dev/null; then
+          if gh release view "${{ env.TAG_NAME }}" --repo "${{ github.repository }}" &> /dev/null; then
             echo "Deleting existing release: ${{ env.TAG_NAME }}"
-            gh release delete "${{ env.TAG_NAME }}" --yes --cleanup-tag
+            gh release delete "${{ env.TAG_NAME }}" --repo "${{ github.repository }}" --yes --cleanup-tag
           else
             echo "No existing release found for ${{ env.TAG_NAME }}"
           fi
@@ -182,7 +184,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: jfrog/setup-jfrog-cli@v5
+      - name: 🐸 Setup JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v5
         with:
           version: 2.77.0
 
@@ -215,6 +218,13 @@ jobs:
           ARTIFACTORY_TOKEN: ${{ secrets.ITS_ARTIFACTORY_ARM_KEY }}
           JFROG_CLI_REPORT_USAGE: "false"
 
+      - name: 🧪 Out-Of-Box Testing
+        uses: ./ASTL/.github/actions/out-of-box-testing
+        with:
+          astl_root: ${{ github.workspace }}/ASTL
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ env.TAG_NAME }}
+
       # Create Release Branch
       # For NONE bumps:
       # - These are meant for frequently scheduled CI/CD releases that don't necessarily have any critical changes
@@ -235,6 +245,7 @@ jobs:
       #     bumps VERSION.md to be the same number as the main PR, but without the ".post" suffix
       # - "releases/rolling" branch is not touched
       - name: 🏷️ Bump Version, Create Branches, and Create PRs
+        working-directory: ${{ github.workspace }}/ASTL
         run: |
 
           # Configure git
@@ -251,9 +262,9 @@ jobs:
 
             BRANCH_NAME_FOR_PR_TO_MAIN="cicd/version_bump_release/${{ env.BUMPED_VERSION_STRING }}"
             git checkout -b "$BRANCH_NAME_FOR_PR_TO_MAIN" ${{ github.ref_name }}
-            echo "${{ env.BUMPED_VERSION_STRING }}" > ${{ github.workspace }}/VERSION.md
+            echo "${{ env.BUMPED_VERSION_STRING }}" > "${{ github.workspace }}/ASTL/VERSION.md"
 
-            git add ${{ github.workspace }}/VERSION.md
+            git add "${{ github.workspace }}/ASTL/VERSION.md"
             git commit -m "Bump version to ${{ env.BUMPED_VERSION_STRING }} for release branch"
 
             git push origin "$BRANCH_NAME_FOR_PR_TO_MAIN"
@@ -276,10 +287,10 @@ jobs:
             git checkout -b "$BRANCH_NAME_FOR_PR_TO_MAIN" main
 
             # Update VERSION.md with .post suffix for main branch
-            echo "${{ env.BUMPED_VERSION_STRING }}.post" > ${{ github.workspace }}/VERSION.md
+            echo "${{ env.BUMPED_VERSION_STRING }}.post" > "${{ github.workspace }}/ASTL/VERSION.md"
 
             # Commit the VERSION.md change
-            git add ${{ github.workspace }}/VERSION.md
+            git add "${{ github.workspace }}/ASTL/VERSION.md"
             git commit -m "Bump version to ${{ env.BUMPED_VERSION_STRING }}.post for main branch"
 
             # Push the branch
@@ -298,21 +309,11 @@ jobs:
             BRANCH_NAME_FOR_PERMANENT_RELEASE="release/${{ env.BUMPED_VERSION_STRING }}"
             git checkout -b "release/${{ env.BUMPED_VERSION_STRING }}" main
 
-            echo "${{ env.BUMPED_VERSION_STRING }}" > ${{ github.workspace }}/VERSION.md
+            echo "${{ env.BUMPED_VERSION_STRING }}" > "${{ github.workspace }}/ASTL/VERSION.md"
 
-            git add ${{ github.workspace }}/VERSION.md
+            git add "${{ github.workspace }}/ASTL/VERSION.md"
             git commit -m "Bump version to ${{ env.BUMPED_VERSION_STRING }} for release branch"
 
             git push origin "$BRANCH_NAME_FOR_PERMANENT_RELEASE"
 
           fi
-
-  # Call the out-of-box testing workflow as a separate job
-  # This creates a visible status line in the GitHub UI
-  # out_of_box_testing:
-  #  needs: release
-  #  uses: ./.github/workflows/out-of-box-testing.yml
-  #  with:
-  #    tag_name: ${{ needs.release.outputs.tag_name }}
-  #  permissions:
-  #    contents: read

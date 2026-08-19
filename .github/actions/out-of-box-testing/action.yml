@@ -1,0 +1,343 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: "Out-Of-Box Testing"
+description: "Download the published ASTL release package and verify it from an end-user install perspective"
+
+inputs:
+  astl_root:
+    description: "Prepared ASTL checkout directory"
+    required: true
+  github_token:
+    description: "GitHub token used to download release artifacts"
+    required: true
+  repository:
+    description: "Repository containing the release artifacts"
+    required: false
+    default: ${{ github.repository }}
+  tag_name:
+    description: "The release tag name"
+    required: false
+    default: "release/rolling"
+
+runs:
+  using: "composite"
+  steps:
+    - name: 🧪 Verify release-prepared ASTL verifier
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        ASTL_ROOT="${{ inputs.astl_root }}"
+
+        fail() {
+          echo "FAILED: $*" >&2
+          exit 1
+        }
+
+        [[ -d "${ASTL_ROOT}" ]] || fail "Expected ASTL checkout from the release job at ${ASTL_ROOT}"
+
+        astl_git_root="$(git -C "${ASTL_ROOT}" rev-parse --show-toplevel 2>/dev/null)" || \
+          fail "ASTL path is not a Git checkout: ${ASTL_ROOT}"
+
+        [[ "${astl_git_root}" == "${ASTL_ROOT}" ]] || \
+          fail "Expected ${ASTL_ROOT} to be the ASTL checkout root, got ${astl_git_root}"
+
+        [[ -x "${ASTL_ROOT}/scripts/verify_static_executable.sh" ]] || \
+          fail "Expected public ASTL static verifier at ${ASTL_ROOT}/scripts/verify_static_executable.sh"
+
+    - name: 🧹 Prepare OOBT work directories
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        OOBT_WORK_DIR="${RUNNER_TEMP}/astl-oobt-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        rm -rf "${OOBT_WORK_DIR}"
+        mkdir -p "${OOBT_WORK_DIR}/downloaded_artifacts" "${OOBT_WORK_DIR}/extracted"
+
+        echo "OOBT_DOWNLOAD_DIR=${OOBT_WORK_DIR}/downloaded_artifacts" | tee -a "${GITHUB_ENV}"
+        echo "OOBT_EXTRACTED_DIR=${OOBT_WORK_DIR}/extracted" | tee -a "${GITHUB_ENV}"
+
+    - name: ⤵️ Download release artifacts
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        RELEASE_TAG="${{ inputs.tag_name }}"
+        echo "Downloading ASTL artifacts from release: ${RELEASE_TAG}"
+
+        gh release download "${RELEASE_TAG}" \
+          --repo "${{ inputs.repository }}" \
+          --dir "${OOBT_DOWNLOAD_DIR}" \
+          --pattern "astl_version_*_linux_aarch64_library.zip" \
+          --pattern "astl_version_*_linux_aarch64_library.zip.sha256"
+
+        echo "Downloaded artifacts:"
+        ls -lh "${OOBT_DOWNLOAD_DIR}"
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+
+    - name: 📐 Determine Artifact Names
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        OS_TYPE="linux"
+        ARCH="aarch64"
+
+        shopt -s nullglob
+        artifact_zip_paths=("${OOBT_DOWNLOAD_DIR}"/astl_version_*_"${OS_TYPE}"_"${ARCH}"_library.zip)
+        artifact_sha256_paths=("${OOBT_DOWNLOAD_DIR}"/astl_version_*_"${OS_TYPE}"_"${ARCH}"_library.zip.sha256)
+        shopt -u nullglob
+
+        if [[ ${#artifact_zip_paths[@]} -ne 1 ]]; then
+          echo "Error: Found ${#artifact_zip_paths[@]} ASTL library zip artifacts when a single artifact was expected"
+          find "${OOBT_DOWNLOAD_DIR}" -type f
+          exit 1
+        fi
+
+        if [[ ${#artifact_sha256_paths[@]} -ne 1 ]]; then
+          echo "Error: Found ${#artifact_sha256_paths[@]} ASTL library checksum files when a single checksum was expected"
+          find "${OOBT_DOWNLOAD_DIR}" -type f
+          exit 1
+        fi
+
+        OOBT_ARTIFACT_ZIP_PATH_01_LIBRARY="${artifact_zip_paths[0]}"
+        OOBT_ARTIFACT_SHA256_PATH_01_LIBRARY="${artifact_sha256_paths[0]}"
+
+        if [[ "$(basename "${OOBT_ARTIFACT_SHA256_PATH_01_LIBRARY}")" != "$(basename "${OOBT_ARTIFACT_ZIP_PATH_01_LIBRARY}").sha256" ]]; then
+          echo "Error: ASTL library checksum does not match the downloaded zip name"
+          find "${OOBT_DOWNLOAD_DIR}" -type f
+          exit 1
+        fi
+
+        OOBT_VERSION=$(basename "${OOBT_ARTIFACT_ZIP_PATH_01_LIBRARY}" | sed 's#^astl_version_##' | sed "s#_${OS_TYPE}_${ARCH}_library\.zip\$##")
+
+        echo "OOBT_ARTIFACT_ZIP_PATH_01_LIBRARY=${OOBT_ARTIFACT_ZIP_PATH_01_LIBRARY}" | tee -a "${GITHUB_ENV}"
+        echo "OOBT_ARTIFACT_SHA256_PATH_01_LIBRARY=${OOBT_ARTIFACT_SHA256_PATH_01_LIBRARY}" | tee -a "${GITHUB_ENV}"
+        echo "OOBT_VERSION=${OOBT_VERSION}" | tee -a "${GITHUB_ENV}"
+
+    - name: 📦 Extract Zip Artifacts
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        mkdir -p "${OOBT_EXTRACTED_DIR}"
+
+        OOBT_STAGING_PATH_01_LIBRARY="${OOBT_EXTRACTED_DIR}/$(basename "${OOBT_ARTIFACT_ZIP_PATH_01_LIBRARY}" .zip)"
+        echo "OOBT_STAGING_PATH_01_LIBRARY=${OOBT_STAGING_PATH_01_LIBRARY}" | tee -a "${GITHUB_ENV}"
+
+        unzip -q "${OOBT_ARTIFACT_ZIP_PATH_01_LIBRARY}" -d "${OOBT_EXTRACTED_DIR}/"
+        echo "*** Contents of ${OOBT_STAGING_PATH_01_LIBRARY} ***"
+        find "${OOBT_STAGING_PATH_01_LIBRARY}" -type f
+
+    - name: 🧪 File Existence Checks
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        check_file_exists_and_nonempty() {
+          local file_path="$1"
+          if [[ -s "${file_path}" ]]; then
+            echo "PASSED: ${file_path}"
+          else
+            echo "FAILED: File doesn't exist or is empty: ${file_path}"
+            exit 1
+          fi
+        }
+
+        check_path_absent() {
+          local path="$1"
+          if [[ -e "${path}" ]]; then
+            echo "FAILED: Unexpected public ASTL package path exists: ${path}"
+            exit 1
+          fi
+          echo "PASSED (absent): ${path}"
+        }
+
+        echo '*** Library Package - Binaries ***'
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/lib/libastl_static-0.a"
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/lib/libastl-0.so"
+
+        echo '*** Library Package - Headers ***'
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/include/astl/astl.h"
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/include/astl/astl_errors.h"
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/include/astl/astl_telemetry.h"
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/include/astl/astl_version.h"
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/include/astl/astl_utils.h"
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/include/astl/astl_test_hooks.h"
+
+        echo '*** Library Package - Runtime Configs ***'
+        find "${OOBT_STAGING_PATH_01_LIBRARY}/lib/config" -type f -name '*.json' | grep -F '.json'
+
+        echo '*** Library Package - Installer Metadata ***'
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/VERSION.md"
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/manifest.json"
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/install.sh"
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/uninstall.sh"
+
+        check_path_absent "${OOBT_STAGING_PATH_01_LIBRARY}/bin/atx"
+        check_path_absent "${OOBT_STAGING_PATH_01_LIBRARY}/bin/config/atx/metric_definitions.json"
+
+    - name: 🧪 Test Compilation against (.h) headers
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        SMOKE_DIR="${RUNNER_TEMP}/astl-header-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        mkdir -p "${SMOKE_DIR}"
+
+        cat >"${SMOKE_DIR}/astl_headers_smoke.c" <<'EOF'
+        #include "astl/astl.h"
+        #include "astl/astl_errors.h"
+        #include "astl/astl_telemetry.h"
+        #include "astl/astl_test_hooks.h"
+        #include "astl/astl_utils.h"
+        #include "astl/astl_version.h"
+
+        int main(void) {
+          return ASTL_STATUS_SUCCESS;
+        }
+        EOF
+
+        cc -fsyntax-only -I"${OOBT_STAGING_PATH_01_LIBRARY}/include" "${SMOKE_DIR}/astl_headers_smoke.c"
+
+    - name: 🧪 Test Dynamic Linking (.so)
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        SMOKE_DIR="${RUNNER_TEMP}/astl-dynamic-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        mkdir -p "${SMOKE_DIR}"
+
+        cat >"${SMOKE_DIR}/astl_dynamic_smoke.c" <<'EOF'
+        #include <stdio.h>
+
+        #include "astl/astl.h"
+
+        int main(void) {
+          const char* version_string = astlVersionString();
+          astl_version_t version = astlVersion();
+          if (version_string == NULL) {
+            return 1;
+          }
+          printf("ASTL version: %s (%u.%u.%u)\n", version_string, version.major, version.minor, version.micro);
+          return 0;
+        }
+        EOF
+
+        cc \
+          -I"${OOBT_STAGING_PATH_01_LIBRARY}/include" \
+          "${SMOKE_DIR}/astl_dynamic_smoke.c" \
+          -L"${OOBT_STAGING_PATH_01_LIBRARY}/lib" \
+          -Wl,-rpath,"${OOBT_STAGING_PATH_01_LIBRARY}/lib" \
+          -l:libastl-0.so \
+          -o "${SMOKE_DIR}/astl_dynamic_smoke"
+
+        echo '*** Linked libraries ***'
+        ldd "${SMOKE_DIR}/astl_dynamic_smoke" | tee "${SMOKE_DIR}/ldd.txt"
+        if grep -i 'not found' "${SMOKE_DIR}/ldd.txt"; then
+          echo "FAILED: Dynamic smoke test has unresolved shared-library dependencies"
+          exit 1
+        fi
+        grep -F 'libastl-0.so' "${SMOKE_DIR}/ldd.txt"
+
+        LD_LIBRARY_PATH="${OOBT_STAGING_PATH_01_LIBRARY}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
+          "${SMOKE_DIR}/astl_dynamic_smoke"
+
+    - name: 🧪 Test Static Archive (.a)
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        ar t "${OOBT_STAGING_PATH_01_LIBRARY}/lib/libastl_static-0.a" | grep -F '.o'
+
+    - name: 🧪 Test Install and Uninstall
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [[ "$(id -u)" -eq 0 ]]; then
+          echo "FAILED: Install/uninstall OOBT must run as a non-root user to avoid system-scope installation"
+          exit 1
+        fi
+
+        check_installed() {
+          local path="$1"
+          if [[ -f "$path" || -L "$path" ]]; then
+            echo "PASSED (present): $path"
+          else
+            echo "FAILED: Expected file not found after install: $path"
+            exit 1
+          fi
+        }
+
+        check_removed() {
+          local path="$1"
+          if [[ ! -f "$path" && ! -L "$path" ]]; then
+            echo "PASSED (removed): $path"
+          else
+            echo "FAILED: File still present after uninstall: $path"
+            exit 1
+          fi
+        }
+
+        check_absent() {
+          local path="$1"
+          if [[ ! -e "$path" ]]; then
+            echo "PASSED (absent): $path"
+          else
+            echo "FAILED: Unexpected file present: $path"
+            exit 1
+          fi
+        }
+
+        TEMP_HOME=$(mktemp -d)
+        TEMP_XDG_DATA_HOME="$TEMP_HOME/.local/share"
+        trap 'rm -rf "$TEMP_HOME"' EXIT
+
+        echo "=== Installing into temp user scope: $TEMP_HOME ==="
+        HOME="$TEMP_HOME" XDG_DATA_HOME="$TEMP_XDG_DATA_HOME" sh "${OOBT_STAGING_PATH_01_LIBRARY}/install.sh"
+
+        echo "=== Verifying installed files ==="
+        check_installed "$TEMP_HOME/.local/lib/libastl-0.so"
+        check_installed "$TEMP_HOME/.local/lib/libastl_static-0.a"
+        check_installed "$TEMP_HOME/.local/include/astl/astl.h"
+        check_installed "$TEMP_HOME/.local/include/astl/astl_errors.h"
+        check_installed "$TEMP_HOME/.local/include/astl/astl_telemetry.h"
+        check_installed "$TEMP_HOME/.local/include/astl/astl_version.h"
+        check_installed "$TEMP_HOME/.local/include/astl/astl_utils.h"
+        check_installed "$TEMP_HOME/.local/include/astl/astl_test_hooks.h"
+        check_installed "$TEMP_HOME/.local/bin/astl-uninstall"
+        check_installed "$TEMP_XDG_DATA_HOME/astl/install/VERSION.md"
+        check_installed "$TEMP_XDG_DATA_HOME/astl/install/manifest.json"
+        check_installed "$TEMP_XDG_DATA_HOME/astl/install/uninstall.sh"
+        find "$TEMP_XDG_DATA_HOME/astl/config" -type f -name '*.json' | grep -F '.json'
+        check_absent "$TEMP_HOME/.local/bin/atx"
+
+        echo "=== Uninstalling ==="
+        HOME="$TEMP_HOME" XDG_DATA_HOME="$TEMP_XDG_DATA_HOME" "$TEMP_HOME/.local/bin/astl-uninstall"
+
+        echo "=== Verifying files are removed ==="
+        check_removed "$TEMP_HOME/.local/lib/libastl-0.so"
+        check_removed "$TEMP_HOME/.local/lib/libastl_static-0.a"
+        check_removed "$TEMP_HOME/.local/include/astl/astl.h"
+        check_removed "$TEMP_HOME/.local/include/astl/astl_errors.h"
+        check_removed "$TEMP_HOME/.local/include/astl/astl_telemetry.h"
+        check_removed "$TEMP_HOME/.local/include/astl/astl_version.h"
+        check_removed "$TEMP_HOME/.local/include/astl/astl_utils.h"
+        check_removed "$TEMP_HOME/.local/include/astl/astl_test_hooks.h"
+        check_removed "$TEMP_HOME/.local/bin/astl-uninstall"
+        check_removed "$TEMP_XDG_DATA_HOME/astl/install/VERSION.md"
+        check_removed "$TEMP_XDG_DATA_HOME/astl/install/manifest.json"
+        check_removed "$TEMP_XDG_DATA_HOME/astl/install/uninstall.sh"
+
+        echo "=== Verifying ASTL-specific directories are cleaned up ==="
+        if [[ ! -d "$TEMP_XDG_DATA_HOME/astl" ]]; then
+          echo "PASSED (removed): $TEMP_XDG_DATA_HOME/astl"
+        else
+          echo "FAILED: ASTL share directory still present after uninstall"
+          find "$TEMP_XDG_DATA_HOME/astl" -type f
+          exit 1
+        fi

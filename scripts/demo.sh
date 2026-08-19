@@ -134,14 +134,14 @@ echo "✅ MockScmi mounted at ${MOUNT_POINT}"
 ###############################################################
 # Copy metrics + scmi spec config/ directory to build directory #
 ###############################################################
-./scripts/publish_configs.sh -o "${BUILD_DIR}/lib/config" --confidential
+"${ASTL_ROOT}/scripts/publish_configs.sh" -o "${BUILD_DIR}/lib/config" --confidential
 
 ###############
 # Demo action #
 ###############
 
 ### delete tmp/*.astl files if they exist to avoid interference with old samples
-rm -f tmp/*.astl
+rm -f "${ASTL_ROOT}"/tmp/*.astl
 
 SAMPLE_TEST_BIN="${BUILD_DIR}/bin/sample_test"
 if [[ ! -x ${SAMPLE_TEST_BIN} ]]; then

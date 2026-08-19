@@ -1,4 +1,11 @@
+# REUSE metadata file self-license: Apache-2.0.
+
 version = 1
+
+[[annotations]]
+path = "REUSE.toml"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
 
 # 3rd party licenses
 [[annotations]]
