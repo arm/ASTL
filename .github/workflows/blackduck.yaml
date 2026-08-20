@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Blackduck
+
+on:
+  release:
+    types: [published]
+  schedule:
+    # Runs nightly at 1:00 AM UTC
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  blackduck:
+    runs-on: self-hosted-ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
+          path: "ASTL"

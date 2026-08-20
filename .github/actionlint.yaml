@@ -6,6 +6,7 @@
 self-hosted-runner:
   labels:
     - self-hosted-ubuntu-24.04-arm64
+    - self-hosted-ubuntu-24.04
 
 # Path-specific configurations.
 paths:
