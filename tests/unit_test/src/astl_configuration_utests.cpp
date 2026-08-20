@@ -54,6 +54,80 @@ TEST_CASE("AstlConfiguration::CreateConfiguration uses valid ASTL_CONFIG_DIR ove
   REQUIRE(configuration_result->scmi_specification_dir == config_dir / "scmi" / "public");
 }
 
+TEST_CASE("AstlConfiguration::CreateConfiguration parses ASTL_COLLECTORS allowlist", "[AstlConfiguration]") {
+  const fs::path config_dir = fs::temp_directory_path() / "astl_config_collectors_allowlist";
+  TempFileGuard  config_guard(config_dir);
+  CreateConfigTree(config_dir);
+
+  EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, config_dir.string());
+  EnvVarGuard collectors_guard(astl::EnvVar::ASTL_COLLECTORS, " SCMI, scmi ");
+
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+
+  REQUIRE(configuration_result.has_value());
+  REQUIRE(configuration_result->collectors.IsEnabled(astl::CollectorType::SCMI));
+  REQUIRE_FALSE(configuration_result->collectors.IsEnabled(astl::CollectorType::LIBSENSORS));
+  REQUIRE_FALSE(configuration_result->collectors.IsEnabled(astl::CollectorType::PROCFS));
+}
+
+TEST_CASE("AstlConfiguration::CreateConfiguration defaults to all compiled collectors", "[AstlConfiguration]") {
+  const fs::path config_dir = fs::temp_directory_path() / "astl_config_collectors_default";
+  TempFileGuard  config_guard(config_dir);
+  CreateConfigTree(config_dir);
+
+  EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, config_dir.string());
+  EnvVarGuard collectors_guard(astl::EnvVar::ASTL_COLLECTORS, "   ");
+
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+
+  REQUIRE(configuration_result.has_value());
+  REQUIRE(configuration_result->collectors.IsEnabled(astl::CollectorType::SCMI));
+#if defined(ASTL_INCLUDE_LIBSENSORS)
+  REQUIRE(configuration_result->collectors.IsEnabled(astl::CollectorType::LIBSENSORS));
+#else
+  REQUIRE_FALSE(configuration_result->collectors.IsEnabled(astl::CollectorType::LIBSENSORS));
+#endif
+#if defined(ASTL_INCLUDE_PROCFS)
+  REQUIRE(configuration_result->collectors.IsEnabled(astl::CollectorType::PROCFS));
+#else
+  REQUIRE_FALSE(configuration_result->collectors.IsEnabled(astl::CollectorType::PROCFS));
+#endif
+}
+
+TEST_CASE("AstlConfiguration::CreateConfiguration rejects unknown collectors", "[AstlConfiguration]") {
+  const fs::path config_dir = fs::temp_directory_path() / "astl_config_collectors_unknown";
+  TempFileGuard  config_guard(config_dir);
+  CreateConfigTree(config_dir);
+
+  EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, config_dir.string());
+  EnvVarGuard collectors_guard(astl::EnvVar::ASTL_COLLECTORS, "scmi,typo");
+
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+
+  REQUIRE_FALSE(configuration_result.has_value());
+  REQUIRE(configuration_result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+}
+
+TEST_CASE("AstlConfiguration::CreateConfiguration validates procfs build availability", "[AstlConfiguration]") {
+  const fs::path config_dir = fs::temp_directory_path() / "astl_config_collectors_procfs";
+  TempFileGuard  config_guard(config_dir);
+  CreateConfigTree(config_dir);
+
+  EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, config_dir.string());
+  EnvVarGuard collectors_guard(astl::EnvVar::ASTL_COLLECTORS, "procfs");
+
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+
+#if defined(ASTL_INCLUDE_PROCFS)
+  REQUIRE(configuration_result.has_value());
+  REQUIRE(configuration_result->collectors.IsEnabled(astl::CollectorType::PROCFS));
+  REQUIRE_FALSE(configuration_result->collectors.IsEnabled(astl::CollectorType::SCMI));
+#else
+  REQUIRE_FALSE(configuration_result.has_value());
+  REQUIRE(configuration_result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+#endif
+}
+
 TEST_CASE("AstlConfiguration::CreateConfiguration rejects invalid ASTL_CONFIG_DIR override", "[AstlConfiguration]") {
   const fs::path  invalid_dir = fs::temp_directory_path() / "astl_missing_config_dir";
   TempFileGuard   config_guard(invalid_dir);

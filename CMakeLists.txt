@@ -249,6 +249,17 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(render_templates)
 
+# Configure optional procfs support. Unlike libsensors, procfs has no external dependency to probe, so a simple ON/OFF
+# option is sufficient.
+option(ASTL_PROCFS "Build procfs collector and metric-discovery support" ON)
+if(ASTL_PROCFS)
+  set(ASTL_INCLUDE_PROCFS ON)
+  message(STATUS "procfs support enabled")
+else()
+  set(ASTL_INCLUDE_PROCFS OFF)
+  message(STATUS "procfs support explicitly disabled (ASTL_PROCFS=OFF)")
+endif()
+
 # Configure optional libsensors support.
 set(ASTL_LIBSENSORS
     "AUTO"

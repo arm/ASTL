@@ -4,6 +4,7 @@
 
 #include <expected>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <unordered_set>
 
@@ -12,9 +13,11 @@
 #include "serdes/protobuf_serdes.hpp"
 #include "target.hpp"
 #include "topology/i_topology_manager.hpp"
-#include "topology/procfs_topology_plugin.hpp"
 #include "topology/scmi_topology_plugin.hpp"
 #include "topology/topology_manager.hpp"
+#if defined(ASTL_INCLUDE_PROCFS)
+#  include "topology/procfs_topology_plugin.hpp"
+#endif
 
 namespace astl {
 
@@ -91,9 +94,17 @@ auto BuildTopologyManager(const AstlConfiguration& configuration, std::optional<
 
   try {
     // Add more topology plugins here by calling ActivatePlugin on each
-    ActivatePlugin(targets, configuration, ScmiTopologyPlugin::ScanForTargets);
-    ActivatePlugin(targets, configuration, LibsensorsTopologyPlugin::ScanForTargets);
-    ActivatePlugin(targets, configuration, ProcfsTopologyPlugin::ScanForTargets);
+    if (configuration.collectors.IsEnabled(CollectorType::SCMI)) {
+      ActivatePlugin(targets, configuration, ScmiTopologyPlugin::ScanForTargets);
+    }
+    if (configuration.collectors.IsEnabled(CollectorType::LIBSENSORS)) {
+      ActivatePlugin(targets, configuration, LibsensorsTopologyPlugin::ScanForTargets);
+    }
+#if defined(ASTL_INCLUDE_PROCFS)
+    if (configuration.collectors.IsEnabled(CollectorType::PROCFS)) {
+      ActivatePlugin(targets, configuration, ProcfsTopologyPlugin::ScanForTargets);
+    }
+#endif
   } catch (astl_status_code& error_code) {
     return std::unexpected(error_code);
   }

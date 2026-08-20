@@ -32,7 +32,6 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/config/astl_configuration.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/config/configuration_manager.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/config/metric_json_declaration.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/config/procfs_metric_json_declaration.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/config/scmi_metric_json_declaration.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/config/scmi_platform_telemetry_spec.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/topology/scmi_topology_plugin.cpp"
@@ -44,15 +43,7 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/common/system_info.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/common/text_file_utils.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/libsensors/libsensors_metric_builder.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/collector/procfs_collector.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/collector/procfs_collector_cpu.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_composite_metric.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder_helpers.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder_expansion_helpers.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder_parsing_helpers.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/operation/procfs_operation_builder.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_counter_discovery.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/common/procfs_utils.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/common/procfs_cpu_utils.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/common/procfs_utils_readers.cpp"
@@ -117,6 +108,21 @@ message(STATUS "Using TE_BITWISE_OPERATORS for tinyexpr++ (& and | are bitwise)"
 
 if(ASTL_HAVE_LIBSENSORS)
   target_compile_definitions(${LIBRARY_NAME} PUBLIC ASTL_INCLUDE_LIBSENSORS)
+endif()
+
+if(ASTL_INCLUDE_PROCFS)
+  target_compile_definitions(${LIBRARY_NAME} PUBLIC ASTL_INCLUDE_PROCFS)
+  target_sources(
+    ${LIBRARY_NAME}
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/config/procfs_metric_json_declaration.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/collector/procfs_collector.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/collector/procfs_collector_cpu.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder_helpers.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder_expansion_helpers.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_metric_builder_parsing_helpers.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/operation/procfs_operation_builder.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/metric/procfs_counter_discovery.cpp")
 endif()
 
 if(ASTL_INCLUDE_LIBSENSORS)

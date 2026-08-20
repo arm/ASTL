@@ -932,6 +932,12 @@ For live discovery, ASTL must find its configuration directory.
 
 SCMI backend paths are resolved independently from the configuration directory:
 
+- `ASTL_COLLECTORS`: comma-separated, case-insensitive allowlist for live
+  collector discovery. Supported values are `scmi`, `libsensors`, and `procfs`.
+  Unset or empty enables all collectors compiled into ASTL. Unknown names, or
+  names unavailable in the current build, cause initialization to return
+  `ASTL_STATUS_BAD_CONFIGURATION`. Saved `.astl` sessions retain their recorded
+  topology and are not filtered by this setting.
 - `ASTL_SCMI_INTERFACE`: `auto`, `ioctl`, or `sysfs`. Defaults to `auto`.
 - `ASTL_SCMI_IOCTL_DEV_ROOT`: ioctl telemetry character-device root. Defaults
   to `/dev/scmi`.

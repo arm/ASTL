@@ -15,7 +15,9 @@
 #if defined(ASTL_INCLUDE_LIBSENSORS)
 #  include "libsensors/libsensors_operation_builder.hpp"
 #endif
-#include "operation/procfs_operation_builder.hpp"
+#if defined(ASTL_INCLUDE_PROCFS)
+#  include "operation/procfs_operation_builder.hpp"
+#endif
 #include "scmi_operation_builder.hpp"
 
 namespace astl {
@@ -42,7 +44,10 @@ using AnyOperationBuilder = std::variant<NullOperationBuilder,
 #if defined(ASTL_INCLUDE_LIBSENSORS)
                                          LibsensorsOperationBuilder,
 #endif
-                                         ProcfsOperationBuilder, ScmiOperationBuilder, ScmiMultiTargetOperationBuilder>;
+#if defined(ASTL_INCLUDE_PROCFS)
+                                         ProcfsOperationBuilder,
+#endif
+                                         ScmiOperationBuilder, ScmiMultiTargetOperationBuilder>;
 
 template <typename OperationBuilderType>
 concept AnyOperationBuilderCompatible = std::constructible_from<AnyOperationBuilder, OperationBuilderType&&>;

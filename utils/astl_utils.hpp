@@ -35,6 +35,9 @@ enum class EnvVar {
   /** @brief Optional SCMI interface selection. Accepted values are auto, ioctl, and sysfs. */
   ASTL_SCMI_INTERFACE,
 
+  /** @brief Optional comma-separated allowlist of collectors used for live discovery. */
+  ASTL_COLLECTORS,
+
   /* optional override for astl config directory */
   ASTL_CONFIG_DIR,
 

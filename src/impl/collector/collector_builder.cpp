@@ -18,11 +18,13 @@
 #  include "libsensors/libsensors_collector.hpp"
 #  include "libsensors/libsensors_target.hpp"
 #endif
-#include "collector/procfs_collector.hpp"
-#include "common/procfs_utils.hpp"
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
-#include "topology/procfs_target.hpp"
+#if defined(ASTL_INCLUDE_PROCFS)
+#  include "collector/procfs_collector.hpp"
+#  include "common/procfs_utils.hpp"
+#  include "topology/procfs_target.hpp"
+#endif
 
 namespace astl {
 namespace {
@@ -117,6 +119,7 @@ auto BuildLibsensorsCollectors([[maybe_unused]] const ITarget& target) -> Collec
  * @param target Procfs target, optionally carrying an overridden procfs root path.
  * @return Collector list containing one procfs collector.
  */
+#if defined(ASTL_INCLUDE_PROCFS)
 auto BuildProcfsCollectors(const ITarget& target) -> CollectorList {
   auto procfs_root_path = procfs::kDefaultProcfsRootPath;
   if (const auto* procfs_target = dynamic_cast<const ProcfsTarget*>(&target)) {
@@ -126,6 +129,7 @@ auto BuildProcfsCollectors(const ITarget& target) -> CollectorList {
   FileInterface procfs_file_interface{procfs_root_path};
   return MakeCollectorList(std::make_unique<ProcfsCollector>(std::move(procfs_file_interface)));
 }
+#endif
 
 /**
  * @brief Dispatches collector construction based on target collector type.
@@ -142,7 +146,12 @@ auto BuildCollectorsForTarget(const ITarget& target, const AstlConfiguration& co
     case CollectorType::LIBSENSORS:
       return BuildLibsensorsCollectors(target);
     case CollectorType::PROCFS:
+#if defined(ASTL_INCLUDE_PROCFS)
       return BuildProcfsCollectors(target);
+#else
+      ASTL_LOG_ERROR("BuildCollectorManager: procfs target '{}' is unsupported by this build", target.Name());
+      return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+#endif
     default:
       ASTL_LOG_ERROR("BuildCollectorManager: Unsupported collector type for target {}", target.Name());
       return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);

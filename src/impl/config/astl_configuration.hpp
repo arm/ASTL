@@ -13,10 +13,28 @@
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
+#include "common/capabilities.hpp"
 #include "common/metric_config.hpp"
 #include "config/scmi_platform_telemetry_spec.hpp"
 
 namespace astl {
+
+/** @brief Collectors enabled for live topology and metric discovery. */
+struct CollectorSelection {
+  bool scmi{true};
+#if defined(ASTL_INCLUDE_LIBSENSORS)
+  bool libsensors{true};
+#else
+  bool libsensors{false};
+#endif
+#if defined(ASTL_INCLUDE_PROCFS)
+  bool procfs{true};
+#else
+  bool procfs{false};
+#endif
+
+  [[nodiscard]] auto IsEnabled(CollectorType collector_type) const -> bool;
+};
 
 /** @brief Overall configuration for the ASTL library */
 struct AstlConfiguration {
@@ -50,6 +68,9 @@ struct AstlConfiguration {
 
   /** @brief Path to load ASTL components from a saved session (.astl file). */
   std::optional<std::filesystem::path> load_file_path;
+
+  /** @brief Collector allowlist used for live discovery. */
+  CollectorSelection collectors;
 
   [[nodiscard]] static auto CreateConfiguration() -> std::expected<AstlConfiguration, astl_status_code>;
 

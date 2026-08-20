@@ -17,7 +17,9 @@
 #include "metric/i_metric_manager.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/metric_manager_cache_loader.hpp"
-#include "metric/procfs_metric_builder.hpp"
+#if defined(ASTL_INCLUDE_PROCFS)
+#  include "metric/procfs_metric_builder.hpp"
+#endif
 #include "metric/scmi_metric_builder.hpp"
 #include "metric/scmi_target_configuration.hpp"
 
@@ -57,11 +59,13 @@ static auto RegisterConfiguredMetrics(
     const AstlConfiguration&                                              configuration,
     const std::unordered_map<CollectorType, std::vector<const ITarget*>>& collector_type_to_targets_map,
     IMetricManager*                                                       metric_manager) -> astl_status_code {
-  constexpr std::array<RegisterMetricsFunction, 4> register_metrics_functions = {
+  constexpr std::array register_metrics_functions = {
       RegisterScmiMetrics,
       RegisterLibsensorsMetrics,
+#if defined(ASTL_INCLUDE_PROCFS)
       RegisterProcfsMetrics,
       RegisterProcfsCounters,
+#endif
   };
 
   astl_status_code status = ASTL_STATUS_SUCCESS;

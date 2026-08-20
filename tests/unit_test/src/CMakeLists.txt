@@ -34,9 +34,7 @@ set(UNIT_TEST_SRCS
     scmi_specification_json_utests.cpp
     topology_manager_utests.cpp
     output_manager_utests.cpp
-    procfs_collector_utests.cpp
     procfs_composite_metric_utests.cpp
-    procfs_metric_builder_utests.cpp
     buffer_output_utests.cpp
     processed_sampled_data_utests.cpp
     perfetto_output_utests.cpp
@@ -51,6 +49,9 @@ set(UNIT_TEST_SRCS
     pause_marker_utests.cpp
     lifecycle_events_utests.cpp
     ${CMAKE_SOURCE_DIR}/tests/test_utilities.cpp)
+if(ASTL_INCLUDE_PROCFS)
+  list(APPEND UNIT_TEST_SRCS procfs_collector_utests.cpp procfs_metric_builder_utests.cpp)
+endif()
 if(ASTL_HAVE_LIBSENSORS)
   find_library(SENSORS_LIB sensors)
   if(SENSORS_LIB)

@@ -158,6 +158,10 @@ mount -t stlmfs none /sys/fs/arm_telemetry/
 
 If needed, use these environment variables to choose or redirect the SCMI backend:
 
+- `ASTL_COLLECTORS`: comma-separated allowlist of collectors used for live
+  discovery. Supported names are `scmi`, `libsensors`, and `procfs`. Unset or
+  empty enables every collector included in the build. Unknown or unavailable
+  names cause initialization to fail.
 - `ASTL_SCMI_INTERFACE`: SCMI backend preference. Accepted values are `auto`,
   `ioctl`, and `sysfs`; unset or unknown values use `auto`.
 - `ASTL_SCMI_IOCTL_DEV_ROOT`: ioctl device root. Defaults to `/dev/scmi`.
@@ -168,6 +172,8 @@ Some developers might have a reason to use modified platform definition and metr
 You can use ASTL_CONFIG_DIR for this.
 
 ```bash
+# optional - discover only SCMI targets and metrics
+export ASTL_COLLECTORS="scmi"
 # optional - force the legacy sysfs backend, for example when using MockSysfs
 export ASTL_SCMI_INTERFACE="sysfs"
 # optional - if SCMI ioctl devices are not under /dev/scmi
@@ -1208,6 +1214,13 @@ build systems and compilers, build it, and execute tests. Supported presets are 
 cmake -S . --preset debug
 cmake --build --preset debug
 ctest --preset debug
+```
+
+Procfs collection and its target-specific metric discovery are included by
+default. Developers can omit that support from a build with:
+
+```sh
+cmake -S . --preset debug -DASTL_PROCFS=OFF
 ```
 
 ### Development hooks

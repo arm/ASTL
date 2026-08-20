@@ -12,7 +12,9 @@
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/targets.pb.h"
 #include "target.hpp"
-#include "topology/procfs_topology_plugin.hpp"
+#if defined(ASTL_INCLUDE_PROCFS)
+#  include "topology/procfs_topology_plugin.hpp"
+#endif
 #include "topology/scmi_target.hpp"
 #include "topology/scmi_topology_plugin.hpp"
 #include "topology/topology_builder.hpp"
@@ -314,6 +316,18 @@ TEST_CASE("TopologyBuilder::BuildTopologyManager rejects load_file_path without 
   REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
 }
 
+TEST_CASE("TopologyBuilder::BuildTopologyManager honors disabled collectors", "[TopologyManager]") {
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration_result.has_value());
+  auto configuration       = configuration_result.value();
+  configuration.collectors = astl::CollectorSelection{.scmi = false, .libsensors = false, .procfs = false};
+
+  auto result = astl::BuildTopologyManager(configuration, std::nullopt);
+
+  REQUIRE(result.has_value());
+  REQUIRE(result.value()->GetTargets().empty());
+}
+
 TEST_CASE("TopologyBuilder::BuildTopologyManagerFromASTLFile fails when topology file is missing",
           "[TopologyManager]") {
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
@@ -386,6 +400,9 @@ TEST_CASE("TopologyBuilder::BuildTopologyManagerFromASTLFile rebuilds a serializ
 }
 
 TEST_CASE("Topology::ProcfsPlugin", "[TopologyManager]") {
+#if !defined(ASTL_INCLUDE_PROCFS)
+  SKIP("ASTL was built without procfs support");
+#else
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
 
@@ -408,4 +425,5 @@ TEST_CASE("Topology::ProcfsPlugin", "[TopologyManager]") {
   REQUIRE(targets->size() == 1);
   REQUIRE((*targets)[0]->Name() == "procfs");
   REQUIRE((*targets)[0]->GetCollectorType() == astl::CollectorType::PROCFS);
+#endif
 }

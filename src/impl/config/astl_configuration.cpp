@@ -4,8 +4,11 @@
 
 #include "config/astl_configuration.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
@@ -15,6 +18,89 @@
 #include "config/configuration_manager.hpp"
 
 namespace astl {
+
+auto CollectorSelection::IsEnabled(CollectorType collector_type) const -> bool {
+  switch (collector_type) {
+    case CollectorType::SCMI:
+      return scmi;
+    case CollectorType::LIBSENSORS:
+      return libsensors;
+    case CollectorType::PROCFS:
+      return procfs;
+    case CollectorType::ASTL_NATIVE:
+      return true;
+    case CollectorType::UNKNOWN:
+      return false;
+  }
+  return false;
+}
+
+namespace {
+
+auto TrimCollectorName(std::string_view value) -> std::string {
+  // string_view iterators are not necessarily pointers (for example, with MSVC STL).
+  // NOLINTNEXTLINE(readability-qualified-auto)
+  const auto first = std::find_if_not(value.begin(), value.end(),
+                                      [](unsigned char character) { return std::isspace(character) != 0; });
+  // NOLINTNEXTLINE(readability-qualified-auto)
+  const auto last = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char character) {
+                      return std::isspace(character) != 0;
+                    }).base();
+  if (first >= last) {
+    return {};
+  }
+  std::string result(first, last);
+  std::transform(result.begin(), result.end(), result.begin(),
+                 [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+  return result;
+}
+
+auto ParseCollectorSelection() -> std::expected<CollectorSelection, astl_status_code> {
+  const std::string value = GetEnvVar(EnvVar::ASTL_COLLECTORS);
+  if (TrimCollectorName(value).empty()) {
+    return CollectorSelection{};
+  }
+
+  CollectorSelection selection{.scmi = false, .libsensors = false, .procfs = false};
+  size_t             start = 0;
+  while (start <= value.size()) {
+    const auto end  = value.find(',', start);
+    const auto name = TrimCollectorName(std::string_view{value}.substr(start, end - start));
+    if (name.empty()) {
+      ASTL_LOG_ERROR("ASTL_COLLECTORS contains an empty collector name: '{}'", value);
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+
+    if (name == "scmi") {
+      selection.scmi = true;
+    } else if (name == "libsensors") {
+#if defined(ASTL_INCLUDE_LIBSENSORS)
+      selection.libsensors = true;
+#else
+      ASTL_LOG_ERROR("ASTL_COLLECTORS requests libsensors, but this build does not include libsensors support");
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+#endif
+    } else if (name == "procfs") {
+#if defined(ASTL_INCLUDE_PROCFS)
+      selection.procfs = true;
+#else
+      ASTL_LOG_ERROR("ASTL_COLLECTORS requests procfs, but this build was configured with ASTL_PROCFS=OFF");
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+#endif
+    } else {
+      ASTL_LOG_ERROR("Unknown collector '{}' in ASTL_COLLECTORS", name);
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+
+    if (end == std::string::npos) {
+      break;
+    }
+    start = end + 1;
+  }
+  return selection;
+}
+
+}  // namespace
 
 /** @brief if ASTL_SCMI_SYSFS_TELEMETRY_ROOT is set, use that, else use default path */
 static auto GetScmiSysFsTelemetryRootPath() -> std::filesystem::path {
@@ -188,10 +274,16 @@ AstlConfiguration::AstlConfiguration(std::filesystem::path const&               
   auto scmi_sysfs_path        = GetScmiSysFsTelemetryRootPath();
   auto scmi_ioctl_device_root = GetScmiIoctlDeviceRootPath();
   auto config_dir_path        = GetAstlConfigDirPath();
+  auto collectors             = ParseCollectorSelection();
   if (!config_dir_path) {
     return std::unexpected<astl_status_code>(config_dir_path.error());
   }
-  return AstlConfiguration(scmi_sysfs_path, scmi_ioctl_device_root, *config_dir_path, std::nullopt);
+  if (!collectors) {
+    return std::unexpected<astl_status_code>(collectors.error());
+  }
+  auto configuration       = AstlConfiguration(scmi_sysfs_path, scmi_ioctl_device_root, *config_dir_path, std::nullopt);
+  configuration.collectors = *collectors;
+  return configuration;
 }
 
 }  // namespace astl

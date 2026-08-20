@@ -10,8 +10,10 @@
 #include "../../test_utilities.hpp"
 #include "collector/collector_builder.hpp"
 #include "collector/collector_manager.hpp"
-#include "topology/procfs_target.hpp"
 #include "topology/scmi_target.hpp"
+#if defined(ASTL_INCLUDE_PROCFS)
+#  include "topology/procfs_target.hpp"
+#endif
 
 TEST_CASE("CollectorManager::RegisterRawSampleSink", "[collector_manager]") {
   // create a collector manager with an empty map of target-collector
@@ -182,6 +184,9 @@ TEST_CASE("CollectorManager::BuildCollectorManager creates SCMI collectors for S
 
 TEST_CASE("CollectorManager::BuildCollectorManager creates procfs collectors for procfs targets",
           "[collector_manager]") {
+#if !defined(ASTL_INCLUDE_PROCFS)
+  SKIP("ASTL was built without procfs support");
+#else
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
   auto configuration = configuration_result.value();
@@ -198,6 +203,7 @@ TEST_CASE("CollectorManager::BuildCollectorManager creates procfs collectors for
   REQUIRE(capabilities_map.contains(procfs_target));
   REQUIRE(capabilities_map.at(procfs_target).size() == 1);
   REQUIRE(capabilities_map.at(procfs_target).front().collector_type == astl::CollectorType::PROCFS);
+#endif
 }
 
 TEST_CASE("CollectorManager::BuildCollectorManager uses SCMI target metadata for sysfs subdirectories",
