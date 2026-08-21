@@ -13,16 +13,114 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: read
   checks: write
 
 jobs:
   blackduck:
+    if: ${{ github.repository == 'Arm-Debug/ASTL' }}
     runs-on: self-hosted-ubuntu-24.04
     steps:
+      - name: 🔑 Create source checkout token
+        id: source-checkout-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL,mock-SCMI
+          permission-contents: read
+
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.head_ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
           path: "ASTL"
+      - name: Install Scan Dependencies
+        run: |
+          sudo apt-get -o DPkg::Lock::Timeout=300 update
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y \
+            build-essential \
+            cmake \
+            g++ \
+            gcc \
+            libsensors-dev \
+            ninja-build \
+            openjdk-17-jdk \
+            openjdk-17-jre \
+            pkg-config \
+            python3
+
+      - name: ⤵️ VCPKG - Restore Cache
+        id: vcpkg-cache
+        uses: TAServers/vcpkg-cache@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: ⤵️ VCPKG - Install Dependencies
+        uses: lukka/run-vcpkg@v11
+        env:
+          VCPKG_FEATURE_FLAGS: binarycaching
+          VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
+        with:
+          vcpkgDirectory: "${{ github.workspace }}/ASTL/external/vcpkg"
+          vcpkgJsonGlob: "**/vcpkg.json"
+
+      - name: ⚙️ Configure ASTL
+        working-directory: ${{ github.workspace }}/ASTL
+        env:
+          VCPKG_FEATURE_FLAGS: binarycaching
+          VCPKG_BINARY_SOURCES: clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite
+        run: |
+          cmake --version
+          cmake \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_C_COMPILER=gcc \
+            -S "${{ github.workspace }}/ASTL" \
+            --preset release
+
+      - name: ⚙️ Generate Protobuf Sources
+        working-directory: ${{ github.workspace }}/ASTL
+        run: cmake --build --preset release --target proto_gen --verbose
+
+      - name: ⤵️ Set up Python 3.9
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+      - name: Fetch Detect Script
+        run: |
+          curl -s -L -o "${{ github.workspace }}/detect-arm.sh" "https://artifactory.arm.com/artifactory/synopsys-blackduck.detect-arm/detect-arm.sh"
+          chmod +x ${{ github.workspace }}/detect-arm.sh
+      - name: Run Blackduck
+        env:
+          # Blackduck will try to download its own version of the java JRE and run Detect with that instead of whatever's installed on the local machine
+          # Unfortunately, it will try to use the x86 JRE when running on an ARM64 runner
+          # This environment variable overrides this behavior and forces Detect to use the JRE installed by apt-get in a previous step
+          # If you see "Syntax error: Unterminated quoted string", it's probably this issue.
+          BDS_JAVA_HOME: /usr/lib/jvm/java-17-openjdk-arm64/
+        run: |
+          VERSION=$(head -1 ${{ github.workspace }}/ASTL/VERSION.md)
+          echo "VERSION = ${VERSION}"
+          ${{ github.workspace }}/detect-arm.sh \
+          --blackduck.url='https://arm.app.blackduck.com' \
+          --detect.project.name='Arm-Debug:ASTL' \
+          --blackduck.api.token="${{ secrets.ITS_BLACKDUCK_KEY }}" \
+          --detect.project.version.name="${VERSION}" \
+          --detect.tools='SIGNATURE_SCAN,DETECTOR' \
+          --detect.source.path="${{ github.workspace }}/ASTL" \
+          --detect.detector.search.depth=3 \
+          --detect.detector.search.continue=true \
+          --detect.excluded.directories.defaults.disabled=true \
+          --detect.included.detector.types='CLANG,GO_MOD,GIT' \
+          --detect.required.detector.types='CLANG' \
+          --detect.excluded.directories='external' \
+          --detect.blackduck.signature.scanner.paths="${{ github.workspace }}/ASTL/third_party,${{ github.workspace }}/ASTL/build/release/vcpkg_installed" \
+          --detect.blackduck.signature.scanner.license.search=true \
+          --detect.blackduck.signature.scanner.snippet.matching=SNIPPET_MATCHING \
+          --detect.project.deep.license=true \
+          --detect.wait.for.results=true \
+          --detect.policy.check.fail.on.severities=ALL \
+          --detect.timeout=3600 \
+          --detect.cleanup=false

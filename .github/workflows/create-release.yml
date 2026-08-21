@@ -219,6 +219,7 @@ jobs:
           JFROG_CLI_REPORT_USAGE: "false"
 
       - name: 🧪 Out-Of-Box Testing
+        if: ${{ github.repository == 'Arm-Debug/ASTL' }}
         uses: ./ASTL/.github/actions/out-of-box-testing
         with:
           astl_root: ${{ github.workspace }}/ASTL
