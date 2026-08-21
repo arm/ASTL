@@ -11,7 +11,7 @@
 #  include <sys/ioctl.h>
 #endif
 
-// This file mirrors include/uapi/linux/scmi.h from the V8 SCMI telemetry
+// This file mirrors include/uapi/linux/scmi.h from the V10 SCMI telemetry
 // patchset. Keep all layouts and ioctl argument types identical to that UAPI.
 // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-macro-usage,cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 
@@ -111,12 +111,6 @@ struct scmi_tlm_de_info {
   uint64_t reserved;
 };
 
-struct scmi_tlm_des_list {
-  uint32_t num_des;
-  uint32_t pad;
-  uint64_t des;
-};
-
 struct scmi_tlm_de_sample {
   uint32_t id;
   uint32_t pad;
@@ -152,12 +146,6 @@ struct scmi_tlm_grp_info {
   uint64_t reserved;
 };
 
-struct scmi_tlm_grps_list {
-  uint32_t num_grps;
-  uint32_t pad;
-  uint64_t grps;
-};
-
 struct scmi_tlm_grp_desc {
   uint32_t grp_id;
   uint32_t num_des;
@@ -173,20 +161,8 @@ struct scmi_tlm_shmti_info {
   uint64_t reserved;
 };
 
-struct scmi_tlm_shmtis_list {
-  uint32_t num_shmtis;
-  uint32_t pad;
-  uint64_t shmtis;
-};
-
 struct scmi_tlm_uuid {
   uint8_t bytes[SCMI_TLM_DE_IMPL_UUID_SZ];
-};
-
-struct scmi_tlm_uuid_list {
-  uint32_t num_uuids;
-  uint32_t pad;
-  uint64_t uuids;
 };
 
 struct scmi_tlm_event {
@@ -208,19 +184,19 @@ struct scmi_tlm_event {
 #  define SCMI_TLM_GET_DE_CFG      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x04, struct scmi_tlm_batch)
 #  define SCMI_TLM_SET_DE_CFG      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x05, struct scmi_tlm_batch)
 #  define SCMI_TLM_GET_DE_INFO     _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x06, struct scmi_tlm_de_info)
-#  define SCMI_TLM_GET_DE_LIST     _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x07, struct scmi_tlm_des_list)
+#  define SCMI_TLM_GET_DE_LIST     _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x07, struct scmi_tlm_batch)
 #  define SCMI_TLM_DE_READ         _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x08, struct scmi_tlm_de_sample)
 #  define SCMI_TLM_GET_ALL_CFG     _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x09, struct scmi_tlm_de_config)
 #  define SCMI_TLM_SET_ALL_CFG     _IOW(SCMI_TLM_IOCTL_MAGIC, 0x0A, struct scmi_tlm_de_config)
-#  define SCMI_TLM_GET_GRP_LIST    _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0B, struct scmi_tlm_grps_list)
+#  define SCMI_TLM_GET_GRP_LIST    _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0B, struct scmi_tlm_batch)
 #  define SCMI_TLM_GET_GRP_INFO    _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0C, struct scmi_tlm_grp_info)
 #  define SCMI_TLM_GET_GRP_DESC    _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0D, struct scmi_tlm_grp_desc)
 #  define SCMI_TLM_SINGLE_READ     _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0E, struct scmi_tlm_data_read)
 #  define SCMI_TLM_BULK_READ       _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x0F, struct scmi_tlm_data_read)
 #  define SCMI_TLM_BATCH_READ      _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x10, struct scmi_tlm_batch)
-#  define SCMI_TLM_GET_SHMTI_LIST  _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x11, struct scmi_tlm_shmtis_list)
+#  define SCMI_TLM_GET_SHMTI_LIST  _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x11, struct scmi_tlm_batch)
 #  define SCMI_TLM_RESET           _IO(SCMI_TLM_IOCTL_MAGIC, 0x12)
-#  define SCMI_TLM_GET_UUID_LIST   _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x13, struct scmi_tlm_uuid_list)
+#  define SCMI_TLM_GET_UUID_LIST   _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x13, struct scmi_tlm_batch)
 #  define SCMI_TLM_EVENT_SUBSCRIBE _IOWR(SCMI_TLM_IOCTL_MAGIC, 0x14, struct scmi_tlm_event)
 #endif
 
@@ -230,17 +206,13 @@ static_assert(sizeof(scmi_tlm_config) == 24);
 static_assert(sizeof(scmi_tlm_intervals) == 32);
 static_assert(sizeof(scmi_tlm_de_config) == 48);
 static_assert(sizeof(scmi_tlm_de_info) == 72);
-static_assert(sizeof(scmi_tlm_des_list) == 16);
 static_assert(sizeof(scmi_tlm_de_sample) == 24);
 static_assert(sizeof(scmi_tlm_data_read) == 24);
 static_assert(sizeof(scmi_tlm_batch) == 32);
 static_assert(sizeof(scmi_tlm_grp_info) == 24);
-static_assert(sizeof(scmi_tlm_grps_list) == 16);
 static_assert(sizeof(scmi_tlm_grp_desc) == 24);
 static_assert(sizeof(scmi_tlm_shmti_info) == 24);
-static_assert(sizeof(scmi_tlm_shmtis_list) == 16);
 static_assert(sizeof(scmi_tlm_uuid) == 16);
-static_assert(sizeof(scmi_tlm_uuid_list) == 16);
 static_assert(sizeof(scmi_tlm_event) == 24);
 
 // NOLINTEND(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-macro-usage,cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)

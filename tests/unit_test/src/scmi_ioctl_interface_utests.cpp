@@ -117,7 +117,7 @@ TEST_CASE("ScmiIoctlInterface identifies likely telemetry ioctl device names", "
   REQUIRE_FALSE(astl::ScmiIoctlInterface::IsLikelyTelemetryDeviceName("tlm_1_extra"));
 }
 
-TEST_CASE("SCMI ioctl UAPI mirrors the V8 layouts and request encodings", "[scmi_ioctl_interface]") {
+TEST_CASE("SCMI ioctl UAPI mirrors the V10 layouts and request encodings", "[scmi_ioctl_interface]") {
   CHECK(sizeof(scmi_tlm_config) == 24);
   CHECK(sizeof(scmi_tlm_de_config) == 48);
   CHECK(sizeof(scmi_tlm_de_info) == 72);
@@ -128,7 +128,11 @@ TEST_CASE("SCMI ioctl UAPI mirrors the V8 layouts and request encodings", "[scmi
   CHECK(_IOC_DIR(SCMI_TLM_SET_ALL_CFG) == _IOC_WRITE);
   CHECK(_IOC_SIZE(SCMI_TLM_GET_DE_CFG) == sizeof(scmi_tlm_batch));
   CHECK(_IOC_SIZE(SCMI_TLM_SET_DE_CFG) == sizeof(scmi_tlm_batch));
+  CHECK(_IOC_SIZE(SCMI_TLM_GET_DE_LIST) == sizeof(scmi_tlm_batch));
+  CHECK(_IOC_SIZE(SCMI_TLM_GET_GRP_LIST) == sizeof(scmi_tlm_batch));
   CHECK(_IOC_SIZE(SCMI_TLM_BATCH_READ) == sizeof(scmi_tlm_batch));
+  CHECK(_IOC_SIZE(SCMI_TLM_GET_SHMTI_LIST) == sizeof(scmi_tlm_batch));
+  CHECK(_IOC_SIZE(SCMI_TLM_GET_UUID_LIST) == sizeof(scmi_tlm_batch));
 #endif
 }
 
