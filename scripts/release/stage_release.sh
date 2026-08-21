@@ -14,6 +14,17 @@ Usage: scripts/release/stage_release.sh [OPTIONS]
 
 Build, test, and stage ASTL release packages. No overlay is required.
 
+Purpose and when to use it:
+  Use stage_release.sh to validate and package an already-prepared source tree,
+  either locally or during the publishing phase of release CI. It does not modify
+  CHANGELOG.md or VERSION.md. The Prepare Release workflow runs prepare_release.py
+  and opens a metadata PR first; after that PR is merged, the Release workflow
+  invokes stage_release.sh to package the reviewed commit.
+
+Choosing a release script:
+  prepare_release.py  edits CHANGELOG.md and VERSION.md for a release commit.
+  stage_release.sh    builds, tests, and packages without editing source metadata.
+
 Options:
   --version VERSION             Package version (default: VERSION.md)
   --variant VARIANT             Repeat for library-only, everything, atx, or atx-static

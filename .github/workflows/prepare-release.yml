@@ -1,0 +1,127 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Prepare Release
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump_type:
+        description: "Stable release version bump"
+        required: true
+        type: choice
+        options:
+          - MAJOR
+          - MINOR
+          - PATCH
+      release_date:
+        description: "Release date in YYYY-MM-DD format (defaults to the current UTC date)"
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔑 Create release preparation token
+        # use the APAP_APP_PRIVATE_KEY instead of GITHUB_TOKEN
+        # so that this workflow can create a pull request that runs CI
+        id: release-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: ⤵️ Checkout release source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+          token: ${{ steps.release-token.outputs.token }}
+
+      - name: 🔎 Validate release source and determine version
+        shell: bash
+        env:
+          BUMP_TYPE: ${{ inputs.version_bump_type }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          if [[ "${BUMP_TYPE}" =~ ^(MAJOR|MINOR)$ && "${SOURCE_BRANCH}" != "main" ]]; then
+            echo "MAJOR and MINOR releases must be prepared from main." >&2
+            exit 1
+          fi
+          if [[ "${BUMP_TYPE}" == "PATCH" && ! "${SOURCE_BRANCH}" =~ ^releases?/ ]]; then
+            echo "PATCH releases must be prepared from a release/ or releases/ branch." >&2
+            exit 1
+          fi
+
+          INITIAL_VERSION_STRING="$(head -n 1 VERSION.md)"
+          RELEASE_VERSION="$(scripts/bump_version.sh "${BUMP_TYPE}" "${INITIAL_VERSION_STRING}")"
+          echo "Preparing ${RELEASE_VERSION} from ${SOURCE_BRANCH} (${INITIAL_VERSION_STRING}, ${BUMP_TYPE})."
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+
+      - name: 📝 Prepare changelog and version metadata
+        shell: bash
+        env:
+          RELEASE_DATE: ${{ inputs.release_date }}
+        run: |
+          PREPARE_ARGS=(--release-version "${RELEASE_VERSION}")
+          if [[ -n "${RELEASE_DATE}" ]]; then
+            PREPARE_ARGS+=(--date "${RELEASE_DATE}")
+          fi
+          scripts/release/prepare_release.py "${PREPARE_ARGS[@]}"
+
+      - name: ⤵️ Install apt-get Dependencies (ubuntu)
+        shell: bash
+        run: |
+          # need clang for check_api_policy
+          sudo apt-get -o DPkg::Lock::Timeout=300 update
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-20
+
+      - name: 🔒 Validate prepared release metadata
+        run: |
+          scripts/release/prepare_release.py \
+            --release-version "${RELEASE_VERSION}" \
+            --check
+          python3 scripts/check_api_policy.py \
+            --base-ref HEAD \
+            --base-is-exact \
+            --release-version "${RELEASE_VERSION}" \
+            --skip-pr-policy
+
+      - name: 🔀 Open release preparation PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          PREPARATION_BRANCH="cicd/prepare_release/${RELEASE_VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git switch -c "${PREPARATION_BRANCH}"
+          git add CHANGELOG.md VERSION.md
+          git commit -m "[NO-JIRA] Prepare ${RELEASE_VERSION} release"
+          git push --set-upstream origin "${PREPARATION_BRANCH}"
+
+          gh pr create \
+            --base "${SOURCE_BRANCH}" \
+            --head "${PREPARATION_BRANCH}" \
+            --title "[NO-JIRA] Prepare ${RELEASE_VERSION} release" \
+            --label "version-bump" \
+            --body "$(printf '%s\n\n%s\n\n%s\n' \
+              "Promotes the Unreleased changelog and sets VERSION.md to ${RELEASE_VERSION}." \
+              "After this PR is reviewed and merged, dispatch the Release workflow with release type STABLE from ${SOURCE_BRANCH}." \
+              '- [x] No public API or user-flow change')"

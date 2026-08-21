@@ -17,16 +17,14 @@ on:
     - cron: "14 9 * * *"
   workflow_dispatch:
     inputs:
-      version_bump_type:
-        description: "Version bump type"
+      release_type:
+        description: "Publish a rolling build or an already-prepared stable release"
         required: true
-        default: "NONE"
+        default: "ROLLING"
         type: choice
         options:
-          - NONE
-          - MAJOR
-          - MINOR
-          - PATCH
+          - ROLLING
+          - STABLE
 
 concurrency:
   # Cancel currently running release workflow if a new one is triggered
@@ -51,7 +49,7 @@ jobs:
         c_compiler: [gcc]
         cpp_compiler: [g++]
     env:
-      VERSION_BUMP_TYPE: ${{ inputs.version_bump_type || 'NONE' }}
+      RELEASE_TYPE: ${{ inputs.release_type || 'ROLLING' }}
 
     steps:
       - name: 🔑 Create source checkout token
@@ -70,25 +68,80 @@ jobs:
         with:
           path: ASTL
           fetch-depth: 0
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ github.sha }}
           token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
-
-      - name: 📈 Determine Final Version String
-        run: |
-          echo "Bumping type: ${{ env.VERSION_BUMP_TYPE }}"
-          INITIAL_VERSION_STRING=$(head -n 1 "${{ github.workspace }}/ASTL/VERSION.md")
-          echo "INITIAL_VERSION_STRING=${INITIAL_VERSION_STRING}"
-          # If the bumping type is "NONE", bump_version.sh will only strip the ".post" suffix if present
-          BUMPED_VERSION_STRING=$("${{ github.workspace }}/ASTL/scripts/bump_version.sh" "${{ env.VERSION_BUMP_TYPE }}" "${INITIAL_VERSION_STRING}")
-          echo "BUMPED_VERSION_STRING=${BUMPED_VERSION_STRING}" | tee -a $GITHUB_ENV
 
       - name: ⤵️ Install apt-get Dependencies (ubuntu)
         if: contains(matrix.os, 'ubuntu')
         shell: bash
         run: |
           sudo apt-get -o DPkg::Lock::Timeout=300 update
-          sudo apt-get -o DPkg::Lock::Timeout=300 install -y tree zip gh
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-20 tree zip gh
+
+      - name: 📈 Determine Final Version String
+        shell: bash
+        env:
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          SOURCE_VERSION_STRING="$(head -n 1 "${{ github.workspace }}/ASTL/VERSION.md")"
+          echo "SOURCE_VERSION_STRING=${SOURCE_VERSION_STRING}"
+          if [[ "${RELEASE_TYPE}" == "STABLE" ]]; then
+            if [[ "${SOURCE_VERSION_STRING}" == *.post ]]; then
+              echo "Stable releases require a prepared VERSION.md without a .post suffix." >&2
+              echo "Run the Prepare Release workflow and merge its PR first." >&2
+              exit 1
+            fi
+            if [[ "${SOURCE_BRANCH}" != "main" && ! "${SOURCE_BRANCH}" =~ ^releases?/ ]]; then
+              echo "Stable releases must be published from main or a release branch." >&2
+              exit 1
+            fi
+            VERSION_STRING="${SOURCE_VERSION_STRING}"
+          else
+            # truncate '.post' from the version number for rolling releases to support cmake ASTL_VERSION_OVERRIDE
+            VERSION_STRING=$("${{ github.workspace }}/ASTL/scripts/bump_version.sh" NONE "${SOURCE_VERSION_STRING}")
+          fi
+          echo "VERSION_STRING=${VERSION_STRING}" | tee -a $GITHUB_ENV
+
+      - name: 📝 Verify Stable Release Metadata
+        if: env.RELEASE_TYPE == 'STABLE'
+        shell: bash
+        env:
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          "${{ github.workspace }}/ASTL/scripts/release/prepare_release.py" \
+            --release-version "${VERSION_STRING}" \
+            --check
+
+          RELEASE_TAG="release/${VERSION_STRING}"
+          if git -C "${{ github.workspace }}/ASTL" show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"; then
+            TAG_COMMIT="$(git -C "${{ github.workspace }}/ASTL" rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
+            if [[ "${TAG_COMMIT}" != "${GITHUB_SHA}" ]]; then
+              echo "Stable release tag ${RELEASE_TAG} already points to ${TAG_COMMIT}, not ${GITHUB_SHA}." >&2
+              exit 1
+            fi
+            echo "Stable release tag ${RELEASE_TAG} already points to this commit; continuing retry."
+          fi
+          if [[ "${SOURCE_BRANCH}" == "main" ]] && \
+            git -C "${{ github.workspace }}/ASTL" show-ref --verify --quiet \
+              "refs/remotes/origin/release/${VERSION_STRING}"; then
+            BRANCH_COMMIT="$(git -C "${{ github.workspace }}/ASTL" rev-parse \
+              "refs/remotes/origin/release/${VERSION_STRING}")"
+            if [[ "${BRANCH_COMMIT}" != "${GITHUB_SHA}" ]]; then
+              echo "Release branch release/${VERSION_STRING} already points to ${BRANCH_COMMIT}, not ${GITHUB_SHA}." >&2
+              exit 1
+            fi
+            echo "Release branch release/${VERSION_STRING} already points to this commit; continuing retry."
+          fi
+
+      - name: 🔒 Validate Public API Release Version
+        if: env.RELEASE_TYPE == 'STABLE'
+        run: |
+          python3 "${{ github.workspace }}/ASTL/scripts/check_api_policy.py" \
+            --base-ref HEAD \
+            --base-is-exact \
+            --release-version "${VERSION_STRING}" \
+            --skip-pr-policy
 
       # Build via GitHub composite action =====
       - name: 🏗️ Build ASTL
@@ -100,7 +153,7 @@ jobs:
           cpp_compiler: ${{ matrix.cpp_compiler }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           source_dir: ${{ github.workspace }}/ASTL
-          version_override: ${{ env.BUMPED_VERSION_STRING }}
+          version_override: ${{ env.VERSION_STRING }}
 
       - name: 📐 Determine Build Output Architecture
         run: |
@@ -125,16 +178,16 @@ jobs:
           echo "OS_TYPE=${OS_TYPE}" | tee -a $GITHUB_ENV
           echo "ARCH=${ARCH}" | tee -a $GITHUB_ENV
 
-          ARTIFACT_NAME_01_LIBRARY="astl_version_${{ env.BUMPED_VERSION_STRING }}_${OS_TYPE}_${ARCH}_library"
+          ARTIFACT_NAME_01_LIBRARY="astl_version_${{ env.VERSION_STRING }}_${OS_TYPE}_${ARCH}_library"
           echo "ARTIFACT_NAME_01_LIBRARY=${ARTIFACT_NAME_01_LIBRARY}" | tee -a  $GITHUB_ENV
 
           STAGING_PATH_01_LIBRARY="${{ github.workspace }}/${ARTIFACT_NAME_01_LIBRARY}"
           echo "STAGING_PATH_01_LIBRARY=${STAGING_PATH_01_LIBRARY}" | tee -a $GITHUB_ENV
 
-          if [[ ${{ env.VERSION_BUMP_TYPE }} == "NONE" ]]; then
+          if [[ "${{ env.RELEASE_TYPE }}" == "ROLLING" ]]; then
             TAG_NAME="release/rolling"
           else
-            TAG_NAME="release/${{ env.BUMPED_VERSION_STRING }}"
+            TAG_NAME="release/${{ env.VERSION_STRING }}"
           fi
           echo "TAG_NAME=${TAG_NAME}" | tee -a $GITHUB_ENV
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
@@ -143,7 +196,7 @@ jobs:
         run: |
           "${{ github.workspace }}/ASTL/scripts/release/stage_release.sh" \
             --skip-build \
-            --version "${{ env.BUMPED_VERSION_STRING }}" \
+            --version "${{ env.VERSION_STRING }}" \
             --output-dir "${{ github.workspace }}"
 
       - name: 🛠️ Prepare Bootstrap Installer Asset
@@ -153,7 +206,7 @@ jobs:
       - name: 🗑️ Delete Existing Rolling Release
         # Technically the second condition in the IF is redundant,
         # but it makes the intent clearer and adds an element of safety
-        if: ${{ env.VERSION_BUMP_TYPE == 'NONE' && env.TAG_NAME == 'release/rolling' }}
+        if: ${{ env.RELEASE_TYPE == 'ROLLING' && env.TAG_NAME == 'release/rolling' }}
         run: |
           # Check if release exists before trying to delete
           if gh release view "${{ env.TAG_NAME }}" --repo "${{ github.repository }}" &> /dev/null; then
@@ -169,6 +222,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: "${{ env.TAG_NAME }}"
+          target_commitish: "${{ github.sha }}"
           files: |
             ${{ github.workspace }}/${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip
             ${{ github.workspace }}/${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip.sha256
@@ -204,7 +258,7 @@ jobs:
 
           # Some Artifactory deployments return 404 for JFrog CLI usage reporting
           # (/artifactory/api/system/usage). Disable it so CI logs only show real upload failures.
-          if [[ ${{ env.VERSION_BUMP_TYPE }} == "NONE" ]]
+          if [[ "${{ env.RELEASE_TYPE }}" == "ROLLING" ]]
           then
             RETENTION_POLICY="nightly"
           else
@@ -226,95 +280,61 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.TAG_NAME }}
 
-      # Create Release Branch
-      # For NONE bumps:
-      # - These are meant for frequently scheduled CI/CD releases that don't necessarily have any critical changes
-      # - VERSION.md is not updated
-      # - Does not create any PRs automatically
-      # - Does not merge to main nor any release branches
-      # - Redirect the "releases/rolling" branch to point to the commit in main that this workflow is currently running on
-      # For PATCH bumps:
-      # - These are meant for cherry-picked fixes on existing release branches
-      # - VERSION.md is updated with the bumped version
-      # - Creates a PR to merge back to whatever branch this flow was run on (usually a release branch)
-      # - "releases/rolling" branch is not touched
-      # - "main" is not touched
-      # For MAJOR or MINOR bumps:
-      # - These are meant to create a new release branch that doesn't already exist
-      # - Creates a PR to merge back to main which bumps VERSION.md with a ".post" suffix
-      # - Creates a parallel branch (without a PR) to start a new release branch which
-      #     bumps VERSION.md to be the same number as the main PR, but without the ".post" suffix
-      # - "releases/rolling" branch is not touched
-      - name: 🏷️ Bump Version, Create Branches, and Create PRs
-        working-directory: ${{ github.workspace }}/ASTL
-        run: |
+      - name: 🔑 Create post-release source token
+        if: env.RELEASE_TYPE == 'STABLE' && github.ref_name == 'main'
+        id: post-release-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
 
-          # Configure git
+      - name: ⤵️ Configure Git to use post-release write credentials
+        if: env.RELEASE_TYPE == 'STABLE' && github.ref_name == 'main'
+        uses: actions/checkout@v7
+        with:
+          clean: false
+          fetch-depth: 0
+          path: ASTL
+          ref: ${{ github.sha }}
+          submodules: false
+          token: ${{ steps.post-release-token.outputs.token }}
+
+      - name: 🌱 Create release branch and post-release version PR
+        if: env.RELEASE_TYPE == 'STABLE' && github.ref_name == 'main'
+        working-directory: ${{ github.workspace }}/ASTL
+        env:
+          GH_TOKEN: ${{ steps.post-release-token.outputs.token }}
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          RELEASE_BRANCH="release/${VERSION_STRING}"
+          POST_RELEASE_BRANCH="cicd/post_release/${VERSION_STRING}"
 
-          if [[ "${{ env.VERSION_BUMP_TYPE }}" == "NONE" ]]; then
+          if ! git show-ref --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}"; then
+            git branch "${RELEASE_BRANCH}" "${GITHUB_SHA}"
+            git push origin "refs/heads/${RELEASE_BRANCH}:refs/heads/${RELEASE_BRANCH}"
+          fi
 
-            echo "No PRs/branches will be created for 'NONE' version bumps."
+          if ! git show-ref --verify --quiet "refs/remotes/origin/${POST_RELEASE_BRANCH}"; then
+            git switch -c "${POST_RELEASE_BRANCH}" "${GITHUB_SHA}"
+            printf '%s.post\n' "${VERSION_STRING}" > VERSION.md
+            git add VERSION.md
+            git commit -m "[NO-JIRA] Start ${VERSION_STRING}.post development"
+            git push --set-upstream origin "${POST_RELEASE_BRANCH}"
+          fi
 
-          elif [[ "${{ env.VERSION_BUMP_TYPE }}" == "PATCH" ]]; then
-
-            echo "1 of 1: Create Branch + PR to bump VERSION.md on release branch"
-
-            BRANCH_NAME_FOR_PR_TO_MAIN="cicd/version_bump_release/${{ env.BUMPED_VERSION_STRING }}"
-            git checkout -b "$BRANCH_NAME_FOR_PR_TO_MAIN" ${{ github.ref_name }}
-            echo "${{ env.BUMPED_VERSION_STRING }}" > "${{ github.workspace }}/ASTL/VERSION.md"
-
-            git add "${{ github.workspace }}/ASTL/VERSION.md"
-            git commit -m "Bump version to ${{ env.BUMPED_VERSION_STRING }} for release branch"
-
-            git push origin "$BRANCH_NAME_FOR_PR_TO_MAIN"
-            # Create PR
-            gh pr create \
-              --base ${{ github.ref_name }} \
-              --head "$BRANCH_NAME_FOR_PR_TO_MAIN" \
-              --title "Bump version to ${{ env.BUMPED_VERSION_STRING }} for release branch" \
-              --body "Automated version bump to ${{ env.BUMPED_VERSION_STRING }} following ${{ env.VERSION_BUMP_TYPE }} release." \
-              --label "version-bump"
-
-          else
-
-            # MAJOR/MINOR version bump
-
-            echo "1 of 2 Create Branch + PR to bump VERSION.md on main"
-
-            # Create PR branch to merge back to main with .post suffix
-            BRANCH_NAME_FOR_PR_TO_MAIN="cicd/version_bump_main/${{ env.BUMPED_VERSION_STRING }}"
-            git checkout -b "$BRANCH_NAME_FOR_PR_TO_MAIN" main
-
-            # Update VERSION.md with .post suffix for main branch
-            echo "${{ env.BUMPED_VERSION_STRING }}.post" > "${{ github.workspace }}/ASTL/VERSION.md"
-
-            # Commit the VERSION.md change
-            git add "${{ github.workspace }}/ASTL/VERSION.md"
-            git commit -m "Bump version to ${{ env.BUMPED_VERSION_STRING }}.post for main branch"
-
-            # Push the branch
-            git push origin "$BRANCH_NAME_FOR_PR_TO_MAIN"
-
-            # Create PR to main
+          if ! gh pr list --head "${POST_RELEASE_BRANCH}" --state all --json number --jq 'length > 0' | grep -qx true; then
             gh pr create \
               --base main \
-              --head "$BRANCH_NAME_FOR_PR_TO_MAIN" \
-              --title "Bump version to ${{ env.BUMPED_VERSION_STRING }}.post for main branch" \
-              --body "Automated version bump to ${{ env.BUMPED_VERSION_STRING }}.post following ${{ env.VERSION_BUMP_TYPE }} release." \
-              --label "version-bump"
-
-            echo "2 of 2 Create Permanent Branch (no PR) for Release"
-
-            BRANCH_NAME_FOR_PERMANENT_RELEASE="release/${{ env.BUMPED_VERSION_STRING }}"
-            git checkout -b "release/${{ env.BUMPED_VERSION_STRING }}" main
-
-            echo "${{ env.BUMPED_VERSION_STRING }}" > "${{ github.workspace }}/ASTL/VERSION.md"
-
-            git add "${{ github.workspace }}/ASTL/VERSION.md"
-            git commit -m "Bump version to ${{ env.BUMPED_VERSION_STRING }} for release branch"
-
-            git push origin "$BRANCH_NAME_FOR_PERMANENT_RELEASE"
-
+              --head "${POST_RELEASE_BRANCH}" \
+              --title "[NO-JIRA] Start ${VERSION_STRING}.post development" \
+              --label "version-bump" \
+              --body "$(printf '%s\n\n%s\n' \
+                "Advances VERSION.md after publishing ${VERSION_STRING}." \
+                '- [x] No public API or user-flow change')"
           fi

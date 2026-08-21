@@ -8,6 +8,7 @@ permissions:
   actions: read
   contents: read
   checks: write
+  pull-requests: write
 
 # run this workflow serially for each PR. Cancel stale runs. fall back on github.ref if non-PR.
 concurrency:
@@ -111,6 +112,34 @@ jobs:
 
       - name: 🧹 Check Wrapper Coverage
         run: python3 ${{ github.workspace }}/scripts/check_wrapper_coverage.py
+
+      - name: 🧪 Test API Policy Checker
+        run: python3 -m unittest discover -s ${{ github.workspace }}/scripts/tests -p 'test_*.py' -v
+
+      - name: 🏷️ Label Public API Changes
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          changed_api_files="$(git diff --name-only "${BASE_SHA}...HEAD" -- include/)"
+          if [[ -n "${changed_api_files}" ]]; then
+            gh api \
+              --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+              -f "labels[]=impacts_api"
+          fi
+
+      - name: 🔒 Check Public API Policy
+        shell: bash
+        run: |
+          BASE_REF="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [[ -z "${BASE_REF}" || "${BASE_REF}" =~ ^0+$ ]]; then
+            BASE_REF="HEAD"
+          fi
+          python3 "${{ github.workspace }}/scripts/check_api_policy.py" --base-ref "${BASE_REF}"
 
       - name: 🧹 Lint with cppcheck
         run: ${{ github.workspace }}/scripts/cppcheck.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}

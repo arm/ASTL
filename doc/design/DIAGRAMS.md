@@ -26,6 +26,7 @@ The rendering is deterministic and handled by a custom Node.js script that ensur
 | System Phase 3    | Interval collection & immediate read | `system_phase_collection.mmd`         | `system_phase_collection.svg`         | Start, paused start, sampling loop, immediate read, pause/resume flow.             |
 | System Phase 4    | Stop & deferred processing           | `system_phase_stop_processing.mmd`    | `system_phase_stop_processing.svg`    | Process raw → processed, summaries, deferred model emphasis.                       |
 | System Phase 5    | Retrieval & shutdown                 | `system_phase_retrieval_shutdown.mmd` | `system_phase_retrieval_shutdown.svg` | Retrieval APIs, teardown, representative errors.                                   |
+| Release           | Normal stable release process        | `release_process.mmd`                 | `release_process.svg`                 | Human and automation handoffs from release decision through the `.post` PR.        |
 
 ## Rationale for Phased Split
 

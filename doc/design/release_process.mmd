@@ -1,0 +1,33 @@
+%% SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+%% SPDX-License-Identifier: Apache-2.0
+
+flowchart LR
+    subgraph phase1["Phase 1 — Prepare reviewed metadata"]
+        direction TB
+        decide(["Decision: cut a stable release"])
+        dispatchPrepare["Release manager<br/>Dispatch Prepare Release on main<br/>Choose MAJOR or MINOR<br/>and the release date"]
+        prepare["prepare-release.yml<br/>Invokes prepare_release.py<br/>Validates and updates metadata<br/>Opens the preparation PR"]
+        mergePrepare["Developers / reviewers<br/>Review CI<br/>Merge the preparation PR"]
+
+        decide --> dispatchPrepare --> prepare --> mergePrepare
+    end
+
+    subgraph phase2["Phase 2 — Publish reviewed source"]
+        direction TB
+        dispatchRelease["Release manager<br/>Dispatch Release on main<br/>Select STABLE<br/>Before other changes merge"]
+        verify["create-release.yml<br/>Invokes prepare_release.py --check<br/>Validates metadata and API policy"]
+        stage["create-release.yml<br/>Builds ASTL<br/>Invokes stage_release.sh<br/>Tests and packages the build"]
+        publish["create-release.yml<br/>Publishes the tag and artifacts<br/>Runs release tests<br/>Creates the release branch"]
+        postPr["create-release.yml<br/>Opens the VERSION.post PR"]
+        mergePost["Developers / reviewers<br/>Review CI<br/>Merge the .post PR"]
+        done(["Release complete<br/>Development version restored"])
+
+        dispatchRelease --> verify --> stage --> publish --> postPr --> mergePost --> done
+    end
+
+    phase1 --> phase2
+
+    classDef human fill:#e8f1ff,stroke:#2563a6,color:#102a43,stroke-width:2px;
+    classDef workflow fill:#f1eafe,stroke:#6d42a1,color:#2d1744,stroke-width:2px;
+    class dispatchPrepare,mergePrepare,dispatchRelease,mergePost human;
+    class prepare,verify,stage,publish,postPr workflow;

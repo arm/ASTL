@@ -1,3 +1,5 @@
+# Pull Request Title
+
 ## Description
 
 Please include a summary of the change and which issue is fixed. Please also include relevant motivation and context. List any dependencies that are required for this change.
@@ -17,10 +19,16 @@ Please describe any relevant performance impact of this change. This can be posi
 - [ ] Bug fix (non-breaking change which fixes an issue)
 - [ ] New feature (non-breaking change which adds functionality)
 - [ ] Testing, Verification, or CICD change
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Interface change (fix or feature that would cause the user facing interface to change)
 - [ ] This change requires a documentation update
-- [ ] This changes requires a version update
+
+## Public API declaration
+
+Select exactly one. PR CI uses this declaration to enforce wrapper and changelog updates for behavioral changes that
+cannot be inferred from the public headers. Stable-release CI validates the cumulative SemVer requirement.
+
+- [ ] No public API or user-flow change
+- [ ] Backward-compatible public API addition
+- [ ] Breaking public API or user-flow change
 
 ## How Has This Been Tested?
 

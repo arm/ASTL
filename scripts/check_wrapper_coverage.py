@@ -18,6 +18,7 @@ HEADERS = [
     REPO_ROOT / "include" / "astl" / "astl_telemetry.h",
 ]
 PYTHON_CORE = REPO_ROOT / "python" / "astl" / "_core.pyx"
+PYTHON_PXD = REPO_ROOT / "python" / "astl" / "_core.pxd"
 PYTHON_INIT = REPO_ROOT / "python" / "astl" / "__init__.py"
 GO_WRAPPER = REPO_ROOT / "Go" / "astl" / "astl.go"
 MAPPING_FILE = REPO_ROOT / "scripts" / "wrapper_coverage.json"
@@ -349,6 +350,18 @@ def load_mapping() -> dict[str, dict[str, dict[str, str]]]:
     return data["functions"]
 
 
+def load_enum_mapping() -> dict[str, dict[str, dict[str, str]]]:
+    data = json.loads(load_text(MAPPING_FILE))
+    return data.get("enum_coverage", {})
+
+
+def extract_c_enum_types() -> set[str]:
+    enum_types: set[str] = set()
+    for header in HEADERS:
+        enum_types.update(match.group("name") for match in ENUM_TYPEDEF_PATTERN.finditer(load_text(header)))
+    return enum_types
+
+
 def python_function_exists(symbol: str) -> bool:
     core_text = load_text(PYTHON_CORE)
     init_text = load_text(PYTHON_INIT)
@@ -357,6 +370,63 @@ def python_function_exists(symbol: str) -> bool:
 
 def go_function_exists(symbol: str) -> bool:
     return bool(re.search(GO_FUNCTION_PATTERN.format(name=re.escape(symbol)), load_text(GO_WRAPPER)))
+
+
+def wrapper_symbol_exists(wrapper_name: str, symbol: str) -> bool:
+    if wrapper_name == "python":
+        return symbol in load_text(PYTHON_CORE) or symbol in load_text(PYTHON_PXD)
+    return symbol in load_text(GO_WRAPPER)
+
+
+def validate_wrapped_enum_entry(enum_name: str, wrapper_name: str, entry: dict[str, str]) -> list[str]:
+    symbol = entry.get("symbol", "")
+    if not symbol:
+        return [f"{enum_name}: {wrapper_name} wrapped entry is missing a symbol."]
+    if not wrapper_symbol_exists(wrapper_name, symbol):
+        return [f"{enum_name}: expected {wrapper_name} wrapper symbol '{symbol}' was not found."]
+    return []
+
+
+def validate_abstracted_enum_entry(
+    enum_name: str, wrapper_name: str, entry: dict[str, str]
+) -> tuple[list[str], list[str]]:
+    reason = entry.get("reason", "")
+    if not reason:
+        return [f"{enum_name}: {wrapper_name} abstracted entry is missing a reason."], []
+    return [], [f"{enum_name}: {wrapper_name} abstraction: {reason}"]
+
+
+def validate_enum_wrapper_entry(
+    enum_name: str, wrapper_name: str, entry: dict[str, str] | None
+) -> tuple[list[str], list[str]]:
+    if entry is None:
+        return [f"{enum_name}: missing {wrapper_name} enum coverage entry."], []
+
+    mode = entry.get("mode")
+    if mode == "wrapped":
+        return validate_wrapped_enum_entry(enum_name, wrapper_name, entry), []
+    if mode == "abstracted":
+        return validate_abstracted_enum_entry(enum_name, wrapper_name, entry)
+    return [f"{enum_name}: unsupported {wrapper_name} enum coverage mode '{mode}'."], []
+
+
+def validate_enum_inventory() -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    discovered = extract_c_enum_types()
+    mapping = load_enum_mapping()
+    missing, stale = collect_missing_and_stale(discovered, set(mapping))
+    append_message(errors, "Public C enums missing from wrapper coverage manifest: ", missing)
+    append_message(errors, "Stale enum wrapper coverage entries: ", stale)
+
+    for enum_name in sorted(discovered & set(mapping)):
+        for wrapper_name in ("python", "go"):
+            entry_errors, entry_warnings = validate_enum_wrapper_entry(
+                enum_name, wrapper_name, mapping[enum_name].get(wrapper_name)
+            )
+            errors.extend(entry_errors)
+            warnings.extend(entry_warnings)
+    return errors, warnings
 
 
 def python_status_constants() -> set[str]:
@@ -643,6 +713,7 @@ def validate_system_info_field_coverage() -> list[str]:
 def print_success_summary(c_functions: list[str]) -> None:
     summary = [
         ("Public C functions covered or annotated", len(c_functions)),
+        ("Public C enum types covered or annotated", len(extract_c_enum_types())),
         ("Public C status codes mirrored in Python and Go", len(extract_c_statuses())),
         ("Python MetricIdentifier constants mirrored", len(PYTHON_METRIC_IDENTIFIER_CONSTANTS)),
         ("Go Status constants mirrored", len(extract_c_statuses())),
@@ -674,6 +745,9 @@ def main() -> int:
     mapping_errors, mapping_warnings = validate_function_mapping(c_functions, mapping)
     errors.extend(mapping_errors)
     warnings.extend(mapping_warnings)
+    enum_errors, enum_warnings = validate_enum_inventory()
+    errors.extend(enum_errors)
+    warnings.extend(enum_warnings)
     for validator in (
         validate_status_coverage,
         validate_python_metric_identifier_coverage,

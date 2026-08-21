@@ -1428,6 +1428,60 @@ Optional:
 python/scripts/vendor_headers.sh --build-dir build/debug
 ```
 
+## Preparing Release Metadata
+
+Stable releases use two manually initiated phases:
+
+1. Dispatch the **Prepare Release** workflow from `main` for a major or minor
+   release, or from an existing `release/` branch for a patch. Select the desired
+   bump type and, if needed, the intended release date. The workflow validates the
+   candidate, promotes `Unreleased`, updates `VERSION.md`, and opens a
+   release-preparation PR containing both files.
+2. Review and merge that PR through the normal CI and branch-protection process.
+3. Dispatch the **Release** workflow from the merged target branch with release
+   type `STABLE`. It verifies the prepared metadata, builds and tests that exact
+   commit, creates the stable tag and artifacts, and publishes the release.
+
+### Normal Stable Release Flow
+
+Start with **Prepare Release** when the team decides to cut a normal major or
+minor release from `main`. The diagram distinguishes actions taken by a release
+manager or reviewer from work performed by GitHub Actions and the release
+scripts.
+
+![Normal stable release workflow](doc/design/release_process.svg)
+
+[View the Mermaid source](doc/design/release_process.mmd).
+
+Until the preparation commit is recorded as an immutable release candidate,
+dispatch **Release** promptly after merging the preparation PR and before other
+changes merge into `main`. The stable release workflow validates and publishes
+the selected `main` revision.
+
+When a stable release is published from `main`, the publishing workflow also
+creates the permanent `release/VERSION` branch at the tagged commit and opens a
+follow-up PR that advances `VERSION.md` to `VERSION.post`. Patch releases are
+published from their existing release branch and do not modify `main`.
+
+Scheduled and manually selected `ROLLING` releases remain single-phase: they
+package the selected source revision without promoting the changelog.
+
+To perform the first-phase metadata edit locally, run:
+
+```bash
+scripts/release/prepare_release.py --release-version 1.2.0
+```
+
+To validate an already-prepared tree without changing it, run:
+
+```bash
+scripts/release/prepare_release.py --release-version 1.2.0 --check
+```
+
+This script changes tracked metadata and is intended to run before the release
+commit is reviewed and tagged unless `--check` is supplied. It does not build or
+package ASTL.
+
 ## Staging a Release Locally
 
 On a Linux host with the normal build prerequisites, build, test, and create the
@@ -1441,6 +1495,8 @@ No source overlay or private repository is required. Use `--version` to stage a
 different version without editing `VERSION.md`, `--output-dir` to choose the
 artifact directory, or repeated `--variant` options to request other variants
 when their corresponding tools are present. Run `--help` for the full interface.
+Unlike `prepare_release.py`, `stage_release.sh` does not modify `CHANGELOG.md` or
+`VERSION.md`; it builds, tests, and packages the source tree as it currently exists.
 
 ## Design Diagrams
 
