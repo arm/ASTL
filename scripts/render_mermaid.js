@@ -42,6 +42,7 @@ function setupDom() {
   global.window = dom.window;
   global.document = dom.window.document;
   global.navigator = { userAgent: "node" };
+  global.CSSStyleSheet = dom.window.CSSStyleSheet;
   function polyBBox() {
     return { x: 0, y: 0, width: 200, height: 50 };
   }

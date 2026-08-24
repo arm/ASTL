@@ -17,6 +17,10 @@ on:
     - cron: "14 9 * * *"
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: "ASTL release-candidate tag or commit (defaults to the dispatched commit)"
+        required: false
+        type: string
       release_type:
         description: "Publish a rolling build or an already-prepared stable release"
         required: true
@@ -25,6 +29,33 @@ on:
         options:
           - ROLLING
           - STABLE
+  workflow_call:
+    inputs:
+      source_ref:
+        description: "ASTL release-candidate tag or commit"
+        required: true
+        type: string
+      release_type:
+        description: "Publish a rolling build or an already-prepared stable release"
+        required: true
+        type: string
+    secrets:
+      APAP_APP_APP_ID:
+        required: true
+      APAP_APP_PRIVATE_KEY:
+        required: true
+      ITS_ARTIFACTORY_ARM_KEY:
+        required: true
+    outputs:
+      source_sha:
+        description: "Resolved immutable ASTL source commit"
+        value: ${{ jobs.release.outputs.source_sha }}
+      version:
+        description: "Published ASTL version"
+        value: ${{ jobs.release.outputs.version }}
+      tag_name:
+        description: "Published ASTL release tag"
+        value: ${{ jobs.release.outputs.tag_name }}
 
 concurrency:
   # Cancel currently running release workflow if a new one is triggered
@@ -35,6 +66,8 @@ jobs:
   release:
     runs-on: ${{ matrix.os }}
     outputs:
+      source_sha: ${{ steps.source-metadata.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
       tag_name: ${{ steps.set_tag_output.outputs.tag_name }}
 
     strategy:
@@ -49,7 +82,9 @@ jobs:
         c_compiler: [gcc]
         cpp_compiler: [g++]
     env:
+      ASTL_REPOSITORY: Arm-Debug/ASTL
       RELEASE_TYPE: ${{ inputs.release_type || 'ROLLING' }}
+      SOURCE_REF: ${{ inputs.source_ref || github.sha }}
 
     steps:
       - name: 🔑 Create source checkout token
@@ -60,17 +95,34 @@ jobs:
           private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
           owner: Arm-Debug
           repositories: ASTL,mock-SCMI
-          permission-contents: read
+          permission-contents: write
+          permission-pull-requests: write
 
       # Checkout MUST happen before calling local composite action
       - name: ⤵️ Checkout code
         uses: actions/checkout@v7
         with:
+          repository: Arm-Debug/ASTL
           path: ASTL
           fetch-depth: 0
-          ref: ${{ github.sha }}
+          ref: ${{ env.SOURCE_REF }}
           token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
+
+      - name: 📌 Record immutable ASTL source
+        id: source-metadata
+        shell: bash
+        working-directory: ${{ github.workspace }}/ASTL
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          SOURCE_IS_MAIN="false"
+          if git merge-base --is-ancestor "${SOURCE_SHA}" origin/main; then
+            SOURCE_IS_MAIN="true"
+          fi
+          echo "sha=${SOURCE_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "is_main=${SOURCE_IS_MAIN}" >> "${GITHUB_OUTPUT}"
+          echo "Releasing ASTL ${SOURCE_SHA} from ${SOURCE_REF}."
 
       - name: ⤵️ Install apt-get Dependencies (ubuntu)
         if: contains(matrix.os, 'ubuntu')
@@ -80,9 +132,8 @@ jobs:
           sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-20 tree zip gh
 
       - name: 📈 Determine Final Version String
+        id: version
         shell: bash
-        env:
-          SOURCE_BRANCH: ${{ github.ref_name }}
         run: |
           SOURCE_VERSION_STRING="$(head -n 1 "${{ github.workspace }}/ASTL/VERSION.md")"
           echo "SOURCE_VERSION_STRING=${SOURCE_VERSION_STRING}"
@@ -92,43 +143,56 @@ jobs:
               echo "Run the Prepare Release workflow and merge its PR first." >&2
               exit 1
             fi
-            if [[ "${SOURCE_BRANCH}" != "main" && ! "${SOURCE_BRANCH}" =~ ^releases?/ ]]; then
-              echo "Stable releases must be published from main or a release branch." >&2
-              exit 1
-            fi
             VERSION_STRING="${SOURCE_VERSION_STRING}"
           else
             # truncate '.post' from the version number for rolling releases to support cmake ASTL_VERSION_OVERRIDE
             VERSION_STRING=$("${{ github.workspace }}/ASTL/scripts/bump_version.sh" NONE "${SOURCE_VERSION_STRING}")
           fi
           echo "VERSION_STRING=${VERSION_STRING}" | tee -a $GITHUB_ENV
+          echo "version=${VERSION_STRING}" >> "${GITHUB_OUTPUT}"
 
       - name: 📝 Verify Stable Release Metadata
         if: env.RELEASE_TYPE == 'STABLE'
         shell: bash
-        env:
-          SOURCE_BRANCH: ${{ github.ref_name }}
         run: |
+          if [[ "${SOURCE_REF}" != "release-candidate/${VERSION_STRING}" && \
+                ! "${SOURCE_REF}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "Stable releases require release-candidate/${VERSION_STRING} or its full commit SHA." >&2
+            exit 1
+          fi
+
           "${{ github.workspace }}/ASTL/scripts/release/prepare_release.py" \
             --release-version "${VERSION_STRING}" \
             --check
 
+          CANDIDATE_TAG="release-candidate/${VERSION_STRING}"
+          if ! git -C "${{ github.workspace }}/ASTL" show-ref --verify --quiet "refs/tags/${CANDIDATE_TAG}"; then
+            echo "Stable release candidate tag ${CANDIDATE_TAG} does not exist." >&2
+            echo "Merge the Prepare Release PR before publishing." >&2
+            exit 1
+          fi
+          CANDIDATE_COMMIT="$(git -C "${{ github.workspace }}/ASTL" rev-list -n 1 "refs/tags/${CANDIDATE_TAG}")"
+          if [[ "${CANDIDATE_COMMIT}" != "${{ steps.source-metadata.outputs.sha }}" ]]; then
+            echo "Stable release candidate ${CANDIDATE_TAG} points to ${CANDIDATE_COMMIT}, not ${{ steps.source-metadata.outputs.sha }}." >&2
+            exit 1
+          fi
+
           RELEASE_TAG="release/${VERSION_STRING}"
           if git -C "${{ github.workspace }}/ASTL" show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"; then
             TAG_COMMIT="$(git -C "${{ github.workspace }}/ASTL" rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
-            if [[ "${TAG_COMMIT}" != "${GITHUB_SHA}" ]]; then
-              echo "Stable release tag ${RELEASE_TAG} already points to ${TAG_COMMIT}, not ${GITHUB_SHA}." >&2
+            if [[ "${TAG_COMMIT}" != "${{ steps.source-metadata.outputs.sha }}" ]]; then
+              echo "Stable release tag ${RELEASE_TAG} already points to ${TAG_COMMIT}, not ${{ steps.source-metadata.outputs.sha }}." >&2
               exit 1
             fi
             echo "Stable release tag ${RELEASE_TAG} already points to this commit; continuing retry."
           fi
-          if [[ "${SOURCE_BRANCH}" == "main" ]] && \
+          if [[ "${{ steps.source-metadata.outputs.is_main }}" == "true" ]] && \
             git -C "${{ github.workspace }}/ASTL" show-ref --verify --quiet \
               "refs/remotes/origin/release/${VERSION_STRING}"; then
             BRANCH_COMMIT="$(git -C "${{ github.workspace }}/ASTL" rev-parse \
               "refs/remotes/origin/release/${VERSION_STRING}")"
-            if [[ "${BRANCH_COMMIT}" != "${GITHUB_SHA}" ]]; then
-              echo "Release branch release/${VERSION_STRING} already points to ${BRANCH_COMMIT}, not ${GITHUB_SHA}." >&2
+            if [[ "${BRANCH_COMMIT}" != "${{ steps.source-metadata.outputs.sha }}" ]]; then
+              echo "Release branch release/${VERSION_STRING} already points to ${BRANCH_COMMIT}, not ${{ steps.source-metadata.outputs.sha }}." >&2
               exit 1
             fi
             echo "Release branch release/${VERSION_STRING} already points to this commit; continuing retry."
@@ -151,7 +215,7 @@ jobs:
           cmake_preset: release
           c_compiler: ${{ matrix.c_compiler }}
           cpp_compiler: ${{ matrix.cpp_compiler }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.source-checkout-token.outputs.token }}
           source_dir: ${{ github.workspace }}/ASTL
           version_override: ${{ env.VERSION_STRING }}
 
@@ -209,20 +273,22 @@ jobs:
         if: ${{ env.RELEASE_TYPE == 'ROLLING' && env.TAG_NAME == 'release/rolling' }}
         run: |
           # Check if release exists before trying to delete
-          if gh release view "${{ env.TAG_NAME }}" --repo "${{ github.repository }}" &> /dev/null; then
+          if gh release view "${{ env.TAG_NAME }}" --repo "${ASTL_REPOSITORY}" &> /dev/null; then
             echo "Deleting existing release: ${{ env.TAG_NAME }}"
-            gh release delete "${{ env.TAG_NAME }}" --repo "${{ github.repository }}" --yes --cleanup-tag
+            gh release delete "${{ env.TAG_NAME }}" --repo "${ASTL_REPOSITORY}" --yes --cleanup-tag
           else
             echo "No existing release found for ${{ env.TAG_NAME }}"
           fi
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.source-checkout-token.outputs.token }}
 
       - name: 🌟 Create GitHub Release Page
         uses: softprops/action-gh-release@v3
         with:
+          repository: Arm-Debug/ASTL
+          token: ${{ steps.source-checkout-token.outputs.token }}
           tag_name: "${{ env.TAG_NAME }}"
-          target_commitish: "${{ github.sha }}"
+          target_commitish: "${{ steps.source-metadata.outputs.sha }}"
           files: |
             ${{ github.workspace }}/${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip
             ${{ github.workspace }}/${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip.sha256
@@ -235,9 +301,6 @@ jobs:
           generate_release_notes: true
           # If you want to use a static release notes file, uncomment the line below and provide the path
           # body_path: RELEASE_NOTES.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: 🐸 Setup JFrog CLI
         uses: jfrog/setup-jfrog-cli@v5
         with:
@@ -273,15 +336,15 @@ jobs:
           JFROG_CLI_REPORT_USAGE: "false"
 
       - name: 🧪 Out-Of-Box Testing
-        if: ${{ github.repository == 'Arm-Debug/ASTL' }}
         uses: ./ASTL/.github/actions/out-of-box-testing
         with:
           astl_root: ${{ github.workspace }}/ASTL
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.source-checkout-token.outputs.token }}
+          repository: Arm-Debug/ASTL
           tag_name: ${{ env.TAG_NAME }}
 
       - name: 🔑 Create post-release source token
-        if: env.RELEASE_TYPE == 'STABLE' && github.ref_name == 'main'
+        if: env.RELEASE_TYPE == 'STABLE' && steps.source-metadata.outputs.is_main == 'true'
         id: post-release-token
         uses: actions/create-github-app-token@v3
         with:
@@ -294,18 +357,18 @@ jobs:
           permission-pull-requests: write
 
       - name: ⤵️ Configure Git to use post-release write credentials
-        if: env.RELEASE_TYPE == 'STABLE' && github.ref_name == 'main'
+        if: env.RELEASE_TYPE == 'STABLE' && steps.source-metadata.outputs.is_main == 'true'
         uses: actions/checkout@v7
         with:
           clean: false
           fetch-depth: 0
           path: ASTL
-          ref: ${{ github.sha }}
+          ref: ${{ steps.source-metadata.outputs.sha }}
           submodules: false
           token: ${{ steps.post-release-token.outputs.token }}
 
       - name: 🌱 Create release branch and post-release version PR
-        if: env.RELEASE_TYPE == 'STABLE' && github.ref_name == 'main'
+        if: env.RELEASE_TYPE == 'STABLE' && steps.source-metadata.outputs.is_main == 'true'
         working-directory: ${{ github.workspace }}/ASTL
         env:
           GH_TOKEN: ${{ steps.post-release-token.outputs.token }}
@@ -316,12 +379,12 @@ jobs:
           POST_RELEASE_BRANCH="cicd/post_release/${VERSION_STRING}"
 
           if ! git show-ref --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}"; then
-            git branch "${RELEASE_BRANCH}" "${GITHUB_SHA}"
+            git branch "${RELEASE_BRANCH}" "${{ steps.source-metadata.outputs.sha }}"
             git push origin "refs/heads/${RELEASE_BRANCH}:refs/heads/${RELEASE_BRANCH}"
           fi
 
           if ! git show-ref --verify --quiet "refs/remotes/origin/${POST_RELEASE_BRANCH}"; then
-            git switch -c "${POST_RELEASE_BRANCH}" "${GITHUB_SHA}"
+            git switch -c "${POST_RELEASE_BRANCH}" "${{ steps.source-metadata.outputs.sha }}"
             printf '%s.post\n' "${VERSION_STRING}" > VERSION.md
             git add VERSION.md
             git commit -m "[NO-JIRA] Start ${VERSION_STRING}.post development"

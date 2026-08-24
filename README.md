@@ -1438,9 +1438,13 @@ Stable releases use two manually initiated phases:
    candidate, promotes `Unreleased`, updates `VERSION.md`, and opens a
    release-preparation PR containing both files.
 2. Review and merge that PR through the normal CI and branch-protection process.
-3. Dispatch the **Release** workflow from the merged target branch with release
-   type `STABLE`. It verifies the prepared metadata, builds and tests that exact
-   commit, creates the stable tag and artifacts, and publishes the release.
+   The merge creates an immutable `release-candidate/VERSION` tag at the reviewed
+   merge commit.
+3. Dispatch the **Release** workflow with release type `STABLE` and the candidate
+   tag (or its full commit SHA) as `source_ref`. It verifies the prepared metadata,
+   builds and tests that exact commit, creates the stable tag and artifacts, and
+   publishes the release. The workflow can also be called from another repository
+   and returns the resolved source SHA, version, and public release tag.
 
 ### Normal Stable Release Flow
 
@@ -1453,10 +1457,12 @@ scripts.
 
 [View the Mermaid source](doc/design/release_process.mmd).
 
-Until the preparation commit is recorded as an immutable release candidate,
-dispatch **Release** promptly after merging the preparation PR and before other
-changes merge into `main`. The stable release workflow validates and publishes
-the selected `main` revision.
+The candidate tag decouples release timing from later changes to `main` and lets
+the public and confidential release workflows build the same reviewed ASTL
+commit. Stable release validation rejects a branch name or moving reference;
+use `release-candidate/VERSION` or the corresponding full commit SHA.
+Configure a repository tag ruleset for `release-candidate/*` so only the release
+automation identity can create tags and no identity can update or delete them.
 
 When a stable release is published from `main`, the publishing workflow also
 creates the permanent `release/VERSION` branch at the tagged commit and opens a

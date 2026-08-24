@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Tag Release Candidate
+
+permissions:
+  contents: write
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  tag-release-candidate:
+    if: >-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'cicd/prepare_release/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔑 Create candidate tag token
+        id: candidate-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL
+          permission-contents: write
+
+      - name: ⤵️ Checkout merged release candidate
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          token: ${{ steps.candidate-token.outputs.token }}
+
+      - name: 🏷️ Create immutable release-candidate tag
+        shell: bash
+        env:
+          MERGE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+          PREPARATION_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          VERSION="$(head -n 1 VERSION.md)"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Prepared VERSION.md must contain MAJOR.MINOR.PATCH, got ${VERSION}." >&2
+            exit 1
+          fi
+          if [[ "${PREPARATION_BRANCH}" != "cicd/prepare_release/${VERSION}" ]]; then
+            echo "Preparation branch ${PREPARATION_BRANCH} does not match VERSION.md ${VERSION}." >&2
+            exit 1
+          fi
+
+          scripts/release/prepare_release.py --release-version "${VERSION}" --check
+
+          CANDIDATE_TAG="release-candidate/${VERSION}"
+          EXISTING_COMMIT="$(git ls-remote --tags origin "refs/tags/${CANDIDATE_TAG}" | awk '{print $1}')"
+          if [[ -n "${EXISTING_COMMIT}" ]]; then
+            if [[ "${EXISTING_COMMIT}" != "${MERGE_COMMIT}" ]]; then
+              echo "${CANDIDATE_TAG} already points to ${EXISTING_COMMIT}, not ${MERGE_COMMIT}." >&2
+              exit 1
+            fi
+            echo "${CANDIDATE_TAG} already identifies this candidate."
+            exit 0
+          fi
+
+          git tag "${CANDIDATE_TAG}" "${MERGE_COMMIT}"
+          git push origin "refs/tags/${CANDIDATE_TAG}"

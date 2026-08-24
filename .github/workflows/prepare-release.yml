@@ -123,5 +123,5 @@ jobs:
             --label "version-bump" \
             --body "$(printf '%s\n\n%s\n\n%s\n' \
               "Promotes the Unreleased changelog and sets VERSION.md to ${RELEASE_VERSION}." \
-              "After this PR is reviewed and merged, dispatch the Release workflow with release type STABLE from ${SOURCE_BRANCH}." \
+              "After this PR is reviewed and merged, use release-candidate/${RELEASE_VERSION} to publish the reviewed source." \
               '- [x] No public API or user-flow change')"
