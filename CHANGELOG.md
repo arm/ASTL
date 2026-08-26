@@ -16,7 +16,7 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Breaking
 
-## 0.0.2 - 2026-08-24
+## 0.0.2 - 2026-08-26
 
 ### Added
 
