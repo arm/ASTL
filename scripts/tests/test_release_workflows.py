@@ -41,6 +41,17 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("gh release view", workflow)
         self.assertIn("Public release ${SOURCE_REF} is missing ${asset}", workflow)
 
+    def test_resolver_uses_caller_supplied_app_token(self) -> None:
+        workflow = (ROOT / ".github/workflows/resolve-release.yml").read_text(encoding="utf-8")
+
+        self.assertIn("APAP_APP_APP_ID:", workflow)
+        self.assertIn("APAP_APP_PRIVATE_KEY:", workflow)
+        self.assertIn("uses: actions/create-github-app-token@v3", workflow)
+        self.assertIn("client-id: ${{ secrets.APAP_APP_APP_ID }}", workflow)
+        self.assertIn("private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}", workflow)
+        self.assertIn("token: ${{ steps.checkout-token.outputs.token }}", workflow)
+        self.assertIn("GH_TOKEN: ${{ steps.checkout-token.outputs.token }}", workflow)
+
     def test_post_release_branch_starts_from_current_main(self) -> None:
         workflow = (ROOT / ".github/workflows/create-release.yml").read_text(encoding="utf-8")
 

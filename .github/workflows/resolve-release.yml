@@ -18,6 +18,11 @@ on:
         description: "CANDIDATE, STABLE, or ROLLING"
         required: true
         type: string
+    secrets:
+      APAP_APP_APP_ID:
+        required: true
+      APAP_APP_PRIVATE_KEY:
+        required: true
     outputs:
       source_sha:
         description: "Resolved immutable ASTL commit"
@@ -37,18 +42,29 @@ jobs:
       version: ${{ steps.resolve.outputs.version }}
       tag_name: ${{ steps.resolve.outputs.tag_name }}
     steps:
+      - name: 🔑 Create checkout token
+        id: checkout-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL
+          permission-contents: read
+
       - name: ⤵️ Checkout exact ASTL source
         uses: actions/checkout@v7
         with:
           repository: Arm-Debug/ASTL
           fetch-depth: 0
           ref: ${{ inputs.source_ref }}
+          token: ${{ steps.checkout-token.outputs.token }}
 
       - name: 📌 Resolve and verify source
         id: resolve
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.checkout-token.outputs.token }}
           OPERATION: ${{ inputs.operation }}
           SOURCE_REF: ${{ inputs.source_ref }}
         run: |
