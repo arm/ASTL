@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Arm-Debug/ASTL/Go/astl"
+	"github.com/arm/ASTL/Go/astl"
 )
 
 func main() {

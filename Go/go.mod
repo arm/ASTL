@@ -2,6 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-module github.com/Arm-Debug/ASTL/Go
+module github.com/arm/ASTL/Go
 
 go 1.22
