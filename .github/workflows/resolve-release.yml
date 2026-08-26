@@ -1,0 +1,134 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Resolve Release Source
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: "ASTL candidate (release-candidate/0.2.0-rc.1), stable release tag (release/0.2.0), or rolling source ref"
+        required: true
+        type: string
+      operation:
+        description: "CANDIDATE, STABLE, or ROLLING"
+        required: true
+        type: string
+    outputs:
+      source_sha:
+        description: "Resolved immutable ASTL commit"
+        value: ${{ jobs.resolve.outputs.source_sha }}
+      version:
+        description: "ASTL package version"
+        value: ${{ jobs.resolve.outputs.version }}
+      tag_name:
+        description: "Resolved candidate or stable release tag"
+        value: ${{ jobs.resolve.outputs.tag_name }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag_name: ${{ steps.resolve.outputs.tag_name }}
+    steps:
+      - name: ⤵️ Checkout exact ASTL source
+        uses: actions/checkout@v7
+        with:
+          repository: Arm-Debug/ASTL
+          fetch-depth: 0
+          ref: ${{ inputs.source_ref }}
+
+      - name: 📌 Resolve and verify source
+        id: resolve
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPERATION: ${{ inputs.operation }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          SOURCE_VERSION="$(head -n 1 VERSION.md)"
+          TAG_NAME="${SOURCE_REF}"
+
+          case "${OPERATION}" in
+            CANDIDATE)
+              if [[ ! "${SOURCE_REF}" =~ ^release-candidate/([0-9]+\.[0-9]+\.[0-9]+)-rc\.[1-9][0-9]*$ ]]; then
+                echo "Candidate testing requires release-candidate/VERSION-rc.N." >&2
+                exit 1
+              fi
+              VERSION="${BASH_REMATCH[1]}"
+              if [[ "${SOURCE_VERSION}" != "${VERSION}" ]]; then
+                echo "${SOURCE_REF} contains VERSION.md ${SOURCE_VERSION}, expected ${VERSION}." >&2
+                exit 1
+              fi
+              scripts/release/prepare_release.py --release-version "${VERSION}" --check
+              STABILIZATION_BRANCH="refs/remotes/origin/releases/${VERSION}"
+              if ! git show-ref --verify --quiet "${STABILIZATION_BRANCH}"; then
+                echo "Stabilization branch releases/${VERSION} does not exist." >&2
+                exit 1
+              fi
+              if ! git merge-base --is-ancestor "${SOURCE_SHA}" "${STABILIZATION_BRANCH}"; then
+                echo "${SOURCE_REF} is not contained in releases/${VERSION}." >&2
+                exit 1
+              fi
+              ;;
+            STABLE)
+              if [[ ! "${SOURCE_REF}" =~ ^release/([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+                echo "Stable verification requires release/VERSION." >&2
+                exit 1
+              fi
+              VERSION="${BASH_REMATCH[1]}"
+              if [[ "${SOURCE_VERSION}" != "${VERSION}" ]]; then
+                echo "${SOURCE_REF} contains VERSION.md ${SOURCE_VERSION}, expected ${VERSION}." >&2
+                exit 1
+              fi
+              scripts/release/prepare_release.py --release-version "${VERSION}" --check
+              EXPECTED_ASSET="astl_version_${VERSION}_linux_aarch64_library.zip"
+              EXPECTED_CHECKSUM="${EXPECTED_ASSET}.sha256"
+              ASSETS="$(gh release view "${SOURCE_REF}" --repo Arm-Debug/ASTL --json assets --jq '.assets[].name')"
+              for asset in "${EXPECTED_ASSET}" "${EXPECTED_CHECKSUM}" get_astl.sh release-complete.json; do
+                if ! grep -Fxq "${asset}" <<< "${ASSETS}"; then
+                  echo "Public release ${SOURCE_REF} is missing ${asset}." >&2
+                  exit 1
+                fi
+              done
+              MARKER_DIR="$(mktemp -d)"
+              gh release download "${SOURCE_REF}" --repo Arm-Debug/ASTL \
+                --pattern release-complete.json --dir "${MARKER_DIR}"
+              CANDIDATE_REF="$(jq -r '.candidate' "${MARKER_DIR}/release-complete.json")"
+              if [[ ! "${CANDIDATE_REF}" =~ ^release-candidate/${VERSION}-rc\.[1-9][0-9]*$ ]]; then
+                echo "Public release ${SOURCE_REF} completion marker has invalid candidate ${CANDIDATE_REF}." >&2
+                exit 1
+              fi
+              if ! jq -e --arg sha "${SOURCE_SHA}" --arg version "${VERSION}" \
+                '.source_sha == $sha and .version == $version' \
+                "${MARKER_DIR}/release-complete.json" >/dev/null; then
+                echo "Public release ${SOURCE_REF} completion marker has inconsistent provenance." >&2
+                exit 1
+              fi
+              if [[ "$(git rev-list -n 1 "refs/tags/${CANDIDATE_REF}")" != "${SOURCE_SHA}" ]]; then
+                echo "Public release candidate ${CANDIDATE_REF} does not point to ${SOURCE_SHA}." >&2
+                exit 1
+              fi
+              ;;
+            ROLLING)
+              VERSION="$(scripts/bump_version.sh NONE "${SOURCE_VERSION}")"
+              TAG_NAME="release/rolling"
+              ;;
+            *)
+              echo "Unsupported operation ${OPERATION}; expected CANDIDATE, STABLE, or ROLLING." >&2
+              exit 1
+              ;;
+          esac
+
+          echo "source_sha=${SOURCE_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag_name=${TAG_NAME}" >> "${GITHUB_OUTPUT}"

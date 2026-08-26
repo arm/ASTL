@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-name: Tag Release Candidate
+name: Prepare Release Candidate
 
 permissions:
   contents: write
@@ -10,61 +10,121 @@ permissions:
 on:
   pull_request:
     types: [closed]
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Stable MAJOR.MINOR.PATCH version"
+        required: true
+        type: string
+      candidate_number:
+        description: "Candidate number (1 may bootstrap an existing prepared release)"
+        required: true
+        type: number
+      source_ref:
+        description: "Commit on releases/VERSION to tag (defaults to that branch)"
+        required: false
+        type: string
+
+concurrency:
+  group: astl-release-candidate-${{ inputs.release_version || github.event.pull_request.head.ref }}
+  cancel-in-progress: false
 
 jobs:
   tag-release-candidate:
     if: >-
-      github.event.pull_request.merged == true &&
-      startsWith(github.event.pull_request.head.ref, 'cicd/prepare_release/')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'cicd/prepare_release/'))
     runs-on: ubuntu-latest
+    env:
+      IS_INITIAL_CANDIDATE: ${{ github.event_name == 'pull_request' }}
+      REQUESTED_VERSION: ${{ inputs.release_version }}
+      REQUESTED_NUMBER: ${{ inputs.candidate_number }}
+      SOURCE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || inputs.source_ref || format('releases/{0}', inputs.release_version) }}
+      PREPARATION_BRANCH: ${{ github.event.pull_request.head.ref }}
     steps:
-      - name: 🔑 Create candidate tag token
-        id: candidate-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ secrets.APAP_APP_APP_ID }}
-          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
-          owner: Arm-Debug
-          repositories: ASTL
-          permission-contents: write
-
-      - name: ⤵️ Checkout merged release candidate
+      - name: ⤵️ Checkout candidate source
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
-          token: ${{ steps.candidate-token.outputs.token }}
+          ref: ${{ env.SOURCE_REF }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🏷️ Create immutable release-candidate tag
+      - name: 🏷️ Create stabilization branch and immutable candidate tag
         shell: bash
-        env:
-          MERGE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
-          PREPARATION_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
 
+          SOURCE_SHA="$(git rev-parse HEAD)"
           VERSION="$(head -n 1 VERSION.md)"
           if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Prepared VERSION.md must contain MAJOR.MINOR.PATCH, got ${VERSION}." >&2
             exit 1
           fi
-          if [[ "${PREPARATION_BRANCH}" != "cicd/prepare_release/${VERSION}" ]]; then
-            echo "Preparation branch ${PREPARATION_BRANCH} does not match VERSION.md ${VERSION}." >&2
+          if [[ -n "${REQUESTED_VERSION}" && "${REQUESTED_VERSION}" != "${VERSION}" ]]; then
+            echo "Requested ${REQUESTED_VERSION}, but VERSION.md contains ${VERSION}." >&2
             exit 1
           fi
 
           scripts/release/prepare_release.py --release-version "${VERSION}" --check
 
-          CANDIDATE_TAG="release-candidate/${VERSION}"
+          STABILIZATION_BRANCH="releases/${VERSION}"
+          if [[ "${IS_INITIAL_CANDIDATE}" == "true" ]]; then
+            if [[ "${PREPARATION_BRANCH}" != "cicd/prepare_release/${VERSION}" ]]; then
+              echo "Preparation branch ${PREPARATION_BRANCH} does not match VERSION.md ${VERSION}." >&2
+              exit 1
+            fi
+            CANDIDATE_NUMBER=1
+            EXISTING_BRANCH="$(git ls-remote --heads origin "refs/heads/${STABILIZATION_BRANCH}" | awk '{print $1}')"
+            if [[ -n "${EXISTING_BRANCH}" && "${EXISTING_BRANCH}" != "${SOURCE_SHA}" ]]; then
+              echo "${STABILIZATION_BRANCH} already points to ${EXISTING_BRANCH}, not ${SOURCE_SHA}." >&2
+              exit 1
+            fi
+            if [[ -z "${EXISTING_BRANCH}" ]]; then
+              git push origin "${SOURCE_SHA}:refs/heads/${STABILIZATION_BRANCH}"
+            fi
+          else
+            if [[ ! "${REQUESTED_NUMBER}" =~ ^[0-9]+$ || "${REQUESTED_NUMBER}" -lt 1 ]]; then
+              echo "candidate_number must be 1 or greater." >&2
+              exit 1
+            fi
+            CANDIDATE_NUMBER="${REQUESTED_NUMBER}"
+            if [[ "${CANDIDATE_NUMBER}" -eq 1 ]]; then
+              EXISTING_BRANCH="$(git ls-remote --heads origin "refs/heads/${STABILIZATION_BRANCH}" | awk '{print $1}')"
+              if [[ -n "${EXISTING_BRANCH}" && "${EXISTING_BRANCH}" != "${SOURCE_SHA}" ]]; then
+                echo "${STABILIZATION_BRANCH} already points to ${EXISTING_BRANCH}, not ${SOURCE_SHA}." >&2
+                exit 1
+              fi
+              if [[ -z "${EXISTING_BRANCH}" ]]; then
+                git push origin "${SOURCE_SHA}:refs/heads/${STABILIZATION_BRANCH}"
+              fi
+            else
+              git fetch origin "refs/heads/${STABILIZATION_BRANCH}:refs/remotes/origin/${STABILIZATION_BRANCH}"
+              BRANCH_SHA="$(git rev-parse "refs/remotes/origin/${STABILIZATION_BRANCH}")"
+              if [[ "${SOURCE_SHA}" != "${BRANCH_SHA}" ]]; then
+                echo "Candidate source ${SOURCE_SHA} must be the tip of ${STABILIZATION_BRANCH} (${BRANCH_SHA})." >&2
+                exit 1
+              fi
+            fi
+          fi
+
+          CANDIDATE_TAG="release-candidate/${VERSION}-rc.${CANDIDATE_NUMBER}"
           EXISTING_COMMIT="$(git ls-remote --tags origin "refs/tags/${CANDIDATE_TAG}" | awk '{print $1}')"
           if [[ -n "${EXISTING_COMMIT}" ]]; then
-            if [[ "${EXISTING_COMMIT}" != "${MERGE_COMMIT}" ]]; then
-              echo "${CANDIDATE_TAG} already points to ${EXISTING_COMMIT}, not ${MERGE_COMMIT}." >&2
+            if [[ "${EXISTING_COMMIT}" != "${SOURCE_SHA}" ]]; then
+              echo "${CANDIDATE_TAG} already points to ${EXISTING_COMMIT}, not ${SOURCE_SHA}." >&2
               exit 1
             fi
             echo "${CANDIDATE_TAG} already identifies this candidate."
             exit 0
           fi
 
-          git tag "${CANDIDATE_TAG}" "${MERGE_COMMIT}"
-          git push origin "refs/tags/${CANDIDATE_TAG}"
+          PREVIOUS_NUMBER=$((CANDIDATE_NUMBER - 1))
+          if [[ "${CANDIDATE_NUMBER}" -gt 1 ]] && ! git ls-remote --exit-code --tags origin \
+            "refs/tags/release-candidate/${VERSION}-rc.${PREVIOUS_NUMBER}" >/dev/null; then
+            echo "Create rc.${PREVIOUS_NUMBER} before rc.${CANDIDATE_NUMBER}." >&2
+            exit 1
+          fi
+
+          git tag "${CANDIDATE_TAG}" "${SOURCE_SHA}"
+          git push origin "refs/tags/${CANDIDATE_TAG}:refs/tags/${CANDIDATE_TAG}"

@@ -35,7 +35,7 @@ repos:
         stages: [pre-commit]
       - id: cmake-lint
         name: cmake lint
-        entry: ./scripts/cmake_lint.sh
+        entry: ./scripts/cmakelang.sh
         language: system
         files: '\.(cmake|CMakeLists.txt)$'
         stages: [pre-commit]

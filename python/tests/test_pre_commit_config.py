@@ -45,7 +45,7 @@ def test_common_pre_commit_hooks_are_identical_and_ordered() -> None:
     assert "entry: qlty check --no-fix" in common_hooks
     assert "entry: ./scripts/license_lint.sh" in common_hooks
     assert "entry: ./scripts/cppcheck.sh build/debug" in common_hooks
-    assert "entry: ./scripts/cmake_lint.sh" in common_hooks
+    assert "entry: ./scripts/cmakelang.sh" in common_hooks
     assert "files: '\\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$'" in common_hooks
     assert "fail_fast: true" in common_hooks
     assert common_hooks.count("stages: [pre-commit]") == len(COMMON_HOOK_IDS) - 1

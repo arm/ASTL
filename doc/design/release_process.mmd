@@ -1,34 +1,42 @@
 %% SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
 %% SPDX-License-Identifier: Apache-2.0
 
-flowchart LR
+flowchart TB
     subgraph phase1["Phase 1 — Prepare reviewed metadata"]
         direction TB
         decide(["Decision: cut a stable release"])
         dispatchPrepare["Release manager<br/>Dispatch Prepare Release on main<br/>Choose MAJOR or MINOR<br/>and the release date"]
         prepare["prepare-release.yml<br/>Invokes prepare_release.py<br/>Validates and updates metadata<br/>Opens the preparation PR"]
         mergePrepare["Developers / reviewers<br/>Review CI<br/>Merge the preparation PR"]
-        candidate["tag-release-candidate.yml<br/>Creates immutable<br/>release-candidate/VERSION tag"]
+        candidate["tag-release-candidate.yml<br/>Creates releases/VERSION and<br/>release-candidate/VERSION-rc.1"]
+        testCandidate["test-release-candidate.yml<br/>Builds and tests candidate<br/>without stable publication"]
+        candidateOk{"Candidate accepted?"}
+        fix["Developers<br/>Fix releases/VERSION<br/>and backport to main"]
+        nextCandidate["Prepare Release Candidate<br/>Creates next immutable rc.N tag"]
+        approved(["Reviewed candidate selected"])
 
-        decide --> dispatchPrepare --> prepare --> mergePrepare --> candidate
+        decide --> dispatchPrepare --> prepare --> mergePrepare --> candidate --> testCandidate --> candidateOk
+        candidateOk -- No --> fix --> nextCandidate --> testCandidate
+        candidateOk -- Yes --> approved
     end
 
     subgraph phase2["Phase 2 — Publish reviewed source"]
         direction TB
-        dispatchRelease["Release manager or confidential workflow<br/>Call Release with candidate ref<br/>Select STABLE"]
+        dispatchRelease["Release manager<br/>Publish selected numbered candidate"]
         verify["create-release.yml<br/>Invokes prepare_release.py --check<br/>Validates metadata and API policy"]
         stage["create-release.yml<br/>Builds ASTL<br/>Invokes stage_release.sh<br/>Tests and packages the build"]
-        publish["create-release.yml<br/>Publishes the tag and artifacts<br/>Runs release tests<br/>Creates the release branch"]
-        postPr["create-release.yml<br/>Opens the VERSION.post PR"]
+        publish["create-release.yml<br/>Publishes immutable stable tag and artifacts<br/>or verifies and reuses a complete release"]
+        postPr["create-release.yml<br/>Opens a monotonic VERSION.post PR<br/>from current main"]
         mergePost["Developers / reviewers<br/>Review CI<br/>Merge the .post PR"]
         done(["Release complete<br/>Development version restored"])
 
         dispatchRelease --> verify --> stage --> publish --> postPr --> mergePost --> done
     end
 
-    phase1 --> phase2
+    approved --> dispatchRelease
+    nextCandidate ~~~ dispatchRelease
 
     classDef human fill:#e8f1ff,stroke:#2563a6,color:#102a43,stroke-width:2px;
     classDef workflow fill:#f1eafe,stroke:#6d42a1,color:#2d1744,stroke-width:2px;
-    class dispatchPrepare,mergePrepare,dispatchRelease,mergePost human;
-    class prepare,candidate,verify,stage,publish,postPr workflow;
+    class dispatchPrepare,mergePrepare,fix,dispatchRelease,mergePost human;
+    class prepare,candidate,testCandidate,nextCandidate,verify,stage,publish,postPr workflow;

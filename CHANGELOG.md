@@ -20,8 +20,8 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Added
 
-- Added PR checks for public API wrapper and changelog updates, plus cumulative SemVer validation for stable releases.
-
 ### Changed
+
+- Added PR checks for public API wrapper and changelog updates, plus cumulative SemVer validation for stable releases.
 
 ### Breaking

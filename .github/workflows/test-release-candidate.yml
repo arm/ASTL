@@ -1,0 +1,92 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Test Release Candidate
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_ref:
+        description: "Immutable release-candidate/VERSION-rc.N tag"
+        required: true
+        type: string
+
+concurrency:
+  group: astl-test-candidate-${{ inputs.candidate_ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    uses: ./.github/workflows/resolve-release.yml
+    with:
+      operation: CANDIDATE
+      source_ref: ${{ inputs.candidate_ref }}
+
+  test-candidate:
+    needs: resolve
+    runs-on: self-hosted-ubuntu-24.04-arm64
+    steps:
+      - name: 🔑 Create source checkout token
+        id: source-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL,mock-SCMI
+          permission-contents: read
+
+      - name: ⤵️ Checkout exact candidate
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.resolve.outputs.source_sha }}
+          token: ${{ steps.source-token.outputs.token }}
+          submodules: true
+
+      - name: ⤵️ Install dependencies
+        shell: bash
+        run: |
+          sudo apt-get -o DPkg::Lock::Timeout=300 update
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-20 tree zip
+
+      - name: 🏗️ Build candidate
+        uses: ./.github/actions/build
+        with:
+          os: self-hosted-ubuntu-24.04-arm64
+          cmake_preset: release
+          c_compiler: gcc
+          cpp_compiler: g++
+          github_token: ${{ steps.source-token.outputs.token }}
+          source_dir: ${{ github.workspace }}
+          version_override: ${{ needs.resolve.outputs.version }}
+
+      - name: 📦 Test and stage candidate
+        shell: bash
+        run: |
+          scripts/release/stage_release.sh \
+            --skip-build \
+            --version "${{ needs.resolve.outputs.version }}" \
+            --output-dir "${{ github.workspace }}"
+
+      - name: 🧾 Record candidate provenance
+        shell: bash
+        run: |
+          printf '{"candidate":"%s","source_sha":"%s","version":"%s"}\n' \
+            "${{ inputs.candidate_ref }}" "${{ needs.resolve.outputs.source_sha }}" \
+            "${{ needs.resolve.outputs.version }}" > candidate-source.json
+
+      - name: ⬆️ Upload candidate package
+        uses: actions/upload-artifact@v7
+        with:
+          name: astl-${{ needs.resolve.outputs.version }}-candidate-${{ github.run_id }}
+          path: |
+            astl_version_${{ needs.resolve.outputs.version }}_linux_aarch64_library.zip
+            astl_version_${{ needs.resolve.outputs.version }}_linux_aarch64_library.zip.sha256
+            candidate-source.json
+          if-no-files-found: error
+          retention-days: 14

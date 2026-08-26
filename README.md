@@ -1438,13 +1438,15 @@ Stable releases use two manually initiated phases:
    candidate, promotes `Unreleased`, updates `VERSION.md`, and opens a
    release-preparation PR containing both files.
 2. Review and merge that PR through the normal CI and branch-protection process.
-   The merge creates an immutable `release-candidate/VERSION` tag at the reviewed
-   merge commit.
-3. Dispatch the **Release** workflow with release type `STABLE` and the candidate
-   tag (or its full commit SHA) as `source_ref`. It verifies the prepared metadata,
-   builds and tests that exact commit, creates the stable tag and artifacts, and
-   publishes the release. The workflow can also be called from another repository
-   and returns the resolved source SHA, version, and public release tag.
+   The merge creates `releases/VERSION` and the immutable
+   `release-candidate/VERSION-rc.1` tag at the reviewed merge commit.
+3. Test that candidate with **Test Release Candidate**. If it needs a fix, merge
+   the fix into `releases/VERSION` (and separately backport it to `main`), then
+   dispatch **Prepare Release Candidate** with the next candidate number.
+4. Dispatch **Release** with release type `STABLE` and the selected numbered
+   candidate tag as `source_ref`. It verifies, builds, and publishes that exact
+   candidate. A retry reuses an existing complete release instead of replacing
+   its artifacts.
 
 ### Normal Stable Release Flow
 
@@ -1457,17 +1459,29 @@ scripts.
 
 [View the Mermaid source](doc/design/release_process.mmd).
 
-The candidate tag decouples release timing from later changes to `main` and lets
-the public and confidential release workflows build the same reviewed ASTL
-commit. Stable release validation rejects a branch name or moving reference;
-use `release-candidate/VERSION` or the corresponding full commit SHA.
+Numbered candidate tags decouple release stabilization from later changes to
+`main` and let public and confidential testing use the same reviewed ASTL
+commit. Stable publication rejects branches and raw SHAs; use an immutable
+`release-candidate/VERSION-rc.N` tag. After final publication, use a new patch
+version rather than moving an existing candidate or stable tag.
 Configure a repository tag ruleset for `release-candidate/*` so only the release
 automation identity can create tags and no identity can update or delete them.
 
-When a stable release is published from `main`, the publishing workflow also
-creates the permanent `release/VERSION` branch at the tagged commit and opens a
-follow-up PR that advances `VERSION.md` to `VERSION.post`. Patch releases are
-published from their existing release branch and do not modify `main`.
+The stabilization branch is created before candidate testing. After final
+publication, the workflow reads the current version from `origin/main` and
+opens a `VERSION.post` PR only when it advances that version. A release of
+`0.2.0` therefore cannot change `0.3.0` or `0.3.0.post` back to `0.2.0.post`.
+The post-release PR always starts from current `origin/main`, so release-only
+fixes are not accidentally included.
+
+The reusable **Resolve Release Source** workflow validates candidate and stable
+references without publishing. ASTL-confidential uses it to test candidates and
+to verify that a complete public stable release already exists.
+
+For a release prepared before numbered candidates were introduced, dispatch
+**Prepare Release Candidate** with candidate number `1` and the existing
+prepared tag or commit as `source_ref`. This bootstraps `releases/VERSION` and
+`release-candidate/VERSION-rc.1` without moving the legacy tag.
 
 Scheduled and manually selected `ROLLING` releases remain single-phase: they
 package the selected source revision without promoting the changelog.

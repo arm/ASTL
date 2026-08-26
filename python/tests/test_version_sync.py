@@ -5,6 +5,9 @@
 import importlib
 import pathlib
 
+from packaging.version import Version
+
+
 def test_package_version_matches_version_file():
     astl = importlib.import_module("astl")
     repo_version = None
@@ -24,4 +27,4 @@ def test_package_version_matches_version_file():
         # If we cannot find VERSION.md (e.g. unusual install), at least assert a non-empty version
         assert astl.__version__
     else:
-        assert astl.__version__ == repo_version
+        assert Version(astl.__version__) == Version(repo_version)
