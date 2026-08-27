@@ -407,7 +407,7 @@ jobs:
             "${{ github.workspace }}/release-complete.json" \
             --repo "${ASTL_REPOSITORY}"
 
-      - name: 🔑 Create post-release source token
+      - name: 🔑 Create stable release write token
         if: env.RELEASE_TYPE == 'STABLE'
         id: post-release-token
         uses: actions/create-github-app-token@v3
@@ -419,6 +419,48 @@ jobs:
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write
+
+      - name: 🏷️ Tag stable Go module
+        if: env.RELEASE_TYPE == 'STABLE'
+        shell: bash
+        working-directory: ${{ github.workspace }}/ASTL
+        env:
+          ASTL_SOURCE_SHA: ${{ steps.source-metadata.outputs.sha }}
+          GH_TOKEN: ${{ steps.post-release-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          GO_MAJOR="${VERSION_STRING%%.*}"
+          EXPECTED_GO_MODULE="github.com/arm/ASTL/Go"
+          if [[ "${GO_MAJOR}" != "0" && "${GO_MAJOR}" != "1" ]]; then
+            EXPECTED_GO_MODULE="${EXPECTED_GO_MODULE}/v${GO_MAJOR}"
+          fi
+          if ! grep -Fxq "module ${EXPECTED_GO_MODULE}" Go/go.mod; then
+            echo "Go/go.mod does not declare the expected ${EXPECTED_GO_MODULE} module for ASTL ${VERSION_STRING}." >&2
+            exit 1
+          fi
+
+          GO_TAG="Go/v${VERSION_STRING}"
+          GO_TAG_REF="refs/tags/${GO_TAG}"
+          REMOTE_TAG="$(gh api "repos/${ASTL_REPOSITORY}/git/matching-refs/tags/${GO_TAG}" \
+            --jq ".[] | select(.ref == \"${GO_TAG_REF}\") | [.object.type, .object.sha] | @tsv")"
+          if [[ -n "${REMOTE_TAG}" ]]; then
+            read -r GO_TAG_OBJECT_TYPE GO_TAG_COMMIT <<< "${REMOTE_TAG}"
+            if [[ "${GO_TAG_OBJECT_TYPE}" == "tag" ]]; then
+              GO_TAG_COMMIT="$(gh api "repos/${ASTL_REPOSITORY}/git/tags/${GO_TAG_COMMIT}" --jq '.object.sha')"
+            fi
+            if [[ "${GO_TAG_COMMIT}" != "${ASTL_SOURCE_SHA}" ]]; then
+              echo "Go module tag ${GO_TAG} already points to ${GO_TAG_COMMIT}, not ${ASTL_SOURCE_SHA}." >&2
+              exit 1
+            fi
+            echo "Go module tag ${GO_TAG} already points to this release commit; continuing retry."
+            exit 0
+          fi
+
+          gh api --method POST "repos/${ASTL_REPOSITORY}/git/refs" \
+            -f ref="${GO_TAG_REF}" \
+            -f sha="${ASTL_SOURCE_SHA}" >/dev/null
+          echo "Created Go module tag ${GO_TAG} at ${ASTL_SOURCE_SHA}."
 
       - name: ⤵️ Configure Git to use post-release write credentials
         if: env.RELEASE_TYPE == 'STABLE'

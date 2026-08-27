@@ -59,6 +59,22 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn('git switch -c "${POST_RELEASE_BRANCH}" origin/main', workflow)
         self.assertNotIn("is_reachable_from_main == 'true'", workflow)
 
+    def test_create_release_tags_stable_go_module_idempotently(self) -> None:
+        workflow = (ROOT / ".github/workflows/create-release.yml").read_text(encoding="utf-8")
+
+        self.assertIn("name: 🏷️ Tag stable Go module", workflow)
+        self.assertIn("if: env.RELEASE_TYPE == 'STABLE'", workflow)
+        self.assertIn('EXPECTED_GO_MODULE="github.com/arm/ASTL/Go"', workflow)
+        self.assertIn('EXPECTED_GO_MODULE="${EXPECTED_GO_MODULE}/v${GO_MAJOR}"', workflow)
+        self.assertIn('grep -Fxq "module ${EXPECTED_GO_MODULE}" Go/go.mod', workflow)
+        self.assertIn('GO_TAG="Go/v${VERSION_STRING}"', workflow)
+        self.assertIn("git/matching-refs/tags/${GO_TAG}", workflow)
+        self.assertIn("select(.ref == \\\"${GO_TAG_REF}\\\")", workflow)
+        self.assertIn("git/tags/${GO_TAG_COMMIT}", workflow)
+        self.assertIn('--method POST "repos/${ASTL_REPOSITORY}/git/refs"', workflow)
+        self.assertIn('-f ref="${GO_TAG_REF}"', workflow)
+        self.assertIn('-f sha="${ASTL_SOURCE_SHA}"', workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
