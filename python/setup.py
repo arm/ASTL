@@ -107,13 +107,6 @@ def _make_extensions(include_dirs: list[str], lib_name: str | None, lib_dirs: li
             runtime_library_dirs=rpaths or None,
         )
     ]
-    # Optional sanitizer flags
-    if os.environ.get("ASTL_PYTHON_ENABLE_ASAN"):
-        san_flags = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]
-        for ext in exts:
-            if san_flags[0] not in ext.extra_compile_args:
-                ext.extra_compile_args.extend(san_flags)
-            ext.extra_link_args = getattr(ext, 'extra_link_args', []) + ["-fsanitize=address,undefined"]
     return exts
 
 

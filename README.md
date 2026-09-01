@@ -1216,6 +1216,16 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
+For deterministic native tests under AddressSanitizer plus UndefinedBehaviorSanitizer or under ThreadSanitizer, see
+[Sanitizer builds](doc/sanitizers.md).
+
+Procfs collection and its target-specific metric discovery are included by
+default. Developers can omit that support from a build with:
+
+```sh
+cmake -S . --preset debug -DASTL_PROCFS=OFF
+```
+
 Procfs collection and its target-specific metric discovery are included by
 default. Developers can omit that support from a build with:
 

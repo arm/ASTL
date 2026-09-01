@@ -186,3 +186,56 @@ jobs:
         # include only sample tests, we skipped these earlier in `Unit tests`
         # because we don't want to include them for coverage.
         run: ctest -L "integration" --preset ${{ matrix.cmake_preset }}
+
+  sanitizer:
+    name: ASan + UBSan (Ubuntu)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+
+    steps:
+      # TODO - remove this step one mock-SCMI is available from Arm/mock-SCMI OSS repo
+      - name: 🔑 Create source checkout token
+        id: source-checkout-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL,mock-SCMI
+          permission-contents: read
+
+      - name: ⤵️ Checkout ASTL
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          # TODO - once mock-SCMI is available from Arm/mock-SCMI OSS repo, we can use secrets.GITHUB_TOKEN
+          token: ${{ steps.source-checkout-token.outputs.token }}
+          submodules: true
+          persist-credentials: false
+
+      - name: 🏗️ Build ASTL with ASan and UBSan
+        uses: ./.github/actions/build
+        with:
+          os: ubuntu-24.04-arm
+          cmake_preset: debug-asan-ubsan
+          c_compiler: clang
+          cpp_compiler: clang++
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: ⤵️ Install just
+        run: sudo apt-get -o DPkg::Lock::Timeout=300 install -y just
+
+      - name: 🧪 Run deterministic sanitizer tests
+        run: just sanitizer debug-asan-ubsan
+
+      - name: ⤴️ Upload sanitizer logs and test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sanitizer-logs-ubuntu-clang
+          if-no-files-found: warn
+          path: |
+            ${{ github.workspace }}/build/debug-asan-ubsan/sanitizer-logs/**
+            ${{ github.workspace }}/build/debug-asan-ubsan/test-results/**
+            ${{ github.workspace }}/build/debug-asan-ubsan/Testing/Temporary/LastTest.log
+            ${{ github.workspace }}/build/debug-asan-ubsan/CMakeFiles/CMakeConfigureLog.yaml

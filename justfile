@@ -117,6 +117,28 @@ test-all preset='debug': build
     echo "[test-all] Running Go wrapper tests"
     just go-test {{preset}}
 
+# Configure, build, and run deterministic native tests with the selected sanitizer preset.
+sanitizer preset='debug-asan-ubsan':
+    #!/usr/bin/env bash
+    set -eu -o pipefail
+    case {{quote(preset)}} in
+        debug-asan-ubsan|debug-tsan) ;;
+        *) echo "[sanitizer][ERROR] Expected debug-asan-ubsan or debug-tsan" >&2; exit 2 ;;
+    esac
+    just build {{quote(preset)}}
+    ./scripts/run_sanitizer_tests.sh {{quote(preset)}}
+
+# Run the MockScmi-backed E2E test separately when the optional MockScmi sources are available.
+sanitizer-e2e preset='debug-asan-ubsan':
+    #!/usr/bin/env bash
+    set -eu -o pipefail
+    case {{quote(preset)}} in
+        debug-asan-ubsan|debug-tsan) ;;
+        *) echo "[sanitizer-e2e][ERROR] Expected debug-asan-ubsan or debug-tsan" >&2; exit 2 ;;
+    esac
+    just build {{quote(preset)}}
+    ./tests/e2e_test/run_e2e.sh {{quote(preset)}}
+
 # test everything, generate html coverage file
 test-cov: build
     #!/usr/bin/env bash

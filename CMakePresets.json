@@ -42,6 +42,28 @@
       }
     },
     {
+      "name": "debug-asan-ubsan",
+      "inherits": "debug",
+      "cacheVariables": {
+        "ASTL_BUILD_SAMPLES": "OFF",
+        "ASTL_LIBSENSORS": "ON",
+        "ASTL_PROCFS": "OFF",
+        "ASTL_SANITIZER": "address-undefined",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "ENABLE_COVERAGE": "OFF",
+        "ENABLE_VALGRIND": "OFF",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets"
+      }
+    },
+    {
+      "name": "debug-tsan",
+      "inherits": "debug-asan-ubsan",
+      "cacheVariables": {
+        "ASTL_SANITIZER": "thread"
+      }
+    },
+    {
       "name": "debug-make",
       "generator": "Unix Makefiles",
       "cacheVariables": {
@@ -96,6 +118,16 @@
       "configuration": "Debug"
     },
     {
+      "name": "debug-asan-ubsan",
+      "configurePreset": "debug-asan-ubsan",
+      "configuration": "Debug"
+    },
+    {
+      "name": "debug-tsan",
+      "configurePreset": "debug-tsan",
+      "configuration": "Debug"
+    },
+    {
       "name": "debug-make",
       "configurePreset": "debug-make",
       "configuration": "Debug"
@@ -137,6 +169,29 @@
       "name": "debug-valgrind",
       "configurePreset": "debug-valgrind",
       "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug-asan-ubsan",
+      "configurePreset": "debug-asan-ubsan",
+      "configuration": "Debug",
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1:abort_on_error=1:strict_string_checks=1:check_initialization_order=1:symbolize=1:log_path=${sourceDir}/build/debug-asan-ubsan/sanitizer-logs/asan",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1:log_path=${sourceDir}/build/debug-asan-ubsan/sanitizer-logs/ubsan"
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug-tsan",
+      "configurePreset": "debug-tsan",
+      "configuration": "Debug",
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:symbolize=1:log_path=${sourceDir}/build/debug-tsan/sanitizer-logs/tsan"
+      },
       "output": {
         "outputOnFailure": true
       }

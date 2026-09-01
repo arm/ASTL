@@ -7,7 +7,7 @@
 ########################################
 # run_e2e.sh
 # Launch MockScmi and run E2E tests
-# Usage: ./run_e2e.sh [debug|release]
+# Usage: ./run_e2e.sh [preset]
 ########################################
 set -euo pipefail
 
@@ -16,9 +16,9 @@ set -euo pipefail
 ########################################
 BUILD_TYPE="${1:-debug}"
 
-if [[ $BUILD_TYPE != "debug" && $BUILD_TYPE != "release" ]]; then
+if [[ ! $BUILD_TYPE =~ ^[A-Za-z0-9._-]+$ ]]; then
 	echo "❌ Invalid build type: $BUILD_TYPE"
-	echo "Usage: $0 [debug|release]"
+	echo "Usage: $0 [preset]"
 	exit 1
 fi
 
@@ -157,6 +157,7 @@ echo ""
 ########################################
 echo "[4/5] Setting up environment..."
 export ASTL_CONFIG_DIR="$BUILD_DIR/lib/config"
+export ASTL_COLLECTORS="scmi"
 export ASTL_VERBOSE=0
 echo "ASTL_CONFIG_DIR: $ASTL_CONFIG_DIR"
 

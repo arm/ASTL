@@ -37,6 +37,10 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
       CACHE STRING "Vcpkg toolchain file")
 endif()
 
+# Sanitizer dependency triplets must be selected before project() initializes the vcpkg toolchain.
+include(AstlSanitizerTriplet)
+astl_configure_sanitizer_vcpkg_triplet()
+
 include(macros)
 setastlversion()
 
@@ -114,27 +118,6 @@ function(astl_add_optional_subdirectory relative_dir component_name)
     message(STATUS "Skipping ${component_name} because ${relative_dir} is missing")
   endif()
 endfunction()
-
-# Sanitizer option (Address + Undefined Behavior)
-option(ENABLE_ASAN "Enable Address/Undefined Behavior sanitizer instrumentation" OFF)
-option(ASTL_PYTHON_ENABLE_ASAN "Propagate sanitizer flags into Python extension build" OFF)
-if(ENABLE_ASAN)
-  message(STATUS "Building with sanitizers (ASAN/UBSAN)")
-  # IMPORTANT: Pass flags as separate list items so CMake does not quote them together.
-  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
-  add_link_options(-fsanitize=address,undefined)
-endif()
-
-if(ASTL_PYTHON_ENABLE_ASAN)
-  if(NOT ENABLE_ASAN)
-    message(WARNING "ASTL_PYTHON_ENABLE_ASAN is ON but ENABLE_ASAN is OFF; enabling ENABLE_ASAN as well")
-    set(ENABLE_ASAN
-        ON
-        CACHE BOOL "Enable Address/Undefined Behavior sanitizer instrumentation" FORCE)
-  endif()
-  message(STATUS "Python extension will be built with sanitizer flags (exporting ASTL_PYTHON_ENABLE_ASAN=1)")
-  set(ENV{ASTL_PYTHON_ENABLE_ASAN} 1)
-endif()
 
 if(PROJECT_IS_TOP_LEVEL)
   message(STATUS "This project is a top-level project")
@@ -235,6 +218,9 @@ if(ENABLE_COVERAGE)
     add_link_options("--coverage")
   endif()
 endif()
+
+include(Sanitizers)
+astl_configure_sanitizers()
 
 include(GNUInstallDirs)
 set(ASTL_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/astl")
