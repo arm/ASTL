@@ -85,6 +85,14 @@ auto IsAllDigits(std::string_view value) -> bool {
 }
 
 #if defined(__linux__)
+#  if defined(ASTL_LIBC_MUSL)
+// NOLINTNEXTLINE(google-runtime-int): POSIX uses `int` for ioctl op param
+using IoctlRequest = int;
+#  else
+// NOLINTNEXTLINE(google-runtime-int): glibc uses `unsigned long` for ioctl op param
+using IoctlRequest = unsigned long;  // NOLINT(google-runtime-int): ioctl's glibc ABI requires this exact type.
+#  endif
+
 constexpr auto AbiInfoIsCompatible(const scmi_tlm_abi_info& info) -> bool {
   return info.size >= sizeof(scmi_tlm_abi_info) && info.abi_version == SCMI_TLM_CURRENT_ABI_VERSION &&
          (info.abi_features & SCMI_TLM_ABI_FEAT_BATCHED_CFG) != 0;
@@ -210,8 +218,8 @@ auto ScmiIoctlInterface::Ioctl(std::uint64_t request, void* arg) -> astl_status_
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg,google-runtime-int): POSIX ioctl requires this ABI type.
-  if (ioctl(_fd, static_cast<unsigned long>(request), arg) != 0) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg): ioctl's request type is libc-specific.
+  if (ioctl(_fd, static_cast<IoctlRequest>(request), arg) != 0) {
     const int error_number = errno;
     ASTL_LOG_DEBUG("SCMI ioctl 0x{:X} failed on '{}': {}", request, _device_path.string(), std::strerror(error_number));
     return ErrnoToStatus(error_number);

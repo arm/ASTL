@@ -27,11 +27,11 @@ if(ASTL_HAVE_LIBSENSORS)
     target_compile_options(${TARGET} PRIVATE /wd4172)
   endif()
 
-  # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
+  # astl.h and other public headers come from Astl::astl_static's interface include paths.
   target_link_libraries(
     ${TARGET}
-    # test targets should link astl publicly so that gcovr can measure how much of astl_static is covered
-    PUBLIC Astl::astl Astl::astl_static
+    # Test targets link astl_static publicly so gcovr can measure how much of it is covered.
+    PUBLIC Astl::astl_static
     PRIVATE Catch2::Catch2WithMain)
 
   # have catch2's cmake module discover the tests and add them to ctest for us

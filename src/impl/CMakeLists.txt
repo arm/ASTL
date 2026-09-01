@@ -12,6 +12,10 @@ add_library(${LIBRARY_NAME} STATIC)
 add_library(Astl::${LIBRARY_NAME} ALIAS ${LIBRARY_NAME})
 target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_BUILD)
 
+if(ASTL_LIBC_MUSL)
+  target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_LIBC_MUSL)
+endif()
+
 include(Warnings)
 set_project_warnings(${LIBRARY_NAME})
 

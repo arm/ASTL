@@ -210,9 +210,13 @@ set(CMAKE_C_VISIBILITY_PRESET "hidden")
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
+include(detect_libc)
+astl_detect_libc()
+
 option(ASTL_BUILD_TESTING "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(ASTL_BUILD_TOOLS "Build tools" ${PROJECT_IS_TOP_LEVEL})
 option(ASTL_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
+option(ASTL_BUILD_SHARED "Build the ASTL shared-library wrapper" ON)
 option(ATX_STATIC_LINK "Also build ATX as a fully static Linux executable" OFF)
 # option(ASTL_INSTALL "Install library when invoking --install" ON) option(ASTL_ENABLE_LOGGING "Enable logging" OFF)
 
@@ -305,118 +309,12 @@ endif()
 # define the static library `astl_static` - aka Astl::astl_static
 add_subdirectory(src/impl)
 
-# define the shared library `astl`
-set(LIBRARY_NAME "${PROJECT_NAME}")
-
-# Define the target for a shared library `astl`, wrapping the static library astl_static
-add_library(${LIBRARY_NAME} SHARED)
-# add alias target for the library for unambiguous FindPackage
-add_library(Astl::${LIBRARY_NAME} ALIAS ${LIBRARY_NAME})
-
-# Create a symlink to the configuration JSON next to the built shared library. We do this after the shared library
-# target is defined so $<TARGET_FILE_DIR:${LIBRARY_NAME}> is valid. Source file lives in
-# samples/sample_configuration/astl_configuration.json; link name should be astl_configuration.json.
-add_custom_command(
-  TARGET ${LIBRARY_NAME}
-  POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_SOURCE_DIR}/samples/sample_configuration/astl_configuration.json
-          $<TARGET_FILE_DIR:${LIBRARY_NAME}>/astl_configuration.json
-  COMMENT "Creating symlink to astl_configuration.json in shared library output directory"
-  VERBATIM)
-
-include(Warnings)
-set_project_warnings(${LIBRARY_NAME})
-
-# ASTL_API macro will export functions on dlls, rather than import with ASTL_BUILD set
-target_compile_definitions(${LIBRARY_NAME} PRIVATE ASTL_BUILD)
-
-# if we're in a debug build, we want nlohmann::json library to include detailed diagnostics on failure. This
-# 'JSON_DIAGNOSTICS' setting has two parts: - the CMake cache variable JSON_DIAGNOSTICS, which is set in the
-# CmakePresets.json file and used here in the conditional below - the preprocessor definition JSON_DIAGNOSTICS which
-# nlohmann::json looks for at compile time.
-if(JSON_DIAGNOSTICS)
-  # Apply globally so all subsequent targets (including tests) inherit it
-  add_compile_definitions(JSON_DIAGNOSTICS=1)
-  # Also ensure the shared lib explicitly has it (redundant but clear)
-  target_compile_definitions(${LIBRARY_NAME} PRIVATE JSON_DIAGNOSTICS=1)
+if(ASTL_BUILD_SHARED)
+  include(add_shared_library)
+  astl_add_shared_library()
+else()
+  message(STATUS "ASTL shared-library wrapper disabled (ASTL_BUILD_SHARED=OFF)")
 endif()
-
-target_sources(
-  ${LIBRARY_NAME}
-  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_errors.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_telemetry.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_test_hooks.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/astl_version.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/utils/astl_read_file_handle_cache.cpp")
-
-# include directories
-target_include_directories(
-  ${LIBRARY_NAME}
-  PRIVATE # where the library itself will look for its internal headers
-          ${CMAKE_CURRENT_SOURCE_DIR}
-  PUBLIC # where top-level project will look for the library's public headers
-         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/utils>
-         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
-         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
-         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-         # where external projects will look for the library's public headers
-         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-
-# statically link in `astl_static` to the shared library
-target_link_libraries(${LIBRARY_NAME} PRIVATE Astl::astl_static)
-
-# Export all symbols in the dynamic symbol table for debug builds (enables readable backtrace_symbols output)
-if(UNIX AND NOT APPLE)
-  target_link_options(${LIBRARY_NAME} PRIVATE $<$<CONFIG:Debug>:-rdynamic>)
-  target_link_libraries(${LIBRARY_NAME} PRIVATE $<$<AND:$<CONFIG:Debug>,$<PLATFORM_ID:Linux>>:dl>)
-endif()
-
-# find spdlog, include it as a header-only dependency. This is a little slower (+10-12s) to compile ASTL, but necessary
-# because #including spdlog headers in multiple translation units causes linker errors like LNK2005
-find_package(spdlog CONFIG REQUIRED)
-target_link_libraries(${LIBRARY_NAME} PRIVATE spdlog::spdlog_header_only)
-
-set(PUBLIC_HEADERS include/astl/astl.h include/astl/astl_errors.h include/astl/astl_telemetry.h
-                   ${PROJECT_BINARY_DIR}/include/astl/astl_version.h)
-
-# public headers
-set_target_properties(
-  ${LIBRARY_NAME}
-  PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}"
-             DEBUG_POSTFIX "d"
-             OUTPUT_NAME "astl-${PROJECT_VERSION_MAJOR}")
-
-# Debug suffix
-set_target_properties(${LIBRARY_NAME} PROPERTIES DEBUG_POSTFIX "d")
-
-# Definition of CMAKE_INSTALL_LIBDIR, etc
-include(GNUInstallDirs)
-
-# Publish filtered ASTL configuration files under the build lib directory so runtime config lookup can reuse the same
-# location as shared-library artifacts.
-if(UNIX)
-  find_program(BASH_PROGRAM bash REQUIRED)
-  set(ASTL_RUNTIME_CONFIG_DIR "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/config")
-  if(TARGET astl)
-    set(ASTL_RUNTIME_CONFIG_DIR "$<TARGET_FILE_DIR:astl>/config")
-  elseif(TARGET Astl::astl)
-    set(ASTL_RUNTIME_CONFIG_DIR "$<TARGET_FILE_DIR:Astl::astl>/config")
-  endif()
-  add_custom_target(
-    ${LIBRARY_NAME}_publish_configs ALL
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${ASTL_RUNTIME_CONFIG_DIR}
-    COMMAND ${BASH_PROGRAM} ${CMAKE_SOURCE_DIR}/scripts/publish_configs.sh -o ${ASTL_RUNTIME_CONFIG_DIR}
-    COMMENT "Publishing ASTL config files to ${ASTL_RUNTIME_CONFIG_DIR}"
-    VERBATIM)
-  add_dependencies(${LIBRARY_NAME} ${LIBRARY_NAME}_publish_configs)
-endif()
-
-# install the target
-install(
-  TARGETS ${PROJECT_NAME}
-  EXPORT "${PROJECT_NAME}Targets"
-  PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
-  INCLUDES
-  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 if(ENABLE_VALGRIND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
   find_program(VALGRIND_PATH valgrind)
@@ -464,8 +362,12 @@ endif()
 include(CTest)
 
 # add samples
-if(BUILD_TESTING AND ASTL_BUILD_SAMPLES)
+if(BUILD_TESTING
+   AND ASTL_BUILD_SAMPLES
+   AND ASTL_BUILD_SHARED)
   add_subdirectory(samples/sample_test)
+elseif(BUILD_TESTING AND ASTL_BUILD_SAMPLES)
+  message(STATUS "Skipping samples because ASTL_BUILD_SHARED is disabled")
 endif()
 
 # add tests
@@ -487,21 +389,27 @@ if(BUILD_TESTING AND ASTL_BUILD_TESTING)
     endif()
     astl_add_optional_subdirectory(tools/AMX/tests "AMX tests")
   endif()
-  add_subdirectory(tests/wrapper_test)
+  if(ASTL_BUILD_SHARED)
+    add_subdirectory(tests/wrapper_test)
+    add_subdirectory(tests/e2e_test)
+  else()
+    message(STATUS "Skipping shared-library wrapper and end-to-end tests because ASTL_BUILD_SHARED is disabled")
+  endif()
   if(ASTL_HAVE_LIBSENSORS)
     add_subdirectory(tests/libsensors_collector_test)
   else()
     message(STATUS "Skipping libsensors_collector_test because libsensors support is disabled")
   endif()
-  add_subdirectory(tests/e2e_test)
 endif()
 
-export(
-  TARGETS ${PROJECT_NAME}
-  FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/AstlTargets.cmake"
-  NAMESPACE Astl::)
+if(ASTL_BUILD_SHARED)
+  export(
+    TARGETS ${PROJECT_NAME}
+    FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/AstlTargets.cmake"
+    NAMESPACE Astl::)
+endif()
 
-if(ASTL_INSTALL)
+if(ASTL_INSTALL AND ASTL_BUILD_SHARED)
   include(CMakePackageConfigHelpers)
 
   write_basic_package_version_file(
@@ -545,6 +453,8 @@ if(ASTL_INSTALL)
     DESTINATION "${ASTL_INSTALL_CMAKE_DIR}"
     COMPONENT Astl_Development)
 
+elseif(ASTL_INSTALL)
+  message(STATUS "Skipping shared-library package installation because ASTL_BUILD_SHARED is disabled")
 endif()
 
 # if(PROJECT_IS_TOP_LEVEL AND ASTL_INSTALL) include(cmake/packaging.cmake) endif()
