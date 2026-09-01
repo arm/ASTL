@@ -51,6 +51,17 @@ TEST_CASE("RateMetric: construction", "[RateMetric]") {
   REQUIRE(sink.captured.empty());
 }
 
+TEST_CASE("RateMetric: properties report the processed value type", "[RateMetric]") {
+  astl::RateMetric    metric = GetRateMetricWithSink(nullptr);
+  astl_metric_props_t properties{};
+
+  REQUIRE(GetRateConfig()->ValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(metric.GetProperties(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(metric.GetProperties(&properties) == ASTL_STATUS_SUCCESS);
+  REQUIRE(properties.metric_type == ASTL_METRIC_RATE);
+  REQUIRE(properties.value_type == ASTL_VALUE_FLOAT64);
+}
+
 TEST_CASE("RateMetric: single sample - no rate calculated", "[RateMetric]") {
   MockSampleSink   sink;
   astl::RateMetric metric = GetRateMetricWithSink(&sink);

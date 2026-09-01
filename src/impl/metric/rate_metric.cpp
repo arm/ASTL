@@ -48,6 +48,16 @@ RateMetric::RateMetric(const MetricConfig* configuration, const ITarget* target,
   _interval_logger.LogInfo("Metric, Rate Value, Time Interval (us), Timestamp \n");
 }
 
+auto RateMetric::GetProperties(astl_metric_props_t* properties) const -> astl_status_code {
+  auto status = DeltaMetric::GetProperties(properties);
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+
+  properties->value_type = ASTL_VALUE_FLOAT64;
+  return ASTL_STATUS_SUCCESS;
+}
+
 auto RateMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code {
   // Check if the sample's value type matches the metric's expected type
   auto type_check_result = CheckSampleValueType(raw_sample);

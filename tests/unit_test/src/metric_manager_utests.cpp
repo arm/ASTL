@@ -285,7 +285,7 @@ TEST_CASE("MetricManager::GetRequiredOperations rejects empty metric list", "[Me
   REQUIRE(result.error() == ASTL_STATUS_BAD_ARGUMENT);
 }
 
-TEST_CASE("MetricManager::GetProperties exposes metric name", "[MetricManager]") {
+TEST_CASE("MetricManager::GetProperties exposes processed rate properties", "[MetricManager]") {
   Capabilities  caps = MakeCaps(CollectorType::SCMI);
   MetricManager mgr(caps);
   MockTarget    target;
@@ -293,7 +293,7 @@ TEST_CASE("MetricManager::GetProperties exposes metric name", "[MetricManager]")
   ALLOW_CALL(target, Name()).RETURN(target_name);
 
   auto cfg = std::make_unique<MetricConfig>("SoC Power", "desc", astl_units_t::ASTL_UNITS_WATTS,
-                                            astl_value_type_t::ASTL_VALUE_FLOAT64, ASTL_METRIC_IDENTIFIER_POWER,
+                                            astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_POWER,
                                             astl_metric_type_t::ASTL_METRIC_RATE, CollectorType::SCMI,
                                             astl::NullOperationBuilder{}, astl::IdentityFormula{}, ASTL_VALUE_UNKNOWN,
                                             std::vector<std::string>{}, "SOC.0.ENERGY_COUNTER");
@@ -307,6 +307,8 @@ TEST_CASE("MetricManager::GetProperties exposes metric name", "[MetricManager]")
   props.size = sizeof(astl_metric_props_t);
   REQUIRE(mgr.GetProperties((*metrics)[0], &props) == ASTL_STATUS_SUCCESS);
   REQUIRE(std::string{props.name} == "SoC Power");
+  REQUIRE(props.metric_type == ASTL_METRIC_RATE);
+  REQUIRE(props.value_type == ASTL_VALUE_FLOAT64);
 }
 
 TEST_CASE("MetricManager::GetRequiredOperations fails for non-SCMI metric", "[MetricManager]") {

@@ -62,6 +62,17 @@ class RateMetric : public DeltaMetric {
                       IProcessedSampleSink *processed_sample_sink);
 
   /**
+   * @brief Assign the properties of this rate metric.
+   *
+   * Rate calculation always produces double-precision floating-point values,
+   * independently of the configured input value type.
+   *
+   * @param properties Non-null pointer to structure to populate.
+   * @return ASTL_STATUS_SUCCESS or ASTL_STATUS_BAD_ARGUMENT.
+   */
+  auto GetProperties(astl_metric_props_t *properties) const -> astl_status_code override;
+
+  /**
    * @brief Process and record a new sample value, calculating rate from delta and time.
    *
    * Inherits delta calculation from DeltaMetric and adds rate calculation by
