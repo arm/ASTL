@@ -38,6 +38,7 @@ jobs:
           owner: Arm
           repositories: ASTL
           permission-contents: write
+          permission-workflows: write
 
       - name: Mirror main and tags
         env:
