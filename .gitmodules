@@ -3,4 +3,4 @@
 
 [submodule "tools/mock_scmi"]
 	path = tools/mock_scmi
-	url = https://github.com/Arm-Debug/mock-SCMI.git
+	url = ../mock-SCMI.git
