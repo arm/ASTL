@@ -25,12 +25,13 @@ flowchart TB
         dispatchRelease["Release manager<br/>Publish selected numbered candidate"]
         verify["create-release.yml<br/>Invokes prepare_release.py --check<br/>Validates metadata and API policy"]
         stage["create-release.yml<br/>Builds ASTL<br/>Invokes stage_release.sh<br/>Tests and packages the build"]
-        publish["create-release.yml<br/>Publishes immutable stable tag and artifacts<br/>or verifies and reuses a complete release"]
+        publish["create-release.yml<br/>Publishes immutable stable tag and artifacts<br/>or verifies and reuses a complete private release"]
+        publicPublish["mirror-arm.yml<br/>Mirrors stable and Go tags, release branch,<br/>notes, and artifacts to Arm/ASTL"]
         postPr["create-release.yml<br/>Opens a monotonic VERSION.post PR<br/>from current main"]
         mergePost["Developers / reviewers<br/>Review CI<br/>Merge the .post PR"]
         done(["Release complete<br/>Development version restored"])
 
-        dispatchRelease --> verify --> stage --> publish --> postPr --> mergePost --> done
+        dispatchRelease --> verify --> stage --> publish --> publicPublish --> postPr --> mergePost --> done
     end
 
     approved --> dispatchRelease
@@ -39,4 +40,4 @@ flowchart TB
     classDef human fill:#e8f1ff,stroke:#2563a6,color:#102a43,stroke-width:2px;
     classDef workflow fill:#f1eafe,stroke:#6d42a1,color:#2d1744,stroke-width:2px;
     class dispatchPrepare,mergePrepare,fix,dispatchRelease,mergePost human;
-    class prepare,candidate,testCandidate,nextCandidate,verify,stage,publish,postPr workflow;
+    class prepare,candidate,testCandidate,nextCandidate,verify,stage,publish,publicPublish,postPr workflow;

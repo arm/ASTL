@@ -1457,6 +1457,12 @@ Stable releases use two manually initiated phases:
    candidate tag as `source_ref`. It verifies, builds, and publishes that exact
    candidate. A retry reuses an existing complete release instead of replacing
    its artifacts.
+5. After the private stable release is complete, automation creates the matching
+   `Go/vVERSION` module tag and publishes the release to
+   [Arm/ASTL](https://github.com/Arm/ASTL/releases). The public publisher mirrors
+   `release/VERSION`, `Go/vVERSION`, and `releases/VERSION`, then copies the
+   release name, notes, and assets. A nightly run retries publication of any
+   completed stable release that was missed.
 
 ### Normal Stable Release Flow
 
@@ -1476,6 +1482,9 @@ commit. Stable publication rejects branches and raw SHAs; use an immutable
 version rather than moving an existing candidate or stable tag.
 Configure a repository tag ruleset for `release-candidate/*` so only the release
 automation identity can create tags and no identity can update or delete them.
+Candidate tags are mirrored to `Arm/ASTL` as immutable Git refs so public clients
+can test a precisely identified source revision, but candidates do not create
+public GitHub Release records or publish release assets.
 
 The stabilization branch is created before candidate testing. After final
 publication, the workflow reads the current version from `origin/main` and
@@ -1494,7 +1503,9 @@ prepared tag or commit as `source_ref`. This bootstraps `releases/VERSION` and
 `release-candidate/VERSION-rc.1` without moving the legacy tag.
 
 Scheduled and manually selected `ROLLING` releases remain single-phase: they
-package the selected source revision without promoting the changelog.
+package the selected source revision without promoting the changelog. Rolling
+tags, branches, GitHub Releases, and artifacts remain private and are not
+published to `Arm/ASTL`.
 
 To perform the first-phase metadata edit locally, run:
 

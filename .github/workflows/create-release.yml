@@ -416,6 +416,7 @@ jobs:
           private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
           owner: Arm-Debug
           repositories: ASTL
+          permission-actions: write
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write
@@ -461,6 +462,17 @@ jobs:
             -f ref="${GO_TAG_REF}" \
             -f sha="${ASTL_SOURCE_SHA}" >/dev/null
           echo "Created Go module tag ${GO_TAG} at ${ASTL_SOURCE_SHA}."
+
+      - name: 🌐 Dispatch public stable release publication
+        if: env.RELEASE_TYPE == 'STABLE'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.post-release-token.outputs.token }}
+        run: |
+          gh workflow run mirror-arm.yml \
+            --repo "${ASTL_REPOSITORY}" \
+            --ref main \
+            -f release_tag="release/${VERSION_STRING}"
 
       - name: ⤵️ Configure Git to use post-release write credentials
         if: env.RELEASE_TYPE == 'STABLE'

@@ -59,6 +59,15 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn('git switch -c "${POST_RELEASE_BRANCH}" origin/main', workflow)
         self.assertNotIn("is_reachable_from_main == 'true'", workflow)
 
+    def test_stable_release_dispatches_publication_after_go_tagging(self) -> None:
+        create = (ROOT / ".github/workflows/create-release.yml").read_text(encoding="utf-8")
+        mirror = (ROOT / ".github/workflows/mirror-arm.yml").read_text(encoding="utf-8")
+
+        self.assertLess(create.index("🏷️ Tag stable Go module"), create.index("🌐 Dispatch public stable release"))
+        self.assertIn('release_tag="release/${VERSION_STRING}"', create)
+        self.assertIn("schedule:", mirror)
+        self.assertIn("publish_public_release.sh", mirror)
+
     def test_create_release_tags_stable_go_module_idempotently(self) -> None:
         workflow = (ROOT / ".github/workflows/create-release.yml").read_text(encoding="utf-8")
 
