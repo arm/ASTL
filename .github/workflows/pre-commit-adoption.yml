@@ -17,6 +17,7 @@ concurrency:
 jobs:
   check-trailers:
     name: Check pre-commit hook adoption
+    if: github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -39,7 +40,9 @@ jobs:
               per_page: 100,
             });
             const missing = commits.filter((commit) =>
-              commit.parents.length < 2 && !hasTrailer(commit.commit.message)
+              commit.parents.length < 2 &&
+              commit.committer?.login !== 'web-flow' &&
+              !hasTrailer(commit.commit.message)
             );
 
             for (const commit of missing) {
@@ -52,11 +55,11 @@ jobs:
             core.summary.addHeading('Pre-commit hook adoption');
             if (missing.length === 0) {
               core.summary.addRaw(
-                'All non-merge commits in this pull request contain `Pre-Commit-Ran: true`.'
+                'All applicable commits in this pull request contain `Pre-Commit-Ran: true`.'
               );
             } else {
               core.summary.addRaw(
-                `Warning: ${missing.length} non-merge commit(s) do not contain ` +
+                `Warning: ${missing.length} applicable commit(s) do not contain ` +
                 '`Pre-Commit-Ran: true`.\n\n' +
                 'Run `./scripts/hooks/install_hooks.sh` to install the ASTL pre-commit hooks.'
               );
@@ -87,7 +90,7 @@ jobs:
             const body = `${marker}
             ### Pre-commit hook adoption
 
-            ⚠️ ${missing.length} non-merge ${commitGrammar} not contain \`Pre-Commit-Ran: true\`.
+            ⚠️ ${missing.length} applicable ${commitGrammar} not contain \`Pre-Commit-Ran: true\`.
 
             Run \`./scripts/hooks/install_hooks.sh\` to install the ASTL pre-commit hooks.`;
 
