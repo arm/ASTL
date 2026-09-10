@@ -8,6 +8,7 @@ on:
     types: [opened, reopened, synchronize]
 
 permissions:
+  checks: write
   contents: read
 
 concurrency:
@@ -16,8 +17,10 @@ concurrency:
 
 jobs:
   trusted:
-    name: Confidential CI
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    name: Dispatch Confidential CI
+    if: >-
+      github.repository == 'Arm-Debug/ASTL' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 190
     steps:
@@ -36,9 +39,11 @@ jobs:
           owner: Arm-Debug
           repositories: ASTL-confidential
 
-      - name: Dispatch and await confidential CI
+      - name: Dispatch confidential CI
         env:
           GH_TOKEN: ${{ steps.confidential-token.outputs.token }}
+          PUBLIC_GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLIC_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           TARGET_REPOSITORY: ${{ github.repository }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -48,8 +53,10 @@ jobs:
         run: ./scripts/confidential_ci_gate.sh
 
   fork:
-    name: Confidential CI
-    if: github.event.pull_request.head.repo.full_name != github.repository
+    name: Dispatch Confidential CI
+    if: >-
+      github.repository == 'Arm-Debug/ASTL' &&
+      github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 190
     environment: confidential-ci-fork-approval
@@ -69,9 +76,11 @@ jobs:
           owner: Arm-Debug
           repositories: ASTL-confidential
 
-      - name: Dispatch and await confidential CI
+      - name: Dispatch confidential CI
         env:
           GH_TOKEN: ${{ steps.confidential-token.outputs.token }}
+          PUBLIC_GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLIC_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           TARGET_REPOSITORY: ${{ github.repository }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}

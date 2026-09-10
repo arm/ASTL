@@ -10,6 +10,7 @@ on:
     branches: [main]
 
 permissions:
+  checks: write
   contents: read
 
 concurrency:
@@ -19,7 +20,7 @@ concurrency:
 jobs:
   # ASTL is mirrored publicly; only the canonical repository owns the dispatch credentials.
   trusted:
-    name: AMX CI / aggregate
+    name: Dispatch AMX CI
     if: >-
       github.repository == 'Arm-Debug/ASTL' &&
       (github.event_name == 'push' ||
@@ -50,9 +51,11 @@ jobs:
           permission-actions: read
           permission-contents: write
 
-      - name: Dispatch and await AMX CI
+      - name: Dispatch AMX CI
         env:
           GH_TOKEN: ${{ steps.amx-ci-token.outputs.token }}
+          PUBLIC_GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLIC_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SOURCE_EVENT: ${{ github.event_name == 'push' && 'push' || 'pull_request' }}
           TARGET_REPOSITORY: ${{ github.repository }}
           HEAD_REPOSITORY: >-
@@ -79,7 +82,7 @@ jobs:
         run: ./scripts/amx_ci_gate.sh
 
   fork:
-    name: AMX CI / aggregate
+    name: Dispatch AMX CI
     if: >-
       github.repository == 'Arm-Debug/ASTL' &&
       github.event_name == 'pull_request_target' &&
@@ -108,9 +111,11 @@ jobs:
           permission-actions: read
           permission-contents: write
 
-      - name: Dispatch and await AMX CI
+      - name: Dispatch AMX CI
         env:
           GH_TOKEN: ${{ steps.amx-ci-token.outputs.token }}
+          PUBLIC_GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLIC_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SOURCE_EVENT: pull_request
           TARGET_REPOSITORY: ${{ github.repository }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}

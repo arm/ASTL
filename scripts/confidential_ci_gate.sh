@@ -5,18 +5,17 @@
 set -euo pipefail
 
 readonly PRIVATE_REPOSITORY="Arm-Debug/ASTL-confidential"
-readonly PRIVATE_WORKFLOW="functional-dispatcher.yml"
-readonly POLL_INTERVAL_SECONDS=15
-readonly MAX_POLLS=720
 
 required=(
 	GH_TOKEN
+	PUBLIC_GH_TOKEN
 	TARGET_REPOSITORY
 	HEAD_REPOSITORY
 	HEAD_SHA
 	BASE_SHA
 	PR_NUMBER
 	CORRELATION_ID
+	PUBLIC_RUN_URL
 )
 for name in "${required[@]}"; do
 	if [[ -z ${!name:-} ]]; then
@@ -29,6 +28,7 @@ if [[ ! ${TARGET_REPOSITORY} =~ ^(Arm-Debug/ASTL|Arm/ASTL)$ ]]; then
 	echo "Unsupported target repository: ${TARGET_REPOSITORY}" >&2
 	exit 2
 fi
+
 if [[ ! ${HEAD_REPOSITORY} =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
 	echo "Invalid head repository: ${HEAD_REPOSITORY}" >&2
 	exit 2
@@ -41,6 +41,31 @@ if [[ ! ${PR_NUMBER} =~ ^[0-9]+$ ]]; then
 	echo "Invalid pull request number: ${PR_NUMBER}" >&2
 	exit 2
 fi
+if [[ ! ${CORRELATION_ID} =~ ^[A-Za-z0-9_.-]+$ || ${#CORRELATION_ID} -gt 180 ]]; then
+	echo "Invalid confidential CI correlation ID." >&2
+	exit 2
+fi
+
+check_name="Confidential CI"
+check_run="$(GH_TOKEN="${PUBLIC_GH_TOKEN}" gh api --method POST \
+	-H "Accept: application/vnd.github+json" "repos/${TARGET_REPOSITORY}/check-runs" \
+	-f name="${check_name}" -f head_sha="${HEAD_SHA}" -f status=in_progress \
+	-f external_id="${CORRELATION_ID}" -f details_url="${PUBLIC_RUN_URL}" \
+	-f 'output[title]=Confidential CI' \
+	-f 'output[summary]=Dispatched to ASTL-confidential; awaiting callback.')"
+check_run_id="$(jq -r '.id' <<<"${check_run}")"
+[[ ${check_run_id} =~ ^[1-9][0-9]*$ ]] || {
+	echo "Failed to create result check." >&2
+	exit 1
+}
+fail_check() {
+	GH_TOKEN="${PUBLIC_GH_TOKEN}" gh api --method PATCH \
+		-H "Accept: application/vnd.github+json" "repos/${TARGET_REPOSITORY}/check-runs/${check_run_id}" \
+		-f status=completed -f conclusion=failure \
+		-f 'output[title]=Confidential CI dispatch failed' \
+		-f 'output[summary]=ASTL could not dispatch the confidential workflow.' >/dev/null || true
+}
+trap fail_check ERR
 
 payload="$({
 	jq -n \
@@ -50,15 +75,22 @@ payload="$({
 		--arg base_sha "${BASE_SHA}" \
 		--arg pr_number "${PR_NUMBER}" \
 		--arg correlation_id "${CORRELATION_ID}" \
+		--arg check_run_id "${check_run_id}" \
+		--arg check_name "${check_name}" \
 		'{
       event_type: "astl-pr-confidential-ci",
       client_payload: {
+        schema_version: 2,
         target_repository: $target_repository,
         head_repository: $head_repository,
         head_sha: $head_sha,
         base_sha: $base_sha,
         pr_number: $pr_number,
-        correlation_id: $correlation_id
+		correlation_id: $correlation_id,
+		callback_repository: "Arm-Debug/ASTL",
+		callback_event_type: "confidential-ci-result",
+		check_run_id: $check_run_id,
+		check_name: $check_name
       }
     }'
 })"
@@ -69,49 +101,5 @@ gh api \
 	-H "Accept: application/vnd.github+json" \
 	"repos/${PRIVATE_REPOSITORY}/dispatches" \
 	--input - <<<"${payload}"
-
-run_id=""
-for ((poll = 1; poll <= MAX_POLLS; poll++)); do
-	runs="$(gh api \
-		-H "Accept: application/vnd.github+json" \
-		"repos/${PRIVATE_REPOSITORY}/actions/workflows/${PRIVATE_WORKFLOW}/runs?event=repository_dispatch&per_page=100")"
-	run_id="$(jq -r \
-		--arg title "Confidential CI ${CORRELATION_ID}" \
-		'.workflow_runs[] | select(.display_title == $title) | .id' \
-		<<<"${runs}" | head -n 1)"
-	if [[ -n ${run_id} ]]; then
-		break
-	fi
-	sleep "${POLL_INTERVAL_SECONDS}"
-done
-
-if [[ -z ${run_id} ]]; then
-	echo "Timed out waiting for the confidential workflow to start." >&2
-	exit 1
-fi
-
-for ((poll = 1; poll <= MAX_POLLS; poll++)); do
-	run="$(gh api \
-		-H "Accept: application/vnd.github+json" \
-		"repos/${PRIVATE_REPOSITORY}/actions/runs/${run_id}")"
-	status="$(jq -r '.status' <<<"${run}")"
-	conclusion="$(jq -r '.conclusion // ""' <<<"${run}")"
-	details_url="$(jq -r '.html_url' <<<"${run}")"
-	if [[ ${status} == "completed" ]]; then
-		{
-			echo "### Confidential CI"
-			echo "- Correlation: \`${CORRELATION_ID}\`"
-			echo "- Private result: ${conclusion}"
-			echo "- [Internal workflow details](${details_url})"
-		} >>"${GITHUB_STEP_SUMMARY}"
-		if [[ ${conclusion} == "success" ]]; then
-			exit 0
-		fi
-		echo "Confidential CI concluded with: ${conclusion}" >&2
-		exit 1
-	fi
-	sleep "${POLL_INTERVAL_SECONDS}"
-done
-
-echo "Timed out waiting for confidential CI to complete: ${details_url}" >&2
-exit 1
+trap - ERR
+echo "Confidential CI dispatched; result check ${check_run_id} awaits callback."

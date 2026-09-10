@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+name: Confidential CI Result Callback
+
+on:
+  repository_dispatch:
+    types: [confidential-ci-result, amx-ci-result]
+
+permissions:
+  checks: write
+  contents: read
+
+jobs:
+  complete-check:
+    name: Complete confidential result
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted callback handler
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate callback and complete check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+          CALLBACK_EVENT: ${{ github.event.action }}
+          SCHEMA_VERSION: ${{ github.event.client_payload.schema_version }}
+          CORRELATION_ID: ${{ github.event.client_payload.correlation_id }}
+          HEAD_SHA: ${{ github.event.client_payload.head_sha }}
+          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+          CHECK_NAME: ${{ github.event.client_payload.check_name }}
+          CONCLUSION: ${{ github.event.client_payload.conclusion }}
+          DETAILS_URL: ${{ github.event.client_payload.details_url }}
+        run: ./scripts/ci_result_callback.sh
