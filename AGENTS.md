@@ -41,7 +41,11 @@ Prefer targeted runs while iterating, then finish with `just test debug`. Native
 
 ## Commit & Pull Request Guidelines
 
-Recent history uses concise, imperative subjects with issue tags, for example `[ASTL-314] Add read-immediate subcommand to atx` or `[NO-JIRA] Add pre-commit hook to auto-format code`. Follow that format and keep unrelated changes out of the same commit. PRs should describe the behavior change, reference the ticket (e.g. [ASTL-123] in the title) or rationale, and list validation performed (`ctest`, `just python-pytest`, `just go-test debug`, etc.). Include logs or screenshots only when they clarify docs, tooling, or user-facing output.
+Recent history uses concise, imperative subjects with issue tags, for example `[ASTL-314] Add read-immediate subcommand to atx` or `[NO-JIRA] Add pre-commit hook to auto-format code`. Follow that format and keep unrelated changes out of the same commit.
+
+When opening a PR, use `.github/PULL_REQUEST_TEMPLATE.md` and complete all applicable sections. In particular, select exactly one option under **Public API declaration** so the API and user-flow impact is explicit. Describe the behavior change and list validation performed (`ctest`, `just python-pytest`, `just go-test debug`, etc.). Include logs or screenshots only when they clarify docs, tooling, or user-facing output.
+
+If the work implements a specific Jira ticket, reference its key in the PR title (for example, `[ASTL-123]`) and add a comment to the Jira ticket linking to the newly created PR. For work without a Jira ticket, include `[NO-JIRA]` in the PR title and explain the rationale in the PR description.
 
 ## Configuration Tips
 
