@@ -6,6 +6,9 @@
 set -euo pipefail
 
 readonly PRIVATE_REPOSITORY="Arm-Debug/ASTL-confidential"
+readonly PRIVATE_WORKFLOW="amx-ci.yml"
+readonly RUN_LOOKUP_ATTEMPTS=20
+readonly RUN_LOOKUP_INTERVAL_SECONDS=3
 
 required=(
 	GH_TOKEN
@@ -74,7 +77,7 @@ check_run="$(GH_TOKEN="${PUBLIC_GH_TOKEN}" gh api --method POST \
 	-f name="${check_name}" -f head_sha="${head_sha}" -f status=in_progress \
 	-f external_id="${correlation_id}" -f details_url="${PUBLIC_RUN_URL}" \
 	-f 'output[title]=AMX CI / aggregate' \
-	-f 'output[summary]=Dispatched to ASTL-confidential; awaiting callback.')"
+	-f 'output[summary]=Private AMX CI dispatched; awaiting callback.')"
 check_run_id="$(jq -r '.id' <<<"${check_run}")"
 [[ ${check_run_id} =~ ^[1-9][0-9]*$ ]] || {
 	echo "Failed to create result check." >&2
@@ -126,4 +129,33 @@ gh api \
 	"repos/${PRIVATE_REPOSITORY}/dispatches" \
 	--input - <<<"${payload}"
 trap - ERR
+
+private_run_url=""
+for ((attempt = 1; attempt <= RUN_LOOKUP_ATTEMPTS; attempt++)); do
+	if runs="$(gh api -H "Accept: application/vnd.github+json" \
+		"repos/${PRIVATE_REPOSITORY}/actions/workflows/${PRIVATE_WORKFLOW}/runs?event=repository_dispatch&per_page=20")"; then
+		private_run_url="$(jq -r --arg title "AMX CI ${correlation_id}" \
+			'.workflow_runs[] | select(.display_title == $title) | .html_url' <<<"${runs}" | head -n 1)" ||
+			private_run_url=""
+		[[ -z ${private_run_url} ]] || break
+	fi
+	((attempt == RUN_LOOKUP_ATTEMPTS)) || sleep "${RUN_LOOKUP_INTERVAL_SECONDS}"
+done
+
+if [[ -n ${private_run_url} ]]; then
+	echo "${private_run_url}"
+	GH_TOKEN="${PUBLIC_GH_TOKEN}" gh api --method PATCH \
+		-H "Accept: application/vnd.github+json" "repos/${target_repository}/check-runs/${check_run_id}" \
+		-f details_url="${private_run_url}" \
+		-f 'output[title]=AMX CI / aggregate' \
+		-f "output[summary]=Waiting for [private workflow run](${private_run_url}) to report completion." >/dev/null ||
+		echo "Unable to attach the private run link to check ${check_run_id}." >&2
+else
+	echo "The private AMX run link is not available yet; correlation ${correlation_id} can be used to locate it."
+fi
 echo "AMX CI dispatched; result check ${check_run_id} awaits callback."
+if [[ ${source_event} == "pull_request" ]]; then
+	echo "https://github.com/${target_repository}/pull/${pr_number}/checks?check_run_id=${check_run_id}"
+else
+	echo "https://github.com/${target_repository}/runs/${check_run_id}"
+fi

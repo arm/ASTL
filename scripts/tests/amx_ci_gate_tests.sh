@@ -12,6 +12,11 @@ set -euo pipefail
 args="$*"
 if [[ ${args} == *"--method POST"* && ${args} == *"/check-runs"* ]]; then jq -n '{id: 4242}'; exit 0; fi
 if [[ ${args} == *"--method POST"* && ${args} == *"/dispatches"* ]]; then cat >"${FAKE_GH_PAYLOAD}"; exit "${FAKE_DISPATCH_STATUS:-0}"; fi
+if [[ ${args} == *"/actions/workflows/amx-ci.yml/runs?"* ]]; then
+	jq -n --arg title "AMX CI ${CORRELATION_ID}" \
+		'{workflow_runs: [{display_title: $title, html_url: "https://example.invalid/amx/42"}]}'
+	exit 0
+fi
 if [[ ${args} == *"--method PATCH"* ]]; then printf '%s' "${args}" >"${FAKE_GH_PATCH}"; exit 0; fi
 echo "Unexpected fake gh invocation: ${args}" >&2; exit 3
 EOF
