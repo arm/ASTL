@@ -17,6 +17,7 @@
 #include "../../test_utilities.hpp"
 #include "astl/astl_errors.h"
 #include "capabilities.hpp"
+#include "common/lifecycle_event.hpp"
 #include "metric/delta_metric.hpp"
 #include "metric/event_metric.hpp"
 #include "metric/finite_set_metric.hpp"
@@ -1059,6 +1060,89 @@ TEST_CASE("Deserialize<MetricManager> rejects metric groups without top-level me
   REQUIRE(mgr_or_err.error() == ASTL_STATUS_BAD_CONFIGURATION);
 }
 
+TEST_CASE("Deserialize<MetricManager> restores explicit lifecycle event association", "[MetricManager][protobuf]") {
+  InstallSingleScmiTargetTlm0();
+  const auto& targets   = astl::Orchestrator::GetInstance()->get()->GetTargets();
+  auto        proto_mgr = BuildValidMetricManagerProto();
+  auto*       config    = proto_mgr.mutable_metrics()->mutable_metrics(0)->mutable_config();
+  config->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_EVENT));
+  config->set_units(static_cast<astl::protobuf::AstlUnits>(ASTL_UNITS_NONE));
+  config->set_collector_type(static_cast<astl::protobuf::CollectorType>(astl::CollectorType::ASTL_NATIVE));
+  auto* event = config->mutable_event_metric();
+  event->set_is_lifecycle_event(true);
+  auto* mapping = event->add_value_names();
+  mapping->mutable_value()->set_uint64_value(static_cast<uint64_t>(astl::LifecycleEventType::PAUSE));
+  mapping->set_name(std::string{astl::kLifecyclePauseEventName});
+  mapping->set_description("Collection paused on this target");
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+  cache_stream.seekg(0);
+  auto manager = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+  REQUIRE(manager.has_value());
+  REQUIRE((*manager)->GetLifecycleEventMetricOnTarget(targets[0].get()) != nullptr);
+  auto handles = (*manager)->GetAvailableMetrics(targets[0].get());
+  REQUIRE(handles.has_value());
+  const auto* handle       = static_cast<const astl::MetricHandle*>((*handles)[0]);
+  const auto* event_config = dynamic_cast<const astl::EventMetricConfig*>(handle->config.get());
+  REQUIRE(event_config != nullptr);
+  REQUIRE(event_config->IsLifecycleEvent());
+  REQUIRE(event_config->GetEventValueInfo().at(astl::AstlValue{uint64_t{0}}).name == astl::kLifecyclePauseEventName);
+}
+
+TEST_CASE("Deserialize<MetricManager> rejects event configs without explicit event payload",
+          "[MetricManager][protobuf]") {
+  InstallSingleScmiTargetTlm0();
+  const auto& targets   = astl::Orchestrator::GetInstance()->get()->GetTargets();
+  auto        proto_mgr = BuildValidMetricManagerProto();
+  proto_mgr.mutable_metrics()->mutable_metrics(0)->mutable_config()->set_metric_type(
+      static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_EVENT));
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+  cache_stream.seekg(0);
+  auto manager = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+  REQUIRE_FALSE(manager.has_value());
+  REQUIRE(manager.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+}
+
+TEST_CASE("Deserialize<MetricManager> rejects floating-point event metrics", "[MetricManager][protobuf]") {
+  InstallSingleScmiTargetTlm0();
+  const auto& targets   = astl::Orchestrator::GetInstance()->get()->GetTargets();
+  auto        proto_mgr = BuildValidMetricManagerProto();
+  auto*       config    = proto_mgr.mutable_metrics()->mutable_metrics(0)->mutable_config();
+  config->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_EVENT));
+  config->set_value_type(static_cast<astl::protobuf::AstlValueType>(ASTL_VALUE_FLOAT32));
+  config->mutable_event_metric();
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+  cache_stream.seekg(0);
+  auto manager = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+  REQUIRE_FALSE(manager.has_value());
+  REQUIRE(manager.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+}
+
+TEST_CASE("Deserialize<MetricManager> rejects reserved lifecycle names on ordinary event metrics",
+          "[MetricManager][protobuf]") {
+  InstallSingleScmiTargetTlm0();
+  const auto& targets   = astl::Orchestrator::GetInstance()->get()->GetTargets();
+  auto        proto_mgr = BuildValidMetricManagerProto();
+  auto*       config    = proto_mgr.mutable_metrics()->mutable_metrics(0)->mutable_config();
+  config->set_metric_type(static_cast<astl::protobuf::AstlMetricType>(ASTL_METRIC_EVENT));
+  auto* mapping = config->mutable_event_metric()->add_value_names();
+  mapping->mutable_value()->set_uint64_value(static_cast<uint64_t>(astl::LifecycleEventType::PAUSE));
+  mapping->set_name(std::string{astl::kLifecyclePauseEventName});
+  mapping->set_description("Reserved lifecycle event");
+
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+  cache_stream.seekg(0);
+  auto manager = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+  REQUIRE_FALSE(manager.has_value());
+  REQUIRE(manager.error() == ASTL_STATUS_BAD_CONFIGURATION);
+}
+
 TEST_CASE("Deserialize<MetricManager> rejects malformed procfs composite metrics", "[MetricManager][protobuf]") {
   InstallSingleScmiTargetTlm0();
   const auto& targets = astl::Orchestrator::GetInstance()->get()->GetTargets();
@@ -1192,12 +1276,17 @@ TEST_CASE("MetricHandle protobuf round-trips grouped metrics across supported co
   REQUIRE(target1 != nullptr);
 
   SECTION("event metric preserves groups and both targets") {
-    astl::MetricHandle handle;
-    handle.config = std::make_unique<astl::MetricConfig>(
-        "event_metric", "event metric with groups", ASTL_UNITS_NONE, ASTL_VALUE_UNKNOWN, ASTL_METRIC_IDENTIFIER_UNKNOWN,
-        ASTL_METRIC_EVENT, astl::CollectorType::SCMI, astl::NullOperationBuilder{}, astl::IdentityFormula{},
-        ASTL_VALUE_UNKNOWN, std::vector<std::string>{"thermal", "lifecycle"});
-    auto* cfg = handle.config.get();
+    astl::MetricHandle                      handle;
+    astl::EventMetricConfig::ValueToInfoMap mappings{
+        {astl::AstlValue{uint64_t{0}}, {std::string{astl::kLifecyclePauseEventName}, "Collection paused"}  },
+        {astl::AstlValue{uint64_t{1}}, {std::string{astl::kLifecycleResumeEventName}, "Collection resumed"}},
+    };
+    handle.config = std::make_unique<astl::EventMetricConfig>(
+        "event_metric", "event metric with groups", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+        astl::CollectorType::SCMI, astl::NullOperationBuilder{}, std::move(mappings), true, astl::IdentityFormula{},
+        ASTL_VALUE_UINT64, std::vector<std::string>{"thermal", "lifecycle"});
+    auto* cfg = dynamic_cast<astl::EventMetricConfig*>(handle.config.get());
+    REQUIRE(cfg != nullptr);
 
     handle.target_to_metric_map.emplace(target0, std::make_unique<astl::EventMetric>(cfg, target0, nullptr));
     handle.target_to_metric_map.emplace(target1, std::make_unique<astl::EventMetric>(cfg, target1, nullptr));
@@ -1214,6 +1303,12 @@ TEST_CASE("MetricHandle protobuf round-trips grouped metrics across supported co
     REQUIRE(rebuilt->config != nullptr);
     REQUIRE(rebuilt->config->MetricType() == ASTL_METRIC_EVENT);
     REQUIRE(rebuilt->config->MetricGroups() == std::vector<std::string>{"thermal", "lifecycle"});
+    const auto* rebuilt_event_config = dynamic_cast<const astl::EventMetricConfig*>(rebuilt->config.get());
+    REQUIRE(rebuilt_event_config != nullptr);
+    REQUIRE(rebuilt_event_config->IsLifecycleEvent());
+    REQUIRE(rebuilt_event_config->GetEventValueInfo().size() == 2);
+    REQUIRE(rebuilt_event_config->GetEventValueInfo().at(astl::AstlValue{uint64_t{1}}).name ==
+            astl::kLifecycleResumeEventName);
     REQUIRE(rebuilt->target_to_metric_map.size() == 2);
     REQUIRE(dynamic_cast<astl::EventMetric*>(rebuilt->target_to_metric_map.at(target0).get()) != nullptr);
     REQUIRE(dynamic_cast<astl::EventMetric*>(rebuilt->target_to_metric_map.at(target1).get()) != nullptr);

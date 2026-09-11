@@ -17,6 +17,17 @@ message FiniteSetMetric {
   map<int64, FiniteSetStateInfo> value_to_state_info = 1;
 }
 
+message EventValueName {
+  AstlValue value       = 1;
+  string    name        = 2;
+  string    description = 3;
+}
+
+message EventMetric {
+  repeated EventValueName value_names        = 1;
+  bool                    is_lifecycle_event = 2;
+}
+
 message StateInfo {
   string state_name = 1;
   double tick_frequency = 2;
@@ -83,6 +94,7 @@ message MetricConfig {
     ResidencyMetric residency_metric = 20;
     FiniteSetMetric finite_set       = 21;
     ProcfsCompositeMetric procfs_composite = 22;
+    EventMetric event_metric = 23;
     // future derived metric messages go here
   }
 }

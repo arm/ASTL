@@ -279,6 +279,12 @@ type MetricState struct {
 	Value       any
 }
 
+type EventProperties struct {
+	Value       any
+	Name        string
+	Description string
+}
+
 type CollectionParameters struct {
 	Flags            CollectionParameterFlags
 	SamplingInterval uint32
@@ -994,6 +1000,58 @@ func GetMetricStatesOnTarget(target Target, metric Metric) ([]MetricState, error
 		states = append(states, state)
 	}
 	return states, nil
+}
+
+func GetMetricEventsOnTarget(target Target, metric Metric) ([]EventProperties, error) {
+	count, releaseCount, err := allocUint32("GetMetricEventsOnTarget")
+	if err != nil {
+		return nil, err
+	}
+	defer releaseCount()
+
+	countParams := C.astl_get_metric_event_count_on_target_params_t{
+		size:          C.size_t(C.sizeof_astl_get_metric_event_count_on_target_params_t),
+		flags:         0,
+		target_handle: cTargetHandle(target),
+		metric_handle: cMetricHandle(metric),
+		event_count:   count,
+	}
+	if err := checkStatus("astlGetMetricEventCountOnTarget", C.astlGetMetricEventCountOnTarget(&countParams)); err != nil {
+		return nil, err
+	}
+	if *count == 0 {
+		return []EventProperties{}, nil
+	}
+
+	ptr := (*C.astl_event_props_t)(C.calloc(C.size_t(*count), C.size_t(C.sizeof_astl_event_props_t)))
+	if ptr == nil {
+		return nil, Error{Op: "GetMetricEventsOnTarget", Status: StatusOutOfMemory}
+	}
+	defer C.free(unsafe.Pointer(ptr))
+
+	items := unsafe.Slice(ptr, int(*count))
+	items[0].size = C.size_t(C.sizeof_astl_event_props_t)
+	params := C.astl_get_metric_events_on_target_params_t{
+		size:          C.size_t(C.sizeof_astl_get_metric_events_on_target_params_t),
+		flags:         0,
+		target_handle: cTargetHandle(target),
+		metric_handle: cMetricHandle(metric),
+		events:        ptr,
+		event_count:   count,
+	}
+	if err := checkStatus("astlGetMetricEventsOnTarget", C.astlGetMetricEventsOnTarget(&params)); err != nil {
+		return nil, err
+	}
+
+	result := make([]EventProperties, 0, int(*count))
+	for _, item := range items[:int(*count)] {
+		result = append(result, EventProperties{
+			Value:       decodeValue(item.value, metric.ValueType),
+			Name:        goString(item.name),
+			Description: goString(item.description),
+		})
+	}
+	return result, nil
 }
 
 func goString(s *C.char) string {

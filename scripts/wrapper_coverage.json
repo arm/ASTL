@@ -110,6 +110,26 @@
         "symbol": "GetMetricsOnTarget"
       }
     },
+    "astlGetMetricEventCountOnTarget": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "get_metric_events_on_target"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "GetMetricEventsOnTarget"
+      }
+    },
+    "astlGetMetricEventsOnTarget": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "get_metric_events_on_target"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "GetMetricEventsOnTarget"
+      }
+    },
     "astlGetMetricStateCountOnTarget": {
       "python": {
         "mode": "wrapped",
@@ -535,16 +555,6 @@
     "astl_metric_type_t": {
       "python": { "mode": "wrapped", "symbol": "astl_metric_type_t" },
       "go": { "mode": "wrapped", "symbol": "MetricType" }
-    },
-    "astl_lifecycle_event_type_t": {
-      "python": {
-        "mode": "abstracted",
-        "reason": "Lifecycle event values are not exposed by the current high-level Python API."
-      },
-      "go": {
-        "mode": "abstracted",
-        "reason": "Lifecycle event values are not exposed by the current high-level Go API."
-      }
     },
     "astl_metric_identifier_t": {
       "python": { "mode": "wrapped", "symbol": "MetricIdentifier" },

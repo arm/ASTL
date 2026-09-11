@@ -392,8 +392,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   // Maps operation IDs to their corresponding metrics for each target.
   TargetOperationToMetricMap _target_to_operation_to_metric_map;
 
-  // Tracks the single lifecycle-event EventMetric per target (registered by Orchestrator via
-  // RegisterMetric with ASTL_NATIVE + ASTL_METRIC_EVENT).
+  // Tracks the single explicitly marked lifecycle-event EventMetric per target.
   LifecycleEventMetricMap _target_to_lifecycle_event_metric;
 
   // Optional metadata loaded from config/groups/metric_groups.json.

@@ -145,6 +145,13 @@ auto BuildCompositeMetricConfig(const ProcfsRenderedMetricMetadata&         meta
                                 const metrics::spec::MetricJsonDeclaration& metric_declaration,
                                 const ProcfsMetricBuildSettings& build_settings, const std::string& label)
     -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code> {
+  if (build_settings.metric_type == ASTL_METRIC_EVENT) {
+    ASTL_LOG_ERROR("PROCFS composite event metric {} is not supported", metadata.metric_name);
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  if (metric_declaration.event_values.has_value()) {
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
   auto inputs = BuildCompositeInputBindings(build_settings.collection_settings, label);
   if (!inputs.has_value()) {
     return std::unexpected(inputs.error());
@@ -195,6 +202,21 @@ auto BuildStandardProcfsMetricConfig(const ProcfsRenderedMetricMetadata&        
     return std::unexpected(formula_result.error());
   }
 
+  if (build_settings.metric_type == ASTL_METRIC_EVENT) {
+    auto mappings =
+        metrics::spec::ParseEventValueInfo(metadata.metric_name, metric_declaration, build_settings.value_type);
+    if (!mappings) {
+      return std::unexpected(mappings.error());
+    }
+    return std::make_unique<EventMetricConfig>(
+        metadata.metric_name, metadata.description, build_settings.units, build_settings.value_type,
+        build_settings.identifier, CollectorType::PROCFS, ProcfsOperationBuilder{std::move(*field_descriptor)},
+        std::move(*mappings), false, std::move(formula_result.value()), build_settings.input_value_type,
+        metadata.metric_groups, metadata.metric_id);
+  }
+  if (metric_declaration.event_values.has_value()) {
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
   return std::make_unique<MetricConfig>(
       metadata.metric_name, metadata.description, build_settings.units, build_settings.value_type,
       build_settings.identifier, build_settings.metric_type, CollectorType::PROCFS,

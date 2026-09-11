@@ -361,6 +361,55 @@ class FiniteSetMetricConfig final : public MetricConfig {
   ValueToInfoMap _state_info;  ///< Mapping from value -> state info (label + description)
 };
 
+/**
+ * @brief Metric configuration for discrete event metrics.
+ *
+ * Event metrics use unsigned integer output values as enum-like event codes.
+ * Event value names are optional. The lifecycle marker explicitly distinguishes ASTL's synthetic
+ * lifecycle metric from other ASTL-native event metrics.
+ */
+class EventMetricConfig final : public MetricConfig {
+ public:
+  struct EventValueInfo {
+    std::string name;
+    std::string description;
+  };
+
+  using ValueToInfoMap = std::map<AstlValue, EventValueInfo>;
+
+  [[nodiscard]] static constexpr auto IsSupportedValueType(astl_value_type_t value_type) -> bool {
+    return value_type == ASTL_VALUE_UINT8 || value_type == ASTL_VALUE_UINT16 || value_type == ASTL_VALUE_UINT32 ||
+           value_type == ASTL_VALUE_UINT64;
+  }
+
+  template <AnyOperationBuilderCompatible OperationBuilderType>
+  explicit EventMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
+                             astl_value_type_t value_type, astl_metric_identifier_t identifier,
+                             CollectorType collector_type, OperationBuilderType &&operation_builder,
+                             ValueToInfoMap event_value_info = {}, bool is_lifecycle_event = false,
+                             AnyFormula               formula          = IdentityFormula{},
+                             astl_value_type_t        input_value_type = ASTL_VALUE_UNKNOWN,
+                             std::vector<std::string> metric_groups = {}, std::string metric_id = {})
+      : MetricConfig(name, description, units, value_type, identifier, ASTL_METRIC_EVENT, collector_type,
+                     std::forward<OperationBuilderType>(operation_builder), std::move(formula), input_value_type,
+                     std::move(metric_groups), std::move(metric_id)),
+        _event_value_info(std::move(event_value_info)),
+        _is_lifecycle_event(is_lifecycle_event) {}
+
+  EventMetricConfig(const EventMetricConfig &)            = delete;
+  EventMetricConfig &operator=(const EventMetricConfig &) = delete;
+  EventMetricConfig(EventMetricConfig &&)                 = default;
+  EventMetricConfig &operator=(EventMetricConfig &&)      = default;
+  ~EventMetricConfig() override                           = default;
+
+  [[nodiscard]] auto GetEventValueInfo() const -> const ValueToInfoMap & { return _event_value_info; }
+  [[nodiscard]] auto IsLifecycleEvent() const -> bool { return _is_lifecycle_event; }
+
+ private:
+  ValueToInfoMap _event_value_info;
+  bool           _is_lifecycle_event{false};
+};
+
 using MetricConfigOnTargets =
     std::unordered_map<std::unique_ptr<MetricConfig>,
                        std::vector<const ITarget *>>;  //< MetricConfig mapped to applicable targets

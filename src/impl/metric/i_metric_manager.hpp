@@ -116,8 +116,8 @@ struct IMetricManager {
   /**
    * @brief Return the lifecycle-event EventMetric instance for the given target, or nullptr if none is registered.
    *
-   * MetricManager records this pointer when an ASTL_NATIVE + ASTL_METRIC_EVENT metric is registered
-   * via RegisterMetric.  Callers (e.g. Orchestrator::GetPauseMarkersSnapshot) use it to locate the
+   * MetricManager records this pointer when an explicitly marked EventMetricConfig is registered.
+   * Callers (e.g. Orchestrator::GetPauseMarkersSnapshot) use it to locate the
    * lifecycle-event metric's ProcessedSampledData in the processed-samples store.
    */
   [[nodiscard]] virtual auto GetLifecycleEventMetricOnTarget(const ITarget* target) const -> const IMetric* = 0;
@@ -131,7 +131,7 @@ struct IMetricManager {
    * This is a no-op (returns SUCCESS) if no lifecycle-event metric is registered for @p target
    *
    * @param target      Target whose lifecycle-event metric should receive the event.
-   * @param event_value uint64_t encoding of the lifecycle event type (see astl_lifecycle_event_type_t).
+   * @param event_value uint64_t encoding of the internal LifecycleEventType value.
    * @param timestamp   Timestamp of the event (CLOCK_MONOTONIC_RAW).
    * @return ASTL_STATUS_SUCCESS or an error status.
    */

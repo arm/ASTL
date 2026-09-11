@@ -225,6 +225,13 @@ cdef extern from "astl/astl_telemetry.h":
         astl_value_t value
     ctypedef _astl_state_props_t astl_state_props_t
 
+    cdef struct _astl_event_props_t:
+        size_t size
+        const char* name
+        const char* description
+        astl_value_t value
+    ctypedef _astl_event_props_t astl_event_props_t
+
     # Collection enums (for future lifecycle exposure)
     cdef enum _astl_collection_mode_t:
         ASTL_COLLECTION_MODE_SAMPLING
@@ -368,6 +375,21 @@ cdef extern from "astl/astl_telemetry.h":
         astl_state_props_t* states
         uint32_t* state_count
 
+    cdef struct astl_get_metric_event_count_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* metric_handle
+        uint32_t* event_count
+
+    cdef struct astl_get_metric_events_on_target_params_t:
+        size_t size
+        uint32_t flags
+        const void* target_handle
+        const void* metric_handle
+        astl_event_props_t* events
+        uint32_t* event_count
+
     cdef struct astl_configure_counter_collection_on_target_params_t:
         size_t size
         uint32_t flags
@@ -479,7 +501,6 @@ cdef extern from "astl/astl_telemetry.h":
     # metrics
     int astlGetMetricCountOnTarget(const astl_get_metric_count_params_t* params)
     int astlGetMetricsOnTarget(const astl_get_metrics_params_t* params)
-
     # metric groups
     int astlGetMetricGroupCount(const astl_get_metric_group_count_params_t* params)
     int astlGetMetricGroupCountOnTarget(const astl_get_metric_group_count_on_target_params_t* params)
@@ -491,6 +512,8 @@ cdef extern from "astl/astl_telemetry.h":
     int astlGetMetricGroupMetricsOnTarget(const astl_get_metric_group_metrics_on_target_params_t* params)
     int astlGetMetricStateCountOnTarget(const astl_get_metric_state_count_on_target_params_t* params)
     int astlGetMetricStatesOnTarget(const astl_get_metric_states_on_target_params_t* params)
+    int astlGetMetricEventCountOnTarget(const astl_get_metric_event_count_on_target_params_t* params)
+    int astlGetMetricEventsOnTarget(const astl_get_metric_events_on_target_params_t* params)
 
     # collection configuration
     int astlConfigureCounterCollectionOnTarget(const astl_configure_counter_collection_on_target_params_t* params)

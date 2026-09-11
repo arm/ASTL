@@ -28,14 +28,14 @@
 #include "metric/i_metric_manager.hpp"
 #include "target.hpp"
 
-#if defined(ASTL_INCLUDE_LIBSENSORS)
+#ifdef ASTL_INCLUDE_LIBSENSORS
 #  include "libsensors/libsensors_api.hpp"
 #  include "libsensors/libsensors_target.hpp"
 #endif
 
 namespace astl {
 
-#if defined(ASTL_INCLUDE_LIBSENSORS)
+#ifdef ASTL_INCLUDE_LIBSENSORS
 
 struct DiscoveredSensorMetric {
   const sensors_chip_name*   chip;
@@ -1157,6 +1157,14 @@ static auto BuildDeclaredRegistrationDetails(const DiscoveredSensorMetric& senso
     return std::unexpected(metric_type_or_error.error());
   }
 
+  if (*metric_type_or_error == ASTL_METRIC_EVENT) {
+    ASTL_LOG_ERROR("libsensors metric '{}' cannot be configured as an event because its output type is FLOAT64",
+                   final_metric_name);
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  } else if (metric_declaration.event_values.has_value()) {
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
   return LibsensorsMetricRegistrationDetails{
       .name = std::string{final_metric_name},
       .description =
@@ -1313,10 +1321,10 @@ auto RegisterLibsensorsMetrics(
     ASTL_LOG_ERROR("metric_manager is null");
     return ASTL_STATUS_BAD_ARGUMENT;
   }
-#if !defined(ASTL_INCLUDE_LIBSENSORS)
+#ifndef ASTL_INCLUDE_LIBSENSORS
   (void)configuration;
 #endif
-#if defined(ASTL_INCLUDE_LIBSENSORS)
+#ifdef ASTL_INCLUDE_LIBSENSORS
   auto libsensors_targets_iter = collector_type_to_targets_map.find(CollectorType::LIBSENSORS);
   if (libsensors_targets_iter == collector_type_to_targets_map.end()) {
     ASTL_LOG_INFO("No targets with LIBSENSORS collector type found, skipping LIBSENSORS metric registration");

@@ -15,6 +15,7 @@
 #include "astl_internal_status.hpp"
 #include "collector/collection_operations.hpp"
 #include "common/astl_defines.hpp"
+#include "common/lifecycle_event.hpp"
 #include "delta_metric.hpp"
 #include "event_metric.hpp"
 #include "finite_set_metric.hpp"
@@ -493,7 +494,12 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
         break;
       case astl_metric_type_t::ASTL_METRIC_EVENT:
         ASTL_LOG_INFO("CreateMetricFromConfig: Creating EventMetric '{}'", metric_name);
-        metric_or_error = std::make_unique<EventMetric>(metric_config, target, sink);
+        if (const auto* event_config = dynamic_cast<const EventMetricConfig*>(metric_config)) {
+          metric_or_error = std::make_unique<EventMetric>(event_config, target, sink);
+        } else {
+          ASTL_LOG_ERROR("CreateMetricFromConfig: Event metric '{}' does not use EventMetricConfig", metric_name);
+          metric_or_error = std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+        }
         break;
       // handle additional MetricType cases here
       default:
@@ -511,7 +517,6 @@ auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const 
     -> std::expected<IMetric*, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
   const auto*                 metric_details = static_cast<const MetricHandle*>(metric_handle);
-
   if (!metric_details) {
     ASTL_LOG_ERROR("GetMetricOnTarget: Invalid metric handle {}", metric_handle);
     return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
@@ -557,6 +562,30 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
     ASTL_LOG_ERROR("RegisterMetric: Invalid metric config");
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+  const auto* event_config = dynamic_cast<const EventMetricConfig*>(metric_config.get());
+  if (event_config != nullptr && !EventMetricConfig::IsSupportedValueType(event_config->ValueType())) {
+    ASTL_LOG_ERROR("RegisterMetric: event metric '{}' has unsupported output value type {}", event_config->Name(),
+                   static_cast<int>(event_config->ValueType()));
+    return ASTL_STATUS_BAD_CONFIGURATION;
+  }
+  if (event_config != nullptr) {
+    for (const auto& [value, info] : event_config->GetEventValueInfo()) {
+      if (value.ToAstlUnionValue().second != event_config->ValueType()) {
+        ASTL_LOG_ERROR("RegisterMetric: event value '{}' does not match metric '{}' output type", info.name,
+                       event_config->Name());
+        return ASTL_STATUS_BAD_CONFIGURATION;
+      }
+    }
+  }
+  if (event_config != nullptr && !event_config->IsLifecycleEvent()) {
+    for (const auto& mapping : event_config->GetEventValueInfo()) {
+      const auto& info = mapping.second;
+      if (IsReservedLifecycleEventName(info.name)) {
+        ASTL_LOG_ERROR("RegisterMetric: event name '{}' is reserved for the ASTL lifecycle metric", info.name);
+        return ASTL_STATUS_BAD_CONFIGURATION;
+      }
+    }
+  }
   if (IsMetricIdRegistered(metric_config->Id())) {
     ASTL_LOG_ERROR("RegisterMetric: Duplicate metric id '{}'", metric_config->Id());
     return ASTL_STATUS_BAD_CONFIGURATION;
@@ -590,12 +619,11 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
     _target_to_metrics_map[target].push_back(metric_handle);
   }
 
-  // ASTL_NATIVE event metrics are lifecycle-event sinks: record the IMetric* in the dedicated
+  // Explicitly marked event metrics are lifecycle-event sinks: record the IMetric* in the dedicated
   // _target_to_lifecycle_event_metric map so that EnqueuePauseMarkerSamples can route lifecycle raw
   // samples directly to ReceiveRawSample on this metric, and GetLifecycleEventMetricOnTarget can
   // expose it to Orchestrator without an opaque handle round-trip.
-  if (metric_config_ptr->GetCollectorType() == CollectorType::ASTL_NATIVE &&
-      metric_config_ptr->MetricType() == ASTL_METRIC_EVENT) {
+  if (event_config != nullptr && event_config->IsLifecycleEvent()) {
     const auto& new_handle = _metric_handles.back();
     for (const auto* const target : targets) {
       if (auto it = new_handle->target_to_metric_map.find(target); it != new_handle->target_to_metric_map.end()) {

@@ -113,6 +113,20 @@ cdef class MetricState:
     def __repr__(self):
         return f"<MetricState name={self.name!r} value={self.value!r}>"
 
+cdef class EventProperties:
+    """A configured event value and its associated metadata."""
+    cdef public object value
+    cdef public object name
+    cdef public object description
+
+    def __init__(self, value, name: str, description: str):
+        self.value = value
+        self.name = name
+        self.description = description
+
+    def __repr__(self):
+        return f"<EventProperties value={self.value!r} name={self.name!r}>"
+
 class MetricIdentifier:
     """Namespace of ASTL identifier codes (mirrors astl_metric_identifier_t enum)."""
     COUNT = ASTL_METRIC_IDENTIFIER_COUNT
@@ -1242,6 +1256,42 @@ cpdef list get_metric_states_on_target(Target target, Metric metric):
             desc = arr[i].description.decode() if arr[i].description != NULL else ""
             value = _decode_value(metric.value_type, arr[i].value) if is_finite_set else None
             out.append(MetricState(name, desc, value))
+        return out
+    finally:
+        free(arr)
+
+cpdef list get_metric_events_on_target(Target target, Metric metric):
+    """Return configured event properties for an event metric."""
+    cdef uint32_t count = 0
+    cdef astl_get_metric_event_count_on_target_params_t count_params
+    cdef astl_get_metric_events_on_target_params_t params
+    count_params.size = sizeof(astl_get_metric_event_count_on_target_params_t)
+    count_params.flags = 0
+    count_params.target_handle = <const void*>target.handle_ptr
+    count_params.metric_handle = <const void*>metric.handle_ptr
+    count_params.event_count = &count
+    _check(astlGetMetricEventCountOnTarget(&count_params))
+    if count == 0:
+        return []
+
+    cdef astl_event_props_t* arr = \
+        <astl_event_props_t*>calloc(count, sizeof(astl_event_props_t))
+    if arr == NULL:
+        raise MemoryError()
+    arr[0].size = sizeof(astl_event_props_t)
+    try:
+        params.size = sizeof(astl_get_metric_events_on_target_params_t)
+        params.flags = 0
+        params.target_handle = <const void*>target.handle_ptr
+        params.metric_handle = <const void*>metric.handle_ptr
+        params.events = arr
+        params.event_count = &count
+        _check(astlGetMetricEventsOnTarget(&params))
+        out = []
+        for i in range(count):
+            name = arr[i].name.decode() if arr[i].name != NULL else ""
+            desc = arr[i].description.decode() if arr[i].description != NULL else ""
+            out.append(EventProperties(_decode_value(metric.value_type, arr[i].value), name, desc))
         return out
     finally:
         free(arr)

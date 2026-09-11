@@ -17,6 +17,7 @@
 #include "astl_internal_status.hpp"
 #include "astl_logger.hpp"
 #include "astl_magic_enum.hpp"
+#include "common/lifecycle_event.hpp"
 #include "common/string_pool.hpp"
 #include "common/system_info.hpp"
 #include "config/configuration_manager.hpp"  // for ConfigurationManager::GetConfiguration
@@ -1135,10 +1136,21 @@ auto Orchestrator::RegisterLifecycleEventMetricForTarget(const ITarget *target) 
   }
 
   // Use a target-scoped name to avoid conflicts when multiple targets are configured.
-  const std::string metric_name = std::string{"astl_lifecycle_events."} + target->Name();
-  auto cfg = std::make_unique<MetricConfig>(metric_name, "ASTL lifecycle events (pause, resume, crop boundary)",
-                                            ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
-                                            ASTL_METRIC_EVENT, CollectorType::ASTL_NATIVE, NullOperationBuilder{});
+  const std::string                 metric_name = std::string{"astl_lifecycle_events."} + target->Name();
+  EventMetricConfig::ValueToInfoMap event_values{
+      {AstlValue{static_cast<uint64_t>(LifecycleEventType::PAUSE)},
+       {std::string{kLifecyclePauseEventName}, "Collection paused on this target"}                                 },
+      {AstlValue{static_cast<uint64_t>(LifecycleEventType::RESUME)},
+       {std::string{kLifecycleResumeEventName}, "Collection resumed on this target"}                               },
+      {AstlValue{static_cast<uint64_t>(LifecycleEventType::CROP_BEGIN)},
+       {std::string{kLifecycleCropBeginEventName}, "Start boundary of a sample crop window applied to this target"}},
+      {AstlValue{static_cast<uint64_t>(LifecycleEventType::CROP_END)},
+       {std::string{kLifecycleCropEndEventName}, "End boundary of a sample crop window applied to this target"}    },
+  };
+  auto cfg = std::make_unique<EventMetricConfig>(metric_name, "ASTL lifecycle events (pause, resume, crop boundary)",
+                                                 ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                                 CollectorType::ASTL_NATIVE, NullOperationBuilder{},
+                                                 std::move(event_values), true);
 
   const auto status = _metric_manager->RegisterMetric(std::move(cfg), {target});
   if (status != ASTL_STATUS_SUCCESS) {
@@ -1147,8 +1159,7 @@ auto Orchestrator::RegisterLifecycleEventMetricForTarget(const ITarget *target) 
     return status;
   }
 
-  // MetricManager::RegisterMetric stores the IMetric* in _target_to_lifecycle_event_metric;
-  // no need to locate the handle — GetLifecycleEventMetricOnTarget provides direct access.
+  // MetricManager::RegisterMetric stores the explicitly marked event metric in its lifecycle map.
   ASTL_LOG_DEBUG("Orchestrator: registered lifecycle-event metric '{}' for target '{}'", metric_name, target->Name());
   return ASTL_STATUS_SUCCESS;
 }
@@ -1735,7 +1746,6 @@ auto Orchestrator::CropSamplesOnTarget(const ITarget *target, std::span<const as
 
   // Step 5: Inject CROP_BEGIN / CROP_END lifecycle events for each window boundary.
   // Injected after filtering so the crop events themselves are never cropped out.
-  // (see astl_lifecycle_event_type_t in astl_telemetry.h).
   // Ensure the lifecycle-event metric exists before recording any crop boundary events.
   EnsureLifecycleEventMetricForTarget(target);
   for (const auto &window : consolidated_windows) {
@@ -1743,7 +1753,7 @@ auto Orchestrator::CropSamplesOnTarget(const ITarget *target, std::span<const as
       const ProcessedSampleTimestamp begin_ts{
           std::chrono::duration<int64_t, std::nano>{static_cast<int64_t>(window.start_ts)}};
       const auto inject_status = _metric_manager->InjectLifecycleEvent(
-          target, static_cast<uint64_t>(ASTL_LIFECYCLE_EVENT_CROP_BEGIN), begin_ts);
+          target, static_cast<uint64_t>(LifecycleEventType::CROP_BEGIN), begin_ts);
       if (inject_status != ASTL_STATUS_SUCCESS) {
         ASTL_LOG_WARNING("CropSamplesOnTarget: failed to inject crop-begin event for '{}' ({})", target->Name(),
                          astlStatusString(inject_status));
@@ -1753,7 +1763,7 @@ auto Orchestrator::CropSamplesOnTarget(const ITarget *target, std::span<const as
       const ProcessedSampleTimestamp end_ts{
           std::chrono::duration<int64_t, std::nano>{static_cast<int64_t>(window.end_ts)}};
       const auto inject_status =
-          _metric_manager->InjectLifecycleEvent(target, static_cast<uint64_t>(ASTL_LIFECYCLE_EVENT_CROP_END), end_ts);
+          _metric_manager->InjectLifecycleEvent(target, static_cast<uint64_t>(LifecycleEventType::CROP_END), end_ts);
       if (inject_status != ASTL_STATUS_SUCCESS) {
         ASTL_LOG_WARNING("CropSamplesOnTarget: failed to inject crop-end event for '{}' ({})", target->Name(),
                          astlStatusString(inject_status));

@@ -320,6 +320,13 @@ if [[ "$(uname -m)" == "x86_64" ]]; then
 	EXTRA_ARGS+=(-mno-mmx -mno-sse -mno-sse2)
 fi
 
+if grep -q '^ASTL_PROCFS:BOOL=ON$' "${BUILD_DIR}/CMakeCache.txt"; then
+	echo "procfs support is enabled"
+	EXTRA_ARGS+=(-DASTL_INCLUDE_PROCFS)
+else
+	echo "procfs support is disabled"
+fi
+
 ## Check for presense of libsensors, to determine if we should bother linting
 ## the libsensors examples
 if echo '#include <sensors/sensors.h>
@@ -379,7 +386,7 @@ if [[ ${#C_HEADERS_TO_LINT[@]} -gt 0 ]]; then
 		"${C_HEADERS_TO_LINT[@]+"${C_HEADERS_TO_LINT[@]}"}" \
 		-p "${BUILD_DIR}" \
 		--warnings-as-errors=* \
-		-checks=-cppcoreguidelines-macro-to-enum \
+		-checks=-cppcoreguidelines-macro-to-enum,-readability-use-concise-preprocessor-directives \
 		-- \
 		"${INCLUDE_PATHS[@]+"${INCLUDE_PATHS[@]}"}" \
 		"${SYS_INCLUDE_PATHS[@]+"${SYS_INCLUDE_PATHS[@]}"}"

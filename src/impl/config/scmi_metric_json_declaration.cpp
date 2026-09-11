@@ -140,8 +140,8 @@ auto BuildScmiMetricId(std::string_view metric_name, const ITarget& target) -> s
   return std::format("{}__{}", metric_name, GetStableTargetKey(target));
 }
 
-auto ParseJsonValueToAstlValue(const nlohmann::json& val, const std::string& label, std::string_view metric_key_name)
-    -> std::expected<AstlValue, astl_status_code> {
+auto ParseJsonValueToAstlValue(const nlohmann::json& val, const std::string& label, std::string_view metric_key_name,
+                               std::string_view field_name) -> std::expected<AstlValue, astl_status_code> {
   if (val.is_number_integer()) {
     return AstlValue{val.get<uint64_t>()};
   }
@@ -152,7 +152,7 @@ auto ParseJsonValueToAstlValue(const nlohmann::json& val, const std::string& lab
     return AstlValue{val.get<bool>()};
   }
 
-  ASTL_LOG_ERROR("Unsupported JSON value type for label '{}' in finite_set_values (metric {})", label, metric_key_name);
+  ASTL_LOG_ERROR("Unsupported JSON value type for label '{}' in {} (metric {})", label, field_name, metric_key_name);
   return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
 }
 
@@ -190,7 +190,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
       return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
 
-    auto parsed_value_result = ParseJsonValueToAstlValue(entry["value"], label, metric_key_name);
+    auto parsed_value_result = ParseJsonValueToAstlValue(entry["value"], label, metric_key_name, "finite_set_values");
     if (!parsed_value_result) {
       return std::unexpected(parsed_value_result.error());
     }
@@ -374,7 +374,6 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
   MetricConfigOnTargets metric_configs_on_targets;
   const auto            identifier       = ParseMetricIdentifier(metric_declaration.identifier);
   const auto            input_value_type = ParseValueType();
-
   // Per-target loop: each tlm-N target produces globally-unique instance labels and DE ids
   // (GetMetricRegistersScmiData derives the DE id from the global instance index
   // target_index * count + local_instance) so that, e.g., PSS.0..2 appear on tlm-0 and PSS.3..5 on
@@ -401,13 +400,26 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
       auto composed_formula = ComposeFormulas(std::move(formula_result.value()),
                                               BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
 
-      auto metric_groups     = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
-      auto new_metric_config = std::make_unique<MetricConfig>(
-          metric_name,
-          ResolveScmiMetricDescription(metric_declaration, metric_key_name, identifier, scmi_metric_declaration), units,
-          value_type, identifier, metric_type, collector_type.value(), std::move(operation_builder),
-          std::move(composed_formula), input_value_type, std::move(metric_groups), std::move(metric_id));
-      metric_configs_on_targets.emplace(std::move(new_metric_config), std::vector<const ITarget*>{target});
+      auto metric_groups = metric_declaration.metric_groups.value_or(std::vector<std::string>{});
+      auto description =
+          ResolveScmiMetricDescription(metric_declaration, metric_key_name, identifier, scmi_metric_declaration);
+      if (metric_type == ASTL_METRIC_EVENT) {
+        auto event_value_info = ParseEventValueInfo(metric_key_name, metric_declaration, value_type);
+        if (!event_value_info) {
+          return std::unexpected(event_value_info.error());
+        }
+        auto new_metric_config = std::make_unique<EventMetricConfig>(
+            metric_name, description, units, value_type, identifier, collector_type.value(),
+            std::move(operation_builder), std::move(*event_value_info), false, std::move(composed_formula),
+            input_value_type, std::move(metric_groups), std::move(metric_id));
+        metric_configs_on_targets.emplace(std::move(new_metric_config), std::vector<const ITarget*>{target});
+      } else {
+        auto new_metric_config = std::make_unique<MetricConfig>(
+            metric_name, description, units, value_type, identifier, metric_type, collector_type.value(),
+            std::move(operation_builder), std::move(composed_formula), input_value_type, std::move(metric_groups),
+            std::move(metric_id));
+        metric_configs_on_targets.emplace(std::move(new_metric_config), std::vector<const ITarget*>{target});
+      }
     }
   }
   return metric_configs_on_targets;
@@ -463,6 +475,10 @@ auto CreateScmiMetricConfigs(std::string_view metric_key_name, MetricJsonDeclara
                              std::vector<const ITarget*> const&   applicable_targets)
     -> std::expected<MetricConfigOnTargets, astl_status_code> {
   auto metric_type = ParseMetricType(metric_declaration.metric_type);
+  if (metric_type != ASTL_METRIC_EVENT && metric_declaration.event_values.has_value()) {
+    ASTL_LOG_ERROR("event_values is only valid for event metrics (metric {})", metric_key_name);
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
   switch (metric_type) {
     case ASTL_METRIC_VALUE:
     case ASTL_METRIC_EVENT:

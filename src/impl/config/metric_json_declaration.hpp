@@ -5,10 +5,12 @@
 #ifndef METRIC_JSON_DECLARATION_HPP_
 #define METRIC_JSON_DECLARATION_HPP_
 
+#include <expected>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "common/metric_config.hpp"
@@ -107,6 +109,7 @@ struct MetricJsonDeclaration {
   std::optional<ResidencyMetricConfig::InferredStateInfo>            inferred_state;
   std::optional<std::map<std::string, nlohmann::json>>               states;
   std::optional<std::map<std::string, nlohmann::json>>               finite_set_values;
+  std::optional<std::map<std::string, nlohmann::json>>               event_values;
   std::optional<std::map<std::string, DerivedMetricJsonDeclaration>> derived_metrics;
 };
 
@@ -148,6 +151,9 @@ inline void from_json(const nlohmann::json& json_data, MetricJsonDeclaration& me
   if (json_data.contains("finite_set_values")) {
     metric.finite_set_values = json_data["finite_set_values"].get<std::map<std::string, nlohmann::json>>();
   }
+  if (json_data.contains("event_values")) {
+    metric.event_values = json_data["event_values"].get<std::map<std::string, nlohmann::json>>();
+  }
   if (json_data.contains("derived_metrics")) {
     metric.derived_metrics = json_data["derived_metrics"].get<std::map<std::string, DerivedMetricJsonDeclaration>>();
   }
@@ -184,6 +190,10 @@ inline void from_json(const nlohmann::json& json_data, MetricsDeclaration& metri
 }
 
 auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std::optional<CollectorType>;
+
+auto ParseEventValueInfo(std::string_view metric_key_name, const MetricJsonDeclaration& metric_declaration,
+                         astl_value_type_t value_type)
+    -> std::expected<EventMetricConfig::ValueToInfoMap, astl_status_code>;
 
 }  // namespace astl::metrics::spec
 

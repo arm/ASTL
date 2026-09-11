@@ -73,6 +73,10 @@ static_assert(IsStdLayout<astl_state_props_t>());
 static_assert(offsetof(astl_state_props_t, size) == 0);
 static_assert(sizeof(astl_state_props_t) == StructLayoutSize<size_t, astl_value_t, const char*, const char*>());
 
+static_assert(IsStdLayout<astl_event_props_t>());
+static_assert(offsetof(astl_event_props_t, size) == 0);
+static_assert(sizeof(astl_event_props_t) == StructLayoutSize<size_t, const char*, const char*, astl_value_t>());
+
 static_assert(IsStdLayout<astl_metric_group_props_t>());
 static_assert(offsetof(astl_metric_group_props_t, size) == 0);
 static_assert(offsetof(astl_metric_group_props_t, handle) ==
@@ -170,6 +174,21 @@ static_assert(offsetof(astl_get_metric_states_on_target_params_t, target_handle)
 static_assert(
     sizeof(astl_get_metric_states_on_target_params_t) ==
     StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, astl_state_props_t*, uint32_t*>());
+
+static_assert(IsStdLayout<astl_get_metric_event_count_on_target_params_t>());
+static_assert(offsetof(astl_get_metric_event_count_on_target_params_t, size) == 0);
+static_assert(offsetof(astl_get_metric_event_count_on_target_params_t, flags) == kFlagsOffset);
+static_assert(offsetof(astl_get_metric_event_count_on_target_params_t, target_handle) == kFirstPtrOffset);
+static_assert(sizeof(astl_get_metric_event_count_on_target_params_t) ==
+              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, uint32_t*>());
+
+static_assert(IsStdLayout<astl_get_metric_events_on_target_params_t>());
+static_assert(offsetof(astl_get_metric_events_on_target_params_t, size) == 0);
+static_assert(offsetof(astl_get_metric_events_on_target_params_t, flags) == kFlagsOffset);
+static_assert(offsetof(astl_get_metric_events_on_target_params_t, target_handle) == kFirstPtrOffset);
+static_assert(
+    sizeof(astl_get_metric_events_on_target_params_t) ==
+    StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, astl_event_props_t*, uint32_t*>());
 
 static_assert(IsStdLayout<astl_get_metric_group_count_params_t>());
 static_assert(offsetof(astl_get_metric_group_count_params_t, size) == 0);

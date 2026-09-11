@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cmath>
+#include <limits>
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
@@ -18,6 +19,55 @@
 #include "operation/scmi_read_operation.hpp"
 
 using trompeloeil::_;
+
+TEST_CASE("Event values are parsed using the configured unsigned integer width", "[ConfigManager][EventMetric]") {
+  using astl::metrics::spec::MetricJsonDeclaration;
+  using astl::metrics::spec::ParseEventValueInfo;
+
+  const auto check_value_type = [](astl_value_type_t value_type, uint64_t maximum) {
+    MetricJsonDeclaration declaration;
+    declaration.event_values = std::map<std::string, nlohmann::json>{
+        {"ZERO", {{"value", uint64_t{0}}, {"description", "Minimum value"}}},
+        {"MAX",  {{"value", maximum}, {"description", "Maximum value"}}    },
+    };
+
+    const auto mappings = ParseEventValueInfo("event", declaration, value_type);
+    REQUIRE(mappings);
+    REQUIRE(mappings->size() == 2);
+    for (const auto& [value, info] : *mappings) {
+      CHECK(value.ToAstlUnionValue().second == value_type);
+    }
+  };
+
+  check_value_type(ASTL_VALUE_UINT8, std::numeric_limits<uint8_t>::max());
+  check_value_type(ASTL_VALUE_UINT16, std::numeric_limits<uint16_t>::max());
+  check_value_type(ASTL_VALUE_UINT32, std::numeric_limits<uint32_t>::max());
+  check_value_type(ASTL_VALUE_UINT64, std::numeric_limits<uint64_t>::max());
+}
+
+TEST_CASE("Event values reject unsupported JSON and output types", "[ConfigManager][EventMetric]") {
+  using astl::metrics::spec::MetricJsonDeclaration;
+  using astl::metrics::spec::ParseEventValueInfo;
+
+  const auto parse_value = [](const nlohmann::json& value, astl_value_type_t value_type) {
+    MetricJsonDeclaration declaration;
+    declaration.event_values = std::map<std::string, nlohmann::json>{
+        {"EVENT", {{"value", value}, {"description", "Event"}}},
+    };
+    return ParseEventValueInfo("event", declaration, value_type);
+  };
+
+  CHECK_FALSE(parse_value(-1, ASTL_VALUE_UINT64));
+  CHECK_FALSE(parse_value(1.0, ASTL_VALUE_UINT64));
+  CHECK_FALSE(parse_value(true, ASTL_VALUE_UINT64));
+  CHECK_FALSE(parse_value(1, ASTL_VALUE_FLOAT32));
+  CHECK_FALSE(parse_value(1, ASTL_VALUE_FLOAT64));
+  CHECK_FALSE(parse_value(1, ASTL_VALUE_BOOL8));
+  CHECK_FALSE(parse_value(1, ASTL_VALUE_UNKNOWN));
+  CHECK_FALSE(parse_value(uint64_t{256}, ASTL_VALUE_UINT8));
+  CHECK_FALSE(parse_value(uint64_t{65'536}, ASTL_VALUE_UINT16));
+  CHECK_FALSE(parse_value(uint64_t{4'294'967'296}, ASTL_VALUE_UINT32));
+}
 
 inline const std::vector<std::string> kDataEventIds = {"0x1234"};
 
@@ -513,6 +563,118 @@ TEST_CASE("CreateScmiMetricConfigs validates metric declarations and unsupported
     };
 
     auto result = astl::metrics::spec::CreateScmiMetricConfigs("P-State", decl, finite_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Event metric accepts optional typed value names") {
+    constexpr uint64_t                         k_large_unsigned_event_value = uint64_t{1} << 63;
+    auto                                       event_spec = MakeSingleRegisterScmiSpec("EVENT_PRESENT");
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description = "Named events";
+    decl.metric_type = "event";
+    SetScmiCollection(decl, "EVENT_PRESENT");
+    decl.event_values = std::map<std::string, nlohmann::json>{
+        {"WAKE",  {{"value", 1}, {"description", "System wake event"}}                          },
+        {"SLEEP", {{"value", 2}, {"description", "System sleep event"}}                         },
+        {"LARGE", {{"value", k_large_unsigned_event_value}, {"description", "Large event code"}}},
+    };
+
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("System Event", decl, event_spec, mock_scmi_targets);
+    REQUIRE(result.has_value());
+    REQUIRE(result->size() == 1);
+    const auto* config = dynamic_cast<const astl::EventMetricConfig*>(result->begin()->first.get());
+    REQUIRE(config != nullptr);
+    REQUIRE(config->GetEventValueInfo().size() == 3);
+    REQUIRE(config->GetEventValueInfo().at(astl::AstlValue{uint64_t{1}}).name == "WAKE");
+    REQUIRE(config->GetEventValueInfo().at(astl::AstlValue{k_large_unsigned_event_value}).name == "LARGE");
+    REQUIRE_FALSE(config->IsLifecycleEvent());
+  }
+
+  SECTION("Event metric rejects duplicate typed values") {
+    auto                                       event_spec = MakeSingleRegisterScmiSpec("EVENT_PRESENT");
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description = "Duplicate events";
+    decl.metric_type = "event";
+    SetScmiCollection(decl, "EVENT_PRESENT");
+    decl.event_values = std::map<std::string, nlohmann::json>{
+        {"FIRST",  {{"value", 1}, {"description", "First name"}} },
+        {"SECOND", {{"value", 1}, {"description", "Second name"}}},
+    };
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("System Event", decl, event_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Event metric rejects lifecycle-reserved event names") {
+    auto                                       event_spec = MakeSingleRegisterScmiSpec("EVENT_PRESENT");
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description = "Reserved lifecycle event";
+    decl.metric_type = "event";
+    SetScmiCollection(decl, "EVENT_PRESENT");
+    decl.event_values = std::map<std::string, nlohmann::json>{
+        {"ASTL_LIFECYCLE_PAUSE", {{"value", 0}, {"description", "Must remain unique to the lifecycle metric"}}},
+    };
+
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("System Event", decl, event_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Event metric rejects negative values instead of wrapping them") {
+    auto                                       event_spec = MakeSingleRegisterScmiSpec("EVENT_PRESENT");
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description = "Negative event";
+    decl.metric_type = "event";
+    SetScmiCollection(decl, "EVENT_PRESENT");
+    decl.event_values = std::map<std::string, nlohmann::json>{
+        {"INVALID", {{"value", -1}, {"description", "Signed values are unsupported"}}},
+    };
+
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("System Event", decl, event_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Event metric rejects mappings missing descriptions") {
+    auto                                       event_spec = MakeSingleRegisterScmiSpec("EVENT_PRESENT");
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description = "Incomplete events";
+    decl.metric_type = "event";
+    SetScmiCollection(decl, "EVENT_PRESENT");
+    decl.event_values = std::map<std::string, nlohmann::json>{
+        {"FIRST", {{"value", 1}}},
+    };
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("System Event", decl, event_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("Event mapping type must match the metric output type") {
+    auto event_spec = MakeSingleRegisterScmiSpec("EVENT_PRESENT");
+    event_spec.members[0].metrics.at("EVENT_PRESENT").base10_unit_modifier = -1;
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description = "Scaled event";
+    decl.metric_type = "event";
+    SetScmiCollection(decl, "EVENT_PRESENT");
+    decl.event_values = std::map<std::string, nlohmann::json>{
+        {"FIRST", {{"value", 1}, {"description", "Integer does not match float output"}}},
+    };
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("System Event", decl, event_spec, mock_scmi_targets);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  SECTION("event_values is rejected on non-event metrics") {
+    auto                                       basic_spec = MakeSingleRegisterScmiSpec("TEMP_PRESENT");
+    astl::metrics::spec::MetricJsonDeclaration decl;
+    decl.description = "Value metric";
+    decl.metric_type = "value";
+    SetScmiCollection(decl, "TEMP_PRESENT");
+    decl.event_values = std::map<std::string, nlohmann::json>{
+        {"FIRST", {{"value", 1}, {"description", "Not valid here"}}},
+    };
+    auto result = astl::metrics::spec::CreateScmiMetricConfigs("Temperature", decl, basic_spec, mock_scmi_targets);
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }

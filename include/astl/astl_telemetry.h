@@ -388,27 +388,6 @@ typedef enum _astl_metric_type_t {
                                       //!< Power as energy/s
 } astl_metric_type_t;
 
-/** Identifies the specific type of lifecycle event emitted by ASTL into the synthetic
- *  @c astl_lifecycle_events.<target-name> metric.
- *
- *  Consumers retrieve these events via astlGetMetricSamplesOnTarget() using the handle for the
- *  @c astl_lifecycle_events.<target-name> metric; the @c value field of each returned
- *  @c astl_sample_t will be one of the values below, cast to @c uint64_t.
- *
- *  The @c astl_lifecycle_events.<target-name> metric is created lazily, the first time a lifecycle
- *  event actually occurs for the target (i.e. on the first pause, resume, or crop).
- *  Because of this, the metric handle may not appear in a metric list retrieved via
- *  astlGetMetricsOnTarget() before the first lifecycle event; callers that cached the metric list
- *  earlier must rediscover the metrics for the target (call astlGetMetricCountOnTarget() then
- *  astlGetMetricsOnTarget() again) after the first pause/resume/crop to obtain the handle.
- */
-typedef enum _astl_lifecycle_event_type_t {
-  ASTL_LIFECYCLE_EVENT_PAUSE      = 0,  //!< Collection paused on this target
-  ASTL_LIFECYCLE_EVENT_RESUME     = 1,  //!< Collection resumed on this target
-  ASTL_LIFECYCLE_EVENT_CROP_BEGIN = 2,  //!< Start boundary of a sample crop window applied to this target
-  ASTL_LIFECYCLE_EVENT_CROP_END   = 3,  //!< End boundary of a sample crop window applied to this target
-} astl_lifecycle_event_type_t;
-
 /** High-level identifier of a metric. Derived from configuration JSON "identifier" string. */
 typedef enum _astl_metric_identifier_t {
   ASTL_METRIC_IDENTIFIER_UNKNOWN       = -1,  //!< Unknown or unmapped identifier
@@ -566,6 +545,69 @@ typedef struct astl_get_metric_states_on_target_params_t {
  * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
 ASTL_API astl_status_code astlGetMetricStatesOnTarget(const astl_get_metric_states_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/***********************************************************************************
+ **********************          METRIC EVENT DISCOVERY          *******************
+ **********************************************************************************/
+
+/** Properties of a configured event for an ASTL_METRIC_EVENT metric.
+ *
+ * The caller allocates only this structure (or an array of structures). ASTL owns the strings
+ * referenced by @c name and @c description; callers must not modify or free them. The pointers
+ * remain valid for the active ASTL session. Names and descriptions are not copied into fixed-size
+ * character arrays and are therefore not truncated by this API.
+ */
+typedef struct _astl_event_props_t {
+  size_t       size;         //!< Size of this struct for versioning; set size to sizeof(astl_event_props_t).
+  const char*  name;         //!< ASTL-owned event name. Never NULL; may be an empty string.
+  const char*  description;  //!< ASTL-owned event description. Never NULL; may be an empty string.
+  astl_value_t value;        //!< Unsigned integer event code represented by this mapping. Its width matches the
+                             //!< metric's ASTL_VALUE_UINT8, UINT16, UINT32, or UINT64 value type.
+} astl_event_props_t;
+
+/** Parameters for querying the number of configured events for an event metric. */
+typedef struct astl_get_metric_event_count_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_get_metric_event_count_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_handle_t metric_handle;  //!< Event metric handle of interest.
+  uint32_t*            event_count;    //!< Output event count. Cannot be NULL.
+} astl_get_metric_event_count_on_target_params_t;
+
+/**
+ * @brief Get the number of configured events for a metric.
+ *
+ * This function is applicable only to metrics of type ASTL_METRIC_EVENT. Event metrics without
+ * configured event properties return ASTL_STATUS_SUCCESS with a count of zero. Other metric types
+ * return ASTL_STATUS_NOT_SUPPORTED.
+ */
+ASTL_API astl_status_code astlGetMetricEventCountOnTarget(const astl_get_metric_event_count_on_target_params_t* params)
+    ASTL_API_NOEXCEPT;
+
+/** Parameters for retrieving configured event properties for an event metric. */
+typedef struct astl_get_metric_events_on_target_params_t {
+  size_t size;                         //!< Size of this struct for versioning; set size to
+                                       //!< sizeof(astl_get_metric_events_on_target_params_t).
+  uint32_t             flags;          //!< Reserved for future flags (must be 0 for now).
+  astl_target_handle_t target_handle;  //!< Target handle of interest from astl_target_props_t.
+  astl_metric_handle_t metric_handle;  //!< Event metric handle of interest.
+  astl_event_props_t*  events;         //!< Caller-allocated event array. Cannot be NULL; set
+                                       //!< events[0].size to sizeof(astl_event_props_t).
+  uint32_t* event_count;               //!< In: event-array capacity (> 0). Out: elements written or required.
+} astl_get_metric_events_on_target_params_t;
+
+/**
+ * @brief Get the configured events for a metric.
+ *
+ * This function is applicable only to metrics of type ASTL_METRIC_EVENT. Events are returned in
+ * ascending typed-value order. If the supplied array is too small, ASTL_STATUS_BUFFER_TOO_SMALL is
+ * returned and @c event_count receives the required size. Event metrics without configured event
+ * properties return ASTL_STATUS_SUCCESS with a count of zero. Other metric types return
+ * ASTL_STATUS_NOT_SUPPORTED.
+ */
+ASTL_API astl_status_code astlGetMetricEventsOnTarget(const astl_get_metric_events_on_target_params_t* params)
     ASTL_API_NOEXCEPT;
 
 /***********************************************************************************

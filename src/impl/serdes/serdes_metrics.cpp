@@ -9,6 +9,7 @@
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl_logger.hpp"
+#include "common/lifecycle_event.hpp"
 #include "common/string_pool.hpp"
 #include "metric/delta_metric.hpp"
 #include "metric/event_metric.hpp"
@@ -280,15 +281,39 @@ static auto SerializeFiniteSetMetric(const MetricConfig& metric_config, const IT
   return out_or_err;
 }
 
+static auto SerializeEventMetric(const MetricConfig& metric_config, const ITarget* target)
+    -> std::expected<astl::protobuf::RawMetric, astl_status_code> {
+  const auto* event_config = dynamic_cast<const EventMetricConfig*>(&metric_config);
+  if (!event_config) {
+    ASTL_LOG_ERROR("SerializeEventMetric: event metric '{}' does not use EventMetricConfig", metric_config.Name());
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  auto out_or_err = SerializeBasicMetric(metric_config, target);
+  if (!out_or_err) {
+    return out_or_err;
+  }
+
+  auto* event_proto = out_or_err->mutable_config()->mutable_event_metric();
+  event_proto->set_is_lifecycle_event(event_config->IsLifecycleEvent());
+  for (const auto& [value, info] : event_config->GetEventValueInfo()) {
+    auto* mapping = event_proto->add_value_names();
+    detail::SerializeAstlValue(value, *mapping->mutable_value());
+    mapping->set_name(info.name);
+    mapping->set_description(info.description);
+  }
+  return out_or_err;
+}
+
 static auto SerializeIMetric(const MetricConfig& metric_config, const ITarget* target)
     -> std::expected<astl::protobuf::RawMetric, astl_status_code> {
   switch (metric_config.MetricType()) {
     case ASTL_METRIC_VALUE:
-    case ASTL_METRIC_EVENT:
     case ASTL_METRIC_DELTA:
     case ASTL_METRIC_RATE: {
       return SerializeBasicMetric(metric_config, target);
     }
+    case ASTL_METRIC_EVENT:
+      return SerializeEventMetric(metric_config, target);
     case ASTL_METRIC_FINITE_SET_VALUE: {
       return SerializeFiniteSetMetric(metric_config, target);
     }
@@ -419,6 +444,62 @@ static auto DeserializeFiniteSetMetricConfig(const astl::protobuf::MetricConfig&
   return cfg;
 }
 
+static auto DeserializeEventMetricConfig(const astl::protobuf::MetricConfig& proto_cfg, const std::string& metric_id)
+    -> std::expected<std::unique_ptr<EventMetricConfig>, astl_status_code> {
+  if (!proto_cfg.has_event_metric()) {
+    ASTL_LOG_ERROR("DeserializeEventMetricConfig: missing event payload for metric {}", metric_id);
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  const auto value_type = FromProtoValueType(proto_cfg.value_type());
+  if (!EventMetricConfig::IsSupportedValueType(value_type)) {
+    ASTL_LOG_ERROR("DeserializeEventMetricConfig: unsupported event output value type for metric {}", metric_id);
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  EventMetricConfig::ValueToInfoMap value_info;
+  for (const auto& mapping : proto_cfg.event_metric().value_names()) {
+    if (!mapping.has_value() || mapping.name().empty()) {
+      ASTL_LOG_ERROR("DeserializeEventMetricConfig: invalid event mapping for metric {}", metric_id);
+      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    }
+    if (!proto_cfg.event_metric().is_lifecycle_event() && IsReservedLifecycleEventName(mapping.name())) {
+      ASTL_LOG_ERROR("DeserializeEventMetricConfig: event name '{}' is reserved for the ASTL lifecycle metric",
+                     mapping.name());
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+    auto value_or_error = detail::DeserializeAstlValue(mapping.value());
+    if (!value_or_error) {
+      return std::unexpected(value_or_error.error());
+    }
+    if (value_or_error->ToAstlUnionValue().second != value_type) {
+      ASTL_LOG_ERROR("DeserializeEventMetricConfig: event mapping type mismatch for metric {}", metric_id);
+      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    }
+    if (!value_info.emplace(*value_or_error, EventMetricConfig::EventValueInfo{mapping.name(), mapping.description()})
+             .second) {
+      ASTL_LOG_ERROR("DeserializeEventMetricConfig: duplicate event value for metric {}", metric_id);
+      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    }
+  }
+
+  AnyFormula formula = IdentityFormula{};
+  if (proto_cfg.has_formula()) {
+    auto formula_or_error = DeserializeFormula(proto_cfg.formula());
+    if (!formula_or_error) {
+      return std::unexpected(formula_or_error.error());
+    }
+    formula = std::move(*formula_or_error);
+  }
+  std::vector<std::string> groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
+  return std::make_unique<EventMetricConfig>(
+      proto_cfg.metric_name(), proto_cfg.description(), FromProtoUnits(proto_cfg.units()),
+      FromProtoValueType(proto_cfg.value_type()), FromProtoMetricIdentifier(proto_cfg.identifier()),
+      FromProtoCollectorType(proto_cfg.collector_type()), NullOperationBuilder{}, std::move(value_info),
+      proto_cfg.event_metric().is_lifecycle_event(), std::move(formula),
+      FromProtoValueType(proto_cfg.input_value_type()), std::move(groups), metric_id);
+}
+
 struct MetricDeserializationResult {
   MetricDeserializationResult(const ITarget* target_in, std::unique_ptr<IMetric> metric_in)
       : target(target_in), metric(std::move(metric_in)) {}
@@ -514,8 +595,18 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
       return DeserializeMetricWithBasicConfig<SampledValueMetric>(raw, targets);
     }
 
-    case ASTL_METRIC_EVENT:
-      return DeserializeMetricWithBasicConfig<EventMetric>(raw, targets);
+    case ASTL_METRIC_EVENT: {
+      auto config = DeserializeEventMetricConfig(raw.config(), raw.metric_id());
+      if (!config) {
+        return std::unexpected(config.error());
+      }
+      auto& event_config = *config;
+      auto  metrics      = DeserializeBasicMetric<EventMetric, EventMetricConfig>(raw, event_config.get(), targets);
+      if (!metrics) {
+        return std::unexpected(metrics.error());
+      }
+      return MetricConfigAndResults{std::move(event_config), std::move(*metrics)};
+    }
 
     case ASTL_METRIC_DELTA:
       return DeserializeMetricWithBasicConfig<DeltaMetric>(raw, targets);
@@ -1141,6 +1232,20 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream&                  
   metric_manager->_metric_group_descriptions = detail::RebuildMetricGroupDescriptions(proto_manager);
   metric_manager->_metric_handles.swap(rebuilt_metrics.metric_handles);
   metric_manager->_target_to_metrics_map.swap(rebuilt_metrics.target_to_metrics_map);
+
+  for (const auto& handle : metric_manager->_metric_handles) {
+    const auto* event_config = dynamic_cast<const EventMetricConfig*>(handle->config.get());
+    if (!event_config || !event_config->IsLifecycleEvent()) {
+      continue;
+    }
+    for (const auto& [target, metric] : handle->target_to_metric_map) {
+      if (target == nullptr || metric == nullptr ||
+          !metric_manager->_target_to_lifecycle_event_metric.emplace(target, metric.get()).second) {
+        ASTL_LOG_ERROR("Deserialize<MetricManager>: duplicate or invalid lifecycle event metric");
+        return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+      }
+    }
+  }
 
   auto rebuilt_counters_or_err = detail::RebuildCounterHandles(proto_manager, targets, metric_manager->_capabilities);
   if (!rebuilt_counters_or_err) {

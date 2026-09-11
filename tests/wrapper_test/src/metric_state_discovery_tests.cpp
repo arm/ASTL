@@ -15,6 +15,7 @@
 #include "astl/astl_test_hooks.h"
 #include "common/astl_value.hpp"
 #include "common/metric_config.hpp"
+#include "metric/event_metric.hpp"
 #include "metric/finite_set_metric.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/residency_metric.hpp"
@@ -454,6 +455,102 @@ TEST_CASE("astlGetMetricStatesOnTarget - Unsupported Metric Type", "[wrapper][Me
       REQUIRE(astlGetMetricStatesOnTarget(&params) == ASTL_STATUS_NOT_SUPPORTED);
     }
   }
+}
+
+TEST_CASE("Metric events are discoverable after metric enumeration", "[wrapper][MetricEventDiscovery]") {
+  std::vector<std::unique_ptr<astl::ITarget>> mock_targets;
+  auto                                        mock_target        = std::make_unique<MockTarget>();
+  astl_target_handle_t                        mock_target_handle = mock_target.get();
+  auto*                                       mock_target_raw    = mock_target.get();
+  ALLOW_CALL(*mock_target, GetProperties(_)).SIDE_EFFECT(_1->handle = mock_target_handle).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*mock_target, Name()).RETURN("MockTarget");
+
+  const std::string                       long_name(1024, 'L');
+  astl::EventMetricConfig::ValueToInfoMap mappings{
+      {astl::AstlValue{uint64_t{3}}, {long_name, ""}                          },
+      {astl::AstlValue{uint64_t{0}}, {"ASTL_LIFECYCLE_PAUSE", "pause event"}  },
+      {astl::AstlValue{uint64_t{1}}, {"ASTL_LIFECYCLE_RESUME", "resume event"}},
+  };
+  auto config = std::make_unique<astl::EventMetricConfig>(
+      "internal.name.that.callers.must.not.parse", "lifecycle events", ASTL_UNITS_NONE, ASTL_VALUE_UINT64,
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::ASTL_NATIVE, astl::NullOperationBuilder{},
+      std::move(mappings), true);
+  auto  metric     = std::make_unique<astl::EventMetric>(config.get(), mock_target_raw, nullptr);
+  auto* metric_raw = metric.get();
+  std::unordered_map<const astl::ITarget*, std::unique_ptr<astl::IMetric>> target_to_metric_map;
+  target_to_metric_map.emplace(mock_target_raw, std::move(metric));
+  auto handle = std::make_unique<astl::MetricHandle>(std::move(config), std::move(target_to_metric_map));
+  astl_metric_handle_t metric_handle = handle.get();
+
+  auto                              metric_manager = std::make_unique<MockMetricManager>();
+  std::vector<astl_metric_handle_t> available_metrics{metric_handle};
+  ALLOW_CALL(*metric_manager, GetAvailableMetrics(mock_target_raw)).RETURN(std::span(available_metrics));
+  ALLOW_CALL(*metric_manager, GetMetricOnTarget(metric_handle, mock_target_raw)).RETURN(metric_raw);
+  ALLOW_CALL(*metric_manager, GetProperties(metric_handle, _))
+      .SIDE_EFFECT({
+        REQUIRE(metric_raw->GetProperties(_2) == ASTL_STATUS_SUCCESS);
+        _2->handle = metric_handle;
+      })
+      .RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  auto output_manager = std::make_unique<MockOutputManager>();
+  auto orchestrator   = std::make_unique<astl::Orchestrator>(std::move(topology_manager), std::move(collector_manager),
+                                                             std::move(metric_manager), std::move(output_manager), "");
+  mock_targets.push_back(std::move(mock_target));
+  REQUIRE(orchestrator->SetTargets(std::move(mock_targets)) == ASTL_STATUS_SUCCESS);
+  TestOrchestratorInjector injector(std::move(orchestrator));
+
+  astl_metric_props_t properties{};
+  properties.size       = sizeof(astl_metric_props_t);
+  uint32_t metric_count = 1;
+  ASTL_INIT_STRUCT(astl_get_metrics_params_t, metrics_params, .flags = 0, .target_handle = mock_target_handle,
+                   .metrics = &properties, .metric_count = &metric_count);
+  REQUIRE(astlGetMetricsOnTarget(&metrics_params) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric_count == 1);
+  REQUIRE(properties.metric_type == ASTL_METRIC_EVENT);
+  REQUIRE(properties.handle == metric_handle);
+
+  uint32_t count = 0;
+  ASTL_INIT_STRUCT(astl_get_metric_event_count_on_target_params_t, count_params, .flags = 0,
+                   .target_handle = mock_target_handle, .metric_handle = properties.handle, .event_count = &count);
+  REQUIRE(astlGetMetricEventCountOnTarget(&count_params) == ASTL_STATUS_SUCCESS);
+  REQUIRE(count == 3);
+
+  std::vector<astl_event_props_t> too_small(2);
+  too_small[0].size = sizeof(astl_event_props_t);
+  uint32_t capacity = 2;
+  ASTL_INIT_STRUCT(astl_get_metric_events_on_target_params_t, small_params, .flags = 0,
+                   .target_handle = mock_target_handle, .metric_handle = metric_handle, .events = too_small.data(),
+                   .event_count = &capacity);
+  REQUIRE(astlGetMetricEventsOnTarget(&small_params) == ASTL_STATUS_BUFFER_TOO_SMALL);
+  REQUIRE(capacity == 3);
+
+  std::vector<astl_event_props_t> events(3);
+  events[0].size = sizeof(astl_event_props_t);
+  capacity       = 3;
+  ASTL_INIT_STRUCT(astl_get_metric_events_on_target_params_t, events_params, .flags = 0,
+                   .target_handle = mock_target_handle, .metric_handle = metric_handle, .events = events.data(),
+                   .event_count = &capacity);
+  REQUIRE(astlGetMetricEventsOnTarget(&events_params) == ASTL_STATUS_SUCCESS);
+  REQUIRE(events[0].value.ui64 == 0);
+  REQUIRE(std::string(events[0].name) == "ASTL_LIFECYCLE_PAUSE");
+  REQUIRE(events[1].value.ui64 == 1);
+  REQUIRE(std::string(events[1].name) == "ASTL_LIFECYCLE_RESUME");
+  REQUIRE(events[2].value.ui64 == 3);
+  REQUIRE(std::string(events[2].name) == long_name);
+  REQUIRE(events[2].description != nullptr);
+  REQUIRE(std::string(events[2].description).empty());
+
+  const char* stable_long_name = events[2].name;
+  REQUIRE(astlGetMetricEventsOnTarget(&events_params) == ASTL_STATUS_SUCCESS);
+  REQUIRE(events[2].name == stable_long_name);
 }
 
 // NOLINTEND(readability-function-cognitive-complexity)

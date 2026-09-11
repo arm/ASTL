@@ -59,7 +59,7 @@ class EventMetric : public RawMetric {
    * @param target The telemetry source for the metric.
    * @param processed_sample_sink Output for where processed samples should be sent.
    */
-  explicit EventMetric(const MetricConfig* configuration, const ITarget* target,
+  explicit EventMetric(const EventMetricConfig* configuration, const ITarget* target,
                        IProcessedSampleSink* processed_sample_sink)
       : RawMetric(configuration, target, processed_sample_sink) {
     // Summary: Metric, Event, Count
@@ -109,6 +109,11 @@ class EventMetric : public RawMetric {
    * @return A const reference to EventSummaryData containing event counts.
    */
   const EventSummaryData& GetEventSummaryData() const { return _summary; }
+
+  /** Return this event metric's value-name configuration. */
+  [[nodiscard]] auto GetEventConfiguration() const -> const EventMetricConfig* {
+    return dynamic_cast<const EventMetricConfig*>(_configuration);
+  }
 
  private:
   /**

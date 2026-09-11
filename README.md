@@ -365,12 +365,23 @@ target. It is created lazily, the first time one of those lifecycle events actua
 target (i.e. on the first pause, resume, or crop), so it does not exist for sessions that never
 pause, resume, or crop.
 
-Because this metric is created only once a lifecycle event has happened, you must rediscover the
-metrics for that target after the first pause/resume/crop if you need the synthetic
-`astl_lifecycle_events.<target-name>` metric in the collection and want to take actions on it later,
-such as filtering or cropping. It will not appear in a metric list retrieved before the first
-lifecycle event. For a given target, call `astlGetMetricCountOnTarget(...)` again, then call
-`astlGetMetricsOnTarget(...)` again to fetch the updated metric set and locate the new metric handle.
+Because the lifecycle metric is created lazily, callers must rediscover the target's metrics after
+the first pause, resume, or crop. Call `astlGetMetricCountOnTarget(...)` and
+`astlGetMetricsOnTarget(...)` again before scanning the updated metric set.
+
+Event metrics use `UINT8`, `UINT16`, `UINT32`, or `UINT64` output values as enum-like event codes and can publish
+typed event properties. Query each `ASTL_METRIC_EVENT` metric with
+`astlGetMetricEventCountOnTarget(...)` and `astlGetMetricEventsOnTarget(...)`. The lifecycle
+metric is identified by its canonical `ASTL_LIFECYCLE_PAUSE`, `ASTL_LIFECYCLE_RESUME`,
+`ASTL_LIFECYCLE_CROP_BEGIN`, and `ASTL_LIFECYCLE_CROP_END` events. These names are reserved for
+ASTL's synthetic lifecycle metric. This makes the mapping unique, so callers do not need to
+construct or parse its internal metric name. Use the identified metric handle with
+`astlGetMetricSamplesOnTarget(...)` to retrieve the lifecycle event samples. An event metric
+without configured event properties returns a count of zero.
+
+The caller allocates the `astl_event_props_t` array and initializes its first element's `size`.
+ASTL owns the `name` and `description` strings for the active session; each pointer is non-NULL,
+may refer to an empty string, uses no fixed character buffer, and is not truncated.
 
 Alternatively, we can configure collection by metric groups
 
@@ -412,10 +423,8 @@ status = astlConfigureMetricGroupCollectionOnTarget(&configure_group_params);
 }
 ```
 
-The same rediscovery rule applies when you configure by metric group: once a lifecycle event
-(pause, resume, or crop) first occurs for a target, call `astlGetMetricCountOnTarget(...)` and
-`astlGetMetricsOnTarget(...)` again for that target if you also need the synthetic
-`astl_lifecycle_events.<target-name>` metric in the collection and want to filter or crop it later.
+The same post-event metric rediscovery and event-property scan applies when collection is
+configured by metric group.
 
 If you need the metrics that belong to a metric group regardless of target, first retrieve the
 global group descriptors with `astlGetMetricGroups(...)`, then call
@@ -674,15 +683,18 @@ Common status codes:
 
 ## String Pointer Lifetimes and Ownership
 
-**Important:** The `astlGetMetricStatesOnTarget` API returns `const char*` pointers to state name strings (`astl_state_props_t.name`). These pointers refer to internal storage owned by ASTL's metric and configuration objects.
+**Important:** `astlGetMetricStatesOnTarget` and `astlGetMetricEventsOnTarget` return
+`const char*` pointers to names and descriptions. These pointers refer to internal storage owned by
+ASTL. Callers allocate and free only the result struct arrays; they must not modify or free the
+strings. There is no caller-provided character-array size and ASTL does not truncate these strings.
 
 ### Lifetime Guarantees
 
-State name pointers are valid only for the current collection session:
+State and event name pointers are valid only for the current collection session:
 
-1. **During a collection session**: All state name pointers returned by `astlGetMetricStatesOnTarget` remain valid throughout the current collection session (across start/stop/pause/resume cycles).
+1. **During a collection session**: All state and event name pointers returned by the discovery APIs remain valid throughout the current collection session (across start/stop/pause/resume cycles).
 
-2. **After reconfiguration**: State name pointers become **invalid** immediately when ASTL is reconfigured for a subsequent collection. Accessing these pointers after reconfiguration results in undefined behavior.
+2. **After reconfiguration**: State and event name pointers become **invalid** immediately when ASTL is reconfigured for a subsequent collection. Accessing these pointers after reconfiguration results in undefined behavior.
 
 ### Usage Recommendations
 

@@ -168,15 +168,10 @@ TEST_CASE("MetricManager::RegisterMetric succeeds for ASTL-native event metric",
   Capabilities  caps = MakeCaps(CollectorType::SCMI);
   MetricManager mgr(caps);
 
-  auto cfg = std::make_unique<MetricConfig>("pause_event_metric",                   // name
-                                            "Synthetic pause/resume event metric",  // description
-                                            astl_units_t::ASTL_UNITS_NONE,          // units
-                                            astl_value_type_t::ASTL_VALUE_UNKNOWN,  // value type
-                                            ASTL_METRIC_IDENTIFIER_UNKNOWN,         // identifier
-                                            astl_metric_type_t::ASTL_METRIC_EVENT,  // metric type
-                                            CollectorType::ASTL_NATIVE,             // collector type
-                                            astl::NullOperationBuilder{}            // operation builder
-  );
+  auto cfg = std::make_unique<astl::EventMetricConfig>(
+      "native_event_metric", "Synthetic non-lifecycle event metric", astl_units_t::ASTL_UNITS_NONE,
+      astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, CollectorType::ASTL_NATIVE,
+      astl::NullOperationBuilder{});
 
   MockTarget  target;
   std::string target_name{"AP0"};
@@ -184,7 +179,63 @@ TEST_CASE("MetricManager::RegisterMetric succeeds for ASTL-native event metric",
 
   REQUIRE(mgr.RegisterMetric(std::move(cfg), {&target}) == ASTL_STATUS_SUCCESS);
   REQUIRE(mgr.GetAvailableMetrics(&target).value().size() == 1);
-  REQUIRE(mgr.GetLifecycleEventMetricOnTarget(&target) != nullptr);
+  REQUIRE(mgr.GetLifecycleEventMetricOnTarget(&target) == nullptr);
+}
+
+TEST_CASE("MetricManager::RegisterMetric rejects unsupported event value types", "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+  std::string   target_name{"AP0"};
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+
+  auto cfg = std::make_unique<astl::EventMetricConfig>(
+      "float_event_metric", "Invalid floating-point event metric", astl_units_t::ASTL_UNITS_NONE,
+      astl_value_type_t::ASTL_VALUE_FLOAT32, ASTL_METRIC_IDENTIFIER_UNKNOWN, CollectorType::ASTL_NATIVE,
+      astl::NullOperationBuilder{});
+
+  REQUIRE(mgr.RegisterMetric(std::move(cfg), {&target}) == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(mgr.GetAvailableMetrics(&target).value().empty());
+}
+
+TEST_CASE("MetricManager::RegisterMetric rejects event mappings with a different integer width", "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+  std::string   target_name{"AP0"};
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+
+  astl::EventMetricConfig::ValueToInfoMap mappings{
+      {astl::AstlValue{uint64_t{1}}, {"WAKE", "Wake event"}},
+  };
+  auto cfg = std::make_unique<astl::EventMetricConfig>(
+      "mismatched_event_metric", "Invalid event mapping", astl_units_t::ASTL_UNITS_NONE,
+      astl_value_type_t::ASTL_VALUE_UINT32, ASTL_METRIC_IDENTIFIER_UNKNOWN, CollectorType::ASTL_NATIVE,
+      astl::NullOperationBuilder{}, std::move(mappings));
+
+  REQUIRE(mgr.RegisterMetric(std::move(cfg), {&target}) == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(mgr.GetAvailableMetrics(&target).value().empty());
+}
+
+TEST_CASE("MetricManager::RegisterMetric rejects lifecycle-reserved names on ordinary event metrics",
+          "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+
+  astl::EventMetricConfig::ValueToInfoMap mappings{
+      {astl::AstlValue{uint64_t{0}}, {"ASTL_LIFECYCLE_PAUSE", "Reserved lifecycle event"}},
+  };
+  auto cfg = std::make_unique<astl::EventMetricConfig>(
+      "ordinary_event_metric", "Ordinary event metric", astl_units_t::ASTL_UNITS_NONE,
+      astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, CollectorType::ASTL_NATIVE,
+      astl::NullOperationBuilder{}, std::move(mappings));
+
+  MockTarget  target;
+  std::string target_name{"AP0"};
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+
+  REQUIRE(mgr.RegisterMetric(std::move(cfg), {&target}) == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(mgr.GetAvailableMetrics(&target).value().empty());
 }
 
 TEST_CASE("MetricManager::RegisterMetric fails when collector unsupported", "[MetricManager]") {

@@ -11,15 +11,14 @@
 
 using namespace std::chrono_literals;
 
-static auto GetEventMetricConfig() -> const astl::MetricConfig* {
-  static astl::MetricConfig config{"test_event",
-                                   "Unit test event metric",
-                                   ASTL_UNITS_NONE,
-                                   ASTL_VALUE_UNKNOWN,
-                                   ASTL_METRIC_IDENTIFIER_UNKNOWN,
-                                   ASTL_METRIC_EVENT,
-                                   astl::CollectorType::UNKNOWN,
-                                   astl::NullOperationBuilder{}};
+static auto GetEventMetricConfig() -> const astl::EventMetricConfig* {
+  static astl::EventMetricConfig config{"test_event",
+                                        "Unit test event metric",
+                                        ASTL_UNITS_NONE,
+                                        ASTL_VALUE_UINT64,
+                                        ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                        astl::CollectorType::UNKNOWN,
+                                        astl::NullOperationBuilder{}};
   return &config;
 }
 

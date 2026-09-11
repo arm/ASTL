@@ -23,6 +23,7 @@
 #include "common/system_info.hpp"
 #include "config/configuration_manager.hpp"
 #include "metric/counter.hpp"
+#include "metric/event_metric.hpp"
 #include "metric/finite_set_metric.hpp"
 #include "metric/i_metric.hpp"
 #include "metric/i_metric_manager.hpp"
@@ -1664,6 +1665,106 @@ auto astlGetMetricStatesOnTarget(const astl_get_metric_states_on_target_params_t
     ASTL_LOG_ERROR("astlGetMetricStatesOnTarget: Metric {} is neither a finite set nor residency metric",
                    properties.name);
     return ASTL_STATUS_NOT_SUPPORTED;
+  });
+}
+
+auto astlGetMetricEventCountOnTarget(const astl_get_metric_event_count_on_target_params_t* params) noexcept
+    -> astl_status_code {
+  return RunPublicApi([&]() noexcept -> astl_status_code {
+    std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+    const auto                  params_status = ValidateApiParams(params);
+    if (params_status != ASTL_STATUS_SUCCESS) {
+      return params_status;
+    }
+    if (!params->target_handle || !params->metric_handle || !params->event_count) {
+      return ASTL_STATUS_BAD_ARGUMENT;
+    }
+    *params->event_count = 0;
+
+    auto target_or_error = GetTargetFromHandle(params->target_handle);
+    if (!target_or_error) {
+      return target_or_error.error();
+    }
+    auto manager_or_error = GetMetricManager();
+    if (!manager_or_error) {
+      return manager_or_error.error();
+    }
+    auto metric_or_error = (*manager_or_error)->GetMetricOnTarget(params->metric_handle, *target_or_error);
+    if (!metric_or_error) {
+      return metric_or_error.error();
+    }
+    const auto* event_metric = dynamic_cast<const astl::EventMetric*>(*metric_or_error);
+    if (!event_metric) {
+      return ASTL_STATUS_NOT_SUPPORTED;
+    }
+    const auto count = event_metric->GetEventConfiguration()->GetEventValueInfo().size();
+    if (count > std::numeric_limits<uint32_t>::max()) {
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+    *params->event_count = static_cast<uint32_t>(count);
+    return ASTL_STATUS_SUCCESS;
+  });
+}
+
+auto astlGetMetricEventsOnTarget(const astl_get_metric_events_on_target_params_t* params) noexcept -> astl_status_code {
+  return RunPublicApi([&]() noexcept -> astl_status_code {
+    std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+    const auto                  params_status = ValidateApiParams(params);
+    if (params_status != ASTL_STATUS_SUCCESS) {
+      return params_status;
+    }
+    if (!params->target_handle || !params->metric_handle || !params->events || !params->event_count ||
+        *params->event_count == 0) {
+      return ASTL_STATUS_BAD_ARGUMENT;
+    }
+
+    auto target_or_error = GetTargetFromHandle(params->target_handle);
+    if (!target_or_error) {
+      return target_or_error.error();
+    }
+    auto manager_or_error = GetMetricManager();
+    if (!manager_or_error) {
+      return manager_or_error.error();
+    }
+    auto metric_or_error = (*manager_or_error)->GetMetricOnTarget(params->metric_handle, *target_or_error);
+    if (!metric_or_error) {
+      return metric_or_error.error();
+    }
+    const auto* event_metric = dynamic_cast<const astl::EventMetric*>(*metric_or_error);
+    if (!event_metric) {
+      return ASTL_STATUS_NOT_SUPPORTED;
+    }
+
+    std::span<astl_event_props_t> output{params->events, *params->event_count};
+    const auto                    element_size = GetFirstElementSizeField(output);
+    if (!element_size) {
+      return element_size.error();
+    }
+    const auto element_status = GetStructVersionStatus(output.front());
+    if (element_status != ASTL_STATUS_SUCCESS) {
+      return element_status;
+    }
+
+    const auto& mappings = event_metric->GetEventConfiguration()->GetEventValueInfo();
+    if (mappings.size() > std::numeric_limits<uint32_t>::max()) {
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+    const auto required = static_cast<uint32_t>(mappings.size());
+    if (output.size() < mappings.size()) {
+      *params->event_count = required;
+      return ASTL_STATUS_BUFFER_TOO_SMALL;
+    }
+
+    std::size_t index = 0;
+    for (const auto& [value, info] : mappings) {
+      output[index].size        = sizeof(astl_event_props_t);
+      output[index].value       = value.ToAstlUnionValue().first;
+      output[index].name        = astl::GetInternedString(info.name);
+      output[index].description = astl::GetInternedString(info.description);
+      ++index;
+    }
+    *params->event_count = required;
+    return ASTL_STATUS_SUCCESS;
   });
 }
 
