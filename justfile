@@ -29,6 +29,10 @@ _overlay-refresh:
 overlay-enable path profile='astl-combined':
     ./scripts/astl_overlay.sh enable {{quote(path)}} {{quote(profile)}}
 
+# Install the pinned ossmosis build used by overlays into an isolated virtual environment.
+overlay-install-ossmosis:
+    ./scripts/install_ossmosis.sh
+
 # Validate the configured source overlay and staged-file ownership.
 overlay-check:
     ./scripts/astl_overlay.sh check

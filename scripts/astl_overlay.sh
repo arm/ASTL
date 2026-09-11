@@ -34,13 +34,7 @@ overlay_profile() {
 }
 
 require_ossmosis() {
-	local executable="${OSSMOSIS_BIN:-ossmosis}"
-	if ! command -v "${executable}" >/dev/null 2>&1; then
-		echo "The configured ASTL overlay requires ossmosis with materialize support." >&2
-		echo "Install ossmosis or set OSSMOSIS_BIN to its executable path." >&2
-		exit 2
-	fi
-	printf '%s\n' "${executable}"
+	"${REPO_ROOT}/scripts/install_ossmosis.sh"
 }
 
 materialize() {

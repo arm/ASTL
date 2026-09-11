@@ -9,6 +9,7 @@ python/astl/_core.cpp
 
 # Python Outputs
 .venv
+.venv-ossmosis
 venv
 python/astl.egg-info/
 __pycache__/

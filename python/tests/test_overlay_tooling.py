@@ -19,6 +19,7 @@ def test_enable_stores_opaque_profile(tmp_path: Path) -> None:
     source.mkdir()
     bin_dir.mkdir()
     shutil.copy2(ROOT / "scripts" / "astl_overlay.sh", scripts / "astl_overlay.sh")
+    shutil.copy2(ROOT / "scripts" / "install_ossmosis.sh", scripts / "install_ossmosis.sh")
     (source / ".ossmosis.json").write_text('{"schema_version": 1, "path_rules": []}\n', encoding="utf-8")
     fake_ossmosis = bin_dir / "ossmosis"
     fake_ossmosis.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")

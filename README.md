@@ -98,6 +98,22 @@ through cgo.
 
 ## Installation and usage
 
+### Confidential overlay development
+
+Keep the `ASTL` and `ASTL-confidential` repositories in sibling directories,
+then enable the confidential checkout from this repository:
+
+```sh
+just overlay-enable ../ASTL-confidential
+```
+
+The command uses an existing `ossmosis` installation when it supports the
+required `materialize` command. Otherwise, it installs a pinned ossmosis commit
+from GitHub into the isolated `.venv-ossmosis` virtual environment. This
+requires Python 3.10 or newer and Git, but does not require activating the
+environment or installing `uv`. Set `OSSMOSIS_BIN` to use a specific ossmosis
+executable, or run `just overlay-install-ossmosis` to install it separately.
+
 ### Installation
 
 ASTL's `config` directory holds platform-specific metrics specifications
