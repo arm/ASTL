@@ -6,11 +6,11 @@
 
 set -eu
 
-REPO_OWNER="Arm-Debug"
+REPO_OWNER="arm"
 REPO_NAME="ASTL"
 DEFAULT_SOURCE="github"
 DEFAULT_VERSION="latest"
-PACKAGE_VARIANT="everything"
+PACKAGE_VARIANT="library"
 
 supports_authenticated_gh() {
 	command -v gh >/dev/null 2>&1 && gh auth status -h github.com >/dev/null 2>&1
@@ -27,17 +27,16 @@ fail() {
 
 usage() {
 	cat <<'EOF'
-Usage: sh get_astl.sh [--source github] [--version latest|X.Y.Z] [--os linux] [--arch aarch64] [--help]
+Usage: sh get_astl.sh [--source github] [--version latest|rolling|X.Y.Z] [--os linux] [--arch aarch64] [--help]
 
 Options:
   --source   Package source. Only "github" is implemented right now.
-  --version  ASTL version to install. Default: latest (maps to release/rolling).
+  --version  ASTL version to install. "latest" selects the highest stable semantic
+             version; "rolling" selects release/rolling. Default: latest.
   --os       Package OS. Default: detect from current system.
   --arch     Package architecture. Default: detect from current system.
   --help     Show this help text.
 
-Notes:
-  If repository releases are private, authenticate gh first (gh auth login).
 EOF
 }
 
@@ -109,6 +108,48 @@ print(zip_asset["name"])
 print(zip_asset["browser_download_url"])
 print(checksum_asset["name"])
 print(checksum_asset["browser_download_url"])
+PY
+}
+
+github_latest_semver_tag() {
+	output_dir="$1"
+	page=1
+	set --
+
+	while :; do
+		page_path="$output_dir/releases-$page.json"
+		releases_url="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases?per_page=100&page=$page"
+		if ! curl -fsSL -H 'Accept: application/vnd.github+json' "$releases_url" -o "$page_path"; then
+			fail "unable to query releases from GitHub"
+		fi
+		set -- "$@" "$page_path"
+
+		release_count=$(python3 -c 'import json, sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))))' "$page_path")
+		[ "$release_count" -eq 100 ] || break
+		page=$((page + 1))
+	done
+
+	python3 - "$@" <<'PY'
+import json
+import re
+import sys
+
+tag_pattern = re.compile(r"^release/(\d+)\.(\d+)\.(\d+)$")
+candidates = []
+for page_path in sys.argv[1:]:
+    with open(page_path, encoding="utf-8") as handle:
+        for release in json.load(handle):
+            if release.get("draft") or release.get("prerelease"):
+                continue
+            tag_name = release.get("tag_name", "")
+            match = tag_pattern.fullmatch(tag_name)
+            if match:
+                candidates.append((tuple(map(int, match.groups())), tag_name))
+
+if not candidates:
+    raise SystemExit("no stable semantic-versioned ASTL releases found")
+
+print(max(candidates)[1])
 PY
 }
 
@@ -242,16 +283,27 @@ main() {
 	require_tool python3
 	require_tool mktemp
 	require_tool find
+	require_tool grep
 	require_tool sed
-
-	if [ "$VERSION" = "latest" ]; then
-		TAG_NAME="release/rolling"
-	else
-		TAG_NAME="release/$VERSION"
-	fi
 
 	TMP_DIR=$(mktemp -d)
 	trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
+
+	case "$VERSION" in
+	latest)
+		TAG_NAME=$(github_latest_semver_tag "$TMP_DIR")
+		;;
+	rolling)
+		TAG_NAME="release/rolling"
+		;;
+	*)
+		if printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+			TAG_NAME="release/$VERSION"
+		else
+			fail "invalid version '$VERSION'; expected latest, rolling, or X.Y.Z"
+		fi
+		;;
+	esac
 
 	DOWNLOAD_DIR="$TMP_DIR/download"
 	EXTRACT_DIR="$TMP_DIR/extracted"
@@ -262,12 +314,14 @@ main() {
 
 	if supports_authenticated_gh; then
 		log "Using authenticated gh CLI to download release assets"
-		gh release download "$TAG_NAME" \
+		if ! gh release download "$TAG_NAME" \
 			--repo "$REPO_OWNER/$REPO_NAME" \
 			--pattern "$ZIP_PATTERN" \
 			--pattern "$CHECKSUM_PATTERN" \
 			--dir "$DOWNLOAD_DIR" \
-			--clobber >/dev/null
+			--clobber >/dev/null; then
+			fail "unable to download GitHub release '$TAG_NAME'"
+		fi
 
 		ZIP_COUNT=$(find "$DOWNLOAD_DIR" -maxdepth 1 -type f -name "$ZIP_PATTERN" | wc -l | tr -d ' ')
 		[ "$ZIP_COUNT" = "1" ] || fail "expected exactly one package asset matching $ZIP_PATTERN, found $ZIP_COUNT"
@@ -284,7 +338,7 @@ main() {
 		RELEASE_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/tags/$TAG_PATH"
 
 		if ! curl -fsSL -H 'Accept: application/vnd.github+json' "$RELEASE_URL" -o "$RELEASE_JSON"; then
-			fail "unable to access release metadata via GitHub API. If this repository is private, authenticate with 'gh auth login' and rerun."
+			fail "unable to access GitHub release '$TAG_NAME'"
 		fi
 
 		ASSET_INFO="$TMP_DIR/asset-info.txt"
