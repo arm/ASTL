@@ -23,8 +23,8 @@ export SOURCE_EVENT=pull_request TARGET_REPOSITORY=Arm-Debug/ASTL HEAD_REPOSITOR
 export HEAD_SHA=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA BASE_SHA=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 export PR_NUMBER=88 CORRELATION_ID=public-pr-88-9001-2
 "${ROOT}/scripts/amx_ci_gate.sh"
-jq -e '.client_payload.schema_version == 2 and .client_payload.check_run_id == "4242" and
- .client_payload.callback_event_type == "amx-ci-result" and .client_payload.head_sha == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "${FAKE_GH_PAYLOAD}" >/dev/null
+jq -e '.client_payload.schema_version == 2 and .client_payload.callback.check_run_id == "4242" and
+ .client_payload.callback.event_type == "amx-ci-result" and .client_payload.head_sha == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "${FAKE_GH_PAYLOAD}" >/dev/null
 export SOURCE_EVENT=push HEAD_REPOSITORY=Arm-Debug/ASTL
 export HEAD_SHA=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC BASE_SHA=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 export PR_NUMBER=0 CORRELATION_ID=public-main-9002-1

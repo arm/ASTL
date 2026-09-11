@@ -87,10 +87,12 @@ payload="$({
         base_sha: $base_sha,
         pr_number: $pr_number,
 		correlation_id: $correlation_id,
-		callback_repository: "Arm-Debug/ASTL",
-		callback_event_type: "confidential-ci-result",
-		check_run_id: $check_run_id,
-		check_name: $check_name
+		callback: {
+			repository: "Arm-Debug/ASTL",
+			event_type: "confidential-ci-result",
+			check_run_id: $check_run_id,
+			check_name: $check_name
+		}
       }
     }'
 })"
