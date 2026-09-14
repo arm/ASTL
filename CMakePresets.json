@@ -64,6 +64,25 @@
       }
     },
     {
+      "name": "fuzz",
+      "inherits": "debug",
+      "binaryDir": "${sourceDir}/build/fuzz",
+      "cacheVariables": {
+        "ASTL_BUILD_FUZZING": "ON",
+        "ASTL_BUILD_SHARED": "ON",
+        "ASTL_BUILD_SAMPLES": "OFF",
+        "ASTL_BUILD_TESTING": "OFF",
+        "ASTL_BUILD_TOOLS": "OFF",
+        "ASTL_LIBSENSORS": "OFF",
+        "ASTL_PROCFS": "OFF",
+        "BUILD_TESTING": "OFF",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "ENABLE_COVERAGE": "OFF",
+        "ENABLE_VALGRIND": "OFF"
+      }
+    },
+    {
       "name": "debug-make",
       "generator": "Unix Makefiles",
       "cacheVariables": {
@@ -125,6 +144,11 @@
     {
       "name": "debug-tsan",
       "configurePreset": "debug-tsan",
+      "configuration": "Debug"
+    },
+    {
+      "name": "fuzz",
+      "configurePreset": "fuzz",
       "configuration": "Debug"
     },
     {

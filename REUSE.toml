@@ -60,3 +60,9 @@ SPDX-License-Identifier = "Apache-2.0"
 path = "**/*.astl"
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
+
+# Fuzz seeds are raw inputs whose bytes must not include source comments.
+[[annotations]]
+path = "fuzz/corpus/**/*"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"

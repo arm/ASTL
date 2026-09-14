@@ -143,6 +143,53 @@ sanitizer-e2e preset='debug-asan-ubsan':
     just build {{quote(preset)}}
     ./tests/e2e_test/run_e2e.sh {{quote(preset)}}
 
+# Configure, build, and run a bounded libFuzzer session.
+fuzz target='astl_wrapper_validation_fuzzer' duration='60': _overlay-refresh
+    #!/usr/bin/env bash
+    set -eu -o pipefail
+    if [[ ! {{quote(target)}} =~ ^[A-Za-z0-9_-]+$ ]]; then
+        echo "[fuzz][ERROR] Invalid target name: {{target}}" >&2
+        exit 2
+    fi
+    if [[ ! {{quote(duration)}} =~ ^[1-9][0-9]*$ ]]; then
+        echo "[fuzz][ERROR] Duration must be a positive number of seconds" >&2
+        exit 2
+    fi
+    cmake -S . --preset fuzz
+    cmake --build --preset fuzz --target {{quote(target)}} --parallel="$(nproc)"
+    ARCH="$(./scripts/host_arch.sh)"
+    BINARY="build/fuzz/${ARCH}/bin/{{target}}"
+    SEED_CORPUS="fuzz/corpus/{{target}}"
+    CORPUS="build/fuzz/corpus/{{target}}"
+    ARTIFACTS="build/fuzz/artifacts/{{target}}"
+    mkdir -p "$CORPUS" "$ARTIFACTS"
+    cp -a "$SEED_CORPUS/." "$CORPUS/"
+    "$BINARY" "$CORPUS" \
+        -max_total_time={{quote(duration)}} \
+        -timeout=10 \
+        -max_len=4096 \
+        -artifact_prefix="$ARTIFACTS/"
+
+# Replay exactly one saved input without mutation.
+fuzz-reproduce target input: _overlay-refresh
+    #!/usr/bin/env bash
+    set -eu -o pipefail
+    if [[ ! {{quote(target)}} =~ ^[A-Za-z0-9_-]+$ ]]; then
+        echo "[fuzz-reproduce][ERROR] Invalid target name: {{target}}" >&2
+        exit 2
+    fi
+    if [[ ! -f {{quote(input)}} ]]; then
+        echo "[fuzz-reproduce][ERROR] Input does not exist: {{input}}" >&2
+        exit 2
+    fi
+    cmake -S . --preset fuzz
+    cmake --build --preset fuzz --target {{quote(target)}} --parallel="$(nproc)"
+    ARCH="$(./scripts/host_arch.sh)"
+    BINARY="build/fuzz/${ARCH}/bin/{{target}}"
+    ARTIFACTS="build/fuzz/artifacts/{{target}}"
+    mkdir -p "$ARTIFACTS"
+    "$BINARY" {{quote(input)}} -runs=1 -artifact_prefix="$ARTIFACTS/"
+
 # test everything, generate html coverage file
 test-cov: build
     #!/usr/bin/env bash
