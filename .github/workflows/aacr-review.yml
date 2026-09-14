@@ -52,7 +52,7 @@ concurrency:
 jobs:
   aacr-review:
     if: github.repository_owner == 'Arm-Debug'
-    uses: Arm-Debug/devops-workflows/.github/workflows/aacr-review.yml@9970ce44e27c5ae83b7cff63e904ca5c73525090
+    uses: Arm-Debug/devops-workflows/.github/workflows/aacr-review.yml@0178a0455c3a0b8e2d3a90a53c9a196adf492d7a
     with:
       aacr_image_source: its--ai-enablement-docker-staging.artifactory.arm.com/aacr-ci/review-runtime@sha256:190cb8df5dcd853b3ea4a74b2a90cc8133eb4ff9334d78ff810524df30b99148
       aacr_image_options: --user 1000:1000 --env AACR_COMMENT_TEMPLATE_FILE=.aacr/comment-template.md --env AACR_SUPPRESS_NO_ISSUES_COMMENT=1
