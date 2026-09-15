@@ -66,5 +66,5 @@ gh api --method PATCH -H "Accept: application/vnd.github+json" \
 	"repos/${TARGET_REPOSITORY}/check-runs/${CHECK_RUN_ID}" \
 	-f status=completed -f conclusion="${CONCLUSION}" -f details_url="${DETAILS_URL}" \
 	-f "output[title]=${CHECK_NAME}: ${CONCLUSION}" \
-	-f "output[summary]=ASTL-confidential reported ${CONCLUSION} for correlation ${CORRELATION_ID}." >/dev/null
+	-f "output[summary]=ASTL-confidential reported ${CONCLUSION} for correlation ${CORRELATION_ID}. [View the private workflow run](${DETAILS_URL})." >/dev/null
 echo "Completed ${CHECK_NAME} check ${CHECK_RUN_ID} with ${CONCLUSION}."
