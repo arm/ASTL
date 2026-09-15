@@ -242,6 +242,8 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
   astl_metric_group_handle_t              group1_handle = group1->ToApiHandle();
   std::vector<astl_metric_group_handle_t> available_groups{group0_handle, group1_handle};
   std::span<const astl_metric_handle_t>   group1_metrics_span{group1->metrics.data(), group1->metrics.size()};
+  int                                     wrong_type_group_token  = 0;
+  astl_metric_group_handle_t              wrong_type_group_handle = &wrong_type_group_token;
 
   // as the internal implementation would return it
   astl_metric_group_props_t group0_properties{.size        = sizeof(astl_metric_group_props_t),
@@ -264,6 +266,8 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
   ALLOW_CALL(*metric_manager, GetMetricGroups()).RETURN(std::span(available_groups));
   ALLOW_CALL(*metric_manager, GetMetricsInGroup(group0_handle)).RETURN(available_metrics_span);
   ALLOW_CALL(*metric_manager, GetMetricsInGroup(group1_handle)).RETURN(group1_metrics_span);
+  ALLOW_CALL(*metric_manager, GetMetricsInGroup(wrong_type_group_handle))
+      .RETURN(std::unexpected(ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE));
   ALLOW_CALL(*metric_manager, GetMetricOnTarget(mock_metric_ptr, mock_target_raw)).RETURN(mock_metric_ptr);
   ALLOW_CALL(*metric_manager, GetMetricGroupProperties(_, _))
       .SIDE_EFFECT({
@@ -331,6 +335,20 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
                        .target_handle = target_handle, .metric_group_handle = nullptr, .metric_count = &metric_count);
       REQUIRE(astlGetMetricGroupMetricCountOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
     }
+    {
+      uint32_t metric_count = 0;
+      ASTL_INIT_STRUCT(astl_get_metric_group_metric_count_params_t, params, .flags = 0,
+                       .metric_group_handle = wrong_type_group_handle, .metric_count = &metric_count);
+      REQUIRE(astlGetMetricGroupMetricCount(&params) == ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE);
+    }
+    {
+      const auto* target_handle = mock_target_handle;
+      uint32_t    metric_count  = 0;
+      ASTL_INIT_STRUCT(astl_get_metric_group_metric_count_on_target_params_t, params, .flags = 0,
+                       .target_handle = target_handle, .metric_group_handle = wrong_type_group_handle,
+                       .metric_count = &metric_count);
+      REQUIRE(astlGetMetricGroupMetricCountOnTarget(&params) == ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE);
+    }
   }
 
   SECTION("[MetricGroups][bad params][wrapper]") {
@@ -370,6 +388,15 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
                        .target_handle = target_handle, .metric_group_handle = group0_handle, .metrics = nullptr,
                        .metric_count = &metric_count);
       REQUIRE(astlGetMetricGroupMetricsOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
+    }
+
+    {
+      const auto* target_handle = mock_target_handle;
+      auto        metric_count  = static_cast<uint32_t>(metrics.size());
+      ASTL_INIT_STRUCT(astl_get_metric_group_metrics_on_target_params_t, params, .flags = 0,
+                       .target_handle = target_handle, .metric_group_handle = wrong_type_group_handle,
+                       .metrics = metrics.data(), .metric_count = &metric_count);
+      REQUIRE(astlGetMetricGroupMetricsOnTarget(&params) == ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE);
     }
 
     // test struct version mismatches
@@ -414,6 +441,14 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
       ASTL_INIT_STRUCT(astl_get_metric_group_metrics_params_t, params, .flags = 0, .metric_group_handle = group0_handle,
                        .metrics = nullptr, .metric_count = &metric_count);
       REQUIRE(astlGetMetricGroupMetrics(&params) == ASTL_STATUS_BAD_ARGUMENT);
+    }
+
+    {
+      auto metric_count = static_cast<uint32_t>(metrics.size());
+      ASTL_INIT_STRUCT(astl_get_metric_group_metrics_params_t, params, .flags = 0,
+                       .metric_group_handle = wrong_type_group_handle, .metrics = metrics.data(),
+                       .metric_count = &metric_count);
+      REQUIRE(astlGetMetricGroupMetrics(&params) == ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE);
     }
 
     metrics[0].size = sizeof(astl_metric_props_t) - 1;
@@ -584,6 +619,15 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
                        .target_handle = target_handle, .collection_params = collection_params_ptr,
                        .metric_group_handles = metric_group_handles, .metric_group_count = metric_group_count);
       REQUIRE(astlConfigureMetricGroupCollectionOnTarget(&params) == ASTL_STATUS_INVALID_TARGET_HANDLE);
+    }
+    {
+      const auto* target_handle         = mock_target_handle;
+      auto*       collection_params_ptr = &collection_params;
+      uint32_t    metric_group_count    = 1;
+      ASTL_INIT_STRUCT(astl_configure_metric_group_collection_on_target_params_t, params, .flags = 0,
+                       .target_handle = target_handle, .collection_params = collection_params_ptr,
+                       .metric_group_handles = &wrong_type_group_handle, .metric_group_count = metric_group_count);
+      REQUIRE(astlConfigureMetricGroupCollectionOnTarget(&params) == ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE);
     }
   }
 

@@ -1588,9 +1588,51 @@ TEST_CASE("MetricManager group lookup and metric ownership errors", "[MetricMana
   REQUIRE_FALSE(metrics_in_group.has_value());
   REQUIRE(metrics_in_group.error() == ASTL_STATUS_BAD_ARGUMENT);
 
+  const auto* const         wrong_type_group = static_cast<astl_metric_group_handle_t>(&metric);
+  astl_metric_group_props_t group_properties{};
+  group_properties.size = sizeof(astl_metric_group_props_t);
+  REQUIRE(mgr.GetMetricGroupProperties(wrong_type_group, &group_properties) == ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE);
+
+  metrics_in_group = mgr.GetMetricsInGroup(wrong_type_group);
+  REQUIRE_FALSE(metrics_in_group.has_value());
+  REQUIRE(metrics_in_group.error() == ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE);
+
   auto target_or_err = mgr.GetTargetForMetric(&metric);
   REQUIRE_FALSE(target_or_err.has_value());
   REQUIRE(target_or_err.error() == ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("MetricManager rejects stale metric group handles", "[MetricManager][MetricGroup]") {
+  Capabilities                             caps = MakeCaps(CollectorType::SCMI);
+  MetricManager::MetricGroupDescriptionMap group_descriptions{
+      {"thermals", "Metrics commonly used to monitor temperatures."}
+  };
+  MetricManager mgr(caps, std::move(group_descriptions));
+  MockTarget    target;
+  ALLOW_CALL(target, Name()).RETURN("AP0");
+
+  std::vector<std::string> groups{"thermals"};
+  auto                     config = std::make_unique<MetricConfig>(
+      "metricA", "descr", astl_units_t::ASTL_UNITS_CELSIUS, astl_value_type_t::ASTL_VALUE_UINT64,
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+      astl::NullOperationBuilder{}, astl::IdentityFormula{}, ASTL_VALUE_UNKNOWN, std::move(groups));
+  REQUIRE(mgr.RegisterMetric(std::move(config), {&target}) == ASTL_STATUS_SUCCESS);
+  REQUIRE(mgr.GetMetricGroups().size() == 1);
+  const auto* const stale_group = mgr.GetMetricGroups().front();
+
+  astl_metric_group_props_t group_properties{};
+  group_properties.size = sizeof(astl_metric_group_props_t);
+  REQUIRE(mgr.GetMetricGroupProperties(stale_group, &group_properties) == ASTL_STATUS_SUCCESS);
+  auto metrics_in_group = mgr.GetMetricsInGroup(stale_group);
+  REQUIRE(metrics_in_group.has_value());
+  REQUIRE(metrics_in_group->size() == 1);
+
+  mgr.RemoveAllMetrics();
+
+  REQUIRE(mgr.GetMetricGroupProperties(stale_group, &group_properties) == ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE);
+  metrics_in_group = mgr.GetMetricsInGroup(stale_group);
+  REQUIRE_FALSE(metrics_in_group.has_value());
+  REQUIRE(metrics_in_group.error() == ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE);
 }
 
 // ---------------------------------------------------------------------------

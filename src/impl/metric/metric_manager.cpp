@@ -61,6 +61,34 @@ auto EnqueuePauseMarkerSamples(IMetric*                                   lifecy
   }
 }
 
+auto ValidateEventMetricConfig(const EventMetricConfig* event_config) -> astl_status_code {
+  if (event_config == nullptr) {
+    return ASTL_STATUS_SUCCESS;
+  }
+  if (!EventMetricConfig::IsSupportedValueType(event_config->ValueType())) {
+    ASTL_LOG_ERROR("RegisterMetric: event metric '{}' has unsupported output value type {}", event_config->Name(),
+                   static_cast<int>(event_config->ValueType()));
+    return ASTL_STATUS_BAD_CONFIGURATION;
+  }
+  for (const auto& [value, info] : event_config->GetEventValueInfo()) {
+    if (value.ToAstlUnionValue().second != event_config->ValueType()) {
+      ASTL_LOG_ERROR("RegisterMetric: event value '{}' does not match metric '{}' output type", info.name,
+                     event_config->Name());
+      return ASTL_STATUS_BAD_CONFIGURATION;
+    }
+  }
+  if (!event_config->IsLifecycleEvent()) {
+    for (const auto& mapping : event_config->GetEventValueInfo()) {
+      const auto& info = mapping.second;
+      if (IsReservedLifecycleEventName(info.name)) {
+        ASTL_LOG_ERROR("RegisterMetric: event name '{}' is reserved for the ASTL lifecycle metric", info.name);
+        return ASTL_STATUS_BAD_CONFIGURATION;
+      }
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
 auto EnqueueResumeMarkerSamples(IMetric*                                   lifecycle_event_metric,
                                 const MetricManager::OperationToMetricMap& operation_to_metric_map,
                                 const RawSampledData& sample, ProcessingQueue& processing_queue) -> void {
@@ -563,28 +591,8 @@ auto MetricManager::RegisterMetric(std::unique_ptr<MetricConfig>      metric_con
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   const auto* event_config = dynamic_cast<const EventMetricConfig*>(metric_config.get());
-  if (event_config != nullptr && !EventMetricConfig::IsSupportedValueType(event_config->ValueType())) {
-    ASTL_LOG_ERROR("RegisterMetric: event metric '{}' has unsupported output value type {}", event_config->Name(),
-                   static_cast<int>(event_config->ValueType()));
-    return ASTL_STATUS_BAD_CONFIGURATION;
-  }
-  if (event_config != nullptr) {
-    for (const auto& [value, info] : event_config->GetEventValueInfo()) {
-      if (value.ToAstlUnionValue().second != event_config->ValueType()) {
-        ASTL_LOG_ERROR("RegisterMetric: event value '{}' does not match metric '{}' output type", info.name,
-                       event_config->Name());
-        return ASTL_STATUS_BAD_CONFIGURATION;
-      }
-    }
-  }
-  if (event_config != nullptr && !event_config->IsLifecycleEvent()) {
-    for (const auto& mapping : event_config->GetEventValueInfo()) {
-      const auto& info = mapping.second;
-      if (IsReservedLifecycleEventName(info.name)) {
-        ASTL_LOG_ERROR("RegisterMetric: event name '{}' is reserved for the ASTL lifecycle metric", info.name);
-        return ASTL_STATUS_BAD_CONFIGURATION;
-      }
-    }
+  if (const auto status = ValidateEventMetricConfig(event_config); status != ASTL_STATUS_SUCCESS) {
+    return status;
   }
   if (IsMetricIdRegistered(metric_config->Id())) {
     ASTL_LOG_ERROR("RegisterMetric: Duplicate metric id '{}'", metric_config->Id());
@@ -946,11 +954,15 @@ auto MetricManager::GetMetricGroups(const ITarget* target) const
 auto MetricManager::GetMetricGroupProperties(astl_metric_group_handle_t group,
                                              astl_metric_group_props_t* properties) const -> astl_status_code {
   std::lock_guard<std::mutex> lock(_mutex);
-  const auto*                 metric_group_details = static_cast<const MetricGroup*>(group);
-  if (!metric_group_details) {
+  if (group == nullptr) {
     ASTL_LOG_ERROR("GetMetricGroupProperties: Invalid metric group handle {}", group);
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+  if (std::ranges::find(_metric_group_api_handles, group) == _metric_group_api_handles.end()) {
+    ASTL_LOG_ERROR("GetMetricGroupProperties: Unknown metric group handle {}", group);
+    return ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE;
+  }
+  const auto* metric_group_details = MetricGroup::FromApiHandle(group);
   return metric_group_details->ToMetricGroupProperties(properties);
 }
 
@@ -963,6 +975,10 @@ auto MetricManager::GetMetricsInGroup(astl_metric_group_handle_t group) const
   if (group == nullptr) {
     ASTL_LOG_ERROR("GetMetricsInGroup: Invalid metric group handle {}", group);
     return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  }
+  if (std::ranges::find(_metric_group_api_handles, group) == _metric_group_api_handles.end()) {
+    ASTL_LOG_ERROR("GetMetricsInGroup: Unknown metric group handle {}", group);
+    return std::unexpected{ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE};
   }
   const MetricGroup* metric_group = MetricGroup::FromApiHandle(group);
   return std::span<const astl_metric_handle_t>{metric_group->metrics};
