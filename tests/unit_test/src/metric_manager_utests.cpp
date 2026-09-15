@@ -1519,12 +1519,32 @@ TEST_CASE(
   REQUIRE(bmc_expected_groups[0]->metrics.size() == 1);  // NIC only
 }
 
-TEST_CASE("MetricManager handle accessors reject invalid inputs and incomplete handles", "[MetricManager]") {
+TEST_CASE("MetricManager metric handle accessors validate registration before dereferencing", "[MetricManager]") {
   Capabilities  caps = MakeCaps(CollectorType::SCMI);
   MetricManager mgr(caps);
 
   astl_metric_props_t metric_props{};
   REQUIRE(mgr.GetProperties(nullptr, &metric_props) == ASTL_STATUS_BAD_ARGUMENT);
+
+  MockTarget  target;
+  std::string target_name{"AP0"};
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+
+  auto metric_or_err = mgr.GetMetricOnTarget(nullptr, &target);
+  REQUIRE_FALSE(metric_or_err.has_value());
+  REQUIRE(metric_or_err.error() == ASTL_STATUS_BAD_ARGUMENT);
+
+  const auto wrong_type_handle = static_cast<astl_metric_handle_t>(&target);
+  REQUIRE(mgr.GetProperties(wrong_type_handle, &metric_props) == ASTL_STATUS_INVALID_METRIC_HANDLE);
+
+  metric_or_err = mgr.GetMetricOnTarget(wrong_type_handle, &target);
+  REQUIRE_FALSE(metric_or_err.has_value());
+  REQUIRE(metric_or_err.error() == ASTL_STATUS_INVALID_METRIC_HANDLE);
+
+  std::array<const astl_metric_handle_t, 1> wrong_type_metrics{wrong_type_handle};
+  auto                                      operations = mgr.GetRequiredOperations(wrong_type_metrics, &target);
+  REQUIRE_FALSE(operations.has_value());
+  REQUIRE(operations.error() == ASTL_STATUS_INVALID_METRIC_HANDLE);
 
   astl::MetricHandle empty_handle;
   empty_handle.config = std::make_unique<MetricConfig>(
@@ -1532,22 +1552,11 @@ TEST_CASE("MetricManager handle accessors reject invalid inputs and incomplete h
       ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
       astl::NullOperationBuilder{});
   REQUIRE(mgr.GetProperties(static_cast<astl_metric_handle_t>(&empty_handle), &metric_props) ==
-          ASTL_STATUS_INTERNAL_ERROR);
+          ASTL_STATUS_INVALID_METRIC_HANDLE);
 
-  MockTarget  target;
-  std::string target_name{"AP0"};
-  ALLOW_CALL(target, Name()).RETURN(target_name);
-
-  astl::MetricHandle null_metric_handle;
-  null_metric_handle.config = std::make_unique<MetricConfig>(
-      "broken", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
-      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
-      astl::NullOperationBuilder{});
-  null_metric_handle.target_to_metric_map.emplace(&target, std::unique_ptr<IMetric>{});
-
-  auto metric_or_err = mgr.GetMetricOnTarget(static_cast<astl_metric_handle_t>(&null_metric_handle), &target);
+  metric_or_err = mgr.GetMetricOnTarget(static_cast<astl_metric_handle_t>(&empty_handle), &target);
   REQUIRE_FALSE(metric_or_err.has_value());
-  REQUIRE(metric_or_err.error() == ASTL_STATUS_INTERNAL_ERROR);
+  REQUIRE(metric_or_err.error() == ASTL_STATUS_INVALID_METRIC_HANDLE);
 }
 
 TEST_CASE("MetricManager processed-sample sink edge cases", "[MetricManager]") {

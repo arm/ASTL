@@ -544,11 +544,18 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
 auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target) const
     -> std::expected<IMetric*, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
-  const auto*                 metric_details = static_cast<const MetricHandle*>(metric_handle);
-  if (!metric_details) {
+  if (!metric_handle) {
     ASTL_LOG_ERROR("GetMetricOnTarget: Invalid metric handle {}", metric_handle);
     return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
+  const auto* metric_details = static_cast<const MetricHandle*>(metric_handle);
+  if (auto iter = std::ranges::find_if(_metric_handles,
+                                       [metric_details](const auto& handle) { return handle.get() == metric_details; });
+      iter == _metric_handles.end()) {
+    ASTL_LOG_ERROR("GetMetricOnTarget: Metric handle {} is not registered", metric_handle);
+    return std::unexpected{ASTL_STATUS_INVALID_METRIC_HANDLE};
+  }
+
   auto target_iter = metric_details->target_to_metric_map.find(target);
   if (target_iter == metric_details->target_to_metric_map.end()) {
     ASTL_LOG_DEBUG("GetMetricOnTarget: Target '{}' not found for metric handle {}", target->Name(), metric_handle);
@@ -675,11 +682,19 @@ auto MetricManager::GetAvailableMetrics(const ITarget* target) const
 auto MetricManager::GetProperties(astl_metric_handle_t metric, astl_metric_props_t* properties) const
     -> astl_status_code {
   std::lock_guard<std::mutex> lock(_mutex);
-  const auto*                 metric_details = static_cast<const MetricHandle*>(metric);
-  if (!metric_details) {
+  if (!metric) {
     ASTL_LOG_ERROR("GetProperties: Invalid metric handle {}", metric);
     return ASTL_STATUS_BAD_ARGUMENT;
   }
+
+  const auto* metric_details = static_cast<const MetricHandle*>(metric);
+  if (auto iter = std::ranges::find_if(_metric_handles,
+                                       [metric_details](const auto& handle) { return handle.get() == metric_details; });
+      iter == _metric_handles.end()) {
+    ASTL_LOG_ERROR("GetProperties: Metric handle {} is not registered", metric);
+    return ASTL_STATUS_INVALID_METRIC_HANDLE;
+  }
+
   auto first_metric_instance = metric_details->target_to_metric_map.begin();
   if (first_metric_instance == metric_details->target_to_metric_map.end()) {
     ASTL_LOG_ERROR("GetProperties: No metric config found for handle {}", metric);
@@ -695,7 +710,7 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
   std::lock_guard<std::mutex> lock(_mutex);
   /**
    * This method performs the following steps for each given metric:
-   * - Validates each metric is registered (returns BAD_ARGUMENT if not).
+   * - Validates each metric is registered (returns INVALID_METRIC_HANDLE if not).
    * - Ensures each metric uses an known collector (returns UNSUPPORTED_COLLECTOR_TYPE otherwise).
    * - For each given metric, asks for the sequence of operations needed to provide sample
    * - Records the operation_id to metric mapping for processing samples later.
@@ -718,14 +733,14 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
 
   for (const auto* metric_api_handle : metrics) {
     const auto* metric_handle = static_cast<const MetricHandle*>(metric_api_handle);
-    const auto& config        = metric_handle->config;
-
     if (auto iter = std::ranges::find_if(_metric_handles,
                                          [metric_handle](const auto& handle) { return handle.get() == metric_handle; });
         iter == _metric_handles.end()) {
       ASTL_LOG_ERROR("GetRequiredOperations: Metric '{}' not registered", metric_api_handle);
       return std::unexpected{ASTL_STATUS_INVALID_METRIC_HANDLE};
     }
+
+    const auto& config = metric_handle->config;
 
     if (collector_type.has_value() && collector_type != config->GetCollectorType()) {
       ASTL_LOG_ERROR("GetRequiredOperations: Mixed collector types in requested metrics not supported");
