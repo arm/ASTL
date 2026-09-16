@@ -380,7 +380,7 @@ jobs:
           CI=true jf rt upload "${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip" "its.astl/astl/${UPLOADED_ARTIFACT_NAME_01_LIBRARY}" --target-props='retention=${RETENTION_POLICY}'
 
         env:
-          ARTIFACTORY_URL: https://eu-west-1.artifactory.aws.arm.com
+          ARTIFACTORY_URL: https://artifactory.arm.com
           ARTIFACTORY_USER: svc_its_ci@arm.com
           ARTIFACTORY_TOKEN: ${{ secrets.ITS_ARTIFACTORY_ARM_KEY }}
           JFROG_CLI_REPORT_USAGE: "false"
