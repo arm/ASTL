@@ -5,7 +5,25 @@ name: Confidential CI Gate
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - ".github/workflows/confidential-ci.yml"
+      - ".ossmosis.json"
+      - ".gitmodules"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "VERSION.md"
+      - "cmake/**"
+      - "config/**"
+      - "include/**"
+      - "justfile"
+      - "scripts/**"
+      - "src/**"
+      - "tests/functional/**"
+      - "third_party/**"
+      - "tools/mock_scmi/**"
+      - "utils/**"
+      - "vcpkg.json"
 
 permissions:
   checks: write
@@ -20,6 +38,7 @@ jobs:
     name: Dispatch Confidential CI
     if: >-
       github.repository == 'Arm-Debug/ASTL' &&
+      github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 190
@@ -56,6 +75,7 @@ jobs:
     name: Dispatch Confidential CI
     if: >-
       github.repository == 'Arm-Debug/ASTL' &&
+      github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 190

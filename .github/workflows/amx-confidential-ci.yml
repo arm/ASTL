@@ -5,9 +5,22 @@ name: AMX Confidential CI Gate
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize]
-  push:
-    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - ".github/workflows/amx-confidential-ci.yml"
+      - ".ossmosis.json"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "VERSION.md"
+      - "cmake/**"
+      - "config/**"
+      - "include/**"
+      - "justfile"
+      - "scripts/**"
+      - "src/**"
+      - "third_party/**"
+      - "utils/**"
+      - "vcpkg.json"
 
 permissions:
   checks: write
@@ -23,6 +36,7 @@ jobs:
     name: Dispatch AMX CI
     if: >-
       github.repository == 'Arm-Debug/ASTL' &&
+      github.event.pull_request.draft == false &&
       (github.event_name == 'push' ||
       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
@@ -85,6 +99,7 @@ jobs:
     name: Dispatch AMX CI
     if: >-
       github.repository == 'Arm-Debug/ASTL' &&
+      github.event.pull_request.draft == false &&
       github.event_name == 'pull_request_target' &&
       github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
