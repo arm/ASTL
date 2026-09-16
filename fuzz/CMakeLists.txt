@@ -9,6 +9,7 @@ include(Warnings)
 set_project_warnings(astl_fuzz_fixtures)
 
 add_executable(astl_wrapper_validation_fuzzer astl_wrapper_validation_fuzzer.cpp)
+add_executable(astl_discovery_fuzzer astl_discovery_fuzzer.cpp)
 
 find_package(spdlog CONFIG REQUIRED)
 
@@ -21,3 +22,13 @@ target_link_options(
   PRIVATE -fno-omit-frame-pointer -fno-sanitize-recover=undefined -fsanitize=fuzzer,address,undefined)
 
 set_project_warnings(astl_wrapper_validation_fuzzer)
+
+target_compile_definitions(astl_discovery_fuzzer PRIVATE ASTL_BUILD)
+target_link_libraries(
+  astl_discovery_fuzzer
+  PRIVATE Astl::astl_static astl_fuzz_fixtures astl_fuzz_instrumentation spdlog::spdlog_header_only)
+target_link_options(
+  astl_discovery_fuzzer
+  PRIVATE -fno-omit-frame-pointer -fno-sanitize-recover=undefined -fsanitize=fuzzer,address,undefined)
+
+set_project_warnings(astl_discovery_fuzzer)

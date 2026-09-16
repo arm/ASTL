@@ -23,3 +23,33 @@ hardware boundaries are replaced:
 The procfs fixture deliberately contains only `stat`, `meminfo`, `loadavg`, and
 `uptime`. It uses regular files, needs no mount or privileges, and makes the tree
 read-only after construction and after every reset.
+
+## Discovery target
+
+`astl_discovery_fuzzer` generates 1–32 bounded public-API discovery operations.
+Each input selects either the minimal procfs profile or the mixed procfs/SCMI
+profile. The target rebuilds ASTL from the selected fixture at the start of each
+iteration, discovers handles by index, and checks count/getter capacity contracts
+and deterministic properties. Configuration, collection, samples, processing,
+and persistence are intentionally left to their dedicated targets.
+
+Build and run a bounded mixed-fixture session with the checked-in seeds:
+
+```sh
+cmake -S . --preset fuzz
+cmake --build --preset fuzz --target astl_discovery_fuzzer
+mkdir -p build/fuzz/artifacts/discovery
+./fuzz/run_astl_discovery_fuzzer.sh \
+  fuzz/corpus/astl_discovery_fuzzer \
+  -max_total_time=30 \
+  -timeout=2 \
+  -max_len=4096 \
+  -artifact_prefix=build/fuzz/artifacts/discovery/
+```
+
+Replay one seed or saved artifact without mutation:
+
+```sh
+./fuzz/run_astl_discovery_fuzzer.sh \
+  fuzz/corpus/astl_discovery_fuzzer/mixed-profile -runs=1
+```
