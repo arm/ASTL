@@ -1534,7 +1534,7 @@ TEST_CASE("MetricManager metric handle accessors validate registration before de
   REQUIRE_FALSE(metric_or_err.has_value());
   REQUIRE(metric_or_err.error() == ASTL_STATUS_BAD_ARGUMENT);
 
-  const auto wrong_type_handle = static_cast<astl_metric_handle_t>(&target);
+  const auto* const wrong_type_handle = static_cast<astl_metric_handle_t>(&target);
   REQUIRE(mgr.GetProperties(wrong_type_handle, &metric_props) == ASTL_STATUS_INVALID_METRIC_HANDLE);
 
   metric_or_err = mgr.GetMetricOnTarget(wrong_type_handle, &target);

@@ -183,6 +183,8 @@ If needed, use these environment variables to choose or redirect the SCMI backen
 - `ASTL_SCMI_IOCTL_DEV_ROOT`: ioctl device root. Defaults to `/dev/scmi`.
 - `ASTL_SCMI_SYSFS_TELEMETRY_ROOT`: legacy sysfs telemetry root. Defaults to
   `/sys/fs/arm_telemetry`.
+- `ASTL_PROCFS_ROOT`: procfs root used for topology discovery, metric discovery,
+  and collection. Defaults to `/proc`.
 
 Some developers might have a reason to use modified platform definition and metrics config files.
 You can use ASTL_CONFIG_DIR for this.
@@ -196,6 +198,8 @@ export ASTL_SCMI_INTERFACE="sysfs"
 export ASTL_SCMI_IOCTL_DEV_ROOT="/path/to/scmi-devices"
 # optional - if your SCMI sysfs is not in the expected mount point
 export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="/sys/fs/arm_telemetry"
+# optional - use a synthetic procfs tree (for example in deterministic tests)
+export ASTL_PROCFS_ROOT="/path/to/procfs-fixture"
 # optional - if you're hacking around with metric definitions
 export ASTL_CONFIG_DIR="/path/to/my_astl/config"
 ```

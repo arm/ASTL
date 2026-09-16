@@ -50,7 +50,8 @@ set(UNIT_TEST_SRCS
     lifecycle_events_utests.cpp
     ${CMAKE_SOURCE_DIR}/tests/test_utilities.cpp)
 if(ASTL_INCLUDE_PROCFS)
-  list(APPEND UNIT_TEST_SRCS procfs_collector_utests.cpp procfs_metric_builder_utests.cpp)
+  list(APPEND UNIT_TEST_SRCS procfs_collector_utests.cpp procfs_fixture_utests.cpp procfs_metric_builder_utests.cpp
+       ${CMAKE_SOURCE_DIR}/fuzz/fixtures/minimal_procfs_fixture.cpp)
 endif()
 if(ASTL_HAVE_LIBSENSORS)
   find_library(SENSORS_LIB sensors)
@@ -69,7 +70,7 @@ if(MSVC)
   # Suppress warning from third-party trompeloeil headers in test-only code paths.
   target_compile_options(unit_test PRIVATE /wd4172)
 endif()
-target_include_directories(unit_test PRIVATE "${CMAKE_BINARY_DIR}/src/impl/gen"
+target_include_directories(unit_test PRIVATE "${CMAKE_BINARY_DIR}/src/impl/gen" "${CMAKE_SOURCE_DIR}/fuzz"
                                              "${CMAKE_SOURCE_DIR}/tests/unit_test/include")
 # astl.h and others should come as include paths along with the taret_link_libraries joining Astl::astl_static
 target_link_libraries(

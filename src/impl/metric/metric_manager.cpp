@@ -548,6 +548,7 @@ auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const 
     ASTL_LOG_ERROR("GetMetricOnTarget: Invalid metric handle {}", metric_handle);
     return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
+
   const auto* metric_details = static_cast<const MetricHandle*>(metric_handle);
   if (auto iter = std::ranges::find_if(_metric_handles,
                                        [metric_details](const auto& handle) { return handle.get() == metric_details; });

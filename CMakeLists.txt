@@ -335,14 +335,25 @@ if(ENABLE_VALGRIND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 if(UNIX AND NOT APPLE)
-  if(ASTL_BUILD_TOOLS)
+  if(ASTL_BUILD_TOOLS OR ASTL_BUILD_FUZZING)
     astl_add_optional_subdirectory(tools/mock_scmi mock_scmi)
+  else()
+    message(STATUS "Skipping MockScmi because ASTL_BUILD_TOOLS and ASTL_BUILD_FUZZING are disabled")
+  endif()
+  if(ASTL_BUILD_TOOLS)
     astl_add_optional_subdirectory(tools/scmi_bridge scmi_bridge)
   else()
-    message(STATUS "Skipping MockScmi and scmi_bridge because ASTL_BUILD_TOOLS is disabled")
+    message(STATUS "Skipping scmi_bridge because ASTL_BUILD_TOOLS is disabled")
   endif()
 else()
   message(STATUS "Skipping MockScmi and scmi_bridge on this platform")
+endif()
+
+if(ASTL_BUILD_FUZZING AND TARGET MockScmi)
+  add_dependencies(astl_fuzz_fixtures MockScmi)
+  target_compile_definitions(
+    astl_fuzz_fixtures PUBLIC ASTL_FUZZ_MOCK_SCMI_BINARY="$<TARGET_FILE:MockScmi>"
+                              ASTL_FUZZ_MOCK_SCMI_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/tools/mock_scmi/config/tlm.json")
 endif()
 
 # define a CLI application to use the library

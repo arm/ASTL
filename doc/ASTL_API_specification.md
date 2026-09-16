@@ -930,7 +930,7 @@ That means:
 
 For live discovery, ASTL must find its configuration directory.
 
-SCMI backend paths are resolved independently from the configuration directory:
+Backend paths are resolved independently from the configuration directory:
 
 - `ASTL_COLLECTORS`: comma-separated, case-insensitive allowlist for live
   collector discovery. Supported values are `scmi`, `libsensors`, and `procfs`.
@@ -943,6 +943,8 @@ SCMI backend paths are resolved independently from the configuration directory:
   to `/dev/scmi`.
 - `ASTL_SCMI_SYSFS_TELEMETRY_ROOT`: legacy sysfs telemetry root. Defaults to
   `/sys/fs/arm_telemetry`.
+- `ASTL_PROCFS_ROOT`: procfs root used for topology discovery, metric discovery,
+  and collection. Defaults to `/proc`.
 
 Current search order:
 

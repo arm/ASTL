@@ -9,6 +9,7 @@
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
 #include "astl_utils.hpp"
+#include "common/procfs_utils.hpp"
 #include "common/scmi/scmi_constants.hpp"
 #include "config/astl_configuration.hpp"
 
@@ -211,4 +212,30 @@ TEST_CASE("AstlConfiguration::CreateConfiguration honors ASTL_SCMI_IOCTL_DEV_ROO
 
   REQUIRE(configuration_result.has_value());
   REQUIRE(configuration_result->scmi_ioctl_device_root_path == ioctl_device_dir);
+}
+
+TEST_CASE("AstlConfiguration::CreateConfiguration honors ASTL_PROCFS_ROOT override", "[AstlConfiguration]") {
+  const fs::path procfs_root = fs::temp_directory_path() / "astl_fake_procfs";
+  TempFileGuard  procfs_guard(procfs_root);
+
+  auto configuration_result =
+      CreateConfigurationWithRootOverride("astl_config_procfs_override", astl::EnvVar::ASTL_PROCFS_ROOT, procfs_root);
+
+  REQUIRE(configuration_result.has_value());
+  REQUIRE(configuration_result->procfs_root_path == procfs_root);
+}
+
+TEST_CASE("AstlConfiguration::CreateConfiguration uses default procfs root when override is unset",
+          "[AstlConfiguration]") {
+  const fs::path config_dir = fs::temp_directory_path() / "astl_config_default_procfs";
+  TempFileGuard  config_guard(config_dir);
+  CreateConfigTree(config_dir);
+
+  EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, config_dir.string());
+  EnvVarGuard procfs_guard_var(astl::EnvVar::ASTL_PROCFS_ROOT, "");
+
+  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+
+  REQUIRE(configuration_result.has_value());
+  REQUIRE(configuration_result->procfs_root_path == astl::procfs::kDefaultProcfsRootPath);
 }

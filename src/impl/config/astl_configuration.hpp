@@ -48,6 +48,9 @@ struct AstlConfiguration {
    */
   std::filesystem::path scmi_ioctl_device_root_path;
 
+  /** @brief Path to procfs. Defaults to /proc, but can be overridden with env var ASTL_PROCFS_ROOT. */
+  std::filesystem::path procfs_root_path;
+
   /** @brief Path to the directory containing ASTL metric definitions and platform-specific SCMI specifications
    * initialized from ASTL_CONFIG_DIR
    */
@@ -83,11 +86,12 @@ struct AstlConfiguration {
    *
    * @param scmi_sysfs_path Root of the SCMI sysfs telemetry tree.
    * @param scmi_ioctl_device_root Root containing SCMI ioctl telemetry devices.
+   * @param procfs_root_path Root of the procfs telemetry tree.
    * @param config_dir_path Root of ASTL's runtime configuration files.
    * @param load_file_path Optional ASTL session file to load.
    */
   AstlConfiguration(std::filesystem::path const& scmi_sysfs_path, std::filesystem::path const& scmi_ioctl_device_root,
-                    std::filesystem::path const&                config_dir_path,
+                    std::filesystem::path const& procfs_root_path, std::filesystem::path const& config_dir_path,
                     std::optional<std::filesystem::path> const& load_file_path = std::nullopt);
 };
 

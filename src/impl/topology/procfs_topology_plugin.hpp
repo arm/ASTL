@@ -77,7 +77,7 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
 
 inline auto ScanForTargets(const AstlConfiguration& configuration)
     -> std::expected<std::vector<std::unique_ptr<ITarget>>, astl_status_code> {
-  FileInterface procfs_file_interface{procfs::kDefaultProcfsRootPath};
+  FileInterface procfs_file_interface{configuration.procfs_root_path};
   return detail::ScanForTargetsOnFileInterface(configuration, std::move(procfs_file_interface));
 }
 

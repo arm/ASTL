@@ -74,7 +74,7 @@
         "ASTL_BUILD_TESTING": "OFF",
         "ASTL_BUILD_TOOLS": "OFF",
         "ASTL_LIBSENSORS": "OFF",
-        "ASTL_PROCFS": "OFF",
+        "ASTL_PROCFS": "ON",
         "BUILD_TESTING": "OFF",
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++",
