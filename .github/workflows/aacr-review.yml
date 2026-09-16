@@ -42,6 +42,7 @@ on:
 
 permissions:
   actions: read
+  checks: read
   contents: read
   pull-requests: write
 
