@@ -11,6 +11,14 @@ set_project_warnings(astl_fuzz_fixtures)
 add_executable(astl_wrapper_validation_fuzzer astl_wrapper_validation_fuzzer.cpp)
 add_executable(astl_discovery_fuzzer astl_discovery_fuzzer.cpp)
 
+set(ASTL_FUZZ_DISCOVERY_PROFILE
+    "input"
+    CACHE STRING "Default deterministic fixture profile for the discovery fuzzer")
+set_property(CACHE ASTL_FUZZ_DISCOVERY_PROFILE PROPERTY STRINGS input procfs procfs-scmi)
+if(NOT ASTL_FUZZ_DISCOVERY_PROFILE MATCHES "^(input|procfs|procfs-scmi)$")
+  message(FATAL_ERROR "ASTL_FUZZ_DISCOVERY_PROFILE must be input, procfs, or procfs-scmi")
+endif()
+
 find_package(spdlog CONFIG REQUIRED)
 
 target_compile_definitions(astl_wrapper_validation_fuzzer PRIVATE ASTL_BUILD)
@@ -24,6 +32,7 @@ target_link_options(
 set_project_warnings(astl_wrapper_validation_fuzzer)
 
 target_compile_definitions(astl_discovery_fuzzer PRIVATE ASTL_BUILD)
+target_compile_definitions(astl_discovery_fuzzer PRIVATE ASTL_FUZZ_DISCOVERY_PROFILE="${ASTL_FUZZ_DISCOVERY_PROFILE}")
 target_link_libraries(
   astl_discovery_fuzzer
   PRIVATE Astl::astl_static astl_fuzz_fixtures astl_fuzz_instrumentation spdlog::spdlog_header_only)

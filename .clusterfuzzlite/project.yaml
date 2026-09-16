@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+language: c++
+base_os_version: ubuntu-24-04
+sanitizers:
+  - address
+architectures:
+  - x86_64
+main_repo: https://github.com/Arm-Debug/ASTL.git

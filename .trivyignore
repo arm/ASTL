@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# The upstream OSS-Fuzz builder is a short-lived build container that writes to
+# root-owned mounted output directories; it is not a deployed service.
+AVD-DS-0002
+AVD-DS-0026

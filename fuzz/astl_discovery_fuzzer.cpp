@@ -8,9 +8,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <source_location>
 #include <span>
 #include <string>
 #include <string_view>
@@ -23,6 +25,12 @@
 #include "orchestrator/orchestrator.hpp"
 
 namespace {
+
+#ifdef ASTL_FUZZ_DISCOVERY_PROFILE
+constexpr std::string_view kDiscoveryProfile = ASTL_FUZZ_DISCOVERY_PROFILE;
+#else
+constexpr std::string_view kDiscoveryProfile = "input";
+#endif
 
 constexpr size_t   kMaxOperations            = 32;
 constexpr size_t   kMaxItems                 = 256;
@@ -68,7 +76,20 @@ class ByteCursor {
   size_t                   offset_{0};
 };
 
-[[noreturn]] auto Fail() -> void { __builtin_trap(); }
+[[noreturn]] auto Fail(std::source_location location = std::source_location::current()) -> void {
+  const std::string message = "ASTL discovery fuzzer invariant failed at " + std::string{location.file_name()} + ':' +
+                              std::to_string(location.line()) + '\n';
+  const auto result = ::write(STDERR_FILENO, message.data(), message.size());
+  static_cast<void>(result);
+  __builtin_trap();
+}
+
+[[noreturn]] auto FailTopology(const char* message) -> void {
+  const std::string diagnostic = "ASTL discovery fuzzer topology invariant failed: " + std::string{message} + '\n';
+  const auto        result     = ::write(STDERR_FILENO, diagnostic.data(), diagnostic.size());
+  static_cast<void>(result);
+  __builtin_trap();
+}
 
 auto CheckStatus(astl_status_code status) -> void {
   if (status < ASTL_STATUS_SUCCESS || status > ASTL_STATUS_INTERNAL_ERROR) {
@@ -376,11 +397,11 @@ auto CaptureTopology() -> TopologySnapshot {
 template <typename T, typename Compare>
 auto CheckElements(const std::vector<T>& actual, const std::vector<T>& expected, Compare compare) -> void {
   if (actual.size() != expected.size()) {
-    Fail();
+    FailTopology("element count changed");
   }
   for (size_t index = 0; index < actual.size(); ++index) {
     if (!compare(actual[index], expected[index])) {
-      Fail();
+      FailTopology("element properties changed");
     }
   }
 }
@@ -403,19 +424,19 @@ auto SamePlatform(const astl_platform_props_t& left, const astl_platform_props_t
 
 auto CheckTopology(const TopologySnapshot& actual, const TopologySnapshot& expected) -> void {
   if (!SamePlatform(actual.system_info, expected.system_info) || actual.targets.size() != expected.targets.size()) {
-    Fail();
+    FailTopology("platform properties or target count changed");
   }
   for (size_t index = 0; index < actual.targets.size(); ++index) {
     const auto& left  = actual.targets[index];
     const auto& right = expected.targets[index];
     if (!SameTarget(left.properties, right.properties)) {
-      Fail();
+      FailTopology("target properties changed");
     }
     CheckElements(left.counters, right.counters, SameCounter);
     CheckElements(left.metrics, right.metrics, SameMetric);
     CheckElements(left.groups, right.groups, SameGroup);
     if (left.states.size() != right.states.size() || left.group_metrics.size() != right.group_metrics.size()) {
-      Fail();
+      FailTopology("metric state or target group count changed");
     }
     for (size_t metric = 0; metric < left.states.size(); ++metric) {
       CheckElements(left.states[metric], right.states[metric], SameState);
@@ -426,7 +447,7 @@ auto CheckTopology(const TopologySnapshot& actual, const TopologySnapshot& expec
   }
   CheckElements(actual.groups, expected.groups, SameGroup);
   if (actual.group_metrics.size() != expected.group_metrics.size()) {
-    Fail();
+    FailTopology("global group count changed");
   }
   for (size_t group = 0; group < actual.group_metrics.size(); ++group) {
     CheckElements(actual.group_metrics[group], expected.group_metrics[group], SameMetric);
@@ -823,11 +844,15 @@ class DiscoveryFixture {
  public:
   DiscoveryFixture()
       : procfs_{std::filesystem::temp_directory_path() / ("astl-discovery-fuzzer-" + std::to_string(::getpid()))} {
+    std::error_code error;
+    const auto      executable = std::filesystem::read_symlink("/proc/self/exe", error);
+    if (error) {
+      Fail();
+    }
+    Require(astl::SetEnvVar(astl::EnvVar::ASTL_CONFIG_DIR, (executable.parent_path() / "config").string()));
     Require(astl::SetEnvVar(astl::EnvVar::ASTL_PROCFS_ROOT, procfs_.RootPath().string()));
     Require(astl::SetEnvVar(astl::EnvVar::ASTL_SCMI_INTERFACE, "sysfs"));
     Require(astl::SetEnvVar(astl::EnvVar::ASTL_LOG_CONSOLE, "off"));
-    minimal_ = BuildProfile("procfs");
-    mixed_   = BuildProfile("procfs,scmi");
   }
 
   ~DiscoveryFixture() { astl::Orchestrator::ResetInstance(); }
@@ -835,6 +860,9 @@ class DiscoveryFixture {
   void BeginIteration(bool mixed) {
     procfs_.Reset();
     auto& selected = mixed ? mixed_ : minimal_;
+    if (!selected) {
+      selected = BuildProfile(mixed ? "procfs,scmi" : "procfs");
+    }
     if (!selected || astl::Orchestrator::SwapInstanceForTest(std::move(selected))) {
       Fail();
     }
@@ -880,6 +908,21 @@ class DiscoveryFixture {
 auto GetFixture() -> DiscoveryFixture& {
   static DiscoveryFixture fixture;
   return fixture;
+}
+
+auto SelectMixedProfile(ByteCursor& input) -> bool {
+  const char*            environment_profile = std::getenv("ASTL_FUZZ_FIXTURE_PROFILE");
+  const std::string_view profile             = environment_profile == nullptr ? kDiscoveryProfile : environment_profile;
+  if (profile == "input") {
+    return input.Take() % 2U != 0U;
+  }
+  if (profile == "procfs") {
+    return false;
+  }
+  if (profile == "procfs-scmi") {
+    return true;
+  }
+  Fail();
 }
 
 class IterationFixture {
@@ -934,8 +977,14 @@ auto RunOperation(Operation operation, ByteCursor& input, const TopologySnapshot
 }  // namespace
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+  // libFuzzer probes the empty input before loading the seed corpus. It carries no profile or operation bytes, so it
+  // is not a meaningful discovery scenario.
+  if (size == 0U) {
+    return 0;
+  }
+
   ByteCursor       input{data, size};
-  IterationFixture fixture{input.Take() % 2U != 0U};
+  IterationFixture fixture{SelectMixedProfile(input)};
   const auto       topology = CaptureTopology();
 
   const auto operation_count = static_cast<size_t>(input.Take() % kMaxOperations) + 1U;

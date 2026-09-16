@@ -1,0 +1,92 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: ClusterFuzzLite PR fuzzing
+
+on:
+  pull_request:
+    paths:
+      - ".clusterfuzzlite/**"
+      - ".dockerignore"
+      - ".github/workflows/clusterfuzzlite-pr.yml"
+      - ".gitignore"
+      - ".trivyignore"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "cmake/**"
+      - "config/**"
+      - "fuzz/**"
+      - "include/**"
+      - "justfile"
+      - "scripts/**"
+      - "src/**"
+      - "tools/mock_scmi/**"
+      - "utils/**"
+      - "vcpkg.json"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: Public API targets (canonical profiles)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Record run metadata
+        run: |
+          mkdir -p "${RUNNER_TEMP}/astl-fuzz-results"
+          {
+            echo "astl_wrapper_validation_fuzzer=synthetic-wrapper"
+            echo "astl_discovery_fuzzer=procfs"
+            echo "astl_revision=${GITHUB_SHA}"
+            echo "builder=gcr.io/oss-fuzz-base/base-builder:v1"
+            echo "sanitizers=address,undefined"
+          } >"${RUNNER_TEMP}/astl-fuzz-results/run-metadata.txt"
+
+      - name: Build fuzz target
+        uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+        with:
+          # The OSS-Fuzz bad-build check expects exactly the sanitizer named
+          # below, while ASTL intentionally combines ASan and UBSan.
+          bad-build-check: false
+          language: c++
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          keep-unaffected-fuzz-targets: true
+          sanitizer: address
+
+      - name: Run fuzz target
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:ubuntu-24-04-v1
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=1:symbolize=1
+          CFL_PLATFORM: github
+          FUZZ_SECONDS: 120
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LANGUAGE: c++
+          LOW_DISK_SPACE: "True"
+          MINIMIZE_CRASHES: "True"
+          MODE: code-change
+          OUTPUT_SARIF: "False"
+          REPORT_OOMS: "True"
+          REPORT_TIMEOUTS: "True"
+          SANITIZER: address
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+
+      - name: Upload run metadata
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: clusterfuzzlite-target-profiles-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/astl-fuzz-results/**
+            build-out/compiler-version.txt
+          retention-days: 10

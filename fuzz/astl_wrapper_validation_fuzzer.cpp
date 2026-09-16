@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <span>
 #include <unordered_map>
@@ -14,7 +15,6 @@
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
-#include "astl/astl_test_hooks.h"
 #include "astl/astl_version.h"
 #include "collector/collector_manager.hpp"
 #include "common/capabilities.hpp"
@@ -150,6 +150,13 @@ auto ChooseTimestamps(ByteCursor& input) -> std::pair<uint64_t, uint64_t> {
   }
 }
 
+[[noreturn]] auto FailInvariant(const char* message) -> void {
+  std::fputs("ASTL wrapper fuzzer invariant failed: ", stderr);
+  std::fputs(message, stderr);
+  std::fputc('\n', stderr);
+  __builtin_trap();
+}
+
 auto CheckPublicStatus(astl_status_code status) -> void {
   const auto value = static_cast<int>(status);
   if (value < static_cast<int>(ASTL_STATUS_SUCCESS) || value > static_cast<int>(ASTL_STATUS_INTERNAL_ERROR)) {
@@ -191,23 +198,10 @@ auto MakeOrchestrator(bool include_target) -> std::unique_ptr<astl::Orchestrator
 
 class ScopedOrchestratorInjection {
  public:
-  ScopedOrchestratorInjection() {
-    previous_process_orchestrator_ = astl::Orchestrator::SwapInstanceForTest(MakeOrchestrator(false));
-
-    auto  injected_orchestrator = MakeOrchestrator(true);
-    auto* injected_raw          = injected_orchestrator.get();
-    if (astlInjectTestOrchestrator(injected_raw, &baseline_orchestrator_) != ASTL_STATUS_SUCCESS) {
-      __builtin_trap();
-    }
-    (void)injected_orchestrator.release();
-  }
+  ScopedOrchestratorInjection()
+      : previous_process_orchestrator_{astl::Orchestrator::SwapInstanceForTest(MakeOrchestrator(true))} {}
 
   ~ScopedOrchestratorInjection() {
-    astl_test_orchestrator_t injected_handle = nullptr;
-    if (astlInjectTestOrchestrator(baseline_orchestrator_, &injected_handle) != ASTL_STATUS_SUCCESS) {
-      __builtin_trap();
-    }
-    std::unique_ptr<astl::Orchestrator> injected_orchestrator{static_cast<astl::Orchestrator*>(injected_handle)};
     (void)astl::Orchestrator::SwapInstanceForTest(std::move(previous_process_orchestrator_));
   }
 
@@ -218,7 +212,6 @@ class ScopedOrchestratorInjection {
 
  private:
   std::unique_ptr<astl::Orchestrator> previous_process_orchestrator_;
-  astl_test_orchestrator_t            baseline_orchestrator_{nullptr};
 };
 
 auto GetStableTargetHandle() -> astl_target_handle_t {
@@ -226,7 +219,7 @@ auto GetStableTargetHandle() -> astl_target_handle_t {
   astl_get_target_count_params_t count_params{
       .size = sizeof(astl_get_target_count_params_t), .flags = 0, .target_count = &target_count};
   if (astlGetTargetCount(&count_params) != ASTL_STATUS_SUCCESS || target_count != 1U) {
-    __builtin_trap();
+    FailInvariant("deterministic target count is not one");
   }
 
   std::array<astl_target_props_t, 1> targets{};
@@ -235,7 +228,7 @@ auto GetStableTargetHandle() -> astl_target_handle_t {
       .size = sizeof(astl_get_targets_params_t), .flags = 0, .targets = targets.data(), .target_count = &target_count};
   if (astlGetTargets(&targets_params) != ASTL_STATUS_SUCCESS || target_count != 1U ||
       targets.front().handle == nullptr) {
-    __builtin_trap();
+    FailInvariant("deterministic target properties are unavailable");
   }
   return targets.front().handle;
 }
@@ -243,7 +236,7 @@ auto GetStableTargetHandle() -> astl_target_handle_t {
 auto FuzzStatusAndVersion(ByteCursor& input) -> void {
   const auto status = static_cast<astl_status_code>(static_cast<int8_t>(input.Take()));
   if (astlStatusString(status) == nullptr || astlGetLastStatusString() == nullptr || astlVersionString() == nullptr) {
-    __builtin_trap();
+    FailInvariant("status or version string is null");
   }
   (void)astlVersion();
 }
@@ -738,6 +731,12 @@ auto FuzzCrop(ByteCursor& input, astl_target_handle_t stable_target) -> void {
 }  // namespace
 
 extern "C" auto LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) -> int {
+  // libFuzzer always probes the empty input before loading the seed corpus. It does not encode an API operation, so
+  // leave it as a no-op instead of synthesizing an all-zero STATUS_AND_VERSION operation through ByteCursor.
+  if (size == 0U) {
+    return 0;
+  }
+
   ByteCursor input{data, size};
   // The fixture is process-lifetime and all mutating operations are constrained to fail validation. Reconstructing
   // it for every input would repeatedly intern identical target metadata and obscure the API coverage signal.

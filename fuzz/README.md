@@ -51,5 +51,19 @@ Replay one seed or saved artifact without mutation:
 
 ```sh
 ./fuzz/run_astl_discovery_fuzzer.sh \
-  fuzz/corpus/astl_discovery_fuzzer/mixed-profile -runs=1
+  fuzz/corpus/astl_discovery_fuzzer/repeat-discovery -runs=1
 ```
+
+Set `ASTL_FUZZ_FIXTURE_PROFILE` to `procfs` or `procfs-scmi` to pin the
+discovery target to one deterministic fixture profile. The default, `input`,
+keeps both profiles reachable from the input byte stream. Pull-request CI uses
+the canonical `procfs` profile; the wrapper-validation target uses its internal
+`synthetic-wrapper` profile.
+
+Pull requests that change fuzz-relevant code run each target for up to 60
+seconds through ClusterFuzzLite on Ubuntu x86_64. The checked-in seed corpus is
+used when no evolved corpus is available, inputs are capped at 4096 bytes, and
+each input has a 10-second timeout. Crash inputs are minimized and uploaded by
+ClusterFuzzLite; a companion artifact records the target, profile, compiler,
+and ASTL revision. The job does not require corpus-storage secrets, including
+for pull requests from forks.

@@ -8,8 +8,9 @@ cmake_minimum_required(VERSION 3.0...4.0) # setting this is required
 
 # enable CMake's built-in package management, which integrates with vcpkg
 include(FetchContent)
+option(ASTL_USE_VCPKG "Use the repository vcpkg manifest to provide dependencies" ON)
 # use vcpkg to manage dependencies
-if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+if(ASTL_USE_VCPKG AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
   # Configure vcpkg bootstrap
   set(VCPKG_DIR "${CMAKE_SOURCE_DIR}/external/vcpkg")
   set(VCPKG_BOOTSTRAP_SH "${CMAKE_SOURCE_DIR}/scripts/bootstrap-vcpkg.sh")
