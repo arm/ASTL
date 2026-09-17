@@ -178,7 +178,7 @@ runs:
         check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/uninstall.sh"
 
         check_path_absent "${OOBT_STAGING_PATH_01_LIBRARY}/bin/atx"
-        check_path_absent "${OOBT_STAGING_PATH_01_LIBRARY}/bin/config/atx/metric_definitions.json"
+        check_path_absent "${OOBT_STAGING_PATH_01_LIBRARY}/bin/config/atx"
 
     - name: 🧪 Test Compilation against (.h) headers
       shell: bash

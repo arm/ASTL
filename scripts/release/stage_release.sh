@@ -331,9 +331,9 @@ stage_everything() {
 	if [[ -x ${build_output_dir}/bin/MockScmi ]]; then
 		install -m 0755 "${build_output_dir}/bin/MockScmi" "${staging_dir}/bin/MockScmi"
 	fi
-	if [[ -f ${REPO_ROOT}/tools/ATX/config/metric_definitions.json ]]; then
-		mkdir -p "${staging_dir}/bin/config/atx"
-		install -m 0644 "${REPO_ROOT}/tools/ATX/config/metric_definitions.json" "${staging_dir}/bin/config/atx/"
+	if [[ -d ${REPO_ROOT}/tools/ATX/config ]]; then
+		mkdir -p "${staging_dir}/bin/config/atx/"
+		cp -a "${REPO_ROOT}/tools/ATX/config/." "${staging_dir}/bin/config/atx/"
 	fi
 	if [[ -d ${REPO_ROOT}/samples/sample_test ]]; then
 		mkdir -p "${staging_dir}/cmake" "${staging_dir}/samples"
@@ -379,9 +379,9 @@ stage_atx() {
 	install -m 0755 "${build_output_dir}/bin/atx" "${staging_dir}/bin/atx"
 	copy_single_match "${build_output_dir}/lib/libastl-*.so" "${staging_dir}/lib"
 	cp -aL "${published_config}" "${staging_dir}/lib/config"
-	if [[ -f ${REPO_ROOT}/tools/ATX/config/metric_definitions.json ]]; then
-		mkdir -p "${staging_dir}/bin/config/atx"
-		install -m 0644 "${REPO_ROOT}/tools/ATX/config/metric_definitions.json" "${staging_dir}/bin/config/atx/"
+	if [[ -d ${REPO_ROOT}/tools/ATX/config ]]; then
+		mkdir -p "${staging_dir}/bin/config/atx/"
+		cp -a "${REPO_ROOT}/tools/ATX/config/." "${staging_dir}/bin/config/atx/"
 	fi
 	copy_pdfs "${staging_dir}" atx
 	printf '%s\n' "${version}" >"${staging_dir}/VERSION.md"
