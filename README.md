@@ -547,7 +547,6 @@ Key rules:
 > [!CAUTION]
 > The crop operation is **irreversible**. Once samples are discarded they cannot be recovered.
 
-- Both `astlCropSamples` and `astlCropSamplesOnTarget` currently return `ASTL_STATUS_NOT_IMPLEMENTED`; the API surface is declared and the structs are stable, but the implementation is pending.
 - Collection must be **stopped** before cropping; calling while a target is STARTED or PAUSED will return `ASTL_STATUS_COLLECTION_NOT_STOPPED` once implemented.
 - A window with `start_ts = 0` has no lower bound; `end_ts = 0` has no upper bound.
 - `window_count` must be ≥ 1.
