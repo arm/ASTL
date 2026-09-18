@@ -466,6 +466,35 @@ TEST_CASE("Formatted logger creates file only after an emitted message", "[logge
   std::filesystem::remove(logfile_name);
 }
 
+TEST_CASE("Default logger does not create a log file unless logging is enabled", "[logger_disabled_by_default]") {
+  const std::string logfile_name = "disabled_default_logger_test.log";
+  EnvVarGuard       modified_logname_var(astl::EnvVar::ASTL_LOG_NAME, logfile_name);
+  EnvVarGuard       modified_loglevel_var(astl::EnvVar::ASTL_LOG_LEVEL, "");
+  EnvVarGuard       modified_logconsole_var(astl::EnvVar::ASTL_LOG_CONSOLE, "0");
+
+  std::filesystem::remove(logfile_name);
+
+  astl::Logger logger(astl::kDefaultLogLevel, astl::kDefaultLogConsole, astl::kDefaultFormatting, astl::kDefaultLogName,
+                      "ASTL");
+  logger.LogCritical("Logging is not enabled");
+
+  REQUIRE_FALSE(std::filesystem::exists(logfile_name));
+}
+
+TEST_CASE("ASTL_LOG_LEVEL OFF does not create a log file", "[logger_disabled_by_environment]") {
+  const std::string logfile_name = "disabled_environment_logger_test.log";
+  EnvVarGuard       modified_logname_var(astl::EnvVar::ASTL_LOG_NAME, logfile_name);
+  EnvVarGuard       modified_loglevel_var(astl::EnvVar::ASTL_LOG_LEVEL, "OFF");
+  EnvVarGuard       modified_logconsole_var(astl::EnvVar::ASTL_LOG_CONSOLE, "0");
+
+  std::filesystem::remove(logfile_name);
+
+  astl::Logger logger(astl::LogLevel::Warning, false, true, astl::kDefaultLogName, "ASTL");
+  logger.LogCritical("Logging is explicitly disabled");
+
+  REQUIRE_FALSE(std::filesystem::exists(logfile_name));
+}
+
 TEST_CASE("Unformatted writer logger ignores logging env file override", "[logger_writer_ignores_env]") {
   const std::string env_logfile_name    = "shared_logging_destination.log";
   const std::string writer_logfile_name = "writer_output_destination.log";

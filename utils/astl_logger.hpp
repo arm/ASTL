@@ -149,7 +149,7 @@ enum class LogLevel {
 // NOLINTEND
 
 /* Default log level for the Logger instance */
-static constexpr astl::LogLevel kDefaultLogLevel = astl::LogLevel::Warning;
+static constexpr astl::LogLevel kDefaultLogLevel = astl::LogLevel::Off;
 
 /* Default logging to console for Logger instance */
 static constexpr bool kDefaultLogConsole = false;
