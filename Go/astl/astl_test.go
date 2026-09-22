@@ -82,6 +82,14 @@ func TestGetTargets(t *testing.T) {
 	}
 }
 
+func TestCounterPreservesQualifiedSCMIName(t *testing.T) {
+	counter := Counter{Name: "SOC.0.ENERGY_COUNTER"}
+
+	if counter.Name != "SOC.0.ENERGY_COUNTER" {
+		t.Fatalf("Counter.Name = %q, want qualified SCMI counter name", counter.Name)
+	}
+}
+
 func TestEnumAlignment(t *testing.T) {
 	if UnitsRPM != 11 {
 		t.Fatalf("UnitsRPM = %d, want 11", UnitsRPM)

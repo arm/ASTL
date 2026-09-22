@@ -151,6 +151,23 @@ void WriteMinimalScmiFixture(const fs::path&       config_root,
   REQUIRE(!ec);
 }
 
+void WriteDuplicateScmiCounterFixture(const fs::path& config_root) {
+  WriteMinimalScmiFixture(config_root);
+
+  const auto    spec_path = config_root / "scmi" / "public" / "unit" / "test_scmi.json";
+  std::ifstream spec_file(spec_path);
+  REQUIRE(spec_file.good());
+  std::string spec_contents{std::istreambuf_iterator<char>{spec_file}, std::istreambuf_iterator<char>{}};
+  const auto  count_position = spec_contents.find(R"json("count": 1)json");
+  REQUIRE(count_position != std::string::npos);
+  spec_contents.replace(count_position, std::string_view{R"json("count": 1)json"}.size(), R"json("count": 2)json");
+  WriteTextFile(spec_path, spec_contents);
+
+  std::error_code ec;
+  fs::create_directories(config_root / "scmi_sysfs" / "tlm-0" / "des" / "0x19E4F", ec);
+  REQUIRE(!ec);
+}
+
 void WriteSerializedMetricManagerCache(const fs::path& cache_dir, const astl::ITarget* target) {
   std::error_code ec;
   fs::create_directories(cache_dir, ec);
@@ -295,14 +312,15 @@ TEST_CASE("MetricBuilder::BuildMetricManagerFromASTLFile with nonexistent path",
   REQUIRE_FALSE(result.has_value());
 }
 
-TEST_CASE("MetricBuilder::BuildMetricManager uses JSON descriptions for SCMI counters", "[MetricBuilder]") {
+TEST_CASE("MetricBuilder::BuildMetricManager uses qualified names and JSON descriptions for SCMI counters",
+          "[MetricBuilder]") {
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
   auto configuration = configuration_result.value();
 
   const fs::path config_root = fs::temp_directory_path() / "astl_metric_builder_json_descriptions";
   TempFileGuard  config_guard(config_root);
-  WriteMinimalScmiFixture(config_root);
+  WriteDuplicateScmiCounterFixture(config_root);
 
   configuration = MakeConfigurationForTestRoot(config_root);
 
@@ -320,15 +338,21 @@ TEST_CASE("MetricBuilder::BuildMetricManager uses JSON descriptions for SCMI cou
   REQUIRE(counters_or_error.has_value());
   REQUIRE_FALSE(counters_or_error->empty());
 
+  std::vector<std::string> counter_names;
   std::vector<std::string> counter_descriptions;
   for (const auto* const counter : *counters_or_error) {
     astl_counter_props_t properties{};
     properties.size = sizeof(astl_counter_props_t);
     REQUIRE(metric_manager.GetCounterProperties(counter, &properties) == ASTL_STATUS_SUCCESS);
+    REQUIRE(properties.name != nullptr);
     REQUIRE(properties.description != nullptr);
+    counter_names.emplace_back(properties.name);
     counter_descriptions.emplace_back(properties.description);
   }
 
+  REQUIRE(std::ranges::find(counter_names, "SOC.0.ENERGY_COUNTER") != counter_names.end());
+  REQUIRE(std::ranges::find(counter_names, "SOC.1.ENERGY_COUNTER") != counter_names.end());
+  REQUIRE(std::ranges::find(counter_names, "ENERGY_COUNTER") == counter_names.end());
   REQUIRE(std::ranges::find(counter_descriptions, "Unit test SoC power metric") != counter_descriptions.end());
   REQUIRE(std::ranges::find(counter_descriptions, "Underlying counter for SoC Power") == counter_descriptions.end());
 }
@@ -442,7 +466,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from tempora
   astl_counter_props_t counter_props{};
   counter_props.size = sizeof(astl_counter_props_t);
   REQUIRE(result.value()->GetCounterProperties((*counters_or_error)[0], &counter_props) == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string{counter_props.name} == "ENERGY_COUNTER");
+  REQUIRE(std::string{counter_props.name} == "SOC.0.ENERGY_COUNTER");
 }
 
 TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from wide-only DE directory fixture",
@@ -478,7 +502,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from wide-on
   astl_counter_props_t counter_props{};
   counter_props.size = sizeof(astl_counter_props_t);
   REQUIRE(result.value()->GetCounterProperties((*counters_or_error)[0], &counter_props) == ASTL_STATUS_SUCCESS);
-  REQUIRE(std::string{counter_props.name} == "ENERGY_COUNTER");
+  REQUIRE(std::string{counter_props.name} == "SOC.0.ENERGY_COUNTER");
 }
 
 TEST_CASE("MetricBuilder::BuildMetricManager skips SCMI metrics when sysfs DE directory is missing",

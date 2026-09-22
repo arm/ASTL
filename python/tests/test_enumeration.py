@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import astl
+from astl._core import Counter
+
 
 def test_version_struct():
     maj, min_, mic, s = astl.version()
@@ -24,3 +26,9 @@ def test_empty_enumerations_do_not_error():
         assert isinstance(metrics, list)
         assert isinstance(groups, list)
         assert isinstance(all_groups, list)
+
+
+def test_counter_preserves_qualified_scmi_name():
+    counter = Counter("SOC.0.ENERGY_COUNTER", "SoC energy", 1, 0, 0, 0, 0, "")
+
+    assert counter.name == "SOC.0.ENERGY_COUNTER"

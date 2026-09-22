@@ -75,7 +75,7 @@ static auto AppendScmiCounterConfigurationsForTarget(std::string_view           
       scmi::spec::GetMetricRegistersScmiData(metric_declaration, context.specification.get(), target_index);
   for (const auto& register_declaration : metric_registers) {
     const std::string counter_id   = register_declaration.GetFullyQualifiedName();
-    const std::string counter_name = register_declaration.name;
+    const std::string counter_name = counter_id;
     const std::string dedup_key    = std::format("{}__{}", counter_id, GetStableTargetKey(*target));
     if (!context.processed_counter_id_target_pairs.get().insert(dedup_key).second) {
       continue;

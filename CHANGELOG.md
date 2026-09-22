@@ -18,6 +18,8 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Breaking
 
+- SCMI counter names now use the metadata-qualified `component.instance.name` form. Applications selecting counters
+  by name must replace unqualified names such as `ENERGY_COUNTER` with names such as `SOC.0.ENERGY_COUNTER`.
 - Removed the public `astl_lifecycle_event_type_t`; discover lifecycle values and names through the
   metric event-property APIs. Serialized event metrics must also use the explicit event-metric payload.
 
