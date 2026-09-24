@@ -8,6 +8,13 @@ SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <
 SPDX-License-Identifier = "Apache-2.0"
 
 # 3rd party licenses
+# Black Duck-generated dependency notice.
+[[annotations]]
+path = "THIRD_PARTY_NOTICES"
+precedence = "override"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
 [[annotations]]
 path = "**/gplot++.h"
 SPDX-FileCopyrightText = "Copyright 2020 Maurizio Tomasi"
