@@ -117,7 +117,7 @@ TEST_CASE("ScmiIoctlInterface identifies likely telemetry ioctl device names", "
   REQUIRE_FALSE(astl::ScmiIoctlInterface::IsLikelyTelemetryDeviceName("tlm_1_extra"));
 }
 
-TEST_CASE("SCMI ioctl UAPI mirrors the V10 layouts and request encodings", "[scmi_ioctl_interface]") {
+TEST_CASE("SCMI ioctl UAPI mirrors SCMI telemetry ABI V1 for the V10 patch set or later", "[scmi_ioctl_interface]") {
   CHECK(sizeof(scmi_tlm_config) == 24);
   CHECK(sizeof(scmi_tlm_de_config) == 48);
   CHECK(sizeof(scmi_tlm_de_info) == 72);

@@ -386,7 +386,8 @@ TEST_CASE("ScmiIoctlCollector snapshots native clocks and reports ioctl read fai
   CHECK(failed_correlations.error() == ASTL_STATUS_FILE_ERROR);
 }
 
-TEST_CASE("ScmiIoctlCollector uses advertised V10 single-read support", "[scmi_ioctl_collector]") {
+TEST_CASE("ScmiIoctlCollector uses advertised SCMI telemetry ABI V1 single-read support for the V10 patch set or later",
+          "[scmi_ioctl_collector]") {
   auto  scripted_interface = std::make_unique<ScriptedScmiIoctlInterface>();
   auto& interface          = *scripted_interface;
 

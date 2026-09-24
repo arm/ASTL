@@ -11,8 +11,8 @@
 #  include <sys/ioctl.h>
 #endif
 
-// This file mirrors include/uapi/linux/scmi.h from the V10 SCMI telemetry
-// patchset. Keep all layouts and ioctl argument types identical to that UAPI.
+// This file mirrors SCMI telemetry ABI V1 from include/uapi/linux/scmi.h,
+// as supported by the V10 patch set or later. Keep all layouts and ioctl argument types identical to that UAPI.
 // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-macro-usage,cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 
 #define SCMI_TLM_ABI_VERSION_V1      1

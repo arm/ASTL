@@ -164,6 +164,10 @@ By default, ASTL automatically probes SCMI telemetry ioctl character devices und
 ASTL falls back to the legacy SCMI telemetry sysfs interface under
 `/sys/fs/arm_telemetry`.
 
+On current platforms, ASTL supports SCMI sampling through direct reads or
+periodic polling only. Event-driven or notification-based sampling is not
+currently supported.
+
 For legacy sysfs-only systems, mount the sysfs interface:
 
 ```bash

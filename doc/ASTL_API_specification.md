@@ -781,6 +781,10 @@ Current ASTL discovery is centered on two backend families:
 ASTL currently focuses on the SCMI telemetry specification as surfaced through the
 Linux SCMI telemetry ioctl interface and the legacy Linux SCMI sysfs interface.
 
+On current platforms, direct reads and periodic polling are the only supported
+SCMI sampling models. ASTL does not currently support event-driven or
+notification-based SCMI sampling.
+
 #### What SCMI Requires On The System
 
 For live SCMI discovery to work, the following must exist:
