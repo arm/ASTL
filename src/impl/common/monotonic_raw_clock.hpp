@@ -5,8 +5,10 @@
 #ifndef MONOTONIC_RAW_CLOCK_HPP_
 #define MONOTONIC_RAW_CLOCK_HPP_
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <limits>
 
 #ifdef __linux__
 #  include <ctime>
@@ -38,6 +40,10 @@ struct ClockMonotonicRaw {
   static constexpr bool is_steady = true;  // NOLINT(readability-identifier-naming) -- required by TrivialClock
 
   static auto now() noexcept -> time_point {  // NOLINT(readability-identifier-naming) -- required by TrivialClock
+    const auto test_now = test_now_ns_.load(std::memory_order_relaxed);
+    if (test_now != kSystemClock) {
+      return time_point{duration{test_now}};
+    }
 #ifdef __linux__
     struct timespec clock_ts{};
     ::clock_gettime(CLOCK_MONOTONIC_RAW, &clock_ts);
@@ -52,6 +58,30 @@ struct ClockMonotonicRaw {
 #endif
     return time_point{duration{nanos}};
   }
+
+  /** Enable a deterministic process-wide clock for internal tests and fuzz fixtures. */
+  static auto SetTestTime(time_point now) noexcept -> void {
+    test_now_ns_.store(now.time_since_epoch().count(), std::memory_order_relaxed);
+  }
+
+  /** Advance the deterministic clock. Has no effect unless SetTestTime() was called. */
+  static auto AdvanceTestTime(duration amount) noexcept -> void {
+    auto current = test_now_ns_.load(std::memory_order_relaxed);
+    while (current != kSystemClock &&
+           !test_now_ns_.compare_exchange_weak(current, current + amount.count(), std::memory_order_relaxed)) {
+    }
+  }
+
+  /** Restore the platform monotonic clock. */
+  static auto ResetTestTime() noexcept -> void { test_now_ns_.store(kSystemClock, std::memory_order_relaxed); }
+
+  [[nodiscard]] static auto TestTimeEnabled() noexcept -> bool {
+    return test_now_ns_.load(std::memory_order_relaxed) != kSystemClock;
+  }
+
+ private:
+  static constexpr rep           kSystemClock = std::numeric_limits<rep>::min();
+  static inline std::atomic<rep> test_now_ns_{kSystemClock};
 };
 
 /** @brief Timestamp type for processed (normalized) samples — always CLOCK_MONOTONIC_RAW, nanosecond resolution. */

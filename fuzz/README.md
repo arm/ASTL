@@ -26,12 +26,17 @@ read-only after construction and after every reset.
 
 ## Discovery target
 
-`astl_discovery_fuzzer` generates 1–32 bounded public-API discovery operations.
+`astl_discovery_fuzzer` generates 1–32 bounded public-API discovery and collection-lifecycle operations.
 Each input selects either the minimal procfs profile or the mixed procfs/SCMI
 profile. The target rebuilds ASTL from the selected fixture at the start of each
 iteration, discovers handles by index, and checks count/getter capacity contracts
-and deterministic properties. Configuration, collection, samples, processing,
-and persistence are intentionally left to their dedicated targets.
+and deterministic properties. It also configures counters, metrics, and metric
+groups at global and per-target scope, then exercises immediate reads, start,
+start-paused, pause, resume, reconfigure, and stop in both valid and invalid
+orders. Procfs values advance only through an explicit input operation, and each
+iteration forcibly stops and clears partial collection state before checking that
+the cached fixture is reusable. Sample retrieval, cropping, histograms, and
+persistence remain outside this target.
 
 Build and run a bounded mixed-fixture session with the checked-in seeds:
 

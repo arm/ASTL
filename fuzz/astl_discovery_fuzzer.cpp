@@ -2,10 +2,14 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+// Fuzz inputs intentionally use compact numeric bounds and probabilities throughout.
+// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+
 #include <unistd.h>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -21,6 +25,7 @@
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl_utils.hpp"
+#include "common/monotonic_raw_clock.hpp"
 #include "fixtures/minimal_procfs_fixture.hpp"
 #include "orchestrator/orchestrator.hpp"
 
@@ -52,6 +57,16 @@ enum class Operation : uint8_t {
   GLOBAL_GROUP_METRICS,
   TARGET_GROUP_METRICS,
   REPEAT_DISCOVERY,
+  CONFIGURE_COUNTERS,
+  CONFIGURE_METRICS,
+  CONFIGURE_METRIC_GROUPS,
+  READ_IMMEDIATE,
+  START,
+  START_PAUSED,
+  PAUSE,
+  RESUME,
+  STOP,
+  ADVANCE_FIXTURE,
   COUNT,
 };
 
@@ -138,6 +153,12 @@ auto SameMetric(const astl_metric_props_t& left, const astl_metric_props_t& righ
          SameString(left.description, right.description) && left.min_sampling_interval == right.min_sampling_interval &&
          left.units == right.units && left.value_type == right.value_type && left.metric_type == right.metric_type &&
          left.identifier == right.identifier;
+}
+
+auto IsLifecycleMetric(const astl_metric_props_t& metric) -> bool {
+  constexpr std::string_view prefix{"astl_lifecycle_events."};
+  return metric.name != nullptr && std::string_view{metric.name}.starts_with(prefix) &&
+         metric.metric_type == ASTL_METRIC_EVENT;
 }
 
 auto SameState(const astl_state_props_t& left, const astl_state_props_t& right) -> bool {
@@ -422,6 +443,29 @@ auto SamePlatform(const astl_platform_props_t& left, const astl_platform_props_t
          SameString(left.transparent_huge_pages, right.transparent_huge_pages);
 }
 
+auto CheckTargetMetrics(const TargetSnapshot& actual, const TargetSnapshot& expected) -> void {
+  if (actual.metrics.size() < expected.metrics.size() || actual.metrics.size() > expected.metrics.size() + 1U) {
+    FailTopology("metric count changed unexpectedly");
+  }
+  for (size_t metric = 0; metric < expected.metrics.size(); ++metric) {
+    if (!SameMetric(actual.metrics[metric], expected.metrics[metric])) {
+      FailTopology("metric properties changed");
+    }
+  }
+  if (actual.metrics.size() != expected.metrics.size() && !IsLifecycleMetric(actual.metrics.back())) {
+    FailTopology("unexpected metric registered during collection lifecycle");
+  }
+  if (actual.states.size() != actual.metrics.size() || expected.states.size() != expected.metrics.size()) {
+    FailTopology("metric state count does not match metric count");
+  }
+  for (size_t metric = 0; metric < expected.states.size(); ++metric) {
+    CheckElements(actual.states[metric], expected.states[metric], SameState);
+  }
+  if (actual.states.size() != expected.states.size() && !actual.states.back().empty()) {
+    FailTopology("lifecycle metric unexpectedly exposes states");
+  }
+}
+
 auto CheckTopology(const TopologySnapshot& actual, const TopologySnapshot& expected) -> void {
   if (!SamePlatform(actual.system_info, expected.system_info) || actual.targets.size() != expected.targets.size()) {
     FailTopology("platform properties or target count changed");
@@ -433,13 +477,10 @@ auto CheckTopology(const TopologySnapshot& actual, const TopologySnapshot& expec
       FailTopology("target properties changed");
     }
     CheckElements(left.counters, right.counters, SameCounter);
-    CheckElements(left.metrics, right.metrics, SameMetric);
+    CheckTargetMetrics(left, right);
     CheckElements(left.groups, right.groups, SameGroup);
-    if (left.states.size() != right.states.size() || left.group_metrics.size() != right.group_metrics.size()) {
-      FailTopology("metric state or target group count changed");
-    }
-    for (size_t metric = 0; metric < left.states.size(); ++metric) {
-      CheckElements(left.states[metric], right.states[metric], SameState);
+    if (left.group_metrics.size() != right.group_metrics.size()) {
+      FailTopology("target group count changed");
     }
     for (size_t group = 0; group < left.group_metrics.size(); ++group) {
       CheckElements(left.group_metrics[group], right.group_metrics[group], SameMetric);
@@ -840,6 +881,191 @@ auto FuzzGroupMetrics(ByteCursor& input, const TopologySnapshot& topology, bool 
       SameMetric);
 }
 
+auto CollectionParams(ByteCursor& input, bool valid) -> astl_collection_params_t {
+  const auto mode = input.Take() % 2U == 0U ? ASTL_COLLECTION_MODE_IMMEDIATE : ASTL_COLLECTION_MODE_SNAPSHOT;
+  return astl_collection_params_t{
+      .size              = ChosenSize<astl_collection_params_t>(input, valid),
+      .flags             = valid ? ASTL_COLLECTION_PARAMETERS_FLAG_NONE : input.TakeUint32() | (1U << 31U),
+      .sampling_interval = 0,
+      .collection_mode   = mode,
+  };
+}
+
+template <typename Property, typename Handle>
+auto ChooseHandles(ByteCursor& input, const std::vector<Property>& properties, bool valid) -> std::vector<Handle> {
+  if (properties.empty()) {
+    return {};
+  }
+  const size_t        count = std::min<size_t>(properties.size(), static_cast<size_t>(input.Take() % 4U) + 1U);
+  std::vector<Handle> handles;
+  handles.reserve(count);
+  for (size_t index = 0; index < count; ++index) {
+    handles.push_back(properties[input.Index(properties.size())].handle);
+  }
+  if (!valid) {
+    handles[input.Index(handles.size())] = nullptr;
+  }
+  return handles;
+}
+
+auto FuzzConfigureCounters(ByteCursor& input, const TopologySnapshot& topology) -> void {
+  const auto  target_index = input.Index(topology.targets.size());
+  const auto& target       = topology.targets[target_index];
+  auto        choices      = ChooseArguments(input);
+  auto        handles =
+      ChooseHandles<astl_counter_props_t, astl_counter_handle_t>(input, target.counters, choices.valid_handle);
+  if (handles.empty()) {
+    return;
+  }
+  auto             collection = CollectionParams(input, choices.valid_element);
+  const bool       on_target  = input.Take() % 2U == 0U;
+  astl_status_code status{};
+  if (on_target) {
+    astl_configure_counter_collection_on_target_params_t params{
+        .size          = ChosenSize<astl_configure_counter_collection_on_target_params_t>(input, choices.valid_params),
+        .flags         = choices.valid_flags ? 0U : input.TakeUint32() | 1U,
+        .target_handle = TargetHandle(input, topology, target_index, choices.valid_handle),
+        .collection_params = choices.valid_output ? &collection : nullptr,
+        .counter_handles   = choices.valid_count ? handles.data() : nullptr,
+        .counter_count     = choices.valid_count ? static_cast<uint32_t>(handles.size()) : 0U,
+    };
+    status = astlConfigureCounterCollectionOnTarget(choices.valid_params ? &params : nullptr);
+  } else {
+    astl_configure_counter_collection_params_t params{
+        .size              = ChosenSize<astl_configure_counter_collection_params_t>(input, choices.valid_params),
+        .flags             = choices.valid_flags ? 0U : input.TakeUint32() | 1U,
+        .collection_params = choices.valid_output ? &collection : nullptr,
+        .counter_handles   = choices.valid_count ? handles.data() : nullptr,
+        .counter_count     = choices.valid_count ? static_cast<uint32_t>(handles.size()) : 0U,
+    };
+    status = astlConfigureCounterCollection(choices.valid_params ? &params : nullptr);
+  }
+  CheckStatus(status);
+}
+
+auto FuzzConfigureMetrics(ByteCursor& input, const TopologySnapshot& topology) -> void {
+  const auto  target_index = input.Index(topology.targets.size());
+  const auto& target       = topology.targets[target_index];
+  auto        choices      = ChooseArguments(input);
+  auto handles = ChooseHandles<astl_metric_props_t, astl_metric_handle_t>(input, target.metrics, choices.valid_handle);
+  if (handles.empty()) {
+    return;
+  }
+  auto             collection = CollectionParams(input, choices.valid_element);
+  const bool       on_target  = input.Take() % 2U == 0U;
+  astl_status_code status{};
+  if (on_target) {
+    astl_configure_metric_collection_on_target_params_t params{
+        .size          = ChosenSize<astl_configure_metric_collection_on_target_params_t>(input, choices.valid_params),
+        .flags         = choices.valid_flags ? 0U : input.TakeUint32() | 1U,
+        .target_handle = TargetHandle(input, topology, target_index, choices.valid_handle),
+        .collection_params = choices.valid_output ? &collection : nullptr,
+        .metric_handles    = choices.valid_count ? handles.data() : nullptr,
+        .metric_count      = choices.valid_count ? static_cast<uint32_t>(handles.size()) : 0U,
+    };
+    status = astlConfigureMetricCollectionOnTarget(choices.valid_params ? &params : nullptr);
+  } else {
+    astl_configure_metric_collection_params_t params{
+        .size              = ChosenSize<astl_configure_metric_collection_params_t>(input, choices.valid_params),
+        .flags             = choices.valid_flags ? 0U : input.TakeUint32() | 1U,
+        .collection_params = choices.valid_output ? &collection : nullptr,
+        .metric_handles    = choices.valid_count ? handles.data() : nullptr,
+        .metric_count      = choices.valid_count ? static_cast<uint32_t>(handles.size()) : 0U,
+    };
+    status = astlConfigureMetricCollection(choices.valid_params ? &params : nullptr);
+  }
+  CheckStatus(status);
+}
+
+auto FuzzConfigureMetricGroups(ByteCursor& input, const TopologySnapshot& topology) -> void {
+  const auto  target_index = input.Index(topology.targets.size());
+  const bool  on_target    = input.Take() % 2U == 0U;
+  const auto& groups       = on_target ? topology.targets[target_index].groups : topology.groups;
+  auto        choices      = ChooseArguments(input);
+  auto        handles =
+      ChooseHandles<astl_metric_group_props_t, astl_metric_group_handle_t>(input, groups, choices.valid_handle);
+  if (handles.empty()) {
+    return;
+  }
+  auto             collection = CollectionParams(input, choices.valid_element);
+  astl_status_code status{};
+  if (on_target) {
+    astl_configure_metric_group_collection_on_target_params_t params{
+        .size  = ChosenSize<astl_configure_metric_group_collection_on_target_params_t>(input, choices.valid_params),
+        .flags = choices.valid_flags ? 0U : input.TakeUint32() | 1U,
+        .target_handle        = TargetHandle(input, topology, target_index, choices.valid_handle),
+        .collection_params    = choices.valid_output ? &collection : nullptr,
+        .metric_group_handles = choices.valid_count ? handles.data() : nullptr,
+        .metric_group_count   = choices.valid_count ? static_cast<uint32_t>(handles.size()) : 0U,
+    };
+    status = astlConfigureMetricGroupCollectionOnTarget(choices.valid_params ? &params : nullptr);
+  } else {
+    astl_configure_metric_group_collection_params_t params{
+        .size              = ChosenSize<astl_configure_metric_group_collection_params_t>(input, choices.valid_params),
+        .flags             = choices.valid_flags ? 0U : input.TakeUint32() | 1U,
+        .collection_params = choices.valid_output ? &collection : nullptr,
+        .metric_group_handles = choices.valid_count ? handles.data() : nullptr,
+        .metric_group_count   = choices.valid_count ? static_cast<uint32_t>(handles.size()) : 0U,
+    };
+    status = astlConfigureMetricGroupCollection(choices.valid_params ? &params : nullptr);
+  }
+  CheckStatus(status);
+}
+
+template <typename TargetParams, typename GlobalParams, typename TargetCall, typename GlobalCall>
+auto FuzzLifecycleCall(ByteCursor& input, const TopologySnapshot& topology, TargetCall target_call,
+                       GlobalCall global_call) -> void {
+  const auto       choices   = ChooseArguments(input);
+  const bool       on_target = input.Take() % 2U == 0U;
+  astl_status_code status    = ASTL_STATUS_INTERNAL_ERROR;
+  if (on_target) {
+    const auto   target_index = input.Index(topology.targets.size());
+    TargetParams params{
+        .size          = ChosenSize<TargetParams>(input, choices.valid_params),
+        .flags         = choices.valid_flags ? 0U : input.TakeUint32() | 1U,
+        .target_handle = TargetHandle(input, topology, target_index, choices.valid_handle),
+    };
+    status = target_call(choices.valid_output ? &params : nullptr);
+  } else {
+    GlobalParams params{
+        .size  = ChosenSize<GlobalParams>(input, choices.valid_params),
+        .flags = choices.valid_flags ? 0U : input.TakeUint32() | 1U,
+    };
+    status = global_call(choices.valid_output ? &params : nullptr);
+  }
+  CheckStatus(status);
+}
+
+auto FuzzReadImmediate(ByteCursor& input, const TopologySnapshot& topology) -> void {
+  FuzzLifecycleCall<astl_read_immediate_on_target_params_t, astl_read_immediate_params_t>(
+      input, topology, astlReadImmediateOnTarget, astlReadImmediate);
+}
+
+auto FuzzStart(ByteCursor& input, const TopologySnapshot& topology) -> void {
+  FuzzLifecycleCall<astl_start_collection_on_target_params_t, astl_start_collection_params_t>(
+      input, topology, astlStartCollectionOnTarget, astlStartCollection);
+}
+
+auto FuzzStartPaused(ByteCursor& input, const TopologySnapshot& topology) -> void {
+  FuzzLifecycleCall<astl_start_collection_on_target_paused_params_t, astl_start_collection_paused_params_t>(
+      input, topology, astlStartCollectionOnTargetPaused, astlStartCollectionPaused);
+}
+
+auto FuzzPause(ByteCursor& input, const TopologySnapshot& topology) -> void {
+  FuzzLifecycleCall<astl_pause_collection_on_target_params_t, astl_pause_collection_params_t>(
+      input, topology, astlPauseCollectionOnTarget, astlPauseCollection);
+}
+
+auto FuzzResume(ByteCursor& input, const TopologySnapshot& topology) -> void {
+  FuzzLifecycleCall<astl_resume_collection_on_target_params_t, astl_resume_collection_params_t>(
+      input, topology, astlResumeCollectionOnTarget, astlResumeCollection);
+}
+
+auto FuzzStop(ByteCursor& input, const TopologySnapshot& topology) -> void {
+  FuzzLifecycleCall<astl_stop_collection_on_target_params_t, astl_stop_collection_params_t>(
+      input, topology, astlStopCollectionOnTarget, astlStopCollection);
+}
+
 class DiscoveryFixture {
  public:
   DiscoveryFixture()
@@ -855,9 +1081,14 @@ class DiscoveryFixture {
     Require(astl::SetEnvVar(astl::EnvVar::ASTL_LOG_CONSOLE, "off"));
   }
 
-  ~DiscoveryFixture() { astl::Orchestrator::ResetInstance(); }
+  ~DiscoveryFixture() {
+    astl::ClockMonotonicRaw::ResetTestTime();
+    astl::Orchestrator::ResetInstance();
+  }
 
   void BeginIteration(bool mixed) {
+    advance_count_ = 0;
+    astl::ClockMonotonicRaw::SetTestTime(astl::ClockMonotonicRaw::time_point{});
     procfs_.Reset();
     auto& selected = mixed ? mixed_ : minimal_;
     if (!selected) {
@@ -870,14 +1101,64 @@ class DiscoveryFixture {
   }
 
   void EndIteration() {
+    const auto orchestrator = astl::Orchestrator::GetInstance();
+    if (!orchestrator) {
+      Fail();
+    }
+    bool needs_stop  = false;
+    bool needs_reset = false;
+    for (const auto& [target, state] : orchestrator->get()->GetAllTargetCollectionStates()) {
+      static_cast<void>(target);
+      needs_stop = needs_stop || state == astl::Orchestrator::TargetCollectionState::STARTING ||
+                   state == astl::Orchestrator::TargetCollectionState::STARTED ||
+                   state == astl::Orchestrator::TargetCollectionState::PAUSED;
+      needs_reset = needs_reset || state != astl::Orchestrator::TargetCollectionState::UNCONFIGURED;
+    }
+    if (needs_stop) {
+      astl_stop_collection_params_t stop_params{.size = sizeof(astl_stop_collection_params_t), .flags = 0};
+      CheckStatus(astlStopCollection(&stop_params));
+    }
+    if (needs_reset && orchestrator->get()->ResetCollectionStateForCleanConfigure() != ASTL_STATUS_SUCCESS) {
+      Fail();
+    }
+    for (const auto& [target, state] : orchestrator->get()->GetAllTargetCollectionStates()) {
+      static_cast<void>(target);
+      if (state != astl::Orchestrator::TargetCollectionState::UNCONFIGURED) {
+        Fail();
+      }
+    }
+    procfs_.Reset();
     auto selected = astl::Orchestrator::SwapInstanceForTest(nullptr);
     if (!selected) {
       Fail();
     }
     (mixed_iteration_ ? mixed_ : minimal_) = std::move(selected);
+    astl::ClockMonotonicRaw::ResetTestTime();
   }
 
   void ResetProcfs() { procfs_.Reset(); }
+
+  void AdvanceProcfs(ByteCursor& input) {
+    ++advance_count_;
+    const auto                        before = astl::ClockMonotonicRaw::now();
+    astl::fuzz::ProcfsFixtureSnapshot snapshot;
+    const uint64_t                    delta       = (advance_count_ * 100U) + (input.TakeUint32() % 100U);
+    const auto                        clock_delta = std::chrono::milliseconds{1U + (input.Take() % 100U)};
+    astl::ClockMonotonicRaw::AdvanceTestTime(clock_delta);
+    if (astl::ClockMonotonicRaw::now() != before + clock_delta) {
+      Fail();
+    }
+    snapshot.cpu[0] += delta;
+    snapshot.cpu[2] += delta / 2U;
+    snapshot.cpu[3] += delta * 4U;
+    snapshot.cpu0 = snapshot.cpu;
+    snapshot.mem_free_kib += input.Take() % 64U;
+    snapshot.mem_available_kib += input.Take() % 64U;
+    snapshot.load_1m_hundredths += input.Take() % 100U;
+    snapshot.uptime_hundredths += delta;
+    snapshot.idle_hundredths += delta / 2U;
+    procfs_.Reset(snapshot);
+  }
 
   DiscoveryFixture(const DiscoveryFixture&)            = delete;
   DiscoveryFixture& operator=(const DiscoveryFixture&) = delete;
@@ -903,6 +1184,7 @@ class DiscoveryFixture {
   std::unique_ptr<astl::Orchestrator> minimal_;
   std::unique_ptr<astl::Orchestrator> mixed_;
   bool                                mixed_iteration_{false};
+  uint64_t                            advance_count_{0};
 };
 
 auto GetFixture() -> DiscoveryFixture& {
@@ -969,6 +1251,36 @@ auto RunOperation(Operation operation, ByteCursor& input, const TopologySnapshot
     case Operation::REPEAT_DISCOVERY:
       CheckTopology(CaptureTopology(), topology);
       break;
+    case Operation::CONFIGURE_COUNTERS:
+      FuzzConfigureCounters(input, topology);
+      break;
+    case Operation::CONFIGURE_METRICS:
+      FuzzConfigureMetrics(input, topology);
+      break;
+    case Operation::CONFIGURE_METRIC_GROUPS:
+      FuzzConfigureMetricGroups(input, topology);
+      break;
+    case Operation::READ_IMMEDIATE:
+      FuzzReadImmediate(input, topology);
+      break;
+    case Operation::START:
+      FuzzStart(input, topology);
+      break;
+    case Operation::START_PAUSED:
+      FuzzStartPaused(input, topology);
+      break;
+    case Operation::PAUSE:
+      FuzzPause(input, topology);
+      break;
+    case Operation::RESUME:
+      FuzzResume(input, topology);
+      break;
+    case Operation::STOP:
+      FuzzStop(input, topology);
+      break;
+    case Operation::ADVANCE_FIXTURE:
+      GetFixture().AdvanceProcfs(input);
+      break;
     case Operation::COUNT:
       Fail();
   }
@@ -998,3 +1310,5 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   CheckTopology(CaptureTopology(), topology);
   return 0;
 }
+
+// NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)

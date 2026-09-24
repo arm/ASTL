@@ -40,4 +40,11 @@ target_link_options(
   astl_discovery_fuzzer
   PRIVATE -fno-omit-frame-pointer -fno-sanitize-recover=undefined -fsanitize=fuzzer,address,undefined)
 
+add_custom_command(
+  TARGET astl_discovery_fuzzer
+  POST_BUILD
+  COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/config"
+          "$<TARGET_FILE_DIR:astl_discovery_fuzzer>/config"
+  COMMENT "Staging ASTL configuration for astl_discovery_fuzzer")
+
 set_project_warnings(astl_discovery_fuzzer)
