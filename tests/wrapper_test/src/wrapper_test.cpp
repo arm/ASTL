@@ -32,12 +32,12 @@
 using trompeloeil::_;
 
 namespace astl {
-auto operator==(const CollectionOperations& lhs, std::nullptr_t rhs) -> bool {
+inline auto operator==(const CollectionOperations& lhs, std::nullptr_t rhs) -> bool {
   (void)lhs;
   (void)rhs;
   return false;
 }
-auto operator==(std::nullptr_t lhs, const CollectionOperations& rhs) -> bool {
+inline auto operator==(std::nullptr_t lhs, const CollectionOperations& rhs) -> bool {
   (void)lhs;
   (void)rhs;
   return false;

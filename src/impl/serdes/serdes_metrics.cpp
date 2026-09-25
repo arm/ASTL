@@ -1012,7 +1012,11 @@ static auto RebuildOperationMap(const astl::protobuf::MetricManager&            
   std::unordered_map<ProcfsCompositeMetric*, std::vector<OperationId>> composite_operation_ids;
 
   for (const auto& entry : proto_manager.operation_to_metric_map()) {
-    const uint32_t     op_id     = entry.operation_id();
+    auto operation_id_or_error = DeserializeOperationId(entry.operation_id(), "Metric operation map");
+    if (!operation_id_or_error) {
+      return std::unexpected(operation_id_or_error.error());
+    }
+    const OperationId  op_id     = *operation_id_or_error;
     const std::string& metric_id = entry.metric_id();
     const std::string& target_id = entry.target_id();
 

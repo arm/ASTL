@@ -1187,6 +1187,26 @@ TEST_CASE("Deserialize<MetricManager> rejects invalid operation map references",
   const auto& orch    = astl::Orchestrator::GetInstance()->get();
   const auto& targets = orch->GetTargets();
 
+  for (const auto operation_id :
+       {static_cast<uint32_t>(astl::kOperationIdInvalid), static_cast<uint32_t>(astl::kOperationIdInvalid) + 1U}) {
+    DYNAMIC_SECTION("invalid operation id " << operation_id) {
+      auto proto_mgr = BuildValidMetricManagerProto();
+
+      auto* op_entry = proto_mgr.add_operation_to_metric_map();
+      op_entry->set_operation_id(operation_id);
+      op_entry->set_metric_id("test_metric");
+      op_entry->set_target_id("tlm-0");
+
+      std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+      REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+      cache_stream.seekg(0);
+
+      auto mgr_or_err = Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+      REQUIRE_FALSE(mgr_or_err.has_value());
+      REQUIRE(mgr_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+    }
+  }
+
   SECTION("unknown metric id") {
     auto proto_mgr = BuildValidMetricManagerProto();
 

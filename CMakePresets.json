@@ -116,8 +116,7 @@
     {
       "name": "windows-release",
       "inherits": "release",
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64"
+      "generator": "Ninja"
     }
   ],
   "buildPresets": [
