@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-name: Prepare Release Candidate
+name: Tag Release Candidate
 
 permissions:
   contents: write
