@@ -30,7 +30,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare-ubuntu-dependencies:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: 🔑 Create source checkout token
+        id: source-checkout-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APAP_APP_APP_ID }}
+          private-key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
+          owner: Arm-Debug
+          repositories: ASTL,mock-SCMI
+          permission-contents: read
+
+      - name: ⤵️ Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          token: ${{ steps.source-checkout-token.outputs.token }}
+          submodules: true
+
+      # The three Ubuntu configurations use the same arm64-linux vcpkg package ABIs.
+      # The manifest pins the vcpkg revision; include local triplet/toolchain inputs so
+      # an ABI change can publish a new immutable archive.
+      - name: ⤵️ Restore Ubuntu vcpkg binaries
+        id: vcpkg-cache
+        uses: actions/cache@v6
+        with:
+          path: .vcpkg-cache
+          key: vcpkg-arm64-linux-v2-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/triplets/**', 'cmake/toolchains/**') }}
+
+      - name: 🏗️ Populate Ubuntu vcpkg binaries
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: ./.github/actions/build
+        with:
+          os: ubuntu-24.04-arm
+          cmake_preset: release
+          c_compiler: clang
+          cpp_compiler: clang++
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          vcpkg_cache_path: ${{ github.workspace }}/.vcpkg-cache
+          configure_only: "true"
+
   build-and-test:
+    needs: prepare-ubuntu-dependencies
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -88,6 +132,28 @@ jobs:
           token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
 
+      - name: ⤵️ Restore Ubuntu vcpkg binaries
+        if: contains(matrix.os, 'ubuntu')
+        uses: actions/cache/restore@v6
+        with:
+          path: .vcpkg-cache
+          key: vcpkg-arm64-linux-v2-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/triplets/**', 'cmake/toolchains/**') }}
+          fail-on-cache-miss: true
+
+      # Refresh the archive when a hosted image changes its compiler or build tools.
+      - name: 🧠 Detect runner image version
+        if: matrix.os != 'ubuntu-24.04-arm'
+        id: runner_image
+        shell: bash
+        run: echo "version=${ImageVersion}" >> "$GITHUB_OUTPUT"
+
+      - name: ⤵️ Restore Windows and macOS vcpkg binaries
+        if: matrix.os != 'ubuntu-24.04-arm'
+        uses: actions/cache@v6
+        with:
+          path: .vcpkg-cache
+          key: vcpkg-${{ matrix.os }}-${{ steps.runner_image.outputs.version }}-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/triplets/**', 'cmake/toolchains/**') }}
+
       # ===== BUILD STEPS (calls composite action) =====
       - name: 🏗️ Build ASTL
         uses: ./.github/actions/build
@@ -97,6 +163,7 @@ jobs:
           c_compiler: ${{ matrix.c_compiler }}
           cpp_compiler: ${{ matrix.cpp_compiler }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          vcpkg_cache_path: ${{ github.workspace }}/.vcpkg-cache
 
       # ===== TEST STEPS =====
       - name: 🐹 Setup Go
