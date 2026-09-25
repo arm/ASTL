@@ -14,11 +14,8 @@ ScmiOperationBuilder::ScmiOperationBuilder(ScmiDataEventId data_event_id) : _dat
     -> std::expected<OperationSequence, astl_status_code> {
   (void)target;
   OperationSequence seq;
-  // default to 1 KHz if not specified, meaning timestamps are in milliseconds
-  // When sample collection is configured, the scmi collector should read the tstamp_rate files and _update_
-  // the tstamp_rate_khz value in the ScmiReadOperations so we can interpret the timestamps correctly when sampling
-  const kilohertz default_tstamp_rate{1};
-  seq.push_back(std::make_unique<ScmiReadOperation>(_data_event_id, default_tstamp_rate));
+  // The collector replaces the default counter rate with a reported timestamp rate during configuration.
+  seq.push_back(std::make_unique<ScmiReadOperation>(_data_event_id, kDefaultScmiTimestampRate));
   return seq;
 }
 
@@ -38,11 +35,8 @@ ScmiMultiTargetOperationBuilder::ScmiMultiTargetOperationBuilder(ScmiTargetToDat
     OperationSequence seq;
     seq.reserve(iter->second.size());
     for (const auto& data_event_id : iter->second) {
-      // default to 1 KHz if not specified, meaning timestamps are in milliseconds
-      // When sample collection is configured, the scmi collector should read the tstamp_rate files and _update_
-      // the tstamp_rate_khz value in the ScmiReadOperations so we can interpret the timestamps correctly when sampling
-      const kilohertz default_tstamp_rate{1};
-      seq.push_back(std::make_unique<ScmiReadOperation>(data_event_id, default_tstamp_rate));
+      // The collector replaces the default counter rate with a reported timestamp rate during configuration.
+      seq.push_back(std::make_unique<ScmiReadOperation>(data_event_id, kDefaultScmiTimestampRate));
     }
     return seq;
   }

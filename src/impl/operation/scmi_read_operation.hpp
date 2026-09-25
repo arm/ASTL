@@ -19,6 +19,10 @@ namespace astl {
 // Type alias for Data Event Identifiers
 using ScmiDataEventId = uint32_t;
 
+// Compatibility fallback based on the current SCMI Firmware: its 1 GHz block timestamp counter
+// SCMI specification defines no universal default.
+inline constexpr kilohertz kDefaultScmiTimestampRate{1'000'000};
+
 // maps a target name to a data event ID for a DE
 using ScmiTargetToDataEventIdMap = std::unordered_map<std::string, std::vector<ScmiDataEventId>>;
 
@@ -45,7 +49,7 @@ struct ScmiReadOperation : public Operation {
 
   ScmiDataEventId scmi_data_event_id{0};  //!< The SCMI data event ID to be used for this operation
   //!< The timestamp rate in KHz for this data event, used to interpret timestamps if they are enabled
-  kilohertz tstamp_rate{1};
+  kilohertz tstamp_rate{kDefaultScmiTimestampRate};
 };
 
 }  // namespace astl

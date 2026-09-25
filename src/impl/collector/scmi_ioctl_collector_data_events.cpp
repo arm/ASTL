@@ -37,12 +37,12 @@ auto ScmiIoctlCollector::EnableDataEvents(std::unordered_set<ScmiDataEventId> co
     }
 
     const bool               originally_enabled = original_config.enable != 0;
-    const bool               can_use_timestamps = !_use_software_clock_timestamps && info.ts_rate != 0;
+    const bool               can_use_timestamps = !_use_software_clock_timestamps;
     std::optional<bool>      original_timestamp_enabled;
     std::optional<kilohertz> timestamp_rate;
     if (can_use_timestamps) {
       original_timestamp_enabled = original_config.t_enable != 0;
-      timestamp_rate             = kilohertz{info.ts_rate};
+      timestamp_rate             = info.ts_rate != 0 ? kilohertz{info.ts_rate} : kDefaultScmiTimestampRate;
     }
 
     scmi_tlm_de_config new_config = original_config;

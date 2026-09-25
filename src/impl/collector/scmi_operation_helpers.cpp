@@ -48,7 +48,7 @@ auto UpdateReadOperationTimestampRates(std::vector<ScmiDataEvent> const& data_ev
               return data_event.id == scmi_operation->scmi_data_event_id;
             });
         if (data_event_it != data_events.end()) {
-          scmi_operation->tstamp_rate = data_event_it->timestamp_rate.value_or(kilohertz{1});
+          scmi_operation->tstamp_rate = data_event_it->timestamp_rate.value_or(kDefaultScmiTimestampRate);
         }
       }
     }

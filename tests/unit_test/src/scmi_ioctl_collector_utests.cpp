@@ -424,6 +424,58 @@ TEST_CASE("ScmiIoctlCollector uses advertised SCMI telemetry ABI V1 single-read 
   REQUIRE(collector.StopCollection() == ASTL_STATUS_SUCCESS);
 }
 
+TEST_CASE("ScmiIoctlCollector uses the default counter rate when ioctl reports zero", "[scmi_ioctl_collector]") {
+  auto  scripted_interface = std::make_unique<ScriptedScmiIoctlInterface>();
+  auto& interface          = *scripted_interface;
+
+  constexpr astl::ScmiDataEventId data_event_id{0x5678U};
+  interface.telemetry_config.enable           = 1;
+  interface.data_event_configs[data_event_id] = MakeDataEventConfig(data_event_id, 0, 0);
+  interface.data_event_infos[data_event_id]   = MakeDataEventInfo(data_event_id, 0);
+  interface.samples.push_back(MakeSample(data_event_id, 1'000'000'000, 0xAA));
+  interface.samples.push_back(MakeSample(data_event_id, 1'000'000'100, 0xBB));
+
+  astl::ScmiTarget           target{"scmi_tlm-0", "unit-test target", "tlm-0", nullptr};
+  auto                       read_operation = MakeScmiReadOperation(data_event_id);
+  const auto                 operation_id   = read_operation->GetId();
+  astl::CollectionOperations operations{.operationsBeforeStart = {},
+                                        .operationsAtStart     = {},
+                                        .operationsOnSample    = {},
+                                        .operationsAtStop      = {},
+                                        .samplingInterval      = astl::SamplingInterval{std::chrono::milliseconds{100}},
+                                        .requirements          = astl::CollectorCapability{astl::CollectorType::SCMI}};
+  operations.operationsOnSample.push_back(std::move(read_operation));
+
+  MockRawSampleSink                 mock_raw_sample_sink;
+  std::vector<astl::RawSampledData> received_samples;
+  REQUIRE_CALL(mock_raw_sample_sink, SinkRawSamples(_, _))
+      .WITH(_2.size() == 1)
+      .LR_SIDE_EFFECT((received_samples.insert(received_samples.end(), _2.begin(), _2.end())))
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  astl::ScmiIoctlCollector collector{std::move(scripted_interface)};
+  collector.SetRawSampleSink(&mock_raw_sample_sink);
+  REQUIRE(collector.ConfigureCollection(MakeCollectionConfiguration(&target, std::move(operations))) ==
+          ASTL_STATUS_SUCCESS);
+  REQUIRE(interface.data_event_config_writes.size() == 1);
+  CHECK(interface.data_event_config_writes.back().t_enable == 1);
+
+  const auto correlations = collector.GetNativeClockSnapshot();
+  REQUIRE(correlations.has_value());
+  REQUIRE(correlations->count(operation_id) == 1);
+  CHECK(correlations->at(operation_id).native_at_start == 1'000'000'000);
+  CHECK(correlations->at(operation_id).ticks == astl::NativeToMonotonicRawRatio{1'000'000LL, 1'000'000});
+
+  REQUIRE(collector.StartCollection() == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
+  REQUIRE(received_samples.size() == 1);
+  CHECK(received_samples[0].raw_tick == 1'000'000'100);
+  CHECK(received_samples[0].value == astl::AstlValue{uint64_t{0xBB}});
+  REQUIRE(collector.StopCollection() == ASTL_STATUS_SUCCESS);
+  REQUIRE(interface.data_event_config_writes.size() == 2);
+  CHECK(interface.data_event_config_writes.back().t_enable == 0);
+}
+
 TEST_CASE("ScmiIoctlCollector uses software-clock timestamps when requested", "[scmi_ioctl_collector]") {
   EnvVarGuard env_cleanup{astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, "1"};
 
