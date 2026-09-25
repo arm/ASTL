@@ -12,6 +12,14 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Added
 
+### Changed
+
+### Breaking
+
+## 0.1.0 - 2026-09-25
+
+### Added
+
 - Added metric event-property discovery APIs in C, Python, and Go, including canonical lifecycle-event mappings.
 
 ### Changed
