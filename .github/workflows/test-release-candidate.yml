@@ -6,6 +6,7 @@ name: Test Release Candidate
 
 permissions:
   contents: read
+  actions: read
 
 on:
   workflow_dispatch:
@@ -64,7 +65,7 @@ jobs:
           cmake_preset: release
           c_compiler: gcc
           cpp_compiler: g++
-          github_token: ${{ steps.source-token.outputs.token }}
+          github_token: ${{ github.token }}
           source_dir: ${{ github.workspace }}
           version_override: ${{ needs.resolve.outputs.version }}
 
