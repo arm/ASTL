@@ -216,6 +216,11 @@ if(ENABLE_COVERAGE)
     # Uniquify the names of our .gcda files with the process ID. Ensures parallel tests don't clobber eachother's
     # coverage files.
     add_compile_options("-fprofile-dir=coverage_%p")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      # PID isolation protects separate processes; atomic counters protect threads within each test process, including
+      # library code compiled without -pthread.
+      add_compile_options("-fprofile-update=atomic")
+    endif()
     add_compile_options("-O0") # Needed to get reliable coverage results
     add_link_options("--coverage")
   endif()

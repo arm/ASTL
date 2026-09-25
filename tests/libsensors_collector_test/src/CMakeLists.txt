@@ -37,7 +37,8 @@ if(ASTL_HAVE_LIBSENSORS)
   # have catch2's cmake module discover the tests and add them to ctest for us
   include(CTest)
   include(Catch)
-  catch_discover_tests(
+  include(AstlCatchShards)
+  astl_discover_tests(
     ${TARGET}
     DISCOVERY_MODE
     PRE_TEST
@@ -48,6 +49,9 @@ if(ASTL_HAVE_LIBSENSORS)
     ENVIRONMENT
     # prevent valgrind from searching the web and hanging looking for debug symbols
     "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
+
+  astl_add_coverage_shards(${TARGET} SHARD_COUNT 1 ENVIRONMENT
+                           "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
 
   include(AstlValgrindShards)
   astl_add_valgrind_shards(

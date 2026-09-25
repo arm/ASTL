@@ -86,7 +86,8 @@ add_custom_target(
 include(CTest)
 include(Catch)
 # unit tests will be run with ASTL_CONFIG_DIR set to the config directory in the build tree
-catch_discover_tests(
+include(AstlCatchShards)
+astl_discover_tests(
   unit_test
   DISCOVERY_MODE
   PRE_TEST
@@ -96,6 +97,9 @@ catch_discover_tests(
   PROPERTIES
   ENVIRONMENT
   "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
+
+astl_add_coverage_shards(unit_test SHARD_COUNT 4 ENVIRONMENT
+                         "ASTL_CONFIG_DIR=${CMAKE_SOURCE_DIR}/tests/config;DEBUGINFOD_URLS=")
 
 include(AstlValgrindShards)
 astl_add_valgrind_shards(

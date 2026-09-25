@@ -195,6 +195,8 @@ jobs:
           # Run ordinary tests in parallel, then tests that use timing or shared
           # process-wide resources individually. Integration tests run in their
           # dedicated step below.
+          # Coverage registers ordinary Catch2 cases as a few suite shards;
+          # isolated cases and non-Catch2 smoke tests remain individual tests.
           ctest --parallel 4 -LE "integration|time_sensitive|valgrind_isolated|^valgrind$" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
           ctest --parallel 1 -L "time_sensitive|valgrind_isolated" -LE "integration" --test-dir ${{ github.workspace }}/build/${{ matrix.cmake_preset }} --preset ${{ matrix.cmake_preset }}
 
@@ -223,11 +225,17 @@ jobs:
 
       - name: 📊 Code Coverage - Merge Coverage from Parallel Runs
         if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-coverage'
-        run: ${{ github.workspace }}/scripts/merge_coverage.sh ${{ github.workspace }}/build
+        run: ${{ github.workspace }}/scripts/merge_coverage.sh ${{ github.workspace }}/build/${{ matrix.cmake_preset }}
 
       - name: 📊 Code Coverage - Generate Report with gcovr
         if: contains(matrix.os, 'ubuntu') && matrix.c_compiler == 'gcc' && matrix.cmake_preset == 'debug-coverage'
         run: ${{ github.workspace }}/scripts/create_coverage_report.sh --xml
+
+      - name: 🧪 Verify coverage shard partition
+        if: matrix.cmake_preset == 'debug-coverage'
+        # Listing cases runs instrumented binaries too. Validate after the report
+        # is finalized so listing-only profiles cannot affect measured coverage.
+        run: python3 scripts/check_coverage_shards.py build/${{ matrix.cmake_preset }}
 
       - name: ⤴️ Code Coverage - Publish to GitHub
         # publish only coverage data from one build configuration

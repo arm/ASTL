@@ -27,14 +27,7 @@ if [ ! -d "${BUILD_DIR}" ]; then
 	exit 1
 fi
 
-if parallel --version >/dev/null 2>&1; then
-	echo "✅ parallel is installed"
-else
-	echo "❌ Error.  parallel is not installed, or you have some non-gnu parallel that doesn't work the same."
-	echo "👉 Please install GNU parallel."
-	exit 1
-fi
-
+SECONDS=0
 TMP_DIR=$(mktemp -d /tmp/merge_coverage_XXXX)
 #TMP_DIR=/tmp/merge_coverage
 #if [ -d "${TMP_DIR}" ]
@@ -48,7 +41,19 @@ TMP_DIR=$(mktemp -d /tmp/merge_coverage_XXXX)
 #
 # ${TMP_DIR}/index_test_dirs.txt will contain paths that look like this:
 # ~/ASTL/build/debug/samples/sample_test
-NUM_TEST_DIRS=$(find "$BUILD_DIR" -type f | grep "\.gcda" | parallel 'dirname' {} | sort -u | tee "${TMP_DIR}/index_all_coverage_dirs.txt" | parallel 'dirname' {} | sort -u | tee "${TMP_DIR}/index_test_dirs.txt" | wc -l)
+# Shell parameter expansion avoids launching a process for every profile file.
+find "$BUILD_DIR" -type f -name '*.gcda' -print0 |
+	while IFS= read -r -d '' profile; do printf '%s\n' "${profile%/*}"; done |
+	sort -u >"${TMP_DIR}/index_all_coverage_dirs.txt"
+while IFS= read -r coverage_dir; do printf '%s\n' "${coverage_dir%/*}"; done <"${TMP_DIR}/index_all_coverage_dirs.txt" |
+	sort -u >"${TMP_DIR}/index_test_dirs.txt"
+NUM_TEST_DIRS=$(wc -l <"${TMP_DIR}/index_test_dirs.txt")
+NUM_PROFILE_DIRS=$(wc -l <"${TMP_DIR}/index_all_coverage_dirs.txt")
+echo "Indexed ${NUM_PROFILE_DIRS} process coverage directories in ${SECONDS}s"
+if [ "${NUM_PROFILE_DIRS}" -eq 0 ]; then
+	echo "❌ Error. No coverage profiles found in ${BUILD_DIR}." >&2
+	exit 1
+fi
 echo "Found ${NUM_TEST_DIRS} test directories containing coverage"
 echo "Outputted index to ${TMP_DIR}/index_test_dirs.txt"
 
@@ -136,3 +141,4 @@ done
 
 echo "Cleaning up temporary scratch space: ${TMP_DIR}"
 rm -rf "${TMP_DIR}"
+echo "✅ Merged ${NUM_PROFILE_DIRS} process coverage directories in ${SECONDS}s"
