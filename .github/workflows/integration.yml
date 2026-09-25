@@ -57,6 +57,7 @@ jobs:
       - name: ⤵️ Restore Ubuntu vcpkg binaries
         id: vcpkg-cache
         uses: actions/cache@v6
+        continue-on-error: true
         with:
           path: .vcpkg-cache
           key: vcpkg-arm64-linux-v2-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/triplets/**', 'cmake/toolchains/**') }}
@@ -72,6 +73,18 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           vcpkg_cache_path: ${{ github.workspace }}/.vcpkg-cache
           configure_only: "true"
+
+      # Pass the prepared binaries through this run's artifact service. The
+      # three Ubuntu jobs then avoid separate cache-service download requests.
+      - name: ⤴️ Upload Ubuntu vcpkg binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: ubuntu-vcpkg-binaries
+          path: .vcpkg-cache/
+          include-hidden-files: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   build-and-test:
     needs: prepare-ubuntu-dependencies
@@ -132,13 +145,12 @@ jobs:
           token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
 
-      - name: ⤵️ Restore Ubuntu vcpkg binaries
+      - name: ⤵️ Download Ubuntu vcpkg binaries
         if: contains(matrix.os, 'ubuntu')
-        uses: actions/cache/restore@v6
+        uses: actions/download-artifact@v8
         with:
+          name: ubuntu-vcpkg-binaries
           path: .vcpkg-cache
-          key: vcpkg-arm64-linux-v2-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/triplets/**', 'cmake/toolchains/**') }}
-          fail-on-cache-miss: true
 
       # Refresh the archive when a hosted image changes its compiler or build tools.
       - name: 🧠 Detect runner image version
