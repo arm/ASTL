@@ -25,6 +25,9 @@ jobs:
     with:
       operation: CANDIDATE
       source_ref: ${{ inputs.candidate_ref }}
+    secrets:
+      APAP_APP_APP_ID: ${{ secrets.APAP_APP_APP_ID }}
+      APAP_APP_PRIVATE_KEY: ${{ secrets.APAP_APP_PRIVATE_KEY }}
 
   test-candidate:
     needs: resolve
