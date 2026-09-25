@@ -11,6 +11,7 @@
 
 #include "astl_logger.hpp"
 #include "collector/collection_configuration.hpp"
+#include "collector/collector_lifecycle_helpers.hpp"
 #include "collector/periodic_sampler.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_raw_sample_sink.hpp"
@@ -70,11 +71,12 @@ auto LibsensorsCollector::ClearCollectionState() -> astl_status_code {
  */
 auto LibsensorsCollector::StartCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  auto             result = ASTL_STATUS_SUCCESS;
-  if (_collection_state == CollectionState::STARTED) {
-    result = ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
-  } else if ((_collection_state != CollectionState::CONFIGURED && _collection_state != CollectionState::STOPPED) ||
-             !_configuration.has_value()) {
+  if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::START);
+      status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  auto result = ASTL_STATUS_SUCCESS;
+  if (!_configuration.has_value()) {
     result = ASTL_STATUS_BAD_CONFIGURATION;  // Cannot start while already started or unconfigured
   } else {
     result = ExecuteCollectionOperations(_configuration->Operations().operationsAtStart);
@@ -108,15 +110,9 @@ auto LibsensorsCollector::StartCollection() -> astl_status_code {
  */
 auto LibsensorsCollector::PauseCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  if (!_periodic_sampler) {
-    ASTL_LOG_WARNING("PauseCollection called when no periodic sampler initialized");
-  } else {
-    _periodic_sampler->Pause();
-  }
-  if (_collection_state == CollectionState::STARTED) {
-    _collection_state = CollectionState::PAUSED;
-  }
-  return EmitPauseResumeSample(PauseResumeMarker::PAUSE, ClockMonotonicRaw::now());
+  return collector_detail::PauseCollectionLifecycle(_collection_state, _periodic_sampler.get(), [this] {
+    return EmitPauseResumeSample(PauseResumeMarker::PAUSE, ClockMonotonicRaw::now());
+  });
 };
 
 /*
@@ -124,19 +120,9 @@ auto LibsensorsCollector::PauseCollection() -> astl_status_code {
  */
 auto LibsensorsCollector::ResumeCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  // Emit the resume marker before restarting the periodic sampler so the marker timestamp
-  // strictly precedes any new samples produced after the sampler resumes.
-  auto       resume_timestamp = ClockMonotonicRaw::now();
-  const auto emit_status      = EmitPauseResumeSample(PauseResumeMarker::RESUME, resume_timestamp);
-  if (!_periodic_sampler) {
-    ASTL_LOG_WARNING("ResumeCollection called when no periodic sampler initialized");
-  } else {
-    _periodic_sampler->Resume();
-  }
-  if (_collection_state == CollectionState::PAUSED) {
-    _collection_state = CollectionState::STARTED;
-  }
-  return emit_status;
+  return collector_detail::ResumeCollectionLifecycle(_collection_state, _periodic_sampler.get(), [this] {
+    return EmitPauseResumeSample(PauseResumeMarker::RESUME, ClockMonotonicRaw::now());
+  });
 };
 
 /*
@@ -149,11 +135,11 @@ auto LibsensorsCollector::StopCollection() -> astl_status_code {
   StopIntervalSampling();
   auto             result = ASTL_STATUS_SUCCESS;
   std::scoped_lock lock{_collection_mutex};
-  if (_collection_state == CollectionState::STOPPED) {
-    return ASTL_STATUS_COLLECTION_ALREADY_STOPPED;  // stop is idempotent
+  if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::STOP);
+      status != ASTL_STATUS_SUCCESS) {
+    return status;
   }
-  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::PAUSED) ||
-      !_configuration.has_value()) {
+  if (!_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;  // Cannot stop while not started, paused, or unconfigured
   }
   switch (_configuration->CollectionParams().collection_mode) {

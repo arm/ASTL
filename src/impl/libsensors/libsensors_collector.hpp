@@ -13,6 +13,7 @@
 #include "collector/i_collector.hpp"
 #include "collector/periodic_sampler.hpp"
 #include "common/capabilities.hpp"
+#include "common/collection_lifecycle.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "libsensors/libsensors_api.hpp"
 #include "operation/operation.hpp"
@@ -90,7 +91,7 @@ class LibsensorsCollector : public ICollector {
  private:
   // internal classes + enums
 
-  enum class CollectionState { UNCONFIGURED, CONFIGURED, STARTED, PAUSED, STOPPED };
+  using CollectionState = CollectionLifecycleState;
   enum class PauseResumeMarker { PAUSE, RESUME };
 
   // data members

@@ -213,6 +213,11 @@ if(ENABLE_COVERAGE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     message(STATUS "Building with coverage instrumentation")
     add_compile_options("--coverage")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      # Per-process files do not protect counters shared by threads within a test process. Atomic updates prevent
+      # corrupted branch counts in concurrent API tests.
+      add_compile_options("-fprofile-update=atomic")
+    endif()
     # Uniquify the names of our .gcda files with the process ID. Ensures parallel tests don't clobber eachother's
     # coverage files.
     add_compile_options("-fprofile-dir=coverage_%p")

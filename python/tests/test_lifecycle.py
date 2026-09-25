@@ -31,3 +31,31 @@ def test_lifecycle_no_exception():
         astl.resume_collection(t)
         astl.read_immediate(t)
         astl.stop_collection(t)
+
+
+def test_stopped_collection_requires_reconfiguration():
+    """Stopped collections report recoverable state errors, not success."""
+    for target in astl.get_targets():
+        counters = astl.get_counters(target)
+        if counters:
+            break
+    else:
+        pytest.skip("No target with counters available")
+
+    params = astl.CollectionParameters(sampling_interval=10, mode=astl.CollectionMode.IMMEDIATE)
+    astl.configure_counters_on_target(target, params, [counters[0]])
+    astl.start_collection(target)
+    astl.stop_collection(target)
+
+    for action in (astl.stop_collection, astl.pause_collection, astl.resume_collection):
+        with pytest.raises(astl.ASTLError) as exc:
+            action(target)
+        assert exc.value.code == astl.Status.COLLECTION_ALREADY_STOPPED
+
+    with pytest.raises(astl.ASTLError) as exc:
+        astl.start_collection(target)
+    assert exc.value.code == astl.Status.INVALID_STATE_TRANSITION
+
+    astl.configure_counters_on_target(target, params, [counters[0]])
+    astl.start_collection(target)
+    astl.stop_collection(target)

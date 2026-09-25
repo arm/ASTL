@@ -248,10 +248,10 @@ TEST_CASE("ProcfsCollector enforces lifecycle state transitions", "[procfs_colle
 
   REQUIRE(collector.GetCapabilities().GetCollectorType() == astl::CollectorType::PROCFS);
   REQUIRE(collector.ReadImmediate() == ASTL_STATUS_BAD_CONFIGURATION);
-  REQUIRE(collector.StartCollection() == ASTL_STATUS_BAD_CONFIGURATION);
-  REQUIRE(collector.StopCollection() == ASTL_STATUS_BAD_CONFIGURATION);
-  REQUIRE(collector.PauseCollection() == ASTL_STATUS_SUCCESS);
-  REQUIRE(collector.ResumeCollection() == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector.StartCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
+  REQUIRE(collector.StopCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
+  REQUIRE(collector.PauseCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
+  REQUIRE(collector.ResumeCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
 
   astl::OperationSequence on_sample_operations;
   on_sample_operations.push_back(

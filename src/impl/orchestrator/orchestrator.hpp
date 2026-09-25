@@ -17,6 +17,7 @@
 #include "astl/astl.h"
 #include "astl_file_interface.hpp"
 #include "collector/i_collector_manager.hpp"
+#include "common/collection_lifecycle.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "metric/i_counter.hpp"
@@ -57,7 +58,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    * State is tracked per target in _target_collection_states (mutex: _collection_state_mutex).
    * Pause/resume timestamps recorded in _target_pause_timestamps / _target_resume_timestamps.
    */
-  enum class TargetCollectionState { UNCONFIGURED, CONFIGURED, STARTING, STARTED, PAUSED, STOPPED };
+  using TargetCollectionState = CollectionLifecycleState;
 
   /**
    * @brief Convert a TargetCollectionState value to a readable string.

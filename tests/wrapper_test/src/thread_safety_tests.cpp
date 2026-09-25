@@ -178,7 +178,7 @@ TEST_CASE("C interface supports valid-handle configure/start/stop interleavings"
             break;
           default:
             status = StopCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
@@ -273,19 +273,21 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings",
             break;
           case 2:
             status = PauseCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_COLLECTION_ALREADY_PAUSED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING,
+                                     ASTL_STATUS_COLLECTION_ALREADY_PAUSED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 3:
             status = ResumeCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_COLLECTION_ALREADY_RUNNING})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_PAUSED,
+                                     ASTL_STATUS_COLLECTION_ALREADY_RUNNING})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           default:
             status = StopCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
@@ -424,40 +426,44 @@ TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors",
             break;
           case 8:
             status = PauseCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_COLLECTION_ALREADY_PAUSED,
-                                     ASTL_STATUS_PAUSE_UNSUPPORTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING,
+                                     ASTL_STATUS_COLLECTION_ALREADY_PAUSED, ASTL_STATUS_PAUSE_UNSUPPORTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 9:
             status = PauseCollection();
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_INTERNAL_ERROR})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING,
+                                     ASTL_STATUS_INTERNAL_ERROR})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 10:
             status = ResumeCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_COLLECTION_ALREADY_RUNNING,
-                                     ASTL_STATUS_RESUME_UNSUPPORTED})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_PAUSED,
+                                     ASTL_STATUS_COLLECTION_ALREADY_RUNNING, ASTL_STATUS_RESUME_UNSUPPORTED})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 11:
             status = ResumeCollection();
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_PAUSED, ASTL_STATUS_INTERNAL_ERROR})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_PAUSED,
+                                     ASTL_STATUS_INTERNAL_ERROR})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 12:
             status = StopCollectionOnTarget(valid_target);
-            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_INVALID_STATE_TRANSITION})) {
+            if (!is_allowed(status, {ASTL_STATUS_COLLECTION_NOT_CONFIGURED, ASTL_STATUS_COLLECTION_NOT_RUNNING,
+                                     ASTL_STATUS_INVALID_STATE_TRANSITION})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;
           case 13:
             status = StopCollection();
-            if (!is_allowed(status, {ASTL_STATUS_SUCCESS, ASTL_STATUS_COLLECTION_NOT_RUNNING,
-                                     ASTL_STATUS_INVALID_STATE_TRANSITION, ASTL_STATUS_INTERNAL_ERROR})) {
+            if (!is_allowed(status, {ASTL_STATUS_SUCCESS, ASTL_STATUS_COLLECTION_NOT_CONFIGURED,
+                                     ASTL_STATUS_COLLECTION_NOT_RUNNING, ASTL_STATUS_INVALID_STATE_TRANSITION,
+                                     ASTL_STATUS_INTERNAL_ERROR})) {
               all_ok.store(false, std::memory_order_release);
             }
             break;

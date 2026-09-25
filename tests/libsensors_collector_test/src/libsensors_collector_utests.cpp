@@ -149,7 +149,7 @@ TEST_CASE("LibsensorsCollector StartCollection with bad configuration", "[libsen
   MockSensorsApiTestHarness harness;
   astl::LibsensorsCollector collector{harness.api};
   auto                      status = collector.StartCollection();
-  REQUIRE(status == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(status == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
 }
 
 TEST_CASE("LibsensorsCollector Pause and Resume", "[libsensors_collector]") {

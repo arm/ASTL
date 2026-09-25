@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "astl_logger.hpp"
+#include "collector/collector_lifecycle_helpers.hpp"
 
 namespace astl {
 
@@ -97,11 +98,12 @@ auto ScmiIoctlCollector::ClearCollectionState() -> astl_status_code {
  */
 auto ScmiIoctlCollector::StartCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  auto             result = ASTL_STATUS_SUCCESS;
-  if (_collection_state == CollectionState::STARTED) {
-    result = ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
-  } else if ((_collection_state != CollectionState::CONFIGURED && _collection_state != CollectionState::STOPPED) ||
-             !_configuration.has_value()) {
+  if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::START);
+      status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  auto result = ASTL_STATUS_SUCCESS;
+  if (!_configuration.has_value()) {
     result = ASTL_STATUS_BAD_CONFIGURATION;
   } else {
     _previous_timestamps.clear();
@@ -136,16 +138,9 @@ auto ScmiIoctlCollector::StartCollection() -> astl_status_code {
  */
 auto ScmiIoctlCollector::PauseCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  if (!_periodic_sampler) {
-    ASTL_LOG_WARNING("PauseCollection called when no periodic sampler initialized");
-  } else {
-    _periodic_sampler->Pause();
-  }
-  if (_collection_state == CollectionState::STARTED) {
-    _collection_state = CollectionState::PAUSED;
-  }
-  auto pause_timestamp = ClockMonotonicRaw::now();
-  return EmitPauseResumeSample(PauseResumeMarker::PAUSE, pause_timestamp);
+  return collector_detail::PauseCollectionLifecycle(_collection_state, _periodic_sampler.get(), [this] {
+    return EmitPauseResumeSample(PauseResumeMarker::PAUSE, ClockMonotonicRaw::now());
+  });
 }
 
 /**
@@ -155,17 +150,9 @@ auto ScmiIoctlCollector::PauseCollection() -> astl_status_code {
  */
 auto ScmiIoctlCollector::ResumeCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  auto             resume_timestamp = ClockMonotonicRaw::now();
-  const auto       emit_status      = EmitPauseResumeSample(PauseResumeMarker::RESUME, resume_timestamp);
-  if (!_periodic_sampler) {
-    ASTL_LOG_WARNING("ResumeCollection called when no periodic sampler initialized");
-  } else {
-    _periodic_sampler->Resume();
-  }
-  if (_collection_state == CollectionState::PAUSED) {
-    _collection_state = CollectionState::STARTED;
-  }
-  return emit_status;
+  return collector_detail::ResumeCollectionLifecycle(_collection_state, _periodic_sampler.get(), [this] {
+    return EmitPauseResumeSample(PauseResumeMarker::RESUME, ClockMonotonicRaw::now());
+  });
 }
 
 /**
@@ -177,10 +164,11 @@ auto ScmiIoctlCollector::StopCollection() -> astl_status_code {
   StopIntervalSampling();
   auto             result = ASTL_STATUS_SUCCESS;
   std::scoped_lock lock{_collection_mutex};
-  if (_collection_state == CollectionState::STOPPED) {
-    result = ASTL_STATUS_COLLECTION_ALREADY_STOPPED;
-  } else if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::PAUSED) ||
-             !_configuration.has_value()) {
+  if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::STOP);
+      status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  if (!_configuration.has_value()) {
     result = ASTL_STATUS_BAD_CONFIGURATION;
   } else {
     switch (_configuration->CollectionParams().collection_mode) {

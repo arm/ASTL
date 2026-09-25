@@ -42,6 +42,7 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/topology/topology_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/topology/topology_manager.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/common/astl_value.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/common/collection_lifecycle.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/common/string_pool.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/common/key_value_text_utils.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/common/system_info.cpp"

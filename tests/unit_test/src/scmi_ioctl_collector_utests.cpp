@@ -202,11 +202,11 @@ TEST_CASE("ScmiIoctlCollector reports capabilities and handles unconfigured life
 
   REQUIRE(collector.GetCapabilities().collector_type == astl::CollectorType::SCMI);
   REQUIRE(collector.ClearCollectionState() == ASTL_STATUS_SUCCESS);
-  REQUIRE(collector.StartCollection() == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(collector.StartCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
   REQUIRE(collector.ReadImmediate() == ASTL_STATUS_BAD_CONFIGURATION);
-  REQUIRE(collector.PauseCollection() == ASTL_STATUS_SUCCESS);
-  REQUIRE(collector.ResumeCollection() == ASTL_STATUS_SUCCESS);
-  REQUIRE(collector.StopCollection() == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(collector.PauseCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
+  REQUIRE(collector.ResumeCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
+  REQUIRE(collector.StopCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
 
   auto clock_snapshot = collector.GetNativeClockSnapshot();
   REQUIRE(clock_snapshot.has_value());
@@ -240,9 +240,9 @@ TEST_CASE("ScmiIoctlCollector rolls back configuration when telemetry enable fai
   astl::CollectionConfiguration configuration{&target, std::move(operations), collection_params};
 
   REQUIRE(collector.ConfigureCollection(std::move(configuration)) == MissingIoctlDeviceStatus());
-  REQUIRE(collector.StartCollection() == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(collector.StartCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
   REQUIRE(collector.ReadImmediate() == ASTL_STATUS_BAD_CONFIGURATION);
-  REQUIRE(collector.StopCollection() == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(collector.StopCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
 }
 
 TEST_CASE("ScmiIoctlCollector rolls back configuration when a pre-start operation fails", "[scmi_ioctl_collector]") {
@@ -272,7 +272,7 @@ TEST_CASE("ScmiIoctlCollector rolls back configuration when a pre-start operatio
   CHECK(interface.data_event_config_writes.front().enable == 1);
   CHECK(interface.data_event_config_writes.back().enable == 0);
   CHECK(interface.data_event_configs[data_event_id].enable == 0);
-  REQUIRE(collector.StartCollection() == ASTL_STATUS_BAD_CONFIGURATION);
+  REQUIRE(collector.StartCollection() == ASTL_STATUS_COLLECTION_NOT_CONFIGURED);
   REQUIRE(collector.ReadImmediate() == ASTL_STATUS_BAD_CONFIGURATION);
 }
 

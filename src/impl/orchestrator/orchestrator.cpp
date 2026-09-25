@@ -520,21 +520,11 @@ auto Orchestrator::StartCollectionImpl(const ITarget *target, bool start_paused)
     if (state_iterator == _target_collection_states.end()) {
       return ASTL_STATUS_INVALID_TARGET_HANDLE;
     }
-    switch (state_iterator->second) {
-      case TargetCollectionState::UNCONFIGURED:
-        return ASTL_STATUS_COLLECTION_NOT_CONFIGURED;
-      case TargetCollectionState::CONFIGURED:
-        state_iterator->second = TargetCollectionState::STARTING;
-        break;  // allowed
-      case TargetCollectionState::STARTING:
-        return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
-      case TargetCollectionState::STARTED:
-        return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
-      case TargetCollectionState::PAUSED:
-        return ASTL_STATUS_INVALID_STATE_TRANSITION;  // must call ResumeCollection
-      case TargetCollectionState::STOPPED:
-        return ASTL_STATUS_INVALID_STATE_TRANSITION;
+    if (const auto status = CheckCollectionLifecycleAction(state_iterator->second, CollectionLifecycleAction::START);
+        status != ASTL_STATUS_SUCCESS) {
+      return status;
     }
+    state_iterator->second = TargetCollectionState::STARTING;
   }
   std::unique_lock lock{_raw_samples_mtx};
   _raw_samples[target].clear();
@@ -687,11 +677,9 @@ auto Orchestrator::PauseCollection(const ITarget *target) -> astl_status_code {
     if (state_iterator == _target_collection_states.end()) {
       return ASTL_STATUS_INVALID_TARGET_HANDLE;
     }
-    if (state_iterator->second == TargetCollectionState::PAUSED) {
-      return ASTL_STATUS_COLLECTION_ALREADY_PAUSED;
-    }
-    if (state_iterator->second != TargetCollectionState::STARTED) {
-      return ASTL_STATUS_COLLECTION_NOT_RUNNING;
+    if (const auto status = CheckCollectionLifecycleAction(state_iterator->second, CollectionLifecycleAction::PAUSE);
+        status != ASTL_STATUS_SUCCESS) {
+      return status;
     }
   }
   // A pause event is about to be recorded; ensure the lifecycle-event metric exists for it.
@@ -725,11 +713,9 @@ auto Orchestrator::ResumeCollection(const ITarget *target) -> astl_status_code {
     if (state_iterator == _target_collection_states.end()) {
       return ASTL_STATUS_INVALID_TARGET_HANDLE;
     }
-    if (state_iterator->second == TargetCollectionState::STARTED) {
-      return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
-    }
-    if (state_iterator->second != TargetCollectionState::PAUSED) {
-      return ASTL_STATUS_COLLECTION_NOT_PAUSED;
+    if (const auto status = CheckCollectionLifecycleAction(state_iterator->second, CollectionLifecycleAction::RESUME);
+        status != ASTL_STATUS_SUCCESS) {
+      return status;
     }
   }
   // A resume event is about to be recorded; ensure the lifecycle-event metric exists for it.
@@ -771,10 +757,9 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
     if (state_iterator == _target_collection_states.end()) {
       return ASTL_STATUS_INVALID_TARGET_HANDLE;
     }
-    // Reject stop requests while a start attempt is still in flight to keep
-    // collector behavior and state transitions consistent (disallow STOP during STARTING).
-    if (state_iterator->second == TargetCollectionState::STARTING) {
-      return ASTL_STATUS_INVALID_STATE_TRANSITION;
+    if (const auto status = CheckCollectionLifecycleAction(state_iterator->second, CollectionLifecycleAction::STOP);
+        status != ASTL_STATUS_SUCCESS) {
+      return status;
     }
   }
 

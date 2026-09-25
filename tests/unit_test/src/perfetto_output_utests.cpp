@@ -9,7 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "../../mock_classes.hpp"     // mocks for orchestrator dependencies
+#include "../../mock_classes.hpp"  // mocks for orchestrator dependencies
+#include "../../orchestrator_lifecycle_test_utils.hpp"
 #include "../../test_includes.hpp"    // include before catch2
 #include "../../test_utilities.hpp"   // TempFileGuard
 #include "output/output_manager.hpp"  // concrete OutputManager
@@ -787,8 +788,11 @@ TEST_CASE("PerfettoOutput deferred emission via Orchestrator StopCollection", "[
   auto output_manager = std::make_unique<astl::OutputManager>();
 
   // Construct orchestrator (throws on null managers; all non-null here).
+  auto*              lifecycle_collectors = collector_manager.get();
+  auto*              lifecycle_metrics    = metric_manager.get();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
                                   std::move(output_manager), "");
+  ConfigureAndStartTestCollection(orchestrator, *lifecycle_collectors, *lifecycle_metrics, target_ptr);
 
   // Create a concrete metric and sink a processed sample prior to StopCollection.
   TestMetricBase                          metric{"DeferredMetric", ASTL_UNITS_WATTS};
@@ -846,9 +850,12 @@ TEST_CASE("PerfettoOutput deferred emission empty map", "[perfetto_output]") {  
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
-  auto               output_manager = std::make_unique<astl::OutputManager>();
+  auto               output_manager       = std::make_unique<astl::OutputManager>();
+  auto*              lifecycle_collectors = collector_manager.get();
+  auto*              lifecycle_metrics    = metric_manager.get();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
                                   std::move(output_manager), "");
+  ConfigureAndStartTestCollection(orchestrator, *lifecycle_collectors, *lifecycle_metrics, target_ptr);
 
   // No SinkProcessedSamples calls -> processed map remains empty.
   REQUIRE_FALSE(std::filesystem::exists(perfetto_path));
@@ -897,9 +904,12 @@ TEST_CASE("PerfettoOutput deferred emission env var unset", "[perfetto_output]")
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
-  auto               output_manager = std::make_unique<astl::OutputManager>();
+  auto               output_manager       = std::make_unique<astl::OutputManager>();
+  auto*              lifecycle_collectors = collector_manager.get();
+  auto*              lifecycle_metrics    = metric_manager.get();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
                                   std::move(output_manager), "");
+  ConfigureAndStartTestCollection(orchestrator, *lifecycle_collectors, *lifecycle_metrics, target_ptr);
 
   // Sink one processed sample to show data exists but env var unset prevents emission.
   TestMetricBase                          metric{"UnsetMetric"};

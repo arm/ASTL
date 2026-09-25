@@ -14,6 +14,7 @@
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
 #include "collector/periodic_sampler.hpp"
+#include "common/collection_lifecycle.hpp"
 #include "common/procfs_utils.hpp"
 #include "operation/operation.hpp"
 #include "operation/procfs_read_operation.hpp"
@@ -45,7 +46,7 @@ class ProcfsCollector : public ICollector {
   auto ReadImmediate() -> astl_status_code override;
 
  private:
-  enum class CollectionState { UNCONFIGURED, CONFIGURED, STARTED, PAUSED, STOPPED };
+  using CollectionState = CollectionLifecycleState;
 
   using CpuSnapshotCache = std::unordered_map<std::filesystem::path, procfs::CpuSnapshotMap>;
 

@@ -14,6 +14,7 @@ set(UNIT_TEST_SRCS
     astl_value_utests.cpp
     astl_utils_utests.cpp
     astl_configuration_utests.cpp
+    collector_lifecycle_utests.cpp
     collector_manager_utests.cpp
     file_interface_utests.cpp
     formula_utests.cpp

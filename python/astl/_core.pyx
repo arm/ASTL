@@ -469,7 +469,7 @@ cpdef configure_counters_on_target(Target target, params, list counters):
         raise MemoryError()
     try:
         for i in range(n):
-            handles[i] = <const void*>counters[i].handle_ptr
+            handles[i] = <const void*><size_t>counters[i].handle_ptr
         call_params.size = sizeof(astl_configure_counter_collection_on_target_params_t)
 
         call_params.flags = 0
@@ -497,7 +497,7 @@ cpdef configure_counters(params, list counters):
         raise MemoryError()
     try:
         for i in range(n):
-            handles[i] = <const void*>counters[i].handle_ptr
+            handles[i] = <const void*><size_t>counters[i].handle_ptr
         call_params.size = sizeof(astl_configure_counter_collection_params_t)
 
         call_params.flags = 0

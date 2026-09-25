@@ -61,11 +61,11 @@ auto ProcfsCollector::ClearCollectionState() -> astl_status_code {
 
 auto ProcfsCollector::StartCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
-  if (_collection_state == CollectionState::STARTED) {
-    return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+  if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::START);
+      status != ASTL_STATUS_SUCCESS) {
+    return status;
   }
-  if ((_collection_state != CollectionState::CONFIGURED && _collection_state != CollectionState::STOPPED) ||
-      !_configuration.has_value()) {
+  if (!_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
   _previous_cpu_snapshots.clear();
@@ -79,27 +79,31 @@ auto ProcfsCollector::StartCollection() -> astl_status_code {
 
 auto ProcfsCollector::PauseCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
+  if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::PAUSE);
+      status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
   if (_periodic_sampler) {
     _periodic_sampler->Pause();
   } else {
     ASTL_LOG_WARNING("ProcfsCollector: PauseCollection called without an active periodic sampler");
   }
-  if (_collection_state == CollectionState::STARTED) {
-    _collection_state = CollectionState::PAUSED;
-  }
+  _collection_state = CollectionState::PAUSED;
   return ASTL_STATUS_SUCCESS;
 }
 
 auto ProcfsCollector::ResumeCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
+  if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::RESUME);
+      status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
   if (_periodic_sampler) {
     _periodic_sampler->Resume();
   } else {
     ASTL_LOG_WARNING("ProcfsCollector: ResumeCollection called without an active periodic sampler");
   }
-  if (_collection_state == CollectionState::PAUSED) {
-    _collection_state = CollectionState::STARTED;
-  }
+  _collection_state = CollectionState::STARTED;
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -107,11 +111,11 @@ auto ProcfsCollector::StopCollection() -> astl_status_code {
   StopIntervalSampling();
 
   std::scoped_lock lock{_collection_mutex};
-  if (_collection_state == CollectionState::STOPPED) {
-    return ASTL_STATUS_COLLECTION_ALREADY_STOPPED;
+  if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::STOP);
+      status != ASTL_STATUS_SUCCESS) {
+    return status;
   }
-  if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::PAUSED) ||
-      !_configuration.has_value()) {
+  if (!_configuration.has_value()) {
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
 

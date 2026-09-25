@@ -111,3 +111,55 @@ func TestEnumAlignment(t *testing.T) {
 		t.Fatalf("MetricIdentifierUnknown = %#x, want 0xFFFFFFFF", MetricIdentifierUnknown)
 	}
 }
+
+func TestStoppedCollectionRequiresReconfiguration(t *testing.T) {
+	targets, err := GetTargets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range targets {
+		counters, err := GetCountersOnTarget(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(counters) == 0 {
+			continue
+		}
+		params := CollectionParameters{SamplingInterval: 10, Mode: CollectionModeImmediate}
+		configureAndStart := func() {
+			t.Helper()
+			if err := ConfigureCountersOnTarget(target, params, counters[:1]); err != nil {
+				t.Fatal(err)
+			}
+			if err := StartCollectionOnTarget(target); err != nil {
+				t.Fatal(err)
+			}
+		}
+		configureAndStart()
+		if err := StopCollectionOnTarget(target); err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range []struct {
+			name   string
+			action func(Target) error
+			want   Status
+		}{
+			{"stop", StopCollectionOnTarget, StatusCollectionAlreadyStopped},
+			{"pause", PauseCollectionOnTarget, StatusCollectionAlreadyStopped},
+			{"resume", ResumeCollectionOnTarget, StatusCollectionAlreadyStopped},
+			{"start", StartCollectionOnTarget, StatusInvalidStateTransition},
+		} {
+			err := check.action(target)
+			statusErr, ok := err.(Error)
+			if !ok || statusErr.Status != check.want {
+				t.Fatalf("%s on stopped collection returned %v, want %v", check.name, err, check.want)
+			}
+		}
+		configureAndStart()
+		if err := StopCollectionOnTarget(target); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	t.Skip("No target with counters available")
+}

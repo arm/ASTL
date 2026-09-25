@@ -20,6 +20,7 @@
 #include "collector/scmi_data_event.hpp"
 #include "collector/scmi_ioctl_interface.hpp"
 #include "common/capabilities.hpp"
+#include "common/collection_lifecycle.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "operation/operation.hpp"
 #include "operation/scmi_read_operation.hpp"
@@ -132,7 +133,7 @@ class ScmiIoctlCollector : public ICollector {
 
  private:
   /** @brief Internal collection lifecycle states. */
-  enum class CollectionState { UNCONFIGURED, CONFIGURED, STARTED, PAUSED, STOPPED };
+  using CollectionState = CollectionLifecycleState;
 
   /** @brief Marker sample type emitted when collection is paused or resumed. */
   enum class PauseResumeMarker { PAUSE, RESUME };
