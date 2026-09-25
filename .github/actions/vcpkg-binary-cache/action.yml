@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Restore vcpkg binary archive
+description: Restore one archive for a compatible vcpkg ABI cohort
+
+inputs:
+  cohort:
+    description: Triplet and runner cohort, shared only by compatible jobs
+    required: true
+  compiler:
+    description: Compiler used to identify the dependency toolchain
+    required: true
+  source_dir:
+    description: Directory containing the vcpkg manifest
+    required: false
+    default: ${{ github.workspace }}
+
+outputs:
+  key:
+    description: Exact archive key for a later save step
+    value: ${{ steps.key.outputs.key }}
+  path:
+    description: Local vcpkg binary archive directory
+    value: ${{ steps.key.outputs.path }}
+  cache-hit:
+    description: Whether the exact archive key was restored
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute vcpkg archive key
+      id: key
+      shell: bash
+      env:
+        ASTL_CACHE_ACTION_PATH: ${{ github.action_path }}
+        ASTL_CACHE_COHORT: ${{ inputs.cohort }}
+        ASTL_CACHE_COMPILER: ${{ inputs.compiler }}
+        ASTL_CACHE_SOURCE_DIR: ${{ inputs.source_dir }}
+      run: python3 "$ASTL_CACHE_ACTION_PATH/key.py" >> "$GITHUB_OUTPUT"
+
+    - name: Restore vcpkg archive
+      id: restore
+      uses: actions/cache/restore@v6
+      continue-on-error: true
+      with:
+        path: ${{ steps.key.outputs.path }}
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: ${{ steps.key.outputs.restore-prefix }}

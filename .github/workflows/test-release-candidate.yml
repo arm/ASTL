@@ -56,7 +56,14 @@ jobs:
         shell: bash
         run: |
           sudo apt-get -o DPkg::Lock::Timeout=300 update
-          sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-20 tree zip
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-20 cmake gcc g++ tree zip
+
+      - name: ⤵️ Restore vcpkg binaries
+        id: vcpkg-cache
+        uses: ./.github/actions/vcpkg-binary-cache
+        with:
+          cohort: selfhosted-linux
+          compiler: gcc
 
       - name: 🏗️ Build candidate
         uses: ./.github/actions/build
@@ -65,9 +72,17 @@ jobs:
           cmake_preset: release
           c_compiler: gcc
           cpp_compiler: g++
-          github_token: ${{ github.token }}
           source_dir: ${{ github.workspace }}
           version_override: ${{ needs.resolve.outputs.version }}
+          vcpkg_cache_path: ${{ steps.vcpkg-cache.outputs.path }}
+
+      - name: ⤴️ Save vcpkg binaries
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.path }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
 
       - name: 📦 Test and stage candidate
         shell: bash

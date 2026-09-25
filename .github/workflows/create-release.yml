@@ -133,7 +133,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get -o DPkg::Lock::Timeout=300 update
-          sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-20 tree zip gh jq
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-20 cmake gcc g++ tree zip gh jq
 
       - name: 📈 Determine Final Version String
         id: version
@@ -250,6 +250,15 @@ jobs:
             --skip-pr-policy
 
       # Build via GitHub composite action =====
+      - name: ⤵️ Restore vcpkg binaries
+        if: steps.existing-release.outputs.reuse != 'true'
+        id: vcpkg-cache
+        uses: ./ASTL/.github/actions/vcpkg-binary-cache
+        with:
+          cohort: selfhosted-linux
+          compiler: gcc
+          source_dir: ${{ github.workspace }}/ASTL
+
       - name: 🏗️ Build ASTL
         if: steps.existing-release.outputs.reuse != 'true'
         uses: ./ASTL/.github/actions/build
@@ -258,9 +267,17 @@ jobs:
           cmake_preset: release
           c_compiler: ${{ matrix.c_compiler }}
           cpp_compiler: ${{ matrix.cpp_compiler }}
-          github_token: ${{ steps.source-checkout-token.outputs.token }}
           source_dir: ${{ github.workspace }}/ASTL
           version_override: ${{ env.VERSION_STRING }}
+          vcpkg_cache_path: ${{ steps.vcpkg-cache.outputs.path }}
+
+      - name: ⤴️ Save vcpkg binaries
+        if: steps.existing-release.outputs.reuse != 'true' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.path }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
 
       - name: 📐 Determine Build Output Architecture
         if: steps.existing-release.outputs.reuse != 'true'

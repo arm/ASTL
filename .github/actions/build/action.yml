@@ -18,9 +18,6 @@ inputs:
   cpp_compiler:
     description: 'C++ compiler'
     required: true
-  github_token:
-    description: 'GitHub token used by actions inside this composite action'
-    required: true
   atx_static_link:
     description: 'Build ATX as a fully static Linux executable'
     required: false
@@ -34,9 +31,8 @@ inputs:
     required: false
     default: ''
   vcpkg_cache_path:
-    description: 'Pre-restored vcpkg binary cache directory (skips per-package cache action)'
-    required: false
-    default: ''
+    description: 'Pre-restored vcpkg binary archive directory'
+    required: true
   configure_only:
     description: 'Configure without building, for dependency cache preparation'
     required: false
@@ -69,18 +65,11 @@ runs:
         echo "$(brew --prefix llvm@18)/bin" >> "$GITHUB_PATH"
 
 
-    - name: ⤵️ VCPKG - Restore Cache
-      if: inputs.vcpkg_cache_path == ''
-      id: vcpkg-cache
-      uses: TAServers/vcpkg-cache@v3
-      with:
-        token: ${{ inputs.github_token }}
-
     - name: ⤵️ VCPKG - Install Dependencies
       uses: lukka/run-vcpkg@v11
       env:
         VCPKG_FEATURE_FLAGS: binarycaching
-        VCPKG_BINARY_SOURCES: clear;files,${{ inputs.vcpkg_cache_path != '' && inputs.vcpkg_cache_path || steps.vcpkg-cache.outputs.path }},readwrite
+        VCPKG_BINARY_SOURCES: clear;files,${{ inputs.vcpkg_cache_path }},readwrite
       with:
         vcpkgDirectory: "${{ inputs.source_dir }}/external/vcpkg"
         vcpkgJsonGlob: "**/vcpkg.json"
@@ -95,7 +84,7 @@ runs:
       working-directory: ${{ inputs.source_dir }}
       env:
         VCPKG_FEATURE_FLAGS: binarycaching
-        VCPKG_BINARY_SOURCES: clear;files,${{ inputs.vcpkg_cache_path != '' && inputs.vcpkg_cache_path || steps.vcpkg-cache.outputs.path }},readwrite
+        VCPKG_BINARY_SOURCES: clear;files,${{ inputs.vcpkg_cache_path }},readwrite
       run: |
         cmake --version
         cmake \
@@ -112,7 +101,7 @@ runs:
       working-directory: ${{ inputs.source_dir }}
       env:
         VCPKG_FEATURE_FLAGS: binarycaching
-        VCPKG_BINARY_SOURCES: clear;files,${{ inputs.vcpkg_cache_path != '' && inputs.vcpkg_cache_path || steps.vcpkg-cache.outputs.path }},readwrite
+        VCPKG_BINARY_SOURCES: clear;files,${{ inputs.vcpkg_cache_path }},readwrite
       run: |
         cmake --version
         cmake \
@@ -127,7 +116,7 @@ runs:
       working-directory: ${{ inputs.source_dir }}
       env:
         VCPKG_FEATURE_FLAGS: binarycaching
-        VCPKG_BINARY_SOURCES: clear;files,${{ inputs.vcpkg_cache_path != '' && inputs.vcpkg_cache_path || steps.vcpkg-cache.outputs.path }},readwrite
+        VCPKG_BINARY_SOURCES: clear;files,${{ inputs.vcpkg_cache_path }},readwrite
       run: |
         cmake --version
         cmake -DATX_STATIC_LINK=${{ inputs.atx_static_link }} \

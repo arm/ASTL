@@ -55,9 +55,11 @@ jobs:
 
       - name: ⤵️ VCPKG - Restore Cache
         id: vcpkg-cache
-        uses: TAServers/vcpkg-cache@v3
+        uses: ./ASTL/.github/actions/vcpkg-binary-cache
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          cohort: selfhosted-linux
+          compiler: gcc
+          source_dir: ${{ github.workspace }}/ASTL
 
       - name: ⤵️ VCPKG - Install Dependencies
         uses: lukka/run-vcpkg@v11
@@ -84,6 +86,14 @@ jobs:
       - name: ⚙️ Generate Protobuf Sources
         working-directory: ${{ github.workspace }}/ASTL
         run: cmake --build --preset release --target proto_gen --verbose
+
+      - name: ⤴️ VCPKG - Save Cache
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.path }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
 
       - name: ⤵️ Set up Python 3.9
         uses: actions/setup-python@v7

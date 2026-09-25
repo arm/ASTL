@@ -29,7 +29,7 @@ jobs:
       # Set fail-fast to true to terminate the jobs as soon as any one fails. set to false for debug
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-24.04-arm]
         cmake_preset: [debug-make]
 
     env:
@@ -55,11 +55,11 @@ jobs:
           token: ${{ steps.source-checkout-token.outputs.token }}
           submodules: true
 
-      - name: ⤵️ Install Tools (ubuntu-latest)
+      - name: ⤵️ Install Tools (ubuntu-24.04-arm)
         if: contains(matrix.os, 'ubuntu')
         run: |
           sudo apt-get -o DPkg::Lock::Timeout=300 update
-          sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-format-20 clang-tidy-20 cppcheck cmake make yamllint libsensors-dev parallel python3 python3-pip clang-format-20 clang-20 libclang-rt-20-dev pkg-config
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y clang-format-20 clang-tidy-20 cppcheck cmake make yamllint libsensors-dev parallel python3 python3-pip clang-format-20 clang-20 libclang-rt-20-dev pkg-config gcc g++
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 200
           sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-20 200
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-20 200
@@ -67,12 +67,13 @@ jobs:
           python3 -m pip install --upgrade --break-system-packages --user cmakelang reuse
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      # Restore per-package vcpkg cache
+      # Share standard arm64-linux binaries with the Integration preparation job.
       - name: ⤵️ VCPKG - Restore Cache
         id: vcpkg-cache
-        uses: TAServers/vcpkg-cache@v3
+        uses: ./.github/actions/vcpkg-binary-cache
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          cohort: hosted-arm64-linux
+          compiler: gcc
 
       - name: ⤵️ VCPKG - Install Dependencies
         uses: lukka/run-vcpkg@v11
@@ -99,11 +100,19 @@ jobs:
             -S "${{ github.workspace }}" \
             --preset ${{ matrix.cmake_preset }}
 
+      - name: ⤴️ VCPKG - Save Cache
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.path }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
+
       - name: ⚙️ CMake - Generate Proto Headers
         run: cmake --build --preset ${{ matrix.cmake_preset }} --target proto_gen
 
       - name: 🧹 YAML Lint
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04-arm'
         shell: bash
         run: find .github -type f \( -iname '*.yml' -o -iname '*.yaml' \) | xargs yamllint
 

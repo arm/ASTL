@@ -65,6 +65,19 @@ jobs:
           private_key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
           source_dir: ${{ github.workspace }}/ASTL
 
+      - name: ⤵️ Install vcpkg toolchain
+        run: |
+          sudo apt-get -o DPkg::Lock::Timeout=300 update
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y gcc g++ cmake
+
+      - name: ⤵️ Restore vcpkg binaries
+        id: vcpkg-cache
+        uses: ./ASTL/.github/actions/vcpkg-binary-cache
+        with:
+          cohort: hosted-arm64-linux
+          compiler: gcc
+          source_dir: ${{ github.workspace }}/ASTL
+
       - name: 🏗️ Build ASTL
         uses: ./ASTL/.github/actions/build
         with:
@@ -72,8 +85,16 @@ jobs:
           cmake_preset: release
           c_compiler: gcc
           cpp_compiler: g++
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           source_dir: ${{ github.workspace }}/ASTL
+          vcpkg_cache_path: ${{ steps.vcpkg-cache.outputs.path }}
+
+      - name: ⤴️ Save vcpkg binaries
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.path }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
 
       - name: 🧪 Run unit tests
         working-directory: ASTL
@@ -138,6 +159,19 @@ jobs:
           private_key: ${{ secrets.APAP_APP_PRIVATE_KEY }}
           source_dir: ${{ github.workspace }}/ASTL
 
+      - name: ⤵️ Install vcpkg toolchain
+        run: |
+          sudo apt-get -o DPkg::Lock::Timeout=300 update
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y gcc g++ cmake
+
+      - name: ⤵️ Restore vcpkg binaries
+        id: vcpkg-cache
+        uses: ./ASTL/.github/actions/vcpkg-binary-cache
+        with:
+          cohort: hosted-arm64-linux
+          compiler: gcc
+          source_dir: ${{ github.workspace }}/ASTL
+
       - name: 🏗️ Build fully static ATX
         uses: ./ASTL/.github/actions/build
         with:
@@ -145,9 +179,17 @@ jobs:
           cmake_preset: release
           c_compiler: gcc
           cpp_compiler: g++
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           atx_static_link: true
           source_dir: ${{ github.workspace }}/ASTL
+          vcpkg_cache_path: ${{ steps.vcpkg-cache.outputs.path }}
+
+      - name: ⤴️ Save vcpkg binaries
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.path }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
 
       - name: 🧪 Verify fully static ATX
         shell: bash
