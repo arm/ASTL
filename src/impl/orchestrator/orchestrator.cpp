@@ -9,6 +9,7 @@
 #include <fstream>
 #include <functional>  // for std::reference_wrapper in expected return types
 #include <iterator>
+#include <sstream>
 #include <vector>
 
 #include "astl/astl_errors.h"
@@ -20,6 +21,7 @@
 #include "common/lifecycle_event.hpp"
 #include "common/string_pool.hpp"
 #include "common/system_info.hpp"
+#include "common/text_parse_utils.hpp"
 #include "config/configuration_manager.hpp"  // for ConfigurationManager::GetConfiguration
 #include "orchestrator/orchestrator_builder.hpp"
 #include "serdes/archive_utils.hpp"
@@ -30,24 +32,153 @@ namespace astl {
 // Definition of singleton instance pointer declared in orchestrator.hpp
 std::unique_ptr<Orchestrator> Orchestrator::instance_{};
 
-// Internal growth heuristic constants for sample vector reservations.
-// Rationale: We previously used the expression size()*3/2 + 8 inline. Exposing
-// the components as named constants improves readability, facilitates tuning,
-// and ensures consistency across raw and processed sample sinks.
 namespace {
-// Growth heuristic: new_cap = current * kRawSampleGrowthNumerator / kRawSampleGrowthDenominator + kRawSampleGrowthBias
-constexpr std::size_t kRawSampleGrowthNumerator   = 3;
-constexpr std::size_t kRawSampleGrowthDenominator = 2;
-constexpr std::size_t kRawSampleGrowthBias        = 8;  // small constant slack to reduce near-threshold reallocs
-
 // Processed samples use the same heuristic currently; kept distinct so future tuning can diverge independently.
 // Growth heuristic for processed samples (kept distinct for future independent tuning)
 constexpr std::size_t kProcSampleGrowthNumerator   = 3;
 constexpr std::size_t kProcSampleGrowthDenominator = 2;
 constexpr std::size_t kProcSampleGrowthBias        = 8;
 
-// TODO(ASTL-242): Investigate optimal max batch size
-constexpr std::size_t kMaxSamplesPerBatch = 1024;
+constexpr std::size_t kDefaultSampleBatchSize = 1024;
+constexpr std::size_t kMaximumSampleBatchSize = 1024 * 1024;
+
+auto ResolveSampleBatchSize() -> std::size_t {
+  const auto configured_value = GetEnvVar(EnvVar::ASTL_SAMPLE_BATCH_SIZE);
+  if (configured_value.empty()) {
+    return kDefaultSampleBatchSize;
+  }
+
+  const auto parsed_value = text::ParseUint64(configured_value);
+  if (!parsed_value || *parsed_value == 0 || *parsed_value > kMaximumSampleBatchSize) {
+    ASTL_LOG_WARNING("Ignoring invalid ASTL_SAMPLE_BATCH_SIZE='{}'; expected 1..{} and using default {}",
+                     configured_value, kMaximumSampleBatchSize, kDefaultSampleBatchSize);
+    return kDefaultSampleBatchSize;
+  }
+  return static_cast<std::size_t>(*parsed_value);
+}
+
+// The metric pipeline reports processed samples through a sink callback without carrying replay context.
+// Thread-local state scopes that context to the synchronous replay on the current thread.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+thread_local const ITarget *g_batch_visit_target = nullptr;
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+thread_local const IMetric *g_batch_visit_metric = nullptr;
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+thread_local const Orchestrator::ProcessedSampleBatchConsumer *g_batch_visit_consumer = nullptr;
+
+class BatchVisitContextGuard {
+ public:
+  BatchVisitContextGuard(const ITarget *target, const IMetric *metric,
+                         const Orchestrator::ProcessedSampleBatchConsumer &consumer) {
+    g_batch_visit_target   = target;
+    g_batch_visit_metric   = metric;
+    g_batch_visit_consumer = &consumer;
+  }
+  BatchVisitContextGuard(const BatchVisitContextGuard &)                     = delete;
+  auto operator=(const BatchVisitContextGuard &) -> BatchVisitContextGuard & = delete;
+  BatchVisitContextGuard(BatchVisitContextGuard &&)                          = delete;
+  auto operator=(BatchVisitContextGuard &&) -> BatchVisitContextGuard &      = delete;
+  ~BatchVisitContextGuard() {
+    g_batch_visit_consumer = nullptr;
+    g_batch_visit_metric   = nullptr;
+    g_batch_visit_target   = nullptr;
+  }
+};
+
+auto SerializeBatchWithRollback(const std::string &stable_target_key, const std::vector<RawSampledData> &samples,
+                                const fs::path &cache_dir) -> astl_status_code {
+  const auto      cache_path = cache_dir / (stable_target_key + kAstlFileExtension);
+  std::error_code file_status_error;
+  const bool      cache_existed     = fs::exists(cache_path, file_status_error);
+  const bool      cache_was_regular = cache_existed && fs::is_regular_file(cache_path, file_status_error);
+  const auto      previous_size     = cache_was_regular ? fs::file_size(cache_path, file_status_error) : 0;
+  if (file_status_error) {
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+
+  const auto status = ProtobufSerDes::SerializeCurrentBatch(stable_target_key, samples, cache_dir);
+  if (status == ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+
+  std::error_code rollback_error;
+  if (cache_was_regular) {
+    fs::resize_file(cache_path, previous_size, rollback_error);
+  } else if (!cache_existed) {
+    fs::remove(cache_path, rollback_error);
+  }
+  if (rollback_error) {
+    ASTL_LOG_ERROR("Failed to roll back partial cache append for {}: {}", cache_path.string(),
+                   rollback_error.message());
+  }
+  return status;
+}
+
+auto ProcessRawBatch(IMetricManager &metric_manager, const ITarget *target, std::vector<RawSampledData> samples,
+                     const IMetric *metric = nullptr) -> astl_status_code {
+  RawSamplesMap raw_samples;
+  raw_samples.emplace(target, std::move(samples));
+  return metric != nullptr ? metric_manager.ProcessRawSamplesForMetric(raw_samples, metric)
+                           : metric_manager.ProcessRawSamples(raw_samples);
+}
+
+auto ReplaySerializedRawBatches(IMetricManager &metric_manager, const ITarget *target, std::istream &stream,
+                                const IMetric *metric = nullptr) -> astl_status_code {
+  ProtobufSerDes::RawSampleBatchReader reader{stream};
+  while (true) {
+    auto batch = reader.ReadNext();
+    if (!batch) {
+      return batch.error();
+    }
+    if (batch->empty()) {
+      return ASTL_STATUS_SUCCESS;
+    }
+    if (const auto status = ProcessRawBatch(metric_manager, target, std::move(*batch), metric);
+        status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+  }
+}
+
+auto VisitSampleSpanBatches(std::span<const ProcessedSampledData>             samples,
+                            const Orchestrator::ProcessedSampleBatchConsumer &consumer, std::size_t sample_batch_size)
+    -> astl_status_code {
+  auto status = ASTL_STATUS_SUCCESS;
+  for (std::size_t offset = 0; offset < samples.size() && status == ASTL_STATUS_SUCCESS; offset += sample_batch_size) {
+    const auto count = std::min(sample_batch_size, samples.size() - offset);
+    status           = consumer(samples.subspan(offset, count));
+  }
+  return status;
+}
+
+// Retains an optional bounded snapshot for reuse by a later API call. Batches have
+// already been delivered to the caller's consumer before they are added here, so
+// snapshot overflow never drops samples from the requested traversal. It only
+// disables the reuse optimization and, for two-pass traversal, causes a replay.
+class BoundedProcessedSampleSnapshot {
+ public:
+  explicit BoundedProcessedSampleSnapshot(std::size_t limit) : _limit{limit} { _samples.reserve(limit); }
+
+  auto Add(std::span<const ProcessedSampledData> batch) -> void {
+    if (_overflowed) {
+      return;
+    }
+    if (batch.size() > _limit - _samples.size()) {
+      _samples.clear();
+      _overflowed = true;
+      return;
+    }
+    _samples.insert(_samples.end(), batch.begin(), batch.end());
+  }
+
+  [[nodiscard]] auto Overflowed() const -> bool { return _overflowed; }
+  auto               Take() -> std::vector<ProcessedSampledData> { return std::move(_samples); }
+
+ private:
+  std::size_t                       _limit;
+  bool                              _overflowed{false};
+  std::vector<ProcessedSampledData> _samples;
+};
 
 auto GetSampleOperationIds(const CollectionOperations &operations) -> std::vector<OperationId> {
   std::vector<OperationId> operation_ids;
@@ -71,7 +202,8 @@ Orchestrator::Orchestrator(std::unique_ptr<ITopologyManager>  topology_manager,
       _collector_manager{std::move(collector_manager)},
       _metric_manager{std::move(metric_manager)},
       _output_manager{std::move(output_manager)},
-      _cache_dir{cache_dir_path} {
+      _cache_dir{cache_dir_path},
+      _sample_batch_size{ResolveSampleBatchSize()} {
   if (!_topology_manager || !_collector_manager || !_metric_manager || !_output_manager) {
     throw std::invalid_argument(
         "Orchestrator requires non-null inputs for topology, collector, metric, and output managers.");
@@ -364,6 +496,11 @@ auto Orchestrator::ResetTargetCollectionArtifacts(const ITarget *target) -> astl
     return ASTL_STATUS_BAD_ARGUMENT;
   }
   const auto stable_target_key = GetStableTargetKey(*target);
+
+  {
+    std::scoped_lock cache_lock{_cache_file_mtx};
+    InvalidateRecentProcessedMetricSamples();
+  }
 
   {
     std::lock_guard raw_lock(_raw_samples_mtx);
@@ -735,32 +872,52 @@ auto Orchestrator::ResumeCollection(const ITarget *target) -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
-auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
+auto Orchestrator::ValidateStopCollectionTarget(const ITarget *target) const -> astl_status_code {
+  auto status = ASTL_STATUS_SUCCESS;
   if (!_metric_manager) {
     ASTL_LOG_ERROR("null _metric_manager in Orchestrator::StopCollection");
-    return ASTL_STATUS_INTERNAL_ERROR;
-  }
-  if (!_collector_manager) {
+    status = ASTL_STATUS_INTERNAL_ERROR;
+  } else if (!_collector_manager) {
     ASTL_LOG_ERROR("null _collector_manager in Orchestrator::StopCollection");
-    return ASTL_STATUS_INTERNAL_ERROR;
+    status = ASTL_STATUS_INTERNAL_ERROR;
+  } else {
+    const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
+    const auto                                   index   = std::find_if(std::begin(targets), std::end(targets),
+                                                                        [target](auto const &owned_target) { return owned_target.get() == target; });
+    if (index == std::end(targets)) {
+      status = ASTL_STATUS_INVALID_TARGET_HANDLE;
+    } else {
+      std::lock_guard state_lock(_collection_state_mutex);
+      const auto      state_iterator = _target_collection_states.find(target);
+      if (state_iterator == _target_collection_states.end()) {
+        status = ASTL_STATUS_INVALID_TARGET_HANDLE;
+      } else {
+        status = CheckCollectionLifecycleAction(state_iterator->second, CollectionLifecycleAction::STOP);
+      }
+    }
   }
-  const std::vector<std::unique_ptr<ITarget>> &targets = _topology_manager->GetTargets();
-  auto                                         index   = std::find_if(std::begin(targets), std::end(targets),
-                                                                      [target](auto const &owned_target) { return owned_target.get() == target; });
-  if (index == std::end(targets)) {
-    return ASTL_STATUS_INVALID_TARGET_HANDLE;
-  }
+  return status;
+}
 
-  {
-    std::lock_guard state_lock(_collection_state_mutex);
-    auto            state_iterator = _target_collection_states.find(target);
-    if (state_iterator == _target_collection_states.end()) {
-      return ASTL_STATUS_INVALID_TARGET_HANDLE;
-    }
-    if (const auto status = CheckCollectionLifecycleAction(state_iterator->second, CollectionLifecycleAction::STOP);
-        status != ASTL_STATUS_SUCCESS) {
-      return status;
-    }
+auto Orchestrator::FlushPendingRawSamples(const ITarget *target) -> astl_status_code {
+  std::scoped_lock cache_lock{_cache_file_mtx};
+  std::lock_guard  raw_lock{_raw_samples_mtx};
+  const auto       iter = _raw_samples.find(target);
+  if (iter == _raw_samples.end() || iter->second.empty()) {
+    return ASTL_STATUS_SUCCESS;
+  }
+  const auto status = SerializeBatchWithRollback(GetStableTargetKey(*target), iter->second, _cache_dir);
+  if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed to serialize remaining samples for {}", target->Name());
+    return status;
+  }
+  iter->second.clear();
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
+  if (const auto validation_status = ValidateStopCollectionTarget(target); validation_status != ASTL_STATUS_SUCCESS) {
+    return validation_status;
   }
 
   auto status = _collector_manager->StopOnTarget(target);  // finalize collector state
@@ -768,21 +925,9 @@ auto Orchestrator::StopCollection(const ITarget *target) -> astl_status_code {
     return status;
   }
 
-  {
-    std::lock_guard lock{_raw_samples_mtx};
-
-    // Serialize any remaining in-memory samples for this target into the batch file, then clear.
-    // Do not hold _raw_samples_mtx while emitting final reports; those paths may rebuild processed
-    // samples and otherwise do non-trivial work during stop/finalize.
-    auto iter = _raw_samples.find(target);
-    if (iter != _raw_samples.end() && !iter->second.empty()) {
-      auto res = astl::ProtobufSerDes::SerializeCurrentBatch(GetStableTargetKey(*target), iter->second, _cache_dir);
-      if (res != ASTL_STATUS_SUCCESS) {
-        ASTL_LOG_ERROR("Failed to serialize remaining samples for {}", target->Name());
-        return res;
-      }
-      iter->second.clear();
-    }
+  status = FlushPendingRawSamples(target);
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
   }
 
   // if we've now stopped collection on all the targets, finalize metric processing and output
@@ -902,8 +1047,7 @@ auto Orchestrator::EnsureFinalEmissionProcessedSamplesRebuilt() const -> void {
 
 auto Orchestrator::RebuildProcessedSamplesForAllTargets() const -> void {
   // Ensure _processed_samples is fully populated before emission.
-  // A single GetProcessedMetricSamples() call can rebuild all metrics for a target,
-  // so we attempt at most once per target to avoid repeated rebuild work.
+  // Rebuild each target at most once to avoid repeated cache replay work.
   if (!_metric_manager || !_topology_manager) {
     return;
   }
@@ -919,19 +1063,28 @@ auto Orchestrator::RebuildProcessedSamplesForAllTargets() const -> void {
       continue;
     }
 
-    auto handles_or_err = _metric_manager->GetAvailableMetrics(target.get());
-    if (!handles_or_err.has_value()) {
-      continue;
+    std::scoped_lock            visit_lock{_batch_visit_mtx};
+    std::scoped_lock            cache_lock{_cache_file_mtx};
+    std::vector<RawSampledData> trailing_samples;
+    {
+      std::scoped_lock raw_lock{_raw_samples_mtx};
+      if (const auto raw_it = _raw_samples.find(target.get()); raw_it != _raw_samples.end()) {
+        trailing_samples = raw_it->second;
+      }
     }
 
-    for (const auto &handle : handles_or_err.value()) {
-      auto metric_or_err = _metric_manager->GetMetricOnTarget(handle, target.get());
-      if (!metric_or_err.has_value()) {
-        continue;
-      }
-      // Side-effect: may lazily rebuild and populate all processed samples for this target.
-      (void)GetProcessedMetricSamples(metric_or_err.value(), target.get());
-      break;
+    std::ifstream stream{cache_file_path, std::ios::binary};
+    if (!stream) {
+      ASTL_LOG_ERROR("Failed to open raw sample cache for final output: {}", cache_file_path.string());
+      continue;
+    }
+    // Final output interfaces consume a complete ProcessedSamplesMap. Rebuild every metric for
+    // this target in one cache pass instead of invoking the single-metric batch visitor once per
+    // metric, which makes report generation scale quadratically with the metric count.
+    if (const auto status = ProcessRawSampleCacheStream(target.get(), stream, trailing_samples);
+        status != ASTL_STATUS_SUCCESS) {
+      ASTL_LOG_ERROR("Failed to rebuild processed samples for final output on target {} (status={})", target->Name(),
+                     status);
     }
   }
 }
@@ -952,44 +1105,23 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
   const auto stable_target_key = GetStableTargetKey(*target);
 
   if (!raw_samples.empty()) [[likely]] {
-    std::vector<RawSampledData> samples_to_process{raw_samples.begin(), raw_samples.end()};
-    std::vector<RawSampledData> batch_samples{};
-    bool                        cache_suppressed = false;
+    bool cache_suppressed = false;
     {
       std::scoped_lock lock{_raw_samples_mtx};
       cache_suppressed = _no_cache_targets.contains(target);
     }
     if (cache_suppressed) {
-      RawSamplesMap uncached_samples{
-          {target, std::move(samples_to_process)}
+      std::vector<RawSampledData> samples_to_process{raw_samples.begin(), raw_samples.end()};
+      RawSamplesMap               uncached_samples{
+                        {target, std::move(samples_to_process)}
       };
+      std::scoped_lock processing_lock{_metric_processing_mtx};
       return _metric_manager->ProcessRawSamples(uncached_samples);
     }
 
-    {
-      std::scoped_lock lock{_raw_samples_mtx};
-      auto            &target_samples_vec = _raw_samples[target];
-
-      if (target_samples_vec.size() >= kMaxSamplesPerBatch) {
-        ASTL_LOG_DEBUG("target_sample_vec size {} exceeded max batch size {}, serializing current batch",
-                       target_samples_vec.size(), kMaxSamplesPerBatch);
-        batch_samples.swap(target_samples_vec);
-      }
-
-      // Bulk reserve once based on total required size rather than per-sample growth decisions.
-      // We keep the 1.5x + bias heuristic but ensure we always meet the exact required size.
-      const auto required_size = target_samples_vec.size() + raw_samples.size();
-      if (target_samples_vec.capacity() < required_size) {
-        auto current       = target_samples_vec.size();
-        auto heuristic_cap = static_cast<size_t>((current * kRawSampleGrowthNumerator / kRawSampleGrowthDenominator) +
-                                                 kRawSampleGrowthBias);
-        // Guarantee capacity is at least the immediate requirement (heuristic may be smaller when current==0).
-        auto new_cap = std::max(required_size, heuristic_cap);
-        target_samples_vec.reserve(new_cap);
-      }
-
-      // Single bulk insert instead of repeated push_back calls.
-      target_samples_vec.insert(target_samples_vec.end(), raw_samples.begin(), raw_samples.end());
+    const auto append_status = AppendCachedRawSamples(target, raw_samples, stable_target_key);
+    if (append_status != ASTL_STATUS_SUCCESS) {
+      return append_status;
     }
 
     // Preserve per-sample debug logging (separate pass keeps insertion branch-predictable / cache-friendly).
@@ -998,15 +1130,35 @@ auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledDat
       auto value        = sample.value;
       ASTL_LOG_DEBUG("Raw Sample - raw_tick: {}, value: {}", timestamp_ns, value);
     }
-
-    if (!batch_samples.empty()) {
-      auto res = astl::ProtobufSerDes::SerializeCurrentBatch(stable_target_key, batch_samples, _cache_dir);
-      if (res != ASTL_STATUS_SUCCESS) {
-        return res;
-      }
-    }
   }
 
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::AppendCachedRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples,
+                                          const std::string &stable_target_key) -> astl_status_code {
+  std::scoped_lock cache_lock{_cache_file_mtx};
+  InvalidateRecentProcessedMetricSamples();
+  std::size_t input_offset{0};
+  while (input_offset < raw_samples.size()) {
+    std::scoped_lock raw_lock{_raw_samples_mtx};
+    auto            &pending = _raw_samples[target];
+    pending.reserve(_sample_batch_size);
+    const auto count = std::min(_sample_batch_size - pending.size(), raw_samples.size() - input_offset);
+    pending.insert(pending.end(), raw_samples.begin() + static_cast<std::ptrdiff_t>(input_offset),
+                   raw_samples.begin() + static_cast<std::ptrdiff_t>(input_offset + count));
+    input_offset += count;
+    if (pending.size() != _sample_batch_size) {
+      continue;
+    }
+
+    const auto status = SerializeBatchWithRollback(stable_target_key, pending, _cache_dir);
+    if (status == ASTL_STATUS_SUCCESS) {
+      pending.clear();
+      continue;
+    }
+    return status;
+  }
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -1047,6 +1199,10 @@ auto Orchestrator::SinkProcessedSamples(const ITarget *target, const IMetric *me
   ASTL_LOG_DEBUG("Received {} samples for metric {} on target {}", processed_samples.size(), metric->Name(),
                  target->Name());
 
+  if (g_batch_visit_consumer != nullptr && target == g_batch_visit_target) {
+    return metric == g_batch_visit_metric ? (*g_batch_visit_consumer)(processed_samples) : ASTL_STATUS_SUCCESS;
+  }
+
   {
     std::scoped_lock lock{_processed_samples_mtx};
     auto            &metric_map = _processed_samples[target];
@@ -1068,6 +1224,231 @@ auto Orchestrator::SinkProcessedSamples(const ITarget *target, const IMetric *me
   }
 
   return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::VisitProcessedMetricSampleBatches(const IMetric *metric, const ITarget *target,
+                                                     const ProcessedSampleBatchConsumer &consumer) const
+    -> astl_status_code {
+  if (!metric || !target || !consumer || !_metric_manager) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  std::scoped_lock visit_lock{_batch_visit_mtx};
+  std::scoped_lock cache_lock{_cache_file_mtx};
+  if (const auto recent_status = VisitRecentProcessedMetricSamples(metric, target, consumer)) {
+    return *recent_status;
+  }
+  InvalidateRecentProcessedMetricSamples();
+  std::vector<RawSampledData> trailing_samples;
+  {
+    std::scoped_lock raw_lock{_raw_samples_mtx};
+    if (const auto raw_it = _raw_samples.find(target); raw_it != _raw_samples.end()) {
+      trailing_samples = raw_it->second;
+    }
+  }
+
+  const fs::path cache_path = _cache_dir / (GetStableTargetKey(*target) + kAstlFileExtension);
+  const bool     has_cache  = fs::exists(cache_path);
+  if (!has_cache && trailing_samples.empty()) {
+    return VisitInMemoryProcessedMetricSampleBatches(metric, target, consumer);
+  }
+  if (has_cache && !fs::is_regular_file(cache_path)) {
+    ASTL_LOG_ERROR("Raw sample cache path {} is not a regular file", cache_path.string());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  return VisitRawMetricSampleBatchesAndRemember(
+      RawMetricBatchSource{metric, target, has_cache ? cache_path : fs::path{}, trailing_samples}, consumer);
+}
+
+auto Orchestrator::VisitRawMetricSampleBatchesAndRemember(const RawMetricBatchSource         &source,
+                                                          const ProcessedSampleBatchConsumer &consumer) const
+    -> astl_status_code {
+  BoundedProcessedSampleSnapshot recent_snapshot{_sample_batch_size};
+  const auto                     collecting_consumer = [&](std::span<const ProcessedSampledData> batch) {
+    const auto status = consumer(batch);
+    if (status == ASTL_STATUS_SUCCESS) {
+      recent_snapshot.Add(batch);
+    }
+    return status;
+  };
+  const auto status = VisitRawMetricSampleBatches(source.metric, source.target, collecting_consumer, source.cache_path,
+                                                  source.trailing_samples);
+  if (status == ASTL_STATUS_SUCCESS && !recent_snapshot.Overflowed()) {
+    RememberRecentProcessedMetricSamples(source.metric, source.target, recent_snapshot.Take());
+  }
+  return status;
+}
+
+auto Orchestrator::VisitProcessedMetricSampleBatchesTwice(const IMetric *metric, const ITarget *target,
+                                                          const ProcessedSampleBatchConsumer &first_consumer,
+                                                          const ProcessedSampleBatchConsumer &second_consumer) const
+    -> astl_status_code {
+  auto status = ASTL_STATUS_SUCCESS;
+  if (metric == nullptr) {
+    status = ASTL_STATUS_BAD_ARGUMENT;
+  } else if (target == nullptr) {
+    status = ASTL_STATUS_BAD_ARGUMENT;
+  } else if (!first_consumer) {
+    status = ASTL_STATUS_BAD_ARGUMENT;
+  } else if (!second_consumer) {
+    status = ASTL_STATUS_BAD_ARGUMENT;
+  } else if (!_metric_manager) {
+    status = ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+
+  std::scoped_lock visit_lock{_batch_visit_mtx};
+  std::scoped_lock cache_lock{_cache_file_mtx};
+  if (const auto recent_status =
+          VisitRecentProcessedMetricSamplesTwice(metric, target, first_consumer, second_consumer)) {
+    return *recent_status;
+  }
+  InvalidateRecentProcessedMetricSamples();
+
+  std::vector<RawSampledData> trailing_samples;
+  {
+    std::scoped_lock raw_lock{_raw_samples_mtx};
+    if (const auto raw_it = _raw_samples.find(target); raw_it != _raw_samples.end()) {
+      trailing_samples = raw_it->second;
+    }
+  }
+
+  const fs::path cache_path = _cache_dir / (GetStableTargetKey(*target) + kAstlFileExtension);
+  const bool     has_cache  = fs::exists(cache_path);
+  if (!has_cache && trailing_samples.empty()) {
+    return VisitInMemoryProcessedMetricSampleBatchesTwice(metric, target, first_consumer, second_consumer);
+  }
+  if (has_cache && !fs::is_regular_file(cache_path)) {
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  return VisitRawMetricSampleBatchesTwice(
+      RawMetricBatchSource{metric, target, has_cache ? cache_path : fs::path{}, trailing_samples}, first_consumer,
+      second_consumer);
+}
+
+auto Orchestrator::VisitRawMetricSampleBatchesTwice(const RawMetricBatchSource         &source,
+                                                    const ProcessedSampleBatchConsumer &first_consumer,
+                                                    const ProcessedSampleBatchConsumer &second_consumer) const
+    -> astl_status_code {
+  BoundedProcessedSampleSnapshot recent_snapshot{_sample_batch_size};
+  const auto                     collecting_consumer = [&](std::span<const ProcessedSampledData> batch) {
+    const auto status = first_consumer(batch);
+    if (status == ASTL_STATUS_SUCCESS) {
+      recent_snapshot.Add(batch);
+    }
+    return status;
+  };
+  auto status = VisitRawMetricSampleBatches(source.metric, source.target, collecting_consumer, source.cache_path,
+                                            source.trailing_samples);
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
+  if (recent_snapshot.Overflowed()) {
+    return VisitRawMetricSampleBatches(source.metric, source.target, second_consumer, source.cache_path,
+                                       source.trailing_samples);
+  }
+
+  auto samples = recent_snapshot.Take();
+  status       = VisitSampleSpanBatches(samples, second_consumer, _sample_batch_size);
+  if (status == ASTL_STATUS_SUCCESS) {
+    RememberRecentProcessedMetricSamples(source.metric, source.target, std::move(samples));
+  }
+  return status;
+}
+
+auto Orchestrator::VisitRecentProcessedMetricSamples(const IMetric *metric, const ITarget *target,
+                                                     const ProcessedSampleBatchConsumer &consumer) const
+    -> std::optional<astl_status_code> {
+  if (_recent_processed_metric != metric || _recent_processed_target != target) {
+    return std::nullopt;
+  }
+  return VisitSampleSpanBatches(_recent_processed_samples, consumer, _sample_batch_size);
+}
+
+auto Orchestrator::VisitRecentProcessedMetricSamplesTwice(const IMetric *metric, const ITarget *target,
+                                                          const ProcessedSampleBatchConsumer &first_consumer,
+                                                          const ProcessedSampleBatchConsumer &second_consumer) const
+    -> std::optional<astl_status_code> {
+  const auto first_status = VisitRecentProcessedMetricSamples(metric, target, first_consumer);
+  if (!first_status || *first_status != ASTL_STATUS_SUCCESS) {
+    return first_status;
+  }
+  return VisitRecentProcessedMetricSamples(metric, target, second_consumer);
+}
+
+auto Orchestrator::RememberRecentProcessedMetricSamples(const IMetric *metric, const ITarget *target,
+                                                        std::vector<ProcessedSampledData> samples) const -> void {
+  _recent_processed_target  = target;
+  _recent_processed_metric  = metric;
+  _recent_processed_samples = std::move(samples);
+}
+
+auto Orchestrator::InvalidateRecentProcessedMetricSamples() const -> void {
+  _recent_processed_target = nullptr;
+  _recent_processed_metric = nullptr;
+  _recent_processed_samples.clear();
+}
+
+auto Orchestrator::VisitInMemoryProcessedMetricSampleBatchesTwice(
+    const IMetric *metric, const ITarget *target, const ProcessedSampleBatchConsumer &first_consumer,
+    const ProcessedSampleBatchConsumer &second_consumer) const -> astl_status_code {
+  std::scoped_lock samples_lock{_processed_samples_mtx};
+  const auto       target_it = _processed_samples.find(target);
+  auto             status    = ASTL_STATUS_SUCCESS;
+  if (target_it != _processed_samples.end()) {
+    const auto metric_it = target_it->second.find(metric);
+    if (metric_it != target_it->second.end()) {
+      const auto samples = std::span<const ProcessedSampledData>{metric_it->second};
+      status             = VisitSampleSpanBatches(samples, first_consumer, _sample_batch_size);
+      if (status == ASTL_STATUS_SUCCESS) {
+        status = VisitSampleSpanBatches(samples, second_consumer, _sample_batch_size);
+      }
+    }
+  }
+  return status;
+}
+
+auto Orchestrator::VisitInMemoryProcessedMetricSampleBatches(const IMetric *metric, const ITarget *target,
+                                                             const ProcessedSampleBatchConsumer &consumer) const
+    -> astl_status_code {
+  std::scoped_lock samples_lock{_processed_samples_mtx};
+  const auto       target_it = _processed_samples.find(target);
+  if (target_it == _processed_samples.end()) {
+    return ASTL_STATUS_SUCCESS;
+  }
+  const auto metric_it = target_it->second.find(metric);
+  if (metric_it == target_it->second.end()) {
+    return ASTL_STATUS_SUCCESS;
+  }
+
+  const auto samples = std::span<const ProcessedSampledData>{metric_it->second};
+  for (std::size_t offset = 0; offset < samples.size(); offset += _sample_batch_size) {
+    const auto count  = std::min(_sample_batch_size, samples.size() - offset);
+    const auto status = consumer(samples.subspan(offset, count));
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto Orchestrator::VisitRawMetricSampleBatches(const IMetric *metric, const ITarget *target,
+                                               const ProcessedSampleBatchConsumer &consumer, const fs::path &cache_path,
+                                               std::span<const RawSampledData> trailing_samples) const
+    -> astl_status_code {
+  const BatchVisitContextGuard context_guard{target, metric, consumer};
+  if (cache_path.empty()) {
+    std::istringstream empty_stream{std::string{}, std::ios::binary};
+    return ProcessRawSampleCacheStream(target, empty_stream, trailing_samples);
+  }
+  std::ifstream stream{cache_path, std::ios::binary};
+  if (!stream) {
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+  return ProcessRawSampleCacheStream(target, stream, trailing_samples);
 }
 
 auto Orchestrator::GetPauseMarkersSnapshot() const -> PauseMarkersMap {
@@ -1160,58 +1541,55 @@ void Orchestrator::EnsureLifecycleEventMetricForTarget(const ITarget *target) {
 }
 
 /**
- * @brief Retrieve the collected samples for the given target and metric,
- *        if they have already been materialized in memory.
+ * @brief Check whether samples for a target and metric are already materialized in memory.
  */
-auto Orchestrator::LookupProcessedMetricSamples(const IMetric *metric, const ITarget *target) const
-    -> std::optional<std::span<const astl::ProcessedSampledData>> {
+auto Orchestrator::HasProcessedMetricSamples(const IMetric *metric, const ITarget *target) const -> bool {
   std::scoped_lock lock{_processed_samples_mtx};
 
   const auto target_it = _processed_samples.find(target);
   if (target_it == _processed_samples.end()) {
-    return std::nullopt;
+    return false;
   }
-
-  const auto &metric_map = target_it->second;
-  const auto  metric_it  = metric_map.find(metric);
-  if (metric_it == metric_map.end()) {
-    return std::nullopt;
-  }
-
-  return std::span<const astl::ProcessedSampledData>(metric_it->second);
+  return target_it->second.contains(metric);
 }
 
-auto Orchestrator::ProcessRawSampleCacheStream(const ITarget *target, std::istream &file_stream) const
+auto Orchestrator::ProcessRawSampleCacheStream(const ITarget *target, std::istream &file_stream,
+                                               std::span<const RawSampledData> trailing_samples) const
     -> astl_status_code {
-  ProtobufSerDes::RawSampleBatchReader reader{file_stream};
+  std::scoped_lock processing_lock{_metric_processing_mtx};
 
   // Rebuild processed samples from raw cache using a clean per-target metric state.
   // This avoids replaying into delta/rate metrics that still hold an old "previous sample".
-  const auto reset_status = _metric_manager->ResetMetricsOnTarget(target);
+  const auto reset_status = g_batch_visit_metric != nullptr
+                                ? _metric_manager->ResetMetricOnTarget(target, g_batch_visit_metric)
+                                : _metric_manager->ResetMetricsOnTarget(target);
   if (reset_status != ASTL_STATUS_SUCCESS) {
     return reset_status;
   }
 
   {
     std::scoped_lock lock{_processed_samples_mtx};
-    _processed_samples.erase(target);
+    if (g_batch_visit_metric == nullptr) {
+      _processed_samples.erase(target);
+    } else if (const auto target_it = _processed_samples.find(target); target_it != _processed_samples.end()) {
+      target_it->second.erase(g_batch_visit_metric);
+      if (target_it->second.empty()) {
+        _processed_samples.erase(target_it);
+      }
+    }
   }
 
-  while (true) {
-    auto raw_batch_or_error = reader.ReadNext();
-    if (!raw_batch_or_error) {
-      return raw_batch_or_error.error();
-    }
-    if (raw_batch_or_error->empty()) {
-      break;
-    }
+  const auto replay_status = ReplaySerializedRawBatches(*_metric_manager, target, file_stream, g_batch_visit_metric);
+  if (replay_status != ASTL_STATUS_SUCCESS) {
+    return replay_status;
+  }
 
-    // ProcessRawSamples sinks results back via SinkProcessedSamples() - don't hold the mutex here.
-    RawSamplesMap raw_samples;
-    raw_samples.emplace(target, std::move(*raw_batch_or_error));
-    const auto replay_status = _metric_manager->ProcessRawSamples(raw_samples);
-    if (replay_status != ASTL_STATUS_SUCCESS) {
-      return replay_status;
+  if (!trailing_samples.empty()) {
+    const auto trailing_status = ProcessRawBatch(
+        *_metric_manager, target, std::vector<RawSampledData>{trailing_samples.begin(), trailing_samples.end()},
+        g_batch_visit_metric);
+    if (trailing_status != ASTL_STATUS_SUCCESS) {
+      return trailing_status;
     }
   }
 
@@ -1254,36 +1632,33 @@ auto Orchestrator::ReplayRawSampleCacheForTarget(const ITarget *target) const ->
   return replay_status;
 }
 
-auto Orchestrator::GetProcessedMetricSamples(const IMetric *metric, const ITarget *target) const
-    -> std::expected<std::span<const astl::ProcessedSampledData>, astl_status_code> {
+auto Orchestrator::MaterializeProcessedMetricSamplesForMutation(const IMetric *metric, const ITarget *target) const
+    -> astl_status_code {
   if (!metric || !target) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return ASTL_STATUS_BAD_ARGUMENT;
   }
   if (!_metric_manager) {
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return ASTL_STATUS_INTERNAL_ERROR;
   }
 
   // 1) Fast path
-  auto samples = LookupProcessedMetricSamples(metric, target);
-  if (samples.has_value()) {
-    return *samples;
+  if (HasProcessedMetricSamples(metric, target)) {
+    return ASTL_STATUS_SUCCESS;
   }
 
   // 2) Rebuild from the raw-sample cache file if it exists.
   const auto replay_status = ReplayRawSampleCacheForTarget(target);
   if (replay_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(replay_status);
+    return replay_status;
   }
 
   // 3) Retry
-  samples = LookupProcessedMetricSamples(metric, target);
-  if (samples.has_value()) {
-    return *samples;
+  if (HasProcessedMetricSamples(metric, target)) {
+    return ASTL_STATUS_SUCCESS;
   }
 
-  ASTL_LOG_WARNING("GetProcessedMetricSamples: No samples found for metric {} on target {}", metric->Name(),
-                   target->Name());
-  return {};  // not found
+  ASTL_LOG_WARNING("No samples found while materializing metric {} on target {}", metric->Name(), target->Name());
+  return ASTL_STATUS_SUCCESS;
 }
 
 auto Orchestrator::GetTargetCollectionState(const ITarget *target) const
@@ -1610,7 +1985,7 @@ auto Orchestrator::EnsureProcessedSamplesLoadedForTarget(const ITarget *target) 
     for (const auto *const handle : *metric_handles_result) {
       auto metric_result = _metric_manager->GetMetricOnTarget(handle, target);
       if (metric_result) {
-        (void)GetProcessedMetricSamples(*metric_result, target);
+        (void)MaterializeProcessedMetricSamplesForMutation(*metric_result, target);
       }
     }
   }
@@ -1620,7 +1995,7 @@ auto Orchestrator::EnsureProcessedSamplesLoadedForTarget(const ITarget *target) 
     for (const auto *const handle : *counter_handles_result) {
       auto counter_result = _metric_manager->GetCounterOnTarget(handle, target);
       if (counter_result) {
-        (void)GetProcessedMetricSamples(*counter_result, target);
+        (void)MaterializeProcessedMetricSamplesForMutation(*counter_result, target);
       }
     }
   }
@@ -1709,7 +2084,7 @@ auto Orchestrator::CropSamplesOnTarget(const ITarget *target, std::span<const as
   }
 
   // Step 1: Ensure processed samples for all metrics on this target are populated in memory.
-  // GetProcessedMetricSamples triggers lazy rebuild from disk when samples are not yet loaded.
+  // Materialization triggers lazy rebuild from disk when samples are not yet loaded.
   // Must be called without _processed_samples_mtx held.
   EnsureProcessedSamplesLoadedForTarget(target);
 
@@ -1755,6 +2130,10 @@ auto Orchestrator::CropSamplesOnTarget(const ITarget *target, std::span<const as
       }
     }
   }
+  {
+    std::scoped_lock cache_lock{_cache_file_mtx};
+    InvalidateRecentProcessedMetricSamples();
+  }
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -1782,7 +2161,7 @@ auto Orchestrator::CropMetricSamplesOnTarget(const ITarget *target, const IMetri
   }
 
   // Step 1: Ensure in-memory processed samples are populated for this (target, metric) pair.
-  (void)GetProcessedMetricSamples(metric, target);
+  (void)MaterializeProcessedMetricSamplesForMutation(metric, target);
 
   // Step 2: Filter in-memory processed samples for this (target, metric) pair only.
   {
@@ -1805,6 +2184,11 @@ auto Orchestrator::CropMetricSamplesOnTarget(const ITarget *target, const IMetri
       "'{}'. A future rebuild from cache will regenerate unfiltered samples. Use CropSamplesOnTarget to "
       "persist the crop.",
       metric->Name(), target->Name());
+
+  {
+    std::scoped_lock cache_lock{_cache_file_mtx};
+    InvalidateRecentProcessedMetricSamples();
+  }
 
   return ASTL_STATUS_SUCCESS;
 }

@@ -6,6 +6,7 @@
 #define ASTL_SUMMARIZER_HPP_
 
 #include <expected>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -36,12 +37,44 @@ struct MinMaxAvgSummary {
   std::size_t              count{0};  ///< Number of samples processed
 };
 
+/** Incremental min/max/average calculation suitable for streamed sample batches. */
+class MinMaxAvgAccumulator {
+ public:
+  auto Add(std::span<const ProcessedSampledData> samples) -> astl_status_code;
+  auto Result() const -> std::expected<MinMaxAvgSummary, astl_status_code>;
+
+ private:
+  MinMaxAvgSummary         _summary{};
+  std::optional<AstlValue> _sum;
+  std::size_t              _arithmetic_count{0};
+};
+
 /**
  * @brief Summary data for time-weighted average statistics.
  */
 struct TimeWeightedAvgSummary {
   std::optional<AstlValue> time_weighted_avg;  ///< Time-weighted average value
   std::size_t              count{0};           ///< Number of samples processed
+};
+
+/** Incremental left-hold time-weighted average across batch boundaries. */
+class TimeWeightedAvgAccumulator {
+ public:
+  explicit TimeWeightedAvgAccumulator(std::span<const ProcessedSampleTimestamp> pause_markers = {});
+  auto Add(std::span<const ProcessedSampledData> samples) -> astl_status_code;
+  auto Result() const -> std::expected<TimeWeightedAvgSummary, astl_status_code>;
+
+ private:
+  auto                                    AddArithmeticSample(const ProcessedSampledData& sample) -> astl_status_code;
+  auto                                    AddWeightedInterval(const ProcessedSampledData& sample) -> astl_status_code;
+  std::vector<ProcessedSampleTimestamp>   _pause_markers;
+  std::optional<AstlValue>                _previous_value;
+  std::optional<ProcessedSampleTimestamp> _previous_timestamp;
+  double                                  _weighted_sum{0.0};
+  double                                  _total_weight{0.0};
+  double                                  _arithmetic_sum{0.0};
+  std::size_t                             _arithmetic_count{0};
+  std::size_t                             _count{0};
 };
 
 /**
@@ -87,6 +120,18 @@ struct HistogramSummary {
   std::size_t               unique_values{0};       ///< Number of unique values (equals bins.size() for discrete)
   bool                      is_discrete{true};      ///< True if using discrete value bins, false for range bins
   std::size_t               out_of_range_count{0};  ///< Samples that fell outside the histogram range (for range bins)
+};
+
+/** Incremental discrete histogram bounded by the supported 1,000 unique bins. */
+class DiscreteHistogramAccumulator {
+ public:
+  auto Add(std::span<const ProcessedSampledData> samples) -> astl_status_code;
+  auto Result() const -> HistogramSummary;
+
+ private:
+  std::map<AstlValue, std::size_t> _histogram;
+  std::size_t                      _total_count{0};
+  bool                             _too_many_bins{false};
 };
 
 /**

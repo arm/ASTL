@@ -41,6 +41,9 @@ enum class EnvVar {
   /** @brief Optional comma-separated allowlist of collectors used for live discovery. */
   ASTL_COLLECTORS,
 
+  /** @brief Maximum number of metric samples held or visited in one batch. Defaults to 1024. */
+  ASTL_SAMPLE_BATCH_SIZE,
+
   /* optional override for astl config directory */
   ASTL_CONFIG_DIR,
 

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "../common/i_processed_sample_sink.hpp"
@@ -41,150 +42,145 @@ constexpr auto IsArithmeticValueType(astl_value_type_t value_type) -> bool {
 auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData>     samples,
                                 std::span<const ProcessedSampleTimestamp> pause_markers)
     -> std::expected<std::optional<AstlValue>, astl_status_code> {
-  if (samples.empty()) {
-    return std::optional<AstlValue>{};
+  TimeWeightedAvgAccumulator accumulator{pause_markers};
+  if (const auto status = accumulator.Add(samples); status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
   }
-
-  // Sort pause markers once for O(log n) lower_bound lookups per interval.
-  std::vector<ProcessedSampleTimestamp> sorted_pauses(pause_markers.begin(), pause_markers.end());
-  std::sort(sorted_pauses.begin(), sorted_pauses.end());
-
-  double weighted_sum = 0.0;
-  double total_weight = 0.0;
-
-  for (size_t idx = 0; (idx + 1) < samples.size(); ++idx) {
-    const auto& current = samples[idx];
-    const auto& next    = samples[idx + 1];
-    if (!current.value.IsArithmetic() || !next.value.IsArithmetic()) {
-      continue;
-    }
-
-    // Clip the interval end to the first pause that falls strictly after current
-    // and before (or at) next.  This prevents the last pre-pause sample from
-    // being weighted across the entire idle gap.
-    ProcessedSampleTimestamp interval_end = next.timestamp;
-    if (!sorted_pauses.empty()) {
-      // Find first pause strictly after current.timestamp.
-      auto it = std::upper_bound(sorted_pauses.begin(), sorted_pauses.end(), current.timestamp);
-      if (it != sorted_pauses.end() && *it < next.timestamp) {
-        interval_end = *it;
-      }
-    }
-
-    if (interval_end <= current.timestamp) {
-      continue;
-    }
-
-    auto current_value = current.value.ToDouble();
-    if (!current_value.has_value()) {
-      return std::unexpected(current_value.error());
-    }
-
-    const auto weight =
-        static_cast<double>(interval_end.time_since_epoch().count() - current.timestamp.time_since_epoch().count());
-    weighted_sum += current_value.value() * weight;
-    total_weight += weight;
+  auto result = accumulator.Result();
+  if (!result) {
+    return std::unexpected(result.error());
   }
+  return result->time_weighted_avg;
+}
 
-  if (total_weight > 0.0) {
-    const auto weighted_avg = weighted_sum / total_weight;
-    const auto rounded_avg  = std::round(weighted_avg * 100.0) / 100.0;
-    return std::optional<AstlValue>{AstlValue{rounded_avg}};
+TimeWeightedAvgAccumulator::TimeWeightedAvgAccumulator(std::span<const ProcessedSampleTimestamp> pause_markers)
+    : _pause_markers{pause_markers.begin(), pause_markers.end()} {
+  std::sort(_pause_markers.begin(), _pause_markers.end());
+}
+
+auto TimeWeightedAvgAccumulator::Add(std::span<const ProcessedSampledData> samples) -> astl_status_code {
+  if (samples.size() > std::numeric_limits<std::size_t>::max() - _count) {
+    return ASTL_STATUS_BUFFER_TOO_SMALL;
   }
-
-  // Fallback for single-sample / identical-timestamp streams: arithmetic mean.
-  double arithmetic_sum   = 0.0;
-  size_t arithmetic_count = 0;
+  _count += samples.size();
   for (const auto& sample : samples) {
-    if (!sample.value.IsArithmetic()) {
-      continue;
+    if (const auto status = AddArithmeticSample(sample); status != ASTL_STATUS_SUCCESS) {
+      return status;
     }
-    auto value = sample.value.ToDouble();
-    if (!value.has_value()) {
-      return std::unexpected(value.error());
+    if (const auto status = AddWeightedInterval(sample); status != ASTL_STATUS_SUCCESS) {
+      return status;
     }
-    arithmetic_sum += value.value();
-    ++arithmetic_count;
+    _previous_value     = sample.value;
+    _previous_timestamp = sample.timestamp;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto TimeWeightedAvgAccumulator::AddArithmeticSample(const ProcessedSampledData& sample) -> astl_status_code {
+  if (!sample.value.IsArithmetic()) {
+    return ASTL_STATUS_SUCCESS;
+  }
+  auto value = sample.value.ToDouble();
+  if (!value) {
+    return value.error();
+  }
+  _arithmetic_sum += *value;
+  ++_arithmetic_count;
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto TimeWeightedAvgAccumulator::AddWeightedInterval(const ProcessedSampledData& sample) -> astl_status_code {
+  if (!_previous_value || !_previous_timestamp || !_previous_value->IsArithmetic() || !sample.value.IsArithmetic()) {
+    return ASTL_STATUS_SUCCESS;
+  }
+  auto       interval_end = sample.timestamp;
+  const auto pause        = std::upper_bound(_pause_markers.begin(), _pause_markers.end(), *_previous_timestamp);
+  if (pause != _pause_markers.end() && *pause < sample.timestamp) {
+    interval_end = *pause;
+  }
+  if (interval_end <= *_previous_timestamp) {
+    return ASTL_STATUS_SUCCESS;
   }
 
-  if (arithmetic_count == 0) {
-    return std::optional<AstlValue>{};
+  auto value = _previous_value->ToDouble();
+  if (!value) {
+    return value.error();
   }
-  const auto regular_avg = arithmetic_sum / static_cast<double>(arithmetic_count);
-  const auto rounded_avg = std::round(regular_avg * 100.0) / 100.0;
-  return std::optional<AstlValue>{AstlValue{rounded_avg}};
+  const auto weight =
+      static_cast<double>(interval_end.time_since_epoch().count() - _previous_timestamp->time_since_epoch().count());
+  _weighted_sum += *value * weight;
+  _total_weight += weight;
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto TimeWeightedAvgAccumulator::Result() const -> std::expected<TimeWeightedAvgSummary, astl_status_code> {
+  TimeWeightedAvgSummary summary{};
+  summary.count = _count;
+  if (_total_weight > 0.0) {
+    summary.time_weighted_avg = AstlValue{std::round((_weighted_sum / _total_weight) * 100.0) / 100.0};
+  } else if (_arithmetic_count > 0) {
+    summary.time_weighted_avg =
+        AstlValue{std::round((_arithmetic_sum / static_cast<double>(_arithmetic_count)) * 100.0) / 100.0};
+  }
+  return summary;
 }
 
 // MinMaxAvgSummarizer Implementation
-auto MinMaxAvgSummarizer::Summarize(std::span<const ProcessedSampledData> samples) const
-    -> std::expected<SummaryResult, astl_status_code> {
-  if (samples.empty()) {
-    ASTL_LOG_TRACE("MinMaxAvgSummarizer: No samples to summarize");
-    return MinMaxAvgSummary{std::nullopt, std::nullopt, std::nullopt, 0};
+auto MinMaxAvgAccumulator::Add(std::span<const ProcessedSampledData> samples) -> astl_status_code {
+  if (samples.size() > std::numeric_limits<std::size_t>::max() - _summary.count) {
+    return ASTL_STATUS_BUFFER_TOO_SMALL;
   }
-
-  MinMaxAvgSummary summary{};
-  summary.count = samples.size();
-
-  // Find first arithmetic sample to initialize min/max
-  auto arithmetic_sample_it = std::find_if(
-      samples.begin(), samples.end(), [](const ProcessedSampledData& sample) { return sample.value.IsArithmetic(); });
-
-  if (arithmetic_sample_it == samples.end()) {
-    ASTL_LOG_TRACE("MinMaxAvgSummarizer: No arithmetic samples found");
-    return summary;
-  }
-
-  // Initialize min/max with first arithmetic value
-  summary.min = arithmetic_sample_it->value;
-  summary.max = arithmetic_sample_it->value;
-
-  // Get type for creating a zero value for sum
-  auto [union_val, value_type] = arithmetic_sample_it->value.ToAstlUnionValue();
-  auto sum_result              = AstlValue::FromUnionPromoting(value_type);
-  if (!sum_result) {
-    ASTL_LOG_ERROR("MinMaxAvgSummarizer: Failed to create initial sum");
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
-  }
-
-  auto        sum              = sum_result.value();
-  std::size_t arithmetic_count = 0;
-
+  _summary.count += samples.size();
   for (const auto& sample : samples) {
     if (!sample.value.IsArithmetic()) {
       continue;
     }
-
-    // Update min/max
-    summary.min = std::min(sample.value, summary.min.value_or(sample.value));
-    summary.max = std::max(sample.value, summary.max.value_or(sample.value));
-
-    // Add to sum
-    auto add_result = AstlValue::Add(sum, sample.value);
-    if (!add_result) {
-      ASTL_LOG_ERROR("MinMaxAvgSummarizer: Failed to add sample to sum");
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    _summary.min = std::min(sample.value, _summary.min.value_or(sample.value));
+    _summary.max = std::max(sample.value, _summary.max.value_or(sample.value));
+    if (!_sum) {
+      const auto [unused, type] = sample.value.ToAstlUnionValue();
+      static_cast<void>(unused);
+      auto zero = AstlValue::FromUnionPromoting(type);
+      if (!zero) {
+        return ASTL_STATUS_INTERNAL_ERROR;
+      }
+      _sum = *zero;
     }
-    sum = add_result.value();
-    arithmetic_count++;
+    auto added = AstlValue::Add(*_sum, sample.value);
+    if (!added) {
+      return ASTL_STATUS_INTERNAL_ERROR;
+    }
+    _sum = *added;
+    ++_arithmetic_count;
   }
+  return ASTL_STATUS_SUCCESS;
+}
 
-  if (arithmetic_count == 0) {
-    ASTL_LOG_DEBUG("MinMaxAvgSummarizer: No arithmetic samples to calculate average");
-    return summary;
+auto MinMaxAvgAccumulator::Result() const -> std::expected<MinMaxAvgSummary, astl_status_code> {
+  auto result = _summary;
+  if (_arithmetic_count == 0) {
+    return result;
   }
-  // Calculate average
-  auto avg_result = AstlValue::Divide(sum, static_cast<double>(arithmetic_count));
-  if (avg_result) {
-    // Extract the double value and round to 2 decimal places
-    double avg_value   = std::get<double>(avg_result.value().value);
-    double rounded_avg = std::round(avg_value * 100.0) / 100.0;
-    summary.avg        = AstlValue{rounded_avg};
-  } else {
-    ASTL_LOG_ERROR("MinMaxAvgSummarizer: Failed to calculate average");
+  auto average = AstlValue::Divide(*_sum, static_cast<double>(_arithmetic_count));
+  if (!average) {
+    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
+  const double rounded = std::round(std::get<double>(average->value) * 100.0) / 100.0;
+  result.avg           = AstlValue{rounded};
+  return result;
+}
 
-  return summary;
+auto MinMaxAvgSummarizer::Summarize(std::span<const ProcessedSampledData> samples) const
+    -> std::expected<SummaryResult, astl_status_code> {
+  MinMaxAvgAccumulator accumulator;
+  if (const auto status = accumulator.Add(samples); status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
+  }
+  auto result = accumulator.Result();
+  if (!result) {
+    return std::unexpected(result.error());
+  }
+  return *result;
 }
 
 auto MinMaxAvgSummarizer::IsSupported(astl_value_type_t value_type, astl_metric_type_t metric_type) const -> bool {
@@ -242,50 +238,47 @@ auto HistogramSummarizer::Summarize(std::span<const ProcessedSampledData> sample
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 auto HistogramSummarizer::SummarizeDiscrete(std::span<const ProcessedSampledData> samples) const
     -> std::expected<SummaryResult, astl_status_code> {
-  HistogramSummary summary{};
-  summary.total_count = samples.size();
-  summary.is_discrete = true;
+  DiscreteHistogramAccumulator accumulator;
+  if (const auto status = accumulator.Add(samples); status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
+  }
+  return accumulator.Result();
+}
 
-  // Use a map to count occurrences of each unique value (map keeps values sorted)
-  std::map<AstlValue, std::size_t> histogram;
-  // Check for excessive unique values (potentially pathological input)
+auto DiscreteHistogramAccumulator::Add(std::span<const ProcessedSampledData> samples) -> astl_status_code {
+  if (samples.size() > std::numeric_limits<std::size_t>::max() - _total_count) {
+    return ASTL_STATUS_BUFFER_TOO_SMALL;
+  }
+  _total_count += samples.size();
   constexpr std::size_t k_max_discrete_bins = 1000;
-
-  /**
-   * @brief SummarizeDiscrete provides sorted Histogram that is stored as a vector.
-   *
-   * @details `std::map` keeps keys (values) in sorted order while we tally
-   * counts. We then transform that ordered data into a vector of summary.bins
-   * The downstream writers can iterate sequentially with cache-friendly
-   * access and emit output that is already sorted by value.
-   *
-   */
-  summary.bins.reserve(histogram.size());
   for (const auto& sample : samples) {
-    // Count occurrences of each value (discrete mode supports all types)
-    histogram[sample.value]++;
-    if (histogram.size() > k_max_discrete_bins) {
-      ASTL_LOG_WARNING("HistogramSummarizer: Too many unique values (%zu > %zu) in discrete mode; summary omitted.",
-                       histogram.size(), k_max_discrete_bins);
-      // Do not populate summary.bins, return summary
-      summary.unique_values = histogram.size();
-      return summary;
+    if (_too_many_bins) {
+      continue;
+    }
+    ++_histogram[sample.value];
+    if (_histogram.size() > k_max_discrete_bins) {
+      ASTL_LOG_WARNING(
+          "DiscreteHistogramAccumulator: Too many unique values ({} > {}) in discrete mode; histogram bins will be "
+          "omitted.",
+          _histogram.size(), k_max_discrete_bins);
+      _too_many_bins = true;
     }
   }
+  return ASTL_STATUS_SUCCESS;
+}
 
-  if (histogram.empty()) {
-    ASTL_LOG_TRACE("HistogramSummarizer: No samples found");
+auto DiscreteHistogramAccumulator::Result() const -> HistogramSummary {
+  HistogramSummary summary{};
+  summary.total_count   = _total_count;
+  summary.is_discrete   = true;
+  summary.unique_values = _histogram.size();
+  if (_too_many_bins) {
     return summary;
   }
-
-  // Create bins for each unique value (already sorted by std::map)
-  summary.bins.reserve(histogram.size());
-  for (const auto& [value, count] : histogram) {
+  summary.bins.reserve(_histogram.size());
+  for (const auto& [value, count] : _histogram) {
     summary.bins.emplace_back(value, count);
   }
-
-  summary.unique_values = histogram.size();
-
   return summary;
 }
 

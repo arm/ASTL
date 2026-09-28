@@ -431,6 +431,29 @@ TEST_CASE("MinMaxAvgSummarizer direct testing", "[csv_summary][summarizer]") {  
     REQUIRE(*summary.avg == astl::AstlValue{3.0});  // (1+2+3+4+5)/5 = 15/5 = 3
   }
 
+  SECTION("Running accumulator preserves results across large batches") {
+    astl::MinMaxAvgAccumulator accumulator;
+    constexpr std::size_t      sample_count = 10'000;
+    constexpr std::size_t      batch_size   = 127;
+
+    for (std::size_t offset = 0; offset < sample_count; offset += batch_size) {
+      std::vector<astl::ProcessedSampledData> batch;
+      const auto                              count = std::min(batch_size, sample_count - offset);
+      batch.reserve(count);
+      for (std::size_t index = 0; index < count; ++index) {
+        batch.emplace_back(astl::AstlValue{static_cast<double>(offset + index)});
+      }
+      REQUIRE(accumulator.Add(batch) == ASTL_STATUS_SUCCESS);
+    }
+
+    const auto summary = accumulator.Result();
+    REQUIRE(summary.has_value());
+    REQUIRE(summary->count == sample_count);
+    REQUIRE(summary->min == astl::AstlValue{0.0});
+    REQUIRE(summary->max == astl::AstlValue{9'999.0});
+    REQUIRE(summary->avg == astl::AstlValue{4'999.5});
+  }
+
   SECTION("Samples with negative values") {
     auto samples = MakeSamplesWithValues({-10.0, -5.0, 0.0, 5.0, 10.0});
     auto result  = summarizer.Summarize(samples);
@@ -501,6 +524,23 @@ TEST_CASE("TimeWeightedAvgSummarizer direct testing", "[csv_summary][summarizer]
     REQUIRE(summary.time_weighted_avg.has_value());
     REQUIRE(summary.count == 3);
     REQUIRE(*summary.time_weighted_avg == astl::AstlValue{17.5});
+  }
+
+  SECTION("Running calculation preserves the interval between batches") {
+    std::vector<astl::ProcessedSampledData> first_batch{
+        {astl::AstlValue{10.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{0}}  },
+        {astl::AstlValue{20.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{100}}},
+    };
+    std::vector<astl::ProcessedSampledData> second_batch{
+        {astl::AstlValue{30.0}, astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{400}}},
+    };
+    astl::TimeWeightedAvgAccumulator accumulator;
+    REQUIRE(accumulator.Add(first_batch) == ASTL_STATUS_SUCCESS);
+    REQUIRE(accumulator.Add(second_batch) == ASTL_STATUS_SUCCESS);
+    const auto summary = accumulator.Result();
+    REQUIRE(summary.has_value());
+    REQUIRE(summary->count == 3);
+    REQUIRE(summary->time_weighted_avg == astl::AstlValue{17.5});
   }
 
   SECTION("IsSupported returns true for arithmetic value/delta/rate metrics") {
@@ -781,6 +821,22 @@ TEST_CASE("HistogramSummarizer discrete mode", "[histogram][summarizer][csv_summ
     REQUIRE(summary.bins.size() == 3);
     REQUIRE(summary.unique_values == 3);
     REQUIRE(summary.total_count == 5);
+  }
+
+  SECTION("More than 1000 unique values omits histogram bins") {
+    std::vector<astl::ProcessedSampledData> samples;
+    samples.reserve(1002);
+    for (uint64_t value = 0; value < 1002; ++value) {
+      samples.emplace_back(astl::AstlValue{value}, astl::ProcessedSampleTimestamp{});
+    }
+
+    auto result = summarizer.Summarize(samples);
+
+    REQUIRE(result.has_value());
+    const auto summary = std::get<astl::HistogramSummary>(result.value());
+    REQUIRE(summary.total_count == samples.size());
+    REQUIRE(summary.unique_values == 1001);
+    REQUIRE(summary.bins.empty());
   }
 }
 

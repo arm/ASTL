@@ -47,6 +47,20 @@ using astl::ProtobufSerDes::Serialize;
 
 namespace {
 
+struct TrackingProcessedSampleSink : astl::IProcessedSampleSink {
+  std::vector<const astl::IMetric*>       producers;
+  std::vector<astl::ProcessedSampledData> samples;
+
+  auto SinkProcessedSamples(const astl::ITarget* target, const astl::IMetric* metric,
+                            std::span<const astl::ProcessedSampledData> processed_samples)
+      -> astl_status_code override {
+    (void)target;
+    producers.insert(producers.end(), processed_samples.size(), metric);
+    samples.insert(samples.end(), processed_samples.begin(), processed_samples.end());
+    return ASTL_STATUS_SUCCESS;
+  }
+};
+
 RawSampledData MakeSample(OperationId operation_id, AstlValue value, int64_t ts_us) {
   RawSampledData sample{operation_id, std::move(value)};
   sample.raw_tick = static_cast<uint64_t>(ts_us);
@@ -723,6 +737,69 @@ TEST_CASE("Serialize(IMetricManager) round-trip through MetricManager", "[Metric
   astl::RawSamplesMap samples_map;
   samples_map[tgt] = {MakeSample(operation_id, AstlValue{uint64_t{99}}, 1000)};  // NOLINT
   REQUIRE(rebuilt_mgr->ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("Loaded MetricManager replays two metrics independently without live routes",
+          "[MetricManager][protobuf][loaded-session]") {
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(MakeTarget("tlm-0", "unit-test target", astl::CollectorType::SCMI));
+  const auto* target = targets.front().get();
+
+  astl::MetricManager manager{MakeCaps(astl::CollectorType::SCMI)};
+  for (const auto& [name, event_id] : {
+           std::pair{"metric0", astl::ScmiDataEventId{0x24}},
+           std::pair{"metric1", astl::ScmiDataEventId{0x25}}
+  }) {
+    auto config = std::make_unique<astl::MetricConfig>(name, "unit-test metric", ASTL_UNITS_NONE, ASTL_VALUE_UINT64,
+                                                       ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
+                                                       astl::CollectorType::SCMI, astl::ScmiOperationBuilder{event_id});
+    REQUIRE(manager.RegisterMetric(std::move(config), {target}) == ASTL_STATUS_SUCCESS);
+  }
+  auto handles = manager.GetAvailableMetrics(target);
+  REQUIRE(handles.has_value());
+  REQUIRE(handles->size() == 2);
+  auto operations = manager.GetRequiredOperations(*handles, target);
+  REQUIRE(operations.has_value());
+  REQUIRE(operations->operationsOnSample.size() == 2);
+  const auto operation0 = operations->operationsOnSample[0]->GetId();
+  const auto operation1 = operations->operationsOnSample[1]->GetId();
+  manager.SetClockCorrelations({
+      {operation0, astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}},
+                                                   uint64_t{0}, astl::MakeTickRatio<astl::SampleMicroseconds>()}},
+      {operation1, astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}},
+                                                   uint64_t{0}, astl::MakeTickRatio<astl::SampleMicroseconds>()}},
+  });
+
+  std::stringstream stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(astl::ProtobufSerDes::Serialize(manager, stream) == ASTL_STATUS_SUCCESS);
+  stream.seekg(0);
+  auto loaded = astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::MetricManager>>(stream, targets);
+  REQUIRE(loaded.has_value());
+  auto loaded_handles = (*loaded)->GetAvailableMetrics(target);
+  REQUIRE(loaded_handles.has_value());
+  REQUIRE(loaded_handles->size() == 2);
+  const auto* metric0 = (*loaded)->GetMetricOnTarget((*loaded_handles)[0], target).value();
+  const auto* metric1 = (*loaded)->GetMetricOnTarget((*loaded_handles)[1], target).value();
+
+  astl::MetricManagerTestAccessor::ClearLiveOperationRoutes(**loaded);
+  TrackingProcessedSampleSink sink;
+  REQUIRE((*loaded)->RegisterProcessedSampleSink(&sink) == ASTL_STATUS_SUCCESS);
+  astl::RawSamplesMap raw_samples{
+      {target,
+       {MakeSample(operation0, AstlValue{uint64_t{17}}, 1000), MakeSample(operation1, AstlValue{uint64_t{29}}, 1000)}}
+  };
+
+  REQUIRE((*loaded)->ProcessRawSamplesForMetric(raw_samples, metric0) == ASTL_STATUS_SUCCESS);
+  REQUIRE(sink.producers == std::vector<const astl::IMetric*>{metric0});
+  REQUIRE(sink.samples.size() == 1);
+  REQUIRE(sink.samples.front().value == AstlValue{uint64_t{17}});
+
+  sink.producers.clear();
+  sink.samples.clear();
+  REQUIRE((*loaded)->ProcessRawSamplesForMetric(raw_samples, metric1) == ASTL_STATUS_SUCCESS);
+  REQUIRE(sink.producers == std::vector<const astl::IMetric*>{metric1});
+  REQUIRE(sink.samples.size() == 1);
+  REQUIRE(sink.samples.front().value == AstlValue{uint64_t{29}});
 }
 
 TEST_CASE("Serialize(IMetricManager) round-trips procfs composite metrics", "[MetricManager][protobuf]") {

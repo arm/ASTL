@@ -207,6 +207,92 @@ auto RememberMetricTimestamp(std::mutex&                                        
   last_processed_timestamps[metric] = timestamp;
 }
 
+auto DispatchProcessingQueue(ProcessingQueue& processing_queue, std::mutex& mutex,
+                             std::unordered_map<IMetric*, ProcessedSampleTimestamp>& last_processed_timestamps)
+    -> astl_status_code {
+  std::sort(processing_queue.begin(), processing_queue.end(), [](const auto& lhs, const auto& rhs) {
+    if (lhs.first != rhs.first) {
+      return std::less<IMetric*>{}(lhs.first, rhs.first);
+    }
+    return lhs.second.timestamp < rhs.second.timestamp;
+  });
+
+  for (const auto& [metric, normalized_sample] : processing_queue) {
+    if (IsTimestampRegression(mutex, last_processed_timestamps, metric, normalized_sample)) {
+      continue;
+    }
+    const auto status = DispatchNormalizedSample(metric, normalized_sample);
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+    RememberMetricTimestamp(mutex, last_processed_timestamps, metric, normalized_sample.timestamp);
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+struct TargetedReplayInput {
+  MetricManager::TargetOperationToMetricMap routes;
+  MetricManager::LifecycleEventMetricMap    lifecycle_metrics;
+  std::vector<RawSampledData>               samples;
+};
+
+struct TargetedReplayContext {
+  const MetricManager::TargetOperationToMetricMap*  routes{nullptr};
+  const MetricManager::LifecycleEventMetricMap*     lifecycle_metrics{nullptr};
+  const std::vector<std::unique_ptr<MetricHandle>>* metric_handles{nullptr};
+  const ITarget*                                    target{nullptr};
+  const IMetric*                                    metric{nullptr};
+};
+
+auto FindSoleMetricOnTarget(const std::vector<std::unique_ptr<MetricHandle>>& metric_handles, const ITarget* target)
+    -> std::pair<IMetric*, std::size_t> {
+  IMetric*    registered_metric = nullptr;
+  std::size_t registered_count  = 0;
+  for (const auto& metric_handle : metric_handles) {
+    if (const auto registered = metric_handle->target_to_metric_map.find(target);
+        registered != metric_handle->target_to_metric_map.end()) {
+      registered_metric = registered->second.get();
+      ++registered_count;
+    }
+  }
+  return {registered_metric, registered_count};
+}
+
+auto BuildTargetedReplayInput(const TargetedReplayContext& context, std::span<const RawSampledData> samples)
+    -> std::expected<TargetedReplayInput, astl_status_code> {
+  TargetedReplayInput input;
+  auto&               target_routes = input.routes[context.target];
+  if (const auto routes = context.routes->find(context.target); routes != context.routes->end()) {
+    for (const auto& [operation_id, routed_metric] : routes->second) {
+      if (routed_metric == context.metric) {
+        target_routes.emplace(operation_id, routed_metric);
+      }
+    }
+    std::ranges::copy_if(samples, std::back_inserter(input.samples), [&](const RawSampledData& sample) {
+      return sample.IsPauseResumeMarker() || target_routes.contains(sample.operation_id);
+    });
+  } else {
+    const auto [registered_metric, registered_count] = FindSoleMetricOnTarget(*context.metric_handles, context.target);
+    if (registered_count != 1 || registered_metric != context.metric) {
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+    for (const auto& sample : samples) {
+      if (!sample.IsPauseResumeMarker()) {
+        target_routes.emplace(sample.operation_id, registered_metric);
+      }
+    }
+    input.samples.assign(samples.begin(), samples.end());
+  }
+
+  // A synthetic route lets pause markers reset only the requested metric. It is never used by a regular sample.
+  target_routes.try_emplace(kFirstAssignableOperationId, const_cast<IMetric*>(context.metric));  // NOLINT
+  if (const auto lifecycle = context.lifecycle_metrics->find(context.target);
+      lifecycle != context.lifecycle_metrics->end() && lifecycle->second == context.metric) {
+    input.lifecycle_metrics.emplace(context.target, lifecycle->second);
+  }
+  return input;
+}
+
 }  // namespace
 
 /**
@@ -409,6 +495,7 @@ auto MetricManager::GetCounterRequiredOperations(std::span<const astl_counter_ha
     for (auto& operation : counter_operations) {
       uint32_t operation_id                                    = operation->GetId();
       _target_to_operation_to_metric_map[target][operation_id] = counter;
+      _replay_operation_to_metric_map[target][operation_id]    = counter;
       op_sequence.push_back(std::move(operation));
       ASTL_LOG_INFO("GetRequiredOperations: Added operation from Counter::GetOperations() for counter '{}'",
                     config->Name());
@@ -773,6 +860,7 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
     for (auto& operation : metric_operations) {
       uint32_t operation_id                                    = operation->GetId();
       _target_to_operation_to_metric_map[target][operation_id] = metric;
+      _replay_operation_to_metric_map[target][operation_id]    = metric;
       op_sequence.push_back(std::move(operation));
       ASTL_LOG_INFO("GetRequiredOperations: Added operation from IMetric::GetOperations() for metric '{}', op_id = {}",
                     config->Name(), operation_id);
@@ -826,6 +914,12 @@ auto MetricManager::ClearStaleOperationStateForTarget(const ITarget*            
     if (target_iter->second.empty()) {
       _target_to_operation_to_metric_map.erase(target_iter);
     }
+  }
+  if (const auto live_routes = _target_to_operation_to_metric_map.find(target);
+      live_routes != _target_to_operation_to_metric_map.end()) {
+    _replay_operation_to_metric_map[target] = live_routes->second;
+  } else {
+    _replay_operation_to_metric_map.erase(target);
   }
   for (const auto operation_id : removed_ids) {
     _clock_correlations.erase(operation_id);
@@ -891,29 +985,43 @@ auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status
     }
   }
 
-  // Sort samples so that each metric receives its samples in non-decreasing normalized timestamp order.
-  // Primary key: metric pointer (groups all samples for the same metric together).
-  // Secondary key: normalized CLOCK_MONOTONIC_RAW timestamp (ascending within each group).
-  std::sort(processing_queue.begin(), processing_queue.end(), [](const auto& lhs, const auto& rhs) {
-    if (lhs.first != rhs.first) {
-      return std::less<IMetric*>{}(lhs.first, rhs.first);
-    }
-    return lhs.second.timestamp < rhs.second.timestamp;
-  });
+  const auto dispatch_status = DispatchProcessingQueue(processing_queue, _mutex, _last_processed_timestamp_by_metric);
+  return dispatch_status == ASTL_STATUS_SUCCESS ? enqueue_status : dispatch_status;
+}
 
-  for (const auto& [metric_handle, normalized_sample] : processing_queue) {
-    if (IsTimestampRegression(_mutex, _last_processed_timestamp_by_metric, metric_handle, normalized_sample)) {
-      continue;
-    }
-
-    const auto status = DispatchNormalizedSample(metric_handle, normalized_sample);
-    if (status != ASTL_STATUS_SUCCESS) {
-      return status;
-    }
-
-    RememberMetricTimestamp(_mutex, _last_processed_timestamp_by_metric, metric_handle, normalized_sample.timestamp);
+auto MetricManager::ProcessRawSamplesForMetric(RawSamplesMap& raw_samples, const IMetric* metric) -> astl_status_code {
+  if (metric == nullptr) {
+    return ASTL_STATUS_BAD_ARGUMENT;
   }
-  return enqueue_status;
+
+  std::lock_guard<std::mutex> process_lock(_process_raw_samples_mutex);
+  ProcessingQueue             processing_queue;
+  auto                        status = ASTL_STATUS_SUCCESS;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    for (const auto& [target, samples] : raw_samples) {
+      const auto                  live_routes   = _target_to_operation_to_metric_map.find(target);
+      const auto&                 replay_routes = live_routes != _target_to_operation_to_metric_map.end()
+                                                      ? _target_to_operation_to_metric_map
+                                                      : _replay_operation_to_metric_map;
+      const TargetedReplayContext context{&replay_routes, &_target_to_lifecycle_event_metric, &_metric_handles, target,
+                                          metric};
+      auto                        input = BuildTargetedReplayInput(context, samples);
+      if (!input) {
+        status = input.error();
+        break;
+      }
+      status = EnqueueTargetSamples(input->routes, input->lifecycle_metrics, _clock_correlations, target,
+                                    input->samples, processing_queue);
+      if (status != ASTL_STATUS_SUCCESS) {
+        break;
+      }
+    }
+  }
+  if (status == ASTL_STATUS_SUCCESS) {
+    status = DispatchProcessingQueue(processing_queue, _mutex, _last_processed_timestamp_by_metric);
+  }
+  return status;
 }
 
 auto MetricManager::ResetMetricsOnTarget(const ITarget* target) -> astl_status_code {
@@ -939,6 +1047,35 @@ auto MetricManager::ResetMetricsOnTarget(const ITarget* target) -> astl_status_c
     }
   }
 
+  return ASTL_STATUS_SUCCESS;
+}
+
+auto MetricManager::ResetMetricOnTarget(const ITarget* target, const IMetric* metric) -> astl_status_code {
+  std::lock_guard<std::mutex> lock(_mutex);
+  if (target == nullptr || metric == nullptr) {
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+
+  const bool metric_is_registered = std::ranges::any_of(_metric_handles, [target, metric](const auto& metric_handle) {
+    const auto metric_on_target = metric_handle->target_to_metric_map.find(target);
+    return metric_on_target != metric_handle->target_to_metric_map.end() && metric_on_target->second.get() == metric;
+  });
+  const bool counter_is_registered =
+      std::ranges::any_of(_counter_handles, [target, metric](const auto& counter_handle) {
+        const auto counter_on_target = counter_handle->target_to_counter_map.find(target);
+        return counter_on_target != counter_handle->target_to_counter_map.end() &&
+               counter_on_target->second.get() == metric;
+      });
+  const auto lifecycle_metric = _target_to_lifecycle_event_metric.find(target);
+  const bool is_lifecycle_metric =
+      lifecycle_metric != _target_to_lifecycle_event_metric.end() && lifecycle_metric->second == metric;
+  if (!metric_is_registered && !counter_is_registered && !is_lifecycle_metric) {
+    return ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET;
+  }
+
+  auto* mutable_metric = const_cast<IMetric*>(metric);  // NOLINT(cppcoreguidelines-pro-type-const-cast)
+  mutable_metric->Reset();
+  _last_processed_timestamp_by_metric.erase(mutable_metric);
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -1023,6 +1160,7 @@ auto MetricManager::RemoveAllMetrics() -> void {
   _target_to_metrics_map.clear();
   _target_to_metric_groups_map.clear();
   _target_to_operation_to_metric_map.clear();
+  _replay_operation_to_metric_map.clear();
   _clock_correlations.clear();
   _last_processed_timestamp_by_metric.clear();
   _target_to_lifecycle_event_metric.clear();

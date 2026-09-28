@@ -212,19 +212,6 @@ auto GetMetricFromHandle(astl_metric_handle_t metric_handle, astl_target_handle_
   return metric;
 }
 
-auto GetProcessedMetricSamples(const astl::IMetric* metric, const astl::ITarget* target) noexcept
-    -> std::expected<std::span<const astl::ProcessedSampledData>, astl_status_code> {
-  auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
-  if (!orchestrator_or_error) {
-    return std::unexpected{orchestrator_or_error.error()};
-  }
-  const auto& orchestrator = orchestrator_or_error->get();
-
-  auto samples_result = orchestrator->GetProcessedMetricSamples(metric, target);
-
-  return samples_result;
-}
-
 auto ConsumeProcessedMetricSamplesIfUncached(const astl::IMetric* metric, const astl::ITarget* target) noexcept
     -> void {
   auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
@@ -720,12 +707,23 @@ auto ParseMetricSampleCountRequest(const astl_get_metric_sample_count_on_target_
 
 auto PopulateSampleCountOutput(const SampleCountRequest& request, uint64_t start_ts, uint64_t end_ts,
                                const char* overflow_log_source) -> astl_status_code {
-  const auto samples_or_error = GetProcessedMetricSamples(request.metric, request.target);
-  if (!samples_or_error) {
-    return samples_or_error.error();
+  auto orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return orchestrator.error();
   }
-
-  const auto filtered_count = CountSamplesInTimestampRange(*samples_or_error, start_ts, end_ts);
+  std::size_t filtered_count{0};
+  const auto  status = orchestrator->get()->VisitProcessedMetricSampleBatches(
+      request.metric, request.target, [&](std::span<const astl::ProcessedSampledData> batch) {
+        const auto batch_count = CountSamplesInTimestampRange(batch, start_ts, end_ts);
+        if (batch_count > std::numeric_limits<std::size_t>::max() - filtered_count) {
+          return ASTL_STATUS_BUFFER_TOO_SMALL;
+        }
+        filtered_count += batch_count;
+        return ASTL_STATUS_SUCCESS;
+      });
+  if (status != ASTL_STATUS_SUCCESS) {
+    return status;
+  }
   if (filtered_count > std::numeric_limits<uint32_t>::max()) {
     ASTL_LOG_ERROR("{} reports absurdly large filtered sample count: {}", overflow_log_source, filtered_count);
     return ASTL_STATUS_BUFFER_TOO_SMALL;
@@ -785,47 +783,8 @@ auto ParseCounterSamplesRequest(const astl_get_counter_samples_on_target_params_
   };
 }
 
-auto CopyProcessedSamplesToOutput(std::span<const astl::ProcessedSampledData> processed_samples,
-                                  std::span<astl_sample_t>                    output_samples) -> void {
-  auto to_api_sample = [](const astl::ProcessedSampledData& processed_sample) {
-    const auto union_value = processed_sample.value.ToAstlUnionValue().first;
-    return astl_sample_t{
-        .timestamp = static_cast<uint64_t>(processed_sample.timestamp.time_since_epoch().count()),
-        .value     = union_value,
-    };
-  };
-  std::transform(processed_samples.begin(), processed_samples.end(), output_samples.begin(), to_api_sample);
-}
-
 auto PopulateCounterSamplesOutput(const CounterSamplesRequest& request, uint64_t start_ts, uint64_t end_ts)
-    -> astl_status_code {
-  auto sample_result = GetProcessedMetricSamples(request.counter, request.target);
-  if (!sample_result) {
-    return sample_result.error();
-  }
-
-  std::vector<astl::ProcessedSampledData> filtered_storage;
-  auto filtered_samples = std::span<const astl::ProcessedSampledData>(*sample_result);
-  if (start_ts != 0 || end_ts != 0) {
-    filtered_storage = FilterSamplesInTimestampRange(*sample_result, start_ts, end_ts);
-    filtered_samples = filtered_storage;
-  }
-
-  if (filtered_samples.size() > std::numeric_limits<uint32_t>::max()) {
-    ASTL_LOG_ERROR("astlGetCounterSamplesOnTarget: filtered sample count exceeds uint32_t max: {}",
-                   filtered_samples.size());
-    return ASTL_STATUS_BUFFER_TOO_SMALL;
-  }
-
-  *request.out_sample_count = static_cast<uint32_t>(filtered_samples.size());
-  if (filtered_samples.size() > request.output_samples.size()) {
-    return ASTL_STATUS_BUFFER_TOO_SMALL;
-  }
-
-  CopyProcessedSamplesToOutput(filtered_samples, request.output_samples);
-  ConsumeProcessedMetricSamplesIfUncached(request.counter, request.target);
-  return ASTL_STATUS_SUCCESS;
-}
+    -> astl_status_code;
 
 struct MetricSamplesRequest {
   const astl::ITarget*     target{nullptr};
@@ -833,6 +792,49 @@ struct MetricSamplesRequest {
   std::span<astl_sample_t> output_samples;
   uint32_t*                out_sample_count{nullptr};
 };
+
+auto CountMetricSamplesInBatch(std::span<const astl::ProcessedSampledData> batch, uint64_t start_ts, uint64_t end_ts,
+                               std::size_t& filtered_count) -> astl_status_code {
+  const auto batch_count = CountSamplesInTimestampRange(batch, start_ts, end_ts);
+  if (batch_count > std::numeric_limits<std::size_t>::max() - filtered_count) {
+    return ASTL_STATUS_BUFFER_TOO_SMALL;
+  }
+  filtered_count += batch_count;
+  return ASTL_STATUS_SUCCESS;
+}
+
+struct MetricSampleCopyState {
+  const MetricSamplesRequest* request{nullptr};
+  uint64_t                    start_ts{0};
+  uint64_t                    end_ts{0};
+  std::size_t                 filtered_count{0};
+  std::size_t                 output_offset{0};
+};
+
+auto CopyMetricSamplesBatch(std::span<const astl::ProcessedSampledData> batch, MetricSampleCopyState& state)
+    -> astl_status_code {
+  auto status = ASTL_STATUS_SUCCESS;
+  if (state.filtered_count > std::numeric_limits<uint32_t>::max() ||
+      state.filtered_count > state.request->output_samples.size()) {
+    status = ASTL_STATUS_BUFFER_TOO_SMALL;
+  } else {
+    for (const auto& sample : batch) {
+      if (SampleIsWithinTimestampRange(sample, state.start_ts, state.end_ts)) {
+        state.request->output_samples[state.output_offset++] = ConvertProcessedSampleToAstlSample(sample);
+      }
+    }
+  }
+  return status;
+}
+
+auto SetMetricSampleCountAndValidateCapacity(const MetricSamplesRequest& request, std::size_t filtered_count)
+    -> astl_status_code {
+  if (filtered_count > std::numeric_limits<uint32_t>::max()) {
+    return ASTL_STATUS_BUFFER_TOO_SMALL;
+  }
+  *request.out_sample_count = static_cast<uint32_t>(filtered_count);
+  return filtered_count > request.output_samples.size() ? ASTL_STATUS_BUFFER_TOO_SMALL : ASTL_STATUS_SUCCESS;
+}
 
 auto ParseMetricSamplesRequest(const astl_get_metric_samples_on_target_params_t& params)
     -> std::expected<MetricSamplesRequest, astl_status_code> {
@@ -862,18 +864,40 @@ auto ParseMetricSamplesRequest(const astl_get_metric_samples_on_target_params_t&
   };
 }
 
-auto ValidateMetricSamplesOutputCapacity(const MetricSamplesRequest&                 request,
-                                         std::span<const astl::ProcessedSampledData> collected_samples)
+auto PopulateMetricSamplesOutput(const MetricSamplesRequest& request, uint64_t start_ts, uint64_t end_ts)
     -> astl_status_code {
-  if (request.output_samples.size() >= collected_samples.size()) {
-    return ASTL_STATUS_SUCCESS;
+  auto                  orchestrator_or_error = astl::Orchestrator::GetInstance();
+  auto                  status = orchestrator_or_error ? ASTL_STATUS_SUCCESS : orchestrator_or_error.error();
+  std::size_t           filtered_count{0};
+  MetricSampleCopyState copy_state{&request, start_ts, end_ts, filtered_count};
+  if (status == ASTL_STATUS_SUCCESS) {
+    status = orchestrator_or_error->get()->VisitProcessedMetricSampleBatchesTwice(
+        request.metric, request.target,
+        [&](std::span<const astl::ProcessedSampledData> batch) {
+          return CountMetricSamplesInBatch(batch, start_ts, end_ts, filtered_count);
+        },
+        [&](std::span<const astl::ProcessedSampledData> batch) {
+          copy_state.filtered_count = filtered_count;
+          return CopyMetricSamplesBatch(batch, copy_state);
+        });
   }
-  if (collected_samples.size() > std::numeric_limits<uint32_t>::max()) {
-    return ASTL_STATUS_BUFFER_TOO_SMALL;
+  if (status == ASTL_STATUS_SUCCESS || status == ASTL_STATUS_BUFFER_TOO_SMALL) {
+    const auto capacity_status = SetMetricSampleCountAndValidateCapacity(request, filtered_count);
+    if (status == ASTL_STATUS_SUCCESS) {
+      status = capacity_status;
+    }
   }
+  if (status == ASTL_STATUS_SUCCESS) {
+    ConsumeProcessedMetricSamplesIfUncached(request.metric, request.target);
+  }
+  return status;
+}
 
-  *request.out_sample_count = static_cast<uint32_t>(collected_samples.size());
-  return ASTL_STATUS_BUFFER_TOO_SMALL;
+auto PopulateCounterSamplesOutput(const CounterSamplesRequest& request, uint64_t start_ts, uint64_t end_ts)
+    -> astl_status_code {
+  return PopulateMetricSamplesOutput(
+      MetricSamplesRequest{request.target, request.counter, request.output_samples, request.out_sample_count}, start_ts,
+      end_ts);
 }
 
 struct MetricHistogramOutputRequest {
@@ -2878,7 +2902,7 @@ auto astlGetCounterSampleCountOnTarget(const astl_get_counter_sample_count_on_ta
   return RunPublicApi([&]() noexcept -> astl_status_code {
     std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
     return GetSampleCountOnTarget(params, "astlGetCounterSampleCountOnTarget", ParseCounterSampleCountRequest,
-                                  "orchestrator.GetProcessedMetricSamples");
+                                  "orchestrator.VisitProcessedMetricSampleBatches");
   });
 }
 
@@ -2905,8 +2929,36 @@ auto astlGetMetricSampleCountOnTarget(const astl_get_metric_sample_count_on_targ
     -> astl_status_code {
   return RunPublicApi([&]() noexcept -> astl_status_code {
     std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-    return GetSampleCountOnTarget(params, "astlGetMetricSampleCountOnTarget", ParseMetricSampleCountRequest,
-                                  "metric->GetProcessedSamples");
+    auto                        status = ValidateTimestampedApiParams(params, "astlGetMetricSampleCountOnTarget");
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+    auto request = ParseMetricSampleCountRequest(*params);
+    if (!request) {
+      return request.error();
+    }
+    auto orchestrator = astl::Orchestrator::GetInstance();
+    if (!orchestrator) {
+      return orchestrator.error();
+    }
+    std::size_t count{0};
+    status = orchestrator->get()->VisitProcessedMetricSampleBatches(
+        request->metric, request->target, [&](std::span<const astl::ProcessedSampledData> batch) {
+          const auto batch_count = CountSamplesInTimestampRange(batch, params->start_ts, params->end_ts);
+          if (batch_count > std::numeric_limits<std::size_t>::max() - count) {
+            return ASTL_STATUS_BUFFER_TOO_SMALL;
+          }
+          count += batch_count;
+          return ASTL_STATUS_SUCCESS;
+        });
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+    if (count > std::numeric_limits<uint32_t>::max()) {
+      return ASTL_STATUS_BUFFER_TOO_SMALL;
+    }
+    *request->out_sample_count = static_cast<uint32_t>(count);
+    return ASTL_STATUS_SUCCESS;
   });
 }
 
@@ -2930,24 +2982,7 @@ auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params
     }
 
     if (status == ASTL_STATUS_SUCCESS) {
-      auto collected_samples_or_error = GetProcessedMetricSamples(request.metric, request.target);
-      if (!collected_samples_or_error) {
-        status = collected_samples_or_error.error();
-      } else {
-        std::vector<astl::ProcessedSampledData> filtered_storage;
-        auto filtered_samples = std::span<const astl::ProcessedSampledData>(*collected_samples_or_error);
-        if (params->start_ts != 0 || params->end_ts != 0) {
-          filtered_storage =
-              FilterSamplesInTimestampRange(*collected_samples_or_error, params->start_ts, params->end_ts);
-          filtered_samples = filtered_storage;
-        }
-
-        status = ValidateMetricSamplesOutputCapacity(request, filtered_samples);
-        if (status == ASTL_STATUS_SUCCESS) {
-          CopyProcessedSamplesToOutput(filtered_samples, request.output_samples);
-          ConsumeProcessedMetricSamplesIfUncached(request.metric, request.target);
-        }
-      }
+      status = PopulateMetricSamplesOutput(request, params->start_ts, params->end_ts);
     }
 
     return status;
@@ -2959,62 +2994,6 @@ auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params
  **********************************************************************************/
 
 namespace {
-
-// Runs MinMaxAvgSummarizer for the given samples and returns the summary, or an error status.
-auto ComputeMinMaxStats(std::span<const astl::ProcessedSampledData> samples,
-                        const astl_metric_props_t&                  metric_properties)
-    -> std::expected<astl::MinMaxAvgSummary, astl_status_code> {
-  astl::MinMaxAvgSummarizer summarizer;
-  if (!summarizer.IsSupported(metric_properties.value_type, metric_properties.metric_type)) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Metric type not supported by MinMaxAvgSummarizer");
-    return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
-  }
-
-  auto summary_result = summarizer.Summarize(samples);
-  if (!summary_result) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Failed to compute summary");
-    return std::unexpected(summary_result.error());
-  }
-
-  const auto* minmax = std::get_if<astl::MinMaxAvgSummary>(&(*summary_result));
-  if (!minmax) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Unexpected summary type returned");
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
-  }
-
-  return *minmax;
-}
-
-// Runs TimeWeightedAvgSummarizer for the given samples and returns the summary, or an error status.
-// Pause markers for (target, metric) are retrieved from the orchestrator so
-// that idle gaps between pause/resume cycles do not inflate sample weights.
-auto ComputeTimeWeightedAvg(std::span<const astl::ProcessedSampledData> samples, const astl::ITarget* target)
-    -> std::expected<astl::TimeWeightedAvgSummary, astl_status_code> {
-  // Retrieve pause markers from the orchestrator.
-  std::span<const astl::ProcessedSampleTimestamp> pause_markers_span;
-  astl::PauseMarkersMap                           pause_markers_snapshot;
-  auto                                            orchestrator_or_error = astl::Orchestrator::GetInstance();
-  if (orchestrator_or_error) {
-    pause_markers_snapshot = orchestrator_or_error->get()->GetPauseMarkersSnapshot();
-    auto target_it         = pause_markers_snapshot.find(target);
-    if (target_it != pause_markers_snapshot.end()) {
-      pause_markers_span = target_it->second;
-    }
-  }
-
-  auto twa_result = astl::TimeWeightedAvgSummarizer::Summarize(samples, pause_markers_span);
-  if (!twa_result.has_value()) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Failed to compute time-weighted average");
-    return std::unexpected(twa_result.error());
-  }
-  const auto* twa_summary = std::get_if<astl::TimeWeightedAvgSummary>(&(*twa_result));
-  if (!twa_summary) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Unexpected summary type returned for time-weighted average");
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
-  }
-
-  return *twa_summary;
-}
 
 auto SelectRequestedAverageMode(astl_metric_statistics_t* summary) -> std::expected<uint32_t, astl_status_code> {
   const auto summary_struct_status = GetStructVersionStatus(*summary);
@@ -3049,50 +3028,6 @@ auto InitializeMetricStatisticsSummary(astl_metric_statistics_t* summary, uint32
   summary->count = 0;
 }
 
-struct MetricStatisticsInputs {
-  const astl::ITarget*                        target{nullptr};
-  std::span<const astl::ProcessedSampledData> samples;
-  std::vector<astl::ProcessedSampledData>     filtered_samples_storage;
-  astl_metric_props_t                         metric_properties{};
-};
-
-auto ResolveMetricStatisticsInputs(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle,
-                                   uint64_t start_ts, uint64_t end_ts)
-    -> std::expected<MetricStatisticsInputs, astl_status_code> {
-  auto get_target_result = GetTargetFromHandle(target_handle);
-  if (!get_target_result) {
-    return std::unexpected(get_target_result.error());
-  }
-  const auto* target = *get_target_result;
-
-  auto get_metric_result = GetMetricFromHandle(metric_handle, target_handle);
-  if (!get_metric_result) {
-    return std::unexpected(get_metric_result.error());
-  }
-  const auto* metric = *get_metric_result;
-
-  auto samples_result = GetProcessedMetricSamples(metric, target);
-  if (!samples_result) {
-    return std::unexpected(samples_result.error());
-  }
-
-  MetricStatisticsInputs inputs;
-  inputs.target  = target;
-  inputs.samples = *samples_result;
-  if (start_ts != 0 || end_ts != 0) {
-    inputs.filtered_samples_storage = FilterSamplesInTimestampRange(*samples_result, start_ts, end_ts);
-    inputs.samples                  = inputs.filtered_samples_storage;
-  }
-  inputs.metric_properties.size = sizeof(astl_metric_props_t);
-  auto props_status             = metric->GetProperties(&inputs.metric_properties);
-  if (props_status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Failed to get metric properties");
-    return std::unexpected(props_status);
-  }
-
-  return inputs;
-}
-
 struct MetricStatisticsRequest {
   astl_target_handle_t      target_handle{nullptr};
   astl_metric_handle_t      metric_handle{nullptr};
@@ -3116,35 +3051,169 @@ auto ParseMetricStatisticsRequest(const astl_get_metric_statistics_on_target_par
   };
 }
 
-auto PopulateMetricStatisticsSummary(astl_metric_statistics_t* summary, const MetricStatisticsInputs& inputs,
-                                     bool is_twa) -> astl_status_code {
-  auto minmax_result = ComputeMinMaxStats(inputs.samples, inputs.metric_properties);
-  if (!minmax_result) {
-    return minmax_result.error();
+struct MetricStatisticsComponents {
+  const astl::ITarget* target;
+  const astl::IMetric* metric;
+  astl::Orchestrator*  orchestrator;
+  astl_metric_props_t  properties;
+};
+
+auto ResolveMetricStatisticsComponents(const MetricStatisticsRequest& request)
+    -> std::expected<MetricStatisticsComponents, astl_status_code> {
+  auto target = GetTargetFromHandle(request.target_handle);
+  if (!target) {
+    return std::unexpected(target.error());
+  }
+  auto metric = GetMetricFromHandle(request.metric_handle, request.target_handle);
+  if (!metric) {
+    return std::unexpected(metric.error());
+  }
+  auto orchestrator = astl::Orchestrator::GetInstance();
+  if (!orchestrator) {
+    return std::unexpected(orchestrator.error());
   }
 
-  summary->count = minmax_result->count;
-  if (minmax_result->min.has_value()) {
-    summary->min = minmax_result->min->ToAstlUnionValue().first;
+  astl_metric_props_t properties{};
+  properties.size = sizeof(astl_metric_props_t);
+  if (const auto status = (*metric)->GetProperties(&properties); status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
   }
-  if (minmax_result->max.has_value()) {
-    summary->max = minmax_result->max->ToAstlUnionValue().first;
-  }
-  if (!is_twa && minmax_result->avg.has_value()) {
-    summary->avg = minmax_result->avg->ToAstlUnionValue().first;
-  }
-  if (!is_twa) {
-    return ASTL_STATUS_SUCCESS;
-  }
+  return MetricStatisticsComponents{*target, *metric, orchestrator->get().get(), properties};
+}
 
-  auto twa_result = ComputeTimeWeightedAvg(inputs.samples, inputs.target);
-  if (!twa_result) {
-    return twa_result.error();
+auto PopulateMinMaxFields(astl_metric_statistics_t& output, const astl::MinMaxAvgSummary& result) -> astl_status_code {
+  if (result.count > std::numeric_limits<uint32_t>::max()) {
+    return ASTL_STATUS_BUFFER_TOO_SMALL;
   }
-  if (twa_result->time_weighted_avg.has_value()) {
-    summary->avg = twa_result->time_weighted_avg->ToAstlUnionValue().first;
+  output.count = static_cast<uint32_t>(result.count);
+  if (result.min) {
+    output.min = result.min->ToAstlUnionValue().first;
+  }
+  if (result.max) {
+    output.max = result.max->ToAstlUnionValue().first;
   }
   return ASTL_STATUS_SUCCESS;
+}
+
+auto CalculateRegularMetricStatistics(const MetricStatisticsRequest&    request,
+                                      const MetricStatisticsComponents& components)
+    -> std::expected<astl::MinMaxAvgSummary, astl_status_code> {
+  astl::MinMaxAvgAccumulator accumulator;
+  const auto                 status = components.orchestrator->VisitProcessedMetricSampleBatches(
+      components.metric, components.target, [&](std::span<const astl::ProcessedSampledData> batch) {
+        return accumulator.Add(FilterSamplesInTimestampRange(batch, request.start_ts, request.end_ts));
+      });
+  if (status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
+  }
+  return accumulator.Result();
+}
+
+auto PopulateRegularMetricStatistics(const MetricStatisticsRequest& request) -> astl_status_code {
+  auto components = ResolveMetricStatisticsComponents(request);
+  if (!components) {
+    return components.error();
+  }
+  astl::MinMaxAvgSummarizer support_check;
+  if (!support_check.IsSupported(components->properties.value_type, components->properties.metric_type)) {
+    return ASTL_STATUS_NOT_SUPPORTED;
+  }
+
+  auto result = CalculateRegularMetricStatistics(request, *components);
+  auto status = result ? PopulateMinMaxFields(*request.summary, *result) : result.error();
+  if (status == ASTL_STATUS_SUCCESS && result->avg) {
+    request.summary->avg = result->avg->ToAstlUnionValue().first;
+  }
+  return status;
+}
+
+struct TimeWeightedStatisticsResults {
+  astl::MinMaxAvgSummary       minmax;
+  astl::TimeWeightedAvgSummary time_weighted;
+};
+
+auto AddTimeWeightedStatisticsBatch(astl::MinMaxAvgAccumulator& minmax, astl::TimeWeightedAvgAccumulator& twa,
+                                    std::span<const astl::ProcessedSampledData> batch) -> astl_status_code {
+  const auto minmax_status = minmax.Add(batch);
+  if (minmax_status != ASTL_STATUS_SUCCESS) {
+    return minmax_status;
+  }
+  return twa.Add(batch);
+}
+
+auto CollectPauseMarkers(const MetricStatisticsComponents& components)
+    -> std::expected<std::vector<astl::ProcessedSampleTimestamp>, astl_status_code> {
+  std::vector<astl::ProcessedSampleTimestamp> pause_markers;
+  const auto*                                 pause_metric =
+      components.orchestrator->GetMetricManager()->GetLifecycleEventMetricOnTarget(components.target);
+  if (pause_metric == nullptr) {
+    return pause_markers;
+  }
+  const auto status = components.orchestrator->VisitProcessedMetricSampleBatches(
+      pause_metric, components.target, [&](std::span<const astl::ProcessedSampledData> batch) {
+        for (const auto& sample : batch) {
+          const auto* value = std::get_if<uint64_t>(&sample.value.value);
+          if (value != nullptr && *value == 0) {
+            pause_markers.push_back(sample.timestamp);
+          }
+        }
+        return ASTL_STATUS_SUCCESS;
+      });
+  if (status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
+  }
+  return pause_markers;
+}
+
+auto CalculateTimeWeightedMetricStatistics(const MetricStatisticsRequest&                  request,
+                                           const MetricStatisticsComponents&               components,
+                                           std::span<const astl::ProcessedSampleTimestamp> pause_markers)
+    -> std::expected<TimeWeightedStatisticsResults, astl_status_code> {
+  astl::MinMaxAvgAccumulator       minmax;
+  astl::TimeWeightedAvgAccumulator twa{pause_markers};
+  const auto                       status = components.orchestrator->VisitProcessedMetricSampleBatches(
+      components.metric, components.target, [&](std::span<const astl::ProcessedSampledData> batch) {
+        return AddTimeWeightedStatisticsBatch(minmax, twa,
+                                                                    FilterSamplesInTimestampRange(batch, request.start_ts, request.end_ts));
+      });
+  if (status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
+  }
+  auto minmax_result = minmax.Result();
+  if (!minmax_result) {
+    return std::unexpected(minmax_result.error());
+  }
+  auto twa_result = twa.Result();
+  if (!twa_result) {
+    return std::unexpected(twa_result.error());
+  }
+  return TimeWeightedStatisticsResults{std::move(*minmax_result), std::move(*twa_result)};
+}
+
+auto PopulateTimeWeightedStatisticsFields(astl_metric_statistics_t&            output,
+                                          const TimeWeightedStatisticsResults& results) -> astl_status_code {
+  const auto status = PopulateMinMaxFields(output, results.minmax);
+  if (status == ASTL_STATUS_SUCCESS && results.time_weighted.time_weighted_avg) {
+    output.avg = results.time_weighted.time_weighted_avg->ToAstlUnionValue().first;
+  }
+  return status;
+}
+
+auto PopulateTimeWeightedMetricStatistics(const MetricStatisticsRequest& request) -> astl_status_code {
+  auto components = ResolveMetricStatisticsComponents(request);
+  if (!components) {
+    return components.error();
+  }
+  astl::TimeWeightedAvgSummarizer support_check;
+  if (!support_check.IsSupported(components->properties.value_type, components->properties.metric_type)) {
+    return ASTL_STATUS_NOT_SUPPORTED;
+  }
+  auto pause_markers = CollectPauseMarkers(*components);
+  if (!pause_markers) {
+    return pause_markers.error();
+  }
+  auto result = CalculateTimeWeightedMetricStatistics(request, *components, *pause_markers);
+  return result ? PopulateTimeWeightedStatisticsFields(*request.summary, *result) : result.error();
 }
 
 }  // namespace
@@ -3182,13 +3251,7 @@ auto astlGetMetricStatisticsOnTarget(const astl_get_metric_statistics_on_target_
 
     if (status == ASTL_STATUS_SUCCESS) {
       const bool is_twa = (selected_avg_mode == ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG);
-      auto       inputs_or_error =
-          ResolveMetricStatisticsInputs(request.target_handle, request.metric_handle, request.start_ts, request.end_ts);
-      if (!inputs_or_error) {
-        status = inputs_or_error.error();
-      } else {
-        status = PopulateMetricStatisticsSummary(request.summary, *inputs_or_error, is_twa);
-      }
+      status = is_twa ? PopulateTimeWeightedMetricStatistics(request) : PopulateRegularMetricStatistics(request);
     }
 
     return status;
@@ -3203,58 +3266,27 @@ namespace {
  */
 auto ComputeDiscreteHistogram(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle, uint64_t start_ts,
                               uint64_t end_ts) -> std::expected<astl::HistogramSummary, astl_status_code> {
-  auto get_target_result = GetTargetFromHandle(target_handle);
-  if (!get_target_result) {
-    return std::unexpected(get_target_result.error());
+  const MetricStatisticsRequest request{target_handle, metric_handle, nullptr, start_ts, end_ts};
+  auto                          components = ResolveMetricStatisticsComponents(request);
+  if (!components) {
+    return std::unexpected(components.error());
   }
-  const auto* target = *get_target_result;
-
-  auto get_metric_result = GetMetricFromHandle(metric_handle, target_handle);
-  if (!get_metric_result) {
-    return std::unexpected(get_metric_result.error());
-  }
-  const auto* metric = *get_metric_result;
-
-  // Check supported metric/value type
-  astl_metric_props_t metric_properties{};
-  metric_properties.size = sizeof(astl_metric_props_t);
-  auto props_status      = metric->GetProperties(&metric_properties);
-  if (props_status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("ComputeDiscreteHistogram: Failed to get metric properties");
-    return std::unexpected(props_status);
-  }
-
   astl::HistogramSummarizer summarizer;  // default constructor = discrete mode
-  if (!summarizer.IsSupported(metric_properties.value_type, metric_properties.metric_type)) {
+  if (!summarizer.IsSupported(components->properties.value_type, components->properties.metric_type)) {
     ASTL_LOG_ERROR("ComputeDiscreteHistogram: Metric type not supported by HistogramSummarizer");
     return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
   }
 
-  auto samples_result = GetProcessedMetricSamples(metric, target);
-  if (!samples_result) {
-    return std::unexpected(samples_result.error());
+  astl::DiscreteHistogramAccumulator accumulator;
+  const auto                         visit_status = components->orchestrator->VisitProcessedMetricSampleBatches(
+      components->metric, components->target, [&](std::span<const astl::ProcessedSampledData> batch) {
+        auto filtered = FilterSamplesInTimestampRange(batch, start_ts, end_ts);
+        return accumulator.Add(filtered);
+      });
+  if (visit_status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(visit_status);
   }
-
-  std::vector<astl::ProcessedSampledData> filtered_samples_storage;
-  auto filtered_samples = std::span<const astl::ProcessedSampledData>(*samples_result);
-  if (start_ts != 0 || end_ts != 0) {
-    filtered_samples_storage = FilterSamplesInTimestampRange(*samples_result, start_ts, end_ts);
-    filtered_samples         = filtered_samples_storage;
-  }
-
-  auto summary_result = summarizer.Summarize(filtered_samples);
-  if (!summary_result) {
-    ASTL_LOG_ERROR("ComputeDiscreteHistogram: Failed to compute histogram");
-    return std::unexpected(summary_result.error());
-  }
-
-  auto* histogram = std::get_if<astl::HistogramSummary>(&(*summary_result));
-  if (!histogram) {
-    ASTL_LOG_ERROR("ComputeDiscreteHistogram: Unexpected summary type returned");
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
-  }
-
-  return std::move(*histogram);
+  return accumulator.Result();
 }
 
 }  // namespace

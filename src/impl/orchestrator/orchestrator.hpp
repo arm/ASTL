@@ -11,6 +11,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -394,12 +395,13 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
     return _processed_samples;
   }
 
-  /**
-   * @brief Retrieve the collected samples for the given target and metric,
-   *        or an error if the target+metric combination isn't valid
-   */
-  auto GetProcessedMetricSamples(const IMetric *metric, const ITarget *target) const
-      -> std::expected<std::span<const astl::ProcessedSampledData>, astl_status_code>;
+  using ProcessedSampleBatchConsumer = std::function<astl_status_code(std::span<const astl::ProcessedSampledData>)>;
+  auto VisitProcessedMetricSampleBatches(const IMetric *metric, const ITarget *target,
+                                         const ProcessedSampleBatchConsumer &consumer) const -> astl_status_code;
+  auto VisitProcessedMetricSampleBatchesTwice(const IMetric *metric, const ITarget *target,
+                                              const ProcessedSampleBatchConsumer &first_consumer,
+                                              const ProcessedSampleBatchConsumer &second_consumer) const
+      -> astl_status_code;
 
   /**
    * @brief Drop processed samples for metrics populated by ASTL_NO_CACHING configured collection.
@@ -451,17 +453,53 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
 
  private:
   auto StartCollectionImpl(const ITarget *target, bool start_paused) -> astl_status_code;
+  auto ValidateStopCollectionTarget(const ITarget *target) const -> astl_status_code;
+  auto FlushPendingRawSamples(const ITarget *target) -> astl_status_code;
+  auto AppendCachedRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples,
+                              const std::string &stable_target_key) -> astl_status_code;
+  auto VisitInMemoryProcessedMetricSampleBatches(const IMetric *metric, const ITarget *target,
+                                                 const ProcessedSampleBatchConsumer &consumer) const
+      -> astl_status_code;
+  auto VisitRawMetricSampleBatches(const IMetric *metric, const ITarget *target,
+                                   const ProcessedSampleBatchConsumer &consumer, const fs::path &cache_path,
+                                   std::span<const RawSampledData> trailing_samples) const -> astl_status_code;
+  auto VisitInMemoryProcessedMetricSampleBatchesTwice(const IMetric *metric, const ITarget *target,
+                                                      const ProcessedSampleBatchConsumer &first_consumer,
+                                                      const ProcessedSampleBatchConsumer &second_consumer) const
+      -> astl_status_code;
+  auto VisitRecentProcessedMetricSamples(const IMetric *metric, const ITarget *target,
+                                         const ProcessedSampleBatchConsumer &consumer) const
+      -> std::optional<astl_status_code>;
+  auto VisitRecentProcessedMetricSamplesTwice(const IMetric *metric, const ITarget *target,
+                                              const ProcessedSampleBatchConsumer &first_consumer,
+                                              const ProcessedSampleBatchConsumer &second_consumer) const
+      -> std::optional<astl_status_code>;
+  auto RememberRecentProcessedMetricSamples(const IMetric *metric, const ITarget *target,
+                                            std::vector<ProcessedSampledData> samples) const -> void;
+  auto InvalidateRecentProcessedMetricSamples() const -> void;
+
+  struct RawMetricBatchSource {
+    const IMetric                  *metric;
+    const ITarget                  *target;
+    fs::path                        cache_path;
+    std::span<const RawSampledData> trailing_samples;
+  };
+  auto VisitRawMetricSampleBatchesAndRemember(const RawMetricBatchSource         &source,
+                                              const ProcessedSampleBatchConsumer &consumer) const -> astl_status_code;
+  auto VisitRawMetricSampleBatchesTwice(const RawMetricBatchSource         &source,
+                                        const ProcessedSampleBatchConsumer &first_consumer,
+                                        const ProcessedSampleBatchConsumer &second_consumer) const -> astl_status_code;
+
+  /** @brief Check whether a target/metric pair already has materialized processed samples. */
+  auto HasProcessedMetricSamples(const IMetric *metric, const ITarget *target) const -> bool;
 
   /**
-   * @brief Return already-materialized processed samples for a target/metric pair.
+   * @brief Materialize and retain processed samples needed by crop operations.
    *
-   * This is the fast path for sample retrieval. It only inspects the in-memory processed sample map and does not
-   * attempt to rebuild samples from the raw cache.
-   *
-   * @return A span over retained processed samples when the entry exists, or std::nullopt when the entry is absent.
+   * Read-only callers must use VisitProcessedMetricSampleBatches() so cached collections remain bounded in memory.
    */
-  auto LookupProcessedMetricSamples(const IMetric *metric, const ITarget *target) const
-      -> std::optional<std::span<const astl::ProcessedSampledData>>;
+  auto MaterializeProcessedMetricSamplesForMutation(const IMetric *metric, const ITarget *target) const
+      -> astl_status_code;
 
   /**
    * @brief Rebuild processed samples for a target from its on-disk raw sample cache file.
@@ -477,7 +515,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    * The target's metric state and in-memory processed samples are reset before replay. Each non-empty serialized batch
    * is passed to MetricManager::ProcessRawSamples(), and metrics are summarized after all batches replay successfully.
    */
-  auto ProcessRawSampleCacheStream(const ITarget *target, std::istream &file_stream) const -> astl_status_code;
+  auto ProcessRawSampleCacheStream(const ITarget *target, std::istream &file_stream,
+                                   std::span<const RawSampledData> trailing_samples = {}) const -> astl_status_code;
 
   /**
    * @brief Ensure processed samples are loaded for every available metric and counter on a target.
@@ -573,8 +612,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   /**
    * @brief Rebuild processed samples for all known (target, metric) pairs.
    *
-   * Triggers lazy population via GetProcessedMetricSamples() so final outputs can
-   * consume a fully populated _processed_samples map.
+   * Replays each target cache once so final outputs can consume a fully populated _processed_samples map.
    */
   auto RebuildProcessedSamplesForAllTargets() const -> void;
 
@@ -612,19 +650,28 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   std::mutex         _configure_mutex;           // serializes configure-time global reset decisions
   bool               _clean_configure_reset_pending{false};
 
-  std::unique_ptr<ITopologyManager>     _topology_manager;   // manages the set of Targets
-  std::unique_ptr<ICollectorManager>    _collector_manager;  // manages the collection of raw samples
-  std::unique_ptr<IMetricManager>       _metric_manager;     // manages the processing of raw samples into metrics
-  std::unique_ptr<IOutputManager>       _output_manager;     // manages the output of processed samples
-  RawSamplesMap                         _raw_samples;        // collected raw samples, organized by target
-  mutable std::mutex                    _raw_samples_mtx;    // protect the _raw_samples container
-  std::unordered_set<const ITarget *>   _no_cache_targets;
-  mutable ProcessedSamplesMap           _processed_samples;  // processed metric samples, organized by target and metric
-  mutable std::mutex                    _processed_samples_mtx;  // protect the _processed_samples container
-  std::atomic<FinalOutputEmissionState> _perfetto_emission_state{FinalOutputEmissionState::NOT_EMITTED};
-  std::atomic<FinalOutputEmissionState> _intervalcsv_emission_state{FinalOutputEmissionState::NOT_EMITTED};
-  mutable std::atomic<bool>             _final_rebuild_attempted{false};
-  std::filesystem::path                 _cache_dir;  // temporary directory to save and load from ASTL file
+  std::unique_ptr<ITopologyManager>   _topology_manager;       // manages the set of Targets
+  std::unique_ptr<ICollectorManager>  _collector_manager;      // manages the collection of raw samples
+  std::unique_ptr<IMetricManager>     _metric_manager;         // manages the processing of raw samples into metrics
+  std::unique_ptr<IOutputManager>     _output_manager;         // manages the output of processed samples
+  RawSamplesMap                       _raw_samples;            // collected raw samples, organized by target
+  mutable std::mutex                  _raw_samples_mtx;        // protect the _raw_samples container
+  mutable std::mutex                  _cache_file_mtx;         // serialize cache snapshots and appends
+  mutable std::mutex                  _metric_processing_mtx;  // serialize reset/process/summarize sessions
+  std::unordered_set<const ITarget *> _no_cache_targets;
+  mutable ProcessedSamplesMap         _processed_samples;  // processed metric samples, organized by target and metric
+  mutable std::mutex                  _processed_samples_mtx;  // protect the _processed_samples container
+  mutable std::mutex                  _batch_visit_mtx;
+  // Keeps at most one small, recently replayed metric so adjacent summary API calls do not
+  // repeatedly scan the target cache. The configured batch size is also the hard memory cap.
+  mutable const ITarget                    *_recent_processed_target{nullptr};
+  mutable const IMetric                    *_recent_processed_metric{nullptr};
+  mutable std::vector<ProcessedSampledData> _recent_processed_samples;
+  std::atomic<FinalOutputEmissionState>     _perfetto_emission_state{FinalOutputEmissionState::NOT_EMITTED};
+  std::atomic<FinalOutputEmissionState>     _intervalcsv_emission_state{FinalOutputEmissionState::NOT_EMITTED};
+  mutable std::atomic<bool>                 _final_rebuild_attempted{false};
+  std::filesystem::path                     _cache_dir;  // temporary directory to save and load from ASTL file
+  const std::size_t                         _sample_batch_size;
 };
 
 }  // namespace astl

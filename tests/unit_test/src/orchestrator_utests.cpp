@@ -297,7 +297,7 @@ TEST_CASE("Orchestrator::ReadImmediate delegates to CollectorManager", "[Orchest
   REQUIRE(orchestrator.ReadImmediate(&target) == ASTL_STATUS_INTERNAL_ERROR);
 }
 
-TEST_CASE("Orchestrator::GetProcessedMetricSamples validates inputs and uses fast path", "[Orchestrator]") {
+TEST_CASE("Orchestrator::VisitProcessedMetricSampleBatches validates inputs and uses fast path", "[Orchestrator]") {
   auto topology_manager  = std::make_unique<MockTopologyManager>();
   auto collector_manager = std::make_unique<MockCollectorManager>();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -324,15 +324,80 @@ TEST_CASE("Orchestrator::GetProcessedMetricSamples validates inputs and uses fas
       {astl::AstlValue{uint64_t{9}}, astl::ProcessedSampleTimestamp{}}
   };
 
-  REQUIRE_FALSE(orchestrator.GetProcessedMetricSamples(nullptr, target).has_value());
-  REQUIRE_FALSE(orchestrator.GetProcessedMetricSamples(&metric, nullptr).has_value());
+  const auto consumer = [](std::span<const astl::ProcessedSampledData>) { return ASTL_STATUS_SUCCESS; };
+  REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(nullptr, target, consumer) == ASTL_STATUS_BAD_ARGUMENT);
+  REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(&metric, nullptr, consumer) == ASTL_STATUS_BAD_ARGUMENT);
 
   REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, processed_samples) == ASTL_STATUS_SUCCESS);
 
-  auto samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
-  REQUIRE(samples_or_err.has_value());
-  REQUIRE(samples_or_err->size() == 1);
-  REQUIRE(samples_or_err->front().value == astl::AstlValue{uint64_t{9}});
+  std::vector<astl::ProcessedSampledData> visited_samples;
+  REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(
+              &metric, target, [&](std::span<const astl::ProcessedSampledData> batch) {
+                visited_samples.insert(visited_samples.end(), batch.begin(), batch.end());
+                return ASTL_STATUS_SUCCESS;
+              }) == ASTL_STATUS_SUCCESS);
+  REQUIRE(visited_samples.size() == 1);
+  REQUIRE(visited_samples.front().value == astl::AstlValue{uint64_t{9}});
+}
+
+TEST_CASE("Orchestrator validates ASTL_SAMPLE_BATCH_SIZE for in-memory batch visits", "[Orchestrator][batch]") {
+  std::string              configured_value;
+  std::vector<std::size_t> expected_batch_sizes;
+  SECTION("valid override") {
+    configured_value     = "2";
+    expected_batch_sizes = {2, 2, 1};
+  }
+  SECTION("unset uses default") {
+    configured_value     = "";
+    expected_batch_sizes = {5};
+  }
+  SECTION("zero uses default") {
+    configured_value     = "0";
+    expected_batch_sizes = {5};
+  }
+  SECTION("malformed value uses default") {
+    configured_value     = "invalid";
+    expected_batch_sizes = {5};
+  }
+  SECTION("excessive value uses default") {
+    configured_value     = "1048577";
+    expected_batch_sizes = {5};
+  }
+  EnvVarGuard batch_size_guard{astl::EnvVar::ASTL_SAMPLE_BATCH_SIZE, configured_value};
+
+  auto topology_manager  = std::make_unique<MockTopologyManager>();
+  auto collector_manager = std::make_unique<MockCollectorManager>();
+  ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  auto metric_manager = std::make_unique<MockMetricManager>();
+  ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
+  ALLOW_CALL(*metric_manager, RemoveAllMetrics());
+  ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+  auto output_manager = std::make_unique<MockOutputManager>();
+
+  astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
+                                  std::move(output_manager), "");
+  auto               target_uptr = std::make_unique<TestTargetBase>("configured-batch-target");
+  auto*              target      = target_uptr.get();
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::move(target_uptr));
+  REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
+
+  TestMetricBase                          metric{"configured-batch-metric"};
+  std::vector<astl::ProcessedSampledData> samples;
+  for (uint64_t value = 0; value < 5; ++value) {
+    samples.push_back({astl::AstlValue{value}, astl::ProcessedSampleTimestamp{}});
+  }
+  REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, samples) == ASTL_STATUS_SUCCESS);
+
+  std::vector<std::size_t> visited_batch_sizes;
+  REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(&metric, target,
+                                                         [&](std::span<const astl::ProcessedSampledData> batch) {
+                                                           visited_batch_sizes.push_back(batch.size());
+                                                           return ASTL_STATUS_SUCCESS;
+                                                         }) == ASTL_STATUS_SUCCESS);
+  REQUIRE(visited_batch_sizes == expected_batch_sizes);
 }
 
 TEST_CASE("Orchestrator::ConsumeProcessedMetricSamplesIfUncached only consumes no-cache targets", "[Orchestrator]") {
@@ -378,20 +443,28 @@ TEST_CASE("Orchestrator::ConsumeProcessedMetricSamplesIfUncached only consumes n
   REQUIRE(orchestrator.ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_SUCCESS);
   REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, processed_samples) == ASTL_STATUS_SUCCESS);
   orchestrator.ConsumeProcessedMetricSamplesIfUncached(&metric, target);
-  auto cached_samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
-  REQUIRE(cached_samples_or_err.has_value());
-  REQUIRE(cached_samples_or_err->size() == 1);
+  std::size_t cached_count{0};
+  REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(&metric, target,
+                                                         [&](std::span<const astl::ProcessedSampledData> batch) {
+                                                           cached_count += batch.size();
+                                                           return ASTL_STATUS_SUCCESS;
+                                                         }) == ASTL_STATUS_SUCCESS);
+  REQUIRE(cached_count == 1);
 
   params.flags = ASTL_NO_CACHING;
   REQUIRE(orchestrator.ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_SUCCESS);
   REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, processed_samples) == ASTL_STATUS_SUCCESS);
   orchestrator.ConsumeProcessedMetricSamplesIfUncached(&metric, target);
-  auto consumed_samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
-  REQUIRE(consumed_samples_or_err.has_value());
-  REQUIRE(consumed_samples_or_err->empty());
+  std::size_t consumed_count{0};
+  REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(&metric, target,
+                                                         [&](std::span<const astl::ProcessedSampledData> batch) {
+                                                           consumed_count += batch.size();
+                                                           return ASTL_STATUS_SUCCESS;
+                                                         }) == ASTL_STATUS_SUCCESS);
+  REQUIRE(consumed_count == 0);
 }
 
-TEST_CASE("Orchestrator::GetProcessedMetricSamples returns empty when cache is absent", "[Orchestrator]") {
+TEST_CASE("Orchestrator::VisitProcessedMetricSampleBatches returns empty when cache is absent", "[Orchestrator]") {
   const auto      cache_dir = std::filesystem::temp_directory_path() / "astl_missing_processed_cache";
   std::error_code remove_error_code;
   std::filesystem::remove_all(cache_dir, remove_error_code);
@@ -418,12 +491,18 @@ TEST_CASE("Orchestrator::GetProcessedMetricSamples returns empty when cache is a
   REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
 
   TestMetricBase metric{"missing-cache-metric"};
-  auto           samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
-  REQUIRE(samples_or_err.has_value());
-  REQUIRE(samples_or_err->empty());
+  std::size_t    visited_count{0};
+  const auto     status = orchestrator.VisitProcessedMetricSampleBatches(
+      &metric, target, [&](std::span<const astl::ProcessedSampledData> batch) {
+        visited_count += batch.size();
+        return ASTL_STATUS_SUCCESS;
+      });
+  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  REQUIRE(visited_count == 0);
 }
 
-TEST_CASE("Orchestrator::GetProcessedMetricSamples returns error when raw cache cannot be read", "[Orchestrator]") {
+TEST_CASE("Orchestrator::VisitProcessedMetricSampleBatches returns error when raw cache cannot be read",
+          "[Orchestrator]") {
   const auto      cache_dir = std::filesystem::temp_directory_path() / "astl_unreadable_processed_cache";
   TempFileGuard   cache_guard(cache_dir);
   std::error_code create_error_code;
@@ -456,12 +535,12 @@ TEST_CASE("Orchestrator::GetProcessedMetricSamples returns error when raw cache 
   REQUIRE_FALSE(create_error_code);
 
   TestMetricBase metric{"unreadable-cache-metric"};
-  auto           samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
-  REQUIRE_FALSE(samples_or_err.has_value());
-  REQUIRE(samples_or_err.error() == ASTL_STATUS_INTERNAL_ERROR);
+  const auto     status = orchestrator.VisitProcessedMetricSampleBatches(
+      &metric, target, [](std::span<const astl::ProcessedSampledData>) { return ASTL_STATUS_SUCCESS; });
+  REQUIRE(status == ASTL_STATUS_INTERNAL_ERROR);
 }
 
-TEST_CASE("Orchestrator::GetProcessedMetricSamples replays raw cache in serialized batches", "[Orchestrator]") {
+TEST_CASE("Orchestrator::VisitProcessedMetricSampleBatches replays raw cache in serialized batches", "[Orchestrator]") {
   const auto      cache_dir = std::filesystem::temp_directory_path() / "astl_batch_replay_processed_cache";
   TempFileGuard   cache_guard(cache_dir);
   std::error_code create_error_code;
@@ -505,28 +584,52 @@ TEST_CASE("Orchestrator::GetProcessedMetricSamples replays raw cache in serializ
   cache_file.close();
 
   std::vector<std::vector<astl::RawSampledData>> replayed_batches;
+  TestMetricBase                                 metric{"batch-replay-metric"};
   const auto                                     record_replayed_batch = [&](astl::RawSamplesMap& raw_samples) {
     REQUIRE(raw_samples.size() == 1);
     const auto target_samples_it = raw_samples.find(target);
     REQUIRE(target_samples_it != raw_samples.end());
     replayed_batches.push_back(target_samples_it->second);
+    std::vector<astl::ProcessedSampledData> processed;
+    processed.reserve(target_samples_it->second.size());
+    for (const auto& sample : target_samples_it->second) {
+      processed.push_back({sample.value, astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{sample.raw_tick}}});
+    }
+    REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, processed) == ASTL_STATUS_SUCCESS);
   };
 
   trompeloeil::sequence replay_sequence;
-  REQUIRE_CALL(*metric_manager_raw, ResetMetricsOnTarget(target))
+  REQUIRE_CALL(*metric_manager_raw, ResetMetricOnTarget(target, &metric))
       .IN_SEQUENCE(replay_sequence)
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*metric_manager_raw, ProcessRawSamples(_))
+  REQUIRE_CALL(*metric_manager_raw, ProcessRawSamplesForMetric(_, &metric))
       .TIMES(2)
       .IN_SEQUENCE(replay_sequence)
       .LR_SIDE_EFFECT(record_replayed_batch(_1))
       .RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*metric_manager_raw, SummarizeMetrics()).IN_SEQUENCE(replay_sequence).RETURN(ASTL_STATUS_SUCCESS);
 
-  TestMetricBase metric{"batch-replay-metric"};
-  auto           samples_or_err = orchestrator.GetProcessedMetricSamples(&metric, target);
-  REQUIRE(samples_or_err.has_value());
-  REQUIRE(samples_or_err->empty());
+  std::vector<astl::ProcessedSampledData> first_visit;
+  std::vector<astl::ProcessedSampledData> copy_visit;
+  REQUIRE(orchestrator.VisitProcessedMetricSampleBatchesTwice(
+              &metric, target,
+              [&](std::span<const astl::ProcessedSampledData> batch) {
+                first_visit.insert(first_visit.end(), batch.begin(), batch.end());
+                return ASTL_STATUS_SUCCESS;
+              },
+              [&](std::span<const astl::ProcessedSampledData> batch) {
+                copy_visit.insert(copy_visit.end(), batch.begin(), batch.end());
+                return ASTL_STATUS_SUCCESS;
+              }) == ASTL_STATUS_SUCCESS);
+
+  // A neighboring summary-style request for the same small metric reuses the bounded recent
+  // replay instead of scanning and processing the target cache again.
+  std::vector<astl::ProcessedSampledData> second_visit;
+  REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(
+              &metric, target, [&](std::span<const astl::ProcessedSampledData> batch) {
+                second_visit.insert(second_visit.end(), batch.begin(), batch.end());
+                return ASTL_STATUS_SUCCESS;
+              }) == ASTL_STATUS_SUCCESS);
 
   REQUIRE(replayed_batches.size() == 2);
   REQUIRE(replayed_batches[0].size() == 2);
@@ -534,9 +637,17 @@ TEST_CASE("Orchestrator::GetProcessedMetricSamples replays raw cache in serializ
   REQUIRE(replayed_batches[0][0].value == astl::AstlValue{uint64_t{10}});
   REQUIRE(replayed_batches[0][1].value == astl::AstlValue{uint64_t{20}});
   REQUIRE(replayed_batches[1][0].value == astl::AstlValue{uint64_t{30}});
+  REQUIRE(copy_visit.size() == first_visit.size());
+  REQUIRE(second_visit.size() == first_visit.size());
+  for (std::size_t index = 0; index < first_visit.size(); ++index) {
+    REQUIRE(copy_visit[index].value == first_visit[index].value);
+    REQUIRE(copy_visit[index].timestamp == first_visit[index].timestamp);
+    REQUIRE(second_visit[index].value == first_visit[index].value);
+    REQUIRE(second_visit[index].timestamp == first_visit[index].timestamp);
+  }
 }
 
-TEST_CASE("Orchestrator::GetProcessedMetricSamples computes delta across serialized raw cache batches",
+TEST_CASE("Orchestrator::VisitProcessedMetricSampleBatches computes delta across serialized raw cache batches",
           "[Orchestrator]") {
   constexpr auto  op_id     = astl::OperationId{17};
   const auto      cache_dir = std::filesystem::temp_directory_path() / "astl_delta_cross_batch_replay_processed_cache";
@@ -592,10 +703,32 @@ TEST_CASE("Orchestrator::GetProcessedMetricSamples computes delta across seriali
   REQUIRE(astl::ProtobufSerDes::Serialize(batch2, cache_file) == ASTL_STATUS_SUCCESS);
   cache_file.close();
 
-  auto samples_or_err = orchestrator.GetProcessedMetricSamples(delta_metric_raw, target);
-  REQUIRE(samples_or_err.has_value());
-  REQUIRE(samples_or_err->size() == 1);
-  REQUIRE(samples_or_err->front().value == astl::AstlValue{uint64_t{75}});
+  std::vector<astl::ProcessedSampledData> initial_samples;
+  REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(
+              delta_metric_raw, target, [&](std::span<const astl::ProcessedSampledData> batch) {
+                initial_samples.insert(initial_samples.end(), batch.begin(), batch.end());
+                return ASTL_STATUS_SUCCESS;
+              }) == ASTL_STATUS_SUCCESS);
+  REQUIRE(initial_samples.size() == 1);
+  REQUIRE(initial_samples.front().value == astl::AstlValue{uint64_t{75}});
+
+  // A sample that has not reached the disk rollover threshold is part of the
+  // same stable visit and keeps delta state from the preceding disk batch.
+  std::vector<astl::RawSampledData> trailing_samples{
+      astl::RawSampledData{op_id, astl::AstlValue{uint64_t{250}}, uint64_t{300}},
+  };
+  REQUIRE(orchestrator.SinkRawSamples(target, trailing_samples) == ASTL_STATUS_SUCCESS);
+
+  std::vector<astl::ProcessedSampledData> visited_samples;
+  REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(
+              delta_metric_raw, target, [&](std::span<const astl::ProcessedSampledData> batch) {
+                visited_samples.insert(visited_samples.end(), batch.begin(), batch.end());
+                return ASTL_STATUS_SUCCESS;
+              }) == ASTL_STATUS_SUCCESS);
+  REQUIRE(visited_samples.size() == 2);
+  REQUIRE(visited_samples[0].value == astl::AstlValue{uint64_t{75}});
+  REQUIRE(visited_samples[1].value == astl::AstlValue{uint64_t{75}});
+  REQUIRE(visited_samples[0].timestamp < visited_samples[1].timestamp);
 }
 
 TEST_CASE("Orchestrator::LoadFromFile short-circuits when instance already exists", "[Orchestrator][cache]") {
@@ -701,8 +834,8 @@ TEST_CASE("Orchestrator-SinkRawSamples bulk growth then skip reserve", "[Orchest
   REQUIRE(orchestrator.SinkRawSamples(target, batch3) == ASTL_STATUS_SUCCESS);
 }
 
-TEST_CASE("Orchestrator-SinkRawSamples serializes rollover batches using the stable target key",
-          "[Orchestrator][cache]") {
+TEST_CASE("Orchestrator-SinkRawSamples uses configured batch size and the stable target key", "[Orchestrator][cache]") {
+  EnvVarGuard                 batch_size_guard{astl::EnvVar::ASTL_SAMPLE_BATCH_SIZE, "4"};
   const std::filesystem::path cache_dir = std::filesystem::temp_directory_path() / "astl_sink_raw_samples_stable_key";
   TempFileGuard               cache_guard(cache_dir);
 
@@ -726,19 +859,22 @@ TEST_CASE("Orchestrator-SinkRawSamples serializes rollover batches using the sta
   auto* target = orchestrator.GetTargets()[0].get();
 
   std::vector<astl::RawSampledData> batch_at_threshold;
-  batch_at_threshold.reserve(1024);
-  for (int i = 0; i < 1024; ++i) {
+  batch_at_threshold.reserve(4);
+  for (int i = 0; i < 4; ++i) {
     batch_at_threshold.emplace_back(static_cast<astl::OperationId>(i), astl::AstlValue{static_cast<uint64_t>(i)});
   }
-  REQUIRE(orchestrator.SinkRawSamples(target, batch_at_threshold) == ASTL_STATUS_SUCCESS);
-
-  std::vector<astl::RawSampledData> rollover_sample{
-      astl::RawSampledData{static_cast<astl::OperationId>(1024), astl::AstlValue{uint64_t{1024}}}
-  };
-  REQUIRE(orchestrator.SinkRawSamples(target, rollover_sample) == ASTL_STATUS_SUCCESS);
 
   const std::filesystem::path stable_batch_file =
       cache_dir / (astl::GetStableTargetKey(*target) + astl::kAstlFileExtension);
+  std::filesystem::create_directories(stable_batch_file);
+  REQUIRE(orchestrator.SinkRawSamples(target, batch_at_threshold) == ASTL_STATUS_INTERNAL_ERROR);
+  REQUIRE(std::filesystem::remove(stable_batch_file));
+
+  std::vector<astl::RawSampledData> rollover_sample{
+      astl::RawSampledData{static_cast<astl::OperationId>(4), astl::AstlValue{uint64_t{4}}}
+  };
+  REQUIRE(orchestrator.SinkRawSamples(target, rollover_sample) == ASTL_STATUS_SUCCESS);
+
   const std::filesystem::path display_name_file = cache_dir / "scmi-display-target.astl";
   REQUIRE(std::filesystem::exists(stable_batch_file));
   REQUIRE_FALSE(std::filesystem::exists(display_name_file));

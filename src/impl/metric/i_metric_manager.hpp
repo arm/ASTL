@@ -224,6 +224,13 @@ struct IMetricManager {
    */
   [[nodiscard]] virtual auto ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code = 0;
 
+  /** Process only raw samples routed to @p metric. */
+  [[nodiscard]] virtual auto ProcessRawSamplesForMetric(RawSamplesMap& raw_samples, const IMetric* metric)
+      -> astl_status_code {
+    (void)metric;
+    return ProcessRawSamples(raw_samples);
+  }
+
   /**
    * @brief Store per-operation clock correlation data used to normalize raw sample timestamps.
    *
@@ -282,6 +289,12 @@ struct IMetricManager {
    * @return ASTL_STATUS_SUCCESS on success, or ASTL_STATUS_BAD_ARGUMENT if target is null.
    */
   [[nodiscard]] virtual auto ResetMetricsOnTarget(const ITarget* target) -> astl_status_code = 0;
+
+  /** Reset one metric before replaying only that metric's cached samples. */
+  [[nodiscard]] virtual auto ResetMetricOnTarget(const ITarget* target, const IMetric* metric) -> astl_status_code {
+    (void)metric;
+    return ResetMetricsOnTarget(target);
+  }
 
   /**
    * @brief Accept processed samples from a metric implementation.

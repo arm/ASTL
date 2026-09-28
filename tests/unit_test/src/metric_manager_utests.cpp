@@ -775,6 +775,127 @@ TEST_CASE("MetricManager::ResetMetricsOnTarget resets only the requested target"
   REQUIRE(metric_ptr1->resetCount == 0);
 }
 
+TEST_CASE("MetricManager::ResetMetricOnTarget resets one registered metric without operation routes",
+          "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto        owner_metric0 = std::make_unique<TestMetric>();
+  auto        owner_metric1 = std::make_unique<TestMetric>();
+  TestMetric* metric_ptr0   = owner_metric0.get();
+  TestMetric* metric_ptr1   = owner_metric1.get();
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric0),
+      std::make_unique<MetricConfig>("m0", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric1),
+      std::make_unique<MetricConfig>("m1", "desc", astl_units_t::ASTL_UNITS_NONE, astl_value_type_t::ASTL_VALUE_UINT64,
+                                     ASTL_METRIC_IDENTIFIER_UNKNOWN, astl_metric_type_t::ASTL_METRIC_VALUE,
+                                     CollectorType::SCMI, astl::NullOperationBuilder{}),
+      &target);
+
+  REQUIRE(mgr.ResetMetricOnTarget(&target, metric_ptr0) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric_ptr0->resetCount == 1);
+  REQUIRE(metric_ptr1->resetCount == 0);
+}
+
+TEST_CASE("MetricManager::ResetMetricOnTarget resets a registered counter", "[MetricManager][counter]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto         counter     = std::make_unique<MockCounter>();
+  MockCounter* counter_ptr = counter.get();
+  REQUIRE_CALL(*counter_ptr, Reset());
+  astl::MetricManagerTestAccessor::InjectCounter(
+      mgr, std::move(counter),
+      std::make_unique<MetricConfig>("counter", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     astl::NullOperationBuilder{}),
+      &target);
+
+  REQUIRE(mgr.ResetMetricOnTarget(&target, counter_ptr) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("MetricManager::ProcessRawSamplesForMetric replays a sole loaded metric without operation routes",
+          "[MetricManager]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto        owner_metric = std::make_unique<TestMetric>();
+  TestMetric* metric       = owner_metric.get();
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric),
+      std::make_unique<MetricConfig>("loaded", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     astl::NullOperationBuilder{}),
+      &target);
+
+  constexpr auto operation_id = astl::OperationId{42};
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({operation_id}));
+  astl::RawSamplesMap samples;
+  samples[&target] = {astl::RawSampledData(operation_id, astl::AstlValue{uint64_t{17}}, uint64_t{100})};
+
+  REQUIRE(mgr.ProcessRawSamplesForMetric(samples, metric) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric->received.size() == 1);
+  REQUIRE(metric->received.front().get<uint64_t>() == 17);
+}
+
+TEST_CASE("MetricManager::ProcessRawSamplesForMetric uses persisted routes for multiple loaded metrics",
+          "[MetricManager][loaded-session]") {
+  Capabilities  caps = MakeCaps(CollectorType::SCMI);
+  MetricManager mgr(caps);
+  MockTarget    target;
+
+  auto        owner_metric0 = std::make_unique<TestMetric>();
+  auto        owner_metric1 = std::make_unique<TestMetric>();
+  TestMetric* metric0       = owner_metric0.get();
+  TestMetric* metric1       = owner_metric1.get();
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric0),
+      std::make_unique<MetricConfig>("loaded0", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     astl::NullOperationBuilder{}),
+      &target);
+  astl::MetricManagerTestAccessor::InjectMetric(
+      mgr, std::move(owner_metric1),
+      std::make_unique<MetricConfig>("loaded1", "desc", astl_units_t::ASTL_UNITS_NONE,
+                                     astl_value_type_t::ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                     astl_metric_type_t::ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                     astl::NullOperationBuilder{}),
+      &target);
+
+  constexpr auto operation0 = astl::OperationId{42};
+  constexpr auto operation1 = astl::OperationId{43};
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, operation0, metric0);
+  astl::MetricManagerTestAccessor::InjectOperation(mgr, &target, operation1, metric1);
+  astl::MetricManagerTestAccessor::ClearLiveOperationRoutes(mgr);
+  mgr.SetClockCorrelations(MakeZeroCorrelationMap({operation0, operation1}));
+  astl::RawSamplesMap samples{
+      {&target,
+       {astl::RawSampledData(operation0, astl::AstlValue{uint64_t{17}}, uint64_t{100}),
+        astl::RawSampledData(operation1, astl::AstlValue{uint64_t{29}}, uint64_t{100})}}
+  };
+
+  REQUIRE(mgr.ProcessRawSamplesForMetric(samples, metric0) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric0->received.size() == 1);
+  REQUIRE(metric0->received.front().get<uint64_t>() == 17);
+  REQUIRE(metric1->received.empty());
+
+  REQUIRE(mgr.ProcessRawSamplesForMetric(samples, metric1) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric1->received.size() == 1);
+  REQUIRE(metric1->received.front().get<uint64_t>() == 29);
+  REQUIRE(metric0->received.size() == 1);
+}
+
 TEST_CASE("MetricManager::ClearStaleOperationStateForTarget prunes stale operation state", "[MetricManager]") {
   Capabilities             caps = MakeCaps(CollectorType::SCMI);
   MetricManager            mgr(caps);

@@ -211,6 +211,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @return ASTL_STATUS_SUCCESS or an appropriate error code.
    */
   auto ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status_code override;
+  auto ProcessRawSamplesForMetric(RawSamplesMap& raw_samples, const IMetric* metric) -> astl_status_code override;
 
   /**
    * @brief Store per-operation clock correlation data used to normalize raw timestamps.
@@ -242,6 +243,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * This helper clears that state before cached raw samples are replayed.
    */
   auto ResetMetricsOnTarget(const ITarget* target) -> astl_status_code override;
+  auto ResetMetricOnTarget(const ITarget* target, const IMetric* metric) -> astl_status_code override;
 
   /**
    * @brief Return the metric groups registered in the manager.
@@ -391,6 +393,8 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
 
   // Maps operation IDs to their corresponding metrics for each target.
   TargetOperationToMetricMap _target_to_operation_to_metric_map;
+  // Retains serialized/configured routing for cache replay after live collection state is cleared.
+  TargetOperationToMetricMap _replay_operation_to_metric_map;
 
   // Tracks the single explicitly marked lifecycle-event EventMetric per target.
   LifecycleEventMetricMap _target_to_lifecycle_event_metric;

@@ -1177,7 +1177,7 @@ auto Serialize(const MetricManager& metric_manager, std::ostream& output_stream)
   }
 
   ASTL_LOG_DEBUG("serialize: serializing operation to metric map");
-  auto op_status = detail::SerializeOperationToMetricMap(metric_manager._target_to_operation_to_metric_map, proto_mgr);
+  auto op_status = detail::SerializeOperationToMetricMap(metric_manager._replay_operation_to_metric_map, proto_mgr);
 
   if (op_status != ASTL_STATUS_SUCCESS) {
     return op_status;
@@ -1276,6 +1276,7 @@ auto Deserialize<std::unique_ptr<MetricManager>>(std::istream&                  
     return std::unexpected(op_map_or_err.error());
   }
   metric_manager->_target_to_operation_to_metric_map.swap(*op_map_or_err);
+  metric_manager->_replay_operation_to_metric_map = metric_manager->_target_to_operation_to_metric_map;
 
   metric_manager->_clock_correlations = detail::DeserializeClockCorrelations(proto_manager);
   ASTL_LOG_DEBUG("Deserialize<MetricManager>: restored {} clock correlations",

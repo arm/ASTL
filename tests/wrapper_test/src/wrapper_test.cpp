@@ -2006,12 +2006,16 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
             ASTL_STATUS_SUCCESS);
     REQUIRE(sample_count == 2);
 
-    sample_count     = 2;
-    auto samples_out = AllocateAstlVector<astl_sample_t>(kAFew);
+    sample_count             = 2;
+    auto samples_out         = AllocateAstlVector<astl_sample_t>(kAFew);
+    samples_out[0].timestamp = 999;
+    samples_out[1].timestamp = 999;
 
     REQUIRE(GetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), samples_out.data(), &sample_count) ==
             ASTL_STATUS_BUFFER_TOO_SMALL);
     REQUIRE(sample_count == samples.size());
+    REQUIRE(samples_out[0].timestamp == 999);
+    REQUIRE(samples_out[1].timestamp == 999);
 
     auto full_samples_out = AllocateAstlVector<astl_sample_t>(samples.size());
     sample_count          = static_cast<uint32_t>(full_samples_out.size());
@@ -2028,6 +2032,32 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
     REQUIRE(sample_count == 2);
     REQUIRE(samples_out[0].timestamp == 101);
     REQUIRE(samples_out[1].timestamp == 102);
+  }
+
+  SECTION("[large timestamp-filtered sample collection][wrapper]") {
+    constexpr uint32_t                      total_samples = 10'000;
+    constexpr uint64_t                      filter_start  = 4'321;
+    constexpr uint64_t                      filter_end    = 7'654;
+    std::vector<astl::ProcessedSampledData> samples;
+    samples.reserve(total_samples);
+    for (uint64_t timestamp = 0; timestamp < total_samples; ++timestamp) {
+      samples.emplace_back(astl::AstlValue{timestamp},
+                           astl::ProcessedSampleTimestamp{astl::ProcessedSampleTimestamp::duration{timestamp}});
+    }
+    REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, mock_metric_concrete, samples) ==
+            ASTL_STATUS_SUCCESS);
+
+    const auto                 expected_count = static_cast<uint32_t>(filter_end - filter_start + 1);
+    std::vector<astl_sample_t> output(expected_count);
+    sample_count = expected_count;
+    REQUIRE(GetMetricSamplesOnTarget(mock_target_handle, metric_handle.get(), output.data(), &sample_count,
+                                     filter_start, filter_end) == ASTL_STATUS_SUCCESS);
+    REQUIRE(sample_count == expected_count);
+    REQUIRE(output.front().timestamp == filter_start);
+    REQUIRE(output.back().timestamp == filter_end);
+    for (std::size_t index = 1; index < output.size(); ++index) {
+      REQUIRE(output[index - 1].timestamp < output[index].timestamp);
+    }
   }
 }
 

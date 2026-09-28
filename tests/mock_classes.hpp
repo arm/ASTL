@@ -344,6 +344,11 @@ struct MockMetricManager : public astl::IMetricManager {
   auto ClearCollectionOperationState() -> void override {}
 
   MAKE_MOCK1(ResetMetricsOnTarget, auto(const astl::ITarget* target)->astl_status_code, override);
+  MAKE_MOCK2(ResetMetricOnTarget,
+             auto(const astl::ITarget* target, const astl::IMetric* metric)->astl_status_code, override);
+
+  MAKE_MOCK2(ProcessRawSamplesForMetric,
+             auto(astl::RawSamplesMap& raw_samples, const astl::IMetric* metric)->astl_status_code, override);
 
   MAKE_MOCK2(SinkProcessedSamples,
              auto(const astl::IMetric* metric, std::span<const astl::ProcessedSampledData> processed_samples)
@@ -363,8 +368,7 @@ struct MockMetricManager : public astl::IMetricManager {
   MAKE_MOCK0(RemoveAllMetrics, auto()->void, override);
 
   // NOTE: The GetProcessedSamples(metric_handle, target) method was removed from IMetricManager.
-  // Tests should obtain processed samples via Orchestrator::GetProcessedMetricSamples after sinking them with
-  // Orchestrator::SinkProcessedSamples.
+  // Tests should obtain processed samples via Orchestrator::VisitProcessedMetricSampleBatches after sinking them.
 
   /*
    * @brief Perform a final summary or aggregation of all collected metric data.
@@ -475,6 +479,16 @@ namespace astl {
 // Test accessor for MetricManager internals
 class MetricManagerTestAccessor {
  public:
+  static void InjectCounter(astl::MetricManager& mgr, std::unique_ptr<astl::ICounter> counter,
+                            std::unique_ptr<astl::MetricConfig> cfg, const astl::ITarget* target) {
+    std::unordered_map<const astl::ITarget*, std::unique_ptr<ICounter>> target_to_counter;
+    auto counter_handle = std::make_unique<astl::CounterHandle>(std::move(cfg), std::move(target_to_counter));
+    counter_handle->target_to_counter_map[target] = std::move(counter);
+    auto* counter_api_handle                      = counter_handle.get();
+    mgr._counter_handles.push_back(std::move(counter_handle));
+    mgr._target_to_counters_map[target].push_back(counter_api_handle);
+  }
+
   static void InjectMetric(astl::MetricManager& mgr, std::unique_ptr<astl::IMetric> metric,
                            std::unique_ptr<astl::MetricConfig> cfg, const astl::ITarget* target) {
     std::unordered_map<const astl::ITarget*, std::unique_ptr<IMetric>> target_to_metric;
@@ -488,6 +502,11 @@ class MetricManagerTestAccessor {
   static void InjectOperation(astl::MetricManager& mgr, const astl::ITarget* target, OperationId op_id,
                               IMetric* metric_handle) {
     mgr._target_to_operation_to_metric_map[target][op_id] = metric_handle;
+    mgr._replay_operation_to_metric_map[target][op_id] = metric_handle;
+  }
+
+  static void ClearLiveOperationRoutes(astl::MetricManager& mgr) {
+    mgr._target_to_operation_to_metric_map.clear();
   }
 };
 }  // namespace astl
