@@ -3401,12 +3401,6 @@ struct CropSamplesOnTargetRequest {
   std::span<const astl_crop_window_t> windows;
 };
 
-struct CropMetricSamplesOnTargetRequest {
-  const astl::ITarget*                target{nullptr};
-  const astl::IMetric*                metric{nullptr};
-  std::span<const astl_crop_window_t> windows;
-};
-
 struct CropSamplesRequest {
   std::span<const astl_crop_window_t> windows;
 };
@@ -3441,35 +3435,6 @@ auto ParseCropSamplesOnTargetRequest(const astl_crop_samples_on_target_params_t&
 
   return CropSamplesOnTargetRequest{
       .target  = *target_or_error,
-      .windows = std::span<const astl_crop_window_t>{params.windows, params.window_count},
-  };
-}
-
-auto ParseCropMetricSamplesOnTargetRequest(const astl_crop_metric_samples_on_target_params_t& params)
-    -> std::expected<CropMetricSamplesOnTargetRequest, astl_status_code> {
-  if (!params.target_handle || !params.metric_handle) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
-  }
-
-  const auto windows_status = ValidateCropWindows(params.windows, params.window_count);
-  if (windows_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(windows_status);
-  }
-
-  auto resolved_components = ResolveTargetAndMetricManager(params.target_handle);
-  if (!resolved_components) {
-    return std::unexpected(resolved_components.error());
-  }
-
-  auto metric_or_error =
-      resolved_components->metric_manager->GetMetricOnTarget(params.metric_handle, resolved_components->target);
-  if (!metric_or_error) {
-    return std::unexpected(metric_or_error.error());
-  }
-
-  return CropMetricSamplesOnTargetRequest{
-      .target  = resolved_components->target,
-      .metric  = *metric_or_error,
       .windows = std::span<const astl_crop_window_t>{params.windows, params.window_count},
   };
 }
@@ -3520,35 +3485,6 @@ auto astlCropSamplesOnTarget(const astl_crop_samples_on_target_params_t* params)
         status = orchestrator_or_error.error();
       } else {
         status = (*orchestrator_or_error)->CropSamplesOnTarget(request.target, request.windows);
-      }
-    }
-
-    return status;
-  });
-}
-
-auto astlCropMetricSamplesOnTarget(const astl_crop_metric_samples_on_target_params_t* params) noexcept
-    -> astl_status_code {
-  return RunPublicApi([&]() noexcept -> astl_status_code {
-    std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-    auto                        status = ValidateApiParams(params);
-
-    CropMetricSamplesOnTargetRequest request;
-    if (status == ASTL_STATUS_SUCCESS) {
-      auto request_or_error = ParseCropMetricSamplesOnTargetRequest(*params);
-      if (!request_or_error) {
-        status = request_or_error.error();
-      } else {
-        request = *request_or_error;
-      }
-    }
-
-    if (status == ASTL_STATUS_SUCCESS) {
-      auto orchestrator_or_error = GetOrchestratorInstance();
-      if (!orchestrator_or_error) {
-        status = orchestrator_or_error.error();
-      } else {
-        status = (*orchestrator_or_error)->CropMetricSamplesOnTarget(request.target, request.metric, request.windows);
       }
     }
 

@@ -16,6 +16,10 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Breaking
 
+- Removed `astlCropMetricSamplesOnTarget` and its Python and Go wrappers. Its crop only affected processed samples in
+  memory; rebuilding them from the raw sample cache could restore discarded samples. Use `astlCropSamplesOnTarget`
+  (or the corresponding Python or Go wrapper) to crop all samples on a target persistently.
+
 ## 0.1.0 - 2026-09-25
 
 ### Added

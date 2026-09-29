@@ -528,7 +528,6 @@ main fields are:
 ### Cropping
 
 - `astlCropSamplesOnTarget`: Crop all samples for one target.
-- `astlCropMetricSamplesOnTarget`: Crop samples for one metric on one target.
 - `astlCropSamples`: Crop samples across the active scope.
 
 ## Typical Native Integration Flow
@@ -743,7 +742,6 @@ The current package exports:
   - `GetMetricStatesOnTarget(...)`
 - Crop operations:
   - `CropSamplesOnTarget(...)`
-  - `CropMetricSamplesOnTarget(...)`
   - `CropSamples(...)`
 
 ### Build And Link Requirements

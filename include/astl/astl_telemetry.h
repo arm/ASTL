@@ -1510,8 +1510,7 @@ ASTL_API astl_status_code astlGetMetricDiscreteHistogramOnTarget(
  **********************************************************************************/
 
 /**
- * @note Common behaviour for all crop APIs (astlCropSamplesOnTarget, astlCropMetricSamplesOnTarget,
- *       astlCropSamples):
+ * @note Common behaviour for all crop APIs (astlCropSamplesOnTarget and astlCropSamples):
  *
  *  - **Retention rule** — a sample is retained if its timestamp falls within at least
  *    one of the supplied [start_ts, end_ts] windows.  All other samples in the scope of the call
@@ -1529,8 +1528,8 @@ ASTL_API astl_status_code astlGetMetricDiscreteHistogramOnTarget(
  */
 
 /**
- * @brief Describes one time window used by astlCropSamples(), astlCropMetricSamplesOnTarget() and
- * astlCropSamplesOnTarget(). Pass an array of these to the @p windows field of the corresponding params struct.
+ * @brief Describes one time window used by astlCropSamples() and astlCropSamplesOnTarget().
+ * Pass an array of these to the @p windows field of the corresponding params struct.
  */
 typedef struct astl_crop_window_t {
   size_t size;        //!< Size of this struct for versioning. Set to sizeof(astl_crop_window_t).
@@ -1568,32 +1567,6 @@ typedef struct astl_crop_samples_on_target_params_t {
  * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
 ASTL_API astl_status_code astlCropSamplesOnTarget(const astl_crop_samples_on_target_params_t* params) ASTL_API_NOEXCEPT;
-
-/** A parameter structure describes inputs and outputs for astlCropMetricSamplesOnTarget().
- */
-typedef struct astl_crop_metric_samples_on_target_params_t {
-  size_t size;                              //!< Size of this struct for versioning; set size to
-                                            //!< sizeof(astl_crop_metric_samples_on_target_params_t).
-  uint32_t                  flags;          //!< Reserved for future flags (must be 0 for now).
-  astl_target_handle_t      target_handle;  //!< Target handle of interest from astl_target_props_t.
-  astl_metric_handle_t      metric_handle;  //!< Metric handle of interest from astl_metric_props_t.
-  const astl_crop_window_t* windows;        //!< Caller-allocated array of crop windows. Cannot be NULL.
-                                            //!< Set windows[0].size to sizeof(astl_crop_window_t).
-  uint32_t window_count;                    //!< Number of elements in @p windows. Must be >= 1.
-} astl_crop_metric_samples_on_target_params_t;
-
-/**
- * @brief Permanently retain samples for a specific metric on a specific target that fall within one or more time
- * windows, discarding all others.
- *
- * Scope: the single (target, metric) pair. See the common-behaviour note above.
- *
- * @param params Parameters for this call (see astl_crop_metric_samples_on_target_params_t).
- *
- * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
- */
-ASTL_API astl_status_code astlCropMetricSamplesOnTarget(const astl_crop_metric_samples_on_target_params_t* params)
-    ASTL_API_NOEXCEPT;
 
 /** A parameter structure describes inputs and outputs for astlCropSamples().
  */

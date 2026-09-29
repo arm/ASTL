@@ -662,14 +662,5 @@ cdef extern from "astl/astl_telemetry.h":
         const astl_crop_window_t* windows
         uint32_t window_count
 
-    cdef struct astl_crop_metric_samples_on_target_params_t:
-        size_t size
-        uint32_t flags
-        const void* target_handle
-        const void* metric_handle
-        const astl_crop_window_t* windows
-        uint32_t window_count
-
     int astlCropSamplesOnTarget(const astl_crop_samples_on_target_params_t* params)
-    int astlCropMetricSamplesOnTarget(const astl_crop_metric_samples_on_target_params_t* params)
     int astlCropSamples(const astl_crop_samples_params_t* params)

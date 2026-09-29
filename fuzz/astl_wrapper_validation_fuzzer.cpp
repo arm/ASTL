@@ -709,16 +709,6 @@ auto FuzzCrop(ByteCursor& input, astl_target_handle_t stable_target) -> void {
   };
   CheckPublicStatus(astlCropSamplesOnTarget(MaybeNull(input, &target_params, kOuterNullFrequency)));
 
-  astl_crop_metric_samples_on_target_params_t metric_params{
-      .size          = ChooseStructSize<astl_crop_metric_samples_on_target_params_t>(input),
-      .flags         = ChooseFlags(input),
-      .target_handle = ChooseTarget(input, stable_target),
-      .metric_handle = static_cast<astl_metric_handle_t>(ChooseOpaqueHandle(input, stable_target)),
-      .windows       = MaybeNull(input, windows.data()),
-      .window_count  = window_count,
-  };
-  CheckPublicStatus(astlCropMetricSamplesOnTarget(MaybeNull(input, &metric_params, kOuterNullFrequency)));
-
   astl_crop_samples_params_t global_params{
       .size         = ChooseStructSize<astl_crop_samples_params_t>(input),
       .flags        = ChooseFlags(input),

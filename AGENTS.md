@@ -50,3 +50,13 @@ If the work implements a specific Jira ticket, reference its key in the PR title
 ## Configuration Tips
 
 ASTL resolves runtime configuration from `ASTL_CONFIG_DIR`; SCMI development can also override the telemetry mount with `ASTL_SCMI_SYSFS_TELEMETRY_ROOT`. Do not hardcode local paths in tests or samples.
+
+## Documentation changes
+
+If you update a .md file that has a matching .pdf, be sure to update the pdf file as well. Example:
+
+```sh
+pandoc doc/ASTL_API_specification.md \
+  -o doc/ASTL_API_specification.pdf \
+  --pdf-engine=pdflatex
+```

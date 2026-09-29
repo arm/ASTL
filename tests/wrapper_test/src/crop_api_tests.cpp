@@ -4,7 +4,7 @@
 
 /**
  * @file crop_api_tests.cpp
- * @brief Tests for the astlCropSamplesOnTarget, astlCropMetricSamplesOnTarget, and astlCropSamples C APIs.
+ * @brief Tests for the astlCropSamplesOnTarget and astlCropSamples C APIs.
  *
  * Coverage:
  *  - NULL params pointer
@@ -16,7 +16,6 @@
  *  - Valid call to astlCropSamples with an empty target list returns ASTL_STATUS_SUCCESS
  *  - End-to-end: processed samples are filtered to the keep window
  *  - End-to-end: on-disk raw sample cache file is filtered to the keep window
- *  - End-to-end: astlCropMetricSamplesOnTarget only filters the specified metric
  */
 
 #include <algorithm>
@@ -49,9 +48,7 @@ using trompeloeil::_;
 // ---------------------------------------------------------------------------
 namespace {
 const int                  kSentinelTarget{};
-const int                  kSentinelMetric{};
 astl_target_handle_t const kTarget = static_cast<astl_target_handle_t>(&kSentinelTarget);
-astl_metric_handle_t const kMetric = static_cast<astl_metric_handle_t>(&kSentinelMetric);
 }  // namespace
 
 // ===========================================================================
@@ -102,107 +99,6 @@ TEST_CASE(
     "INVALID_TARGET_HANDLE",
     "[crop_api]") {
   REQUIRE(CropSamplesOnTarget(kTarget, 1'000'000, 5'000'000) == ASTL_STATUS_INVALID_TARGET_HANDLE);
-}
-
-// ===========================================================================
-// astlCropMetricSamplesOnTarget
-// ===========================================================================
-
-TEST_CASE("astlCropMetricSamplesOnTarget - NULL params", "[crop_api]") {
-  REQUIRE(astlCropMetricSamplesOnTarget(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
-}
-
-TEST_CASE("astlCropMetricSamplesOnTarget - incompatible struct size", "[crop_api]") {
-  astl_crop_window_t                          window{sizeof(astl_crop_window_t), 0, 0, 0};
-  astl_crop_metric_samples_on_target_params_t params{};
-  params.target_handle = kTarget;
-  params.metric_handle = kMetric;
-  params.windows       = &window;
-  params.window_count  = 1;
-  params.flags         = 0;
-
-  SECTION("size too small") {
-    params.size = sizeof(astl_crop_metric_samples_on_target_params_t) - 1;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
-  }
-
-  SECTION("size too large") {
-    params.size = sizeof(astl_crop_metric_samples_on_target_params_t) + 1;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_NEW_STRUCT_VERSION);
-  }
-}
-
-TEST_CASE("astlCropMetricSamplesOnTarget - non-zero params flags", "[crop_api]") {
-  astl_crop_window_t                          window{sizeof(astl_crop_window_t), 0, 0, 0};
-  astl_crop_metric_samples_on_target_params_t params{};
-  params.size          = sizeof(astl_crop_metric_samples_on_target_params_t);
-  params.flags         = 1U;
-  params.target_handle = kTarget;
-  params.metric_handle = kMetric;
-  params.windows       = &window;
-  params.window_count  = 1;
-  REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_INVALID_FLAG_VALUE);
-}
-
-TEST_CASE("astlCropMetricSamplesOnTarget - window array validation", "[crop_api]") {
-  astl_crop_metric_samples_on_target_params_t params{};
-  params.size          = sizeof(astl_crop_metric_samples_on_target_params_t);
-  params.flags         = 0;
-  params.target_handle = kTarget;
-  params.metric_handle = kMetric;
-
-  SECTION("NULL windows pointer") {
-    params.windows      = nullptr;
-    params.window_count = 1;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
-  }
-
-  SECTION("window_count is zero") {
-    astl_crop_window_t window{sizeof(astl_crop_window_t), 0, 0, 0};
-    params.windows      = &window;
-    params.window_count = 0;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
-  }
-
-  SECTION("windows[0].size is wrong") {
-    astl_crop_window_t window{sizeof(astl_crop_window_t) - 1, 0, 0, 0};
-    params.windows      = &window;
-    params.window_count = 1;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
-  }
-
-  SECTION("windows[0].flags is non-zero") {
-    astl_crop_window_t window{sizeof(astl_crop_window_t), /*flags=*/1U, 0, 0};
-    params.windows      = &window;
-    params.window_count = 1;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_INVALID_FLAG_VALUE);
-  }
-
-  SECTION("start_ts > end_ts (both non-zero)") {
-    astl_crop_window_t window{sizeof(astl_crop_window_t), 0, /*start_ts=*/5'000'000, /*end_ts=*/1'000'000};
-    params.windows      = &window;
-    params.window_count = 1;
-    REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_BAD_ARGUMENT);
-  }
-}
-
-TEST_CASE("astlCropMetricSamplesOnTarget - valid params with unregistered target returns INVALID_TARGET_HANDLE",
-          "[crop_api]") {
-  REQUIRE(CropMetricSamplesOnTarget(kTarget, kMetric, 0, 0) == ASTL_STATUS_INVALID_TARGET_HANDLE);
-}
-
-TEST_CASE(
-    "astlCropMetricSamplesOnTarget - valid params with non-zero window bounds and unregistered target returns "
-    "INVALID_TARGET_HANDLE",
-    "[crop_api]") {
-  REQUIRE(CropMetricSamplesOnTarget(kTarget, kMetric, 1'000'000, 5'000'000) == ASTL_STATUS_INVALID_TARGET_HANDLE);
-}
-
-TEST_CASE(
-    "astlCropMetricSamplesOnTarget - start_ts == end_ts (single-point window) with unregistered target returns "
-    "INVALID_TARGET_HANDLE",
-    "[crop_api]") {
-  REQUIRE(CropMetricSamplesOnTarget(kTarget, kMetric, 3'000'000, 3'000'000) == ASTL_STATUS_INVALID_TARGET_HANDLE);
 }
 
 // ===========================================================================
@@ -631,113 +527,6 @@ TEST_CASE("astlCropSamplesOnTarget - raw sample cache file is removed when all s
   REQUIRE(CropSamplesOnTarget(target_hdl, 500, 600) == ASTL_STATUS_SUCCESS);
 
   REQUIRE_FALSE(fs::exists(cache_file));
-}
-
-// ---------------------------------------------------------------------------
-// CropMetricSamplesOnTarget metric isolation
-// ---------------------------------------------------------------------------
-
-TEST_CASE("astlCropMetricSamplesOnTarget - only the specified metric's samples are cropped", "[crop_api][e2e]") {
-  std::vector<expectation> expectations;
-  auto [orchestrator, mm_raw, cm_raw] = BuildCropOrchestrator(expectations);
-  (void)cm_raw;
-  expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, GetClockCorrelations()).RETURN(astl::ClockCorrelationMap{}));
-
-  auto        target_uptr = std::make_unique<TestTargetBase>("crop-e2e-two-metric-target");
-  auto*       target_ptr  = target_uptr.get();
-  const auto* target_hdl  = static_cast<astl_target_handle_t>(target_ptr);
-
-  // Metric A — will be cropped
-  auto                 mh_a_storage = std::make_unique<astl::MetricHandle>();
-  astl_metric_handle_t metric_hdl_a = static_cast<astl_metric_handle_t>(mh_a_storage.get());
-  TestMetricBase       metric_a{"crop-e2e-metric-a"};
-  astl::IMetric*       metric_a_iface = &metric_a;
-  expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, GetMetricOnTarget(metric_hdl_a, target_ptr)).RETURN(metric_a_iface));
-
-  // Metric B — must stay untouched
-  auto                 mh_b_storage = std::make_unique<astl::MetricHandle>();
-  astl_metric_handle_t metric_hdl_b = static_cast<astl_metric_handle_t>(mh_b_storage.get());
-  TestMetricBase       metric_b{"crop-e2e-metric-b"};
-  astl::IMetric*       metric_b_iface = &metric_b;
-  expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, GetMetricOnTarget(metric_hdl_b, target_ptr)).RETURN(metric_b_iface));
-
-  std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::move(target_uptr));
-  REQUIRE(orchestrator->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
-  auto*                    orch_raw = orchestrator.get();
-  TestOrchestratorInjector injector(std::move(orchestrator));
-
-  const std::vector<astl::ProcessedSampledData> samples_abc{MakeProcSample(100), MakeProcSample(200),
-                                                            MakeProcSample(300)};
-  REQUIRE(orch_raw->SinkProcessedSamples(target_ptr, &metric_a, samples_abc) == ASTL_STATUS_SUCCESS);
-  REQUIRE(orch_raw->SinkProcessedSamples(target_ptr, &metric_b, samples_abc) == ASTL_STATUS_SUCCESS);
-
-  // Crop metric A to only keep [200 ns, 200 ns] — 1 sample survives
-  REQUIRE(CropMetricSamplesOnTarget(target_hdl, metric_hdl_a, 200, 200) == ASTL_STATUS_SUCCESS);
-
-  uint32_t count_a = 0;
-  REQUIRE(GetMetricSampleCountOnTarget(target_hdl, metric_hdl_a, &count_a) == ASTL_STATUS_SUCCESS);
-  REQUIRE(count_a == 1);
-
-  // Metric B must still have all 3 samples
-  uint32_t count_b = 0;
-  REQUIRE(GetMetricSampleCountOnTarget(target_hdl, metric_hdl_b, &count_b) == ASTL_STATUS_SUCCESS);
-  REQUIRE(count_b == 3);
-}
-
-TEST_CASE("astlCropMetricSamplesOnTarget - overlapping windows retain the consolidated ranges", "[crop_api][e2e]") {
-  std::vector<expectation> expectations;
-  auto [orchestrator, mm_raw, cm_raw] = BuildCropOrchestrator(expectations);
-  (void)cm_raw;
-
-  auto        target_uptr = std::make_unique<TestTargetBase>("crop-e2e-metric-overlap-target");
-  auto*       target_ptr  = target_uptr.get();
-  const auto* target_hdl  = static_cast<astl_target_handle_t>(target_ptr);
-
-  auto                 mh_storage = std::make_unique<astl::MetricHandle>();
-  astl_metric_handle_t metric_hdl = static_cast<astl_metric_handle_t>(mh_storage.get());
-  TestMetricBase       metric{"crop-e2e-metric-overlap"};
-  astl::IMetric*       metric_iface = &metric;
-  expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, GetMetricOnTarget(metric_hdl, target_ptr)).RETURN(metric_iface));
-
-  std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::move(target_uptr));
-  REQUIRE(orchestrator->SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
-  auto*                    orch_raw = orchestrator.get();
-  TestOrchestratorInjector injector(std::move(orchestrator));
-
-  std::vector<astl::ProcessedSampledData> samples;
-  for (uint64_t ts_ns = 1; ts_ns <= 15; ++ts_ns) {
-    samples.push_back(MakeProcSample(ts_ns));
-  }
-  REQUIRE(orch_raw->SinkProcessedSamples(target_ptr, &metric, samples) == ASTL_STATUS_SUCCESS);
-
-  std::array<astl_crop_window_t, 4> windows{};
-  windows[0] = {sizeof(astl_crop_window_t), 0, 1, 3};
-  windows[1] = {sizeof(astl_crop_window_t), 0, 2, 3};
-  windows[2] = {sizeof(astl_crop_window_t), 0, 7, 9};
-  windows[3] = {sizeof(astl_crop_window_t), 0, 11, 15};
-
-  astl_crop_metric_samples_on_target_params_t params{};
-  params.size          = sizeof(astl_crop_metric_samples_on_target_params_t);
-  params.flags         = 0;
-  params.target_handle = target_hdl;
-  params.metric_handle = metric_hdl;
-  params.windows       = windows.data();
-  params.window_count  = static_cast<uint32_t>(windows.size());
-  REQUIRE(astlCropMetricSamplesOnTarget(&params) == ASTL_STATUS_SUCCESS);
-
-  uint32_t count = 0;
-  REQUIRE(GetMetricSampleCountOnTarget(target_hdl, metric_hdl, &count) == ASTL_STATUS_SUCCESS);
-  REQUIRE(count == 11);
-
-  std::array<astl_sample_t, 11> retained_samples{};
-  REQUIRE(GetMetricSamplesOnTarget(target_hdl, metric_hdl, retained_samples.data(), &count) == ASTL_STATUS_SUCCESS);
-  const std::array<uint64_t, 11> expected_timestamps{1, 2, 3, 7, 8, 9, 11, 12, 13, 14, 15};
-  REQUIRE(count == expected_timestamps.size());
-  REQUIRE(std::equal(
-      retained_samples.begin(), retained_samples.end(), expected_timestamps.begin(), expected_timestamps.end(),
-      [](const auto& sample, uint64_t expected_timestamp) { return sample.timestamp == expected_timestamp; }));
 }
 
 TEST_CASE(

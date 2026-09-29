@@ -519,16 +519,6 @@
         "mode": "wrapped",
         "symbol": "CropSamplesOnTarget"
       }
-    },
-    "astlCropMetricSamplesOnTarget": {
-      "python": {
-        "mode": "wrapped",
-        "symbol": "crop_metric_samples_on_target"
-      },
-      "go": {
-        "mode": "wrapped",
-        "symbol": "CropMetricSamplesOnTarget"
-      }
     }
   },
   "enum_coverage": {

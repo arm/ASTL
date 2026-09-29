@@ -424,14 +424,6 @@ static_assert(offsetof(astl_crop_samples_on_target_params_t, target_handle) == k
 static_assert(sizeof(astl_crop_samples_on_target_params_t) ==
               StructLayoutSize<size_t, uint32_t, astl_target_handle_t, const astl_crop_window_t*, uint32_t>());
 
-static_assert(IsStdLayout<astl_crop_metric_samples_on_target_params_t>());
-static_assert(offsetof(astl_crop_metric_samples_on_target_params_t, size) == 0);
-static_assert(offsetof(astl_crop_metric_samples_on_target_params_t, flags) == kFlagsOffset);
-static_assert(offsetof(astl_crop_metric_samples_on_target_params_t, target_handle) == kFirstPtrOffset);
-static_assert(sizeof(astl_crop_metric_samples_on_target_params_t) ==
-              StructLayoutSize<size_t, uint32_t, astl_target_handle_t, astl_metric_handle_t, const astl_crop_window_t*,
-                               uint32_t>());
-
 static_assert(IsStdLayout<astl_crop_samples_params_t>());
 static_assert(offsetof(astl_crop_samples_params_t, size) == 0);
 static_assert(offsetof(astl_crop_samples_params_t, flags) == kFlagsOffset);
