@@ -879,9 +879,11 @@ TEST_CASE("Serialize(IMetricManager) round-trips counters through MetricManager"
 
   astl::MetricManager metric_manager{MakeCaps(astl::CollectorType::SCMI)};
   auto                counter_config = std::make_unique<astl::MetricConfig>(
-      "raw_counter", "unit-test counter", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
-      ASTL_METRIC_VALUE, astl::CollectorType::SCMI, astl::ScmiOperationBuilder{astl::ScmiDataEventId{0x42}},
-      astl::IdentityFormula{}, ASTL_VALUE_UINT64, std::vector<std::string>{}, "counter::raw_counter");
+      astl::MetricConfig::RawCounterInfo{
+                         .name = "raw_counter", .id = "counter::raw_counter", .type = ASTL_COUNTER_TYPE_VALUE},
+      "unit-test counter", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
+      astl::CollectorType::SCMI, astl::ScmiOperationBuilder{astl::ScmiDataEventId{0x42}}, astl::IdentityFormula{},
+      ASTL_VALUE_UINT64);
 
   REQUIRE(metric_manager.RegisterCounter(std::move(counter_config), {target}) == ASTL_STATUS_SUCCESS);
 
@@ -914,6 +916,7 @@ TEST_CASE("Serialize(IMetricManager) round-trips counters through MetricManager"
   REQUIRE(std::string{props.name} == "raw_counter");
   REQUIRE(std::string{props.description} == "unit-test counter");
   REQUIRE(props.value_type == ASTL_VALUE_UINT64);
+  REQUIRE(props.counter_type == ASTL_COUNTER_TYPE_VALUE);
 
   astl::ClockCorrelationMap corr;
   corr[operation_id] = astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}},
@@ -923,6 +926,24 @@ TEST_CASE("Serialize(IMetricManager) round-trips counters through MetricManager"
   astl::RawSamplesMap samples_map;
   samples_map[target] = {MakeSample(operation_id, AstlValue{uint64_t{99}}, 1000)};  // NOLINT
   REQUIRE(rebuilt_mgr->ProcessRawSamples(samples_map) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("Deserialize<MetricManager> defaults legacy counter types to COUNT", "[MetricManager][protobuf]") {
+  const auto* target    = InstallSingleScmiTargetTlm0();
+  const auto& targets   = astl::Orchestrator::GetInstance()->get()->GetTargets();
+  auto        proto_mgr = BuildValidMetricManagerProto();
+  AddCounterToMetricManagerProto(proto_mgr);
+  std::stringstream cache_stream(std::ios::in | std::ios::out | std::ios::binary);
+  REQUIRE(proto_mgr.SerializeToOstream(&cache_stream));
+  cache_stream.seekg(0);
+  auto rebuilt = astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::MetricManager>>(cache_stream, targets);
+  REQUIRE(rebuilt.has_value());
+  auto counters = (*rebuilt)->GetAvailableCounters(target);
+  REQUIRE(counters.has_value());
+  REQUIRE(counters->size() == 1);
+  astl_counter_props_t props{};
+  REQUIRE((*rebuilt)->GetCounterProperties(counters->front(), &props) == ASTL_STATUS_SUCCESS);
+  REQUIRE(props.counter_type == ASTL_COUNTER_TYPE_COUNT);
 }
 
 TEST_CASE("Deserialize<MetricManager> rejects malformed counter payloads", "[MetricManager][protobuf]") {
@@ -961,6 +982,16 @@ TEST_CASE("Deserialize<MetricManager> rejects malformed counter payloads", "[Met
     auto  proto_mgr = BuildValidMetricManagerProto();
     auto* raw       = AddCounterToMetricManagerProto(proto_mgr);
     raw->set_target_ids(0, "missing-target");
+
+    auto mgr_or_err = deserialize(proto_mgr);
+    REQUIRE_FALSE(mgr_or_err.has_value());
+    REQUIRE(mgr_or_err.error() == ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+
+  SECTION("invalid counter type") {
+    auto  proto_mgr = BuildValidMetricManagerProto();
+    auto* raw       = AddCounterToMetricManagerProto(proto_mgr);
+    raw->mutable_config()->set_counter_type(99);
 
     auto mgr_or_err = deserialize(proto_mgr);
     REQUIRE_FALSE(mgr_or_err.has_value());

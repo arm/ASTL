@@ -74,9 +74,24 @@ static auto AppendScmiCounterConfigurationsForTarget(std::string_view           
   auto metric_registers =
       scmi::spec::GetMetricRegistersScmiData(metric_declaration, context.specification.get(), target_index);
   for (const auto& register_declaration : metric_registers) {
-    const std::string counter_id   = register_declaration.GetFullyQualifiedName();
-    const std::string counter_name = counter_id;
-    const std::string dedup_key    = std::format("{}__{}", counter_id, GetStableTargetKey(*target));
+    // Histogram data events have no ASTL raw counter type; metric discovery handles them separately.
+    if (register_declaration.type == "Histogram") {
+      continue;
+    }
+    astl_counter_type_t counter_type = ASTL_COUNTER_TYPE_UNKNOWN;
+    if (register_declaration.type == "Gauge") {
+      counter_type = ASTL_COUNTER_TYPE_VALUE;
+    } else if (register_declaration.type == "Counter") {
+      counter_type = ASTL_COUNTER_TYPE_COUNT;
+    } else if (register_declaration.type == "Event") {
+      counter_type = ASTL_COUNTER_TYPE_EVENT;
+    } else {
+      ASTL_LOG_WARNING("Skipping SCMI counter '{}' with unsupported type '{}'",
+                       register_declaration.GetFullyQualifiedName(), register_declaration.type);
+      continue;
+    }
+    const std::string counter_id = register_declaration.GetFullyQualifiedName();
+    const std::string dedup_key  = std::format("{}__{}", counter_id, GetStableTargetKey(*target));
     if (!context.processed_counter_id_target_pairs.get().insert(dedup_key).second) {
       continue;
     }
@@ -88,9 +103,10 @@ static auto AppendScmiCounterConfigurationsForTarget(std::string_view           
     const astl_value_type_t     value_type       = input_value_type;
 
     auto new_counter_config = std::make_unique<MetricConfig>(
-        counter_name, std::move(description), ASTL_UNITS_UNKNOWN, value_type, ASTL_METRIC_IDENTIFIER_UNKNOWN,
-        ASTL_METRIC_VALUE, CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id},
-        std::move(scaling_formula), input_value_type, std::vector<std::string>{}, counter_id);
+        MetricConfig::RawCounterInfo{.name = counter_id, .id = counter_id, .type = counter_type},
+        std::move(description), ASTL_UNITS_UNKNOWN, value_type, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
+        CollectorType::SCMI, ScmiOperationBuilder{register_declaration.de_id}, std::move(scaling_formula),
+        input_value_type);
 
     context.configurations_on_targets.get().emplace(std::move(new_counter_config), std::vector<const ITarget*>{target});
   }

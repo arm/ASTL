@@ -24,7 +24,7 @@ auto Counter::GetProperties(astl_counter_props_t *properties) const -> astl_stat
   properties->formula = GetInternedString(FormatFormulaForApi(_configuration->GetFormula()));
   // Counter sample payloads are always reported in the raw/on-wire type expected by collection APIs.
   properties->value_type   = _configuration->InputValueType();
-  properties->counter_type = ASTL_COUNTER_TYPE_COUNT;
+  properties->counter_type = _configuration->CounterType();
   return ASTL_STATUS_SUCCESS;
 }
 

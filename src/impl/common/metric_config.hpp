@@ -47,20 +47,28 @@ class MetricConfig {
   MetricConfig() = delete;
 
   /**
-   * @brief Construct a MetricConfig with the given parameters.
-   * @param name           User-facing metric name.
-   * @param description    Human-readable description of the metric.
-   * @param units          Measurement units for the metric (e.g., Watts, Joules).
-   * @param value_type     Data type of the metric value (e.g., uint32, float64).
-   * @param metric_type    Semantic type of the metric defined by ASTL design doc (e.g. value, delta, residency)
-   * @param identifier       High-level domain identifier (e.g., Power, Temperature).
-   * @param collector_type Collector type responsible for gathering this metric (e.g., SCMI, Libsensors).
-   * @param operation_builder The operation builder associated with this metric's collector type,
-   *                          including collector-specific parameters like data event id or libsensors chip.
-   * @param formula        Formula for processing raw samples (ExpressionFormula or IdentityFormula).
-   * @param input_value_type Raw collector sample type before metric-level processing.
-   * @param metric_groups  Optional group names this metric belongs to.
-   * @param metric_id      Optional stable internal identifier. Defaults to the metric name when omitted.
+   * @brief Identity and classification of a raw counter.
+   */
+  struct RawCounterInfo {
+    std::string         name;
+    std::string         id;
+    astl_counter_type_t type;
+  };
+
+ private:
+  struct CreateOptions {
+    AnyFormula               formula{IdentityFormula{}};
+    astl_value_type_t        input_value_type{ASTL_VALUE_UNKNOWN};
+    std::vector<std::string> metric_groups;
+    std::string              metric_id;
+    astl_counter_type_t      counter_type{ASTL_COUNTER_TYPE_COUNT};
+  };
+
+ public:
+  /**
+   * @brief Construct a metric configuration with the existing positional settings.
+   *
+   * The raw counter type defaults to COUNT.
    */
   template <AnyOperationBuilderCompatible OperationBuilderType>
   explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
@@ -69,20 +77,48 @@ class MetricConfig {
                         OperationBuilderType &&operation_builder, AnyFormula formula = IdentityFormula{},
                         astl_value_type_t        input_value_type = ASTL_VALUE_UNKNOWN,
                         std::vector<std::string> metric_groups = {}, std::string metric_id = {})
-      : _metric_id(metric_id.empty() ? name : std::move(metric_id)),
+      : MetricConfig(name, description, units, value_type, identifier, metric_type, collector_type,
+                     std::forward<OperationBuilderType>(operation_builder),
+                     CreateOptions{std::move(formula), input_value_type, std::move(metric_groups), std::move(metric_id),
+                                   ASTL_COUNTER_TYPE_COUNT}) {}
+
+  /**
+   * @brief Construct a raw counter configuration with its name, ID, and type.
+   */
+  template <AnyOperationBuilderCompatible OperationBuilderType>
+  explicit MetricConfig(RawCounterInfo counter, const std::string &description, astl_units_t units,
+                        astl_value_type_t value_type, astl_metric_identifier_t identifier,
+                        astl_metric_type_t metric_type, CollectorType collector_type,
+                        OperationBuilderType &&operation_builder, AnyFormula formula = IdentityFormula{},
+                        astl_value_type_t        input_value_type = ASTL_VALUE_UNKNOWN,
+                        std::vector<std::string> metric_groups    = {})
+      : MetricConfig(counter.name, description, units, value_type, identifier, metric_type, collector_type,
+                     std::forward<OperationBuilderType>(operation_builder),
+                     CreateOptions{std::move(formula), input_value_type, std::move(metric_groups),
+                                   std::move(counter.id), counter.type}) {}
+
+ private:
+  template <AnyOperationBuilderCompatible OperationBuilderType>
+  explicit MetricConfig(const std::string &name, const std::string &description, astl_units_t units,
+                        astl_value_type_t value_type, astl_metric_identifier_t identifier,
+                        astl_metric_type_t metric_type, CollectorType collector_type,
+                        OperationBuilderType &&operation_builder, CreateOptions options)
+      : _metric_id(options.metric_id.empty() ? name : std::move(options.metric_id)),
         _metric_name(name),
         _description(description),
         _units(units),
         _value_type(value_type),
         // Default input type to the output type unless caller explicitly separates them.
-        _input_value_type(input_value_type == ASTL_VALUE_UNKNOWN ? value_type : input_value_type),
+        _input_value_type(options.input_value_type == ASTL_VALUE_UNKNOWN ? value_type : options.input_value_type),
         _metric_type(metric_type),
+        _counter_type(options.counter_type),
         _identifier(identifier),
-        _metric_groups(std::move(metric_groups)),
+        _metric_groups(std::move(options.metric_groups)),
         _collector_type(collector_type),
         _operation_builder(std::forward<OperationBuilderType>(operation_builder)),
-        _formula(std::move(formula)) {}
+        _formula(std::move(options.formula)) {}
 
+ public:
   // Delete copy operations since ExpressionFormula is move-only
   MetricConfig(const MetricConfig &)            = delete;
   MetricConfig &operator=(const MetricConfig &) = delete;
@@ -133,6 +169,12 @@ class MetricConfig {
    */
   astl_metric_type_t MetricType() const { return _metric_type; }
   /**
+   * @brief Return the spec-defined type of the underlying raw counter for this metric.
+   *
+   * @return astl_counter_type_t The raw counter classification.
+   */
+  astl_counter_type_t CounterType() const { return _counter_type; }
+  /**
    * @brief Return the high-level metric identifier (e.g. Power, Temperature).
    *
    * @return astl_metric_identifier_t The metric identifier.
@@ -172,6 +214,7 @@ class MetricConfig {
   astl_value_type_t _input_value_type;  // Collector-provided raw sample type before transformations
   // Semantic type of the metric defined by ASTL design doc(e.g., value, delta, residency)
   astl_metric_type_t       _metric_type;     // Semantic metric type (value, delta, residency, etc.)
+  astl_counter_type_t      _counter_type;    // Raw counter classification, independent of metric type
   astl_metric_identifier_t _identifier;      // High-level domain identifier (power, temperature, count, etc.)
   std::vector<std::string> _metric_groups;   // Groups this metric belongs to
   CollectorType            _collector_type;  // Collector type to support this metric

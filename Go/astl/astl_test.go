@@ -82,11 +82,15 @@ func TestGetTargets(t *testing.T) {
 	}
 }
 
-func TestCounterPreservesQualifiedSCMIName(t *testing.T) {
-	counter := Counter{Name: "SOC.0.ENERGY_COUNTER"}
+func TestCounterPreservesQualifiedSCMINameAndType(t *testing.T) {
+	gauge := Counter{Name: "SOC.0.TEMP_PRESENT", CounterType: CounterTypeValue}
+	count := Counter{Name: "SOC.0.ENERGY_COUNTER", CounterType: CounterTypeCount}
 
-	if counter.Name != "SOC.0.ENERGY_COUNTER" {
-		t.Fatalf("Counter.Name = %q, want qualified SCMI counter name", counter.Name)
+	if gauge.Name != "SOC.0.TEMP_PRESENT" || gauge.CounterType != CounterTypeValue {
+		t.Fatalf("gauge counter = %#v, want qualified name and VALUE type", gauge)
+	}
+	if count.Name != "SOC.0.ENERGY_COUNTER" || count.CounterType != CounterTypeCount {
+		t.Fatalf("count counter = %#v, want qualified name and COUNT type", count)
 	}
 }
 

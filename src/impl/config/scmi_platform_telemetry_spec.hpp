@@ -154,6 +154,8 @@ inline auto FindSpecFileByUuid(const RepoMeta& repo_meta, const scmi::spec::Uuid
 struct DataEvent {
   uint32_t    base_de_id{};
   std::string name;
+  // GCC requires an explicit default when designated initializers omit the optional type.
+  std::string type{};  // NOLINT(readability-redundant-member-init)
   std::string component;
   std::string description;
   std::string unit;
@@ -164,6 +166,9 @@ struct DataEvent {
 inline void from_json(const json& json_data, DataEvent& entry) {
   entry.base_de_id = ParseToUint32(json_data, "base_de_id");
   json_data.at("name").get_to(entry.name);
+  if (json_data.contains("type")) {
+    json_data.at("type").get_to(entry.type);
+  }
   json_data.at("component").get_to(entry.component);
   json_data.at("description").get_to(entry.description);
   json_data.at("unit").get_to(entry.unit);
@@ -324,15 +329,17 @@ inline void from_json(const json& json_data, ScmiSpecification& spec) {
  */
 struct ScmiMetricDeclaration {
   std::string     name;
+  std::string     type;
   std::string     component;
   std::string     instance;
   astl_units_t    units;
   int32_t         base10_unit_modifier{};
   ScmiDataEventId de_id{};
 
-  ScmiMetricDeclaration(std::string name, std::string component, std::string instance, astl_units_t units,
-                        int32_t base10_unit_modifier, ScmiDataEventId de_id)
+  ScmiMetricDeclaration(std::string name, std::string type, std::string component, std::string instance,
+                        astl_units_t units, int32_t base10_unit_modifier, ScmiDataEventId de_id)
       : name(std::move(name)),
+        type(std::move(type)),
         component(std::move(component)),
         instance(std::move(instance)),
         units(units),

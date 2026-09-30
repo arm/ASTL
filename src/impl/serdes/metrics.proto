@@ -89,6 +89,8 @@ message MetricConfig {
   AstlValueType input_value_type = 9;
   // Persisted formula/scaling pipeline preserving runtime semantics.
   MetricFormula formula = 10;
+  // Absent in older archives; deserialization defaults to COUNT for compatibility.
+  optional int32 counter_type = 11;
 
   oneof metric {
     ResidencyMetric residency_metric = 20;

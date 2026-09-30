@@ -127,8 +127,9 @@ static auto AddMetricInstancesIfScmiElementMatches(
     }
 
     // create the full metric type name, e.g. 'PSS_BMU.0.ENERGY_COUNTER'
-    metric_declarations.emplace_back(scmi_spec_layout_member.name, component_string, instance_string, units.value(),
-                                     scmi_spec_layout_member.base10_unit_modifier, de_id);
+    metric_declarations.emplace_back(scmi_spec_layout_member.name, scmi_spec_layout_member.type, component_string,
+                                     instance_string, units.value(), scmi_spec_layout_member.base10_unit_modifier,
+                                     de_id);
   }
 }
 

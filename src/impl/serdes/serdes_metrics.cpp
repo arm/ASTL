@@ -213,6 +213,7 @@ auto SerializeBasicMetricConfig(const MetricConfig& config)
   out.set_value_type(ToProtoValueType(config.ValueType()));
   out.set_input_value_type(ToProtoValueType(config.InputValueType()));
   out.set_metric_type(ToProtoMetricType(config.MetricType()));
+  out.set_counter_type(static_cast<int32_t>(config.CounterType()));
   out.set_identifier(ToProtoMetricIdentifier(config.Identifier()));
 
   for (const auto& group : config.MetricGroups()) {
@@ -328,13 +329,23 @@ auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& proto_cfg,
   const std::string& name        = proto_cfg.metric_name();
   const std::string& description = proto_cfg.description();
 
-  const auto units            = FromProtoUnits(proto_cfg.units());
-  const auto value_type       = FromProtoValueType(proto_cfg.value_type());
-  const auto input_value_type = FromProtoValueType(proto_cfg.input_value_type());
-  const auto identifier       = FromProtoMetricIdentifier(proto_cfg.identifier());
-  const auto metric_type      = FromProtoMetricType(proto_cfg.metric_type());
-  const auto collector        = FromProtoCollectorType(proto_cfg.collector_type());
-  AnyFormula formula          = IdentityFormula{};
+  const auto    units            = FromProtoUnits(proto_cfg.units());
+  const auto    value_type       = FromProtoValueType(proto_cfg.value_type());
+  const auto    input_value_type = FromProtoValueType(proto_cfg.input_value_type());
+  const auto    identifier       = FromProtoMetricIdentifier(proto_cfg.identifier());
+  const auto    metric_type      = FromProtoMetricType(proto_cfg.metric_type());
+  const auto    collector        = FromProtoCollectorType(proto_cfg.collector_type());
+  const int32_t counter_type_value =
+      proto_cfg.has_counter_type() ? proto_cfg.counter_type() : static_cast<int32_t>(ASTL_COUNTER_TYPE_COUNT);
+  if (counter_type_value != static_cast<int32_t>(ASTL_COUNTER_TYPE_UNKNOWN) &&
+      counter_type_value != static_cast<int32_t>(ASTL_COUNTER_TYPE_VALUE) &&
+      counter_type_value != static_cast<int32_t>(ASTL_COUNTER_TYPE_COUNT) &&
+      counter_type_value != static_cast<int32_t>(ASTL_COUNTER_TYPE_EVENT)) {
+    ASTL_LOG_ERROR("DeserializeBasicMetricConfig: invalid counter type for metric {}", metric_id);
+    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+  const auto counter_type = static_cast<astl_counter_type_t>(counter_type_value);
+  AnyFormula formula      = IdentityFormula{};
   if (proto_cfg.has_formula()) {
     auto formula_or_err = DeserializeFormula(proto_cfg.formula());
     if (!formula_or_err) {
@@ -344,18 +355,11 @@ auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& proto_cfg,
     formula = std::move(formula_or_err.value());
   }
 
-  if (proto_cfg.metric_groups_size() == 0) {
-    auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, identifier, metric_type, collector,
-                                              NullOperationBuilder{}, std::move(formula), input_value_type,
-                                              std::vector<std::string>{}, metric_id);
-    return cfg;
-  }
-
   std::vector<std::string> groups{proto_cfg.metric_groups().begin(), proto_cfg.metric_groups().end()};
-  auto cfg = std::make_unique<MetricConfig>(name, description, units, value_type, identifier, metric_type, collector,
-                                            NullOperationBuilder{}, std::move(formula), input_value_type,
-                                            std::move(groups), metric_id);
-  return cfg;
+  return std::make_unique<MetricConfig>(
+      MetricConfig::RawCounterInfo{.name = name, .id = metric_id, .type = counter_type}, description, units, value_type,
+      identifier, metric_type, collector, NullOperationBuilder{}, std::move(formula), input_value_type,
+      std::move(groups));
 }
 
 static auto DeserializeProcfsCompositeMetricConfig(const astl::protobuf::MetricConfig& proto_cfg,

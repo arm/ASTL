@@ -28,7 +28,11 @@ def test_empty_enumerations_do_not_error():
         assert isinstance(all_groups, list)
 
 
-def test_counter_preserves_qualified_scmi_name():
-    counter = Counter("SOC.0.ENERGY_COUNTER", "SoC energy", 1, 0, 0, 0, 0, "")
+def test_counter_preserves_qualified_scmi_name_and_type():
+    gauge = Counter("SOC.0.TEMP_PRESENT", "SoC temperature", 1, 0, 0, 0, astl.CounterType.VALUE, "")
+    count = Counter("SOC.0.ENERGY_COUNTER", "SoC energy", 2, 0, 0, 0, astl.CounterType.COUNT, "")
 
-    assert counter.name == "SOC.0.ENERGY_COUNTER"
+    assert gauge.name == "SOC.0.TEMP_PRESENT"
+    assert astl.CounterType(gauge.counter_type) is astl.CounterType.VALUE
+    assert count.name == "SOC.0.ENERGY_COUNTER"
+    assert astl.CounterType(count.counter_type) is astl.CounterType.COUNT

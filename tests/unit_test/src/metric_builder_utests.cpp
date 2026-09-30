@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -166,6 +167,74 @@ void WriteDuplicateScmiCounterFixture(const fs::path& config_root) {
   std::error_code ec;
   fs::create_directories(config_root / "scmi_sysfs" / "tlm-0" / "des" / "0x19E4F", ec);
   REQUIRE(!ec);
+}
+
+void WriteMixedScmiCounterTypesFixture(const fs::path& config_root) {
+  WriteMinimalScmiFixture(config_root);
+  const auto    spec_path    = config_root / "scmi" / "public" / "unit" / "test_scmi.json";
+  const auto    metrics_path = config_root / "metrics" / "unit" / "test_metrics.json";
+  std::ifstream spec_file(spec_path);
+  std::ifstream metrics_file(metrics_path);
+  REQUIRE(spec_file.good());
+  REQUIRE(metrics_file.good());
+  auto  spec              = nlohmann::json::parse(spec_file);
+  auto  metrics           = nlohmann::json::parse(metrics_file);
+  auto& entries           = spec["members"][0]["metrics"];
+  entries["BYTE_COUNTER"] = {
+      {"description", "Unit test byte counter"},
+      {"type",        "Counter"               },
+      {"unit",        "W"                     },
+      {"name",        "BYTE_COUNTER"          },
+      {"component",   "SOC"                   },
+      {"base_de_id",  "0x00009E50"            },
+      {"rel_offset",  "0x0008"                }
+  };
+  entries["HISTOGRAM_BUCKETS"] = {
+      {"description", "Unit test histogram"},
+      {"type",        "Histogram"          },
+      {"unit",        "W"                  },
+      {"name",        "HISTOGRAM_BUCKETS"  },
+      {"component",   "SOC"                },
+      {"base_de_id",  "0x00009E51"         },
+      {"rel_offset",  "0x0010"             }
+  };
+  entries["EVENT_TRIGGER"] = {
+      {"description", "Unit test event"},
+      {"type",        "Event"          },
+      {"unit",        "W"              },
+      {"name",        "EVENT_TRIGGER"  },
+      {"component",   "SOC"            },
+      {"base_de_id",  "0x00009E52"     },
+      {"rel_offset",  "0x0018"         }
+  };
+  metrics["metrics"]["Byte Count"] = {
+      {"description", "Unit test byte count metric"                       },
+      {"unit",        "W"                                                 },
+      {"metric_type", "value"                                             },
+      {"identifier",  "POWER"                                             },
+      {"collection",  {{"register", "BYTE_COUNTER"}, {"protocol", "scmi"}}}
+  };
+  metrics["metrics"]["Histogram Metric"] = {
+      {"description", "Unit test histogram metric"                             },
+      {"unit",        "W"                                                      },
+      {"metric_type", "value"                                                  },
+      {"identifier",  "POWER"                                                  },
+      {"collection",  {{"register", "HISTOGRAM_BUCKETS"}, {"protocol", "scmi"}}}
+  };
+  metrics["metrics"]["Event Metric"] = {
+      {"description", "Unit test event metric"                             },
+      {"unit",        "W"                                                  },
+      {"metric_type", "value"                                              },
+      {"identifier",  "POWER"                                              },
+      {"collection",  {{"register", "EVENT_TRIGGER"}, {"protocol", "scmi"}}}
+  };
+  WriteTextFile(spec_path, spec.dump());
+  WriteTextFile(metrics_path, metrics.dump());
+  std::error_code ec;
+  for (const char* id : {"0x9E50", "0x9E51", "0x9E52"}) {
+    fs::create_directories(config_root / "scmi_sysfs" / "tlm-0" / "des" / id, ec);
+    REQUIRE(!ec);
+  }
 }
 
 void WriteSerializedMetricManagerCache(const fs::path& cache_dir, const astl::ITarget* target) {
@@ -355,6 +424,43 @@ TEST_CASE("MetricBuilder::BuildMetricManager uses qualified names and JSON descr
   REQUIRE(std::ranges::find(counter_names, "ENERGY_COUNTER") == counter_names.end());
   REQUIRE(std::ranges::find(counter_descriptions, "Unit test SoC power metric") != counter_descriptions.end());
   REQUIRE(std::ranges::find(counter_descriptions, "Underlying counter for SoC Power") == counter_descriptions.end());
+}
+
+TEST_CASE("MetricBuilder exposes supported SCMI types but skips Histogram raw counters", "[MetricBuilder]") {
+  const fs::path config_root = fs::temp_directory_path() / "astl_metric_builder_scmi_counter_types";
+  TempFileGuard  config_guard(config_root);
+  WriteMixedScmiCounterTypesFixture(config_root);
+  auto configuration = MakeConfigurationForTestRoot(config_root);
+
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  auto        scmi_target = std::make_unique<astl::ScmiTarget>("scmi_tlm-0", "test target", "tlm-0", nullptr,
+                                                               "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
+  const auto* target      = scmi_target.get();
+  targets.push_back(std::move(scmi_target));
+  auto manager_or_error = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  REQUIRE(manager_or_error.has_value());
+  auto metrics_or_error = manager_or_error.value()->GetAvailableMetrics(target);
+  REQUIRE(metrics_or_error.has_value());
+  REQUIRE(metrics_or_error->size() == 4);
+  auto counters_or_error = manager_or_error.value()->GetAvailableCounters(target);
+  REQUIRE(counters_or_error.has_value());
+  REQUIRE(counters_or_error->size() == 3);
+
+  for (const auto* counter : *counters_or_error) {
+    astl_counter_props_t properties{};
+    properties.size = sizeof(properties);
+    REQUIRE(manager_or_error.value()->GetCounterProperties(counter, &properties) == ASTL_STATUS_SUCCESS);
+    const std::string_view name{properties.name};
+    if (name == "SOC.0.ENERGY_COUNTER") {
+      REQUIRE(properties.counter_type == ASTL_COUNTER_TYPE_VALUE);
+    } else if (name == "SOC.0.BYTE_COUNTER") {
+      REQUIRE(properties.counter_type == ASTL_COUNTER_TYPE_COUNT);
+    } else if (name == "SOC.0.EVENT_TRIGGER") {
+      REQUIRE(properties.counter_type == ASTL_COUNTER_TYPE_EVENT);
+    } else {
+      FAIL("Unexpected raw SCMI counter");
+    }
+  }
 }
 
 TEST_CASE("MetricBuilder::BuildMetricManager rejects load_file_path without cache dir", "[MetricBuilder]") {

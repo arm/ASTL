@@ -19,6 +19,10 @@ All notable user-facing changes to the ASTL public API are recorded here.
 - Removed `astlCropMetricSamplesOnTarget` and its Python and Go wrappers. Its crop only affected processed samples in
   memory; rebuilding them from the raw sample cache could restore discarded samples. Use `astlCropSamplesOnTarget`
   (or the corresponding Python or Go wrapper) to crop all samples on a target persistently.
+- SCMI Gauge data events now report `ASTL_COUNTER_TYPE_VALUE` through raw counter discovery instead of
+  `ASTL_COUNTER_TYPE_COUNT`. SCMI Counter and Event data events report their matching counter types; Histogram
+  data events no longer appear as raw counters. Applications relying on the old classification or selecting
+  Histogram raw counters must update their handling.
 
 ## 0.1.0 - 2026-09-25
 
