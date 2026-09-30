@@ -347,24 +347,37 @@ jobs:
 
       - name: 🌟 Create GitHub Release Page
         if: steps.existing-release.outputs.reuse != 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          repository: Arm-Debug/ASTL
-          token: ${{ steps.source-checkout-token.outputs.token }}
-          tag_name: "${{ env.TAG_NAME }}"
-          target_commitish: "${{ steps.source-metadata.outputs.sha }}"
-          files: |
-            ${{ github.workspace }}/${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip
-            ${{ github.workspace }}/${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip.sha256
-            ${{ github.workspace }}/get_astl.sh
-          fail_on_unmatched_files: true
-          # generate_release_notes: true will use the commit history to initialize the release landing page automatically.
-          # This is not suitable as-is for external customers, the idea is to provide a starting point
-          # for a human to edit into the final release notes.
-          # You can make the edits directly in the GitHub UI.  No extra commits required.
-          generate_release_notes: true
-          # If you want to use a static release notes file, uncomment the line below and provide the path
-          # body_path: RELEASE_NOTES.md
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.source-checkout-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          release_args=(
+            --repo "${ASTL_REPOSITORY}"
+            --target "${{ steps.source-metadata.outputs.sha }}"
+            --generate-notes
+          )
+          if [[ "${RELEASE_TYPE}" == "ROLLING" ]]; then
+            # Rolling releases are replaced nightly and must not replace the latest stable release.
+            release_args+=(--latest=false)
+          else
+            previous_stable_tag="$(gh release list --repo "${ASTL_REPOSITORY}" --limit 1000 \
+              --exclude-drafts --exclude-pre-releases --json tagName \
+              --jq '[.[] | select(.tagName | test("^release/[0-9]+\\.[0-9]+\\.[0-9]+$")) | .tagName] | sort_by(sub("^release/"; "") | split(".") | map(tonumber)) | last // empty')"
+            # A numbered release is always the repository's latest release.  Its generated notes
+            # must compare against the preceding numbered release, never release/rolling.
+            release_args+=(--latest)
+            if [[ -n "${previous_stable_tag}" ]]; then
+              release_args+=(--notes-start-tag "${previous_stable_tag}")
+            fi
+          fi
+
+          gh release create "${TAG_NAME}" \
+            "${{ github.workspace }}/${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip" \
+            "${{ github.workspace }}/${{ env.ARTIFACT_NAME_01_LIBRARY }}.zip.sha256" \
+            "${{ github.workspace }}/get_astl.sh" \
+            "${release_args[@]}"
 
       - name: 🐸 Setup JFrog CLI
         if: steps.existing-release.outputs.reuse != 'true'
