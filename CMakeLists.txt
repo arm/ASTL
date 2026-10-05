@@ -170,10 +170,6 @@ message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
 
 # Need exact match with Clang to avoid matching "AppleClang"
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  # Workaround for std::expected not available in clang 18 and earlier, use gcc's libstdc++
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-stdlib=libstdc++> $<$<COMPILE_LANGUAGE:CXX>:-D__cpp_concepts=202002>
-                      $<$<COMPILE_LANGUAGE:CXX>:-Wno-builtin-macro-redefined>)
-
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 18)
     # add -fclang-abi-compat=17 to fix absl compile errors with clang 18+ (see links below) -
     # https://github.com/abseil/abseil-cpp/issues/1747 - https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=280885
@@ -184,6 +180,11 @@ endif()
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Respect the toolchain's standard library, including the Android NDK's ANDROID_STL selection.
+include(AstlCxxFeatures)
+astl_check_cxx_features()
+
 set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
 
 set(CMAKE_C_STANDARD 99)

@@ -1343,6 +1343,25 @@ cmake --build ./build/debug --config DEBUG
 cd ./build/debug && ctest
 ```
 
+### C++ standard library and cross-compilation
+
+ASTL uses the C++ standard library selected by the compiler or toolchain. Configuration checks
+that it provides `std::expected`, `std::format`, and `std::optional::transform` in C++23 mode.
+Use a compatible compiler/library pair and build C++ dependencies with the same toolchain;
+ASTL does not override compiler feature-test macros to enable unsupported library features.
+
+For Android NDK integrations, use the NDK's `build/cmake/android.toolchain.cmake` and select
+C++ runtime linkage with `-DANDROID_STL=c++_static` when static libc++ linkage is needed, or
+`-DANDROID_STL=c++_shared` for shared libc++. Static libc++ linkage does not make the entire
+executable static. Follow the [NDK runtime guidance](https://developer.android.com/ndk/guides/cpp-support)
+when an application contains multiple native shared libraries. Dependency cross-compilation
+and Android platform support must also be validated; selecting the runtime alone is insufficient.
+
+Musl is a C library, separate from the C++ standard library. Integrations using a musl sysroot
+should retain their toolchain's C++ library and runtime choices for ASTL and its dependencies.
+Standalone release builds should use a controlled toolchain and verify the final executable's
+runtime dependencies; ASTL does not globally select a C++ library for those builds.
+
 ### Custom targets
 
 #### Formatting

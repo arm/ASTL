@@ -9,6 +9,9 @@ ENV VCPKG_ROOT=/opt/vcpkg
 ENV VCPKG_INSTALLED_DIR=/opt/vcpkg-installed
 ENV CMAKE_PREFIX_PATH=/opt/vcpkg-installed/x64-linux
 ENV CPATH=/opt/vcpkg-installed/x64-linux/include
+# Clang 18 cannot expose libstdc++'s std::expected without spoofing feature macros.
+# Keep the compiler and sanitizer runtimes aligned with the Linux CI toolchain.
+ENV PATH=/usr/lib/llvm-20/bin:${PATH}
 
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
@@ -17,10 +20,10 @@ RUN apt-get update && \
       cmake \
       curl \
       git \
-      clang \
-      clang-tools-18 \
-      libclang-rt-18-dev \
-      libfuzzer-18-dev \
+      clang-20 \
+      clang-tools-20 \
+      libclang-rt-20-dev \
+      libfuzzer-20-dev \
       libmagicenum-dev \
       libprotobuf-dev \
       libspdlog-dev \
