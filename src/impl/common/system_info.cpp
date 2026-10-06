@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 
 #if defined(__GLIBC__)
 #  include <gnu/libc-version.h>
@@ -151,7 +152,7 @@ auto IsNameWithNumericSuffix(const std::string& name, std::string_view prefix) -
 auto ReadSysconfUint32(int name) -> uint32_t {
 #if defined(__unix__)
   const auto value = sysconf(name);
-  if (value > 0 && value <= static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+  if (value > 0 && std::in_range<uint32_t>(value)) {
     return static_cast<uint32_t>(value);
   }
 #else
