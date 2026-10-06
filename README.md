@@ -116,6 +116,10 @@ executable, or run `just overlay-install-ossmosis` to install it separately.
 
 ### Installation
 
+For native Android builds and procfs collection through `adb shell`, see
+[Android development and CI](doc/android.md). Apple Silicon Macs can build and
+run the Arm64 emulator workflow locally.
+
 ASTL's `config` directory holds platform-specific metrics specifications
 and should be included in distributions of the binary library.
 ASTL looks for it in the following directories in preferred order:

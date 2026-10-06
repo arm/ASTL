@@ -315,6 +315,8 @@ EXTRA_ARGS+=(-std=c++23)
 EXTRA_ARGS+=(-D__cpp_concepts=202002L)
 # set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_scmi/CMakeLists.txt
 EXTRA_ARGS+=(-DFUSE_USE_VERSION=316)
+# Match the unit-test definition when linting with explicit compiler arguments.
+EXTRA_ARGS+=("-DASTL_TEST_SOURCE_DIR=\"${REPO_ROOT_DIR}\"")
 # if on x86_64, disable mmx intrinsics for linting to avoid issues with some CI runners
 if [[ "$(uname -m)" == "x86_64" ]]; then
 	EXTRA_ARGS+=(-mno-mmx -mno-sse -mno-sse2)

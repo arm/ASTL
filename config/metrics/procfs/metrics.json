@@ -92,6 +92,22 @@
           "label_token_index": 0
         }
       }
+    },
+    "meminfo.MemAvailable": {
+      "description": "Memory available for starting new applications without swapping",
+      "unit": "bytes",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": ["memory"],
+      "formula": "value * 1024",
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "key_value",
+        "relative_path": "meminfo",
+        "field_name": "MemAvailable",
+        "raw_value_type": "uint64"
+      }
     }
   }
 }

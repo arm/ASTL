@@ -85,7 +85,10 @@ auto IsAllDigits(std::string_view value) -> bool {
 }
 
 #if defined(__linux__)
-#  if defined(ASTL_LIBC_MUSL)
+#  if defined(__BIONIC__)
+// Android's bionic uses a 32-bit unsigned request, including on 64-bit targets.
+using IoctlRequest = unsigned int;  // NOLINT(google-runtime-int): bionic's ioctl ABI requires this exact type.
+#  elif defined(ASTL_LIBC_MUSL)
 // NOLINTNEXTLINE(google-runtime-int): POSIX uses `int` for ioctl op param
 using IoctlRequest = int;
 #  else

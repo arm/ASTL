@@ -12,6 +12,10 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Added
 
+- Added native Android procfs support for API 28+ shell executables, with NDK builds,
+  emulator CI, and local Apple Silicon development scripts. The generic procfs
+  configuration now also exposes `meminfo.MemAvailable` in bytes.
+
 ### Changed
 
 ### Breaking

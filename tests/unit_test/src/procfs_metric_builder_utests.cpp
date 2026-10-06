@@ -15,6 +15,7 @@
 #include "astl_utils.hpp"
 #include "common/capabilities.hpp"
 #include "config/astl_configuration.hpp"
+#include "metric/metric_builder.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/procfs_metric_builder.hpp"
 #include "operation/procfs_read_operation.hpp"
@@ -61,6 +62,30 @@ auto CollectMetricNames(astl::IMetricManager& metric_manager, const astl::ITarge
 }
 
 }  // namespace
+
+TEST_CASE("Shipped procfs metrics work without platform-specific configuration", "[procfs_metric_builder]") {
+  const fs::path config_dir  = fs::temp_directory_path() / "astl_generic_procfs_config";
+  const fs::path procfs_root = fs::temp_directory_path() / "astl_generic_procfs_root";
+  TempFileGuard  config_guard(config_dir);
+  TempFileGuard  procfs_guard(procfs_root);
+  const fs::path source_dir{ASTL_TEST_SOURCE_DIR};
+  fs::create_directories(config_dir / "metrics" / "procfs");
+  fs::create_directories(config_dir / "groups");
+  fs::copy_file(source_dir / "config/metrics/procfs/metrics.json", config_dir / "metrics/procfs/metrics.json");
+  fs::copy_file(source_dir / "config/groups/metric_groups.json", config_dir / "groups/metric_groups.json");
+  WriteTextFile(procfs_root / "meminfo", "MemTotal: 1024 kB\nMemAvailable: 256 kB\n");
+  WriteTextFile(procfs_root / "stat", "cpu 1 2 3 4 5 6 7 8 9 10\ncpu0 1 2 3 4 5 6 7 8 9 10\n");
+  EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, config_dir.string());
+  auto        configuration = astl::AstlConfiguration::CreateConfiguration();
+  REQUIRE(configuration.has_value());
+  std::vector<std::unique_ptr<astl::ITarget>> targets;
+  targets.push_back(std::make_unique<astl::ProcfsTarget>("procfs", "generic Android or Linux", procfs_root));
+  auto manager = astl::BuildMetricManager(targets, *configuration, std::nullopt);
+  REQUIRE(manager.has_value());
+  CHECK(CollectMetricNames(**manager, targets.front().get()) ==
+        std::vector<std::string>{"meminfo.MemAvailable", "meminfo.MemTotal", "meminfo.MemUsed", "meminfo.utilization",
+                                 "stat.cpu.utilization", "stat.cpu0.utilization"});
+}
 
 TEST_CASE("RegisterProcfsMetrics loads config-defined procfs metrics", "[procfs_metric_builder]") {
   const fs::path config_dir  = fs::temp_directory_path() / "astl_procfs_metric_builder_config";

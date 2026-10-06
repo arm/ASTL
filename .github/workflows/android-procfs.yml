@@ -1,0 +1,109 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Android procfs
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: NDK build (${{ matrix.abi }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [x86_64, arm64-v8a]
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+    steps:
+      # No private submodules or overlay tools are required by this procfs-only build.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install pinned NDK
+        run: |
+          sdkmanager "ndk;29.0.14206865"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+      - name: Prepare dependency cache
+        run: mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+      - uses: actions/cache@v6
+        with:
+          path: .vcpkg-cache
+          key: android-ndk29-${{ runner.os }}-${{ matrix.abi }}-${{ hashFiles('vcpkg.json', 'scripts/android/build.sh') }}
+      - name: Build Android bundle
+        run: scripts/android/build.sh "${{ matrix.abi }}" 2>&1 | tee android-build.log
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-${{ matrix.abi }}
+          path: build/android-${{ matrix.abi }}/bundle/
+          if-no-files-found: error
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-build-logs-${{ matrix.abi }}
+          path: |
+            android-build.log
+            build/android-${{ matrix.abi }}/CMakeFiles/CMakeConfigureLog.yaml
+            build/android-${{ matrix.abi }}/vcpkg-manifest-install.log
+            external/vcpkg/buildtrees/**/*.log
+
+  collect:
+    name: Procfs collection (API ${{ matrix.api }})
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [28, 35]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-x86_64
+          path: build/android-x86_64/bundle
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Collect live Android procfs metrics
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: default
+          arch: x86_64
+          cores: 2
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader -noaudio -no-boot-anim -no-snapshot -memory 2048
+          script: scripts/android/run.sh x86_64
+      - name: Upload collection diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-procfs-api${{ matrix.api }}
+          path: build/android-x86_64/test-results/
+          if-no-files-found: warn
