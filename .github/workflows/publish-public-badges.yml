@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+name: Publish public badges
+
+on:
+  workflow_run:
+    workflows:
+      [Integration, Publish commits and releases to Arm public organization]
+    types: [completed]
+  workflow_dispatch:
+  schedule:
+    # Retry if mirroring or report processing finished after the previous attempt.
+    - cron: "45 23 * * *"
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: public-badges
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.repository == 'Arm-Debug/ASTL' &&
+      (github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event != 'pull_request'))
+    runs-on: ubuntu-latest
+    steps:
+      # Use trusted default-branch code, never code from the triggering run.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Get public repository token
+        id: public-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.ITS_ARM_ORG_APP_ID }}
+          private-key: ${{ secrets.ITS_ARM_ORG_APP_PK }}
+          owner: Arm
+          repositories: ASTL
+          permission-contents: write
+
+      # Add future badge publishers here, sharing the public repository token.
+      - name: Publish coverage for public main
+        run: python3 scripts/publish_coverage_badge.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC_GITHUB_TOKEN: ${{ steps.public-token.outputs.token }}

@@ -274,6 +274,22 @@ jobs:
           language: C++
           label: code-coverage/gcovr
 
+      # Retain the exact report for the public badge publisher. PRs never publish badges.
+      - name: Save main coverage report for public badge
+        if: >-
+          github.repository == 'Arm-Debug/ASTL' &&
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request' &&
+          contains(matrix.os, 'ubuntu') &&
+          matrix.c_compiler == 'gcc' &&
+          matrix.cmake_preset == 'debug-coverage'
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-coverage-report
+          path: coverage.xml
+          if-no-files-found: error
+          retention-days: 30
+
       - name: 🧪 Run Sample tests
         if: matrix.cmake_preset != 'debug-valgrind'
         # Execute tests defined by the CMake configuration.
