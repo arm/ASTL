@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="154" height="20" role="img" aria-label="test coverage: 81%">
+<title>test coverage: 81%</title>
+<linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
+<clipPath id="r"><rect width="154" height="20" rx="3"/></clipPath>
+<g clip-path="url(#r)"><path fill="#555" d="M0 0h112v20H0z"/><path fill="#4c1" d="M112 0h42v20h-42z"/><path fill="url(#s)" d="M0 0h154v20H0z"/></g>
+<g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+<text x="56" y="15" fill="#010101" fill-opacity=".3">test coverage</text><text x="56" y="14">test coverage</text>
+<text x="133" y="15" fill="#010101" fill-opacity=".3">81%</text><text x="133" y="14">81%</text></g></svg>
