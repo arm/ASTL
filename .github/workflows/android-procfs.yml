@@ -31,11 +31,11 @@ jobs:
     steps:
       # No private submodules or overlay tools are required by this procfs-only build.
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
       - name: Install pinned NDK
@@ -77,7 +77,7 @@ jobs:
         api: [28, 35]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
