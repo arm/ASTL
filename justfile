@@ -92,6 +92,33 @@ wrapper-coverage:
     set -eu -o pipefail
     python3 ./scripts/check_wrapper_coverage.py
 
+# Build and replay canonical fuzz corpora; reports go to coverage/fuzz/ (requires Docker).
+fuzz-coverage corpus='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    corpus={{quote(corpus)}}
+    corpus_args=()
+    if [[ -n "$corpus" ]]; then
+        corpus=$(cd "$corpus" && pwd)
+        corpus_args=(-v "$corpus:/corpus:ro" -e ASTL_EVOLVED_CORPUS=/corpus)
+    fi
+    docker build --load --platform linux/amd64 -f .clusterfuzzlite/Dockerfile -t astl-fuzz-coverage .
+    mkdir -p coverage/fuzz
+    docker run --rm --platform linux/amd64 \
+        -v "$PWD/coverage/fuzz:/report" \
+        -e ASTL_REVISION="$(git rev-parse HEAD)" -e SANITIZER=coverage -e OUT=/out \
+        "${corpus_args[@]}" astl-fuzz-coverage bash -ceu '
+            mkdir -p "$OUT"
+            /usr/local/bin/compile
+            corpus_args=()
+            if [[ -n "${ASTL_EVOLVED_CORPUS:-}" ]]; then
+                corpus_args=(--corpus "$ASTL_EVOLVED_CORPUS")
+            fi
+            python3 scripts/fuzz_coverage.py --bin-dir "$OUT" --output /report \
+                --revision "$ASTL_REVISION" "${corpus_args[@]}"
+        '
+    cat coverage/fuzz/summary.md
+
 license-lint:
     #!/user/bin/env bash
     set -eu -o pipefail

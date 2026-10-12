@@ -6,7 +6,11 @@ name: Publish public badges
 on:
   workflow_run:
     workflows:
-      [Integration, Publish commits and releases to Arm public organization]
+      [
+        Integration,
+        Fuzz testing,
+        Publish commits and releases to Arm public organization,
+      ]
     types: [completed]
   workflow_dispatch:
   schedule:
@@ -50,6 +54,12 @@ jobs:
       # Add future badge publishers here, sharing the public repository token.
       - name: Publish coverage for public main
         run: python3 scripts/publish_coverage_badge.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC_GITHUB_TOKEN: ${{ steps.public-token.outputs.token }}
+
+      - name: Publish fuzz coverage for public main
+        run: python3 scripts/publish_coverage_badge.py --fuzz
         env:
           GH_TOKEN: ${{ github.token }}
           PUBLIC_GITHUB_TOKEN: ${{ steps.public-token.outputs.token }}

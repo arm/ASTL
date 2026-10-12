@@ -2,9 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-name: ClusterFuzzLite PR fuzzing
+name: Fuzz testing
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - ".clusterfuzzlite/**"
@@ -25,6 +27,11 @@ on:
       - "utils/**"
       - "vcpkg.json"
   workflow_dispatch:
+    inputs:
+      corpus-run-id:
+        description: "Optional run ID containing a canonical-fuzz-corpus artifact (one directory per target)"
+        type: string
+        required: false
 
 permissions:
   actions: read
@@ -36,9 +43,13 @@ concurrency:
 
 jobs:
   fuzz:
+    # Code-change fuzzing is for PRs and explicit manual runs. Main pushes
+    # refresh the coverage baseline without an additional mutation session.
+    if: github.event_name != 'push'
     name: Public API targets (canonical profiles)
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Allow cold image setup and compilation before the full mutation session.
+    timeout-minutes: 30
 
     steps:
       - name: Record run metadata
@@ -90,3 +101,64 @@ jobs:
             ${{ runner.temp }}/astl-fuzz-results/**
             build-out/compiler-version.txt
           retention-days: 10
+
+  coverage:
+    name: Canonical corpus line coverage
+    # Independent of fuzz: retain coverage feedback even when mutation finds a crash.
+    # Keep coverage.xml artifact-only, with fuzz results in the summary and badge.
+    # GitHub Code Quality uploads would aggregate fuzz coverage into the test coverage merge gate.
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Download optional canonical evolved corpus
+        if: inputs.corpus-run-id != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: canonical-fuzz-corpus
+          path: evolved-corpus
+          run-id: ${{ inputs.corpus-run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build ClusterFuzzLite coverage image
+        run: docker build -f .clusterfuzzlite/Dockerfile -t astl-fuzz-coverage .
+
+      - name: Replay canonical corpora and generate reports
+        env:
+          ASTL_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+          CORPUS_RUN_ID: ${{ inputs.corpus-run-id }}
+        run: |
+          mkdir -p coverage/fuzz
+          corpus_args=()
+          if [[ -n "$CORPUS_RUN_ID" ]]; then
+            corpus_args=(-v "$PWD/evolved-corpus:/corpus:ro" -e ASTL_EVOLVED_CORPUS=/corpus)
+          fi
+          docker run --rm \
+            -v "$PWD/coverage/fuzz:/report" \
+            -e ASTL_REVISION -e SANITIZER=coverage -e OUT=/out \
+            "${corpus_args[@]}" astl-fuzz-coverage bash -ceu '
+              mkdir -p "$OUT"
+              /usr/local/bin/compile
+              corpus_args=()
+              if [[ -n "${ASTL_EVOLVED_CORPUS:-}" ]]; then
+                corpus_args=(--corpus "$ASTL_EVOLVED_CORPUS")
+              fi
+              python3 scripts/fuzz_coverage.py --bin-dir "$OUT" --output /report \
+                --revision "$ASTL_REVISION" "${corpus_args[@]}"
+            '
+          cat coverage/fuzz/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload annotated source and uncovered-line data
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-coverage
+          path: coverage/fuzz/
+          if-no-files-found: error
+          retention-days: 30

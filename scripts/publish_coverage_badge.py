@@ -4,6 +4,7 @@
 
 """Publish coverage for the exact public main commit, without exposing the full report."""
 
+import argparse
 import json
 import os
 import subprocess
@@ -28,34 +29,41 @@ def api(endpoint, token, payload=None, method="GET"):
     return json.loads(result.stdout)
 
 
-def render_badge(report):
+def render_badge(report, fuzz=False):
     root = ET.parse(report).getroot()
     covered = int(root.attrib["lines-covered"])
     valid = int(root.attrib["lines-valid"])
     if valid <= 0 or not 0 <= covered <= valid:
         raise ValueError("Invalid coverage line counts")
     percentage = covered * 100 / valid
-    message = f"{percentage:.0f}%"
+    message = f"{percentage:.1f}%" if fuzz else f"{percentage:.0f}%"
+    label = "fuzz coverage" if fuzz else "test coverage"
     color = "#4c1" if percentage >= 80 else "#dfb317" if percentage >= 60 else "#e05d44"
-    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="154" height="20" role="img" aria-label="test coverage: {message}">
-<title>test coverage: {message}</title>
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="154" height="20" role="img" aria-label="{label}: {message}">
+<title>{label}: {message}</title>
 <linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
 <clipPath id="r"><rect width="154" height="20" rx="3"/></clipPath>
 <g clip-path="url(#r)"><path fill="#555" d="M0 0h112v20H0z"/><path fill="{color}" d="M112 0h42v20h-42z"/><path fill="url(#s)" d="M0 0h154v20H0z"/></g>
 <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
-<text x="56" y="15" fill="#010101" fill-opacity=".3">test coverage</text><text x="56" y="14">test coverage</text>
+<text x="56" y="15" fill="#010101" fill-opacity=".3">{label}</text><text x="56" y="14">{label}</text>
 <text x="133" y="15" fill="#010101" fill-opacity=".3">{message}</text><text x="133" y="14">{message}</text></g></svg>
 '''
     return svg, percentage
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--fuzz", action="store_true", help="Publish the canonical fuzz line-coverage badge")
+    args = parser.parse_args()
+    workflow = "clusterfuzzlite-pr.yml" if args.fuzz else "integration.yml"
+    artifact = "fuzz-coverage" if args.fuzz else "public-coverage-report"
+    name = "fuzz-coverage" if args.fuzz else "coverage"
     source_token = os.environ["GH_TOKEN"]
     public_token = os.environ["PUBLIC_GITHUB_TOKEN"]
     public_ref = f"repos/{TARGET}/git/ref/heads/main"
     sha = api(public_ref, public_token)["object"]["sha"]
     runs = api(
-        f"repos/{SOURCE}/actions/workflows/integration.yml/runs?branch=main&head_sha={sha}&status=success&per_page=100",
+        f"repos/{SOURCE}/actions/workflows/{workflow}/runs?branch=main&head_sha={sha}&status=success&per_page=100",
         source_token,
     )["workflow_runs"]
     # API lists newest runs first. Never select PR coverage, even for the same SHA.
@@ -64,18 +72,22 @@ def main():
         print("No successful coverage run for public main; keeping the previous badge.")
         return
     artifacts = api(f"repos/{SOURCE}/actions/runs/{run['id']}/artifacts", source_token)["artifacts"]
-    if not any(a["name"] == "public-coverage-report" and not a["expired"] for a in artifacts):
+    if not any(a["name"] == artifact and not a["expired"] for a in artifacts):
         print("Coverage artifact unavailable; keeping the previous badge.")
         return
     with tempfile.TemporaryDirectory() as directory:
         subprocess.run(
             ["gh", "run", "download", str(run["id"]), "--repo", SOURCE,
-             "--name", "public-coverage-report", "--dir", directory], check=True,
+             "--name", artifact, "--dir", directory], check=True,
         )
-        svg, percentage = render_badge(Path(directory) / "coverage.xml")
+        svg, percentage = render_badge(Path(directory) / "coverage.xml", args.fuzz)
+        corpus_metadata = {}
+        if args.fuzz:
+            report = json.loads((Path(directory) / "uncovered.json").read_text())
+            corpus_metadata = {"corpus_mode": report["metadata"]["corpus_mode"]}
     metadata = json.dumps({"commit": sha, "coverage_percent": percentage,
                            "measured_at": run["updated_at"],
-                           "published_at": datetime.now(timezone.utc).isoformat()}, indent=2) + "\n"
+                           "published_at": datetime.now(timezone.utc).isoformat(), **corpus_metadata}, indent=2) + "\n"
     badge_ref = f"repos/{TARGET}/git/ref/heads/badges"
     try:
         parent = api(badge_ref, public_token)["object"]["sha"]
@@ -84,12 +96,12 @@ def main():
             raise
         parent = None
     tree_payload = {"tree": [{"path": name, "mode": "100644", "type": "blob", "content": content}
-                             for name, content in (("coverage.svg", svg), ("coverage.json", metadata))]}
+                             for name, content in ((f"{name}.svg", svg), (f"{name}.json", metadata))]}
     if parent:
         tree_payload["base_tree"] = api(f"repos/{TARGET}/git/commits/{parent}", public_token)["tree"]["sha"]
     tree = api(f"repos/{TARGET}/git/trees", public_token, tree_payload, "POST")
     commit = api(f"repos/{TARGET}/git/commits", public_token,
-                 {"message": f"Update coverage badge for {sha}", "tree": tree["sha"],
+                 {"message": f"Update {name} badge for {sha}", "tree": tree["sha"],
                   "parents": [parent] if parent else []}, "POST")
     # Mirroring can race this workflow. Do not publish a result for an obsolete main.
     if api(public_ref, public_token)["object"]["sha"] != sha:

@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+#
+# Files excluded from every fuzz coverage report and its percentage.
+# Add one exact repository-relative src/ path per line, followed by # and a reason.
+# Blank lines and comments are ignored. Globs are not supported.
+src/astl_test_hooks.cpp # Unit-test-only hooks, not production API behavior.

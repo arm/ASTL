@@ -10,8 +10,15 @@ readonly TARGETS=(astl_wrapper_validation_fuzzer astl_discovery_fuzzer)
 readonly FUZZ_CC="${CC:-clang}"
 readonly FUZZ_CXX="${CXX:-clang++}"
 
+# ClusterFuzzLite's coverage mode uses the same hermetic targets and fixtures.
+coverage=OFF
+if [[ ${SANITIZER:-address} == coverage ]]; then
+	coverage=ON
+fi
+
 cmake -S . -B build/cflite -G Ninja \
 	-DASTL_BUILD_FUZZING=ON \
+	-DASTL_FUZZ_COVERAGE="${coverage}" \
 	-DASTL_BUILD_SAMPLES=OFF \
 	-DASTL_BUILD_SHARED=OFF \
 	-DASTL_BUILD_TESTING=OFF \
@@ -48,3 +55,8 @@ max_total_time = 60
 timeout = 10
 EOF
 done
+
+if [[ ${coverage} == ON ]]; then
+	# Retain mappings for every compiled ASTL object, including unlinked code.
+	cp build/cflite/x86_64/lib/libastl_static-*.a "${OUT}/libastl_coverage.a"
+fi

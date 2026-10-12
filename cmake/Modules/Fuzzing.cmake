@@ -40,19 +40,21 @@ function(astl_configure_fuzzing)
 
   add_library(astl_fuzz_instrumentation INTERFACE)
   target_compile_options(
-    astl_fuzz_instrumentation
-    INTERFACE -O1
-              -g
-              -fno-omit-frame-pointer
-              -fno-sanitize-recover=undefined
-              -fsanitize=fuzzer-no-link,address,undefined)
+    astl_fuzz_instrumentation INTERFACE -O1 -g -fno-omit-frame-pointer -fno-sanitize-recover=undefined
+                                        -fsanitize=fuzzer-no-link,address,undefined)
+
+  option(ASTL_FUZZ_COVERAGE "Collect LLVM source coverage during corpus replay" OFF)
+  if(ASTL_FUZZ_COVERAGE)
+    target_compile_options(astl_fuzz_instrumentation INTERFACE -O0 -fprofile-instr-generate -fcoverage-mapping
+                                                               -fprofile-update=atomic)
+    target_link_options(astl_fuzz_instrumentation INTERFACE -fprofile-instr-generate)
+  endif()
 
   target_link_libraries(astl_static PRIVATE astl_fuzz_instrumentation)
 
   if(TARGET astl)
     target_link_libraries(astl PRIVATE astl_fuzz_instrumentation)
-    target_link_options(
-      astl
-      PRIVATE -fno-omit-frame-pointer -fno-sanitize-recover=undefined -fsanitize=address,undefined)
+    target_link_options(astl PRIVATE -fno-omit-frame-pointer -fno-sanitize-recover=undefined
+                        -fsanitize=address,undefined)
   endif()
 endfunction()

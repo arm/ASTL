@@ -24,6 +24,7 @@ RUN apt-get update && \
       clang-tools-20 \
       libclang-rt-20-dev \
       libfuzzer-20-dev \
+      llvm-20 \
       libmagicenum-dev \
       libprotobuf-dev \
       libspdlog-dev \
