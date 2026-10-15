@@ -36,3 +36,30 @@ def test_counter_preserves_qualified_scmi_name_and_type():
     assert astl.CounterType(gauge.counter_type) is astl.CounterType.VALUE
     assert count.name == "SOC.0.ENERGY_COUNTER"
     assert astl.CounterType(count.counter_type) is astl.CounterType.COUNT
+
+
+def test_system_utilization_metrics_are_discoverable():
+    import os
+    from pathlib import Path
+    import subprocess
+    import sys
+    import pytest
+
+    if sys.platform != "linux":
+        pytest.skip("requires a system utilization collector")
+    # The suite uses tests/config, which intentionally contains no procfs metrics.
+    # A fresh process isolates ASTL's initialized state and loads the shipped config.
+    env = dict(os.environ)
+    env["ASTL_CONFIG_DIR"] = str(Path(__file__).resolve().parents[2] / "config")
+    env["ASTL_COLLECTORS"] = "procfs"
+    result = subprocess.run([sys.executable, "-c", """
+import astl
+system_targets = [target for target in astl.get_targets() if target.name == "sysutil"]
+assert len(system_targets) == 1
+metrics = {metric.name for metric in astl.get_metrics(system_targets[0])}
+assert {"memory.total", "memory.used", "memory.utilization",
+        "cpu.total.utilization", "cpu.0.utilization"} <= metrics, metrics
+assert not {"meminfo.MemTotal", "meminfo.MemUsed", "meminfo.utilization",
+            "stat.cpu.utilization", "stat.cpu0.utilization"} & metrics
+"""], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr

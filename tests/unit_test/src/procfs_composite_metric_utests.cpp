@@ -30,7 +30,7 @@ auto MakeMemUsedInputBindings() -> std::vector<astl::ProcfsCompositeMetricConfig
 auto MakeMemUsedConfig() -> astl::ProcfsCompositeMetricConfig {
   return astl::ProcfsCompositeMetricConfig{
       astl::ProcfsCompositeMetricConfig::CreateParams{
-                                                      .name              = "meminfo.MemUsed",
+                                                      .name              = "memory.used",
                                                       .description       = "derived used memory",
                                                       .units             = ASTL_UNITS_BYTES,
                                                       .value_type        = ASTL_VALUE_UINT64,
@@ -88,7 +88,7 @@ TEST_CASE("ProcfsCompositeMetric computes delta-based composites after the first
 
   astl::ProcfsCompositeMetricConfig config{
       astl::ProcfsCompositeMetricConfig::CreateParams{
-                                                      .name              = "stat.cpu.utilization",
+                                                      .name              = "cpu.total.utilization",
                                                       .description       = "cpu utilization",
                                                       .units             = ASTL_UNITS_PERCENT,
                                                       .value_type        = ASTL_VALUE_FLOAT64,

@@ -6,6 +6,7 @@ package astl
 
 import (
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -166,4 +167,34 @@ func TestStoppedCollectionRequiresReconfiguration(t *testing.T) {
 		return
 	}
 	t.Skip("No target with counters available")
+}
+
+func TestSystemUtilizationMetrics(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("requires a system utilization collector")
+	}
+	targets, err := GetTargets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range targets {
+		if target.Name != "sysutil" {
+			continue
+		}
+		metrics, err := GetMetricsOnTarget(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		names := map[string]bool{}
+		for _, metric := range metrics {
+			names[metric.Name] = true
+		}
+		for _, name := range []string{"memory.total", "memory.used", "memory.utilization", "cpu.total.utilization", "cpu.0.utilization"} {
+			if !names[name] {
+				t.Errorf("System utilization metric %s was not discovered", name)
+			}
+		}
+		return
+	}
+	t.Skip("System utilization collector disabled or excluded")
 }

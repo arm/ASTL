@@ -181,6 +181,10 @@ mount -t stlmfs none /sys/fs/arm_telemetry/
 
 2. Initialize ASTL
 
+The procfs collector exposes the `sysutil` target with portable CPU and memory
+metric names. See [System utilization](doc/system_utilization.md) for the names,
+sampling semantics, and migration from the old procfs names.
+
 If needed, use these environment variables to choose or redirect the SCMI backend:
 
 - `ASTL_COLLECTORS`: comma-separated allowlist of collectors used for live

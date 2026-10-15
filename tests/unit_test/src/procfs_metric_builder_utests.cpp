@@ -83,8 +83,8 @@ TEST_CASE("Shipped procfs metrics work without platform-specific configuration",
   auto manager = astl::BuildMetricManager(targets, *configuration, std::nullopt);
   REQUIRE(manager.has_value());
   CHECK(CollectMetricNames(**manager, targets.front().get()) ==
-        std::vector<std::string>{"meminfo.MemAvailable", "meminfo.MemTotal", "meminfo.MemUsed", "meminfo.utilization",
-                                 "stat.cpu.utilization", "stat.cpu0.utilization"});
+        std::vector<std::string>{"cpu.0.utilization", "cpu.total.utilization", "meminfo.MemAvailable", "memory.total",
+                                 "memory.used", "memory.utilization"});
 }
 
 TEST_CASE("RegisterProcfsMetrics loads config-defined procfs metrics", "[procfs_metric_builder]") {
@@ -111,7 +111,7 @@ TEST_CASE("RegisterProcfsMetrics loads config-defined procfs metrics", "[procfs_
     "confidential": false
   },
   "metrics": {
-    "meminfo.MemTotal": {
+    "memory.total": {
       "description": "Procfs /proc/meminfo field MemTotal",
       "unit": "bytes",
       "value_type": "uint64",
@@ -127,7 +127,7 @@ TEST_CASE("RegisterProcfsMetrics loads config-defined procfs metrics", "[procfs_
         "raw_value_type": "uint64"
       }
     },
-    "meminfo.MemUsed": {
+    "memory.used": {
       "description": "Procfs /proc/meminfo derived used memory (MemTotal - MemAvailable)",
       "unit": "bytes",
       "value_type": "uint64",
@@ -155,7 +155,7 @@ TEST_CASE("RegisterProcfsMetrics loads config-defined procfs metrics", "[procfs_
         ]
       }
     },
-    "meminfo.utilization": {
+    "memory.utilization": {
       "description": "Procfs /proc/meminfo derived used memory percent",
       "unit": "percent",
       "value_type": "float64",
@@ -183,7 +183,7 @@ TEST_CASE("RegisterProcfsMetrics loads config-defined procfs metrics", "[procfs_
         ]
       }
     },
-    "stat.{label}.utilization": {
+    "cpu.{cpu_index}.utilization": {
       "description": "Procfs /proc/stat {label} busy percent over sample interval",
       "unit": "percent",
       "value_type": "float64",
@@ -228,9 +228,8 @@ TEST_CASE("RegisterProcfsMetrics loads config-defined procfs metrics", "[procfs_
           ASTL_STATUS_SUCCESS);
 
   const auto metric_names = CollectMetricNames(metric_manager, target.get());
-  REQUIRE(metric_names == std::vector<std::string>{"meminfo.MemTotal", "meminfo.MemUsed", "meminfo.utilization",
-                                                   "stat.cpu.utilization", "stat.cpu0.utilization",
-                                                   "stat.cpu1.utilization"});
+  REQUIRE(metric_names == std::vector<std::string>{"cpu.0.utilization", "cpu.1.utilization", "cpu.total.utilization",
+                                                   "memory.total", "memory.used", "memory.utilization"});
 
   auto metrics = metric_manager.GetAvailableMetrics(target.get());
   REQUIRE(metrics.has_value());

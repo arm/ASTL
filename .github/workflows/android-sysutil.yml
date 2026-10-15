@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-name: Android procfs
+name: Android sysutil
 
 on:
   pull_request:
@@ -21,7 +21,8 @@ jobs:
   build:
     name: NDK build (${{ matrix.abi }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # Cold NDK dependency builds can take most of 45 minutes before final linking.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -67,7 +68,7 @@ jobs:
             external/vcpkg/buildtrees/**/*.log
 
   collect:
-    name: Procfs collection (API ${{ matrix.api }})
+    name: System utilization collection (API ${{ matrix.api }})
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -90,7 +91,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Collect live Android procfs metrics
+      - name: Collect live Android sysutil metrics
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}
@@ -104,6 +105,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-procfs-api${{ matrix.api }}
+          name: android-sysutil-api${{ matrix.api }}
           path: build/android-x86_64/test-results/
           if-no-files-found: warn

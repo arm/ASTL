@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-s
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Android procfs development and CI
+# Android system utilization development and CI
 
 ASTL supports native Android executables launched through **unprivileged
 `adb shell` with SELinux enforcing**, collecting the guest's real `/proc/stat`
@@ -73,8 +73,8 @@ can select a separate results directory for each emulator version.
 
 ## What the smoke test verifies
 
-`procfs_smoke` links the ASTL shared library and calls its public C API to discover
-the procfs target, total/available/used memory, memory utilization, and at least
+`sysutil_smoke` links the ASTL shared library and calls its public C API to discover
+the `sysutil` target, total/available/used memory, memory utilization, and at least
 one per-core CPU utilization metric. It makes four immediate reads 250 ms apart
 and checks repeated samples, advancing timestamps, expected units, finite
 percentages in [0, 100], positive total memory, and memory readings bounded by

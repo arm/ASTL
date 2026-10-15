@@ -423,7 +423,7 @@ TEST_CASE("Topology::ProcfsPlugin", "[TopologyManager]") {
                                                                                    std::move(procfs_file_interface));
   REQUIRE(targets.has_value());
   REQUIRE(targets->size() == 1);
-  REQUIRE((*targets)[0]->Name() == "procfs");
+  REQUIRE((*targets)[0]->Name() == "sysutil");
   REQUIRE((*targets)[0]->GetCollectorType() == astl::CollectorType::PROCFS);
 #endif
 }

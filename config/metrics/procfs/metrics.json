@@ -3,7 +3,7 @@
     "confidential": false
   },
   "metrics": {
-    "meminfo.MemTotal": {
+    "memory.total": {
       "description": "Total memory available in the system",
       "unit": "bytes",
       "value_type": "uint64",
@@ -19,7 +19,7 @@
         "raw_value_type": "uint64"
       }
     },
-    "meminfo.MemUsed": {
+    "memory.used": {
       "description": "Total used memory",
       "unit": "bytes",
       "value_type": "uint64",
@@ -47,7 +47,7 @@
         ]
       }
     },
-    "meminfo.utilization": {
+    "memory.utilization": {
       "description": "Average memory utilization percentage",
       "unit": "percent",
       "value_type": "float64",
@@ -75,7 +75,7 @@
         ]
       }
     },
-    "stat.{label}.utilization": {
+    "cpu.{cpu_index}.utilization": {
       "description": "Average {label} utilization percentage",
       "unit": "percent",
       "value_type": "float64",

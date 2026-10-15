@@ -37,10 +37,10 @@ trap collect_diagnostics EXIT
 # shellcheck disable=SC2016 # Expand id/getenforce in the Android shell, not on the host.
 adb_run shell 'test "$(id -u)" = 2000 && test "$(getenforce)" = Enforcing'
 adb_run shell 'test -r /proc/stat && test -r /proc/meminfo'
-adb_run shell "mkdir -p /data/local/tmp/astl-procfs-$abi"
-adb_run push "$bundle/." "/data/local/tmp/astl-procfs-$abi/" >"$logs/deploy.txt" 2>&1
-adb_run shell "chmod 755 /data/local/tmp/astl-procfs-$abi/bin/procfs_smoke"
+adb_run shell "mkdir -p /data/local/tmp/astl-sysutil-$abi"
+adb_run push "$bundle/." "/data/local/tmp/astl-sysutil-$abi/" >"$logs/deploy.txt" 2>&1
+adb_run shell "chmod 755 /data/local/tmp/astl-sysutil-$abi/bin/sysutil_smoke"
 # Clear root overrides inherited from a developer shell and use the emulator's live /proc.
-adb_run shell "cd /data/local/tmp/astl-procfs-$abi && unset ASTL_PROCFS_ROOT && \
+adb_run shell "cd /data/local/tmp/astl-sysutil-$abi && unset ASTL_PROCFS_ROOT && \
   ASTL_CONFIG_DIR=\$PWD/config ASTL_COLLECTORS=procfs LD_LIBRARY_PATH=\$PWD/lib \
-  ./bin/procfs_smoke" 2>&1 | tee "$logs/astl.txt"
+  ./bin/sysutil_smoke" 2>&1 | tee "$logs/astl.txt"

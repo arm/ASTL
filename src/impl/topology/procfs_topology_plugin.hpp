@@ -68,7 +68,7 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
     return targets;
   }
 
-  targets.push_back(std::make_unique<ProcfsTarget>("procfs", "System telemetry discovered via procfs",
+  targets.push_back(std::make_unique<ProcfsTarget>("sysutil", "System telemetry discovered via procfs",
                                                    procfs_file_interface.GetBasePath()));
   return targets;
 }

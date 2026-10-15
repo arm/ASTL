@@ -34,7 +34,7 @@ void Require(bool condition, std::string_view message) {
   }
 }
 
-auto GetProcfsTarget() -> astl_target_handle_t {
+auto GetSystemUtilizationTarget() -> astl_target_handle_t {
   // The checked count API initializes this output; cppcheck cannot track nested output pointers.
   uint32_t count;  // NOLINT(cppcoreguidelines-init-variables)
   ASTL_INIT_STRUCT(astl_get_target_count_params_t, count_params, .flags = 0, .target_count = &count);
@@ -48,11 +48,11 @@ auto GetProcfsTarget() -> astl_target_handle_t {
   Check(astlGetTargets(&params), "astlGetTargets");
   for (const auto& target : targets) {
     std::cout << "target=" << target.name << '\n';
-    if (std::string_view{target.name} == "procfs") {
+    if (std::string_view{target.name} == "sysutil") {
       return target.handle;
     }
   }
-  throw std::runtime_error{"procfs target missing"};
+  throw std::runtime_error{"sysutil target missing"};
 }
 
 auto GetMetrics(astl_target_handle_t target) -> std::vector<astl_metric_props_t> {
@@ -63,7 +63,7 @@ auto GetMetrics(astl_target_handle_t target) -> std::vector<astl_metric_props_t>
   Check(astlGetMetricCountOnTarget(&count_params), "astlGetMetricCountOnTarget");
   // cppcheck cannot follow output pointers nested in const API parameter structs.
   // cppcheck-suppress uninitvar
-  Require(count > 0, "No procfs metrics discovered");
+  Require(count > 0, "No system utilization metrics discovered");
   std::vector<astl_metric_props_t> metrics(count);
   metrics.front().size = sizeof(astl_metric_props_t);
   ASTL_INIT_STRUCT(astl_get_metrics_params_t, params, .flags = 0, .target_handle = target, .metrics = metrics.data(),
@@ -77,7 +77,7 @@ auto GetMetrics(astl_target_handle_t target) -> std::vector<astl_metric_props_t>
 }
 
 auto IsPerCoreUtilization(std::string_view name) -> bool {
-  constexpr std::string_view prefix = "stat.cpu";
+  constexpr std::string_view prefix = "cpu.";
   constexpr std::string_view suffix = ".utilization";
   if (!name.starts_with(prefix) || !name.ends_with(suffix) || name.size() <= prefix.size() + suffix.size()) {
     return false;
@@ -95,7 +95,7 @@ auto GetSamples(astl_target_handle_t target, astl_metric_handle_t metric) -> std
   // CPU utilization needs an initial baseline; subsequent reads must produce real samples.
   // cppcheck cannot follow output pointers nested in const API parameter structs.
   // cppcheck-suppress uninitvar
-  Require(count >= kReadCount - 1, "Too few procfs samples");
+  Require(count >= kReadCount - 1, "Too few system utilization samples");
   std::vector<astl_sample_t> samples(count);
   ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, params, .flags = 0, .target_handle = target,
                    .metric_handle = metric, .samples = samples.data(), .sample_count = &count, .start_ts = 0,
@@ -112,13 +112,13 @@ auto ReadValue(const astl_sample_t& sample, astl_value_type_t type) -> double {
     case ASTL_VALUE_FLOAT64:
       return sample.value.fp64;
     default:
-      throw std::runtime_error{"Unexpected procfs value type"};
+      throw std::runtime_error{"Unexpected system utilization value type"};
   }
 }
 
 auto SelectMetrics(const std::vector<astl_metric_props_t>& metrics) -> std::vector<astl_metric_props_t> {
-  constexpr std::array<std::string_view, 4> memory_names{"meminfo.MemTotal", "meminfo.MemUsed", "meminfo.MemAvailable",
-                                                         "meminfo.utilization"};
+  constexpr std::array<std::string_view, 4> memory_names{"memory.total", "memory.used", "meminfo.MemAvailable",
+                                                         "memory.utilization"};
   std::vector<astl_metric_props_t>          selected;
   for (const auto& metric : metrics) {
     const std::string_view name{metric.name};
@@ -157,13 +157,13 @@ void CollectMetrics(astl_target_handle_t target, const std::vector<astl_metric_p
 void ValidateMetrics(astl_target_handle_t target, const std::vector<astl_metric_props_t>& selected) {
   double memory_total{};
   for (const auto& metric : selected) {
-    if (std::string_view{metric.name} == "meminfo.MemTotal") {
+    if (std::string_view{metric.name} == "memory.total") {
       memory_total = ReadValue(GetSamples(target, metric.handle).back(), metric.value_type);
     }
   }
   Require(std::isfinite(memory_total) && memory_total > 0, "Invalid total system memory");
   for (const auto& metric : selected) {
-    const bool is_percent = IsPerCoreUtilization(metric.name) || std::string_view{metric.name} == "meminfo.utilization";
+    const bool is_percent = IsPerCoreUtilization(metric.name) || std::string_view{metric.name} == "memory.utilization";
     Require(metric.units == (is_percent ? ASTL_UNITS_PERCENT : ASTL_UNITS_BYTES), "Unexpected metric units");
     uint64_t previous_timestamp{};
     for (const auto& sample : GetSamples(target, metric.handle)) {
@@ -171,14 +171,14 @@ void ValidateMetrics(astl_target_handle_t target, const std::vector<astl_metric_
       Require(sample.timestamp > previous_timestamp, "Sample timestamps did not advance");
       previous_timestamp = sample.timestamp;
       Require(std::isfinite(value) && value >= 0 && value <= (is_percent ? 100 : memory_total),
-              "Invalid procfs reading");
+              "Invalid system utilization reading");
       std::cout << metric.name << " timestamp=" << sample.timestamp << " value=" << value << '\n';
     }
   }
 }
 
 void Run() {
-  const auto* const target   = GetProcfsTarget();
+  const auto* const target   = GetSystemUtilizationTarget();
   const auto        selected = SelectMetrics(GetMetrics(target));
   CollectMetrics(target, selected);
   ValidateMetrics(target, selected);

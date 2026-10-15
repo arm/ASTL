@@ -48,6 +48,19 @@ auto ReplaceLabelPlaceholder(std::string_view text_template, std::string_view la
 }
 
 auto RenderExpandedMetricName(std::string_view metric_name_template, std::string_view label) -> std::string {
+  constexpr std::string_view cpu_placeholder = "{cpu_index}";
+  if (const auto position = metric_name_template.find(cpu_placeholder); position != std::string_view::npos) {
+    // Keep the native cpu/cpuN label for reads, but expose a portable metric name.
+    auto index = label;
+    if (label == "cpu") {
+      index = "total";
+    } else if (label.starts_with("cpu")) {
+      index = label.substr(3);
+    }
+    std::string rendered{metric_name_template};
+    rendered.replace(position, cpu_placeholder.size(), index);
+    return rendered;
+  }
   if (metric_name_template.find(kProcfsMetricPlaceholder) == std::string_view::npos) {
     return std::string{metric_name_template} + "." + std::string{label};
   }

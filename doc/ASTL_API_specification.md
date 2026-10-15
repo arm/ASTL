@@ -932,6 +932,12 @@ That means:
 
 For live discovery, ASTL must find its configuration directory.
 
+The procfs collector exposes the `sysutil` target with `cpu.total.utilization`,
+`cpu.N.utilization`, `memory.total`, `memory.used`, and `memory.utilization`.
+These replace the old procfs target and utilization names without aliases.
+Collector selection remains `ASTL_COLLECTORS=procfs`. See
+[System utilization](system_utilization.md) for migration and sampling details.
+
 Backend paths are resolved independently from the configuration directory:
 
 - `ASTL_COLLECTORS`: comma-separated, case-insensitive allowlist for live

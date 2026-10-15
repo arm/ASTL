@@ -20,6 +20,11 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Breaking
 
+- Rename the procfs system target to `sysutil` and expose `cpu.total.utilization`,
+  `cpu.N.utilization`, `memory.total`, `memory.used`, and `memory.utilization`.
+  The old utilization names are removed without aliases; collector selection
+  remains `ASTL_COLLECTORS=procfs`.
+
 - Removed `astlCropMetricSamplesOnTarget` and its Python and Go wrappers. Its crop only affected processed samples in
   memory; rebuilding them from the raw sample cache could restore discarded samples. Use `astlCropSamplesOnTarget`
   (or the corresponding Python or Go wrapper) to crop all samples on a target persistently.

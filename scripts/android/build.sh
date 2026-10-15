@@ -45,14 +45,14 @@ cmake -S "$repo_root" -B "$build_dir" -G Ninja \
 	-DCMAKE_LIBRARY_OUTPUT_DIRECTORY="$build_dir/lib" \
 	-DASTL_BUILD_SHARED=ON -DASTL_PROCFS=ON -DASTL_LIBSENSORS=OFF \
 	-DASTL_BUILD_TESTING=OFF -DBUILD_TESTING=OFF -DASTL_BUILD_SAMPLES=OFF \
-	-DASTL_BUILD_TOOLS=OFF -DASTL_BUILD_PROCFS_SMOKE=ON
-cmake --build "$build_dir" --target procfs_smoke --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
+	-DASTL_BUILD_TOOLS=OFF -DASTL_BUILD_SYSUTIL_SMOKE=ON
+cmake --build "$build_dir" --target sysutil_smoke --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
 
 # The bundle deliberately contains no SCMI platform lookup or device-specific definitions.
 mkdir -p "$build_dir/bundle/bin" "$build_dir/bundle/lib" \
 	"$build_dir/bundle/config/metrics/procfs" "$build_dir/bundle/config/groups"
-smoke_binary="$(cat "$build_dir/procfs-smoke-Release-binary.txt")"
-library_dir="$(cat "$build_dir/procfs-smoke-Release-library-dir.txt")"
+smoke_binary="$(cat "$build_dir/sysutil-smoke-Release-binary.txt")"
+library_dir="$(cat "$build_dir/sysutil-smoke-Release-library-dir.txt")"
 cp "$smoke_binary" "$build_dir/bundle/bin/"
 cp -L "$library_dir"/*.so* "$build_dir/bundle/lib/"
 ndk_host_dirs=("$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*)
@@ -60,7 +60,7 @@ ndk_host_dir="${ndk_host_dirs[0]}"
 cp "$ndk_host_dir/sysroot/usr/lib/$ndk_triple/libc++_shared.so" "$build_dir/bundle/lib/"
 # Keep deployment artifacts small without removing dynamic symbols needed by the shared-library loader.
 "$ndk_host_dir/bin/llvm-strip" --strip-debug \
-	"$build_dir/bundle/bin/procfs_smoke" "$build_dir/bundle/lib/"*.so*
+	"$build_dir/bundle/bin/sysutil_smoke" "$build_dir/bundle/lib/"*.so*
 cp "$repo_root/config/metrics/procfs/metrics.json" "$build_dir/bundle/config/metrics/procfs/"
 cp "$repo_root/config/groups/metric_groups.json" "$build_dir/bundle/config/groups/"
 echo "Android $abi bundle: $build_dir/bundle"
