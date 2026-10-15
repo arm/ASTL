@@ -1,7 +1,7 @@
 {
-  "commit": "4b6cf0d0752f4f404420dc45646d5aea87830201",
-  "coverage_percent": 20.979998784120614,
-  "measured_at": "2026-10-14T13:24:05Z",
-  "published_at": "2026-10-15T16:07:30.376678+00:00",
+  "commit": "72d7df0cb5bfd6de71c08039d81baaa674c50391",
+  "coverage_percent": 21.098353684466314,
+  "measured_at": "2026-10-15T15:45:19Z",
+  "published_at": "2026-10-15T19:52:03.021297+00:00",
   "corpus_mode": "seeds"
 }
