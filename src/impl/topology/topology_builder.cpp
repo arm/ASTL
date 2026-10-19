@@ -15,6 +15,10 @@
 #include "topology/i_topology_manager.hpp"
 #include "topology/scmi_topology_plugin.hpp"
 #include "topology/topology_manager.hpp"
+#if defined(ASTL_INCLUDE_WINDOWS)
+#  include "windows/windows_metric_builder.hpp"
+#  include "windows/windows_system_api.hpp"
+#endif
 #if defined(ASTL_INCLUDE_PROCFS)
 #  include "topology/procfs_topology_plugin.hpp"
 #endif
@@ -77,6 +81,21 @@ auto BuildTopologyManagerFromASTLFile(const std::filesystem::path& cache_dir_pat
   return topology_manager;
 }
 
+#if defined(ASTL_INCLUDE_WINDOWS)
+static auto BuildWindowsTarget() -> std::expected<std::unique_ptr<ITarget>, astl_status_code> {
+  auto api        = MakeWindowsSystemApi();
+  auto processors = api->DiscoverProcessors();
+  if (!processors) {
+    return std::unexpected(processors.error());
+  }
+  const auto memory = api->ReadMemory();
+  if (!memory) {
+    return std::unexpected(memory.error());
+  }
+  return std::make_unique<WindowsSystemTarget>(std::move(*processors));
+}
+#endif
+
 auto BuildTopologyManager(const AstlConfiguration& configuration, std::optional<std::filesystem::path> cache_dir_path)
     -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
   std::vector<std::unique_ptr<ITarget>> targets;
@@ -93,6 +112,15 @@ auto BuildTopologyManager(const AstlConfiguration& configuration, std::optional<
   }
 
   try {
+#if defined(ASTL_INCLUDE_WINDOWS)
+    if (configuration.collectors.IsEnabled(CollectorType::WINDOWS)) {
+      auto target = BuildWindowsTarget();
+      if (!target) {
+        return std::unexpected(target.error());
+      }
+      targets.push_back(std::move(*target));
+    }
+#endif
     // Add more topology plugins here by calling ActivatePlugin on each
     if (configuration.collectors.IsEnabled(CollectorType::SCMI)) {
       ActivatePlugin(targets, configuration, ScmiTopologyPlugin::ScanForTargets);

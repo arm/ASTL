@@ -115,6 +115,19 @@ if(ASTL_HAVE_LIBSENSORS)
   target_compile_definitions(${LIBRARY_NAME} PUBLIC ASTL_INCLUDE_LIBSENSORS)
 endif()
 
+# Portable collector logic is also built on other hosts for deterministic API-mock tests.
+target_sources(
+  ${LIBRARY_NAME}
+  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_system_api.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_system_collector.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_system_sampling.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_metric_builder.cpp")
+if(ASTL_INCLUDE_WINDOWS)
+  target_compile_definitions(${LIBRARY_NAME} PUBLIC ASTL_INCLUDE_WINDOWS)
+  target_sources(${LIBRARY_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_native_api.cpp")
+  target_link_libraries(${LIBRARY_NAME} PRIVATE pdh)
+endif()
+
 if(ASTL_INCLUDE_PROCFS)
   target_compile_definitions(${LIBRARY_NAME} PUBLIC ASTL_INCLUDE_PROCFS)
   target_sources(

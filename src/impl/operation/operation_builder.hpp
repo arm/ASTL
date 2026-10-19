@@ -19,6 +19,7 @@
 #  include "operation/procfs_operation_builder.hpp"
 #endif
 #include "scmi_operation_builder.hpp"
+#include "windows/windows_operation_builder.hpp"
 
 namespace astl {
 
@@ -40,7 +41,7 @@ class NullOperationBuilder {
 
 static_assert(OperationBuilder<NullOperationBuilder>, "NullOperationBuilder does not satisfy OperationBuilder concept");
 
-using AnyOperationBuilder = std::variant<NullOperationBuilder,
+using AnyOperationBuilder = std::variant<NullOperationBuilder, WindowsOperationBuilder,
 #if defined(ASTL_INCLUDE_LIBSENSORS)
                                          LibsensorsOperationBuilder,
 #endif

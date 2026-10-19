@@ -254,6 +254,12 @@ include(render_templates)
 
 # Configure optional procfs support. Unlike libsensors, procfs has no external dependency to probe, so a simple ON/OFF
 # option is sufficient.
+option(ASTL_WINDOWS "Build Windows system collector and discovery support" ${WIN32})
+if(ASTL_WINDOWS AND NOT WIN32)
+  message(FATAL_ERROR "ASTL_WINDOWS requires Windows")
+endif()
+set(ASTL_INCLUDE_WINDOWS ${ASTL_WINDOWS})
+
 option(ASTL_PROCFS "Build procfs collector and metric-discovery support" ON)
 if(ASTL_PROCFS)
   set(ASTL_INCLUDE_PROCFS ON)

@@ -10,6 +10,7 @@ if(NOT CMAKE_BUILD_TYPE)
       CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif()
 set(UNIT_TEST_SRCS
+    windows_collector_utests.cpp
     api_layout_utests.cpp
     astl_value_utests.cpp
     astl_utils_utests.cpp

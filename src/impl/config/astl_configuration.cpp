@@ -26,6 +26,8 @@ auto CollectorSelection::IsEnabled(CollectorType collector_type) const -> bool {
       return scmi;
     case CollectorType::LIBSENSORS:
       return libsensors;
+    case CollectorType::WINDOWS:
+      return windows;
     case CollectorType::PROCFS:
       return procfs;
     case CollectorType::ASTL_NATIVE:
@@ -62,7 +64,7 @@ auto ParseCollectorSelection() -> std::expected<CollectorSelection, astl_status_
     return CollectorSelection{};
   }
 
-  CollectorSelection selection{.scmi = false, .libsensors = false, .procfs = false};
+  CollectorSelection selection{.scmi = false, .windows = false, .libsensors = false, .procfs = false};
   size_t             start = 0;
   while (start <= value.size()) {
     const auto end  = value.find(',', start);
@@ -78,15 +80,19 @@ auto ParseCollectorSelection() -> std::expected<CollectorSelection, astl_status_
 #if defined(ASTL_INCLUDE_LIBSENSORS)
       selection.libsensors = true;
 #else
-      ASTL_LOG_ERROR("ASTL_COLLECTORS requests libsensors, but this build does not include libsensors support");
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      ASTL_LOG_DEBUG("Skipping unavailable collector: libsensors");
+#endif
+    } else if (name == "windows") {
+#if defined(ASTL_INCLUDE_WINDOWS)
+      selection.windows = true;
+#else
+      ASTL_LOG_DEBUG("Skipping unavailable collector: windows");
 #endif
     } else if (name == "procfs") {
 #if defined(ASTL_INCLUDE_PROCFS)
       selection.procfs = true;
 #else
-      ASTL_LOG_ERROR("ASTL_COLLECTORS requests procfs, but this build was configured with ASTL_PROCFS=OFF");
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      ASTL_LOG_DEBUG("Skipping unavailable collector: procfs");
 #endif
     } else {
       ASTL_LOG_ERROR("Unknown collector '{}' in ASTL_COLLECTORS", name);
@@ -97,6 +103,10 @@ auto ParseCollectorSelection() -> std::expected<CollectorSelection, astl_status_
       break;
     }
     start = end + 1;
+  }
+  if (!selection.scmi && !selection.libsensors && !selection.procfs && !selection.windows) {
+    ASTL_LOG_ERROR("None of the requested ASTL_COLLECTORS are available in this build");
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return selection;
 }

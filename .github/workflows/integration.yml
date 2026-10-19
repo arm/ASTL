@@ -206,6 +206,13 @@ jobs:
           cd ${{ github.workspace }}/Go
           go test ./...
 
+      - name: 🧪 Validate Windows system telemetry
+        if: matrix.os == 'windows-2022'
+        shell: pwsh
+        run: |
+          Get-ComputerInfo -Property WindowsProductName, WindowsVersion, OsBuildNumber, OsArchitecture | Format-List
+          ctest --preset windows-release -L "windows_native|windows_collector" --output-on-failure --no-tests=error
+
       - name: 🧪 CMake - Run Unit Tests Without Valgrind
         if: contains(matrix.os, 'ubuntu') && matrix.cmake_preset != 'debug-valgrind'
         # Execute tests defined by the CMake configuration.

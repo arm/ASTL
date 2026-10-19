@@ -72,6 +72,7 @@ enum CollectorType {
   COLLECTOR_TYPE_LIBSENSORS  = 2;
   COLLECTOR_TYPE_PROCFS      = 3;
   COLLECTOR_TYPE_ASTL_NATIVE = 4;
+  COLLECTOR_TYPE_WINDOWS     = 5;
 }
 
 message AstlValue {

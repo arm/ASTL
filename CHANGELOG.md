@@ -12,6 +12,11 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Added
 
+- Added an optional Windows system collector for aggregate and per-logical-processor CPU busy-time utilization,
+  physical memory capacity, used bytes, and utilization through the `sysutil` target.
+  Select it with `ASTL_COLLECTORS=windows`, or use `procfs,windows` across platforms;
+  known unavailable backends are skipped and selection fails if none are available.
+
 - Added native Android procfs support for API 28+ shell executables, with NDK builds,
   emulator CI, and local Apple Silicon development scripts. The generic procfs
   configuration now also exposes `meminfo.MemAvailable` in bytes.

@@ -22,6 +22,11 @@ namespace astl {
 /** @brief Collectors enabled for live topology and metric discovery. */
 struct CollectorSelection {
   bool scmi{true};
+#if defined(ASTL_INCLUDE_WINDOWS)
+  bool windows{true};
+#else
+  bool windows{false};
+#endif
 #if defined(ASTL_INCLUDE_LIBSENSORS)
   bool libsensors{true};
 #else

@@ -20,6 +20,9 @@
 #endif
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
+#if defined(ASTL_INCLUDE_WINDOWS)
+#  include "windows/windows_system_collector.hpp"
+#endif
 #if defined(ASTL_INCLUDE_PROCFS)
 #  include "collector/procfs_collector.hpp"
 #  include "common/procfs_utils.hpp"
@@ -119,8 +122,8 @@ auto BuildLibsensorsCollectors([[maybe_unused]] const ITarget& target) -> Collec
  * @param target Procfs target, optionally carrying an overridden procfs root path.
  * @return Collector list containing one procfs collector.
  */
+auto BuildProcfsCollectors(const ITarget& target) -> std::expected<CollectorList, astl_status_code> {
 #if defined(ASTL_INCLUDE_PROCFS)
-auto BuildProcfsCollectors(const ITarget& target) -> CollectorList {
   auto procfs_root_path = procfs::kDefaultProcfsRootPath;
   if (const auto* procfs_target = dynamic_cast<const ProcfsTarget*>(&target)) {
     procfs_root_path = procfs_target->ProcfsRootPath();
@@ -128,8 +131,23 @@ auto BuildProcfsCollectors(const ITarget& target) -> CollectorList {
 
   FileInterface procfs_file_interface{procfs_root_path};
   return MakeCollectorList(std::make_unique<ProcfsCollector>(std::move(procfs_file_interface)));
-}
+#else
+  ASTL_LOG_ERROR("BuildCollectorManager: procfs target '{}' is unsupported by this build", target.Name());
+  return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
 #endif
+}
+
+auto BuildWindowsCollectors(const AstlConfiguration& configuration) -> std::expected<CollectorList, astl_status_code> {
+  // Saved Windows samples can be replayed on any host without opening PDH.
+  if (configuration.load_file_path.has_value()) {
+    return CollectorList{};
+  }
+#if defined(ASTL_INCLUDE_WINDOWS)
+  return MakeCollectorList(std::make_unique<WindowsSystemCollector>(MakeWindowsSystemApi()));
+#else
+  return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+#endif
+}
 
 /**
  * @brief Dispatches collector construction based on target collector type.
@@ -141,17 +159,14 @@ auto BuildProcfsCollectors(const ITarget& target) -> CollectorList {
 auto BuildCollectorsForTarget(const ITarget& target, const AstlConfiguration& configuration)
     -> std::expected<CollectorList, astl_status_code> {
   switch (target.GetCollectorType()) {
+    case CollectorType::WINDOWS:
+      return BuildWindowsCollectors(configuration);
     case CollectorType::SCMI:
       return BuildScmiCollectors(target, configuration);
     case CollectorType::LIBSENSORS:
       return BuildLibsensorsCollectors(target);
     case CollectorType::PROCFS:
-#if defined(ASTL_INCLUDE_PROCFS)
       return BuildProcfsCollectors(target);
-#else
-      ASTL_LOG_ERROR("BuildCollectorManager: procfs target '{}' is unsupported by this build", target.Name());
-      return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
-#endif
     default:
       ASTL_LOG_ERROR("BuildCollectorManager: Unsupported collector type for target {}", target.Name());
       return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);

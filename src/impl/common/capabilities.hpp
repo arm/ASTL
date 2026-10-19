@@ -19,6 +19,7 @@ enum class CollectorType {
   SCMI        = 2,
   LIBSENSORS  = 3,
   PROCFS      = 4,
+  WINDOWS     = 5,
 };
 
 /**

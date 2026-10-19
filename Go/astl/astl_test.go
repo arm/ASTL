@@ -170,7 +170,7 @@ func TestStoppedCollectionRequiresReconfiguration(t *testing.T) {
 }
 
 func TestSystemUtilizationMetrics(t *testing.T) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
 		t.Skip("requires a system utilization collector")
 	}
 	targets, err := GetTargets()

@@ -29,6 +29,9 @@
     "io": {
       "description": "Unit test I/O metrics"
     },
+    "memory": {
+      "description": "Unit test memory metrics"
+    },
     "nic": {
       "description": "Unit test NIC metrics"
     },

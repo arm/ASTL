@@ -239,3 +239,26 @@ TEST_CASE("AstlConfiguration::CreateConfiguration uses default procfs root when 
   REQUIRE(configuration_result.has_value());
   REQUIRE(configuration_result->procfs_root_path == astl::procfs::kDefaultProcfsRootPath);
 }
+
+TEST_CASE("Portable system collector allowlist skips unavailable backends", "[AstlConfiguration][windows_collector]") {
+  EnvVarGuard selected(astl::EnvVar::ASTL_COLLECTORS, "procfs,windows");
+  auto        configuration = astl::AstlConfiguration::CreateConfiguration();
+#if defined(ASTL_INCLUDE_PROCFS) || defined(ASTL_INCLUDE_WINDOWS)
+  REQUIRE(configuration.has_value());
+  CHECK_FALSE(configuration->collectors.scmi);
+  CHECK_FALSE(configuration->collectors.libsensors);
+#  if defined(ASTL_INCLUDE_PROCFS)
+  CHECK(configuration->collectors.procfs);
+#  else
+  CHECK_FALSE(configuration->collectors.procfs);
+#  endif
+#  if defined(ASTL_INCLUDE_WINDOWS)
+  CHECK(configuration->collectors.windows);
+#  else
+  CHECK_FALSE(configuration->collectors.windows);
+#  endif
+#else
+  REQUIRE_FALSE(configuration.has_value());
+  CHECK(configuration.error() == ASTL_STATUS_BAD_CONFIGURATION);
+#endif
+}

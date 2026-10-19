@@ -185,12 +185,17 @@ The procfs collector exposes the `sysutil` target with portable CPU and memory
 metric names. See [System utilization](doc/system_utilization.md) for the names,
 sampling semantics, and migration from the old procfs names.
 
-If needed, use these environment variables to choose or redirect the SCMI backend:
+Windows builds include system CPU and physical-memory telemetry by default; see
+[Windows system telemetry](doc/windows_system_collector.md) for metrics and sampling semantics.
+
+Use these environment variables to select collectors or redirect backend paths:
 
 - `ASTL_COLLECTORS`: comma-separated allowlist of collectors used for live
-  discovery. Supported names are `scmi`, `libsensors`, and `procfs`. Unset or
-  empty enables every collector included in the build. Unknown or unavailable
-  names cause initialization to fail.
+  discovery. Supported names are `scmi`, `libsensors`, `procfs`, and `windows`. Unset or
+  empty enables every collector included in the build. Known unavailable backends
+  are skipped; unknown names or an explicit list with no available backend fail.
+  Use `ASTL_COLLECTORS=procfs,windows` for portable system utilization through
+  the `sysutil` target and `cpu.*` / `memory.*` metric names.
 - `ASTL_SCMI_INTERFACE`: SCMI backend preference. Accepted values are `auto`,
   `ioctl`, and `sysfs`; unset or unknown values use `auto`.
 - `ASTL_SCMI_IOCTL_DEV_ROOT`: ioctl device root. Defaults to `/dev/scmi`.

@@ -34,19 +34,28 @@ struct ITarget {
 };
 
 inline auto CollectorTypeStableKeyPrefix(CollectorType collector_type) -> std::string_view {
+  std::string_view prefix = "unknown";
   switch (collector_type) {
     case CollectorType::SCMI:
-      return "scmi";
+      prefix = "scmi";
+      break;
     case CollectorType::LIBSENSORS:
-      return "libsensors";
+      prefix = "libsensors";
+      break;
+    case CollectorType::WINDOWS:
+      prefix = "windows";
+      break;
     case CollectorType::PROCFS:
-      return "procfs";
+      prefix = "procfs";
+      break;
     case CollectorType::UNKNOWN:
-      return "unknown";
+      prefix = "unknown";
+      break;
     case CollectorType::ASTL_NATIVE:
-      return "astl_native";
+      prefix = "astl_native";
+      break;
   }
-  return "unknown";
+  return prefix;
 }
 
 inline auto GetStableTargetKey(const ITarget& target) -> std::string {

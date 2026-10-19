@@ -45,13 +45,13 @@ def test_system_utilization_metrics_are_discoverable():
     import sys
     import pytest
 
-    if sys.platform != "linux":
+    if sys.platform not in ("win32", "linux"):
         pytest.skip("requires a system utilization collector")
     # The suite uses tests/config, which intentionally contains no procfs metrics.
     # A fresh process isolates ASTL's initialized state and loads the shipped config.
     env = dict(os.environ)
     env["ASTL_CONFIG_DIR"] = str(Path(__file__).resolve().parents[2] / "config")
-    env["ASTL_COLLECTORS"] = "procfs"
+    env["ASTL_COLLECTORS"] = "procfs,windows"
     result = subprocess.run([sys.executable, "-c", """
 import astl
 system_targets = [target for target in astl.get_targets() if target.name == "sysutil"]

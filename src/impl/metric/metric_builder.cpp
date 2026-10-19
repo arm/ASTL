@@ -22,6 +22,7 @@
 #endif
 #include "metric/scmi_metric_builder.hpp"
 #include "metric/scmi_target_configuration.hpp"
+#include "windows/windows_metric_builder.hpp"
 
 namespace astl {
 
@@ -61,10 +62,12 @@ static auto RegisterConfiguredMetrics(
     IMetricManager*                                                       metric_manager) -> astl_status_code {
   constexpr std::array register_metrics_functions = {
       RegisterScmiMetrics,
+#if defined(ASTL_INCLUDE_WINDOWS)
+      RegisterWindowsMetrics,
+#endif
       RegisterLibsensorsMetrics,
 #if defined(ASTL_INCLUDE_PROCFS)
-      RegisterProcfsMetrics,
-      RegisterProcfsCounters,
+      RegisterProcfsMetrics,     RegisterProcfsCounters,
 #endif
   };
 
