@@ -94,7 +94,8 @@ auto ApplyConfiguredScmiTargetNames(const AstlConfiguration&                    
     return ASTL_STATUS_SUCCESS;
   }
 
-  auto platform_lookup = config::LoadPlatformLookupFragments(configuration.metrics_dir_path);
+  auto platform_lookup =
+      config::LoadPlatformLookupFragments(configuration.metrics_dir_path, configuration.resources.get());
   if (!platform_lookup.has_value()) {
     return platform_lookup.error();
   }
@@ -173,12 +174,13 @@ static auto AddScmiSpecificationInfoForTarget(std::vector<ScmiUuidSpecificationI
 auto LookUpScmiSpecificationFiles(const AstlConfiguration&           configuration,
                                   const std::vector<const ITarget*>& scmi_targets)
     -> std::expected<std::vector<ScmiUuidSpecificationInfo>, astl_status_code> {
-  auto repo_meta = config::LoadRepoMetaFragments(configuration.scmi_specification_dir);
+  auto repo_meta = config::LoadRepoMetaFragments(configuration.scmi_specification_dir, configuration.resources.get());
   if (!repo_meta.has_value()) {
     return std::unexpected(repo_meta.error());
   }
 
-  auto platform_lookup = config::LoadPlatformLookupFragments(configuration.metrics_dir_path);
+  auto platform_lookup =
+      config::LoadPlatformLookupFragments(configuration.metrics_dir_path, configuration.resources.get());
   if (!platform_lookup.has_value()) {
     return std::unexpected(platform_lookup.error());
   }

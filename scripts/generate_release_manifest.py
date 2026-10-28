@@ -168,6 +168,15 @@ def build_manifest(
             "products": products or [],
         }
 
+    embedded_manifest = staging_dir / "embedded_config.json"
+    if embedded_manifest.exists():
+        embedded = json.loads(embedded_manifest.read_text(encoding="utf-8"))
+        if not embedded.get("embedded") or embedded.get("profile") != release_profile:
+            raise ValueError("embedded resource manifest does not match release profile")
+        if (staging_dir / "lib/config").exists():
+            raise ValueError("embedded release must not contain external ASTL config")
+        manifest["embedded_config"] = embedded
+
     sources = {}
     if astl_revision is not None:
         sources["astl"] = {"revision": astl_revision, "dirty": astl_dirty}

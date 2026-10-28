@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The procfs collector exposes CPU and physical-memory utilization through the
 `sysutil` target. Select this backend with `ASTL_COLLECTORS=procfs` and set
-`ASTL_CONFIG_DIR` to the installed configuration directory. The C, Python, and Go
+`ASTL_CONFIG_DIR` only when replacing the bundled configuration. The C, Python, and Go
 discovery APIs expose the same names; no additional API calls are required.
 
 ## Migration

@@ -47,14 +47,11 @@ void WriteTextFile(const fs::path& path, std::string_view contents) {
 }
 
 auto MakeConfigurationForTestRoot(const fs::path& config_root) -> astl::AstlConfiguration {
-  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
+  EnvVarGuard config_guard(astl::EnvVar::ASTL_CONFIG_DIR, config_root.string());
+  auto        configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
 
   auto configuration                           = configuration_result.value();
-  configuration.config_dir_path                = config_root;
-  configuration.metrics_dir_path               = config_root / "metrics";
-  configuration.groups_dir_path                = config_root / "groups";
-  configuration.scmi_specification_dir         = config_root / "scmi" / "public";
   configuration.scmi_sysfs_telemetry_root_path = config_root / "scmi_sysfs";
   return configuration;
 }

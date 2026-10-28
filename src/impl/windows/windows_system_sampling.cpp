@@ -12,7 +12,7 @@ namespace astl {
 namespace {
 constexpr double kPercentageScale = 100.0;
 
-auto NativeNow() -> uint64_t {
+auto WindowsNativeNow() -> uint64_t {
   if (ClockMonotonicRaw::TestTimeEnabled()) {
     return static_cast<uint64_t>(
         std::chrono::time_point_cast<SampleMicroseconds>(ClockMonotonicRaw::now()).time_since_epoch().count());
@@ -101,7 +101,7 @@ auto WindowsSystemCollector::GetNativeClockSnapshot() -> std::expected<ClockCorr
     return {};
   }
 
-  const uint64_t native_now = NativeNow();
+  const uint64_t native_now = WindowsNativeNow();
   const auto     raw_now    = ClockMonotonicRaw::now();
 
   ClockCorrelationMap result;
@@ -122,7 +122,7 @@ auto WindowsSystemCollector::ExecuteCollectionOperations(const OperationSequence
     return snapshot.error();
   }
   std::vector<RawSampledData> samples;
-  const auto                  native_tick = NativeNow();
+  const auto                  native_tick = WindowsNativeNow();
   for (const auto& operation : operations) {
     const auto& read = dynamic_cast<const WindowsReadOperation&>(*operation);
     if (auto value = OperationValue(read, *snapshot)) {

@@ -305,3 +305,11 @@ because the setup step copies the shared library beside the extension and sets
 an rpath. If import fails
 unexpectedly, verify the native library was built (look for
 `build/debug/lib/libastl-*.so`) and reinstall the editable package.
+
+## Runtime configuration
+
+The native library uses one configuration source: `ASTL_CONFIG_DIR` when set,
+otherwise `config/` beside the loaded library (or executable for static linking),
+otherwise bundled resources. Sources are not combined; OS-specific user and
+system config directories are not searched. Invalid selected configuration is
+an error rather than a reason to fall back.

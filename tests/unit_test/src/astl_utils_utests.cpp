@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "../../test_includes.hpp"
+#include "../../test_utilities.hpp"
 #include "astl_utils.hpp"
 
 TEST_CASE("CompareDigitRuns compares numeric runs without integer conversion", "[astl_utils]") {
@@ -86,4 +87,35 @@ TEST_CASE("NaturalLess orders strings with human numeric ordering", "[astl_utils
     REQUIRE(names.front() == "core1");
     REQUIRE(names.back() == "core100");
   }
+}
+
+TEST_CASE("Environment guards restore absent and present values", "[astl_utils]") {
+  constexpr auto variable = astl::EnvVar::ASTL_CONFIG_DIR;
+  EnvVarGuard    restore_original(variable);
+  REQUIRE(astl::UnsetEnvVar(variable) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::UnsetEnvVar(variable) == ASTL_STATUS_SUCCESS);
+  bool present = true;
+  CHECK(astl::GetEnvVar(variable, &present).empty());
+  CHECK_FALSE(present);
+  {
+    EnvVarGuard temporary(variable, "temporary");
+    CHECK(astl::GetEnvVar(variable) == "temporary");
+  }
+  CHECK(astl::GetEnvVar(variable, &present).empty());
+  CHECK_FALSE(present);
+  REQUIRE(astl::SetEnvVar(variable, "original") == ASTL_STATUS_SUCCESS);
+  {
+    EnvVarGuard temporary(variable, "temporary");
+    REQUIRE(astl::UnsetEnvVar(variable) == ASTL_STATUS_SUCCESS);
+  }
+  CHECK(astl::GetEnvVar(variable, &present) == "original");
+  CHECK(present);
+#ifndef _WIN32
+  REQUIRE(astl::SetEnvVar(variable, "") == ASTL_STATUS_SUCCESS);
+  {
+    EnvVarGuard temporary(variable, "temporary");
+  }
+  CHECK(astl::GetEnvVar(variable, &present).empty());
+  CHECK(present);
+#endif
 }

@@ -44,20 +44,11 @@ the uninstall script should make use of the manifest.json file to remove all fil
 
 I want this script to be intuitive and conventional. We might use it, or modify it to later build .deb packages, rpm packages, and .msi files to make the process more robust, so just keep that in mind.
 
-## Config file locations
+## Config resources
 
-ASTL's `config` directory holds platform-specific metrics specifications
-and should be included in distributions of the binary library.
-ASTL looks for it in the following directories in preferred order:
-
-1. Environment variable override: `ASTL_CONFIG_DIR`
-2. Under a user-specific application data dir, depending on OS
-
-Linux : `$XDG_DATA_HOME/astl/config` -> defaults to `~/.local/share/astl/config`
-Mac : `~/Library/Application Support/astl/config`
-Windows: `%LOCALAPPDATA%\astl\config` 3. System-wide application resource directory, depending on OS
-
-Linux : `/usr/local/share/astl/config`
-Mac : `/Library/Application Support/astl/config`
-Windows: `%PROGRAMDATA%\astl\config` 4. Default to fallback of relative location by path to astl library.
-For instance, if the library is at `/Downloads/astl/libastl.so`, ASTL looks in `/Downloads/astl/config/`
+ASTL embeds the selected release-profile config in the library. No config ZIP or
+companion config directory is deployed. Profile overlays and filtering run before
+CMake generation. At runtime, use one source: `ASTL_CONFIG_DIR` when set,
+otherwise `config/` beside the library (or statically linked executable), otherwise
+bundled resources. There is no OS-specific user or system directory search.
+See the repository README for the current release staging and profile workflow.

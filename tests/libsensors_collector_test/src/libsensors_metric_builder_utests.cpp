@@ -56,6 +56,15 @@ auto GetTestMetricsDir() -> std::filesystem::path {
   return std::filesystem::path{__FILE__}.parent_path().parent_path().parent_path() / "config" / "metrics";
 }
 
+void SetTestMetrics(astl::AstlConfiguration& configuration, const std::filesystem::path& directory) {
+  EnvVarGuard config_dir(astl::EnvVar::ASTL_CONFIG_DIR, directory.string());
+  auto        source = astl::config::ConfigSource::Create();
+  REQUIRE(source.has_value());
+  configuration.resources = *source;
+  // This fixture's root is the metrics directory itself.
+  configuration.metrics_dir_path.clear();
+}
+
 auto WriteTextFile(const std::filesystem::path& path, std::string_view contents) -> void {
   std::error_code err;
   std::filesystem::create_directories(path.parent_path(), err);
@@ -295,8 +304,8 @@ TEST_CASE("RegisterLibsensorsMetrics uses stable family instance prefixes for ad
 
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
-  auto configuration             = configuration_result.value();
-  configuration.metrics_dir_path = temp_root;
+  auto configuration = configuration_result.value();
+  SetTestMetrics(configuration, temp_root);
 
   MetricManager metric_manager{MakeCaps(), MakeMetricGroupDescriptions()};
   auto libsensors_target_1 = std::make_unique<astl::LibsensorsTarget>("libsensors_nvme-pci-40100", "nvme target 1",
@@ -794,8 +803,8 @@ TEST_CASE("RegisterLibsensorsMetrics uses per-target JSON declarations when avai
 
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
-  auto configuration             = configuration_result.value();
-  configuration.metrics_dir_path = GetTestMetricsDir();
+  auto configuration = configuration_result.value();
+  SetTestMetrics(configuration, GetTestMetricsDir());
 
   MetricManager metric_manager{MakeCaps(), MakeMetricGroupDescriptions()};
   auto          libsensors_target =
@@ -903,7 +912,7 @@ TEST_CASE("RegisterLibsensorsMetrics applies family-level JSON declarations with
   }
 }
 )");
-  configuration.metrics_dir_path = config_root;
+  SetTestMetrics(configuration, config_root);
 
   MetricManager metric_manager{MakeCaps(), MakeMetricGroupDescriptions()};
   auto libsensors_target = std::make_unique<astl::LibsensorsTarget>("libsensors_chip-11-7", "family configured target",
@@ -969,8 +978,8 @@ TEST_CASE("RegisterLibsensorsMetrics matches declared register names when labels
 
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
-  auto configuration             = configuration_result.value();
-  configuration.metrics_dir_path = GetTestMetricsDir();
+  auto configuration = configuration_result.value();
+  SetTestMetrics(configuration, GetTestMetricsDir());
 
   MetricManager metric_manager{MakeCaps(), MakeMetricGroupDescriptions()};
   auto          libsensors_target =
@@ -1028,8 +1037,8 @@ TEST_CASE("RegisterLibsensorsMetrics applies configured formula scaling", "[libs
 
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
-  auto configuration             = configuration_result.value();
-  configuration.metrics_dir_path = GetTestMetricsDir();
+  auto configuration = configuration_result.value();
+  SetTestMetrics(configuration, GetTestMetricsDir());
 
   MetricManager                metric_manager{MakeCaps(), MakeMetricGroupDescriptions()};
   RecordingProcessedSampleSink sink;
@@ -1137,8 +1146,8 @@ TEST_CASE("RegisterLibsensorsMetrics creates composite thermal limit metrics", "
 
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
-  auto configuration             = configuration_result.value();
-  configuration.metrics_dir_path = GetTestMetricsDir();
+  auto configuration = configuration_result.value();
+  SetTestMetrics(configuration, GetTestMetricsDir());
 
   MetricManager metric_manager{MakeCaps(), MakeMetricGroupDescriptions()};
   auto          libsensors_target =
@@ -1236,8 +1245,8 @@ TEST_CASE("RegisterLibsensorsMetrics supports inherited libsensors config templa
 
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
-  auto configuration             = configuration_result.value();
-  configuration.metrics_dir_path = GetTestMetricsDir();
+  auto configuration = configuration_result.value();
+  SetTestMetrics(configuration, GetTestMetricsDir());
 
   MetricManager metric_manager{MakeCaps(), MakeMetricGroupDescriptions()};
   auto          libsensors_target =
@@ -1353,8 +1362,8 @@ TEST_CASE("RegisterLibsensorsMetrics expands configured voltage derived metrics 
 
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
-  auto configuration             = configuration_result.value();
-  configuration.metrics_dir_path = GetTestMetricsDir();
+  auto configuration = configuration_result.value();
+  SetTestMetrics(configuration, GetTestMetricsDir());
 
   MetricManager metric_manager{MakeCaps(), MakeMetricGroupDescriptions()};
   auto          libsensors_target =

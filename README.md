@@ -121,25 +121,27 @@ For native Android builds and procfs collection through `adb shell`, see
 [Android development and CI](doc/android.md). Apple Silicon Macs can build and
 run the Arm64 emulator workflow locally.
 
-ASTL's `config` directory holds platform-specific metrics specifications
-and should be included in distributions of the binary library.
-ASTL looks for it in the following directories in preferred order:
+ASTL uses a single configuration source, selected in this order:
 
-1. Environment variable override: `ASTL_CONFIG_DIR`
-2. Under a user-specific application data dir, depending on OS
+1. The directory specified by `ASTL_CONFIG_DIR`, when set.
+2. A `config/` directory beside the loaded ASTL library, or beside the executable
+   when ASTL is statically linked.
+3. The configuration embedded in the library.
 
-- Linux : `$XDG_DATA_HOME/astl/config` -> defaults to `~/.local/share/astl/config`
-- Mac : `~/Library/Application Support/astl/config`
-- Windows: `%LOCALAPPDATA%\astl\config`
+Sources are not combined. No OS-specific user or system config directories are
+searched. An invalid explicit directory (including an empty `ASTL_CONFIG_DIR`)
+or invalid contents in the selected directory cause an error, without falling
+back to another source.
 
-3. System-wide application resource directory, depending on OS
+Configuration references (`extends`, `metrics_file`, and `specification_file`)
+must be relative to the referring JSON file and resolve to a JSON file within the
+selected config directory. Absolute paths and paths escaping that directory are
+rejected.
 
-- Linux : `/usr/local/share/astl/config`
-- Mac : `/Library/Application Support/astl/config`
-- Windows: `%PROGRAMDATA%\astl\config`
-
-4. Default to fallback of relative location by path to astl library.
-   For instance, if the library is at `~/Downloads/astl/libastl.so`, ASTL looks in `~/Downloads/astl/config/`
+Every build embeds configuration. `ASTL_EMBED_CONFIG_DIR` selects the prepared input
+tree at configure time (default: this project's `config/`). Apply ossmosis
+and release-profile filtering before configuration. `ASTL_RELEASE_PROFILE`
+identifies the embedded input set in the generated resource manifest.
 
 See [Build steps for developers](#build-steps-for-developers) for more detailed build instructions.
 
@@ -1623,3 +1625,23 @@ See `doc/design/DIAGRAMS.md` for:
 - CI drift detection snippet
 
 Please regenerate diagrams whenever you change a `.mmd` file.
+
+### Embedded release profiles
+
+Release staging prepares filtered config inputs before compiling the library.
+The public profile retains the public artifact names. Named confidential/customer
+profiles use separate build directories under `build/release-profiles/<profile>/`
+and include the profile in artifact names. Apply the approved ossmosis profile
+first; the confidential release wrapper resolves this selection.
+
+`scripts/release/stage_release.sh --release-profile NAME` records the prepared
+profile. It does not itself select a product overlay. Config replacements are
+applied to build inputs, not to files after compilation. `--skip-build` requires
+matching embedded-input and binary-checksum manifests from a previous staging
+build. Switching profiles cannot reuse another profile's binary.
+
+Embedded library packages contain no `lib/config/` tree or config ZIP. The library
+binary holds the runtime resources; SDK packages still include headers, licenses,
+documentation and a resource manifest. Runtime environment overrides remain
+available for customer additions. ATX's own CLI configuration is separate from
+ASTL's embedded library configuration.

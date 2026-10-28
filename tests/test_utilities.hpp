@@ -41,10 +41,11 @@ struct TempFileGuard {
 
 struct EnvVarGuard {
   // restore original value on destruction
-  explicit EnvVarGuard(astl::EnvVar env_var) : env_var(env_var), old_value(astl::GetEnvVar(this->env_var)) {}
+  explicit EnvVarGuard(astl::EnvVar env_var) : env_var(env_var), old_value(astl::GetEnvVar(this->env_var, &was_set)) {}
 
   // set new value on construction, and restore original on destruction.
-  EnvVarGuard(astl::EnvVar env_var, const std::string& value) : env_var{env_var}, old_value{astl::GetEnvVar(env_var)} {
+  EnvVarGuard(astl::EnvVar env_var, const std::string& value)
+      : env_var{env_var}, old_value{astl::GetEnvVar(env_var, &was_set)} {
     astl::SetEnvVar(env_var, value);
   }
 
@@ -55,11 +56,15 @@ struct EnvVarGuard {
   EnvVarGuard& operator=(EnvVarGuard&&)      = delete;
 
   ~EnvVarGuard() {
-    // Restore previous value (empty == unset for codepaths that check GetEnvVar().empty()).
-    (void)astl::SetEnvVar(env_var, old_value);
+    if (!was_set) {
+      (void)astl::UnsetEnvVar(env_var);
+    } else {
+      (void)astl::SetEnvVar(env_var, old_value);
+    }
   }
 
   astl::EnvVar env_var;
+  bool         was_set = false;
   std::string  old_value;
 };
 

@@ -169,7 +169,8 @@ runs:
         check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/include/astl/astl_test_hooks.h"
 
         echo '*** Library Package - Runtime Configs ***'
-        find "${OOBT_STAGING_PATH_01_LIBRARY}/lib/config" -type f -name '*.json' | grep -F '.json'
+        check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/embedded_config.json"
+        check_path_absent "${OOBT_STAGING_PATH_01_LIBRARY}/lib/config"
 
         echo '*** Library Package - Installer Metadata ***'
         check_file_exists_and_nonempty "${OOBT_STAGING_PATH_01_LIBRARY}/VERSION.md"
@@ -313,7 +314,7 @@ runs:
         check_installed "$TEMP_XDG_DATA_HOME/astl/install/VERSION.md"
         check_installed "$TEMP_XDG_DATA_HOME/astl/install/manifest.json"
         check_installed "$TEMP_XDG_DATA_HOME/astl/install/uninstall.sh"
-        find "$TEMP_XDG_DATA_HOME/astl/config" -type f -name '*.json' | grep -F '.json'
+        check_absent "$TEMP_XDG_DATA_HOME/astl/config"
         check_absent "$TEMP_HOME/.local/bin/atx"
 
         echo "=== Uninstalling ==="

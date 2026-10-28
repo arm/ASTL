@@ -16,17 +16,6 @@ namespace astl {
 namespace ConfigurationManager {
 
 /**
- * @brief Get the path to the .so / .dll file for the ASTL library
- *
- * For a statically linked Linux executable, returns the equivalent library path
- * derived from the executable location so callers can find the adjacent config directory.
- *
- * @return If successful, returns the path to the ASTL shared object file or its static-build equivalent.
- * If unsuccessful, returns an appropriate astl_status_code error.
- */
-auto GetAstlFilePath() -> std::expected<std::filesystem::path, astl_status_code>;
-
-/**
  * @brief Determine the path to the configuration JSON file and parse it into an AstlConfiguration object
  *
  * @return If successful, returns the path the configuration JSON file.

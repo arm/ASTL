@@ -15,6 +15,7 @@ set(UNIT_TEST_SRCS
     astl_value_utests.cpp
     astl_utils_utests.cpp
     astl_configuration_utests.cpp
+    config_source_utests.cpp
     collector_lifecycle_utests.cpp
     collector_manager_utests.cpp
     file_interface_utests.cpp
@@ -127,3 +128,25 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
   target_compile_options(pure_c_header_smoke PRIVATE -Werror -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME pure_c_header_smoke COMMAND pure_c_header_smoke)
+
+# Relocate probes so discovery cannot accidentally succeed through the build tree.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+foreach(linkage IN ITEMS static shared)
+  if(linkage STREQUAL "shared" AND NOT TARGET Astl::astl)
+    continue()
+  endif()
+  add_executable(config_location_${linkage} config_location_probe.cpp)
+  if(linkage STREQUAL "static")
+    target_link_libraries(config_location_${linkage} PRIVATE Astl::astl_static)
+    # Match unit_test: static consumers must not declare the C API as dllimport.
+    target_compile_definitions(config_location_${linkage} PRIVATE ASTL_BUILD)
+    set(_config_location_library static)
+  else()
+    target_link_libraries(config_location_${linkage} PRIVATE Astl::astl)
+    set(_config_location_library "$<TARGET_FILE:astl>")
+  endif()
+  add_test(NAME config_location_${linkage}
+           COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../config_location_test.py"
+                   "$<TARGET_FILE:config_location_${linkage}>" "${_config_location_library}")
+  set_tests_properties(config_location_${linkage} PROPERTIES LABELS "windows_native")
+endforeach()

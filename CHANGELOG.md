@@ -28,6 +28,12 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Breaking
 
+- Always embed configuration in the library. Select one source in order:
+  `ASTL_CONFIG_DIR`, `config/` beside the library (or statically linked executable),
+  then bundled resources. Remove OS-specific user and system config searches.
+  Embedded release profiles contain their own selected collateral and require
+  no companion ASTL config directory.
+
 - Rename the procfs system target to `sysutil` and expose `cpu.total.utilization`,
   `cpu.N.utilization`, `memory.total`, `memory.used`, and `memory.utilization`.
   The old utilization names are removed without aliases; collector selection

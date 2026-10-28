@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import astl
+import pytest
 from astl._core import Counter
 
 
@@ -38,7 +39,8 @@ def test_counter_preserves_qualified_scmi_name_and_type():
     assert astl.CounterType(count.counter_type) is astl.CounterType.COUNT
 
 
-def test_system_utilization_metrics_are_discoverable():
+@pytest.mark.parametrize("embedded", [True, False])
+def test_system_utilization_metrics_are_discoverable(embedded):
     import os
     from pathlib import Path
     import subprocess
@@ -50,7 +52,10 @@ def test_system_utilization_metrics_are_discoverable():
     # The suite uses tests/config, which intentionally contains no procfs metrics.
     # A fresh process isolates ASTL's initialized state and loads the shipped config.
     env = dict(os.environ)
-    env["ASTL_CONFIG_DIR"] = str(Path(__file__).resolve().parents[2] / "config")
+    if embedded:
+        env.pop("ASTL_CONFIG_DIR", None)
+    else:
+        env["ASTL_CONFIG_DIR"] = str(Path(__file__).resolve().parents[2] / "config")
     env["ASTL_COLLECTORS"] = "procfs,windows"
     result = subprocess.run([sys.executable, "-c", """
 import astl

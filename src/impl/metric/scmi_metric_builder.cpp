@@ -146,9 +146,9 @@ static auto AppendScmiConfigurationsForSpecification(const AstlConfiguration&   
   const std::string_view uuid_sv = spec_info.uuid.normalized_value;
   ASTL_LOG_DEBUG("Processing SCMI specification for UUID {}", uuid_sv);
 
-  astl_status_code status = ASTL_STATUS_SUCCESS;
-  auto             scmi_specification_result =
-      config::TryParseJsonFile<scmi::spec::ScmiSpecification>(spec_info.specification_file);
+  astl_status_code status                    = ASTL_STATUS_SUCCESS;
+  auto             scmi_specification_result = config::TryParseJsonFile<scmi::spec::ScmiSpecification>(
+      spec_info.specification_file, configuration.resources.get());
   if (!scmi_specification_result.has_value()) {
     ASTL_LOG_ERROR("Failed to parse SCMI specification file {} for UUID {}: error code {}",
                    spec_info.specification_file.string(), uuid_sv, astlStatusString(scmi_specification_result.error()));
@@ -162,8 +162,8 @@ static auto AppendScmiConfigurationsForSpecification(const AstlConfiguration&   
 
   std::optional<metrics::spec::MetricsDeclaration> metric_declarations;
   if (status == ASTL_STATUS_SUCCESS) {
-    auto metric_declaration_result =
-        config::TryParseJsonFile<metrics::spec::MetricsDeclaration>(spec_info.metric_declaration_file);
+    auto metric_declaration_result = config::TryParseJsonFile<metrics::spec::MetricsDeclaration>(
+        spec_info.metric_declaration_file, configuration.resources.get());
     if (!metric_declaration_result.has_value()) {
       ASTL_LOG_ERROR("Failed to parse metric declaration file {} for UUID {}: error code {}",
                      spec_info.metric_declaration_file.string(), uuid_sv,

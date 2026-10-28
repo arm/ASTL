@@ -229,23 +229,11 @@ auto BuildStandardProcfsMetricConfig(const ProcfsRenderedMetricMetadata&        
 auto LoadProcfsMetricDeclarations(const AstlConfiguration& configuration)
     -> std::expected<std::vector<std::pair<std::string, metrics::spec::MetricJsonDeclaration>>, astl_status_code> {
   const auto procfs_metrics_dir = configuration.metrics_dir_path / "procfs";
-  if (!std::filesystem::exists(procfs_metrics_dir)) {
-    ASTL_LOG_INFO("PROCFS metrics config directory not found at {}, skipping PROCFS metric declarations",
-                  procfs_metrics_dir.string());
-    return std::vector<std::pair<std::string, metrics::spec::MetricJsonDeclaration>>{};
-  }
-
-  std::vector<std::filesystem::path> declaration_files;
-  for (const auto& entry : std::filesystem::directory_iterator{procfs_metrics_dir}) {
-    if (entry.is_regular_file() && entry.path().extension() == ".json") {
-      declaration_files.push_back(entry.path());
-    }
-  }
-  std::ranges::sort(declaration_files);
-
+  const auto declaration_files  = configuration.resources->Files(procfs_metrics_dir, false);
   std::vector<std::pair<std::string, metrics::spec::MetricJsonDeclaration>> metric_declarations;
   for (const auto& declaration_file : declaration_files) {
-    auto declaration = config::TryParseJsonFile<metrics::spec::MetricsDeclaration>(declaration_file);
+    auto declaration =
+        config::TryParseJsonFile<metrics::spec::MetricsDeclaration>(declaration_file, configuration.resources.get());
     if (!declaration.has_value()) {
       return std::unexpected(declaration.error());
     }
@@ -253,6 +241,13 @@ auto LoadProcfsMetricDeclarations(const AstlConfiguration& configuration)
       if (!IsProcfsMetricDeclaration(metric_declaration)) {
         continue;
       }
+      std::erase_if(metric_declarations, [&](const auto& old) {
+        if (old.first != metric_name) {
+          return false;
+        }
+        ASTL_LOG_WARNING("PROCFS metric '{}' replaced by {}", metric_name, declaration_file.string());
+        return true;
+      });
       metric_declarations.emplace_back(metric_name, metric_declaration);
     }
   }

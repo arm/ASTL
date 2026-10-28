@@ -30,10 +30,19 @@ inline auto ResolvePathRelativeTo(const std::filesystem::path& base_dir, const s
   return (base_dir / path).lexically_normal();
 }
 
-inline auto FindLookupFiles(const std::filesystem::path& root_dir, std::string_view file_name)
+inline auto FindLookupFiles(const std::filesystem::path& root_dir, std::string_view file_name,
+                            const ConfigSource* source = nullptr)
     -> std::expected<std::vector<std::filesystem::path>, astl_status_code> {
   std::vector<std::filesystem::path> lookup_files;
 
+  if (source) {
+    for (const auto& path : source->Files(root_dir)) {
+      if (path.filename() == file_name) {
+        lookup_files.push_back(path);
+      }
+    }
+    return lookup_files;
+  }
   try {
     if (!std::filesystem::is_directory(root_dir)) {
       ASTL_LOG_ERROR("Lookup root directory does not exist: {}", root_dir.string());
@@ -59,16 +68,16 @@ inline auto FindLookupFiles(const std::filesystem::path& root_dir, std::string_v
 
 }  // namespace detail
 
-inline auto LoadPlatformLookupFragments(const std::filesystem::path& metrics_dir)
+inline auto LoadPlatformLookupFragments(const std::filesystem::path& metrics_dir, const ConfigSource* source = nullptr)
     -> std::expected<metrics::spec::PlatformLookup, astl_status_code> {
-  auto lookup_files = detail::FindLookupFiles(metrics_dir, "platform_lookup.json");
+  auto lookup_files = detail::FindLookupFiles(metrics_dir, "platform_lookup.json", source);
   if (!lookup_files.has_value()) {
     return std::unexpected(lookup_files.error());
   }
 
   metrics::spec::PlatformLookup merged_lookup;
   for (const auto& lookup_file : *lookup_files) {
-    auto lookup = TryParseJsonFile<metrics::spec::PlatformLookup>(lookup_file);
+    auto lookup = TryParseJsonFile<metrics::spec::PlatformLookup>(lookup_file, source);
     if (!lookup.has_value()) {
       return std::unexpected(lookup.error());
     }
@@ -77,6 +86,15 @@ inline auto LoadPlatformLookupFragments(const std::filesystem::path& metrics_dir
     for (auto& entry : lookup->metric_files_by_platform_uuid) {
       entry.metrics_declaration_file.resolved_metrics_file =
           detail::ResolvePathRelativeTo(lookup_file.parent_path(), entry.metrics_declaration_file.metrics_file);
+      std::erase_if(merged_lookup.metric_files_by_platform_uuid, [&](const auto& old) {
+        if (old.uuid.num_significant_bytes != entry.uuid.num_significant_bytes ||
+            old.uuid.SignificantPart() != entry.uuid.SignificantPart()) {
+          return false;
+        }
+        ASTL_LOG_WARNING("Platform {} replaced: {} -> {}", entry.uuid.normalized_value,
+                         old.metrics_declaration_file.resolved_metrics_file.string(), lookup_file.string());
+        return true;
+      });
       merged_lookup.metric_files_by_platform_uuid.emplace_back(std::move(entry));
     }
   }
@@ -84,16 +102,17 @@ inline auto LoadPlatformLookupFragments(const std::filesystem::path& metrics_dir
   return merged_lookup;
 }
 
-inline auto LoadRepoMetaFragments(const std::filesystem::path& scmi_specification_dir)
+inline auto LoadRepoMetaFragments(const std::filesystem::path& scmi_specification_dir,
+                                  const ConfigSource*          source = nullptr)
     -> std::expected<scmi::spec::RepoMeta, astl_status_code> {
-  auto repo_meta_files = detail::FindLookupFiles(scmi_specification_dir, "repometa.json");
+  auto repo_meta_files = detail::FindLookupFiles(scmi_specification_dir, "repometa.json", source);
   if (!repo_meta_files.has_value()) {
     return std::unexpected(repo_meta_files.error());
   }
 
   scmi::spec::RepoMeta merged_repo_meta;
   for (const auto& repo_meta_file : *repo_meta_files) {
-    auto repo_meta = TryParseJsonFile<scmi::spec::RepoMeta>(repo_meta_file);
+    auto repo_meta = TryParseJsonFile<scmi::spec::RepoMeta>(repo_meta_file, source);
     if (!repo_meta.has_value()) {
       return std::unexpected(repo_meta.error());
     }
@@ -102,6 +121,15 @@ inline auto LoadRepoMetaFragments(const std::filesystem::path& scmi_specificatio
     for (auto& entry : repo_meta->spec_files_by_uuid) {
       entry.spec_file.resolved_specification_file =
           detail::ResolvePathRelativeTo(repo_meta_file.parent_path(), entry.spec_file.specification_file);
+      std::erase_if(merged_repo_meta.spec_files_by_uuid, [&](const auto& old) {
+        if (old.uuid.num_significant_bytes != entry.uuid.num_significant_bytes ||
+            old.uuid.SignificantPart() != entry.uuid.SignificantPart()) {
+          return false;
+        }
+        ASTL_LOG_WARNING("SCMI specification {} replaced: {} -> {}", entry.uuid.normalized_value,
+                         old.spec_file.resolved_specification_file.string(), repo_meta_file.string());
+        return true;
+      });
       merged_repo_meta.spec_files_by_uuid.emplace_back(std::move(entry));
     }
   }

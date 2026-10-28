@@ -699,15 +699,6 @@ TEST_CASE("CreateScmiMetricConfigs validates metric declarations and unsupported
   }
 }
 
-// Basic path / configuration retrieval tests
-TEST_CASE("ConfigurationManager::GetAstlFilePath returns success", "[ConfigManager][Paths]") {
-  auto result = astl::ConfigurationManager::GetAstlFilePath();
-  if (!result) {
-    std::cerr << "[DEBUG] GetAstlFilePath error code: " << astlStatusString(result.error()) << '\n';
-  }
-  REQUIRE(result);  // ensure success; do not inspect underlying path
-}
-
 TEST_CASE("ConfigurationManager::GetConfiguration returns configuration", "[ConfigManager][Paths]") {
   auto result = astl::ConfigurationManager::GetConfiguration();
   if (!result) {

@@ -4,6 +4,7 @@
 
 #include <expected>
 #include <filesystem>
+#include <fstream>
 #include <string_view>
 
 #include "../../test_includes.hpp"
@@ -21,6 +22,7 @@ void CreateConfigTree(const fs::path& config_dir) {
   std::error_code ec;
   fs::create_directories(config_dir / "metrics", ec);
   REQUIRE(!ec);
+  std::ofstream(config_dir / "metrics" / "fixture.json") << "{}";
   fs::create_directories(config_dir / "scmi" / "public", ec);
   REQUIRE(!ec);
 }
@@ -50,9 +52,9 @@ TEST_CASE("AstlConfiguration::CreateConfiguration uses valid ASTL_CONFIG_DIR ove
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
 
   REQUIRE(configuration_result.has_value());
-  REQUIRE(configuration_result->config_dir_path == config_dir);
-  REQUIRE(configuration_result->metrics_dir_path == config_dir / "metrics");
-  REQUIRE(configuration_result->scmi_specification_dir == config_dir / "scmi" / "public");
+  REQUIRE(configuration_result->config_dir_path.empty());
+  REQUIRE(configuration_result->metrics_dir_path == "metrics");
+  REQUIRE(configuration_result->scmi_specification_dir == fs::path("scmi/public"));
 }
 
 TEST_CASE("AstlConfiguration::CreateConfiguration parses ASTL_COLLECTORS allowlist", "[AstlConfiguration]") {
@@ -141,39 +143,6 @@ TEST_CASE("AstlConfiguration::CreateConfiguration rejects invalid ASTL_CONFIG_DI
 
   REQUIRE_FALSE(configuration_result.has_value());
   REQUIRE(configuration_result.error() == ASTL_STATUS_BAD_CONFIGURATION);
-}
-
-TEST_CASE("AstlConfiguration::CreateConfiguration falls back to XDG_DATA_HOME/astl/config on Linux",
-          "[AstlConfiguration]") {
-  const fs::path xdg_root   = fs::temp_directory_path() / "astl_xdg_data_home";
-  const fs::path config_dir = xdg_root / "astl" / "config";
-  TempFileGuard  xdg_guard(xdg_root);
-  CreateConfigTree(config_dir);
-
-  EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, "");
-  EnvVarGuard xdg_guard_var(astl::EnvVar::XDG_DATA_HOME, xdg_root.string());
-
-  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
-
-  REQUIRE(configuration_result.has_value());
-  REQUIRE(configuration_result->config_dir_path == config_dir);
-}
-
-TEST_CASE("AstlConfiguration::CreateConfiguration falls back to HOME/.local/share/astl/config on Linux",
-          "[AstlConfiguration]") {
-  const fs::path home_root  = fs::temp_directory_path() / "astl_home_data_home";
-  const fs::path config_dir = home_root / ".local" / "share" / "astl" / "config";
-  TempFileGuard  home_guard(home_root);
-  CreateConfigTree(config_dir);
-
-  EnvVarGuard config_dir_guard(astl::EnvVar::ASTL_CONFIG_DIR, "");
-  EnvVarGuard xdg_guard_var(astl::EnvVar::XDG_DATA_HOME, "");
-  EnvVarGuard home_guard_var(astl::EnvVar::HOME, home_root.string());
-
-  auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
-
-  REQUIRE(configuration_result.has_value());
-  REQUIRE(configuration_result->config_dir_path == config_dir);
 }
 
 TEST_CASE("AstlConfiguration::CreateConfiguration honors ASTL_SCMI_SYSFS_TELEMETRY_ROOT override",

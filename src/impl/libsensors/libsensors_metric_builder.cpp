@@ -456,7 +456,8 @@ static auto MergeMetricsDeclarationJson(nlohmann::json base_json, const nlohmann
 }
 
 static auto LoadMergedMetricsDeclarationJson(const std::filesystem::path&     json_file_path,
-                                             std::unordered_set<std::string>& active_paths)
+                                             std::unordered_set<std::string>& active_paths,
+                                             const config::ConfigSource*      source)
     -> std::expected<nlohmann::json, astl_status_code>;
 
 class ActiveDeclarationPathScope {
@@ -475,7 +476,8 @@ class ActiveDeclarationPathScope {
 };
 
 static auto MergeParentDeclarationIfPresent(const std::filesystem::path& normalized_path, nlohmann::json& merged_json,
-                                            std::unordered_set<std::string>& active_paths)
+                                            std::unordered_set<std::string>& active_paths,
+                                            const config::ConfigSource*      source)
     -> std::expected<void, astl_status_code> {
   if (!merged_json.contains("extends")) {
     return {};
@@ -490,7 +492,7 @@ static auto MergeParentDeclarationIfPresent(const std::filesystem::path& normali
     parent_path = normalized_path.parent_path() / parent_path;
   }
 
-  auto parent_json_or_error = LoadMergedMetricsDeclarationJson(parent_path, active_paths);
+  auto parent_json_or_error = LoadMergedMetricsDeclarationJson(parent_path, active_paths, source);
   if (!parent_json_or_error.has_value()) {
     return std::unexpected(parent_json_or_error.error());
   }
@@ -499,10 +501,12 @@ static auto MergeParentDeclarationIfPresent(const std::filesystem::path& normali
 }
 
 static auto LoadMergedMetricsDeclarationJson(const std::filesystem::path&     json_file_path,
-                                             std::unordered_set<std::string>& active_paths)
+                                             std::unordered_set<std::string>& active_paths,
+                                             const config::ConfigSource*      source)
     -> std::expected<nlohmann::json, astl_status_code> {
   std::error_code ec;
-  const auto      normalized_path = std::filesystem::weakly_canonical(json_file_path, ec);
+  const auto      normalized_path =
+      source ? json_file_path.lexically_normal() : std::filesystem::weakly_canonical(json_file_path, ec);
   if (ec) {
     ASTL_LOG_ERROR("Failed to canonicalize libsensors metrics declaration path {}: {}", json_file_path.string(),
                    ec.message());
@@ -515,13 +519,13 @@ static auto LoadMergedMetricsDeclarationJson(const std::filesystem::path&     js
   }
   const ActiveDeclarationPathScope active_path_scope{active_paths, active_key};
 
-  auto loaded_json_or_error = config::LoadJsonFile(normalized_path);
+  auto loaded_json_or_error = config::LoadJsonFile(normalized_path, source);
   if (!loaded_json_or_error.has_value()) {
     return std::unexpected(loaded_json_or_error.error());
   }
 
   auto merged_json         = std::move(loaded_json_or_error.value());
-  auto merge_parent_status = MergeParentDeclarationIfPresent(normalized_path, merged_json, active_paths);
+  auto merge_parent_status = MergeParentDeclarationIfPresent(normalized_path, merged_json, active_paths, source);
   if (!merge_parent_status.has_value()) {
     return std::unexpected(merge_parent_status.error());
   }
@@ -867,7 +871,7 @@ static auto FindStableMetricFamilyName(const AstlConfiguration& configuration, s
     chip_family.erase(separator_position);
     const auto metrics_file_path =
         configuration.metrics_dir_path / "libsensors" / ("libsensors_" + chip_family + ".json");
-    if (std::filesystem::exists(metrics_file_path)) {
+    if (configuration.resources->Exists(metrics_file_path)) {
       return chip_family;
     }
   }
@@ -986,12 +990,13 @@ static auto LoadMetricDeclarationsForTarget(const AstlConfiguration& configurati
   const auto lookup_names = BuildDeclarationLookupNames(target);
   for (const auto& [lookup_name, is_exact_match] : lookup_names) {
     const auto metrics_file_path = configuration.metrics_dir_path / "libsensors" / (lookup_name + ".json");
-    if (!std::filesystem::exists(metrics_file_path)) {
+    if (!configuration.resources->Exists(metrics_file_path)) {
       continue;
     }
 
     std::unordered_set<std::string> active_paths;
-    auto merged_json_or_error = LoadMergedMetricsDeclarationJson(metrics_file_path, active_paths);
+    auto                            merged_json_or_error =
+        LoadMergedMetricsDeclarationJson(metrics_file_path, active_paths, configuration.resources.get());
     if (!merged_json_or_error.has_value()) {
       return std::unexpected(merged_json_or_error.error());
     }
@@ -1161,7 +1166,8 @@ static auto BuildDeclaredRegistrationDetails(const DiscoveredSensorMetric& senso
     ASTL_LOG_ERROR("libsensors metric '{}' cannot be configured as an event because its output type is FLOAT64",
                    final_metric_name);
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  } else if (metric_declaration.event_values.has_value()) {
+  }
+  if (metric_declaration.event_values.has_value()) {
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 

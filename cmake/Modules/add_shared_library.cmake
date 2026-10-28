@@ -8,16 +8,6 @@ function(astl_add_shared_library)
   add_library(${library_name} SHARED)
   add_library(Astl::${library_name} ALIAS ${library_name})
 
-  # Create a symlink to the configuration JSON next to the built shared library.
-  add_custom_command(
-    TARGET ${library_name}
-    POST_BUILD
-    COMMAND
-      ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/samples/sample_configuration/astl_configuration.json
-      $<TARGET_FILE_DIR:${library_name}>/astl_configuration.json
-    COMMENT "Creating symlink to astl_configuration.json in shared library output directory"
-    VERBATIM)
-
   include(Warnings)
   set_project_warnings(${library_name})
 
@@ -58,18 +48,6 @@ function(astl_add_shared_library)
     PROPERTIES PUBLIC_HEADER "${public_headers}"
                DEBUG_POSTFIX "d"
                OUTPUT_NAME "astl-${PROJECT_VERSION_MAJOR}")
-
-  if(UNIX)
-    find_program(BASH_PROGRAM bash REQUIRED)
-    set(astl_runtime_config_dir "$<TARGET_FILE_DIR:${library_name}>/config")
-    add_custom_target(
-      ${library_name}_publish_configs ALL
-      COMMAND ${CMAKE_COMMAND} -E make_directory ${astl_runtime_config_dir}
-      COMMAND ${BASH_PROGRAM} ${PROJECT_SOURCE_DIR}/scripts/publish_configs.sh -o ${astl_runtime_config_dir}
-      COMMENT "Publishing ASTL config files to ${astl_runtime_config_dir}"
-      VERBATIM)
-    add_dependencies(${library_name} ${library_name}_publish_configs)
-  endif()
 
   install(
     TARGETS ${library_name}

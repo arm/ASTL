@@ -307,8 +307,12 @@ TEST_CASE("LibsensorsTopologyPlugin::ScanForTargets keeps raw chip names even wh
 
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
-  auto configuration             = configuration_result.value();
-  configuration.metrics_dir_path = temp_root;
+  auto        configuration = configuration_result.value();
+  EnvVarGuard config_dir(astl::EnvVar::ASTL_CONFIG_DIR, temp_root.string());
+  auto        source = astl::config::ConfigSource::Create();
+  REQUIRE(source.has_value());
+  configuration.resources = *source;
+  configuration.metrics_dir_path.clear();
 
   auto result = astl::LibsensorsTopologyPlugin::detail::ScanForTargetsWithLibsensors(configuration, harness.api);
 

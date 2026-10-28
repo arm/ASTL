@@ -930,7 +930,7 @@ That means:
 
 ## ASTL Runtime Configuration Resolution
 
-For live discovery, ASTL must find its configuration directory.
+Live discovery uses one selected explicit, adjacent, or bundled configuration source.
 
 The procfs collector exposes the `sysutil` target with `cpu.total.utilization`,
 `cpu.N.utilization`, `memory.total`, `memory.used`, and `memory.utilization`.
@@ -954,23 +954,29 @@ Backend paths are resolved independently from the configuration directory:
 - `ASTL_PROCFS_ROOT`: procfs root used for topology discovery, metric discovery,
   and collection. Defaults to `/proc`.
 
-Current search order:
+ASTL uses a single configuration source, selected in this order:
 
-1. `ASTL_CONFIG_DIR`
-2. User config directory
-   - Linux: `$XDG_DATA_HOME/astl/config` or `~/.local/share/astl/config`
-3. System config directory
-   - Linux: `/usr/local/share/astl/config`
-4. Relative to the ASTL library location
-   - `<libdir>/config`
+1. The directory specified by `ASTL_CONFIG_DIR`, when set.
+2. A `config/` directory beside the loaded ASTL library, or beside the executable
+   when ASTL is statically linked.
+3. The configuration embedded in the library.
 
-When configuration is found, ASTL derives:
+Sources are not combined. No OS-specific user or system config directories are
+searched. An invalid explicit directory (including an empty `ASTL_CONFIG_DIR`)
+or invalid contents in the selected directory cause an error, without falling
+back to another source.
 
-- `metrics/`
-- `groups/`
-- `scmi/public/`
+Configuration references (`extends`, `metrics_file`, and `specification_file`)
+must be relative to the referring JSON file and resolve to a JSON file within the
+selected config directory. Absolute paths and paths escaping that directory are
+rejected.
 
-This config payload is necessary for dynamic processed-metric discovery.
+Every build embeds configuration. `ASTL_EMBED_CONFIG_DIR` selects the prepared input
+tree at configure time (default: this project's `config/`). Apply ossmosis
+and release-profile filtering before configuration. `ASTL_RELEASE_PROFILE`
+identifies the embedded input set in the generated resource manifest.
+
+The resource tree contains `metrics/`, `groups/`, and `scmi/public/`.
 
 ## What Dynamic Discovery Means in Practice
 
@@ -981,7 +987,7 @@ Live host discovery is possible when:
 - The low-level source is present,
 - ASTL can reach the source,
 - ASTL can read the source metadata needed to identify it,
-- ASTL can load matching ASTL config files.
+- ASTL can load matching configuration resources.
 
 ### Loaded-Session Mode
 

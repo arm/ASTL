@@ -321,7 +321,6 @@ jobs:
         if: steps.existing-release.outputs.reuse != 'true'
         run: |
           "${{ github.workspace }}/ASTL/scripts/release/stage_release.sh" \
-            --skip-build \
             --version "${{ env.VERSION_STRING }}" \
             --output-dir "${{ github.workspace }}"
 

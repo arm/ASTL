@@ -15,6 +15,7 @@
 #include "astl/astl_telemetry.h"
 #include "common/capabilities.hpp"
 #include "common/metric_config.hpp"
+#include "config/config_source.hpp"
 #include "config/scmi_platform_telemetry_spec.hpp"
 
 namespace astl {
@@ -56,20 +57,19 @@ struct AstlConfiguration {
   /** @brief Path to procfs. Defaults to /proc, but can be overridden with env var ASTL_PROCFS_ROOT. */
   std::filesystem::path procfs_root_path;
 
-  /** @brief Path to the directory containing ASTL metric definitions and platform-specific SCMI specifications
-   * initialized from ASTL_CONFIG_DIR
+  /** @brief Logical root of the selected configuration snapshot (empty path)
    */
   std::filesystem::path config_dir_path;
 
-  /** @brief Path to the subdirectory containing ASTL metric definitions, derived from config_dir_path
+  /** @brief Logical path to the subdirectory containing ASTL metric definitions, derived from config_dir_path
    */
   std::filesystem::path metrics_dir_path;
 
-  /** @brief Path to the subdirectory containing ASTL metric-group definitions, derived from config_dir_path
+  /** @brief Logical path to the subdirectory containing ASTL metric-group definitions, derived from config_dir_path
    */
   std::filesystem::path groups_dir_path;
 
-  /** @brief Path to the directory containing platform-specific SCMI specifications
+  /** @brief Logical path to platform-specific SCMI specifications
    * derived from config_dir_path
    */
   std::filesystem::path scmi_specification_dir;
@@ -79,6 +79,8 @@ struct AstlConfiguration {
 
   /** @brief Collector allowlist used for live discovery. */
   CollectorSelection collectors;
+
+  std::shared_ptr<const config::ConfigSource> resources;
 
   [[nodiscard]] static auto CreateConfiguration() -> std::expected<AstlConfiguration, astl_status_code>;
 

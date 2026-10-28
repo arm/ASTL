@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <random>
 #include <string>
 #include <string_view>
@@ -134,19 +135,39 @@ inline astl_status_code SetEnvVar(EnvVar env_var, const std::string& var_value) 
   return status;
 }
 
+/* @brief Remove an environment variable, succeeding if it is already absent.
+ * Unlike setting an empty string on POSIX, this removes the variable entirely.
+ */
+inline astl_status_code UnsetEnvVar(EnvVar env_var) {
+#ifndef _WIN32
+  const auto var_name = std::string(GetEnvVarName(env_var));
+  return unsetenv(var_name.c_str()) == 0 ? ASTL_STATUS_SUCCESS : ASTL_STATUS_INTERNAL_ERROR;
+#else
+  return SetEnvVar(env_var, "");
+#endif
+}
+
 /* @brief Get environment variable value
  * @param env_var  The environment variable enum value
+ * @param present  Optional output distinguishing an absent variable from an empty value
  *
  * @return the value of the environment variable if found or empty std::string()
  */
-inline std::string GetEnvVar(EnvVar env_var) {
+inline std::string GetEnvVar(EnvVar env_var, bool* present = nullptr) {
   std::string var_name = std::string(GetEnvVarName(env_var));
 #ifndef _WIN32  // Linux
   const char* var = getenv(var_name.c_str());
+  if (present != nullptr) {
+    *present = var != nullptr;
+  }
   return (var == nullptr) ? std::string() : std::string(var);
 #else  // Windows
-  char* var_value = nullptr;
-  if (_dupenv_s(&var_value, nullptr, var_name.c_str()) != 0 || var_value == nullptr) {
+  char*      var_value = nullptr;
+  const auto result    = _dupenv_s(&var_value, nullptr, var_name.c_str());
+  if (present != nullptr) {
+    *present = result == 0 && var_value != nullptr;
+  }
+  if (result != 0 || var_value == nullptr) {
     return std::string();
   }
   std::string var(var_value);

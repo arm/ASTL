@@ -12,11 +12,15 @@
 
 #include "astl/astl.h"
 #include "astl_logger.hpp"
+#include "config/config_source.hpp"
 
 namespace astl::config {
 
-inline auto LoadJsonFile(const std::filesystem::path& json_file_path)
+inline auto LoadJsonFile(const std::filesystem::path& json_file_path, const ConfigSource* source = nullptr)
     -> std::expected<nlohmann::json, astl_status_code> {
+  if (source) {
+    return source->Load(json_file_path);
+  }
   try {
     std::ifstream json_file{json_file_path};
     json_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
@@ -31,8 +35,9 @@ inline auto LoadJsonFile(const std::filesystem::path& json_file_path)
 }
 
 template <typename SpecType>
-inline auto TryParseJsonFile(const std::filesystem::path& json_file_path) -> std::expected<SpecType, astl_status_code> {
-  auto json_or_error = LoadJsonFile(json_file_path);
+inline auto TryParseJsonFile(const std::filesystem::path& json_file_path, const ConfigSource* source = nullptr)
+    -> std::expected<SpecType, astl_status_code> {
+  auto json_or_error = LoadJsonFile(json_file_path, source);
   if (!json_or_error.has_value()) {
     return std::unexpected(json_or_error.error());
   }

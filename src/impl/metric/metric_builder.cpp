@@ -34,7 +34,7 @@ using RegisterMetricsFunction = astl_status_code (*)(
 static auto LoadMetricGroupDescriptions(const AstlConfiguration& configuration)
     -> std::expected<MetricGroupDescriptionMap, astl_status_code> {
   const auto metric_group_catalog_path = configuration.groups_dir_path / "metric_groups.json";
-  if (!std::filesystem::exists(metric_group_catalog_path)) {
+  if (!configuration.resources->Exists(metric_group_catalog_path)) {
     ASTL_LOG_WARNING(
         "Metric group metadata config not found at {}. "
         "Metrics declaring metric_groups will fail during registration.",
@@ -42,8 +42,8 @@ static auto LoadMetricGroupDescriptions(const AstlConfiguration& configuration)
     return MetricGroupDescriptionMap{};
   }
 
-  auto declaration =
-      config::TryParseJsonFile<metrics::groups::spec::MetricGroupsDeclaration>(metric_group_catalog_path);
+  auto declaration = config::TryParseJsonFile<metrics::groups::spec::MetricGroupsDeclaration>(
+      metric_group_catalog_path, configuration.resources.get());
   if (!declaration.has_value()) {
     return std::unexpected(declaration.error());
   }
