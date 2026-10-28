@@ -610,6 +610,9 @@ auto Orchestrator::ResetCollectionStateForCleanConfigureLocked() -> astl_status_
     return reset_status;
   }
   _metric_manager->ClearCollectionOperationState();
+  // All previous samples have been removed: this is now a fresh live session.
+  ClearLoadedPlatformInfo();
+  CaptureSessionWallClockCorrelation();
   Operation::ResetOperationIdAllocator();
   ResetFinalOutputEmissionState();
   return ASTL_STATUS_SUCCESS;

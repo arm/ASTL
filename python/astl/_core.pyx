@@ -219,6 +219,23 @@ def version() -> tuple[int, int, int, str]:
     v = astlVersion()
     return v.major, v.minor, v.micro, astlVersionString().decode()
 
+cpdef dict get_clock_correlation():
+    """Return the collection's raw/realtime reference in integer nanoseconds.
+
+    Convert a raw sample with realtime_ns + (timestamp - raw_ns).
+    The uncertainty bounds read latency only; nodes must synchronize their clocks.
+    Raises ASTLError when no reference is available (for example legacy archives).
+    """
+    cdef astl_clock_correlation_t reference
+    cdef astl_get_clock_correlation_params_t params
+    params.size = sizeof(astl_get_clock_correlation_params_t)
+    params.flags = 0
+    params.correlation = &reference
+    _check(astlGetClockCorrelation(&params))
+    return {"raw_ns": reference.raw_ns, "realtime_ns": reference.realtime_ns,
+            "uncertainty_ns": reference.uncertainty_ns}
+
+
 cpdef dict get_system_info():
     """Return host/session platform metadata from ASTL as a dictionary."""
     cdef astl_platform_props_t info

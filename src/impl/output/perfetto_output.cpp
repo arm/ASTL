@@ -144,6 +144,13 @@ auto PerfettoOutput::WriteHeader() -> void {
                 << EscapeJsonString(info.firmware_version) << R"(","hostname":")" << EscapeJsonString(info.hostname)
                 << R"(","architecture":")" << EscapeJsonString(info.architecture) << R"("}})";
 
+  if (const auto reference = GetActiveWallClockCorrelation()) {
+    _trace_stream << ",\n"
+                  << R"({"ph":"M","pid":0,"name":"astl_clock_correlation","args":{"raw_ns":")" << reference->raw_ns
+                  << R"(","realtime_ns":")" << reference->realtime_ns << R"(","uncertainty_ns":)"
+                  << reference->uncertainty_ns << "}}";
+  }
+
   _first_event = false;  // We have written the first element; subsequent events need leading comma.
   _opened_json = true;
 }
@@ -182,7 +189,8 @@ auto PerfettoOutput::WriteProcessedSamples(const ProcessedSamplesMap& samples) -
               }
               _first_event = false;
 
-              uint64_t    ts_us          = static_cast<uint64_t>(sample.timestamp.time_since_epoch().count());
+              uint64_t ts_us = static_cast<uint64_t>(
+                  std::chrono::duration_cast<std::chrono::microseconds>(sample.timestamp.time_since_epoch()).count());
               std::string category       = PerfettoOutput::DetermineCategory(props.units);
               std::string composite_name = target_name + "." + metric_name;
               _trace_stream << R"({"ph":"C","cat":")" << category << R"(","name":")" << composite_name << R"(","ts":)"

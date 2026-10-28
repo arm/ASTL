@@ -68,6 +68,7 @@ existing names are not removed without a deprecation period.
 
 from ._core import (
     get_system_info,
+    get_clock_correlation,
     get_targets,
     get_counters,
     get_metrics,
@@ -249,6 +250,7 @@ class MetricType(IntEnum):
 __all__ = [
     "initialize",
     "get_system_info",
+    "get_clock_correlation",
     "get_targets",
     "get_counters",
     "get_metrics",

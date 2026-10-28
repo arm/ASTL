@@ -1,5 +1,15 @@
 {
   "functions": {
+    "astlGetClockCorrelation": {
+      "python": {
+        "mode": "wrapped",
+        "symbol": "get_clock_correlation"
+      },
+      "go": {
+        "mode": "wrapped",
+        "symbol": "GetClockCorrelation"
+      }
+    },
     "astlStatusString": {
       "python": {
         "mode": "wrapped",

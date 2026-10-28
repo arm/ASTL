@@ -8,6 +8,7 @@
 
 #include "../../mock_classes.hpp"
 #include "../../test_utilities.hpp"
+#include "common/system_info.hpp"
 #include "output/interval_csv_output.hpp"
 
 namespace {
@@ -119,6 +120,7 @@ TEST_CASE("IntervalCsvOutput empty map emits collection info only", "[intervalcs
   REQUIRE(content.find("ASTL Build Version,") != std::string::npos);
   REQUIRE(content.find("Collection Date/Time,") != std::string::npos);
   REQUIRE(content.find("timestamp_us,value") == std::string::npos);
+  REQUIRE_FALSE(writer.Ready());
 }
 
 TEST_CASE("IntervalCsvOutput converts monotonic nanoseconds to timestamp_us", "[intervalcsv]") {  // NOLINT
@@ -139,4 +141,91 @@ TEST_CASE("IntervalCsvOutput converts monotonic nanoseconds to timestamp_us", "[
   REQUIRE(ifs.is_open());
   std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
   REQUIRE(content.find("1234,3") != std::string::npos);
+}
+
+TEST_CASE("Archived clock reference survives replay and supplies UTC output", "[intervalcsv][wallclock]") {
+  const std::filesystem::path directory = "astl_clock_reference_test";
+  std::filesystem::create_directories(directory);
+  struct Cleanup {
+    explicit Cleanup(const std::filesystem::path& directory) : path(directory) {}
+    Cleanup(const Cleanup&)                                = delete;
+    auto operator=(const Cleanup&) -> Cleanup&             = delete;
+    Cleanup(Cleanup&&)                                     = delete;
+    auto                  operator=(Cleanup&&) -> Cleanup& = delete;
+    std::filesystem::path path;
+    ~Cleanup() {
+      astl::ClearLoadedPlatformInfo();
+      std::filesystem::remove_all(path);
+    }
+  } cleanup{directory};
+  {
+    std::ofstream metadata(directory / astl::kPlatformInfoFileName);
+    metadata << R"({"wall_clock_correlation":{"raw_ns":1000,"realtime_ns":0,"uncertainty_ns":3}})";
+  }
+  REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::SavePlatformInfoToCacheDir(directory / "saved") == ASTL_STATUS_SUCCESS);
+  astl::ClearLoadedPlatformInfo();
+  astl::CaptureSessionWallClockCorrelation();
+  REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory / "saved") == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::GetActiveWallClockCorrelation() == astl::WallClockCorrelation{1000, 0, 3});
+  TestTargetBase            target{"Soc"};
+  TestMetricBase            metric{"Power", ASTL_UNITS_WATTS};
+  astl::ProcessedSamplesMap processed;
+  processed[&target][&metric].push_back(
+      MakeSample(3.14, astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{1001}}));
+  {
+    astl::IntervalCsvOutput writer(directory / "output.csv");
+    REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
+  }
+  std::ifstream     output(directory / "output.csv");
+  const std::string content((std::istreambuf_iterator<char>(output)), std::istreambuf_iterator<char>());
+  REQUIRE(content.find("timestamp_us,value,timestamp_utc\n1,3.14,1970-01-01T00:00:00.000000001Z") != std::string::npos);
+  REQUIRE(content.find("Collection Date/Time,\"1970-01-01T00:00:00.000000000Z\"") != std::string::npos);
+  SECTION("Legacy metadata does not inherit the analysis host reference") {
+    std::ofstream(directory / astl::kPlatformInfoFileName) << "{}";
+    REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory) == ASTL_STATUS_SUCCESS);
+    REQUIRE_FALSE(astl::GetActiveWallClockCorrelation());
+  }
+  SECTION("Missing metadata does not inherit the analysis host reference") {
+    REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory / "missing") == ASTL_STATUS_SUCCESS);
+    REQUIRE_FALSE(astl::GetActiveWallClockCorrelation());
+    REQUIRE_FALSE(astl::GetLoadedPlatformInfo());
+  }
+  {
+    astl::IntervalCsvOutput legacy_writer(directory / "legacy.csv");
+    REQUIRE(legacy_writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
+  }
+  std::ifstream     legacy_output(directory / "legacy.csv");
+  const std::string legacy((std::istreambuf_iterator<char>(legacy_output)), std::istreambuf_iterator<char>());
+  REQUIRE(legacy.find("1,3.14,\n") != std::string::npos);
+  REQUIRE(legacy.find("Collection Date/Time,\"<unknown>\"") != std::string::npos);
+}
+
+TEST_CASE("Clock metadata rejects lossy numeric types and invalid uncertainty", "[wallclock]") {
+  const auto    directory = std::filesystem::temp_directory_path() / "astl_invalid_clock_metadata";
+  TempFileGuard guard{directory};
+  std::filesystem::create_directories(directory);
+  struct RestoreHost {
+    RestoreHost()                                      = default;
+    RestoreHost(const RestoreHost&)                    = delete;
+    auto operator=(const RestoreHost&) -> RestoreHost& = delete;
+    RestoreHost(RestoreHost&&)                         = delete;
+    auto operator=(RestoreHost&&) -> RestoreHost&      = delete;
+    ~RestoreHost() { astl::ClearLoadedPlatformInfo(); }
+  } restore;
+  const auto file = directory / astl::kPlatformInfoFileName;
+  std::ofstream(file) << R"({"wall_clock_correlation":{"raw_ns":1000,"realtime_ns":2000,"uncertainty_ns":3}})";
+  REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory) == ASTL_STATUS_SUCCESS);
+  const auto original = astl::GetActiveWallClockCorrelation();
+  for (const auto* invalid :
+       {R"({"raw_ns":1.5,"realtime_ns":0,"uncertainty_ns":0})",
+        R"({"raw_ns":0,"realtime_ns":18446744073709551615,"uncertainty_ns":0})",
+        R"({"raw_ns":false,"realtime_ns":0,"uncertainty_ns":0})", R"({"raw_ns":0,"realtime_ns":0,"uncertainty_ns":-1})",
+        R"({"raw_ns":0,"realtime_ns":0})", R"({"raw_ns":0,"realtime_ns":0,"uncertainty_ns":"1"})", "null", "[]"}) {
+    DYNAMIC_SECTION("invalid correlation: " << invalid) {
+      std::ofstream(file) << "{\"wall_clock_correlation\":" << invalid << '}';
+      REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory) == ASTL_STATUS_INTERNAL_ERROR);
+      REQUIRE(astl::GetActiveWallClockCorrelation() == original);
+    }
+  }
 }

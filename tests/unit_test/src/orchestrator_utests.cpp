@@ -23,6 +23,7 @@
 #include "common/clock_correlation.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "common/metric_config.hpp"
+#include "common/system_info.hpp"
 #include "metric/delta_metric.hpp"
 #include "metric/metric_manager.hpp"
 #include "operation/operation_builder.hpp"
@@ -2146,12 +2147,18 @@ TEST_CASE("Orchestrator::ConfigureMetricCollection does not reset again while co
   REQUIRE(collector_manager_ptr->clear_configured_collection_calls == 1);
   REQUIRE(configured_operation_ids == std::vector<astl::OperationId>{astl::kFirstAssignableOperationId});
 
+  const auto reference = astl::GetActiveWallClockCorrelation();
+  REQUIRE(reference);
   REQUIRE(orchestrator.ConfigureMetricCollection(target1_ptr, &params, metrics) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::GetActiveWallClockCorrelation() == reference);
   REQUIRE(collector_manager_ptr->clear_configured_collection_calls == 1);
   REQUIRE(configured_operation_ids ==
           std::vector<astl::OperationId>{astl::kFirstAssignableOperationId, astl::kFirstAssignableOperationId + 1});
 
   REQUIRE(orchestrator.ResetCollectionStateForCleanConfigure() == ASTL_STATUS_SUCCESS);
+  const auto next_reference = astl::GetActiveWallClockCorrelation();
+  REQUIRE(next_reference);
+  REQUIRE(next_reference->raw_ns >= reference->raw_ns);
   REQUIRE(orchestrator.GetTargetCollectionState(target0_ptr).value() ==
           astl::Orchestrator::TargetCollectionState::UNCONFIGURED);
   REQUIRE(orchestrator.GetTargetCollectionState(target1_ptr).value() ==
@@ -2160,6 +2167,7 @@ TEST_CASE("Orchestrator::ConfigureMetricCollection does not reset again while co
 
   REQUIRE(orchestrator.ConfigureMetricCollection(target0_ptr, &params, metrics) == ASTL_STATUS_SUCCESS);
   REQUIRE(orchestrator.ConfigureMetricCollection(target1_ptr, &params, metrics) == ASTL_STATUS_SUCCESS);
+  REQUIRE(astl::GetActiveWallClockCorrelation() == next_reference);
   REQUIRE(collector_manager_ptr->clear_configured_collection_calls == 2);
   REQUIRE(configured_operation_ids ==
           std::vector<astl::OperationId>{astl::kFirstAssignableOperationId, astl::kFirstAssignableOperationId + 1,

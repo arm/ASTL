@@ -70,8 +70,6 @@ auto GetMetricManager() noexcept -> std::expected<astl::IMetricManager*, astl_st
   return metric_manager.get();
 }
 
-auto SwitchSystemInfoToHostCapture() noexcept -> void { astl::ClearLoadedPlatformInfo(); }
-
 // Invoke the given closure that implements a public C API function,
 // handling common concerns such as setting the last status string
 // and normalizing internal error codes to `ASTL_STATUS_INTERNAL_ERROR`.
@@ -1116,6 +1114,31 @@ auto GetMetricHandlesInGroupForTarget(astl::IMetricManager* metric_manager, astl
 /***********************************************************************************
  **********************            SYSTEM PROPERTIES         ************************
  **********************************************************************************/
+
+auto astlGetClockCorrelation(const astl_get_clock_correlation_params_t* params) noexcept -> astl_status_code {
+  return RunPublicApi([&]() noexcept -> astl_status_code {
+    std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
+    const auto                  status = ValidateApiParams(params);
+    if (status != ASTL_STATUS_SUCCESS) {
+      return status;
+    }
+    if (params->correlation == nullptr) {
+      return ASTL_STATUS_BAD_ARGUMENT;
+    }
+    const auto orchestrator = GetOrchestratorInstance();
+    if (!orchestrator) {
+      return orchestrator.error();
+    }
+    const auto reference = astl::GetActiveWallClockCorrelation();
+    if (!reference) {
+      return ASTL_STATUS_NOT_SUPPORTED;
+    }
+    params->correlation->raw_ns         = reference->raw_ns;
+    params->correlation->realtime_ns    = reference->realtime_ns;
+    params->correlation->uncertainty_ns = reference->uncertainty_ns;
+    return ASTL_STATUS_SUCCESS;
+  });
+}
 
 auto astlGetSystemInfo(const astl_get_system_info_params_t* params) noexcept -> astl_status_code {
   return RunPublicApi([&]() noexcept -> astl_status_code {
@@ -2366,8 +2389,6 @@ auto astlConfigureCounterCollectionOnTarget(const astl_configure_counter_collect
       return params_status;
     }
 
-    SwitchSystemInfoToHostCapture();
-
     auto request_or_error = ParseConfigureCounterCollectionOnTargetRequest(*params);
     if (!request_or_error) {
       return request_or_error.error();
@@ -2410,8 +2431,6 @@ auto astlConfigureCounterCollection(const astl_configure_counter_collection_para
         return collection_flags_status;
       }
 
-      SwitchSystemInfoToHostCapture();
-
       std::vector<const astl::ICounter*>     counters;
       std::span<const astl_counter_handle_t> counter_handle_span{counter_handles, counter_count};
       std::transform(begin(counter_handle_span), std::end(counter_handle_span), std::back_inserter(counters),
@@ -2448,8 +2467,6 @@ auto astlConfigureMetricCollectionOnTarget(const astl_configure_metric_collectio
       if (collection_flags_status != ASTL_STATUS_SUCCESS) {
         return collection_flags_status;
       }
-
-      SwitchSystemInfoToHostCapture();
 
       auto get_target_result = GetTargetFromHandle(target_handle);
       if (!get_target_result) {
@@ -2494,7 +2511,6 @@ auto astlConfigureMetricCollection(const astl_configure_metric_collection_params
       if (collection_flags_status != ASTL_STATUS_SUCCESS) {
         return collection_flags_status;
       }
-      SwitchSystemInfoToHostCapture();
 
       (void)metric_handles;
       (void)metric_count;
@@ -2528,8 +2544,6 @@ auto astlConfigureMetricGroupCollectionOnTarget(
       if (collection_flags_status != ASTL_STATUS_SUCCESS) {
         return collection_flags_status;
       }
-
-      SwitchSystemInfoToHostCapture();
 
       auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
       if (!orchestrator_or_error) {
@@ -2582,7 +2596,6 @@ auto astlConfigureMetricGroupCollection(const astl_configure_metric_group_collec
     if (collection_flags_status != ASTL_STATUS_SUCCESS) {
       return collection_flags_status;
     }
-    SwitchSystemInfoToHostCapture();
     std::span<const astl_metric_group_handle_t> metric_group_handle_span{metric_group_handles, metric_group_count};
     return ConfigureMetricGroupCollectionOnAllTargets(collection_params, metric_group_handle_span);
   });

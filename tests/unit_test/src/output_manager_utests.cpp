@@ -5,11 +5,13 @@
 #include <array>
 #include <chrono>
 #include <cstdlib>
+#include <nlohmann/json.hpp>
 #include <vector>
 
 #include "../../test_includes.hpp"   // must come first before any Catch2 usage
 #include "../../test_utilities.hpp"  // TempFileGuard
 #include "common/i_processed_sample_sink.hpp"
+#include "common/system_info.hpp"
 #include "config/astl_configuration.hpp"
 #include "metric/i_metric.hpp"
 #include "operation/operation.hpp"
@@ -311,4 +313,38 @@ TEST_CASE("OutputManager::OutputProcessedSamples unknown output type", "[output_
   auto                unknown = static_cast<astl::OutputType>(999);
   REQUIRE(mgr.OutputProcessedSamples(astl::ProcessedSamplesMap{}, unknown, nullptr, nullptr) ==
           ASTL_STATUS_BAD_ARGUMENT);
+}
+
+TEST_CASE("Perfetto final emissions use the current collection reference", "[output_manager][wallclock]") {
+  const auto    directory = std::filesystem::temp_directory_path() / "astl_perfetto_collection_references";
+  TempFileGuard directory_guard{directory};
+  std::filesystem::create_directories(directory);
+  struct RestoreHost {
+    RestoreHost()                                      = default;
+    RestoreHost(const RestoreHost&)                    = delete;
+    auto operator=(const RestoreHost&) -> RestoreHost& = delete;
+    RestoreHost(RestoreHost&&)                         = delete;
+    auto operator=(RestoreHost&&) -> RestoreHost&      = delete;
+    ~RestoreHost() { astl::ClearLoadedPlatformInfo(); }
+  } restore;
+  const auto          output = directory / "trace.json";
+  EnvVarGuard         perfetto_guard{astl::EnvVar::ASTL_OUTPUT_PERFETTO, output.string()};
+  astl::OutputManager manager;
+  for (const auto raw : {1000, 2000}) {
+    std::ofstream(directory / astl::kPlatformInfoFileName)
+        << "{\"wall_clock_correlation\":{\"raw_ns\":" << raw
+        << ",\"realtime_ns\":1234567890123456789,\"uncertainty_ns\":3}}";
+    REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory) == ASTL_STATUS_SUCCESS);
+    REQUIRE(manager.OutputProcessedSamples({}, astl::OutputType::PERFETTO, nullptr, nullptr) == ASTL_STATUS_SUCCESS);
+    std::ifstream input(output);
+    const auto    events     = nlohmann::json::parse(input);
+    size_t        references = 0;
+    for (const auto& event : events) {
+      if (event.value("name", "") == "astl_clock_correlation") {
+        REQUIRE(event.at("args").at("raw_ns") == std::to_string(raw));
+        ++references;
+      }
+    }
+    REQUIRE(references == 1);
+  }
 }

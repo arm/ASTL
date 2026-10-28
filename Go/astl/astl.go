@@ -327,6 +327,34 @@ func VersionInfo() Version {
 	}
 }
 
+// ClockCorrelation maps raw sample timestamps to Unix epoch nanoseconds using
+// RealtimeNS + (timestamp - RawNS). UncertaintyNS bounds clock read latency only.
+// Nodes must synchronize their realtime clocks independently.
+type ClockCorrelation struct {
+	RawNS         int64
+	RealtimeNS    int64
+	UncertaintyNS int64
+}
+
+// GetClockCorrelation returns the active collection's reference, including during
+// archive replay. It returns an error when the reference is unavailable.
+func GetClockCorrelation() (ClockCorrelation, error) {
+	ptr, release, err := allocArray("GetClockCorrelation", 1, C.sizeof_astl_clock_correlation_t)
+	if err != nil {
+		return ClockCorrelation{}, err
+	}
+	defer release()
+	reference := (*C.astl_clock_correlation_t)(ptr)
+	params := C.astl_get_clock_correlation_params_t{
+		size: C.size_t(C.sizeof_astl_get_clock_correlation_params_t), correlation: reference,
+	}
+	if err := checkStatus("astlGetClockCorrelation", C.astlGetClockCorrelation(&params)); err != nil {
+		return ClockCorrelation{}, err
+	}
+	return ClockCorrelation{RawNS: int64(reference.raw_ns), RealtimeNS: int64(reference.realtime_ns),
+		UncertaintyNS: int64(reference.uncertainty_ns)}, nil
+}
+
 func GetSystemInfo() (SystemInfo, error) {
 	return GetSystemInfoWithFlags(0)
 }

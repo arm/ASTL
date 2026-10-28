@@ -12,6 +12,9 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Added
 
+- Added raw-to-UTC clock correlation saved with collection archives and exposed through C, Python, and Go APIs.
+  Native and ATX interval CSV reports include UTC timestamps, and native Perfetto output includes clock correlation metadata.
+
 - Added an optional Windows system collector for aggregate and per-logical-processor CPU busy-time utilization,
   physical memory capacity, used bytes, and utilization through the `sysutil` target.
   Select it with `ASTL_COLLECTORS=windows`, or use `procfs,windows` across platforms;

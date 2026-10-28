@@ -14,7 +14,7 @@
  *  For each metric/target pair encountered:
  *    <metric_name> on <target_name>
  *
- *    timestamp_us,value
+ *    timestamp_us,value,timestamp_utc
  *    <one row per sample for that metric-target series>
  *
  *  Blank line separates sections. Empty collection yields collection info only.
@@ -41,7 +41,7 @@ namespace astl {
  *           written once via WriteProcessedSamples (called from orchestrator
  *           stop path when ASTL_OUTPUT_INTERVAL_CSV is set). Each metric-target
  *           section has an info row (`metric on target`), a header row
- *           (`timestamp_us,value`), then sample rows. Sections are ordered by
+ *           (`timestamp_us,value,timestamp_utc`), then sample rows. Sections are ordered by
  *           metric then target; blank line separates sections. Empty set
  *           produces collection info only. Thread-safety: not thread-safe.
  */

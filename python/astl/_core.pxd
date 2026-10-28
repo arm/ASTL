@@ -490,6 +490,16 @@ cdef extern from "astl/astl_telemetry.h":
         uint32_t flags
 
     # targets
+    cdef struct _astl_clock_correlation_t:
+        int64_t raw_ns
+        int64_t realtime_ns
+        int64_t uncertainty_ns
+    ctypedef _astl_clock_correlation_t astl_clock_correlation_t
+    cdef struct astl_get_clock_correlation_params_t:
+        size_t size
+        uint32_t flags
+        astl_clock_correlation_t* correlation
+    int astlGetClockCorrelation(const astl_get_clock_correlation_params_t* params)
     int astlGetSystemInfo(const astl_get_system_info_params_t* params)
     int astlGetTargetCount(const astl_get_target_count_params_t* params)
     int astlGetTargets(const astl_get_targets_params_t* params)

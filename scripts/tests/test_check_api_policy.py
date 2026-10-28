@@ -281,6 +281,21 @@ class VersionPolicyTests(unittest.TestCase):
 
 
 class PullRequestPolicyTests(unittest.TestCase):
+    def test_pr_policy_failure_without_candidate_version_returns_failure(self) -> None:
+        with patch.multiple(
+            policy,
+            read_version=Mock(return_value=policy.Version.parse("0.1.0")),
+            build_snapshot=Mock(return_value=policy.ApiSnapshot()),
+            print_report=Mock(),
+            parse_pr_declaration=Mock(return_value=(policy.Severity.MINOR, [])),
+            changed_files=Mock(return_value=[]),
+            validate_repository_policy=Mock(return_value=["missing changelog entry"]),
+        ):
+            self.assertEqual(
+                policy.main(["--base-ref", "base", "--base-is-exact", "--release-ref", "release/0.1.0"]),
+                1,
+            )
+
     def write_event(self, body: str) -> Path:
         temporary = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
         json.dump({"pull_request": {"body": body}}, temporary)

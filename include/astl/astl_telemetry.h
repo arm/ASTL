@@ -150,6 +150,30 @@ typedef struct astl_get_system_info_params_t {
  */
 ASTL_API astl_status_code astlGetSystemInfo(const astl_get_system_info_params_t* params) ASTL_API_NOEXCEPT;
 
+/** Collection clock reference, retained when loading an ASTL archive.
+ * Convert sample nanoseconds using realtime_ns + (sample_timestamp - raw_ns).
+ * Realtime is Unix epoch nanoseconds; format it in UTC for cross-node comparison.
+ * uncertainty_ns bounds read latency only, excluding clock synchronization error and drift.
+ */
+typedef struct _astl_clock_correlation_t {
+  int64_t raw_ns;
+  int64_t realtime_ns;
+  int64_t uncertainty_ns;
+} astl_clock_correlation_t;
+
+/** Parameters for retrieving the active collection clock reference. */
+typedef struct astl_get_clock_correlation_params_t {
+  size_t                    size;         //!< Set to sizeof(astl_get_clock_correlation_params_t).
+  uint32_t                  flags;        //!< Reserved; must be zero.
+  astl_clock_correlation_t* correlation;  //!< Output reference. Cannot be NULL.
+} astl_get_clock_correlation_params_t;
+
+/** Get the active collection reference. Returns ASTL_STATUS_NOT_SUPPORTED when unavailable,
+ * including legacy archives. Initializes the library on first use, like target enumeration.
+ * No clock synchronization is performed.
+ */
+ASTL_API astl_status_code astlGetClockCorrelation(const astl_get_clock_correlation_params_t* params) ASTL_API_NOEXCEPT;
+
 /***********************************************************************************
  **********************               TARGETS               ************************
  **********************************************************************************/

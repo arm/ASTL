@@ -771,7 +771,7 @@ def main(argv: list[str] | None = None) -> int:
             print("API policy check failed:", file=sys.stderr)
             for error in errors:
                 print(f"  - {error}", file=sys.stderr)
-            if candidate_version.major < 1:
+            if candidate_version is not None and candidate_version.major < 1:
                 print("Warning: Candidate version is below 1.0.0, so ignoring API policy violations", file=sys.stderr)
                 return 0
             return 1

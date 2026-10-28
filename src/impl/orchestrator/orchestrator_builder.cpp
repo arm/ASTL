@@ -39,6 +39,7 @@ auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_sta
     }
   } else {
     astl::ClearLoadedPlatformInfo();
+    astl::CaptureSessionWallClockCorrelation();
   }
 
   auto topology_manager = astl::BuildTopologyManager(configuration, cache_dir_path);

@@ -139,8 +139,10 @@ auto OutputManager::OutputProcessedSamples(const ProcessedSamplesMap& processed_
       if (status_code != ASTL_STATUS_SUCCESS) {
         return status_code;
       }
-      // Ignore target/metric parameters; write all samples.
-      return _perfetto_output->WriteProcessedSamples(processed_samples);
+      // Each final emission owns a complete trace and its collection's clock metadata.
+      status_code = _perfetto_output->WriteProcessedSamples(processed_samples);
+      _perfetto_output.reset();
+      return status_code;
     }
     case OutputType::INTERVAL_CSV: {
       auto status_code = EnsureIntervalCsvOutput();

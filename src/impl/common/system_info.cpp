@@ -464,6 +464,14 @@ auto BuildPlatformInfoJson(const PlatformInfoData& info) -> std::expected<nlohma
     payload["huge_pages_total"]       = info.huge_pages_total;
     payload["huge_page_size_kb"]      = info.huge_page_size_kb;
     payload["transparent_huge_pages"] = info.transparent_huge_pages;
+    if (info.wall_clock_correlation) {
+      const auto& reference             = *info.wall_clock_correlation;
+      payload["wall_clock_correlation"] = {
+          {"raw_ns",         reference.raw_ns        },
+          {"realtime_ns",    reference.realtime_ns   },
+          {"uncertainty_ns", reference.uncertainty_ns}
+      };
+    }
     return payload;
   } catch (const nlohmann::json::exception& e) {
     ASTL_LOG_ERROR("BuildPlatformInfoJson: failed serializing platform info: {}", e.what());
@@ -474,6 +482,23 @@ auto BuildPlatformInfoJson(const PlatformInfoData& info) -> std::expected<nlohma
 auto ParsePlatformInfoJson(const nlohmann::json& payload) -> std::expected<PlatformInfoData, astl_status_code> {
   try {
     PlatformInfoData info{};
+    if (payload.contains("wall_clock_correlation")) {
+      const auto& reference = payload.at("wall_clock_correlation");
+      for (const auto* field : {"raw_ns", "realtime_ns", "uncertainty_ns"}) {
+        const auto& value = reference.at(field);
+        if (!value.is_number_integer() ||
+            (value.is_number_unsigned() && value.get<uint64_t>() > uint64_t{std::numeric_limits<int64_t>::max()})) {
+          ASTL_LOG_ERROR("ParsePlatformInfoJson: invalid clock correlation field '{}'", field);
+          return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+        }
+      }
+      info.wall_clock_correlation =
+          WallClockCorrelation{reference.at("raw_ns").get<int64_t>(), reference.at("realtime_ns").get<int64_t>(),
+                               reference.at("uncertainty_ns").get<int64_t>()};
+      if (info.wall_clock_correlation->uncertainty_ns < 0) {
+        return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+      }
+    }
     info.soc_name              = payload.value("soc_name", "");
     info.vendor_id             = payload.value("vendor_id", "");
     info.os_name               = payload.value("os_name", "");
@@ -517,12 +542,40 @@ auto PlatformInfoMutex() -> std::mutex& {
   return platform_info_mutex;
 }
 
+auto LoadedSessionStorage() -> bool& {
+  static bool loaded = false;
+  return loaded;
+}
+
+auto SessionClockStorage() -> std::optional<WallClockCorrelation>& {
+  static std::optional<WallClockCorrelation> reference;
+  return reference;
+}
+
 auto LoadedPlatformInfoPointerStorage() -> std::shared_ptr<const PlatformInfoData>* {
   static std::shared_ptr<const PlatformInfoData> loaded_platform_info_ptr = nullptr;
   return &loaded_platform_info_ptr;
 }
 
 }  // namespace
+
+auto CaptureSessionWallClockCorrelation() -> void {
+  const auto                  reference = CaptureWallClockCorrelation();
+  std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
+  SessionClockStorage() = reference;
+}
+
+auto GetActiveWallClockCorrelation() -> std::optional<WallClockCorrelation> {
+  std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
+  if (!LoadedSessionStorage()) {
+    return SessionClockStorage();
+  }
+  const auto& loaded = *LoadedPlatformInfoPointerStorage();
+  if (loaded) {
+    return loaded->wall_clock_correlation;
+  }
+  return std::nullopt;
+}
 
 auto GetHostPlatformInfo() -> const PlatformInfoData& {
   static std::once_flag   init_once;
@@ -560,7 +613,9 @@ auto SavePlatformInfoToCacheDir(const std::filesystem::path& cache_dir_path) -> 
     return ASTL_STATUS_FILE_OPEN_FAILED;
   }
 
-  const auto payload_or_error = BuildPlatformInfoJson(GetActivePlatformInfo());
+  auto info                   = GetActivePlatformInfo();
+  info.wall_clock_correlation = GetActiveWallClockCorrelation();
+  const auto payload_or_error = BuildPlatformInfoJson(info);
   if (!payload_or_error.has_value()) {
     return payload_or_error.error();
   }
@@ -580,6 +635,7 @@ auto LoadPlatformInfoFromCacheDir(const std::filesystem::path& cache_dir_path) -
   if (!std::filesystem::exists(input_file)) {
     std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
     *LoadedPlatformInfoPointerStorage() = {};
+    LoadedSessionStorage()              = true;
     ASTL_LOG_WARNING("LoadPlatformInfoFromCacheDir: '{}' not present; using host info", input_file.string());
     return ASTL_STATUS_SUCCESS;
   }
@@ -606,12 +662,14 @@ auto LoadPlatformInfoFromCacheDir(const std::filesystem::path& cache_dir_path) -
 
   std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
   *LoadedPlatformInfoPointerStorage() = std::make_shared<const PlatformInfoData>(std::move(loaded));
+  LoadedSessionStorage()              = true;
   return ASTL_STATUS_SUCCESS;
 }
 
 auto ClearLoadedPlatformInfo() -> void {
   std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
   *LoadedPlatformInfoPointerStorage() = nullptr;
+  LoadedSessionStorage()              = false;
 }
 
 }  // namespace astl
