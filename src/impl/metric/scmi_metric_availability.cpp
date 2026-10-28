@@ -14,6 +14,7 @@
 #include "collector/scmi_ioctl_interface.hpp"
 #include "config/scmi_metric_json_declaration.hpp"
 #include "metric/scmi_target_configuration.hpp"
+#include "operation/scmi_operation_builder.hpp"
 #include "target.hpp"
 
 namespace astl {
@@ -93,7 +94,7 @@ auto FilterUnavailableScmiMetricConfigs(const AstlConfiguration& configuration, 
   std::erase_if(configs, [&configuration](auto& config_entry) {
     const auto& metric_config     = config_entry.first;
     auto&       targets           = config_entry.second;
-    const auto* operation_builder = std::get_if<ScmiOperationBuilder>(&metric_config->GetOperationBuilder());
+    const auto* operation_builder = metric_config->GetOperationBuilder().template Target<ScmiOperationBuilder>();
 
     std::erase_if(targets, [&](const ITarget* target) {
       return ShouldSkipUnavailableScmiMetric(configuration, *metric_config, operation_builder, target);

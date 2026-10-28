@@ -21,6 +21,7 @@
 #include "common/system_info.hpp"
 #include "metric/counter.hpp"
 #include "metric/metric_manager.hpp"
+#include "operation/scmi_operation_builder.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "output/output_manager.hpp"
 #include "serdes/archive_utils.hpp"

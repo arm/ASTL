@@ -231,7 +231,6 @@ class MetricConfig {
 class ResidencyMetricConfig final : public MetricConfig {
  public:
   // Reuse the underlying data event id type from TargetToDataEventIdMap to ensure consistency.
-  using DataEventId = ScmiDataEventId;  // For residency, each state has a single data event ID
 
   // Structure to hold both data event ID and tick frequency for a state
   struct StateInfo {

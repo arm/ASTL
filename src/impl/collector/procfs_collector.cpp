@@ -14,7 +14,7 @@
 namespace astl {
 namespace {
 
-auto NativeNow() -> uint64_t {
+auto ProcfsNativeNow() -> uint64_t {
   if (ClockMonotonicRaw::TestTimeEnabled()) {
     return static_cast<uint64_t>(
         std::chrono::time_point_cast<SampleMicroseconds>(ClockMonotonicRaw::now()).time_since_epoch().count());
@@ -144,7 +144,7 @@ auto ProcfsCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelation
     return {};
   }
 
-  const uint64_t native_now = NativeNow();
+  const uint64_t native_now = ProcfsNativeNow();
   const auto     raw_now    = ClockMonotonicRaw::now();
 
   ClockCorrelationMap result;
@@ -163,7 +163,7 @@ auto ProcfsCollector::ExecuteCollectionOperations(OperationSequence const& opera
 
   std::vector<RawSampledData> collected_samples;
   collected_samples.reserve(operations.size());
-  const auto native_tick = NativeNow();
+  const auto native_tick = ProcfsNativeNow();
 
   for (const auto* operation : prepared_or_error->operations) {
     auto value_or_error = ReadOperationSample(*operation, prepared_or_error->cpu_snapshots);

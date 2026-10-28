@@ -19,6 +19,7 @@
 
 #include "common/astl_value.hpp"
 #include "common/i_processed_sample_sink.hpp"
+#include "operation/scmi_operation_builder.hpp"
 #include "wrapper_utils.hpp"
 
 using trompeloeil::_;

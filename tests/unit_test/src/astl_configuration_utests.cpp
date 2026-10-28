@@ -214,17 +214,17 @@ TEST_CASE("Portable system collector allowlist skips unavailable backends", "[As
   auto        configuration = astl::AstlConfiguration::CreateConfiguration();
 #if defined(ASTL_INCLUDE_PROCFS) || defined(ASTL_INCLUDE_WINDOWS)
   REQUIRE(configuration.has_value());
-  CHECK_FALSE(configuration->collectors.scmi);
-  CHECK_FALSE(configuration->collectors.libsensors);
+  CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::SCMI));
+  CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::LIBSENSORS));
 #  if defined(ASTL_INCLUDE_PROCFS)
-  CHECK(configuration->collectors.procfs);
+  CHECK(configuration->collectors.IsEnabled(astl::CollectorType::PROCFS));
 #  else
-  CHECK_FALSE(configuration->collectors.procfs);
+  CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::PROCFS));
 #  endif
 #  if defined(ASTL_INCLUDE_WINDOWS)
-  CHECK(configuration->collectors.windows);
+  CHECK(configuration->collectors.IsEnabled(astl::CollectorType::WINDOWS));
 #  else
-  CHECK_FALSE(configuration->collectors.windows);
+  CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::WINDOWS));
 #  endif
 #else
   REQUIRE_FALSE(configuration.has_value());

@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "collector/collector_backend.hpp"
 #include "collector/i_collector_manager.hpp"
 #include "config/astl_configuration.hpp"
 #include "target.hpp"
@@ -23,7 +24,8 @@ namespace astl {
  *         Note the RegisterRawSampleSink() function will still need to be called on the returned collector manager
  */
 [[nodiscard]] auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
-                                         const AstlConfiguration&                     configuration)
+                                         const AstlConfiguration&                     configuration,
+                                         CollectorBackends backends = BuiltinCollectorBackends())
     -> std::expected<std::unique_ptr<ICollectorManager>, astl_status_code>;
 
 }  // namespace astl

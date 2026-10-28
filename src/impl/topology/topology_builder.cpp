@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "topology/topology_builder.hpp"
+
 #include <expected>
 #include <filesystem>
 #include <fstream>
@@ -9,56 +11,11 @@
 #include <unordered_set>
 
 #include "astl/astl_errors.h"
-#include "libsensors/libsensors_topology_plugin.hpp"
 #include "serdes/protobuf_serdes.hpp"
 #include "target.hpp"
-#include "topology/i_topology_manager.hpp"
-#include "topology/scmi_topology_plugin.hpp"
 #include "topology/topology_manager.hpp"
-#if defined(ASTL_INCLUDE_WINDOWS)
-#  include "windows/windows_metric_builder.hpp"
-#  include "windows/windows_system_api.hpp"
-#endif
-#if defined(ASTL_INCLUDE_PROCFS)
-#  include "topology/procfs_topology_plugin.hpp"
-#endif
 
 namespace astl {
-
-// Helper function which runs a single topology plugin and does some error handling
-// 2nd parameter is a function pointer to the ScanForTargets() member of a given plugin
-auto ActivatePlugin(std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration,
-                    std::expected<std::vector<std::unique_ptr<ITarget>>, astl_status_code> (*scanFunc)(
-                        const AstlConfiguration&)) -> void {
-  auto targets_detected_from_this_plugin = scanFunc(configuration);
-  if (!targets_detected_from_this_plugin) {
-    throw targets_detected_from_this_plugin.error();
-  }
-
-  auto validated_new_targets = std::move(targets_detected_from_this_plugin.value());
-
-  // Target names must be globally unique because they seed metric/target identifiers downstream.
-  // Discard any newly discovered target whose name collides with one we have already accepted,
-  // emitting a warning and continuing rather than failing the whole build.
-  std::unordered_set<std::string> seen_names;
-  seen_names.reserve(targets.size() + validated_new_targets.size());
-  for (const auto& existing_target : targets) {
-    seen_names.insert(existing_target->Name());
-  }
-
-  // std::vector::append_range() would be better,
-  // but g++ 13.1.0 doesn't seem to implement __cpp_lib_containers_ even when using -std=c++23
-  targets.reserve(targets.size() + validated_new_targets.size());
-  for (size_t ix = 0; ix < validated_new_targets.size(); ix++) {
-    const auto insert_result = seen_names.insert(validated_new_targets[ix]->Name());
-    if (!insert_result.second) {
-      ASTL_LOG_WARNING("Duplicate target name '{}'; discarding the duplicate target and continuing",
-                       validated_new_targets[ix]->Name());
-      continue;
-    }
-    targets.push_back(std::move(validated_new_targets[ix]));
-  }
-}
 
 auto BuildTopologyManagerFromASTLFile(const std::filesystem::path& cache_dir_path)
     -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
@@ -74,29 +31,11 @@ auto BuildTopologyManagerFromASTLFile(const std::filesystem::path& cache_dir_pat
     return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
-  auto topology_manager = ProtobufSerDes::Deserialize<std::unique_ptr<ITopologyManager>>(topology_file);
-  if (!topology_manager.has_value()) {
-    return std::unexpected(topology_manager.error());
-  }
-  return topology_manager;
+  return ProtobufSerDes::Deserialize<std::unique_ptr<ITopologyManager>>(topology_file);
 }
 
-#if defined(ASTL_INCLUDE_WINDOWS)
-static auto BuildWindowsTarget() -> std::expected<std::unique_ptr<ITarget>, astl_status_code> {
-  auto api        = MakeWindowsSystemApi();
-  auto processors = api->DiscoverProcessors();
-  if (!processors) {
-    return std::unexpected(processors.error());
-  }
-  const auto memory = api->ReadMemory();
-  if (!memory) {
-    return std::unexpected(memory.error());
-  }
-  return std::make_unique<WindowsSystemTarget>(std::move(*processors));
-}
-#endif
-
-auto BuildTopologyManager(const AstlConfiguration& configuration, std::optional<std::filesystem::path> cache_dir_path)
+auto BuildTopologyManager(const AstlConfiguration& configuration, std::optional<std::filesystem::path> cache_dir_path,
+                          CollectorBackends backends)
     -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
   std::vector<std::unique_ptr<ITarget>> targets;
 
@@ -111,30 +50,31 @@ auto BuildTopologyManager(const AstlConfiguration& configuration, std::optional<
     return BuildTopologyManagerFromASTLFile(cache_dir_path.value());
   }
 
-  try {
-#if defined(ASTL_INCLUDE_WINDOWS)
-    if (configuration.collectors.IsEnabled(CollectorType::WINDOWS)) {
-      auto target = BuildWindowsTarget();
+  if (auto status = ValidateCollectorBackends(backends); status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
+  }
+  std::unordered_set<std::string> seen_names;
+  for (const auto& backend : backends) {
+    if (backend.discover == nullptr || !configuration.collectors.IsEnabled(backend.type)) {
+      continue;
+    }
+    auto discovered = backend.discover(configuration);
+    if (!discovered) {
+      return std::unexpected(discovered.error());
+    }
+    for (auto& target : *discovered) {
       if (!target) {
-        return std::unexpected(target.error());
+        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
       }
-      targets.push_back(std::move(*target));
+      if (target->GetCollectorType() != backend.type) {
+        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      }
+      if (seen_names.insert(target->Name()).second) {
+        targets.push_back(std::move(target));
+      } else {
+        ASTL_LOG_WARNING("Duplicate target name '{}'; discarding the duplicate target and continuing", target->Name());
+      }
     }
-#endif
-    // Add more topology plugins here by calling ActivatePlugin on each
-    if (configuration.collectors.IsEnabled(CollectorType::SCMI)) {
-      ActivatePlugin(targets, configuration, ScmiTopologyPlugin::ScanForTargets);
-    }
-    if (configuration.collectors.IsEnabled(CollectorType::LIBSENSORS)) {
-      ActivatePlugin(targets, configuration, LibsensorsTopologyPlugin::ScanForTargets);
-    }
-#if defined(ASTL_INCLUDE_PROCFS)
-    if (configuration.collectors.IsEnabled(CollectorType::PROCFS)) {
-      ActivatePlugin(targets, configuration, ProcfsTopologyPlugin::ScanForTargets);
-    }
-#endif
-  } catch (astl_status_code& error_code) {
-    return std::unexpected(error_code);
   }
 
   return std::make_unique<TopologyManager>(std::move(targets));

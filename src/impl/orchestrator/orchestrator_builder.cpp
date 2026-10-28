@@ -42,18 +42,20 @@ auto BuildOrchestrator(const astl::AstlConfiguration& configuration) -> astl_sta
     astl::CaptureSessionWallClockCorrelation();
   }
 
-  auto topology_manager = astl::BuildTopologyManager(configuration, cache_dir_path);
+  const auto backends         = astl::BuiltinCollectorBackends();
+  auto       topology_manager = astl::BuildTopologyManager(configuration, cache_dir_path, backends);
   if (!topology_manager) {
     return topology_manager.error();
   }
 
   // TODO(ASTL-279) - Once state machine is in place, we can skip building collector manager if loading from file
-  auto collector_manager = astl::BuildCollectorManager(topology_manager.value()->GetTargets(), configuration);
+  auto collector_manager = astl::BuildCollectorManager(topology_manager.value()->GetTargets(), configuration, backends);
   if (!collector_manager) {
     return collector_manager.error();
   }
 
-  auto metric_manager = astl::BuildMetricManager(topology_manager.value()->GetTargets(), configuration, cache_dir_path);
+  auto metric_manager =
+      astl::BuildMetricManager(topology_manager.value()->GetTargets(), configuration, cache_dir_path, backends);
   if (!metric_manager) {
     return metric_manager.error();
   }

@@ -21,6 +21,7 @@
 #include "config/scmi_platform_telemetry_spec.hpp"
 #include "metric/scmi_metric_availability.hpp"
 #include "metric/scmi_target_configuration.hpp"
+#include "operation/scmi_operation_builder.hpp"
 #include "target.hpp"
 
 namespace astl {

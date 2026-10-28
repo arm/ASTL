@@ -31,6 +31,7 @@
 #include "common/metric_config.hpp"
 #include "common/monotonic_raw_clock.hpp"
 #include "metric/metric_manager.hpp"
+#include "operation/scmi_operation_builder.hpp"
 
 using namespace std::chrono_literals;
 

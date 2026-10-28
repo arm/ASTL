@@ -18,6 +18,7 @@ set(UNIT_TEST_SRCS
     config_source_utests.cpp
     collector_lifecycle_utests.cpp
     collector_manager_utests.cpp
+    collector_backend_utests.cpp
     file_interface_utests.cpp
     formula_utests.cpp
     logger_utests.cpp

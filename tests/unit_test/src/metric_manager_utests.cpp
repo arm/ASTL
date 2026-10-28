@@ -20,6 +20,7 @@
 #include "metric/i_metric.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/sampled_value_metric.hpp"
+#include "operation/scmi_operation_builder.hpp"
 #include "operation/scmi_read_operation.hpp"
 
 using astl::Capabilities;
@@ -41,7 +42,7 @@ constexpr size_t kJunk = 7;
 namespace astl {
 
 astl::ScmiDataEventId GetDataEventId(const astl::ResidencyMetricConfig::StateInfo& state_info) {
-  if (const auto* scmi_builder = std::get_if<astl::ScmiOperationBuilder>(&state_info.operation_builder)) {
+  if (const auto* scmi_builder = state_info.operation_builder.Target<astl::ScmiOperationBuilder>()) {
     return scmi_builder->GetDataEventId();
   }
   return astl::ScmiDataEventId{0xFFFFFFFF};  // invalid id

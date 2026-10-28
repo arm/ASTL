@@ -14,6 +14,7 @@
 #include "astl/astl_telemetry.h"
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
+#include "collector/collector_backend.hpp"
 #include "common/procfs_utils.hpp"
 #include "common/scmi/scmi_constants.hpp"
 #include "config/configuration_manager.hpp"
@@ -21,21 +22,15 @@
 namespace astl {
 
 auto CollectorSelection::IsEnabled(CollectorType collector_type) const -> bool {
-  switch (collector_type) {
-    case CollectorType::SCMI:
-      return scmi;
-    case CollectorType::LIBSENSORS:
-      return libsensors;
-    case CollectorType::WINDOWS:
-      return windows;
-    case CollectorType::PROCFS:
-      return procfs;
-    case CollectorType::ASTL_NATIVE:
-      return true;
-    case CollectorType::UNKNOWN:
-      return false;
+  if (collector_type == CollectorType::ASTL_NATIVE) {
+    return true;
   }
-  return false;
+  if (enabled) {
+    return std::ranges::find(*enabled, collector_type) != enabled->end();
+  }
+  const auto backends = BuiltinCollectorBackends();
+  const auto backend  = std::ranges::find(backends, collector_type, &CollectorBackend::type);
+  return backend != backends.end() && backend->discover != nullptr;
 }
 
 namespace {
@@ -64,7 +59,7 @@ auto ParseCollectorSelection() -> std::expected<CollectorSelection, astl_status_
     return CollectorSelection{};
   }
 
-  CollectorSelection selection{.scmi = false, .windows = false, .libsensors = false, .procfs = false};
+  CollectorSelection selection{std::vector<CollectorType>{}};
   size_t             start = 0;
   while (start <= value.size()) {
     const auto end  = value.find(',', start);
@@ -74,29 +69,16 @@ auto ParseCollectorSelection() -> std::expected<CollectorSelection, astl_status_
       return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
 
-    if (name == "scmi") {
-      selection.scmi = true;
-    } else if (name == "libsensors") {
-#if defined(ASTL_INCLUDE_LIBSENSORS)
-      selection.libsensors = true;
-#else
-      ASTL_LOG_DEBUG("Skipping unavailable collector: libsensors");
-#endif
-    } else if (name == "windows") {
-#if defined(ASTL_INCLUDE_WINDOWS)
-      selection.windows = true;
-#else
-      ASTL_LOG_DEBUG("Skipping unavailable collector: windows");
-#endif
-    } else if (name == "procfs") {
-#if defined(ASTL_INCLUDE_PROCFS)
-      selection.procfs = true;
-#else
-      ASTL_LOG_DEBUG("Skipping unavailable collector: procfs");
-#endif
-    } else {
+    const auto backends = BuiltinCollectorBackends();
+    const auto backend  = std::ranges::find(backends, name, &CollectorBackend::name);
+    if (backend == backends.end()) {
       ASTL_LOG_ERROR("Unknown collector '{}' in ASTL_COLLECTORS", name);
       return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+    if (backend->discover != nullptr) {
+      selection.enabled->push_back(backend->type);
+    } else {
+      ASTL_LOG_DEBUG("Skipping unavailable collector: {}", name);
     }
 
     if (end == std::string::npos) {
@@ -104,7 +86,7 @@ auto ParseCollectorSelection() -> std::expected<CollectorSelection, astl_status_
     }
     start = end + 1;
   }
-  if (!selection.scmi && !selection.libsensors && !selection.procfs && !selection.windows) {
+  if (selection.enabled->empty()) {
     ASTL_LOG_ERROR("None of the requested ASTL_COLLECTORS are available in this build");
     return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }

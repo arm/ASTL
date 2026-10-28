@@ -22,22 +22,7 @@ namespace astl {
 
 /** @brief Collectors enabled for live topology and metric discovery. */
 struct CollectorSelection {
-  bool scmi{true};
-#if defined(ASTL_INCLUDE_WINDOWS)
-  bool windows{true};
-#else
-  bool windows{false};
-#endif
-#if defined(ASTL_INCLUDE_LIBSENSORS)
-  bool libsensors{true};
-#else
-  bool libsensors{false};
-#endif
-#if defined(ASTL_INCLUDE_PROCFS)
-  bool procfs{true};
-#else
-  bool procfs{false};
-#endif
+  std::optional<std::vector<CollectorType>> enabled;
 
   [[nodiscard]] auto IsEnabled(CollectorType collector_type) const -> bool;
 };

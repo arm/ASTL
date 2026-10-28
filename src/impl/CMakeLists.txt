@@ -24,7 +24,12 @@ set_project_warnings(${LIBRARY_NAME})
 
 target_sources(
   ${LIBRARY_NAME}
-  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/orchestrator/orchestrator.cpp"
+  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_backend.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/collector/scmi_backend.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/collector/procfs_backend.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/libsensors/libsensors_backend.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_backend.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/orchestrator/orchestrator.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/orchestrator/orchestrator_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_manager.cpp"

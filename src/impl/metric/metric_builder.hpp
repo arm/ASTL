@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "collector/collector_backend.hpp"
 #include "config/astl_configuration.hpp"
 #include "metric/i_metric_manager.hpp"
 
@@ -18,7 +19,8 @@ namespace astl {
  */
 [[nodiscard]] auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets,
                                       const AstlConfiguration&                     configuration,
-                                      std::optional<std::filesystem::path>         cache_dir_path)
+                                      std::optional<std::filesystem::path>         cache_dir_path,
+                                      CollectorBackends backends = BuiltinCollectorBackends())
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code>;
 
 }  // namespace astl

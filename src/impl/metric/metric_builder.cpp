@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <array>
+#include "metric/metric_builder.hpp"
+
 #include <expected>
 #include <memory>
 #include <optional>
@@ -13,23 +14,12 @@
 #include "config/astl_configuration.hpp"
 #include "config/json_file_utils.hpp"
 #include "config/metric_group_json_declaration.hpp"
-#include "libsensors/libsensors_metric_builder.hpp"
-#include "metric/i_metric_manager.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/metric_manager_cache_loader.hpp"
-#if defined(ASTL_INCLUDE_PROCFS)
-#  include "metric/procfs_metric_builder.hpp"
-#endif
-#include "metric/scmi_metric_builder.hpp"
-#include "metric/scmi_target_configuration.hpp"
-#include "windows/windows_metric_builder.hpp"
 
 namespace astl {
 
 using MetricGroupDescriptionMap = MetricManager::MetricGroupDescriptionMap;
-
-using RegisterMetricsFunction = astl_status_code (*)(
-    const AstlConfiguration&, const std::unordered_map<CollectorType, std::vector<const ITarget*>>&, IMetricManager*);
 
 static auto LoadMetricGroupDescriptions(const AstlConfiguration& configuration)
     -> std::expected<MetricGroupDescriptionMap, astl_status_code> {
@@ -56,73 +46,39 @@ static auto LoadMetricGroupDescriptions(const AstlConfiguration& configuration)
   return descriptions;
 }
 
-static auto RegisterConfiguredMetrics(
-    const AstlConfiguration&                                              configuration,
-    const std::unordered_map<CollectorType, std::vector<const ITarget*>>& collector_type_to_targets_map,
-    IMetricManager*                                                       metric_manager) -> astl_status_code {
-  constexpr std::array register_metrics_functions = {
-      RegisterScmiMetrics,
-#if defined(ASTL_INCLUDE_WINDOWS)
-      RegisterWindowsMetrics,
-#endif
-      RegisterLibsensorsMetrics,
-#if defined(ASTL_INCLUDE_PROCFS)
-      RegisterProcfsMetrics,     RegisterProcfsCounters,
-#endif
-  };
-
-  astl_status_code status = ASTL_STATUS_SUCCESS;
-  for (const auto register_metrics : register_metrics_functions) {
-    if (status == ASTL_STATUS_SUCCESS) {
-      status = register_metrics(configuration, collector_type_to_targets_map, metric_manager);
-    }
-  }
-  return status;
-}
-
-static auto LoadConfiguredMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets,
-                                        const std::optional<std::filesystem::path>&  cache_dir_path)
-    -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
-  if (!cache_dir_path.has_value()) {
-    ASTL_LOG_ERROR("Cache directory path must be provided when load_file_path is specified in configuration");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-  }
-  return LoadMetricManagerFromCache(targets, cache_dir_path.value());
-}
-
 auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration,
-                        std::optional<std::filesystem::path> cache_dir_path)
+                        std::optional<std::filesystem::path> cache_dir_path, CollectorBackends backends)
     -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
   if (configuration.load_file_path.has_value()) {
-    return LoadConfiguredMetricManager(targets, cache_dir_path);
-  }
-
-  auto rename_status = ApplyConfiguredScmiTargetNames(configuration, targets);
-  if (rename_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(rename_status);
-  }
-
-  // arrange the targets by the collector type
-  std::unordered_map<CollectorType, std::vector<const ITarget*>> collector_type_to_targets_map;
-  for (const auto& target : targets) {
-    collector_type_to_targets_map[target->GetCollectorType()].push_back(target.get());
-  }
-  // build a vector of CollectorCapability objects for each unique collector
-  std::vector<astl::CollectorCapability> collector_caps_list;
-  for (const auto& [collector_type, target_list] : collector_type_to_targets_map) {
-    if (collector_type == CollectorType::UNKNOWN) {
-      ASTL_LOG_ERROR("BuildMetricManager: Found target with UNKNOWN collector type, skipping");
-      continue;
+    if (!cache_dir_path) {
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
-    ASTL_LOG_DEBUG("BuildMetricManager: Found {} targets with collector type {}", target_list.size(),
-                   static_cast<int>(collector_type));
-    collector_caps_list.emplace_back(collector_type);
+    return LoadMetricManagerFromCache(targets, *cache_dir_path);
   }
 
-  // create the astl::Capabilities object to pass to the MetricManager
-  astl::SystemCapability              system_capabilities{};
-  std::vector<astl::SystemCapability> system_caps_list{system_capabilities};
-  astl::Capabilities                  capabilities{std::move(collector_caps_list), std::move(system_caps_list)};
+  if (auto status = ValidateCollectorBackends(backends); status != ASTL_STATUS_SUCCESS) {
+    return std::unexpected(status);
+  }
+  for (const auto& backend : backends) {
+    if (backend.prepare_targets != nullptr) {
+      const auto status = backend.prepare_targets(configuration, targets);
+      if (status != ASTL_STATUS_SUCCESS) {
+        return std::unexpected(status);
+      }
+    }
+  }
+
+  BackendTargetMap                 collector_type_to_targets_map;
+  std::vector<CollectorCapability> collector_caps;
+  for (const auto& target : targets) {
+    const auto type        = target->GetCollectorType();
+    auto [entry, inserted] = collector_type_to_targets_map.try_emplace(type);
+    entry->second.push_back(target.get());
+    if (inserted && type != CollectorType::UNKNOWN) {
+      collector_caps.emplace_back(type);
+    }
+  }
+  Capabilities capabilities{std::move(collector_caps), {SystemCapability{}}};
 
   auto metric_group_descriptions = LoadMetricGroupDescriptions(configuration);
   if (!metric_group_descriptions.has_value()) {
@@ -132,9 +88,14 @@ auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, co
   std::unique_ptr<astl::IMetricManager> metric_manager =
       std::make_unique<astl::MetricManager>(capabilities, std::move(metric_group_descriptions.value()));
 
-  const auto status = RegisterConfiguredMetrics(configuration, collector_type_to_targets_map, metric_manager.get());
-  if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+  for (const auto& backend : backends) {
+    if (backend.register_metrics == nullptr) {
+      continue;
+    }
+    const auto status = backend.register_metrics(configuration, collector_type_to_targets_map, metric_manager.get());
+    if (status != ASTL_STATUS_SUCCESS) {
+      return std::unexpected(status);
+    }
   }
   return metric_manager;
 }

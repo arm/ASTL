@@ -77,7 +77,7 @@ inline const astl::MetricConfig kTemperature{
     astl::CollectorType::SCMI, astl::ScmiOperationBuilder{0x1234}};
 
 astl::ScmiDataEventId GetDataEventId(const astl::ResidencyMetricConfig::StateInfo& state_info) {
-  if (const auto* scmi_builder = std::get_if<astl::ScmiOperationBuilder>(&state_info.operation_builder)) {
+  if (const auto* scmi_builder = state_info.operation_builder.Target<astl::ScmiOperationBuilder>()) {
     return scmi_builder->GetDataEventId();
   }
   return astl::ScmiDataEventId{0xFFFFFFFF};  // invalid id
@@ -1056,4 +1056,40 @@ TEST_CASE("ParseConfiguration invalid identifier string maps to UNKNOWN", "[Conf
   auto metric_configs = std::move(metric_configs_result.value());
   REQUIRE_FALSE(metric_configs.empty());
   REQUIRE(metric_configs.begin()->first->Identifier() == ASTL_METRIC_IDENTIFIER_UNKNOWN);
+}
+
+TEST_CASE("Operation strategies accept independent large builders and preserve value copies", "[OperationBuilder]") {
+  struct LargeBuilder {
+    std::array<char, 1024> payload{};
+    auto                   BuildOperations(const astl::ITarget* /*target*/) const
+        -> std::expected<astl::OperationSequence, astl_status_code> {
+      if (payload[0] == 1) {
+        return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+      }
+      return astl::OperationSequence{};
+    }
+  };
+  LargeBuilder              concrete;
+  astl::AnyOperationBuilder builder{concrete};
+  concrete.payload[0] = 1;
+  auto copy           = builder;
+  builder             = concrete;
+  CHECK(astl::BuildOperations(copy, nullptr).has_value());
+  CHECK(astl::BuildOperations(builder, nullptr).error() == ASTL_STATUS_BAD_ARGUMENT);
+  CHECK(copy.Target<LargeBuilder>() != nullptr);
+  CHECK(copy.Target<astl::NullOperationBuilder>() == nullptr);
+  auto moved = std::move(copy);
+  CHECK(astl::BuildOperations(moved, nullptr).has_value());
+}
+
+TEST_CASE("Operation strategies preserve null and exhausted-ID errors", "[OperationBuilder]") {
+  struct ExhaustedBuilder {
+    static auto BuildOperations(const astl::ITarget* /*target*/)
+        -> std::expected<astl::OperationSequence, astl_status_code> {
+      throw astl::OperationIdExhausted{};
+    }
+  };
+  CHECK(astl::BuildOperations(astl::AnyOperationBuilder{}, nullptr).error() == astl::kInternalNotImplemented);
+  CHECK(astl::BuildOperations(astl::AnyOperationBuilder{ExhaustedBuilder{}}, nullptr).error() ==
+        astl::OperationIdExhausted::Status());
 }

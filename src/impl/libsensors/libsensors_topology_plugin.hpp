@@ -28,7 +28,7 @@ namespace detail {
 #ifdef ASTL_INCLUDE_LIBSENSORS
 constexpr std::string_view kLibsensorsTargetNamePrefix{"libsensors_"};
 
-static auto BuildTargetName(std::string_view target_suffix) -> std::string {
+inline auto BuildTargetName(std::string_view target_suffix) -> std::string {
   return std::string{kLibsensorsTargetNamePrefix} + std::string{target_suffix};
 }
 /**
@@ -36,8 +36,8 @@ static auto BuildTargetName(std::string_view target_suffix) -> std::string {
  *
  * @param configuration The ASTL configuration
  */
-auto ScanForTargetsWithLibsensors(const AstlConfiguration&    configuration,
-                                  std::shared_ptr<SensorsApi> sensors_api = nullptr)
+inline auto ScanForTargetsWithLibsensors(const AstlConfiguration&    configuration,
+                                         std::shared_ptr<SensorsApi> sensors_api = nullptr)
     -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
   (void)configuration;
   std::vector<std::unique_ptr<ITarget> > targets;

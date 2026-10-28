@@ -24,6 +24,7 @@
 #include "config/astl_configuration.hpp"
 #include "config/json_file_utils.hpp"
 #include "config/metric_json_declaration.hpp"
+#include "libsensors/libsensors_operation_builder.hpp"
 #include "metric/formula_builder.hpp"
 #include "metric/i_metric_manager.hpp"
 #include "target.hpp"

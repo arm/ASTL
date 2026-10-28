@@ -102,3 +102,8 @@ To tweak colors or fonts, edit `themeVariables` inside `scripts/render_mermaid.j
 ---
 
 Maintainers: Update this document if you add export formats, relocate diagrams, or change the rendering pipeline.
+
+## Collector extension boundary
+
+See [Collector backend integration](collector_backends.md) for the registration contract,
+resource ownership, and steps to add a backend within the existing initialization phases.

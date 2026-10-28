@@ -20,6 +20,7 @@
 #include "common/metric_config.hpp"
 #include "config/scmi_platform_telemetry_spec.hpp"
 #include "metric/formula_builder.hpp"
+#include "operation/scmi_operation_builder.hpp"
 #include "target.hpp"
 
 using json = nlohmann::json;

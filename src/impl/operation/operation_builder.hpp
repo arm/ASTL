@@ -6,27 +6,19 @@
 #define OPERATION_BUILDER_HPP_
 
 #include <concepts>
-#include <variant>
+#include <functional>
+#include <utility>
 
 #include "astl_internal_status.hpp"
 #include "operation/operation.hpp"  // defines OperationSequence and OperationBuilder concept
 #include "target.hpp"
-
-#if defined(ASTL_INCLUDE_LIBSENSORS)
-#  include "libsensors/libsensors_operation_builder.hpp"
-#endif
-#if defined(ASTL_INCLUDE_PROCFS)
-#  include "operation/procfs_operation_builder.hpp"
-#endif
-#include "scmi_operation_builder.hpp"
-#include "windows/windows_operation_builder.hpp"
 
 namespace astl {
 
 /**
  * @brief A no-op operation builder that always returns NOT_IMPLEMENTED
  *
- * Useful as a default placeholder in AnyOperationBuilder variant
+ * Useful as a default placeholder in AnyOperationBuilder
  */
 class NullOperationBuilder {
  public:
@@ -41,14 +33,37 @@ class NullOperationBuilder {
 
 static_assert(OperationBuilder<NullOperationBuilder>, "NullOperationBuilder does not satisfy OperationBuilder concept");
 
-using AnyOperationBuilder = std::variant<NullOperationBuilder, WindowsOperationBuilder,
-#if defined(ASTL_INCLUDE_LIBSENSORS)
-                                         LibsensorsOperationBuilder,
-#endif
-#if defined(ASTL_INCLUDE_PROCFS)
-                                         ProcfsOperationBuilder,
-#endif
-                                         ScmiOperationBuilder, ScmiMultiTargetOperationBuilder>;
+// An owning, copyable strategy. std::function handles storage without a fixed size limit.
+// Concrete builders remain independent of this wrapper and are invoked through const references.
+class AnyOperationBuilder {
+  template <OperationBuilder T>
+  struct Adapter {
+    T    builder;
+    auto operator()(const ITarget* target) const { return builder.BuildOperations(target); }
+  };
+
+ public:
+  AnyOperationBuilder() : AnyOperationBuilder(NullOperationBuilder{}) {}
+
+  template <OperationBuilder T>
+  requires(!std::same_as<std::remove_cvref_t<T>, AnyOperationBuilder>) &&
+          std::copy_constructible<std::remove_cvref_t<T>>
+  // NOLINTNEXTLINE(google-explicit-constructor) -- Preserve variant-style conversion in aggregate metric configs.
+  AnyOperationBuilder(T builder) : _build(Adapter<T>{std::move(builder)}) {}
+
+  template <OperationBuilder T>
+  auto Target() const -> const T* {
+    const auto* adapter = _build.template target<Adapter<T>>();
+    return adapter ? &adapter->builder : nullptr;
+  }
+
+  auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code> {
+    return _build ? _build(target) : NullOperationBuilder::BuildOperations(target);
+  }
+
+ private:
+  std::function<std::expected<OperationSequence, astl_status_code>(const ITarget*)> _build;
+};
 
 template <typename OperationBuilderType>
 concept AnyOperationBuilderCompatible = std::constructible_from<AnyOperationBuilder, OperationBuilderType&&>;
@@ -57,7 +72,7 @@ concept AnyOperationBuilderCompatible = std::constructible_from<AnyOperationBuil
  * @brief Use the given builder to create operations for the given target
  *
  * @param builder The operation builder to use, satisfies the OperationBuilder concept
- *                and is part of the 'AnyOperationBuilder' variant
+ *                can be stored in AnyOperationBuilder
  * @param target The target for which to build operations,
  *               should match the collector type (.eg SCMI, Libsensors) of the builder
  *
@@ -66,11 +81,7 @@ concept AnyOperationBuilderCompatible = std::constructible_from<AnyOperationBuil
 inline auto BuildOperations(const AnyOperationBuilder& builder, const ITarget* target)
     -> std::expected<OperationSequence, astl_status_code> {
   try {
-    return std::visit(
-        [target](const auto& bldr) -> std::expected<OperationSequence, astl_status_code> {
-          return bldr.BuildOperations(target);
-        },
-        builder);
+    return builder.BuildOperations(target);
   } catch (const OperationIdExhausted& ex) {
     ASTL_LOG_ERROR("BuildOperations: {}", ex.what());
     return std::unexpected{OperationIdExhausted::Status()};

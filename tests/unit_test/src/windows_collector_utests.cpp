@@ -325,10 +325,10 @@ TEST_CASE("Windows collector allowlist follows build availability", "[windows_co
   const auto  configuration = astl::AstlConfiguration::CreateConfiguration();
 #if defined(ASTL_INCLUDE_WINDOWS)
   REQUIRE(configuration.has_value());
-  CHECK(configuration->collectors.windows);
-  CHECK_FALSE(configuration->collectors.scmi);
-  CHECK_FALSE(configuration->collectors.procfs);
-  CHECK_FALSE(configuration->collectors.libsensors);
+  CHECK(configuration->collectors.IsEnabled(astl::CollectorType::WINDOWS));
+  CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::SCMI));
+  CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::PROCFS));
+  CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::LIBSENSORS));
 #else
   REQUIRE_FALSE(configuration.has_value());
   CHECK(configuration.error() == ASTL_STATUS_BAD_CONFIGURATION);

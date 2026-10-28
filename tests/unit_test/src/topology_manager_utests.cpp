@@ -320,7 +320,7 @@ TEST_CASE("TopologyBuilder::BuildTopologyManager honors disabled collectors", "[
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
   auto configuration       = configuration_result.value();
-  configuration.collectors = astl::CollectorSelection{.scmi = false, .libsensors = false, .procfs = false};
+  configuration.collectors = astl::CollectorSelection{std::vector<astl::CollectorType>{}};
 
   auto result = astl::BuildTopologyManager(configuration, std::nullopt);
 
