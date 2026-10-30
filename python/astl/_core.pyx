@@ -541,7 +541,7 @@ cpdef configure_metrics_on_target(Target target, params, list metrics):
         raise MemoryError()
     try:
         for i in range(n):
-            handles[i] = <void*>metrics[i].handle_ptr
+            handles[i] = <void*><size_t>metrics[i].handle_ptr
         call_params.size = sizeof(astl_configure_metric_collection_on_target_params_t)
 
         call_params.flags = 0
@@ -569,7 +569,7 @@ cpdef configure_metrics(params, list metrics):
         raise MemoryError()
     try:
         for i in range(n):
-            handles[i] = <void*>metrics[i].handle_ptr
+            handles[i] = <void*><size_t>metrics[i].handle_ptr
         call_params.size = sizeof(astl_configure_metric_collection_params_t)
 
         call_params.flags = 0

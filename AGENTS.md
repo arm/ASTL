@@ -45,6 +45,8 @@ Recent history uses concise, imperative subjects with issue tags, for example `[
 
 When opening a PR, use `.github/PULL_REQUEST_TEMPLATE.md` and complete all applicable sections. In particular, select exactly one option under **Public API declaration** so the API and user-flow impact is explicit. Describe the behavior change and list validation performed (`ctest`, `just python-pytest`, `just go-test debug`, etc.). Include logs or screenshots only when they clarify docs, tooling, or user-facing output.
 
+AI agents must never tick the PR template checkbox "I have performed a self-review of my own code". Leave it unchecked for a human to complete.
+
 If the work implements a specific Jira ticket, reference its key in the PR title (for example, `[ASTL-123]`) and add a comment to the Jira ticket linking to the newly created PR. For work without a Jira ticket, include `[NO-JIRA]` in the PR title and explain the rationale in the PR description.
 
 ## Configuration Tips

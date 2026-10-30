@@ -11,6 +11,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 set(UNIT_TEST_SRCS
     windows_collector_utests.cpp
+    numa_utests.cpp
     api_layout_utests.cpp
     astl_value_utests.cpp
     astl_utils_utests.cpp

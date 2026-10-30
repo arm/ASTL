@@ -13,6 +13,7 @@ endif()
 add_executable(
   wrapper_test
   wrapper_test.cpp
+  numa_api_tests.cpp
   metric_groups_tests.cpp
   metric_state_discovery_tests.cpp
   summary_api_tests.cpp

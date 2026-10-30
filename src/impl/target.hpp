@@ -45,6 +45,9 @@ inline auto CollectorTypeStableKeyPrefix(CollectorType collector_type) -> std::s
     case CollectorType::WINDOWS:
       prefix = "windows";
       break;
+    case CollectorType::NUMA:
+      prefix = "numa";
+      break;
     case CollectorType::PROCFS:
       prefix = "procfs";
       break;

@@ -10,10 +10,19 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ## Unreleased
 
+### Fixed
+
+- Fixed Python metric configuration to pass the stored native handle address for both
+  target-specific and global collection, rather than the address of its Python integer object.
+
 ### Added
 
 - Added raw-to-UTC clock correlation saved with collection archives and exposed through C, Python, and Go APIs.
   Native and ATX interval CSV reports include UTC timestamps, and native Perfetto output includes clock correlation metadata.
+
+- Added Linux NUMA sysfs telemetry on the `numa` target: interval page counts, CPU-local/remote
+  allocation percentages, and per-node allocations. Select with `ASTL_COLLECTORS=numa`;
+  Android and non-Linux discovery are disabled. See `doc/numa.md` for sampling semantics.
 
 - Added an optional Windows system collector for aggregate and per-logical-processor CPU busy-time utilization,
   physical memory capacity, used bytes, and utilization through the `sysutil` target.

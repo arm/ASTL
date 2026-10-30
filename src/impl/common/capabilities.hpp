@@ -20,6 +20,7 @@ enum class CollectorType {
   LIBSENSORS  = 3,
   PROCFS      = 4,
   WINDOWS     = 5,
+  NUMA        = 6,
 };
 
 /**

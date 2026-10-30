@@ -32,6 +32,7 @@ enum class EnvVar {
 
   /** @brief Optional override for the procfs root path. */
   ASTL_PROCFS_ROOT,
+  ASTL_NUMA_ROOT,
 
   /** @brief Optional override for the SCMI ioctl device root path. */
   ASTL_SCMI_IOCTL_DEV_ROOT,

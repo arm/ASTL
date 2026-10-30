@@ -260,6 +260,7 @@ if(ASTL_WINDOWS AND NOT WIN32)
 endif()
 set(ASTL_INCLUDE_WINDOWS ${ASTL_WINDOWS})
 
+option(ASTL_NUMA "Build Linux NUMA sysfs discovery support (not Android)" ON)
 option(ASTL_PROCFS "Build procfs collector and metric-discovery support" ON)
 if(ASTL_PROCFS)
   set(ASTL_INCLUDE_PROCFS ON)

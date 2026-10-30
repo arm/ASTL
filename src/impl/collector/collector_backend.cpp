@@ -10,9 +10,9 @@
 
 namespace astl {
 // Explicit references keep backend modules linked even when ASTL is a static library.
-extern const CollectorBackend kWindowsBackend, kScmiBackend, kLibsensorsBackend, kProcfsBackend;
+extern const CollectorBackend kWindowsBackend, kScmiBackend, kLibsensorsBackend, kProcfsBackend, kNumaBackend;
 auto                          BuiltinCollectorBackends() -> CollectorBackends {
-  static const std::array backends{kWindowsBackend, kScmiBackend, kLibsensorsBackend, kProcfsBackend};
+  static const std::array backends{kWindowsBackend, kScmiBackend, kLibsensorsBackend, kProcfsBackend, kNumaBackend};
   return backends;
 }
 

@@ -137,6 +137,8 @@ AstlConfiguration::AstlConfiguration(std::filesystem::path const&               
     : scmi_sysfs_telemetry_root_path{scmi_sysfs_path},
       scmi_ioctl_device_root_path{scmi_ioctl_device_root},
       procfs_root_path{procfs_root_path},
+      numa_root_path{GetEnvVar(EnvVar::ASTL_NUMA_ROOT).empty() ? "/sys/devices/system/node"
+                                                               : GetEnvVar(EnvVar::ASTL_NUMA_ROOT)},
       config_dir_path{config_dir_path},
       metrics_dir_path{config_dir_path / "metrics"},
       groups_dir_path{config_dir_path / "groups"},

@@ -29,6 +29,10 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_backend.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/libsensors/libsensors_backend.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_backend.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/numa/numa_backend.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/numa/numa_source.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/numa/numa_collector.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/numa/numa_sampling.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/orchestrator/orchestrator.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/orchestrator/orchestrator_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_builder.cpp"
@@ -118,6 +122,12 @@ endif()
 target_compile_definitions(${LIBRARY_NAME} PRIVATE TE_UINT64 TE_BITWISE_OPERATORS)
 message(STATUS "Using TE_UINT64 for tinyexpr++ (exact uint64_t arithmetic)")
 message(STATUS "Using TE_BITWISE_OPERATORS for tinyexpr++ (& and | are bitwise)")
+
+if(ASTL_NUMA
+   AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND NOT ANDROID)
+  target_compile_definitions(${LIBRARY_NAME} PUBLIC ASTL_INCLUDE_NUMA)
+endif()
 
 if(ASTL_HAVE_LIBSENSORS)
   target_compile_definitions(${LIBRARY_NAME} PUBLIC ASTL_INCLUDE_LIBSENSORS)

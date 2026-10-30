@@ -42,6 +42,9 @@ struct AstlConfiguration {
   /** @brief Path to procfs. Defaults to /proc, but can be overridden with env var ASTL_PROCFS_ROOT. */
   std::filesystem::path procfs_root_path;
 
+  /** @brief NUMA node sysfs root, overridden by ASTL_NUMA_ROOT. */
+  std::filesystem::path numa_root_path{"/sys/devices/system/node"};
+
   /** @brief Logical root of the selected configuration snapshot (empty path)
    */
   std::filesystem::path config_dir_path;
