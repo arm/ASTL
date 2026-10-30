@@ -10,9 +10,9 @@
 #include "../../test_utilities.hpp"
 #include "collector/collector_builder.hpp"
 #include "collector/collector_manager.hpp"
-#include "topology/scmi_target.hpp"
+#include "scmi/scmi_target.hpp"
 #if defined(ASTL_INCLUDE_PROCFS)
-#  include "topology/procfs_target.hpp"
+#  include "procfs/procfs_target.hpp"
 #endif
 
 TEST_CASE("CollectorManager::RegisterRawSampleSink", "[collector_manager]") {

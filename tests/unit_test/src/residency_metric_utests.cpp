@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "metric/residency_metric.hpp"
-#include "operation/scmi_operation_builder.hpp"
+#include "scmi/scmi_operation_builder.hpp"
 
 using namespace std::chrono_literals;
 

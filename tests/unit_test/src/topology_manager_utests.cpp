@@ -13,10 +13,10 @@
 #include "serdes/targets.pb.h"
 #include "target.hpp"
 #if defined(ASTL_INCLUDE_PROCFS)
-#  include "topology/procfs_topology_plugin.hpp"
+#  include "procfs/procfs_topology_plugin.hpp"
 #endif
-#include "topology/scmi_target.hpp"
-#include "topology/scmi_topology_plugin.hpp"
+#include "scmi/scmi_target.hpp"
+#include "scmi/scmi_topology_plugin.hpp"
 #include "topology/topology_builder.hpp"
 #include "topology/topology_manager.hpp"
 

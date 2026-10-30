@@ -12,8 +12,8 @@
 
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
-#include "collector/scmi_backend_selection.hpp"
-#include "collector/scmi_ioctl_interface.hpp"
+#include "scmi/scmi_backend_selection.hpp"
+#include "scmi/scmi_ioctl_interface.hpp"
 
 namespace fs = std::filesystem;
 

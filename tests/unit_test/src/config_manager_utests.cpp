@@ -14,9 +14,9 @@
 #include "config/astl_configuration.hpp"
 #include "config/configuration_manager.hpp"
 #include "config/metric_json_declaration.hpp"
-#include "config/scmi_metric_json_declaration.hpp"
-#include "operation/scmi_operation_builder.hpp"
-#include "operation/scmi_read_operation.hpp"
+#include "scmi/scmi_metric_json_declaration.hpp"
+#include "scmi/scmi_operation_builder.hpp"
+#include "scmi/scmi_read_operation.hpp"
 
 using trompeloeil::_;
 

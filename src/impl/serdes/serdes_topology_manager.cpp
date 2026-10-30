@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "scmi/scmi_target.hpp"
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/targets.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
-#include "topology/scmi_target.hpp"
 #include "topology/topology_manager.hpp"
 
 namespace astl::ProtobufSerDes {

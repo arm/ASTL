@@ -28,10 +28,10 @@
 #include "metric/metric_manager.hpp"
 #include "operation/operation_builder.hpp"
 #include "orchestrator/orchestrator.hpp"
+#include "scmi/scmi_target.hpp"
 #include "serdes/archive_utils.hpp"
 #include "serdes/protobuf_serdes.hpp"
 #include "target.hpp"
-#include "topology/scmi_target.hpp"
 #include "topology/topology_manager.hpp"
 
 using Catch::Matchers::ContainsSubstring;

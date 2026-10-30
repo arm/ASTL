@@ -23,6 +23,11 @@ selection to distinguish a compiled-out backend from an unknown name. Live backe
 must provide construction and registration callbacks. Registry validation rejects
 duplicate names/IDs and incomplete live descriptors; discovery checks target ownership.
 
+Backend-specific implementation lives under `src/impl/scmi/`, `src/impl/procfs/`,
+`src/impl/libsensors/`, and `src/impl/windows/`. Each folder groups its discovery,
+targets, operations, collectors, metrics, and configuration parsing where applicable.
+Shared interfaces and orchestration remain in the common layer folders.
+
 To add a backend:
 
 1. Implement its targets, collectors, metrics, and operation builders inside its module.

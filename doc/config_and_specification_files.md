@@ -183,8 +183,8 @@ The output shows available metrics with their descriptions, units, and types:
 
 See the parser implementation in:
 
-- [`src/impl/config/scmi_platform_telemetry_spec.hpp`](../src/impl/config/scmi_platform_telemetry_spec.hpp)
-- [`src/impl/config/scmi_platform_telemetry_spec.cpp`](../src/impl/config/scmi_platform_telemetry_spec.cpp)
+- [`src/impl/scmi/scmi_platform_telemetry_spec.hpp`](../src/impl/scmi/scmi_platform_telemetry_spec.hpp)
+- [`src/impl/scmi/scmi_platform_telemetry_spec.cpp`](../src/impl/scmi/scmi_platform_telemetry_spec.cpp)
 
 ## Metrics Declaration Files
 

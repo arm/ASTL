@@ -11,11 +11,11 @@
 #include "../../test_utilities.hpp"
 #include "astl/astl_errors.h"
 #include "astl_internal_status.hpp"
-#include "common/scmi/uuid.hpp"
 #include "config/config_lookup_loader.hpp"
 #include "config/metric_json_declaration.hpp"
-#include "config/scmi_metric_json_declaration.hpp"
-#include "config/scmi_platform_telemetry_spec.hpp"
+#include "scmi/scmi_metric_json_declaration.hpp"
+#include "scmi/scmi_platform_telemetry_spec.hpp"
+#include "scmi/uuid.hpp"
 
 using json = nlohmann::json;
 

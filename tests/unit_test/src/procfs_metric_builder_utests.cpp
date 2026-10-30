@@ -17,9 +17,9 @@
 #include "config/astl_configuration.hpp"
 #include "metric/metric_builder.hpp"
 #include "metric/metric_manager.hpp"
-#include "metric/procfs_metric_builder.hpp"
-#include "operation/procfs_read_operation.hpp"
-#include "topology/procfs_target.hpp"
+#include "procfs/procfs_metric_builder.hpp"
+#include "procfs/procfs_read_operation.hpp"
+#include "procfs/procfs_target.hpp"
 
 namespace fs = std::filesystem;
 

@@ -22,17 +22,17 @@
 #include "metric/event_metric.hpp"
 #include "metric/finite_set_metric.hpp"
 #include "metric/metric_manager.hpp"
-#include "metric/procfs_composite_metricconfig.hpp"
 #include "metric/rate_metric.hpp"
 #include "metric/sampled_value_metric.hpp"
-#include "operation/scmi_operation_builder.hpp"
 #include "orchestrator/orchestrator.hpp"
+#include "procfs/procfs_composite_metricconfig.hpp"
+#include "scmi/scmi_operation_builder.hpp"
+#include "scmi/scmi_target.hpp"
 #include "serdes/metrics.pb.h"
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/raw_samples.pb.h"  // AUTO-GENERATED RawSampleBatch
 #include "serdes/targets.pb.h"      // AUTO-GENERATED Target
 #include "topology/i_topology_manager.hpp"
-#include "topology/scmi_target.hpp"
 #include "topology/topology_manager.hpp"
 
 namespace fs = std::filesystem;

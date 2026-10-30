@@ -18,8 +18,8 @@
 #include "collector/collector_builder.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "metric/metric_builder.hpp"
-#include "topology/procfs_target.hpp"
-#include "topology/procfs_topology_plugin.hpp"
+#include "procfs/procfs_target.hpp"
+#include "procfs/procfs_topology_plugin.hpp"
 
 namespace fs = std::filesystem;
 

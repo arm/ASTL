@@ -11,12 +11,12 @@
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
 #include "collector/collection_configuration.hpp"
-#include "collector/procfs_collector.hpp"
-#include "common/procfs_utils_readers.hpp"
 #include "operation/operation.hpp"
-#include "operation/procfs_operation_builder.hpp"
-#include "operation/procfs_read_operation.hpp"
-#include "topology/procfs_target.hpp"
+#include "procfs/procfs_collector.hpp"
+#include "procfs/procfs_operation_builder.hpp"
+#include "procfs/procfs_read_operation.hpp"
+#include "procfs/procfs_target.hpp"
+#include "procfs/procfs_utils_readers.hpp"
 
 namespace fs = std::filesystem;
 

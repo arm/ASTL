@@ -32,10 +32,10 @@
 
 #include "astl_logger.hpp"
 #include "common/key_value_text_utils.hpp"
-#include "common/procfs_utils.hpp"
 #include "common/text_file_utils.hpp"
 #include "common/text_parse_utils.hpp"
 #include "nlohmann/json.hpp"
+#include "procfs/procfs_utils.hpp"
 
 namespace astl {
 namespace {

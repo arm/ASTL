@@ -15,8 +15,8 @@
 #include "astl/astl_errors.h"
 #include "astl_logger.hpp"
 #include "config/json_file_utils.hpp"
-#include "config/scmi_metric_json_declaration.hpp"
-#include "config/scmi_platform_telemetry_spec.hpp"
+#include "scmi/scmi_metric_json_declaration.hpp"
+#include "scmi/scmi_platform_telemetry_spec.hpp"
 
 namespace astl::config {
 

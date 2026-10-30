@@ -15,9 +15,9 @@
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
 #include "collector/collector_backend.hpp"
-#include "common/procfs_utils.hpp"
-#include "common/scmi/scmi_constants.hpp"
 #include "config/configuration_manager.hpp"
+#include "procfs/procfs_utils.hpp"
+#include "scmi/scmi_constants.hpp"
 
 namespace astl {
 

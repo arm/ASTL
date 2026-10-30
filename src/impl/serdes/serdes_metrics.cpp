@@ -16,9 +16,9 @@
 #include "metric/finite_set_metric.hpp"
 #include "metric/formula_builder.hpp"
 #include "metric/metric_manager.hpp"
-#include "metric/procfs_composite_metricconfig.hpp"
 #include "metric/rate_metric.hpp"
 #include "metric/sampled_value_metric.hpp"
+#include "procfs/procfs_composite_metricconfig.hpp"
 #include "serdes/metrics.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/serdes_metrics_detail.hpp"

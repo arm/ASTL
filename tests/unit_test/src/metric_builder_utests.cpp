@@ -20,9 +20,9 @@
 #include "metric/metric_builder.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/sampled_value_metric.hpp"
+#include "scmi/scmi_target.hpp"
 #include "serdes/protobuf_serdes.hpp"
 #include "target.hpp"
-#include "topology/scmi_target.hpp"
 
 using trompeloeil::_;
 

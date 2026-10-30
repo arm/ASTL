@@ -20,8 +20,8 @@
 #include "metric/i_metric.hpp"
 #include "metric/metric_manager.hpp"
 #include "metric/sampled_value_metric.hpp"
-#include "operation/scmi_operation_builder.hpp"
-#include "operation/scmi_read_operation.hpp"
+#include "scmi/scmi_operation_builder.hpp"
+#include "scmi/scmi_read_operation.hpp"
 
 using astl::Capabilities;
 using astl::CollectorCapability;

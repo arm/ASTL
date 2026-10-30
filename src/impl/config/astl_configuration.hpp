@@ -16,7 +16,7 @@
 #include "common/capabilities.hpp"
 #include "common/metric_config.hpp"
 #include "config/config_source.hpp"
-#include "config/scmi_platform_telemetry_spec.hpp"
+#include "scmi/scmi_platform_telemetry_spec.hpp"
 
 namespace astl {
 

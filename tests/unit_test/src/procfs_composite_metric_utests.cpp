@@ -4,7 +4,7 @@
 
 #include "../../test_includes.hpp"
 #include "common/i_processed_sample_sink.hpp"
-#include "metric/procfs_composite_metricconfig.hpp"
+#include "procfs/procfs_composite_metricconfig.hpp"
 
 namespace {
 

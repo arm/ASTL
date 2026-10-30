@@ -20,12 +20,12 @@
 #include "event_metric.hpp"
 #include "finite_set_metric.hpp"
 #include "i_metric.hpp"
-#include "metric/procfs_composite_metricconfig.hpp"
 #include "metric_config.hpp"
-#include "operation/scmi_read_operation.hpp"
+#include "procfs/procfs_composite_metricconfig.hpp"
 #include "rate_metric.hpp"
 #include "residency_metric.hpp"
 #include "sampled_value_metric.hpp"
+#include "scmi/scmi_read_operation.hpp"
 
 namespace astl {
 namespace {

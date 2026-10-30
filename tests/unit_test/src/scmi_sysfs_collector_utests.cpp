@@ -63,8 +63,8 @@ inline auto GetScmiProcessLockTempDirectory(std::error_code& error_code) -> std:
 #include "../../test_utilities.hpp"
 #include "astl/astl.h"
 #include "astl_file_interface.hpp"
-#include "collector/scmi_sysfs_collector.hpp"
-#include "operation/scmi_read_operation.hpp"
+#include "scmi/scmi_read_operation.hpp"
+#include "scmi/scmi_sysfs_collector.hpp"
 
 using namespace std::chrono_literals;
 

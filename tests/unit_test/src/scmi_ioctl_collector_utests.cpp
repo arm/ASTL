@@ -14,9 +14,9 @@
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
-#include "collector/scmi_ioctl_collector.hpp"
-#include "operation/scmi_read_operation.hpp"
-#include "topology/scmi_target.hpp"
+#include "scmi/scmi_ioctl_collector.hpp"
+#include "scmi/scmi_read_operation.hpp"
+#include "scmi/scmi_target.hpp"
 
 namespace fs = std::filesystem;
 using trompeloeil::_;

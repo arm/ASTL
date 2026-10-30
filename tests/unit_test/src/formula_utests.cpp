@@ -9,9 +9,9 @@
 
 #include "../../test_includes.hpp"  // include before catch2
 #include "common/astl_value.hpp"
-#include "config/scmi_metric_json_declaration.hpp"
 #include "metric/expression_formula.hpp"
 #include "metric/formula_builder.hpp"
+#include "scmi/scmi_metric_json_declaration.hpp"
 
 using Catch::Matchers::WithinAbs;
 

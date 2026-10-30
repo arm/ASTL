@@ -10,7 +10,7 @@
 #include <optional>
 #include <string_view>
 
-#include "common/procfs_utils.hpp"
+#include "procfs/procfs_utils.hpp"
 
 namespace astl::text {
 

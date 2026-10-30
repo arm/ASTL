@@ -10,9 +10,9 @@
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
 #include "astl_utils.hpp"
-#include "common/procfs_utils.hpp"
-#include "common/scmi/scmi_constants.hpp"
 #include "config/astl_configuration.hpp"
+#include "procfs/procfs_utils.hpp"
+#include "scmi/scmi_constants.hpp"
 
 namespace fs = std::filesystem;
 
