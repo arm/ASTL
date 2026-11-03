@@ -212,6 +212,7 @@ type Version struct {
 }
 
 type SystemInfo struct {
+	ClockCorrelation     *ClockCorrelation
 	Flags                SystemInfoFlags
 	SoCName              string
 	VendorID             string
@@ -331,28 +332,10 @@ func VersionInfo() Version {
 // RealtimeNS + (timestamp - RawNS). UncertaintyNS bounds clock read latency only.
 // Nodes must synchronize their realtime clocks independently.
 type ClockCorrelation struct {
-	RawNS         int64
-	RealtimeNS    int64
-	UncertaintyNS int64
-}
-
-// GetClockCorrelation returns the active collection's reference, including during
-// archive replay. It returns an error when the reference is unavailable.
-func GetClockCorrelation() (ClockCorrelation, error) {
-	ptr, release, err := allocArray("GetClockCorrelation", 1, C.sizeof_astl_clock_correlation_t)
-	if err != nil {
-		return ClockCorrelation{}, err
-	}
-	defer release()
-	reference := (*C.astl_clock_correlation_t)(ptr)
-	params := C.astl_get_clock_correlation_params_t{
-		size: C.size_t(C.sizeof_astl_get_clock_correlation_params_t), correlation: reference,
-	}
-	if err := checkStatus("astlGetClockCorrelation", C.astlGetClockCorrelation(&params)); err != nil {
-		return ClockCorrelation{}, err
-	}
-	return ClockCorrelation{RawNS: int64(reference.raw_ns), RealtimeNS: int64(reference.realtime_ns),
-		UncertaintyNS: int64(reference.uncertainty_ns)}, nil
+	ClockReferenceUTC string
+	RawNS             int64
+	RealtimeNS        int64
+	UncertaintyNS     int64
 }
 
 func GetSystemInfo() (SystemInfo, error) {
@@ -377,7 +360,12 @@ func GetSystemInfoWithFlags(flags SystemInfoFlags) (SystemInfo, error) {
 		return SystemInfo{}, err
 	}
 
+	var reference *ClockCorrelation
+	if info.clock_correlation.clock_reference_utc != nil {
+		reference = &ClockCorrelation{RawNS: int64(info.clock_correlation.raw_ns), RealtimeNS: int64(info.clock_correlation.realtime_ns), UncertaintyNS: int64(info.clock_correlation.uncertainty_ns), ClockReferenceUTC: goString(info.clock_correlation.clock_reference_utc)}
+	}
 	return SystemInfo{
+		ClockCorrelation:     reference,
 		Flags:                SystemInfoFlags(info.flags),
 		SoCName:              goString(info.soc_name),
 		VendorID:             goString(info.vendor_id),

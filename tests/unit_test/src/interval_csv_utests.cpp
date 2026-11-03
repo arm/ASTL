@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <string>
 
 #include "../../mock_classes.hpp"
@@ -38,7 +39,6 @@ TEST_CASE("IntervalCsvOutput writes ATX-shaped collection info and interval sect
   REQUIRE(ifs.is_open());
   const std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
   REQUIRE(content.find("ASTL Build Version,") != std::string::npos);
-  REQUIRE(content.find("Collection Date/Time,") != std::string::npos);
   REQUIRE(content.find("Command Line,\"<not captured>\"") != std::string::npos);
   REQUIRE(content.find("Power on Soc") != std::string::npos);
   REQUIRE(content.find("timestamp_us,value") != std::string::npos);
@@ -118,7 +118,6 @@ TEST_CASE("IntervalCsvOutput empty map emits collection info only", "[intervalcs
   REQUIRE(ifs.is_open());
   const std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
   REQUIRE(content.find("ASTL Build Version,") != std::string::npos);
-  REQUIRE(content.find("Collection Date/Time,") != std::string::npos);
   REQUIRE(content.find("timestamp_us,value") == std::string::npos);
   REQUIRE_FALSE(writer.Ready());
 }
@@ -143,7 +142,7 @@ TEST_CASE("IntervalCsvOutput converts monotonic nanoseconds to timestamp_us", "[
   REQUIRE(content.find("1234,3") != std::string::npos);
 }
 
-TEST_CASE("Archived clock reference survives replay and supplies UTC output", "[intervalcsv][wallclock]") {
+TEST_CASE("Archived clock reference survives replay without adding UTC to reports", "[intervalcsv][wallclock]") {
   const std::filesystem::path directory = "astl_clock_reference_test";
   std::filesystem::create_directories(directory);
   struct Cleanup {
@@ -164,6 +163,9 @@ TEST_CASE("Archived clock reference survives replay and supplies UTC output", "[
   }
   REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory) == ASTL_STATUS_SUCCESS);
   REQUIRE(astl::SavePlatformInfoToCacheDir(directory / "saved") == ASTL_STATUS_SUCCESS);
+  std::ifstream saved_metadata(directory / "saved" / astl::kPlatformInfoFileName);
+  const auto    saved_json = nlohmann::json::parse(saved_metadata);
+  REQUIRE(saved_json.at("wall_clock_correlation").at("utc") == "1970-01-01T00:00:00.000000000Z");
   astl::ClearLoadedPlatformInfo();
   astl::CaptureSessionWallClockCorrelation();
   REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory / "saved") == ASTL_STATUS_SUCCESS);
@@ -179,8 +181,9 @@ TEST_CASE("Archived clock reference survives replay and supplies UTC output", "[
   }
   std::ifstream     output(directory / "output.csv");
   const std::string content((std::istreambuf_iterator<char>(output)), std::istreambuf_iterator<char>());
-  REQUIRE(content.find("timestamp_us,value,timestamp_utc\n1,3.14,1970-01-01T00:00:00.000000001Z") != std::string::npos);
-  REQUIRE(content.find("Collection Date/Time,\"1970-01-01T00:00:00.000000000Z\"") != std::string::npos);
+  REQUIRE(content.find("timestamp_us,value\n1,3.14\n") != std::string::npos);
+  REQUIRE(content.find("timestamp_utc") == std::string::npos);
+  REQUIRE(content.find("Clock Reference") == std::string::npos);
   SECTION("Legacy metadata does not inherit the analysis host reference") {
     std::ofstream(directory / astl::kPlatformInfoFileName) << "{}";
     REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory) == ASTL_STATUS_SUCCESS);
@@ -197,8 +200,7 @@ TEST_CASE("Archived clock reference survives replay and supplies UTC output", "[
   }
   std::ifstream     legacy_output(directory / "legacy.csv");
   const std::string legacy((std::istreambuf_iterator<char>(legacy_output)), std::istreambuf_iterator<char>());
-  REQUIRE(legacy.find("1,3.14,\n") != std::string::npos);
-  REQUIRE(legacy.find("Collection Date/Time,\"<unknown>\"") != std::string::npos);
+  REQUIRE(legacy.find("1,3.14\n") != std::string::npos);
 }
 
 TEST_CASE("Clock metadata rejects lossy numeric types and invalid uncertainty", "[wallclock]") {

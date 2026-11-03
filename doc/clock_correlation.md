@@ -3,91 +3,97 @@ SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-s
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Correlating collection timestamps with UTC
+# Collection clock references in system information
 
-ASTL retains sample timestamps in `CLOCK_MONOTONIC_RAW` nanoseconds on Linux.
-Each live library initialization and clean collection configuration captures a
-fresh wall-clock reference, before collecting samples, by reading raw time,
-`CLOCK_REALTIME`, then raw time again. The
-midpoint of the two raw reads is paired with realtime. Half the read interval,
-rounded up, is saved as `uncertainty_ns`. Clock read failures leave the reference
-unavailable. Other platforms use the steady and system clocks.
+ASTL samples retain `CLOCK_MONOTONIC_RAW` timestamps on Linux. Live initialization
+captures a reference connecting raw time to
+`CLOCK_REALTIME`. It reads raw time, realtime, then raw time again, and pairs the
+raw midpoint with realtime. Half the read interval, rounded up, is saved as
+`uncertainty_ns`. Other platforms use steady and system clocks.
 
-The reference is saved in `platform_info.astl` inside the collection archive:
+ASTL does not record a reference at machine boot. Live initialization, including
+through target discovery, captures a reference. Reading system information
+alone does not initialize the collection engine, so it has no reference before
+initialization or archive loading. Fresh collection configuration refreshes the
+reference. Additional targets share the collection reference; a new clean collection captures
+a fresh reference. Invalid requests that retain the collection retain its reference.
+
+## Retrieve the reference
+
+Use `astlGetSystemInfo`; there is no separate clock getter:
+
+```c
+astl_platform_props_t info = {0};
+info.size = sizeof(info);
+astl_get_system_info_params_t params = {0};
+params.size = sizeof(params);
+params.system_info = &info;
+if (astlGetSystemInfo(&params) == ASTL_STATUS_SUCCESS &&
+    info.clock_correlation.clock_reference_utc != NULL) {
+  /* info.clock_correlation contains raw_ns, realtime_ns, uncertainty_ns.
+     info.clock_correlation.clock_reference_utc is the reference's ISO 8601 UTC timestamp. */
+}
+```
+
+Before initialization, if capture fails, or for legacy archives without a reference,
+the numeric fields are zero and `clock_correlation.clock_reference_utc` is NULL.
+Availability must be checked; zero is a valid time.
+UTC strings use `YYYY-MM-DDTHH:MM:SS.nnnnnnnnnZ`.
+
+Default system-info requests return the active collection's reference, including
+during archive replay. Explicit `ASTL_SYSTEM_INFO_FLAG_HOST` requests return the
+last live collection reference from this process, never the loaded archive's
+reference. Explicit `ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION` requests return the
+loaded archive's reference and require loaded platform information.
+
+Python exposes `astl.get_system_info()['clock_correlation']` as a dictionary with
+three integer nanosecond fields and a `clock_reference_utc` string, or `None` when
+unavailable. Go exposes `GetSystemInfo().ClockCorrelation` as a pointer or nil;
+its `ClockReferenceUTC` field contains the readable UTC reference.
+
+## Archive persistence and conversion
+
+The reference is saved in `platform_info.astl` inside the `.astl` archive:
 
 ```json
 "wall_clock_correlation": {
   "raw_ns": 1000000000,
   "realtime_ns": 1792540800000000000,
-  "uncertainty_ns": 100
+  "uncertainty_ns": 100,
+  "utc": "2026-10-21T00:00:00.000000000Z"
 }
 ```
 
-Convert a sample using integer nanosecond arithmetic:
+Convert a sample using checked integer nanosecond arithmetic:
 
 ```text
 sample_realtime_ns = reference.realtime_ns + (sample_raw_ns - reference.raw_ns)
 ```
 
-Interval CSV keeps `timestamp_us,value` and appends `timestamp_utc`, formatted as
-`YYYY-MM-DDTHH:MM:SS.nnnnnnnnnZ`. The original raw timestamp remains available.
-CSV collection metadata also includes the reference and read uncertainty. The
-collection date/time uses the saved UTC reference; it is unknown for legacy
-archives rather than showing the analysis machine's current date/time.
-Perfetto keeps raw microsecond event timestamps and includes an
-`astl_clock_correlation` metadata event. Its `raw_ns` and `realtime_ns` are decimal
-strings to preserve nanosecond precision in JSON consumers.
+The numeric reference is authoritative; the readable UTC value is derived from
+`realtime_ns`. Older archives remain readable without assigning the analysis
+host's clock reference to their samples.
 
-Replay uses the archived reference, including when analysis runs on another
-host. Older archives without a reference have an empty UTC column and omit clock
-reference metadata. Overflowing conversions also produce an empty UTC field.
+UTC information is confined to system information and collection archives.
+Native CSV reports keep `timestamp_us,value`; Perfetto timestamps remain
+raw microseconds. Reports do not include UTC timestamps or correlation metadata.
+Existing report date/time metadata is local time, separate from the reference.
 
-Nodes must synchronize their realtime clocks with a common reference, for
-example using NTP or PTP. This mapping does not synchronize clocks itself. The
-saved uncertainty measures clock read latency only. A fixed reference does not
-track later wall-clock steps, frequency corrections, or drift between raw and
-realtime clocks; errors can grow during long collections. Configuring a new
-collection clears the previous samples and captures a fresh
-reference. Configuring additional targets in that collection retains the same
-reference. Invalid requests that leave the collection intact retain its reference.
+## Accuracy and limitations
 
-C API consumers can call `astlGetClockCorrelation` after initialization or loading
-an archive. Initialize `astl_get_clock_correlation_params_t.size` to
-`sizeof(astl_get_clock_correlation_params_t)`, set `flags` to zero, and point
-`correlation` to an `astl_clock_correlation_t` output struct.
-For example:
+This is a basic reference scheme for converting raw monotonic timestamps to UTC
+when needed. It does not guarantee accurate alignment indefinitely or synchronize
+clocks between nodes. Cross-node comparison depends on each host's UTC clock
+being synchronized, for example using NTP or PTP; any host synchronization error
+also affects the converted timestamps.
 
-```c
-astl_clock_correlation_t reference = {0};
-astl_get_clock_correlation_params_t params = {0};
-params.size = sizeof(params);
-params.correlation = &reference;
-astl_status_code status = astlGetClockCorrelation(&params);
-```
+The saved `uncertainty_ns` measures read latency only, not UTC clock accuracy or
+accumulated conversion error. A fixed reference cannot account for subsequent
+wall-clock steps, NTP frequency corrections, or drift between raw and realtime
+clocks, so conversion errors may grow over time.
 
-The output fields use signed integer nanoseconds;
-`ASTL_STATUS_NOT_SUPPORTED` indicates that no reference is available. Use checked
-arithmetic for the conversion formula above. Existing sample APIs continue to
-return raw timestamps. The UTC column described above is emitted by the native
-library interval CSV writer (`ASTL_OUTPUT_INTERVAL_CSV`).
-
-Python exposes `astl.get_clock_correlation()` as a dictionary with the same three
-nanosecond fields. Go exposes `astl.GetClockCorrelation()` with `RawNS`,
-`RealtimeNS`, and `UncertaintyNS` fields. Querying the reference triggers lazy
-library initialization, just like target
-enumeration.
-
-Each native final output emission writes a complete file with that collection's
-reference, including empty collections. Reusing an output path for a new
-collection replaces its previous report.
-
-The native library interval CSV writer (`ASTL_OUTPUT_INTERVAL_CSV`) and ATX's
-metric and raw-counter interval CSV reports all emit
-`timestamp_us,value,timestamp_utc`, using the same UTC conversion and formatting.
-ATX also uses the saved reference for collection date/time and clock metadata,
-including when loading archives; UTC is empty when a reference is unavailable.
-The Perfetto metadata described here applies to the native writer selected by
-`ASTL_OUTPUT_PERFETTO`; ATX's separate Perfetto writer is unchanged. Perfetto event timestamps
-remain raw microseconds; merging traces across nodes requires applying each
-node's correlation first. Adding metadata does not automatically align events in
-the Perfetto UI.
+The scheme also does not handle system suspend/resume: on Linux,
+`CLOCK_MONOTONIC_RAW` stops during suspend while realtime continues to advance.
+The saved reference therefore cannot correctly map samples taken after resume
+without capturing a new reference. A boot-time reference would have the same
+limitations.

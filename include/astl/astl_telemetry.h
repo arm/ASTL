@@ -89,6 +89,20 @@ extern "C" {
  **********************            SYSTEM PROPERTIES         ************************
  **********************************************************************************/
 
+/** Raw-to-realtime reference captured during initialization and refreshed for a collection.
+ * Numeric values are signed nanoseconds. This is not machine boot time.
+ * Convert a CLOCK_MONOTONIC_RAW sample timestamp to Unix time in nanoseconds:
+ * sample_realtime_ns = realtime_ns + (sample_raw_ns - raw_ns).
+ * clock_reference_utc is NULL when unavailable; all numeric fields are then zero.
+ * The UTC string is owned by ASTL and remains valid until process exit.
+ */
+typedef struct _astl_clock_correlation_t {
+  int64_t     raw_ns;
+  int64_t     realtime_ns;
+  int64_t     uncertainty_ns;
+  const char* clock_reference_utc;  //!< ISO 8601 UTC timestamp corresponding to realtime_ns, or NULL.
+} astl_clock_correlation_t;
+
 /**
  * @brief System-level platform properties.
  *
@@ -96,30 +110,31 @@ extern "C" {
  * until process exit. Any field may be NULL when not available on the running platform.
  */
 typedef struct _astl_platform_props_t {
-  size_t      size;              //!< Size of this struct for versioning; set size to sizeof(astl_platform_props_t).
-  uint32_t    flags;             //!< Source selector input and selected-source output (astl_system_info_flags_t)
-  const char* soc_name;          //!< SoC / platform name (for example from sysfs or device-tree)
-  const char* vendor_id;         //!< Platform or system vendor identifier
-  const char* os_name;           //!< Operating system name
-  const char* kernel_name;       //!< Kernel name (for example, "Linux")
-  const char* kernel_version;    //!< Kernel version string
-  const char* kernel_release;    //!< Kernel release string
-  const char* firmware_version;  //!< Firmware or BIOS version if available
-  const char* hostname;          //!< Host name
-  const char* architecture;      //!< Machine architecture (for example, "aarch64")
-  const char* cpu_type;          //!< CPU model/type summary if available
-  const char* cpu_features;      //!< CPU feature flags if available
-  const char* cache_info;        //!< Cache hierarchy summary if available
-  uint32_t    core_count;        //!< Number of configured CPU cores, or 0 when unavailable
-  uint32_t    numa_node_count;   //!< Number of NUMA nodes, or 0 when unavailable
-  uint32_t    socket_count;      //!< Number of physical CPU packages/sockets, or 0 when unavailable
-  uint32_t    cache_line_size_bytes;   //!< Data cache line size in bytes, or 0 when unavailable
-  uint64_t    memory_total_bytes;      //!< Total system memory in bytes, or 0 when unavailable
-  const char* libc_version;            //!< C library version if available
-  const char* boot_info;               //!< Boot environment summary if available
-  int64_t     huge_pages_total;        //!< Number of huge pages, or -1 when unavailable
-  int64_t     huge_page_size_kb;       //!< Huge page size in KiB, or -1 when unavailable
-  const char* transparent_huge_pages;  //!< Transparent huge page mode if available
+  size_t                   size;   //!< Size of this struct for versioning; set size to sizeof(astl_platform_props_t).
+  uint32_t                 flags;  //!< Source selector input and selected-source output (astl_system_info_flags_t)
+  const char*              soc_name;                //!< SoC / platform name (for example from sysfs or device-tree)
+  const char*              vendor_id;               //!< Platform or system vendor identifier
+  const char*              os_name;                 //!< Operating system name
+  const char*              kernel_name;             //!< Kernel name (for example, "Linux")
+  const char*              kernel_version;          //!< Kernel version string
+  const char*              kernel_release;          //!< Kernel release string
+  const char*              firmware_version;        //!< Firmware or BIOS version if available
+  const char*              hostname;                //!< Host name
+  const char*              architecture;            //!< Machine architecture (for example, "aarch64")
+  const char*              cpu_type;                //!< CPU model/type summary if available
+  const char*              cpu_features;            //!< CPU feature flags if available
+  const char*              cache_info;              //!< Cache hierarchy summary if available
+  uint32_t                 core_count;              //!< Number of configured CPU cores, or 0 when unavailable
+  uint32_t                 numa_node_count;         //!< Number of NUMA nodes, or 0 when unavailable
+  uint32_t                 socket_count;            //!< Number of physical CPU packages/sockets, or 0 when unavailable
+  uint32_t                 cache_line_size_bytes;   //!< Data cache line size in bytes, or 0 when unavailable
+  uint64_t                 memory_total_bytes;      //!< Total system memory in bytes, or 0 when unavailable
+  const char*              libc_version;            //!< C library version if available
+  const char*              boot_info;               //!< Boot environment summary if available
+  int64_t                  huge_pages_total;        //!< Number of huge pages, or -1 when unavailable
+  int64_t                  huge_page_size_kb;       //!< Huge page size in KiB, or -1 when unavailable
+  const char*              transparent_huge_pages;  //!< Transparent huge page mode if available
+  astl_clock_correlation_t clock_correlation;       //!< Zeroed when unavailable.
 } astl_platform_props_t;
 
 typedef enum _astl_system_info_flags_t {
@@ -149,30 +164,6 @@ typedef struct astl_get_system_info_params_t {
  * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
  */
 ASTL_API astl_status_code astlGetSystemInfo(const astl_get_system_info_params_t* params) ASTL_API_NOEXCEPT;
-
-/** Collection clock reference, retained when loading an ASTL archive.
- * Convert sample nanoseconds using realtime_ns + (sample_timestamp - raw_ns).
- * Realtime is Unix epoch nanoseconds; format it in UTC for cross-node comparison.
- * uncertainty_ns bounds read latency only, excluding clock synchronization error and drift.
- */
-typedef struct _astl_clock_correlation_t {
-  int64_t raw_ns;
-  int64_t realtime_ns;
-  int64_t uncertainty_ns;
-} astl_clock_correlation_t;
-
-/** Parameters for retrieving the active collection clock reference. */
-typedef struct astl_get_clock_correlation_params_t {
-  size_t                    size;         //!< Set to sizeof(astl_get_clock_correlation_params_t).
-  uint32_t                  flags;        //!< Reserved; must be zero.
-  astl_clock_correlation_t* correlation;  //!< Output reference. Cannot be NULL.
-} astl_get_clock_correlation_params_t;
-
-/** Get the active collection reference. Returns ASTL_STATUS_NOT_SUPPORTED when unavailable,
- * including legacy archives. Initializes the library on first use, like target enumeration.
- * No clock synchronization is performed.
- */
-ASTL_API astl_status_code astlGetClockCorrelation(const astl_get_clock_correlation_params_t* params) ASTL_API_NOEXCEPT;
 
 /***********************************************************************************
  **********************               TARGETS               ************************

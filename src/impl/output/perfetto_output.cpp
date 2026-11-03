@@ -144,13 +144,6 @@ auto PerfettoOutput::WriteHeader() -> void {
                 << EscapeJsonString(info.firmware_version) << R"(","hostname":")" << EscapeJsonString(info.hostname)
                 << R"(","architecture":")" << EscapeJsonString(info.architecture) << R"("}})";
 
-  if (const auto reference = GetActiveWallClockCorrelation()) {
-    _trace_stream << ",\n"
-                  << R"({"ph":"M","pid":0,"name":"astl_clock_correlation","args":{"raw_ns":")" << reference->raw_ns
-                  << R"(","realtime_ns":")" << reference->realtime_ns << R"(","uncertainty_ns":)"
-                  << reference->uncertainty_ns << "}}";
-  }
-
   _first_event = false;  // We have written the first element; subsequent events need leading comma.
   _opened_json = true;
 }

@@ -17,8 +17,9 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Added
 
-- Added raw-to-UTC clock correlation saved with collection archives and exposed through C, Python, and Go APIs.
-  Native and ATX interval CSV reports include UTC timestamps, and native Perfetto output includes clock correlation metadata.
+- Added collection clock references and readable UTC timestamps to system information and saved collection archives.
+  System information groups the numeric reference and UTC string in one optional correlation.
+  Live initialization captures a reference, including help and target discovery; fresh collection configuration refreshes it.
 
 - Added Linux NUMA sysfs telemetry on the `numa` target: interval page counts, CPU-local/remote
   allocation percentages, and per-node allocations. Select with `ASTL_COLLECTORS=numa`;
@@ -36,6 +37,12 @@ All notable user-facing changes to the ASTL public API are recorded here.
 ### Changed
 
 ### Breaking
+
+- Group the readable UTC reference inside `astl_clock_correlation_t` and remove the redundant availability flag.
+  A null `clock_reference_utc` indicates an unavailable reference. Python and Go expose UTC within the correlation.
+
+- Replaced `astlGetClockCorrelation` and its Python/Go getters with clock reference fields in `astlGetSystemInfo`.
+  CSV and Perfetto reports no longer emit UTC columns or clock correlation metadata.
 
 - Always embed configuration in the library. Select one source in order:
   `ASTL_CONFIG_DIR`, `config/` beside the library (or statically linked executable),

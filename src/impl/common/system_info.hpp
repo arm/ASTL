@@ -45,6 +45,8 @@ struct PlatformInfoData {
 };
 
 auto CaptureSessionWallClockCorrelation() -> void;
+auto ClearSessionWallClockCorrelation() -> void;
+auto GetHostWallClockCorrelation() -> std::optional<WallClockCorrelation>;
 auto GetActiveWallClockCorrelation() -> std::optional<WallClockCorrelation>;
 
 auto GetActivePlatformInfo() -> const PlatformInfoData&;

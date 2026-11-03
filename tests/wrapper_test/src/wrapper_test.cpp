@@ -841,8 +841,8 @@ TEST_CASE("astlConfigureCounterCollectionOnTarget", "[Enumerate targets, counter
       // simulate the behavior of a metric manager to look up the target-specific counter instance
       // from the counter api handle, and query it's properties.
       // In this test, we should invoke the MockCounter's GetProperties.
-      .SIDE_EFFECT(auto counterHandle = static_cast<const astl::CounterHandle*>(_1);
-                   auto iter = counterHandle->target_to_counter_map.begin(); auto& [target, counter] = *iter;
+      .SIDE_EFFECT(auto counter_handle = static_cast<const astl::CounterHandle*>(_1);
+                   auto iter = counter_handle->target_to_counter_map.begin(); auto& [target, counter] = *iter;
                    counter->GetProperties(_2);)
       .RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_metric_manager, GetCounterOnTarget(_, _)).RETURN(counter_ptr);
@@ -2409,9 +2409,11 @@ TEST_CASE("Rejected configure preserves loaded system info and clock reference",
   REQUIRE(retained_info.flags == ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION);
   REQUIRE(retained_info.soc_name != nullptr);
   REQUIRE(std::string(retained_info.soc_name) == "soc-from-session");
-  astl_clock_correlation_t                  reference{};
-  const astl_get_clock_correlation_params_t clock_params{sizeof(clock_params), 0, &reference};
-  REQUIRE(astlGetClockCorrelation(&clock_params) == ASTL_STATUS_SUCCESS);
+  astl_platform_props_t clock_info{};
+  clock_info.size = sizeof(clock_info);
+  REQUIRE(AstlGetSystemInfo(&clock_info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(clock_info.clock_correlation.clock_reference_utc != nullptr);
+  const auto reference = clock_info.clock_correlation;
   REQUIRE(reference.raw_ns == 1000);
   REQUIRE(reference.realtime_ns == 2000);
   REQUIRE(reference.uncertainty_ns == 3);
@@ -2755,30 +2757,48 @@ TEST_CASE("astlStopCollection routes through orchestrator", "[wrapper]") {
   REQUIRE(orchestrator_raw->GetTargetCollectionState(target).value() == State::STOPPED);
 }
 
-TEST_CASE("astlGetClockCorrelation validates arguments and returns the session reference", "[wrapper][wallclock]") {
-  REQUIRE(astlGetClockCorrelation(nullptr) == ASTL_STATUS_BAD_ARGUMENT);
-  astl_clock_correlation_t            result{};
-  astl_get_clock_correlation_params_t params{sizeof(params) - 1, 0, &result};
-  REQUIRE(astlGetClockCorrelation(&params) == ASTL_STATUS_OLD_STRUCT_VERSION);
-  params.size = sizeof(params) + 1;
-  REQUIRE(astlGetClockCorrelation(&params) == ASTL_STATUS_NEW_STRUCT_VERSION);
-  params.size  = sizeof(params);
-  params.flags = 1;
-  REQUIRE(astlGetClockCorrelation(&params) == ASTL_STATUS_INVALID_FLAG_VALUE);
-  params.flags       = 0;
-  params.correlation = nullptr;
-  REQUIRE(astlGetClockCorrelation(&params) == ASTL_STATUS_BAD_ARGUMENT);
-  params.correlation                = &result;
-  auto [orchestrator, expectations] = MakeMinimalOrchestrator();
-  TestOrchestratorInjector injector(std::move(orchestrator));
+TEST_CASE("System info clock reference is empty before initialization and follows the selected source",
+          "[wrapper][wallclock]") {
   astl::ClearLoadedPlatformInfo();
+  astl::ClearSessionWallClockCorrelation();
+  astl_platform_props_t info{};
+  info.size = sizeof(info);
+  REQUIRE(AstlGetSystemInfo(&info) == ASTL_STATUS_SUCCESS);
+  REQUIRE_FALSE(info.clock_correlation.clock_reference_utc != nullptr);
+  REQUIRE(info.clock_correlation.clock_reference_utc == nullptr);
+  REQUIRE(info.clock_correlation.realtime_ns == 0);
   astl::CaptureSessionWallClockCorrelation();
-  REQUIRE(astlGetClockCorrelation(&params) == ASTL_STATUS_SUCCESS);
-  const auto reference = astl::GetActiveWallClockCorrelation();
-  REQUIRE(reference);
-  REQUIRE(result.raw_ns == reference->raw_ns);
-  REQUIRE(result.realtime_ns == reference->realtime_ns);
-  REQUIRE(result.uncertainty_ns == reference->uncertainty_ns);
+  REQUIRE(AstlGetSystemInfo(&info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(info.clock_correlation.clock_reference_utc != nullptr);
+  REQUIRE(info.clock_correlation.realtime_ns > 0);
+  REQUIRE(info.clock_correlation.clock_reference_utc != nullptr);
+  const auto    host_raw  = info.clock_correlation.raw_ns;
+  const auto    directory = std::filesystem::temp_directory_path() / "astl_clock_source_selection";
+  TempFileGuard guard{directory};
+  std::filesystem::create_directories(directory);
+  std::ofstream(directory / astl::kPlatformInfoFileName)
+      << R"({"wall_clock_correlation":{"raw_ns":1000,"realtime_ns":2000,"uncertainty_ns":3}})";
+  REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory) == ASTL_STATUS_SUCCESS);
+  info.flags = 0;
+  REQUIRE(AstlGetSystemInfo(&info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(info.clock_correlation.raw_ns == 1000);
+  REQUIRE(std::string(info.clock_correlation.clock_reference_utc) == "1970-01-01T00:00:00.000002000Z");
+  info.flags = ASTL_SYSTEM_INFO_FLAG_HOST;
+  REQUIRE(AstlGetSystemInfo(&info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(info.clock_correlation.raw_ns == host_raw);
+  info.flags = ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION;
+  REQUIRE(AstlGetSystemInfo(&info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(info.clock_correlation.raw_ns == 1000);
+  // Numeric zero is valid; availability is determined by the UTC pointer.
+  std::ofstream(directory / astl::kPlatformInfoFileName)
+      << R"({"wall_clock_correlation":{"raw_ns":0,"realtime_ns":0,"uncertainty_ns":0}})";
+  REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory) == ASTL_STATUS_SUCCESS);
+  REQUIRE(AstlGetSystemInfo(&info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(info.clock_correlation.raw_ns == 0);
+  REQUIRE(info.clock_correlation.realtime_ns == 0);
+  REQUIRE(info.clock_correlation.clock_reference_utc != nullptr);
+  REQUIRE(std::string(info.clock_correlation.clock_reference_utc) == "1970-01-01T00:00:00.000000000Z");
+  astl::ClearLoadedPlatformInfo();
 }
 
 TEST_CASE("Clock reference survives invalid configuration and refreshes with a clean collection",
@@ -2818,15 +2838,20 @@ TEST_CASE("Clock reference survives invalid configuration and refreshes with a c
   REQUIRE(live->raw_ns >= before);
   REQUIRE(live->raw_ns <= after);
   REQUIRE_FALSE(astl::GetLoadedPlatformInfo());
-  astl_clock_correlation_t                  reference{};
-  const astl_get_clock_correlation_params_t clock_params{sizeof(clock_params), 0, &reference};
-  REQUIRE(astlGetClockCorrelation(&clock_params) == ASTL_STATUS_SUCCESS);
+  astl_platform_props_t clock_info{};
+  clock_info.size = sizeof(clock_info);
+  REQUIRE(AstlGetSystemInfo(&clock_info) == ASTL_STATUS_SUCCESS);
+  REQUIRE(clock_info.clock_correlation.clock_reference_utc != nullptr);
+  const auto reference = clock_info.clock_correlation;
   REQUIRE(reference.raw_ns == live->raw_ns);
   REQUIRE(reference.realtime_ns == live->realtime_ns);
   // A second clean collection must refresh even though this is already a live session.
   REQUIRE(instance->ResetCollectionStateForCleanConfigure() == ASTL_STATUS_SUCCESS);
   REQUIRE(astl::GetActiveWallClockCorrelation()->raw_ns >= after);
   REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory / "legacy") == ASTL_STATUS_SUCCESS);
-  REQUIRE(astlGetClockCorrelation(&clock_params) == ASTL_STATUS_NOT_SUPPORTED);
+  clock_info.flags = 0;
+  REQUIRE(AstlGetSystemInfo(&clock_info) == ASTL_STATUS_SUCCESS);
+  REQUIRE_FALSE(clock_info.clock_correlation.clock_reference_utc != nullptr);
+  REQUIRE(clock_info.clock_correlation.clock_reference_utc == nullptr);
   REQUIRE_FALSE(astl::GetLoadedPlatformInfo());
 }

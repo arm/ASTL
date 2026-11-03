@@ -40,6 +40,7 @@ func TestSystemInfoFieldsMatchCPlatformProps(t *testing.T) {
 	}
 
 	wantFields := []string{
+		"ClockCorrelation",
 		"Flags",
 		"SoCName",
 		"VendorID",
@@ -199,18 +200,12 @@ func TestSystemUtilizationMetrics(t *testing.T) {
 	t.Skip("System utilization collector disabled or excluded")
 }
 
-func TestGetClockCorrelation(t *testing.T) {
-	if _, err := GetTargets(); err != nil {
-		if astlErr, ok := err.(Error); ok && astlErr.Status == StatusBadConfiguration {
-			t.Skipf("clock correlation requires initialized ASTL configuration: %v", err)
-		}
-		t.Fatal(err)
-	}
-	reference, err := GetClockCorrelation()
+func TestSystemInfoClockCorrelationAvailability(t *testing.T) {
+	info, err := GetSystemInfo()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reference.RealtimeNS <= 0 || reference.UncertaintyNS < 0 {
-		t.Fatalf("invalid clock correlation: %+v", reference)
+	if info.ClockCorrelation != nil && info.ClockCorrelation.ClockReferenceUTC == "" {
+		t.Fatal("available clock reference must have a UTC value")
 	}
 }

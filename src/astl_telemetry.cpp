@@ -1115,31 +1115,6 @@ auto GetMetricHandlesInGroupForTarget(astl::IMetricManager* metric_manager, astl
  **********************            SYSTEM PROPERTIES         ************************
  **********************************************************************************/
 
-auto astlGetClockCorrelation(const astl_get_clock_correlation_params_t* params) noexcept -> astl_status_code {
-  return RunPublicApi([&]() noexcept -> astl_status_code {
-    std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-    const auto                  status = ValidateApiParams(params);
-    if (status != ASTL_STATUS_SUCCESS) {
-      return status;
-    }
-    if (params->correlation == nullptr) {
-      return ASTL_STATUS_BAD_ARGUMENT;
-    }
-    const auto orchestrator = GetOrchestratorInstance();
-    if (!orchestrator) {
-      return orchestrator.error();
-    }
-    const auto reference = astl::GetActiveWallClockCorrelation();
-    if (!reference) {
-      return ASTL_STATUS_NOT_SUPPORTED;
-    }
-    params->correlation->raw_ns         = reference->raw_ns;
-    params->correlation->realtime_ns    = reference->realtime_ns;
-    params->correlation->uncertainty_ns = reference->uncertainty_ns;
-    return ASTL_STATUS_SUCCESS;
-  });
-}
-
 auto astlGetSystemInfo(const astl_get_system_info_params_t* params) noexcept -> astl_status_code {
   return RunPublicApi([&]() noexcept -> astl_status_code {
     std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
@@ -1159,6 +1134,17 @@ auto astlGetSystemInfo(const astl_get_system_info_params_t* params) noexcept -> 
     }
 
     PopulateSystemInfo(params->system_info, *system_info_or_error->info, system_info_or_error->selected_flag);
+    auto reference = astl::GetActiveWallClockCorrelation();
+    if ((*request_flags_or_error & ASTL_SYSTEM_INFO_FLAG_HOST) != 0U) {
+      reference = astl::GetHostWallClockCorrelation();
+    }
+    params->system_info->clock_correlation = {};
+    if (reference) {
+      params->system_info->clock_correlation = {reference->raw_ns, reference->realtime_ns, reference->uncertainty_ns,
+                                                nullptr};
+      params->system_info->clock_correlation.clock_reference_utc =
+          astl::GetInternedString(astl::FormatWallClockUtc(reference->realtime_ns));
+    }
 
     return ASTL_STATUS_SUCCESS;
   });

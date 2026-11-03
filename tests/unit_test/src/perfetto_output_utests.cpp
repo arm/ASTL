@@ -927,12 +927,10 @@ TEST_CASE("PerfettoOutput deferred emission env var unset", "[perfetto_output]")
   REQUIRE_FALSE(std::filesystem::exists(perfetto_path));
 }
 
-TEST_CASE("Perfetto clock metadata retains integer precision and event times use microseconds",
-          "[perfetto_output][wallclock]") {
+TEST_CASE("Perfetto omits UTC metadata and keeps event times in microseconds", "[perfetto_output][wallclock]") {
   astl::ClearLoadedPlatformInfo();
   astl::CaptureSessionWallClockCorrelation();
-  const auto reference = astl::GetActiveWallClockCorrelation();
-  REQUIRE(reference);
+  REQUIRE(astl::GetActiveWallClockCorrelation());
   TempFileGuard guard{"astl_perfetto_clock.json"};
   {
     astl::PerfettoOutput      writer(guard.path);
@@ -945,18 +943,7 @@ TEST_CASE("Perfetto clock metadata retains integer precision and event times use
   }
   std::ifstream     output(guard.path);
   const std::string content((std::istreambuf_iterator<char>(output)), std::istreambuf_iterator<char>());
-  REQUIRE(content.find("\"name\":\"astl_clock_correlation\"") != std::string::npos);
-  REQUIRE(content.find("\"realtime_ns\":\"" + std::to_string(reference->realtime_ns) + "\"") != std::string::npos);
+  REQUIRE(content.find("astl_clock_correlation") == std::string::npos);
+  REQUIRE(content.find("realtime_ns") == std::string::npos);
   REQUIRE(content.find("\"ts\":1234,") != std::string::npos);
-  const auto events         = nlohmann::json::parse(content);
-  bool       metadata_found = false;
-  for (const auto& event : events) {
-    if (event.value("name", "") == "astl_clock_correlation") {
-      REQUIRE(event.at("args").at("raw_ns") == std::to_string(reference->raw_ns));
-      REQUIRE(event.at("args").at("realtime_ns") == std::to_string(reference->realtime_ns));
-      REQUIRE(event.at("args").at("uncertainty_ns") == reference->uncertainty_ns);
-      metadata_found = true;
-    }
-  }
-  REQUIRE(metadata_found);
 }

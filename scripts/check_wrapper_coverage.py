@@ -156,6 +156,7 @@ GO_SYSTEM_INFO_FIELD_NAMES = {
     "huge_pages_total": "HugePagesTotal",
     "huge_page_size_kb": "HugePageSizeKB",
     "transparent_huge_pages": "TransparentHugePages",
+    "clock_correlation": "ClockCorrelation",
 }
 
 

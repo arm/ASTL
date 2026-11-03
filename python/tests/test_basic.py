@@ -12,56 +12,72 @@ def test_get_targets():
     # Targets may be empty; just ensure list semantics
 
 
-def test_clock_correlation_retains_integer_nanoseconds():
-    astl.get_targets()  # Triggers live library initialization.
-    reference = astl.get_clock_correlation()
-    assert set(reference) == {"raw_ns", "realtime_ns", "uncertainty_ns"}
-    assert all(isinstance(value, int) for value in reference.values())
-    assert reference["uncertainty_ns"] >= 0
-    assert reference["realtime_ns"] > 0
-
-
-def test_clock_reference_initializes_and_survives_archive_replay(tmp_path):
+def test_system_info_clock_reference_lifecycle(tmp_path):
     import subprocess
     import sys
 
-    # A fresh process verifies lazy initialization and avoids changing other tests' sessions.
     script = """
 import astl
 import json
 import sys
 import zipfile
 
-reference = astl.get_clock_correlation()
+info = astl.get_system_info()
+assert info['clock_correlation'] is None
+astl.get_targets()
+initialized_info = astl.get_system_info()
+assert initialized_info['clock_correlation']['clock_reference_utc'].endswith('Z')
+initialized_reference = initialized_info['clock_correlation']
+assert initialized_reference['realtime_ns'] > 0
+assert astl.get_system_info()['clock_correlation'] == initialized_reference
+for target in astl.get_targets():
+    counters = astl.get_counters(target)
+    if counters:
+        break
+else:
+    raise AssertionError('No counter available for collection')
+params = astl.CollectionParameters(sampling_interval=10, mode=astl.CollectionMode.IMMEDIATE)
+astl.configure_counters_on_target(target, params, [counters[0]])
+configured_reference = astl.get_system_info()['clock_correlation']
+assert configured_reference is not None
+assert configured_reference['raw_ns'] >= initialized_reference['raw_ns']
+astl.start_collection(target)
+astl.stop_collection(target)
+info = astl.get_system_info()
+reference = info['clock_correlation']
+assert reference == configured_reference
+assert set(reference) == {'raw_ns', 'realtime_ns', 'uncertainty_ns', 'clock_reference_utc'}
+assert all(isinstance(reference[key], int) for key in ('raw_ns', 'realtime_ns', 'uncertainty_ns'))
 assert reference['realtime_ns'] > 0
+assert reference['uncertainty_ns'] >= 0
+assert info['clock_correlation']['clock_reference_utc'].endswith('Z')
 astl.save_collection(sys.argv[1])
 astl.load_collection(sys.argv[1])
-assert astl.get_clock_correlation() == reference
-
-# Legacy archives must not acquire a reference from the analysis host.
+assert astl.get_system_info()['clock_correlation'] == reference
+assert astl.get_system_info()['clock_correlation']['clock_reference_utc'] == info['clock_correlation']['clock_reference_utc']
 with zipfile.ZipFile(sys.argv[1]) as source, zipfile.ZipFile(sys.argv[2], 'w') as legacy:
     found = False
     for entry in source.infolist():
         data = source.read(entry.filename)
         if entry.filename.endswith('platform_info.astl'):
             metadata = json.loads(data)
+            assert metadata['wall_clock_correlation']['utc'] == info['clock_correlation']['clock_reference_utc']
             del metadata['wall_clock_correlation']
             data = json.dumps(metadata).encode()
             found = True
         legacy.writestr(entry, data)
     assert found
 astl.load_collection(sys.argv[2])
-try:
-    astl.get_clock_correlation()
-except astl.ASTLError:
-    pass
-else:
-    raise AssertionError('Legacy archive acquired a wall clock reference')
+assert astl.get_system_info()['clock_correlation'] is None
+with zipfile.ZipFile(sys.argv[1]) as source, zipfile.ZipFile(sys.argv[3], 'w') as legacy:
+    for entry in source.infolist():
+        if not entry.filename.endswith('platform_info.astl'):
+            legacy.writestr(entry, source.read(entry.filename))
+astl.load_collection(sys.argv[3])
+assert astl.get_system_info()['clock_correlation'] is None
 """
     subprocess.run(
-        [sys.executable, "-c", script, str(tmp_path / "clock.astl"), str(tmp_path / "legacy.astl")],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+        [sys.executable, "-c", script, str(tmp_path / "clock.astl"),
+         str(tmp_path / "legacy.astl"), str(tmp_path / "legacy_without_platform.astl")],
+        check=True, capture_output=True, text=True, timeout=30,
     )

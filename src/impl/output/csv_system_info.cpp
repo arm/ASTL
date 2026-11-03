@@ -5,6 +5,8 @@
 
 #include "csv_system_info.hpp"
 
+#include <chrono>
+#include <ctime>
 #include <iomanip>
 #include <ostream>
 #include <sstream>
@@ -15,6 +17,24 @@
 #include "common/system_info.hpp"
 
 namespace astl {
+namespace {
+
+auto FormatLocalTimestamp(const std::chrono::system_clock::time_point time_point) -> std::string {
+  const auto time_value = std::chrono::system_clock::to_time_t(time_point);
+  std::tm    local_tm{};
+#ifdef _WIN32
+  localtime_s(&local_tm, &time_value);
+#else
+  localtime_r(&time_value, &local_tm);
+#endif
+
+  std::ostringstream stream;
+  stream << std::put_time(&local_tm, "%Y-%m-%d %H:%M:%S");
+  return stream.str();
+}
+
+}  // namespace
+
 auto EscapeCsvField(std::string_view value) -> std::string {
   std::string escaped;
   escaped.reserve(value.size() + 2);
@@ -51,8 +71,7 @@ auto FormatReportValue(const AstlValue& value) -> std::string {
 }
 
 void WriteCollectionInfoCsvSection(std::ostream& output_stream) {
-  const auto& info      = GetActivePlatformInfo();
-  const auto  reference = GetActiveWallClockCorrelation();
+  const auto& info = GetActivePlatformInfo();
 
   const auto write_field = [&output_stream](const char* field_name, const std::string& field_value) {
     output_stream << field_name << "," << EscapeCsvField(field_value.empty() ? std::string{"<unknown>"} : field_value)
@@ -60,16 +79,9 @@ void WriteCollectionInfoCsvSection(std::ostream& output_stream) {
   };
 
   output_stream << "ASTL Build Version," << EscapeCsvField(astlVersionString()) << '\n';
-  output_stream << "Collection Date/Time,"
-                << EscapeCsvField(reference ? FormatWallClockUtc(reference->realtime_ns) : "<unknown>") << '\n';
+  output_stream << "Collection Date/Time," << EscapeCsvField(FormatLocalTimestamp(std::chrono::system_clock::now()))
+                << '\n';
   output_stream << "Command Line," << EscapeCsvField("<not captured>") << '\n';
-
-  if (reference) {
-    write_field("Clock Reference UTC", FormatWallClockUtc(reference->realtime_ns));
-    write_field("Clock Reference Raw ns", std::to_string(reference->raw_ns));
-    write_field("Clock Reference Realtime ns", std::to_string(reference->realtime_ns));
-    write_field("Clock Read Uncertainty ns", std::to_string(reference->uncertainty_ns));
-  }
 
   write_field("Platform SoC", info.soc_name);
   write_field("Platform Vendor", info.vendor_id);

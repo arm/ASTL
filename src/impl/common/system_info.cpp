@@ -467,9 +467,10 @@ auto BuildPlatformInfoJson(const PlatformInfoData& info) -> std::expected<nlohma
     if (info.wall_clock_correlation) {
       const auto& reference             = *info.wall_clock_correlation;
       payload["wall_clock_correlation"] = {
-          {"raw_ns",         reference.raw_ns        },
-          {"realtime_ns",    reference.realtime_ns   },
-          {"uncertainty_ns", reference.uncertainty_ns}
+          {"raw_ns",         reference.raw_ns                         },
+          {"realtime_ns",    reference.realtime_ns                    },
+          {"uncertainty_ns", reference.uncertainty_ns                 },
+          {"utc",            FormatWallClockUtc(reference.realtime_ns)}
       };
     }
     return payload;
@@ -558,6 +559,16 @@ auto LoadedPlatformInfoPointerStorage() -> std::shared_ptr<const PlatformInfoDat
 }
 
 }  // namespace
+
+auto ClearSessionWallClockCorrelation() -> void {
+  std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
+  SessionClockStorage().reset();
+}
+
+auto GetHostWallClockCorrelation() -> std::optional<WallClockCorrelation> {
+  std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
+  return SessionClockStorage();
+}
 
 auto CaptureSessionWallClockCorrelation() -> void {
   const auto                  reference = CaptureWallClockCorrelation();

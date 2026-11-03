@@ -219,23 +219,6 @@ def version() -> tuple[int, int, int, str]:
     v = astlVersion()
     return v.major, v.minor, v.micro, astlVersionString().decode()
 
-cpdef dict get_clock_correlation():
-    """Return the collection's raw/realtime reference in integer nanoseconds.
-
-    Convert a raw sample with realtime_ns + (timestamp - raw_ns).
-    The uncertainty bounds read latency only; nodes must synchronize their clocks.
-    Raises ASTLError when no reference is available (for example legacy archives).
-    """
-    cdef astl_clock_correlation_t reference
-    cdef astl_get_clock_correlation_params_t params
-    params.size = sizeof(astl_get_clock_correlation_params_t)
-    params.flags = 0
-    params.correlation = &reference
-    _check(astlGetClockCorrelation(&params))
-    return {"raw_ns": reference.raw_ns, "realtime_ns": reference.realtime_ns,
-            "uncertainty_ns": reference.uncertainty_ns}
-
-
 cpdef dict get_system_info():
     """Return host/session platform metadata from ASTL as a dictionary."""
     cdef astl_platform_props_t info
@@ -270,6 +253,11 @@ cpdef dict get_system_info():
         "boot_info": info.boot_info.decode() if info.boot_info != NULL else None,
         "huge_pages_total": info.huge_pages_total,
         "huge_page_size_kb": info.huge_page_size_kb,
+        "clock_correlation": dict(raw_ns=info.clock_correlation.raw_ns,
+                              realtime_ns=info.clock_correlation.realtime_ns,
+                              uncertainty_ns=info.clock_correlation.uncertainty_ns,
+                              clock_reference_utc=info.clock_correlation.clock_reference_utc.decode())
+                             if info.clock_correlation.clock_reference_utc != NULL else None,
         "transparent_huge_pages": info.transparent_huge_pages.decode() if info.transparent_huge_pages != NULL else None,
     }
 

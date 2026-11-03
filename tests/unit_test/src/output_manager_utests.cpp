@@ -315,7 +315,7 @@ TEST_CASE("OutputManager::OutputProcessedSamples unknown output type", "[output_
           ASTL_STATUS_BAD_ARGUMENT);
 }
 
-TEST_CASE("Perfetto final emissions use the current collection reference", "[output_manager][wallclock]") {
+TEST_CASE("Perfetto final emissions omit collection clock references", "[output_manager][wallclock]") {
   const auto    directory = std::filesystem::temp_directory_path() / "astl_perfetto_collection_references";
   TempFileGuard directory_guard{directory};
   std::filesystem::create_directories(directory);
@@ -337,14 +337,9 @@ TEST_CASE("Perfetto final emissions use the current collection reference", "[out
     REQUIRE(astl::LoadPlatformInfoFromCacheDir(directory) == ASTL_STATUS_SUCCESS);
     REQUIRE(manager.OutputProcessedSamples({}, astl::OutputType::PERFETTO, nullptr, nullptr) == ASTL_STATUS_SUCCESS);
     std::ifstream input(output);
-    const auto    events     = nlohmann::json::parse(input);
-    size_t        references = 0;
+    const auto    events = nlohmann::json::parse(input);
     for (const auto& event : events) {
-      if (event.value("name", "") == "astl_clock_correlation") {
-        REQUIRE(event.at("args").at("raw_ns") == std::to_string(raw));
-        ++references;
-      }
+      REQUIRE(event.value("name", "") != "astl_clock_correlation");
     }
-    REQUIRE(references == 1);
   }
 }

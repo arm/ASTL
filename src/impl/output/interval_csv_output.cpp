@@ -68,20 +68,14 @@ inline auto BuildSections(const ProcessedSamplesMap& processed) -> std::vector<R
 
 void EmitSection(std::ostream& output_stream, const ReportSection& section) {
   output_stream << section.metric_name << " on " << section.target_name << "\n\n";
-  output_stream << "timestamp_us,value,timestamp_utc\n";
-  const auto reference = GetActiveWallClockCorrelation();
+  output_stream << "timestamp_us,value\n";
   for (const auto* sample : section.samples) {
     if (!sample) {
       continue;
     }
     const uint64_t ts_us = static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::microseconds>(sample->timestamp.time_since_epoch()).count());
-    output_stream << ts_us << ',' << FormatReportValue(sample->value) << ',';
-    if (reference) {
-      if (const auto wall = CorrelateWallClock(sample->timestamp, *reference)) {
-        output_stream << FormatWallClockUtc(*wall);
-      }
-    }
+    output_stream << ts_us << ',' << FormatReportValue(sample->value);
     output_stream << '\n';
   }
   output_stream << '\n';
