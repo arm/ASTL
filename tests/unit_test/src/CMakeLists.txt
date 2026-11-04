@@ -152,3 +152,25 @@ foreach(linkage IN ITEMS static shared)
                    "$<TARGET_FILE:config_location_${linkage}>" "${_config_location_library}")
   set_tests_properties(config_location_${linkage} PROPERTIES LABELS "windows_native")
 endforeach()
+
+# Dedicated executable: each discovered case gets a fresh process and allocator state, including coverage builds.
+add_executable(sample_memory_test sample_memory_utests.cpp)
+target_compile_definitions(sample_memory_test PRIVATE ASTL_BUILD)
+target_link_libraries(sample_memory_test PRIVATE Astl::astl_static Catch2::Catch2WithMain)
+set_project_warnings(sample_memory_test)
+if(MSVC)
+  target_compile_options(sample_memory_test PRIVATE /wd4172)
+endif()
+if(ENABLE_VALGRIND OR (DEFINED ASTL_SANITIZER AND NOT ASTL_SANITIZER STREQUAL "none"))
+  target_compile_definitions(sample_memory_test PRIVATE ASTL_MEMORY_TEST_INSTRUMENTED)
+endif()
+catch_discover_tests(
+  sample_memory_test
+  DISCOVERY_MODE
+  PRE_TEST
+  ADD_TAGS_AS_LABELS
+  PROPERTIES
+  TIMEOUT
+  300
+  ENVIRONMENT
+  "ASTL_LOG_LEVEL=off;ASTL_LOG_CONSOLE=0;ASTL_OUTPUT_PERFETTO=;ASTL_OUTPUT_INTERVAL_CSV=;ASTL_OUTPUT_SUMMARY_CSV=")

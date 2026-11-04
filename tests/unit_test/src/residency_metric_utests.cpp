@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <span>
@@ -72,12 +73,6 @@ class ResidencyMetricTestFixture : public astl::ResidencyMetric {
     return astl::ResidencyMetric::CalculatePercentage(time_in_state, total_interval);
   }
 
-  astl_status_code TestUpdateStateResidencyStatistics(const std::string&        state_name,
-                                                      std::chrono::microseconds time_microseconds, double percentage,
-                                                      astl::ProcessedSampleTimestamp timestamp) {
-    return UpdateStateResidencyStatistics(state_name, time_microseconds, percentage, timestamp);
-  }
-
   // Helper method to create properly typed timestamps
   static astl::ProcessedSampleTimestamp CreateTimestamp(std::chrono::steady_clock::time_point timePoint) {
     return astl::ProcessedSampleTimestamp{
@@ -88,14 +83,16 @@ class ResidencyMetricTestFixture : public astl::ResidencyMetric {
 // Recording sink capturing microsecond values in the order delivered. Does not assume
 // how many samples arrive per sink invocation (future batching friendly).
 struct RecordingProcessedSampleSink : public astl::IProcessedSampleSink {
-  std::vector<uint64_t> values_in_order;  // microsecond values in sink order
-  astl_status_code      SinkProcessedSamples(const astl::ITarget* target, const astl::IMetric* metric,
-                                             std::span<const astl::ProcessedSampledData> samples) override {
+  std::vector<uint64_t>                       values_in_order;  // microsecond values in sink order
+  std::vector<astl::ProcessedSampleTimestamp> timestamps_in_order;
+  astl_status_code SinkProcessedSamples(const astl::ITarget* target, const astl::IMetric* metric,
+                                        std::span<const astl::ProcessedSampledData> samples) override {
     (void)target;  // unused
     (void)metric;  // unused
     for (const auto& sample : samples) {
       REQUIRE(std::holds_alternative<uint64_t>(sample.value.value));
       values_in_order.push_back(std::get<uint64_t>(sample.value.value));
+      timestamps_in_order.push_back(sample.timestamp);
     }
     return ASTL_STATUS_SUCCESS;
   }
@@ -169,6 +166,28 @@ TEST_CASE("ResidencyMetric: deterministic processed sample sink order", "[Reside
   // Deltas: C6=50, C1=25, C2=15; Interval length = 50ms = 50,000us -> Active = 50,000 - (50+25+15) = 49,910
   const std::vector<uint64_t> expected_values_in_order{50, 25, 15, 49910};
   REQUIRE(recording_sink.values_in_order == expected_values_in_order);
+  REQUIRE(recording_sink.timestamps_in_order == std::vector<astl::ProcessedSampleTimestamp>(4, timestamp2));
+
+  // Discard the output batch and process another interval without draining the metric.
+  recording_sink.values_in_order.clear();
+  recording_sink.timestamps_in_order.clear();
+  const auto timestamp3 = ResidencyMetricTestFixture::CreateTimestamp(base_time + 100ms);
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{operations[1]->GetId(), astl::AstlValue{uint64_t{575}},
+                                                              timestamp3}) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{operations[0]->GetId(), astl::AstlValue{uint64_t{1150}},
+                                                              timestamp3}) == ASTL_STATUS_SUCCESS);
+  REQUIRE(recording_sink.values_in_order.empty());
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{operations[2]->GetId(), astl::AstlValue{uint64_t{295}},
+                                                              timestamp3}) == ASTL_STATUS_SUCCESS);
+  REQUIRE(recording_sink.values_in_order == std::vector<uint64_t>{100, 50, 30, 49820});
+  REQUIRE(recording_sink.timestamps_in_order == std::vector<astl::ProcessedSampleTimestamp>(4, timestamp3));
+
+  REQUIRE(metric.Summarize() == ASTL_STATUS_SUCCESS);
+  const auto& totals = metric.GetResidencySummaryData().total_time_seconds;
+  REQUIRE(totals.at("C6").count() == Catch::Approx(0.000150));
+  REQUIRE(totals.at("C1").count() == Catch::Approx(0.000075));
+  REQUIRE(totals.at("C2").count() == Catch::Approx(0.000045));
+  REQUIRE(totals.at("Active").count() == Catch::Approx(0.099730));
 }
 
 TEST_CASE("ResidencyMetric: construction", "[ResidencyMetric]") {
@@ -180,8 +199,8 @@ TEST_CASE("ResidencyMetric: construction", "[ResidencyMetric]") {
   REQUIRE(summary.average_percentage.empty());
   REQUIRE(!summary.inferred_state_percentage.has_value());
 
-  auto residency_data = metric.GetResidencyData();
-  REQUIRE(residency_data.empty());
+  REQUIRE(metric.Summarize() == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.GetResidencySummaryData().total_time_seconds.empty());
 }
 
 TEST_CASE("ResidencyMetric: construction without inferred state", "[ResidencyMetric]") {
@@ -202,8 +221,8 @@ TEST_CASE("ResidencyMetric: construction without inferred state", "[ResidencyMet
   REQUIRE(summary.average_percentage.empty());
   REQUIRE(!summary.inferred_state_percentage.has_value());
 
-  auto residency_data = metric.GetResidencyData();
-  REQUIRE(residency_data.empty());
+  REQUIRE(metric.Summarize() == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.GetResidencySummaryData().total_time_seconds.empty());
 }
 
 TEST_CASE("ResidencyMetric: tick to seconds conversion", "[ResidencyMetric]") {
@@ -293,8 +312,8 @@ TEST_CASE("ResidencyMetric: single sample processing", "[ResidencyMetric]") {
   REQUIRE(status == ASTL_STATUS_SUCCESS);
 
   // No residency data should be generated yet
-  auto residency_data = fixture.GetResidencyData();
-  REQUIRE(residency_data.empty());
+  REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
+  REQUIRE(fixture.GetResidencySummaryData().total_time_seconds.empty());
 }
 
 TEST_CASE("ResidencyMetric: two samples processing", "[ResidencyMetric]") {
@@ -324,13 +343,10 @@ TEST_CASE("ResidencyMetric: two samples processing", "[ResidencyMetric]") {
   auto status = fixture.ReceiveRawSample(c6_sample2);
   REQUIRE(status == ASTL_STATUS_SUCCESS);
 
-  // Should have one residency data entry
-  auto residency_data = fixture.GetResidencyData();
-  REQUIRE(residency_data.size() == 1);
-
-  const auto& data = residency_data[0];
-  REQUIRE(data.state_name == "C6");
-  REQUIRE(data.time_seconds == 1.0s);  // 1000000 ticks / 1000000 Hz = 1 second
+  REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
+  const auto& totals = fixture.GetResidencySummaryData().total_time_seconds;
+  REQUIRE(totals.size() == 1);
+  REQUIRE(totals.at("C6") == 1.0s);  // 1000000 ticks / 1000000 Hz = 1 second
 }
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
@@ -370,27 +386,11 @@ TEST_CASE("ResidencyMetric: multiple states processing", "[ResidencyMetric]") {
   astl::NormalizedSampledData c1_sample2(second_operation_id, c1_val2, timestamp4);
   fixture.ReceiveRawSample(c1_sample2);
 
-  // Should have two residency data entries
-  auto residency_data = fixture.GetResidencyData();
-  REQUIRE(residency_data.size() == 2);
-
-  // Find C6 and C1 data
-  const astl::StateResidencyData* c6_data = nullptr;
-  const astl::StateResidencyData* c1_data = nullptr;
-
-  for (const auto& data : residency_data) {
-    if (data.state_name == "C6") {
-      c6_data = &data;
-    } else if (data.state_name == "C1") {
-      c1_data = &data;
-    }
-  }
-
-  REQUIRE(c6_data != nullptr);
-  REQUIRE(c1_data != nullptr);
-
-  REQUIRE(c6_data->time_seconds == 1.5s);  // 1.5 seconds in C6
-  REQUIRE(c1_data->time_seconds == 0.5s);  // 0.5 seconds in C1
+  REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
+  const auto& totals = fixture.GetResidencySummaryData().total_time_seconds;
+  REQUIRE(totals.size() == 2);
+  REQUIRE(totals.at("C6") == 1.5s);
+  REQUIRE(totals.at("C1") == 0.5s);
 }
 // NOLINTEND(readability-function-cognitive-complexity)
 
@@ -422,12 +422,6 @@ TEST_CASE("ResidencyMetric: summarization", "[ResidencyMetric]") {
   // Summarize
   auto status = fixture.Summarize();
   REQUIRE(status == ASTL_STATUS_SUCCESS);
-
-  // Check that we have some data
-  auto residency_data = fixture.GetResidencyData();
-  REQUIRE(residency_data.size() == 1);
-  REQUIRE(residency_data[0].state_name == "C6");
-  REQUIRE(residency_data[0].time_seconds == 1.0s);
 
   // Check summary data
   auto summary = fixture.GetResidencySummaryData();
@@ -476,16 +470,11 @@ TEST_CASE("ResidencyMetric: reset functionality", "[ResidencyMetric]") {
   astl::NormalizedSampledData sample2(first_operation_id, astl::AstlValue{uint64_t{2000000}}, timestamp2);
   fixture.ReceiveRawSample(sample2);
 
-  // Verify data exists
-  auto residency_data = fixture.GetResidencyData();
-  REQUIRE(residency_data.size() == 1);  // Should have one residency calculation
+  REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
+  REQUIRE(fixture.GetResidencySummaryData().total_time_seconds.size() == 1);
 
-  // Reset
   fixture.Reset();
-
-  // Verify data is cleared
-  residency_data = fixture.GetResidencyData();
-  REQUIRE(residency_data.empty());
+  REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
 
   auto summary = fixture.GetResidencySummaryData();
   REQUIRE(summary.total_time_seconds.empty());
@@ -493,7 +482,7 @@ TEST_CASE("ResidencyMetric: reset functionality", "[ResidencyMetric]") {
   REQUIRE(!summary.inferred_state_percentage.has_value());
 }
 
-TEST_CASE("ResidencyMetric: state-specific data retrieval", "[ResidencyMetric]") {
+TEST_CASE("ResidencyMetric: state-specific summary retrieval", "[ResidencyMetric]") {
   ResidencyMetricTestFixture fixture;
 
   // Get the operations to find the actual operation IDs
@@ -522,21 +511,11 @@ TEST_CASE("ResidencyMetric: state-specific data retrieval", "[ResidencyMetric]")
   fixture.ReceiveRawSample(
       astl::NormalizedSampledData(second_operation_id, astl::AstlValue{uint64_t{1000000}}, timestamp4));
 
-  // Get C6-specific data
-  auto c6_data = fixture.GetStateResidencyData("C6");
-  REQUIRE(c6_data.size() == 1);
-  REQUIRE(c6_data[0].state_name == "C6");
-  REQUIRE(c6_data[0].time_seconds == 1.0s);
-
-  // Get C1-specific data
-  auto c1_data = fixture.GetStateResidencyData("C1");
-  REQUIRE(c1_data.size() == 1);
-  REQUIRE(c1_data[0].state_name == "C1");
-  REQUIRE(c1_data[0].time_seconds == 0.5s);
-
-  // Get data for non-existent state
-  auto invalid_data = fixture.GetStateResidencyData("NonExistentState");
-  REQUIRE(invalid_data.empty());
+  REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
+  const auto& totals = fixture.GetResidencySummaryData().total_time_seconds;
+  REQUIRE(totals.at("C6") == 1.0s);
+  REQUIRE(totals.at("C1") == 0.5s);
+  REQUIRE_FALSE(totals.contains("NonExistentState"));
 }
 
 TEST_CASE("ResidencyMetric: inferred state calculation setup", "[ResidencyMetric]") {
@@ -588,8 +567,8 @@ TEST_CASE("ResidencyMetric: inferred state baseline samples", "[ResidencyMetric]
   REQUIRE(status3 == ASTL_STATUS_SUCCESS);
 
   // No residency data should be generated yet (need deltas)
-  auto residency_data = fixture.GetResidencyData();
-  REQUIRE(residency_data.empty());
+  REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
+  REQUIRE(fixture.GetResidencySummaryData().total_time_seconds.empty());
 }
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
@@ -625,17 +604,10 @@ TEST_CASE("ResidencyMetric: inferred state calculation when all states receive s
   // After this sample, inferred state should be calculated since all states have been processed
   fixture.ReceiveRawSample(astl::NormalizedSampledData(c2_operation_id, astl::AstlValue{uint64_t{265}}, timestamp2));
 
-  // Verify residency data includes inferred state
-  auto residency_data = fixture.GetResidencyData();
-  REQUIRE(residency_data.size() == 4);  // C6, C1, C2, and Active (inferred state)
-
-  // Find and verify inferred state data
-  auto active_it = std::find_if(residency_data.begin(), residency_data.end(),
-                                [](const auto& data) { return data.state_name == "Active"; });
-
-  REQUIRE(active_it != residency_data.end());
-  REQUIRE(active_it->state_name == "Active");
-  REQUIRE(active_it->time_seconds >= 0.0s);
+  REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
+  const auto& totals = fixture.GetResidencySummaryData().total_time_seconds;
+  REQUIRE(totals.size() == 4);  // C6, C1, C2, and Active (inferred state)
+  REQUIRE(totals.at("Active") == 10ms);
 }
 // NOLINTEND(readability-function-cognitive-complexity)
 
@@ -689,9 +661,29 @@ TEST_CASE("ResidencyMetric: inferred state summary verification", "[ResidencyMet
   // Total interval = 100ms = 0.1s, Accounted = 0.05 + 0.025 + 0.015 = 0.09s
   // Expected Active time = 0.1 - 0.09 = 0.01s
   REQUIRE(summary.total_time_seconds.at("Active") == 10ms);
+}
 
-  // Verify Active state specific data
-  auto active_state_data = fixture.GetStateResidencyData("Active");
-  REQUIRE(active_state_data.size() == 1);
-  REQUIRE(active_state_data[0].state_name == "Active");
+TEST_CASE("ResidencyMetric: consecutive intervals accumulate statistics and reset clears them", "[ResidencyMetric]") {
+  ResidencyMetricTestFixture metric;
+  auto                       operations = metric.GetOperations();
+  REQUIRE(operations.has_value());
+  REQUIRE_FALSE(operations->empty());
+  const auto operation_id = operations->front()->GetId();
+  auto       feed         = [&](uint64_t value, std::chrono::milliseconds elapsed) {
+    const auto timestamp =
+        astl::ProcessedSampleTimestamp{std::chrono::duration_cast<astl::ProcessedSampleTimestamp::duration>(elapsed)};
+    REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{operation_id, astl::AstlValue{value}, timestamp}) ==
+                          ASTL_STATUS_SUCCESS);
+  };
+  feed(1000, 0ms);
+  feed(2000, 10ms);
+  REQUIRE(metric.Summarize() == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.GetResidencySummaryData().total_time_seconds.at("C6") == 1ms);
+
+  feed(3000, 20ms);
+  REQUIRE(metric.Summarize() == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.GetResidencySummaryData().total_time_seconds.at("C6") == 2ms);
+
+  metric.Reset();
+  REQUIRE(metric.GetResidencySummaryData().total_time_seconds.empty());
 }

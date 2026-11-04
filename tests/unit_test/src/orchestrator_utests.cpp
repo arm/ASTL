@@ -26,6 +26,7 @@
 #include "common/system_info.hpp"
 #include "metric/delta_metric.hpp"
 #include "metric/metric_manager.hpp"
+#include "metric/sampled_value_metric.hpp"
 #include "operation/operation_builder.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "scmi/scmi_target.hpp"
@@ -408,7 +409,16 @@ TEST_CASE("Orchestrator::ConsumeProcessedMetricSamplesIfUncached only consumes n
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
 
-  TestMetricBase                    metric{"consumable-metric"};
+  astl::MetricConfig                config{"consumable-metric",
+                            "",
+                            ASTL_UNITS_CELSIUS,
+                            ASTL_VALUE_UINT64,
+                            ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                            ASTL_METRIC_VALUE,
+                            astl::CollectorType::UNKNOWN,
+                            astl::NullOperationBuilder{}};
+  astl::SampledValueMetric          metric{&config, nullptr, nullptr};
+  const astl::IMetric*              metric_view = &metric;
   std::vector<astl_metric_handle_t> available_metrics{&metric};
   auto                              metric_manager = std::make_unique<MockMetricManager>();
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -442,8 +452,10 @@ TEST_CASE("Orchestrator::ConsumeProcessedMetricSamplesIfUncached only consumes n
   };
 
   REQUIRE(orchestrator.ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{1, astl::AstlValue{uint64_t{13}}}) ==
+          ASTL_STATUS_SUCCESS);
   REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, processed_samples) == ASTL_STATUS_SUCCESS);
-  orchestrator.ConsumeProcessedMetricSamplesIfUncached(&metric, target);
+  orchestrator.ConsumeProcessedMetricSamplesIfUncached(metric_view, target);
   std::size_t cached_count{0};
   REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(&metric, target,
                                                          [&](std::span<const astl::ProcessedSampledData> batch) {
@@ -451,11 +463,13 @@ TEST_CASE("Orchestrator::ConsumeProcessedMetricSamplesIfUncached only consumes n
                                                            return ASTL_STATUS_SUCCESS;
                                                          }) == ASTL_STATUS_SUCCESS);
   REQUIRE(cached_count == 1);
+  REQUIRE(metric.Summarize() == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.GetSummaryData().avg == astl::AstlValue{uint64_t{13}});
 
   params.flags = ASTL_NO_CACHING;
   REQUIRE(orchestrator.ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_SUCCESS);
   REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, processed_samples) == ASTL_STATUS_SUCCESS);
-  orchestrator.ConsumeProcessedMetricSamplesIfUncached(&metric, target);
+  orchestrator.ConsumeProcessedMetricSamplesIfUncached(metric_view, target);
   std::size_t consumed_count{0};
   REQUIRE(orchestrator.VisitProcessedMetricSampleBatches(&metric, target,
                                                          [&](std::span<const astl::ProcessedSampledData> batch) {
@@ -463,6 +477,26 @@ TEST_CASE("Orchestrator::ConsumeProcessedMetricSamplesIfUncached only consumes n
                                                            return ASTL_STATUS_SUCCESS;
                                                          }) == ASTL_STATUS_SUCCESS);
   REQUIRE(consumed_count == 0);
+  REQUIRE(metric.Summarize() == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.GetSummaryData().min == astl::AstlValue{uint64_t{13}});
+  REQUIRE(metric.GetSummaryData().max == astl::AstlValue{uint64_t{13}});
+  REQUIRE(metric.GetSummaryData().avg == astl::AstlValue{uint64_t{13}});
+
+  // Consuming the retrieval buffer must preserve accumulated statistics across batches.
+  uint64_t sum   = 13;
+  uint64_t count = 1;
+  for (uint64_t value : {uint64_t{27}, uint64_t{41}, uint64_t{55}}) {
+    sum += value;
+    ++count;
+    REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{1, astl::AstlValue{value}}) == ASTL_STATUS_SUCCESS);
+    REQUIRE(metric.Summarize() == ASTL_STATUS_SUCCESS);
+    REQUIRE(metric.GetSummaryData().avg == astl::AstlValue{sum / count});
+    const std::vector<astl::ProcessedSampledData> next_samples{
+        {astl::AstlValue{value}, astl::ProcessedSampleTimestamp{}}
+    };
+    REQUIRE(orchestrator.SinkProcessedSamples(target, &metric, next_samples) == ASTL_STATUS_SUCCESS);
+    orchestrator.ConsumeProcessedMetricSamplesIfUncached(metric_view, target);
+  }
 }
 
 TEST_CASE("Orchestrator::VisitProcessedMetricSampleBatches returns empty when cache is absent", "[Orchestrator]") {

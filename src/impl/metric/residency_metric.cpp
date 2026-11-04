@@ -48,7 +48,6 @@ auto ResidencyMetric::ProcessPauseSample(ProcessedSampleTimestamp pause_timestam
 
 auto ResidencyMetric::InitializeResidencyState() -> void {
   _previous_samples.clear();
-  _residency_data.clear();
   _summary_data = {};
   _state_time_totals.clear();
   _state_percentage_sums.clear();
@@ -185,8 +184,7 @@ auto ResidencyMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) 
   }
 
   // Update state residency statistics
-  auto status =
-      UpdateStateResidencyStatistics(state_name, time_result.value(), percentage_result.value(), raw_sample.timestamp);
+  auto status = UpdateStateResidencyStatistics(state_name, time_result.value(), percentage_result.value());
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
@@ -255,17 +253,6 @@ auto ResidencyMetric::Summarize() -> astl_status_code {
 
 auto ResidencyMetric::GetResidencySummaryData() const -> const ResidencySummaryData& { return _summary_data; }
 
-auto ResidencyMetric::GetResidencyData() const -> std::span<const StateResidencyData> {
-  return std::span<const StateResidencyData>(_residency_data);
-}
-
-auto ResidencyMetric::GetStateResidencyData(const std::string& state_name) const -> std::vector<StateResidencyData> {
-  std::vector<StateResidencyData> state_data;
-  std::copy_if(_residency_data.begin(), _residency_data.end(), std::back_inserter(state_data),
-               [&state_name](const StateResidencyData& data) { return data.state_name == state_name; });
-  return state_data;
-}
-
 auto ResidencyMetric::ConvertTicksToMicroseconds(const AstlValue& ticks, const ResidencyMetricConfig::StateInfo& config)
     -> std::expected<std::chrono::microseconds, astl_status_code> {
   if (config.tick_frequency <= 0.0) {
@@ -317,16 +304,10 @@ auto ResidencyMetric::CalculatePercentage(std::chrono::microseconds time_in_stat
 }
 
 auto ResidencyMetric::UpdateStateResidencyStatistics(const std::string&        state_name,
-                                                     std::chrono::microseconds time_microseconds, double percentage,
-                                                     ProcessedSampleTimestamp timestamp) -> astl_status_code {
+                                                     std::chrono::microseconds time_microseconds, double percentage)
+    -> astl_status_code {
   // Convert time_microseconds to seconds as std::chrono::duration<double>
   std::chrono::duration<double> time_seconds_chrono = time_microseconds;
-
-  // Create and store residency data entry
-  StateResidencyData residency_data{
-      .state_name = state_name, .time_seconds = time_seconds_chrono, .timestamp = timestamp};
-
-  _residency_data.push_back(residency_data);
 
   // Update running totals and statistics
   _state_time_totals[state_name] += time_seconds_chrono;
@@ -377,10 +358,10 @@ auto ResidencyMetric::CalculateInferredStateResidencyForInterval(std::chrono::mi
   // Clamp percentage to [0, 100] range
   inferred_percentage = std::clamp(inferred_percentage, 0.0, 100.0);
 
-  // Create StateResidencyData for the inferred state and capture time for pending sink ordering
+  // Update inferred-state statistics and capture time for pending sink ordering.
   if (inferred_time_microseconds.count() > 0) {
     auto status = UpdateStateResidencyStatistics(_residency_configuration->InferredState()->name,
-                                                 inferred_time_microseconds, inferred_percentage, timestamp);
+                                                 inferred_time_microseconds, inferred_percentage);
     if (status != ASTL_STATUS_SUCCESS) {
       return status;
     }

@@ -369,6 +369,21 @@ TEST_CASE("DeltaMetric: Reset functionality", "[DeltaMetric]") {
   REQUIRE(avg == 0);
 }
 
+TEST_CASE("DeltaMetric: consecutive intervals preserve the baseline and accumulate statistics", "[DeltaMetric]") {
+  MockSampleSink    sink;
+  astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{1, astl::AstlValue{uint64_t{100}}}) ==
+          ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{1, astl::AstlValue{uint64_t{150}}}) ==
+          ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{1, astl::AstlValue{uint64_t{250}}}) ==
+          ASTL_STATUS_SUCCESS);
+  REQUIRE(sink.captured.size() == 2);
+  REQUIRE(sink.captured[1].value == astl::AstlValue{uint64_t{100}});
+  REQUIRE(metric.Summarize() == ASTL_STATUS_SUCCESS);
+  REQUIRE(metric.GetDeltaSummaryData().avg_delta == astl::AstlValue{uint64_t{75}});
+}
+
 TEST_CASE("DeltaMetric: Delta processing with sink", "[DeltaMetric]") {
   MockSampleSink    sink;
   astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};

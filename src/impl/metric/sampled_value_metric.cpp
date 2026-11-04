@@ -6,13 +6,6 @@
 
 namespace astl {
 
-namespace {
-// Initial reservation for processed samples per metric. Chosen as a modest
-// size to avoid several small reallocations during the first burst of
-// samples while keeping footprint tiny (< 1KB for typical sample structs).
-constexpr std::size_t kInitialProcessedSampleCapacity = 16;
-}  // namespace
-
 SampledValueMetric::SampledValueMetric(const MetricConfig* configuration, const ITarget* target,
                                        IProcessedSampleSink* processed_sample_sink)
     : RawMetric(configuration, target, processed_sample_sink), _summary_data{}, _sum_sample_value{uint64_t{0}} {
@@ -38,8 +31,11 @@ auto SampledValueMetric::ReceiveRawSample(const NormalizedSampledData& raw_sampl
   }
 
   ProcessedSampledData processed_sample{*processed_value, raw_sample.timestamp};
-  (void)UpdateStatistics(processed_sample);  // statistics errors are logged inside helper
-  _processed_samples.push_back(processed_sample);
+  {
+    std::lock_guard<std::mutex> lock(_samples_mutex);
+    (void)UpdateStatistics(processed_sample);  // statistics errors are logged inside helper
+    ++_sample_count;
+  }
   // fan-out to manager / external sinks
   SinkProcessedSample(processed_sample);
   return ASTL_STATUS_SUCCESS;
@@ -71,17 +67,8 @@ auto SampledValueMetric::UpdateStatistics(const ProcessedSampledData& processed_
 }
 
 auto SampledValueMetric::InitializeSamples() -> void {
-  // Reset the metric state
-  if (!_processed_samples.empty()) {
-    _processed_samples.clear();
-  }
-  // Heuristic: pre-reserve a small initial capacity if this is a cold vector. Metrics often receive
-  // a handful of samples quickly after configuration; reserving avoids several tiny reallocations.
-  // Reserve initial capacity if this is a cold vector.
-  if (_processed_samples.capacity() == 0) {
-    _processed_samples.reserve(kInitialProcessedSampleCapacity);
-  }
   _summary_data          = MinMaxAvgSummaryData{};
+  _sample_count          = 0;
   auto from_union_result = AstlValue::FromUnionPromoting(_configuration->ValueType());
   if (from_union_result.has_value()) {
     _sum_sample_value = from_union_result.value();
@@ -105,11 +92,11 @@ auto SampledValueMetric::Summarize() -> astl_status_code {
   // Compute min, max, and average values for the received samples.
   // Only one numeric type is valid for a given metric instance.
   std::lock_guard<std::mutex> lock(_samples_mutex);
-  if (_processed_samples.empty()) {
+  if (_sample_count == 0) {
     _summary_logger.LogInfo("No samples to summarize.\n");
     return ASTL_STATUS_SUCCESS;
   }
-  auto average = AstlValue::Divide(_sum_sample_value, _processed_samples.size());
+  auto average = AstlValue::Divide(_sum_sample_value, _sample_count);
   if (average) {
     _summary_data.avg = average.value();
   } else {
@@ -127,6 +114,9 @@ auto SampledValueMetric::Summarize() -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
-auto SampledValueMetric::GetSummaryData() const -> MinMaxAvgSummaryData { return _summary_data; }
+auto SampledValueMetric::GetSummaryData() const -> MinMaxAvgSummaryData {
+  std::lock_guard<std::mutex> lock(_samples_mutex);
+  return _summary_data;
+}
 
 }  // namespace astl

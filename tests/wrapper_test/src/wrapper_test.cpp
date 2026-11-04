@@ -1882,8 +1882,9 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
   // New interface path: resolve metric handle + target to metric implementation
   ALLOW_CALL(*mock_metric_manager, GetMetricOnTarget(metric_api_handle, mock_target_raw)).RETURN(mock_metric_raw);
 
-  auto topology_manager  = std::make_unique<MockTopologyManager>();
-  auto collector_manager = std::make_unique<MockCollectorManager>();
+  auto  topology_manager      = std::make_unique<MockTopologyManager>();
+  auto  collector_manager     = std::make_unique<MockCollectorManager>();
+  auto* collector_manager_raw = collector_manager.get();
   ALLOW_CALL(*collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   auto output_manager = std::make_unique<astl::OutputManager>();
@@ -2033,6 +2034,47 @@ TEST_CASE("astlGetMetricSampleCountOnTarget", "[wrapper][Orchestrator][wrapper]"
     REQUIRE(sample_count == 2);
     REQUIRE(samples_out[0].timestamp == 101);
     REQUIRE(samples_out[1].timestamp == 102);
+  }
+
+  SECTION("[no-caching samples drain only after a successful read][wrapper]") {
+    ALLOW_CALL(*collector_manager_raw, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
+    ALLOW_CALL(*mock_metric_manager, GetRequiredOperations(_, _))
+        .RETURN(astl::CollectionOperations{
+            {}, {}, {}, {}, std::chrono::milliseconds{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}});
+    ASTL_INIT_STRUCT(astl_collection_params_t, params, .flags = ASTL_NO_CACHING, .sampling_interval = 0,
+                     .collection_mode = ASTL_COLLECTION_MODE_IMMEDIATE);
+    const std::array<astl_metric_handle_t, 1> metrics{metric_api_handle};
+    REQUIRE(orchestrator_raw->ConfigureMetricCollection(mock_target_raw, &params, metrics) == ASTL_STATUS_SUCCESS);
+
+    const std::vector<astl::ProcessedSampledData> samples{
+        {astl::AstlValue{uint64_t{13}}, astl::ProcessedSampleTimestamp{}},
+        {astl::AstlValue{uint64_t{27}}, astl::ProcessedSampleTimestamp{}}
+    };
+    for (int batch = 0; batch < 3; ++batch) {
+      REQUIRE(orchestrator_raw->SinkProcessedSamples(mock_target_raw, mock_metric_concrete, samples) ==
+              ASTL_STATUS_SUCCESS);
+      REQUIRE(GetMetricSampleCountOnTarget(mock_target_handle, metric_api_handle, &sample_count) ==
+              ASTL_STATUS_SUCCESS);
+      REQUIRE(sample_count == 2);
+
+      std::array<astl_sample_t, 2> output{};
+      sample_count = 1;
+      REQUIRE(GetMetricSamplesOnTarget(mock_target_handle, metric_api_handle, output.data(), &sample_count) ==
+              ASTL_STATUS_BUFFER_TOO_SMALL);
+      REQUIRE(sample_count == 2);
+      // Neither the count query nor the failed copy may consume samples.
+      REQUIRE(GetMetricSampleCountOnTarget(mock_target_handle, metric_api_handle, &sample_count) ==
+              ASTL_STATUS_SUCCESS);
+      REQUIRE(sample_count == 2);
+      REQUIRE(GetMetricSamplesOnTarget(mock_target_handle, metric_api_handle, output.data(), &sample_count) ==
+              ASTL_STATUS_SUCCESS);
+      REQUIRE(sample_count == 2);
+      REQUIRE(output[0].value.ui64 == 13);
+      REQUIRE(output[1].value.ui64 == 27);
+      REQUIRE(GetMetricSampleCountOnTarget(mock_target_handle, metric_api_handle, &sample_count) ==
+              ASTL_STATUS_SUCCESS);
+      REQUIRE(sample_count == 0);
+    }
   }
 
   SECTION("[large timestamp-filtered sample collection][wrapper]") {

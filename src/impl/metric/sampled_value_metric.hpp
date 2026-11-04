@@ -88,15 +88,15 @@ class SampledValueMetric : public RawMetric {
   /** @brief private helper to update statistics for summary later */
   auto UpdateStatistics(const ProcessedSampledData &processed_sample) -> astl_status_code;
 
-  // private helper to initialize or reset the samples + statistics
+  // private helper to initialize or reset statistics
   void InitializeSamples();
 
-  std::vector<ProcessedSampledData> _processed_samples;
-  mutable std::mutex                _samples_mutex;  // protects _processed_samples & summary data
-  MinMaxAvgSummaryData              _summary_data;   // Summary data for min, max, avg
+  mutable std::mutex   _samples_mutex;  // protects statistics and summary data
+  MinMaxAvgSummaryData _summary_data;   // Summary data for min, max, avg
   // Sum of sample values for average calculation. Uses max representation to reduce risk of overflow.
   // uint64_t or double are the largest natively support integer/float type across Windows, macOS and Linux.
   AstlValue _sum_sample_value;
+  uint64_t  _sample_count{0};  // Number of samples included in the running statistics.
   // create a logger instance to explicitly log summary
   astl::Logger _summary_logger{astl::LogLevel::Info, false /* Console logging disabled */,
                                false /* No default formatting */, "sampled_value_summary.log"};

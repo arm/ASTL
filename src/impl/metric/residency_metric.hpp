@@ -8,7 +8,6 @@
 #include <chrono>
 #include <expected>
 #include <optional>
-#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -21,18 +20,6 @@
 #include "delta_metric.hpp"
 
 namespace astl {
-
-/**
- * @brief Holds residency calculation data for a specific state.
- * note @todo (ASTL-159): Revisit the Residency samples data structure for GetProcessedSamples API
- * This structure stores the residency delta, converted time, and percentage for each state and string_name can be
- * optimized with a map.
- */
-struct StateResidencyData {
-  std::string                   state_name;    ///< Name of the power/system state
-  std::chrono::duration<double> time_seconds;  ///< Converted time in seconds
-  ProcessedSampleTimestamp      timestamp;     ///< Timestamp when calculated
-};
 
 /**
  * @brief Holds summary data for all states in the residency metric.
@@ -154,25 +141,6 @@ class ResidencyMetric : public DeltaMetric {
   const ResidencySummaryData& GetResidencySummaryData() const;
 
   /**
-   * @brief Get a view of the residency data calculated by this metric.
-   *
-   * This method provides access to the internal residency data for all states.
-   *
-   * note @todo (ASTL-159): Implement a GetProcessedSamples API in all Metric types to get a span of processed samples.
-   *
-   * @return A span containing all calculated residency values for all states.
-   */
-  std::span<const StateResidencyData> GetResidencyData() const;
-
-  /**
-   * @brief Get residency data for a specific state.
-   *
-   * @param state_name The name of the state to retrieve data for.
-   * @return Vector of residency data for the specified state.
-   */
-  std::vector<StateResidencyData> GetStateResidencyData(const std::string& state_name) const;
-
-  /**
    * @brief Get the state configurations.
    * @return Const reference to the vector of state configurations.
    */
@@ -219,17 +187,16 @@ class ResidencyMetric : public DeltaMetric {
    * @param state_name The name of the state.
    * @param time_microseconds Converted time in microseconds.
    * @param percentage Calculated percentage.
-   * @param timestamp Sample timestamp.
    * @return astl_status_code indicating success or failure.
    */
   auto UpdateStateResidencyStatistics(const std::string& state_name, std::chrono::microseconds time_microseconds,
-                                      double percentage, ProcessedSampleTimestamp timestamp) -> astl_status_code;
+                                      double percentage) -> astl_status_code;
 
   /**
    * @brief Calculate and update inferred state residency for a specific sample interval.
    *
    * Calculates the residency of the inferred state for the current sample interval,
-   * creating a StateResidencyData entry for the inferred state.
+   * updating running statistics and preparing an output sample for the inferred state.
    *
    * @param sample_interval Time interval for this sample.
    * @param timestamp Timestamp for this sample.
@@ -248,9 +215,8 @@ class ResidencyMetric : public DeltaMetric {
   // First (smallest) operation id assigned (captures ordering baseline). Set when operations are built.
   std::optional<OperationId> _first_operation_id;
   std::unordered_map<std::string, std::optional<NormalizedSampledData>>
-                                  _previous_samples;  ///< Previous samples per state
-  std::vector<StateResidencyData> _residency_data;    ///< All residency calculations
-  ResidencySummaryData            _summary_data;      ///< Summary statistics
+                       _previous_samples;  ///< Previous samples per state
+  ResidencySummaryData _summary_data;      ///< Summary statistics
 
   // Per-state running totals for summary calculation
   std::unordered_map<std::string, std::chrono::duration<double>> _state_time_totals;  ///< Running total time per state
