@@ -15,11 +15,16 @@
 #include "astl_utils.hpp"
 #include "common/capabilities.hpp"
 #include "config/astl_configuration.hpp"
+#include "config/json_file_utils.hpp"
+#include "config/metric_json_declaration.hpp"
 #include "metric/metric_builder.hpp"
 #include "metric/metric_manager.hpp"
 #include "procfs/procfs_metric_builder.hpp"
+#include "procfs/procfs_metric_builder_helpers.hpp"
+#include "procfs/procfs_metric_builder_parsing_helpers.hpp"
 #include "procfs/procfs_read_operation.hpp"
 #include "procfs/procfs_target.hpp"
+#include "procfs/procfs_utils.hpp"
 
 namespace fs = std::filesystem;
 
@@ -83,8 +88,9 @@ TEST_CASE("Shipped procfs metrics work without platform-specific configuration",
   auto manager = astl::BuildMetricManager(targets, *configuration, std::nullopt);
   REQUIRE(manager.has_value());
   CHECK(CollectMetricNames(**manager, targets.front().get()) ==
-        std::vector<std::string>{"cpu.0.utilization", "cpu.total.utilization", "meminfo.MemAvailable", "memory.total",
-                                 "memory.used", "memory.utilization"});
+        std::vector<std::string>{"cpu.0.iowait", "cpu.0.utilization", "cpu.total.iowait", "cpu.total.utilization",
+                                 "meminfo.MemAvailable", "memory.total", "memory.used", "memory.utilization",
+                                 "system.current_processes", "system.current_threads"});
 }
 
 TEST_CASE("RegisterProcfsMetrics loads config-defined procfs metrics", "[procfs_metric_builder]") {
@@ -268,4 +274,177 @@ TEST_CASE("RegisterProcfsMetrics loads config-defined procfs metrics", "[procfs_
   }
   std::ranges::sort(group_names);
   REQUIRE(group_names == std::vector<std::string>{"cpu", "memory"});
+}
+
+TEST_CASE("Default procfs discovery exposes optional system sources with identities", "[procfs_metric_builder]") {
+  const auto    root = fs::temp_directory_path() / "astl_procfs_default_system_discovery";
+  TempFileGuard guard{root};
+  WriteTextFile(root / "diskstats", "8 0 sda 10 0 20 0 30 0 40 0 0 0 0\n8 1 sda1 1 0 2 0 3 0 4 0 0 0 0\n");
+  WriteTextFile(root / "net/dev",
+                "header\nheader\n lo: 10 0 0 0 0 0 0 0 20 0 0 0 0 0 0 0\n eth0:30 0 0 0 0 0 0 0 40 0 0 0 0 0 0 0\n");
+  WriteTextFile(root / "interrupts", " CPU0 CPU2\n 1: 10 20 controller device\n");
+  WriteTextFile(root / "softirqs", " CPU0 CPU2\n TIMER: 30 40\n");
+  WriteTextFile(root / "vmstat", "pgfault 100\npgmajfault 3\n");
+  WriteTextFile(
+      root / "stat",
+      "cpu 1 0 1 10 2 0 0 0\ncpu0 1 0 1 10 2 0 0 0\nctxt 100\nintr 30\nsoftirq 70\nprocs_running 2\nprocs_blocked 1\n");
+  WriteTextFile(root / "loadavg", "0.25 1.50 2.75 2/10 123\n");
+  WriteTextFile(root / "meminfo", "MemTotal: 100 kB\nMemAvailable: 50 kB\nSwapTotal: 10 kB\nSwapFree: 4 kB\n");
+  WriteTextFile(root / "1/status", "Threads: 2\n");
+  astl::FileInterface files{root};
+  astl::ProcfsTarget  target{"procfs", "fixture", root};
+  const auto          config_path =
+      fs::path{__FILE__}.parent_path().parent_path().parent_path().parent_path() / "config/metrics/procfs/metrics.json";
+  auto declarations = astl::config::TryParseJsonFile<astl::metrics::spec::MetricsDeclaration>(config_path);
+  REQUIRE(declarations);
+  std::vector<std::string> names;
+  for (const auto& [name, declaration] : declarations->metrics) {
+    auto configs = astl::procfs_metric_builder_helpers::CreateProcfsMetricConfigs(name, declaration, &target, files);
+    REQUIRE(configs);
+    for (const auto& config : *configs) {
+      names.push_back(config->Name());
+    }
+  }
+  for (const auto& name : {"disk.sda.read_operations_per_second",
+                           "disk.sda1.write_bytes_per_second",
+                           "network.eth0.rx_bytes_per_second",
+                           "network.lo.tx_bytes",
+                           "vm.page_faults",
+                           "vm.major_page_faults",
+                           "cpu.2.interrupts_per_second",
+                           "cpu.0.soft_interrupts",
+                           "system.current_processes",
+                           "system.current_threads",
+                           "cpu.total.iowait",
+                           "swap.used",
+                           "swap.occupancy",
+                           "scheduler.context_switches_per_second",
+                           "swap.total",
+                           "scheduler.load_average_1m",
+                           "scheduler.load_average_5m",
+                           "scheduler.load_average_15m",
+                           "scheduler.runnable_tasks",
+                           "scheduler.blocked_tasks",
+                           "vm.page_faults_per_second",
+                           "vm.major_page_faults_per_second"}) {
+    INFO(name);
+    CHECK(std::ranges::find(names, name) != names.end());
+  }
+  auto raw = astl::procfs::DiscoverCounterDescriptors(files);
+  REQUIRE(raw);
+  CHECK(
+      std::ranges::any_of(*raw, [](const auto& descriptor) { return descriptor.metric_name == "vmstat.pgmajfault"; }));
+  CHECK(std::ranges::any_of(
+      *raw, [](const auto& descriptor) { return descriptor.metric_name == "diskstats.sda.read_bytes"; }));
+  fs::remove(root / "vmstat");
+  auto missing                              = declarations->metrics.at("vm.page_faults");
+  missing.collection.raw_json["field_type"] = "SYSTEM";
+  auto unavailable =
+      astl::procfs_metric_builder_helpers::CreateProcfsMetricConfigs("vm.page_faults", missing, &target, files);
+  REQUIRE(unavailable);
+  CHECK(unavailable->empty());
+  WriteTextFile(root / "stat", "cpu 1 2 3 4\n");
+  auto iowait                              = declarations->metrics.at("cpu.{cpu_index}.iowait");
+  iowait.collection.raw_json["field_type"] = "CPU_IOWAIT";
+  auto missing_iowait =
+      astl::procfs_metric_builder_helpers::CreateProcfsMetricConfigs("cpu.{cpu_index}.iowait", iowait, &target, files);
+  REQUIRE(missing_iowait);
+  CHECK(missing_iowait->empty());
+  // A present meminfo file without swap fields cannot support swap gauges.
+  WriteTextFile(root / "meminfo", "MemTotal: 100 kB\nMemAvailable: 50 kB\n");
+  for (const auto* name : {"swap.total", "swap.used", "swap.occupancy"}) {
+    auto unsupported = astl::procfs_metric_builder_helpers::CreateProcfsMetricConfigs(
+        name, declarations->metrics.at(name), &target, files);
+    REQUIRE(unsupported);
+    CHECK(unsupported->empty());
+  }
+  WriteTextFile(root / "softirqs", " CPU0 CPU2\n TIMER: 1 2 3\n");
+  auto invalid_softirqs = astl::procfs_metric_builder_helpers::CreateProcfsMetricConfigs(
+      "cpu.{cpu_index}.soft_interrupts_per_second",
+      declarations->metrics.at("cpu.{cpu_index}.soft_interrupts_per_second"), &target, files);
+  REQUIRE(invalid_softirqs);
+  CHECK(invalid_softirqs->empty());
+  raw = astl::procfs::DiscoverCounterDescriptors(files);
+  REQUIRE(raw);
+  CHECK_FALSE(std::ranges::any_of(
+      *raw, [](const auto& descriptor) { return descriptor.metric_name.starts_with("softirqs."); }));
+}
+
+TEST_CASE("Task gauge discovery survives incomplete task scans", "[procfs_metric_builder]") {
+  const auto    root = fs::temp_directory_path() / "astl_procfs_task_discovery_churn";
+  TempFileGuard guard{root};
+  fs::create_directories(root / "123");
+  astl::FileInterface files{root};
+  astl::ProcfsTarget  target{"procfs", "fixture", root};
+  const auto          config_path = fs::path{ASTL_TEST_SOURCE_DIR} / "config/metrics/procfs/metrics.json";
+  auto declarations = astl::config::TryParseJsonFile<astl::metrics::spec::MetricsDeclaration>(config_path);
+  REQUIRE(declarations);
+  auto discover = [&](const std::string& name) {
+    auto configs = astl::procfs_metric_builder_helpers::CreateProcfsMetricConfigs(name, declarations->metrics.at(name),
+                                                                                  &target, files);
+    REQUIRE(configs);
+    auto raw = astl::procfs::DiscoverCounterDescriptors(files);
+    REQUIRE(raw);
+    const auto raw_count =
+        std::ranges::count_if(*raw, [&](const auto& descriptor) { return descriptor.metric_name == name; });
+    CHECK(static_cast<size_t>(raw_count) == configs->size());
+    return configs->size();
+  };
+  const astl::procfs::SystemField threads{".", "", "threads"};
+  // A vanished/unreadable status must fail collection without hiding either gauge.
+  CHECK_FALSE(astl::procfs::ReadField(files, threads));
+  CHECK(discover("system.current_threads") == 1);
+  CHECK(discover("system.current_processes") == 1);
+  WriteTextFile(root / "123/status", "Threads: invalid\n");
+  CHECK_FALSE(astl::procfs::ReadField(files, threads));
+  CHECK(discover("system.current_threads") == 1);
+  WriteTextFile(root / "123/status", "Threads: 2\n");
+  auto recovered = astl::procfs::ReadField(files, threads);
+  REQUIRE(recovered);
+  CHECK(std::get<uint64_t>(recovered->value) == 2);
+  fs::remove_all(root);
+  CHECK(discover("system.current_threads") == 0);
+  CHECK(discover("system.current_processes") == 0);
+}
+
+TEST_CASE("Optional scheduler and VM metrics require their individual source fields", "[procfs_metric_builder]") {
+  const auto    root = fs::temp_directory_path() / "astl_procfs_optional_scheduler";
+  TempFileGuard guard{root};
+  fs::create_directories(root);
+  astl::FileInterface files{root};
+  astl::ProcfsTarget  target{"procfs", "fixture", root};
+  auto                declarations = astl::config::TryParseJsonFile<astl::metrics::spec::MetricsDeclaration>(
+      fs::path{ASTL_TEST_SOURCE_DIR} / "config/metrics/procfs/metrics.json");
+  REQUIRE(declarations);
+  for (const auto* name : {"scheduler.runnable_tasks", "scheduler.blocked_tasks", "vm.page_faults_per_second",
+                           "vm.major_page_faults_per_second", "swap.total", "scheduler.load_average_1m",
+                           "scheduler.load_average_5m", "scheduler.load_average_15m"}) {
+    auto configs = astl::procfs_metric_builder_helpers::CreateProcfsMetricConfigs(name, declarations->metrics.at(name),
+                                                                                  &target, files);
+    REQUIRE(configs);
+    CHECK(configs->empty());
+  }
+  WriteTextFile(root / "loadavg", "0.25 1.50 2.75 2/10 123\n");
+  const std::unordered_map<std::string, double> loads{
+      {"scheduler.load_average_1m",  0.25},
+      {"scheduler.load_average_5m",  1.50},
+      {"scheduler.load_average_15m", 2.75}
+  };
+  for (const auto& [name, expected] : loads) {
+    auto settings =
+        astl::metrics::spec::ParseProcfsMetricJsonCollectionSettings(declarations->metrics.at(name).collection);
+    REQUIRE(settings);
+    auto descriptor = astl::procfs_metric_builder_helpers::detail::ParseProcfsFieldDescriptor(*settings, std::nullopt);
+    REQUIRE(descriptor);
+    auto value = astl::procfs::ReadField(files, *descriptor);
+    REQUIRE(value);
+    CHECK(std::get<double>(value->value) == Catch::Approx(expected));
+  }
+  WriteTextFile(root / "loadavg", "0.25 invalid 2.75 2/10 123\n");
+  for (const auto* name : {"scheduler.load_average_1m", "scheduler.load_average_5m", "scheduler.load_average_15m"}) {
+    auto configs = astl::procfs_metric_builder_helpers::CreateProcfsMetricConfigs(name, declarations->metrics.at(name),
+                                                                                  &target, files);
+    REQUIRE(configs);
+    CHECK(configs->size() == (std::string_view{name} == "scheduler.load_average_5m" ? 0 : 1));
+  }
 }

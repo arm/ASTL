@@ -97,10 +97,6 @@ class SampledValueMetric : public RawMetric {
   // uint64_t or double are the largest natively support integer/float type across Windows, macOS and Linux.
   AstlValue _sum_sample_value;
   uint64_t  _sample_count{0};  // Number of samples included in the running statistics.
-  // create a logger instance to explicitly log summary
-  astl::Logger _summary_logger{astl::LogLevel::Info, false /* Console logging disabled */,
-                               false /* No default formatting */, "sampled_value_summary.log"};
-
 };  // End of SampledValueMetric class
 
 }  // namespace astl

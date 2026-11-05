@@ -11,6 +11,7 @@ set -eu -o pipefail
 # 1. Filters out confidential content based on --confidential flag
 # 2. Excludes JSON files with document.confidential == true
 # 3. Removes JSON elements within files that have "confidential": true
+# 4. Removes references to excluded files and declarations inheriting from them
 #
 # @TODO(ASTL-351) Consider tradeoffs of .toml vs .json for the metric definitions file
 
@@ -20,6 +21,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Default values
 OUTPUT_DIR=""
 INCLUDE_CONFIDENTIAL=false
+REFERENCE_EXCLUSIONS=""
 
 # Usage function
 usage() {
@@ -33,6 +35,8 @@ Required arguments:
 
 Optional arguments:
   --confidential            Include confidential content (default: exclude confidential content)
+  --defer-reference-pruning FILE
+                            Write exclusions to FILE; caller must prune after config replacements
   -h, --help                Show this help message
 
 Examples:
@@ -57,6 +61,14 @@ while [[ $# -gt 0 ]]; do
 		INCLUDE_CONFIDENTIAL=true
 		shift
 		;;
+	--defer-reference-pruning)
+		[[ $# -ge 2 ]] || {
+			echo "Error: --defer-reference-pruning requires a file" >&2
+			exit 1
+		}
+		REFERENCE_EXCLUSIONS="$2"
+		shift 2
+		;;
 	-h | --help)
 		usage
 		;;
@@ -78,6 +90,14 @@ if ! command -v jq >/dev/null 2>&1; then
 	echo "Error: jq is required but not installed. Please install jq." >&2
 	exit 1
 fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+	echo "Error: python3 is required to validate published config references." >&2
+	exit 1
+fi
+
+EXCLUDED_FILES=$(mktemp)
+trap 'rm -f -- "$EXCLUDED_FILES"' EXIT
 
 # Check if source config directory exists
 CONFIG_DIR="$REPO_ROOT/config"
@@ -113,6 +133,7 @@ copy_and_filter_json_files() {
 		if jq -e '.document.confidential == true' "$json_file" >/dev/null 2>&1; then
 			if [[ $INCLUDE_CONFIDENTIAL == false ]]; then
 				echo "  Excluding (document.confidential=true): $rel_path"
+				printf '%s\n' "${output_file#"$OUTPUT_DIR"/}" >>"$EXCLUDED_FILES"
 				continue
 			fi
 		fi
@@ -121,6 +142,7 @@ copy_and_filter_json_files() {
 		if jq -e 'has("confidential") and .confidential == true' "$json_file" >/dev/null 2>&1; then
 			if [[ $INCLUDE_CONFIDENTIAL == false ]]; then
 				echo "  Excluding (top-level confidential=true): $rel_path"
+				printf '%s\n' "${output_file#"$OUTPUT_DIR"/}" >>"$EXCLUDED_FILES"
 				continue
 			fi
 		fi
@@ -205,6 +227,13 @@ mkdir -p "$SCMI_OUTPUT"
 
 # Copy and filter SCMI files
 copy_and_filter_json_files "$SCMI_SOURCE" "$SCMI_OUTPUT" "SCMI"
+
+if [[ -n $REFERENCE_EXCLUSIONS ]]; then
+	mkdir -p "$(dirname -- "$REFERENCE_EXCLUSIONS")"
+	cp -- "$EXCLUDED_FILES" "$REFERENCE_EXCLUSIONS"
+else
+	python3 "$SCRIPT_DIR/prune_config_references.py" --root "$OUTPUT_DIR" --excluded "$EXCLUDED_FILES"
+fi
 
 echo ""
 echo "Publishing complete!"

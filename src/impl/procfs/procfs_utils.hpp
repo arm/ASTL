@@ -5,7 +5,9 @@
 #ifndef PROCFS_UTILS_HPP_
 #define PROCFS_UTILS_HPP_
 
+#include <chrono>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -53,9 +55,35 @@ struct TokenSumField {
   size_t                token_end_index{0};
 };
 
+// Procfs counters are monotonic only within one source lifetime. A decrease re-baselines.
+struct CounterRateState {
+  using Clock = std::chrono::steady_clock;
+  std::optional<std::pair<uint64_t, Clock::time_point>> previous;
+  std::string                                           source_identity;
+
+  auto Sample(uint64_t value, Clock::time_point now, std::string_view identity = {}) -> std::optional<double> {
+    const auto baseline    = previous;
+    const bool same_source = source_identity == identity;
+    source_identity        = identity;
+    previous               = std::pair{value, now};
+    if (!baseline || !same_source || now <= baseline->second || value < baseline->first) {
+      return std::nullopt;
+    }
+    return static_cast<double>(value - baseline->first) / std::chrono::duration<double>(now - baseline->second).count();
+  }
+};
+
+struct SystemField {
+  std::filesystem::path relative_path;
+  std::string           label;
+  std::string           kind;
+  bool                  rate{false};
+};
+
 struct CpuUtilizationField {
   std::filesystem::path relative_path;
   std::string           line_prefix;
+  bool                  iowait{false};
 };
 
 struct MemUsedField {
@@ -69,12 +97,14 @@ struct MemUsedPercentField {
 struct CpuSnapshot {
   uint64_t total{0};
   uint64_t idle{0};
+  uint64_t iowait{0};
+  bool     has_iowait{false};
 };
 
 using CpuSnapshotMap = std::unordered_map<std::string, CpuSnapshot>;
 
 using FieldDescriptor = std::variant<KeyValueField, TokenField, SplitTokenField, TokenSumField, CpuUtilizationField,
-                                     MemUsedField, MemUsedPercentField>;
+                                     MemUsedField, MemUsedPercentField, SystemField>;
 
 struct MetricDescriptor {
   std::string              metric_name;
@@ -89,6 +119,16 @@ struct MetricDescriptor {
   FieldDescriptor          field_descriptor;
 };
 
+using InterruptCounterMap = std::unordered_map<std::string, uint64_t>;
+
+auto ReadInterruptCounters(const FileInterface& files, const std::filesystem::path& path,
+                           std::string* source_identity = nullptr, std::vector<uint64_t>* component_counts = nullptr)
+    -> std::expected<InterruptCounterMap, astl_status_code>;
+
+// missing_label distinguishes an absent disk/interface row from malformed data or file-read errors.
+auto ReadSystemField(const FileInterface& files, const SystemField& field, std::string* source_identity = nullptr,
+                     bool* missing_label = nullptr) -> std::expected<AstlValue, astl_status_code>;
+
 auto ReadField(const FileInterface& file_interface, const FieldDescriptor& field_descriptor)
     -> std::expected<AstlValue, astl_status_code>;
 
@@ -99,6 +139,8 @@ auto ReadCpuSnapshots(const FileInterface& file_interface, const std::filesystem
     -> std::expected<CpuSnapshotMap, astl_status_code>;
 
 auto CalculateCpuUtilization(const CpuSnapshot& previous, const CpuSnapshot& current) -> double;
+
+auto DiscoverSystemCounterDescriptors(const FileInterface& files) -> std::vector<MetricDescriptor>;
 
 auto DiscoverCounterDescriptors(const FileInterface& file_interface)
     -> std::expected<std::vector<MetricDescriptor>, astl_status_code>;

@@ -4,7 +4,9 @@
 
 #include <atomic>
 #include <barrier>
+#include <filesystem>
 #include <future>
+#include <memory>
 #include <vector>
 
 #include "../../test_includes.hpp"  // include before catch2
@@ -81,6 +83,35 @@ TEST_CASE("SampledValueMetric: GetSummaryData returns correct summary", "[Sample
   REQUIRE(as_u64(summary.max) == 40);
   REQUIRE(as_u64(summary.avg) == 25);
 }
+
+#ifdef __linux__
+TEST_CASE("SampledValueMetric shares summary file descriptors across large inventories", "[SampledValueMetric]") {
+  const auto count_descriptors = [] {
+    const auto entries = std::filesystem::directory_iterator{"/proc/self/fd"};
+    return std::distance(std::filesystem::begin(entries), std::filesystem::end(entries));
+  };
+  const auto                                             before = count_descriptors();
+  astl::MetricConfig                                     config{"fixture",
+                            "fixture metric",
+                            ASTL_UNITS_COUNT,
+                            ASTL_VALUE_UINT64,
+                            ASTL_METRIC_IDENTIFIER_COUNT,
+                            ASTL_METRIC_VALUE,
+                            astl::CollectorType::PROCFS,
+                            astl::NullOperationBuilder{}};
+  std::vector<std::unique_ptr<astl::SampledValueMetric>> metrics;
+  for (size_t index = 0; index < 256; ++index) {
+    metrics.push_back(std::make_unique<astl::SampledValueMetric>(&config, nullptr, nullptr));
+  }
+  CHECK(count_descriptors() <= before + 1);
+  for (const auto& metric : metrics) {
+    REQUIRE(metric->Summarize() == ASTL_STATUS_SUCCESS);
+  }
+  CHECK(count_descriptors() <= before + 1);
+  metrics.clear();
+  CHECK(count_descriptors() <= before + 1);
+}
+#endif
 
 TEST_CASE("SampledValueMetric: running statistics accumulate and reset starts a clean collection",
           "[SampledValueMetric]") {

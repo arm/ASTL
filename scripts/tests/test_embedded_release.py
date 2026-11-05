@@ -18,11 +18,44 @@ spec.loader.exec_module(embed)
 
 @unittest.skipUnless(all(shutil.which(tool) for tool in ('bash', 'cmake', 'jq', 'zip', 'sha256sum')), 'release tools unavailable')
 class EmbeddedReleaseTests(unittest.TestCase):
+    def test_replacement_restores_a_filtered_base_before_pruning(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ('scripts/release/stage_release.sh', 'scripts/publish_configs.sh',
+                         'scripts/prune_config_references.py', 'scripts/embed_config.py', 'scripts/filter_config.py'):
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / name, target)
+            metrics = root / 'config/metrics'
+            metrics.mkdir(parents=True)
+            (root / 'config/scmi/public').mkdir(parents=True)
+            (metrics / 'base.json').write_text(json.dumps({'document': {'confidential': True}}))
+            child = {'extends': 'base.json', 'metrics': {'retained': {}}}
+            (metrics / 'child.json').write_text(json.dumps(child))
+            (metrics / 'replacement.json').write_text('{}')
+            (root / 'mock-bin').mkdir()
+            for name, data in [('scripts/host_arch.sh', '#!/bin/sh\necho arm64\n'),
+                               ('mock-bin/uname', '#!/bin/sh\necho Linux\n')]:
+                (root / name).write_text(data)
+                (root / name).chmod(0o755)
+            env = {**os.environ, 'PATH': str(root / 'mock-bin') + os.pathsep + os.environ['PATH']}
+            result = subprocess.run([
+                'bash', str(root / 'scripts/release/stage_release.sh'), '--version', '1.2.3',
+                '--skip-build', '--skip-tests', '--config-replacement', 'metrics/replacement.json:metrics/base.json',
+                '--output-dir', str(root / 'out')], env=env, capture_output=True, text=True)
+            # Input preparation must succeed and reach the missing-binary check.
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('rebuild required', result.stderr)
+            prepared = root / 'build/config-inputs/public/metrics'
+            self.assertEqual(json.loads((prepared / 'child.json').read_text()), child)
+            self.assertEqual(json.loads((prepared / 'base.json').read_text()), {})
+
     def test_profile_packages_omit_config_and_reject_stale_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in ('scripts/release/stage_release.sh', 'scripts/release/install.sh',
                          'scripts/release/uninstall.sh', 'scripts/publish_configs.sh',
+                         'scripts/prune_config_references.py',
                          'scripts/embed_config.py', 'scripts/filter_config.py', 'scripts/generate_release_manifest.py'):
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -70,7 +103,7 @@ class EmbeddedReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in ('scripts/release/stage_release.sh', 'scripts/embed_config.py',
-                         'scripts/filter_config.py'):
+                         'scripts/filter_config.py', 'scripts/prune_config_references.py'):
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ROOT / name, target)
@@ -86,7 +119,13 @@ class EmbeddedReleaseTests(unittest.TestCase):
             publisher.write_text(
                 '#!/bin/sh\nset -eu\nmkdir -p "$2"\n'
                 'overlay="$(dirname "$0")/../overlay"\n'
-                'ln -s "$overlay" "$2/metrics"\n')
+                'ln -s "$overlay" "$2/metrics"\n'
+                'while [ "$#" -gt 0 ]; do\n'
+                '  if [ "$1" = "--defer-reference-pruning" ]; then\n'
+                '    mkdir -p "$(dirname "$2")"; : > "$2"; break\n'
+                '  fi\n'
+                '  shift\n'
+                'done\n')
             publisher.chmod(0o755)
             for name, data in [('scripts/host_arch.sh', '#!/bin/sh\necho arm64\n'),
                                ('mock-bin/uname', '#!/bin/sh\necho Linux\n')]:

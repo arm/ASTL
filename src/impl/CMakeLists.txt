@@ -62,6 +62,9 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/libsensors/libsensors_metric_builder.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_composite_metric.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_utils.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_system_utils.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_io_utils.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_interrupt_utils.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_cpu_utils.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_utils_readers.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_utils_readers_primitives.cpp"
@@ -153,12 +156,15 @@ if(ASTL_INCLUDE_PROCFS)
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_metric_json_declaration.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_collector.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_collector_cpu.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_collector_prepare.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_metric_builder.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_metric_builder_helpers.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_metric_builder_expansion_helpers.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_metric_builder_parsing_helpers.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_operation_builder.cpp"
-            "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_counter_discovery.cpp")
+            "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_counter_discovery.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_system_discovery.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_source_availability.cpp")
 endif()
 
 if(ASTL_INCLUDE_LIBSENSORS)

@@ -6,6 +6,15 @@
 
 namespace astl {
 
+namespace {
+auto SummaryLogger() -> Logger& {
+  // Session loading creates every discovered metric, including metrics without
+  // samples. Share one lazily opened sink instead of opening a file per metric.
+  static Logger logger{LogLevel::Info, false, false, "sampled_value_summary.log"};
+  return logger;
+}
+}  // namespace
+
 SampledValueMetric::SampledValueMetric(const MetricConfig* configuration, const ITarget* target,
                                        IProcessedSampleSink* processed_sample_sink)
     : RawMetric(configuration, target, processed_sample_sink), _summary_data{}, _sum_sample_value{uint64_t{0}} {
@@ -93,7 +102,7 @@ auto SampledValueMetric::Summarize() -> astl_status_code {
   // Only one numeric type is valid for a given metric instance.
   std::lock_guard<std::mutex> lock(_samples_mutex);
   if (_sample_count == 0) {
-    _summary_logger.LogInfo("No samples to summarize.\n");
+    SummaryLogger().LogInfo("No samples to summarize.\n");
     return ASTL_STATUS_SUCCESS;
   }
   auto average = AstlValue::Divide(_sum_sample_value, _sample_count);
@@ -109,7 +118,7 @@ auto SampledValueMetric::Summarize() -> astl_status_code {
   const auto min_value = to_string_or_none(_summary_data.min);
   const auto avg_value = to_string_or_none(_summary_data.avg);
   // LOG : Metric, Description, Units, Maximum Value, Minimum Value, Average Value, Type
-  _summary_logger.LogInfo("{}, {}, {}, {}, {}, {}, {} \n", _configuration->Name(), _configuration->Description(),
+  SummaryLogger().LogInfo("{}, {}, {}, {}, {}, {}, {} \n", _configuration->Name(), _configuration->Description(),
                           _configuration->Units(), max_value, min_value, avg_value, _configuration->ValueType());
   return ASTL_STATUS_SUCCESS;
 }

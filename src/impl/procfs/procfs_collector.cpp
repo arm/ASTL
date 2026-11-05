@@ -25,8 +25,8 @@ auto ProcfsNativeNow() -> uint64_t {
 
 }  // namespace
 
-ProcfsCollector::ProcfsCollector(FileInterface procfs_file_interface)
-    : _procfs_file_interface(std::move(procfs_file_interface)) {}
+ProcfsCollector::ProcfsCollector(FileInterface procfs_file_interface, SampleClock sample_clock)
+    : _procfs_file_interface(std::move(procfs_file_interface)), _sample_clock(std::move(sample_clock)) {}
 
 auto ProcfsCollector::GetCapabilities() const -> CollectorCapability { return _collector_capability; }
 
@@ -42,6 +42,8 @@ auto ProcfsCollector::ConfigureCollection(CollectionConfiguration&& configuratio
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
   _previous_cpu_snapshots.clear();
+  _counter_rates.clear();
+  _previous_interrupt_snapshots.clear();
   _configuration    = std::move(configuration);
   _collection_state = CollectionState::CONFIGURED;
   return ExecuteCollectionOperations(_configuration->Operations().operationsBeforeStart);
@@ -54,6 +56,8 @@ auto ProcfsCollector::ClearCollectionState() -> astl_status_code {
   }
   StopIntervalSampling();
   _previous_cpu_snapshots.clear();
+  _counter_rates.clear();
+  _previous_interrupt_snapshots.clear();
   _configuration.reset();
   _collection_state = CollectionState::UNCONFIGURED;
   return ASTL_STATUS_SUCCESS;
@@ -69,6 +73,8 @@ auto ProcfsCollector::StartCollection() -> astl_status_code {
     return ASTL_STATUS_BAD_CONFIGURATION;
   }
   _previous_cpu_snapshots.clear();
+  _counter_rates.clear();
+  _previous_interrupt_snapshots.clear();
 
   auto result = ExecuteStartModeOperations();
   if (result == ASTL_STATUS_SUCCESS) {
@@ -123,6 +129,8 @@ auto ProcfsCollector::StopCollection() -> astl_status_code {
   if (result == ASTL_STATUS_SUCCESS) {
     _collection_state = CollectionState::STOPPED;
     _previous_cpu_snapshots.clear();
+    _counter_rates.clear();
+    _previous_interrupt_snapshots.clear();
   }
   return result;
 }
@@ -158,6 +166,9 @@ auto ProcfsCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelation
 auto ProcfsCollector::ExecuteCollectionOperations(OperationSequence const& operations) -> astl_status_code {
   auto prepared_or_error = PrepareOperations(operations);
   if (!prepared_or_error.has_value()) {
+    _counter_rates.clear();
+    _previous_interrupt_snapshots.clear();
+    _previous_cpu_snapshots.clear();
     return prepared_or_error.error();
   }
 
@@ -166,9 +177,12 @@ auto ProcfsCollector::ExecuteCollectionOperations(OperationSequence const& opera
   const auto native_tick = ProcfsNativeNow();
 
   for (const auto* operation : prepared_or_error->operations) {
-    auto value_or_error = ReadOperationSample(*operation, prepared_or_error->cpu_snapshots);
+    auto value_or_error = ReadOperationSample(*operation, *prepared_or_error);
     if (!value_or_error.has_value()) {
       ASTL_LOG_ERROR("ProcfsCollector: failed to read procfs field");
+      _counter_rates.clear();
+      _previous_interrupt_snapshots.clear();
+      _previous_cpu_snapshots.clear();
       return value_or_error.error();
     }
     if (!value_or_error->has_value()) {

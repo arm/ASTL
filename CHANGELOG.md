@@ -12,10 +12,23 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Fixed
 
+- Keep published configuration references consistent when confidential files are
+  excluded, preventing startup failures with the generated public config.
+
+- Retry complete procfs thread-count scans after observed task exits, and omit
+  unavailable task-count samples without disrupting other procfs metrics.
+
 - Fixed Python metric configuration to pass the stored native handle address for both
   target-specific and global collection, rather than the address of its Python integer object.
 
 ### Added
+
+- Extended Linux procfs telemetry with disk IOPS and bandwidth, network bandwidth,
+  page faults, per-core interrupt counters and rates, current visible process and
+  thread counts, load averages, runnable/blocked task counts, page-fault rates,
+  I/O wait, scheduler rates, and swap capacity and usage. Added the public
+  `ASTL_UNITS_BYTESPERSEC` and `ASTL_UNITS_COUNTPERSEC` units and matching Python
+  and Go constants; existing unit values remain unchanged.
 
 - Added collection clock references and readable UTC timestamps to system information and saved collection archives.
   System information groups the numeric reference and UTC string in one optional correlation.

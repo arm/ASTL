@@ -148,6 +148,8 @@ func TestUnitsEnumABIParity(t *testing.T) {
 		{"rpm", UnitsRPM, 11},
 		{"count", UnitsCount, 12},
 		{"percent", UnitsPercent, 13},
+		{"bytes_per_sec", UnitsBytesPerSec, 14},
+		{"count_per_sec", UnitsCountPerSec, 15},
 	}
 
 	for _, testCase := range testCases {

@@ -157,6 +157,12 @@ auto ParseProcfsInputValueType(const metrics::spec::ProcfsMetricJsonCollectionSe
 
   std::expected<astl_value_type_t, astl_status_code> parsed_input_value_type =
       std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+  if (field_type == "system") {
+    return collection_settings.field_name == "swap_occupancy" ? ASTL_VALUE_FLOAT64 : ASTL_VALUE_UINT64;
+  }
+  if (field_type == "system_rate" || field_type == "cpu_iowait") {
+    return ASTL_VALUE_FLOAT64;
+  }
   if (field_type == "token_sum" || field_type == "mem_used") {
     parsed_input_value_type = ASTL_VALUE_UINT64;
   } else if (field_type == "mem_used_percent" || field_type == "cpu_utilization") {
@@ -197,6 +203,16 @@ auto ParseProcfsFieldDescriptor(const ProcfsFieldDescriptorDeclaration& declarat
 
   std::expected<procfs::FieldDescriptor, astl_status_code> parsed_descriptor =
       std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+  if (lowered_field_type == "system" || lowered_field_type == "system_rate") {
+    if (!declaration.field_name.has_value()) {
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
+    return procfs::SystemField{declaration.relative_path, rendered_line_prefix.value_or(""), *declaration.field_name,
+                               lowered_field_type == "system_rate"};
+  }
+  if (lowered_field_type == "cpu_iowait") {
+    return procfs::CpuUtilizationField{declaration.relative_path, rendered_line_prefix.value_or("cpu"), true};
+  }
   if (lowered_field_type == "key_value") {
     parsed_descriptor =
         ParseKeyValueFieldDescriptor(declaration.relative_path, declaration.field_name, declaration.raw_value_type);
@@ -236,7 +252,7 @@ auto ParseProcfsFieldDescriptor(const metrics::spec::ProcfsMetricJsonCollectionS
           .field_type        = collection_settings.field_type,
           .field_name        = collection_settings.field_name,
           .line_prefix       = collection_settings.line_prefix,
-          .token_index       = std::nullopt,
+          .token_index       = collection_settings.token_index,
           .token_start_index = std::nullopt,
           .token_end_index   = std::nullopt,
           .delimiter         = std::nullopt,

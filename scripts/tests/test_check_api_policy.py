@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from unittest.mock import Mock, patch
 from pathlib import Path
 
@@ -329,6 +331,30 @@ class PullRequestPolicyTests(unittest.TestCase):
             "base", policy.Severity.NONE, policy.Severity.MAJOR, files
         )
         self.assertEqual(errors, [])
+
+
+class PolicyCommandTests(unittest.TestCase):
+    def test_policy_errors_handle_optional_candidate_version(self) -> None:
+        for candidate, expected_status in ((None, 1), ("0.2.0", 0), ("1.0.0", 1)):
+            with self.subTest(candidate=candidate), ExitStack() as stack:
+                for name, value in (
+                    ("build_snapshot", policy.ApiSnapshot()),
+                    ("read_version", policy.Version.parse("0.1.0")),
+                    ("parse_pr_declaration", (policy.Severity.NONE, [])),
+                    ("changed_files", []),
+                    ("validate_repository_policy", ["PR declaration mismatch"]),
+                    ("unreleased_changelog_severity", policy.Severity.NONE),
+                    ("changelog_section_severity", policy.Severity.NONE),
+                ):
+                    stack.enter_context(patch.object(policy, name, return_value=value))
+                stack.enter_context(patch.object(policy, "print_report"))
+                stack.enter_context(patch("sys.stdout", new_callable=io.StringIO))
+                stderr = stack.enter_context(patch("sys.stderr", new_callable=io.StringIO))
+                arguments = ["--base-ref", "base", "--base-is-exact", "--release-ref", "release/0.1.0"]
+                if candidate is not None:
+                    arguments.extend(["--release-version", candidate])
+                self.assertEqual(policy.main(arguments), expected_status)
+                self.assertIn("PR declaration mismatch", stderr.getvalue())
 
 
 class ClangExtractionTests(unittest.TestCase):

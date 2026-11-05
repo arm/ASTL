@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 #include <string_view>
 
 #include "procfs/procfs_utils_readers.hpp"
@@ -46,19 +47,29 @@ auto ParseCpuSnapshotTokens(const std::vector<std::string>& tokens) -> std::expe
 
   uint64_t     total_ticks{0};
   uint64_t     idle_ticks{0};
+  uint64_t     iowait_ticks{0};
   const size_t last_token_index = std::min(tokens.size() - 1, kCpuLastTotalTokenIndex);
   for (size_t token_index = 1; token_index <= last_token_index; ++token_index) {
     auto token_value = ParseUint64Token(tokens[token_index]);
     if (!token_value.has_value()) {
       return std::unexpected(token_value.error());
     }
+    if (*token_value > std::numeric_limits<uint64_t>::max() - total_ticks) {
+      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    }
     total_ticks += *token_value;
+    if (token_index == kCpuIoWaitTokenIndex) {
+      iowait_ticks = *token_value;
+    }
     if (token_index == kCpuIdleTokenIndex || token_index == kCpuIoWaitTokenIndex) {
       idle_ticks += *token_value;
     }
   }
 
-  return CpuSnapshot{.total = total_ticks, .idle = idle_ticks};
+  return CpuSnapshot{.total      = total_ticks,
+                     .idle       = idle_ticks,
+                     .iowait     = iowait_ticks,
+                     .has_iowait = tokens.size() > kCpuIoWaitTokenIndex};
 }
 
 }  // namespace
@@ -86,7 +97,9 @@ auto ParseCpuSnapshotsFromContents(std::string_view contents) -> std::expected<C
       if (!snapshot_or_error.has_value()) {
         return std::unexpected(snapshot_or_error.error());
       }
-      snapshots.emplace(line_prefix, *snapshot_or_error);
+      if (!snapshots.emplace(line_prefix, *snapshot_or_error).second) {
+        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      }
     }
     if (end == std::string_view::npos) {
       break;

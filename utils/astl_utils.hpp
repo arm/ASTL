@@ -318,6 +318,8 @@ inline auto ParseUnits(std::string_view units_str) -> astl_units_t {
       {"rpm",        ASTL_UNITS_RPM         },
       {"count",      ASTL_UNITS_COUNT       },
       {"counts",     ASTL_UNITS_COUNT       },
+      {"bytes/s",    ASTL_UNITS_BYTESPERSEC },
+      {"count/s",    ASTL_UNITS_COUNTPERSEC },
   });
 
   const std::array<UnitAlias, std::size(k_unit_aliases)>::const_iterator alias_it = std::ranges::find_if(
@@ -374,6 +376,12 @@ inline auto UnitsToString(astl_units_t units) -> std::string_view {
       break;
     case ASTL_UNITS_COUNT:
       units_text = "Count";
+      break;
+    case ASTL_UNITS_BYTESPERSEC:
+      units_text = "bytes/s";
+      break;
+    case ASTL_UNITS_COUNTPERSEC:
+      units_text = "count/s";
       break;
     case ASTL_UNITS_UNKNOWN:
       break;

@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -35,6 +36,38 @@ auto TryExtractExpandedLabel(std::string_view line, const std::regex& label_patt
   return tokens[expansion_settings.label_token_index];
 }
 
+auto ReadHeaderLabels(std::string_view contents, const std::regex& label_pattern) -> std::vector<std::string> {
+  std::vector<std::string> labels;
+  const auto               header = procfs::SplitWhitespace(contents.substr(0, contents.find('\n')));
+  for (const auto& label : header) {
+    if (std::regex_match(label, label_pattern)) {
+      labels.push_back(label);
+    }
+  }
+  return labels;
+}
+
+auto ReadLineLabels(const std::string& contents, const std::regex& label_pattern,
+                    const metrics::spec::ProcfsMetricJsonExpansionSettings& settings) -> std::vector<std::string> {
+  std::vector<std::string> labels;
+  std::istringstream       stream{contents};
+  std::string              line;
+  while (std::getline(stream, line)) {
+    std::string_view label_line{line};
+    if (settings.relative_path == "net/dev") {
+      const auto colon = label_line.find(':');
+      if (colon == std::string_view::npos) {
+        continue;
+      }
+      label_line = procfs::Trim(label_line.substr(0, colon));
+    }
+    if (auto label = TryExtractExpandedLabel(label_line, label_pattern, settings); label) {
+      labels.push_back(std::move(*label));
+    }
+  }
+  return labels;
+}
+
 }  // namespace
 
 auto ReplaceLabelPlaceholder(std::string_view text_template, std::string_view label) -> std::string {
@@ -54,7 +87,7 @@ auto RenderExpandedMetricName(std::string_view metric_name_template, std::string
     auto index = label;
     if (label == "cpu") {
       index = "total";
-    } else if (label.starts_with("cpu")) {
+    } else if ((label.starts_with("cpu") || label.starts_with("CPU"))) {
       index = label.substr(3);
     }
     std::string rendered{metric_name_template};
@@ -107,21 +140,10 @@ auto ExpandProcfsLabels(const FileInterface&                                    
     return {};
   }
 
-  std::vector<std::string> labels;
-  size_t                   position = 0;
-  while (position <= contents.size()) {
-    const size_t end = contents.find('\n', position);
-    const auto   line =
-        std::string_view{contents}.substr(position, end == std::string::npos ? std::string_view::npos : end - position);
-    if (auto label = TryExtractExpandedLabel(line, label_pattern, expansion_settings); label.has_value()) {
-      labels.push_back(std::move(*label));
-    }
-    if (end == std::string::npos) {
-      break;
-    }
-    position = end + 1;
+  if (expansion_settings.relative_path == "interrupts" || expansion_settings.relative_path == "softirqs") {
+    return ReadHeaderLabels(contents, label_pattern);
   }
-  return labels;
+  return ReadLineLabels(contents, label_pattern, expansion_settings);
 }
 
 }  // namespace astl::procfs_metric_builder_helpers::detail

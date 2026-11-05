@@ -6,6 +6,7 @@
 #include <google/protobuf/util/delimited_message_util.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -482,7 +483,8 @@ TEST_CASE("MetricHandle + SampledValueMetric: protobuf round-trip", "[MetricHand
 
 TEST_CASE("MetricHandle + SampledValueMetric preserves input_value_type through protobuf",
           "[MetricHandle][SampledValueMetric][protobuf]") {
-  auto orch_expected = astl::Orchestrator::GetInstance();
+  const auto units         = GENERATE(ASTL_UNITS_WATTS, ASTL_UNITS_BYTESPERSEC, ASTL_UNITS_COUNTPERSEC);
+  auto       orch_expected = astl::Orchestrator::GetInstance();
   REQUIRE(orch_expected.has_value());
   auto* orch = orch_expected->get().get();
   REQUIRE(orch != nullptr);
@@ -500,9 +502,8 @@ TEST_CASE("MetricHandle + SampledValueMetric preserves input_value_type through 
 
   astl::MetricHandle handle;
   handle.config = std::make_unique<astl::MetricConfig>(
-      "scaled_metric", "scaled metric", ASTL_UNITS_WATTS, ASTL_VALUE_FLOAT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
-      ASTL_METRIC_VALUE, astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}, astl::IdentityFormula{},
-      ASTL_VALUE_UINT64);
+      "scaled_metric", "scaled metric", units, ASTL_VALUE_FLOAT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,
+      astl::CollectorType::UNKNOWN, astl::NullOperationBuilder{}, astl::IdentityFormula{}, ASTL_VALUE_UINT64);
   REQUIRE(handle.config != nullptr);
   REQUIRE(handle.config->ValueType() == ASTL_VALUE_FLOAT64);
   REQUIRE(handle.config->InputValueType() == ASTL_VALUE_UINT64);
@@ -523,6 +524,7 @@ TEST_CASE("MetricHandle + SampledValueMetric preserves input_value_type through 
   REQUIRE(rebuilt->config != nullptr);
   REQUIRE(rebuilt->config->ValueType() == ASTL_VALUE_FLOAT64);
   REQUIRE(rebuilt->config->InputValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(rebuilt->config->Units() == units);
 }
 
 TEST_CASE("MetricHandle + FiniteSetMetric: protobuf round-trip", "[MetricHandle][FiniteSetMetric][protobuf]") {

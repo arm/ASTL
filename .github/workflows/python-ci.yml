@@ -121,6 +121,15 @@ jobs:
           just python-reuse-tests
         env:
           ASTL_DISABLE_NATIVE_FALLBACK: "1"
+      - name: Live procfs smoke against Linux tools
+        if: matrix.python-version == '3.12'
+        timeout-minutes: 5
+        env:
+          ASTL_COLLECTORS: procfs
+          ASTL_CONFIG_DIR: ${{ github.workspace }}/config
+        run: |
+          sudo apt-get -o DPkg::Lock::Timeout=300 install -y procps iproute2
+          .venv/bin/python scripts/procfs_smoke.py
       - name: Tests (pytest + mypy)
         run: echo "[tests] Already executed within python-reuse-tests recipe"
 

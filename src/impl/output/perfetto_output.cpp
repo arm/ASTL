@@ -223,8 +223,12 @@ auto PerfettoOutput::DetermineCategory(astl_units_t units) -> std::string {
     case ASTL_UNITS_BYTES:
       category = "Bytes";
       break;
+    case ASTL_UNITS_BYTESPERSEC:
     case ASTL_UNITS_MBYTESPERSEC:
       category = "Bandwidth";
+      break;
+    case ASTL_UNITS_COUNTPERSEC:
+      category = "Event rate";
       break;
     case ASTL_UNITS_TICKS:
       category = "Ticks";

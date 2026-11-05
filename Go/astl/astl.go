@@ -116,6 +116,8 @@ const (
 	UnitsRPM          Units = Units(C.ASTL_UNITS_RPM)
 	UnitsCount        Units = Units(C.ASTL_UNITS_COUNT)
 	UnitsPercent      Units = Units(C.ASTL_UNITS_PERCENT)
+	UnitsBytesPerSec  Units = Units(C.ASTL_UNITS_BYTESPERSEC)
+	UnitsCountPerSec  Units = Units(C.ASTL_UNITS_COUNTPERSEC)
 )
 
 type ValueType uint32

@@ -158,6 +158,9 @@ auto ParseOptionalCollectionFields(ProcfsMetricJsonCollectionSettings& settings,
   if (json_value.contains("line_prefix")) {
     json_value.at("line_prefix").get_to(settings.line_prefix);
   }
+  if (json_value.contains("token_index")) {
+    json_value.at("token_index").get_to(settings.token_index);
+  }
   if (json_value.contains("raw_value_type")) {
     json_value.at("raw_value_type").get_to(settings.raw_value_type);
   }

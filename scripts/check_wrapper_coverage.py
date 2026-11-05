@@ -130,6 +130,8 @@ GO_UNITS_CONSTANTS = {
     "UnitsRPM": "ASTL_UNITS_RPM",
     "UnitsCount": "ASTL_UNITS_COUNT",
     "UnitsPercent": "ASTL_UNITS_PERCENT",
+    "UnitsBytesPerSec": "ASTL_UNITS_BYTESPERSEC",
+    "UnitsCountPerSec": "ASTL_UNITS_COUNTPERSEC",
 }
 
 GO_SYSTEM_INFO_FIELD_NAMES = {

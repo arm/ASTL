@@ -65,9 +65,13 @@ def generate(root, output, profile):
     lines = ['#include "config/embedded_config.hpp"', '#include <array>',
              'namespace astl::config { namespace {']
     for i, (_, data) in enumerate(entries):
-        # Byte escapes are independent of the compiler's source character set.
-        literal = ''.join('\\x%02x' % b for b in data)
-        lines.append('constexpr char data_%d[] = "%s";' % (i, literal))
+        # Individual character initializers avoid MSVC's string-literal limits,
+        # including its limit on the result of adjacent literal concatenation.
+        # Byte escapes remain independent of the compiler's source character set.
+        lines.append('constexpr char data_%d[] = {' % i)
+        for offset in range(0, len(data), 32):
+            lines.append(','.join("'\\x%02x'" % b for b in data[offset:offset + 32]) + ',')
+        lines.append('};')
     lines.append('const std::array<EmbeddedResource, %d> resources = {{' % len(entries))
     for i, (name, data) in enumerate(entries):
         lines.append('{%s, std::string_view{data_%d, %d}},' % (json.dumps(name), i, len(data)))

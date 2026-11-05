@@ -8,34 +8,6 @@
 
 namespace astl {
 
-auto ProcfsCollector::PrepareOperations(const OperationSequence& operations)
-    -> std::expected<PreparedOperations, astl_status_code> {
-  PreparedOperations prepared;
-  prepared.operations.reserve(operations.size());
-
-  for (const auto& operation : operations) {
-    const auto* procfs_operation = dynamic_cast<const ProcfsReadOperation*>(operation.get());
-    if (procfs_operation == nullptr) {
-      ASTL_LOG_ERROR("ProcfsCollector: invalid operation type");
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
-    }
-    prepared.operations.push_back(procfs_operation);
-
-    const auto* cpu_field = std::get_if<procfs::CpuUtilizationField>(&procfs_operation->field_descriptor);
-    if (cpu_field == nullptr || prepared.cpu_snapshots.contains(cpu_field->relative_path)) {
-      continue;
-    }
-
-    auto snapshots_or_error = procfs::ReadCpuSnapshots(_procfs_file_interface, cpu_field->relative_path);
-    if (!snapshots_or_error.has_value()) {
-      ASTL_LOG_ERROR("ProcfsCollector: failed to read procfs CPU snapshots");
-      return std::unexpected(snapshots_or_error.error());
-    }
-    prepared.cpu_snapshots.emplace(cpu_field->relative_path, std::move(*snapshots_or_error));
-  }
-  return prepared;
-}
-
 auto ProcfsCollector::FindCpuSnapshot(const procfs::CpuUtilizationField& cpu_field,
                                       const CpuSnapshotCache&            cpu_snapshot_cache)
     -> std::expected<const procfs::CpuSnapshot*, astl_status_code> {
@@ -83,27 +55,97 @@ auto ProcfsCollector::ReadCpuUtilizationSample(const ProcfsReadOperation&       
     }
   }
 
-  const auto utilization = procfs::CalculateCpuUtilization(previous_snapshot, cpu_snapshot);
-  previous_it->second    = cpu_snapshot;
+  const auto old      = previous_snapshot;
+  previous_it->second = cpu_snapshot;
+  if (cpu_field.iowait) {
+    if (!cpu_snapshot.has_iowait || !old.has_iowait || cpu_snapshot.total <= old.total ||
+        cpu_snapshot.iowait < old.iowait || cpu_snapshot.iowait - old.iowait > cpu_snapshot.total - old.total) {
+      return std::nullopt;
+    }
+    return AstlValue{100.0 * static_cast<double>(cpu_snapshot.iowait - old.iowait) /
+                     static_cast<double>(cpu_snapshot.total - old.total)};
+  }
+  const auto utilization = procfs::CalculateCpuUtilization(old, cpu_snapshot);
   return AstlValue{utilization};
 }
 
-auto ProcfsCollector::ReadOperationSample(const ProcfsReadOperation& operation,
-                                          const CpuSnapshotCache&    cpu_snapshot_cache)
+auto ProcfsCollector::ReadOperationSample(const ProcfsReadOperation& operation, const PreparedOperations& prepared)
     -> std::expected<std::optional<AstlValue>, astl_status_code> {
   if (const auto* cpu_field = std::get_if<procfs::CpuUtilizationField>(&operation.field_descriptor)) {
-    auto snapshot_or_error = FindCpuSnapshot(*cpu_field, cpu_snapshot_cache);
+    auto snapshot_or_error = FindCpuSnapshot(*cpu_field, prepared.cpu_snapshots);
     if (!snapshot_or_error.has_value()) {
       return std::unexpected(snapshot_or_error.error());
     }
     return ReadCpuUtilizationSample(operation, *cpu_field, **snapshot_or_error);
   }
 
-  auto value_or_error = procfs::ReadField(_procfs_file_interface, operation.field_descriptor);
+  return ReadFieldSample(operation, prepared);
+}
+
+auto ProcfsCollector::ReadFieldSample(const ProcfsReadOperation& operation, const PreparedOperations& prepared)
+    -> std::expected<std::optional<AstlValue>, astl_status_code> {
+  std::string source_identity;
+  bool        missing_label  = false;
+  const auto* field          = std::get_if<procfs::SystemField>(&operation.field_descriptor);
+  auto        value_or_error = field ? ReadSystemSample(*field, prepared, source_identity, missing_label)
+                                     : procfs::ReadField(_procfs_file_interface, operation.field_descriptor);
   if (!value_or_error.has_value()) {
+    if (missing_label) {
+      // A known device/interface vanished. Never bridge the gap on reappearance.
+      _counter_rates.erase(operation.GetId());
+      return std::optional<AstlValue>{};
+    }
+    if (field && (field->kind == "threads" || field->kind == "processes") &&
+        (value_or_error.error() == ASTL_STATUS_FILE_ERROR || value_or_error.error() == ASTL_STATUS_FILE_OPEN_FAILED ||
+         value_or_error.error() == ASTL_STATUS_BAD_CONFIGURATION)) {
+      // Task scans are optional, non-atomic gauges. Preserve other samples and rate baselines.
+      ASTL_LOG_DEBUG("ProcfsCollector: omitting unavailable current {} sample", field->kind);
+      return std::optional<AstlValue>{};
+    }
     return std::unexpected(value_or_error.error());
   }
+  if (field && field->rate) {
+    return ReadRateSample(operation.GetId(), *field, *value_or_error, prepared, source_identity);
+  }
   return std::optional<AstlValue>{std::move(*value_or_error)};
+}
+
+auto ProcfsCollector::ReadSystemSample(const procfs::SystemField& field, const PreparedOperations& prepared,
+                                       std::string& source_identity, bool& missing_label)
+    -> std::expected<AstlValue, astl_status_code> {
+  if (field.kind != "interrupts") {
+    return procfs::ReadSystemField(_procfs_file_interface, field, &source_identity, &missing_label);
+  }
+  const auto& counters = prepared.interrupt_snapshots.at(field.relative_path);
+  const auto  it       = counters.find(field.label);
+  if (it == counters.end()) {
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  return AstlValue{it->second};
+}
+
+auto ProcfsCollector::ReadRateSample(OperationId operation_id, const procfs::SystemField& field, const AstlValue& value,
+                                     const PreparedOperations& prepared, std::string_view source_identity)
+    -> std::expected<std::optional<AstlValue>, astl_status_code> {
+  const auto* counter = std::get_if<uint64_t>(&value.value);
+  if (counter == nullptr) {
+    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  // Cached columns share the time of the table read, independent of later
+  // operations (including potentially expensive process/thread scans).
+  const auto sample_time =
+      field.kind == "interrupts" ? prepared.interrupt_times.at(field.relative_path) : _sample_clock();
+  const auto identity = field.kind == "interrupts"
+                            ? std::string_view{prepared.interrupt_identities.at(field.relative_path)}
+                            : std::string_view{source_identity};
+  if (field.kind == "interrupts" && prepared.interrupt_resets.contains(field.relative_path)) {
+    _counter_rates.erase(operation_id);
+  }
+  auto rate = _counter_rates[operation_id].Sample(*counter, sample_time, identity);
+  if (!rate) {
+    return std::optional<AstlValue>{};
+  }
+  return std::optional<AstlValue>{AstlValue{*rate}};
 }
 
 }  // namespace astl

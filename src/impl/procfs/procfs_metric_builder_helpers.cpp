@@ -22,6 +22,7 @@
 #include "procfs/procfs_metric_builder_parsing_helpers.hpp"
 #include "procfs/procfs_metric_json_declaration.hpp"
 #include "procfs/procfs_operation_builder.hpp"
+#include "procfs/procfs_source_availability.hpp"
 
 namespace astl::procfs_metric_builder_helpers {
 
@@ -267,13 +268,27 @@ auto CreateProcfsMetricConfigs(const std::string&                          metri
 
   std::vector<std::unique_ptr<MetricConfig>> metric_configs;
   metric_configs.reserve(labels.size());
+  auto availability = detail::ProcfsSourceAvailability::Create(file_interface, build_settings->collection_settings);
+  if (!availability) {
+    return metric_configs;
+  }
   for (const auto& label : labels) {
+    if (!availability->SupportsCpuLabel(label)) {
+      continue;
+    }
     const auto metadata      = RenderProcfsMetricMetadata(metric_name_template, metric_declaration, target, label);
     auto       metric_config = build_settings->is_composite
                                    ? BuildCompositeMetricConfig(metadata, metric_declaration, *build_settings, label)
                                    : BuildStandardProcfsMetricConfig(metadata, metric_declaration, *build_settings, label);
     if (!metric_config.has_value()) {
       return std::unexpected(metric_config.error());
+    }
+    auto supported = availability->SupportsMetric(**metric_config, build_settings->is_composite, label);
+    if (!supported) {
+      return std::unexpected(supported.error());
+    }
+    if (!*supported) {
+      continue;
     }
     metric_configs.push_back(std::move(*metric_config));
   }

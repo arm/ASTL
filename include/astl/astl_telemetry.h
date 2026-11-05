@@ -243,10 +243,12 @@ typedef enum _astl_units_t {
   ASTL_UNITS_BYTES        = 8,  //!< Bytes transferred
   ASTL_UNITS_MBYTESPERSEC = 9,  //!< Bandwidth in MB/s. For calculated metrics but hardware may
                                 //!< already be doing the calculation, not ideal but possible
-  ASTL_UNITS_MHZ     = 10,      //!< Frequency readings in MHz
-  ASTL_UNITS_RPM     = 11,      //!< Fan speed in revolutions per minute
-  ASTL_UNITS_COUNT   = 12,      //!< Count of events or occurrences
-  ASTL_UNITS_PERCENT = 13,      //!< Percentage-style readings such as humidity
+  ASTL_UNITS_MHZ         = 10,  //!< Frequency readings in MHz
+  ASTL_UNITS_RPM         = 11,  //!< Fan speed in revolutions per minute
+  ASTL_UNITS_COUNT       = 12,  //!< Count of events or occurrences
+  ASTL_UNITS_PERCENT     = 13,  //!< Percentage-style readings such as humidity
+  ASTL_UNITS_BYTESPERSEC = 14,  //!< Bandwidth in bytes per second
+  ASTL_UNITS_COUNTPERSEC = 15,  //!< Operations or events per second
 } astl_units_t;
 
 /** Generic value types we expect to use.

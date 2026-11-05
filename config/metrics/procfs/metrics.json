@@ -108,6 +108,693 @@
         "field_name": "MemAvailable",
         "raw_value_type": "uint64"
       }
+    },
+    "disk.{label}.read_operations": {
+      "description": "Cumulative completed read operations for block device/partition {label}; do not sum overlapping storage layers",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "io"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "diskstats",
+        "field_name": "read_operations",
+        "expand": {
+          "relative_path": "diskstats",
+          "match_pattern": "^.+$",
+          "label_token_index": 2
+        }
+      }
+    },
+    "disk.{label}.read_operations_per_second": {
+      "description": "read operations per measured second for {label}; first sample is baseline; no automatic aggregation",
+      "unit": "count/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "io"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "diskstats",
+        "field_name": "read_operations",
+        "expand": {
+          "relative_path": "diskstats",
+          "match_pattern": "^.+$",
+          "label_token_index": 2
+        }
+      }
+    },
+    "disk.{label}.write_operations": {
+      "description": "Cumulative completed write operations for block device/partition {label}; do not sum overlapping storage layers",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "io"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "diskstats",
+        "field_name": "write_operations",
+        "expand": {
+          "relative_path": "diskstats",
+          "match_pattern": "^.+$",
+          "label_token_index": 2
+        }
+      }
+    },
+    "disk.{label}.write_operations_per_second": {
+      "description": "write operations per measured second for {label}; first sample is baseline; no automatic aggregation",
+      "unit": "count/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "io"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "diskstats",
+        "field_name": "write_operations",
+        "expand": {
+          "relative_path": "diskstats",
+          "match_pattern": "^.+$",
+          "label_token_index": 2
+        }
+      }
+    },
+    "disk.{label}.read_bytes": {
+      "description": "Cumulative completed read bytes for block device/partition {label}; do not sum overlapping storage layers",
+      "unit": "bytes",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "io"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "diskstats",
+        "field_name": "read_bytes",
+        "expand": {
+          "relative_path": "diskstats",
+          "match_pattern": "^.+$",
+          "label_token_index": 2
+        }
+      }
+    },
+    "disk.{label}.read_bytes_per_second": {
+      "description": "read bytes per measured second for {label}; first sample is baseline; no automatic aggregation",
+      "unit": "bytes/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "io",
+        "bandwidth"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "diskstats",
+        "field_name": "read_bytes",
+        "expand": {
+          "relative_path": "diskstats",
+          "match_pattern": "^.+$",
+          "label_token_index": 2
+        }
+      }
+    },
+    "disk.{label}.write_bytes": {
+      "description": "Cumulative completed write bytes for block device/partition {label}; do not sum overlapping storage layers",
+      "unit": "bytes",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "io"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "diskstats",
+        "field_name": "write_bytes",
+        "expand": {
+          "relative_path": "diskstats",
+          "match_pattern": "^.+$",
+          "label_token_index": 2
+        }
+      }
+    },
+    "disk.{label}.write_bytes_per_second": {
+      "description": "write bytes per measured second for {label}; first sample is baseline; no automatic aggregation",
+      "unit": "bytes/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "io",
+        "bandwidth"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "diskstats",
+        "field_name": "write_bytes",
+        "expand": {
+          "relative_path": "diskstats",
+          "match_pattern": "^.+$",
+          "label_token_index": 2
+        }
+      }
+    },
+    "network.{label}.rx_bytes": {
+      "description": "Cumulative rx bytes on interface {label}, including loopback; no automatic aggregation",
+      "unit": "bytes",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "nic"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "net/dev",
+        "field_name": "rx_bytes",
+        "expand": {
+          "relative_path": "net/dev",
+          "match_pattern": "^.+$",
+          "label_token_index": 0
+        }
+      }
+    },
+    "network.{label}.rx_bytes_per_second": {
+      "description": "rx bytes per measured second on interface {label}; do not sum overlapping interfaces",
+      "unit": "bytes/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "nic",
+        "bandwidth"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "net/dev",
+        "field_name": "rx_bytes",
+        "expand": {
+          "relative_path": "net/dev",
+          "match_pattern": "^.+$",
+          "label_token_index": 0
+        }
+      }
+    },
+    "network.{label}.tx_bytes": {
+      "description": "Cumulative tx bytes on interface {label}, including loopback; no automatic aggregation",
+      "unit": "bytes",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "nic"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "net/dev",
+        "field_name": "tx_bytes",
+        "expand": {
+          "relative_path": "net/dev",
+          "match_pattern": "^.+$",
+          "label_token_index": 0
+        }
+      }
+    },
+    "network.{label}.tx_bytes_per_second": {
+      "description": "tx bytes per measured second on interface {label}; do not sum overlapping interfaces",
+      "unit": "bytes/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "nic",
+        "bandwidth"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "net/dev",
+        "field_name": "tx_bytes",
+        "expand": {
+          "relative_path": "net/dev",
+          "match_pattern": "^.+$",
+          "label_token_index": 0
+        }
+      }
+    },
+    "vm.page_faults": {
+      "description": "All page faults since boot; cumulative counter",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "memory"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "vmstat",
+        "field_name": "pgfault"
+      }
+    },
+    "vm.major_page_faults": {
+      "description": "Major page faults since boot; cumulative counter",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "memory"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "vmstat",
+        "field_name": "pgmajfault"
+      }
+    },
+    "scheduler.context_switches": {
+      "description": "Context switches since boot; cumulative counter",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "stat",
+        "field_name": "ctxt"
+      }
+    },
+    "scheduler.context_switches_per_second": {
+      "description": "Context switches per measured second; first sample is baseline",
+      "unit": "count/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "stat",
+        "field_name": "ctxt"
+      }
+    },
+    "scheduler.interrupts": {
+      "description": "Hardware and architecture-specific interrupt events since boot; cumulative counter",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "stat",
+        "field_name": "intr"
+      }
+    },
+    "scheduler.interrupts_per_second": {
+      "description": "Hardware and architecture-specific interrupt events per measured second; first sample is baseline",
+      "unit": "count/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "stat",
+        "field_name": "intr"
+      }
+    },
+    "scheduler.soft_interrupts": {
+      "description": "Software interrupt executions since boot; cumulative counter",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "stat",
+        "field_name": "softirq"
+      }
+    },
+    "scheduler.soft_interrupts_per_second": {
+      "description": "Software interrupt executions per measured second; first sample is baseline",
+      "unit": "count/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "stat",
+        "field_name": "softirq"
+      }
+    },
+    "cpu.{cpu_index}.interrupts": {
+      "description": "Sum of per-CPU interrupts columns for {label}; cumulative events; hardware/local interrupts and software interrupts are separate",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu",
+        "core"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "interrupts",
+        "field_name": "interrupts",
+        "expand": {
+          "relative_path": "interrupts",
+          "match_pattern": "^CPU[0-9]+$",
+          "label_token_index": 0
+        }
+      }
+    },
+    "cpu.{cpu_index}.interrupts_per_second": {
+      "description": "Sum of per-CPU interrupts columns for {label}; events per measured second; hardware/local interrupts and software interrupts are separate",
+      "unit": "count/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu",
+        "core"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "interrupts",
+        "field_name": "interrupts",
+        "expand": {
+          "relative_path": "interrupts",
+          "match_pattern": "^CPU[0-9]+$",
+          "label_token_index": 0
+        }
+      }
+    },
+    "cpu.{cpu_index}.soft_interrupts": {
+      "description": "Sum of per-CPU softirqs columns for {label}; cumulative events; hardware/local interrupts and software interrupts are separate",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu",
+        "core"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "softirqs",
+        "field_name": "interrupts",
+        "expand": {
+          "relative_path": "softirqs",
+          "match_pattern": "^CPU[0-9]+$",
+          "label_token_index": 0
+        }
+      }
+    },
+    "cpu.{cpu_index}.soft_interrupts_per_second": {
+      "description": "Sum of per-CPU softirqs columns for {label}; events per measured second; hardware/local interrupts and software interrupts are separate",
+      "unit": "count/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu",
+        "core"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "softirqs",
+        "field_name": "interrupts",
+        "expand": {
+          "relative_path": "softirqs",
+          "match_pattern": "^CPU[0-9]+$",
+          "label_token_index": 0
+        }
+      }
+    },
+    "system.current_processes": {
+      "description": "Current visible processes in this procfs PID namespace; includes kernel tasks and zombies where visible; scan is not atomic, hidepid can limit scope",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": ".",
+        "field_name": "processes"
+      }
+    },
+    "system.current_threads": {
+      "description": "Current visible threads in this procfs PID namespace; includes kernel tasks and zombies where visible; scan is not atomic, hidepid can limit scope",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": ".",
+        "field_name": "threads"
+      }
+    },
+    "cpu.{cpu_index}.iowait": {
+      "description": "Percentage of {label} CPU time spent in I/O wait; denominator is delta(user+nice+system+idle+iowait+irq+softirq+steal), excluding guest double counting",
+      "unit": "percent",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "cpu_iowait",
+        "relative_path": "stat",
+        "expand": {
+          "relative_path": "stat",
+          "match_pattern": "^cpu[0-9]*$",
+          "label_token_index": 0
+        }
+      }
+    },
+    "swap.used": {
+      "description": "Swap used bytes",
+      "unit": "bytes",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "memory"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "meminfo",
+        "field_name": "swap_used"
+      }
+    },
+    "swap.occupancy": {
+      "description": "Swap occupancy percentage; zero when no swap is configured",
+      "unit": "percent",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "memory"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "meminfo",
+        "field_name": "swap_occupancy"
+      }
+    },
+    "scheduler.load_average_1m": {
+      "description": "1-minute system load average; runnable and uninterruptible tasks, not CPU utilization",
+      "unit": "none",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "token",
+        "relative_path": "loadavg",
+        "token_index": 0,
+        "raw_value_type": "float64"
+      }
+    },
+    "scheduler.load_average_5m": {
+      "description": "5-minute system load average; runnable and uninterruptible tasks, not CPU utilization",
+      "unit": "none",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "token",
+        "relative_path": "loadavg",
+        "token_index": 1,
+        "raw_value_type": "float64"
+      }
+    },
+    "scheduler.load_average_15m": {
+      "description": "15-minute system load average; runnable and uninterruptible tasks, not CPU utilization",
+      "unit": "none",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "token",
+        "relative_path": "loadavg",
+        "token_index": 2,
+        "raw_value_type": "float64"
+      }
+    },
+    "scheduler.runnable_tasks": {
+      "description": "Current runnable tasks; includes running and ready-to-run threads, not total processes",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "stat",
+        "field_name": "procs_running"
+      }
+    },
+    "scheduler.blocked_tasks": {
+      "description": "Current tasks blocked waiting for I/O, not total processes",
+      "unit": "count",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "cpu"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "stat",
+        "field_name": "procs_blocked"
+      }
+    },
+    "swap.total": {
+      "description": "Total configured swap capacity in bytes; zero when no swap is configured",
+      "unit": "bytes",
+      "value_type": "uint64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "memory"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system",
+        "relative_path": "meminfo",
+        "field_name": "swap_total"
+      }
+    },
+    "vm.page_faults_per_second": {
+      "description": "All page faults per measured second; first sample is baseline",
+      "unit": "count/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "memory"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "vmstat",
+        "field_name": "pgfault"
+      }
+    },
+    "vm.major_page_faults_per_second": {
+      "description": "Major page faults per measured second; first sample is baseline",
+      "unit": "count/s",
+      "value_type": "float64",
+      "metric_type": "value",
+      "identifier": "unknown",
+      "metric_groups": [
+        "memory"
+      ],
+      "collection": {
+        "protocol": "procfs",
+        "field_type": "system_rate",
+        "relative_path": "vmstat",
+        "field_name": "pgmajfault"
+      }
     }
   }
 }

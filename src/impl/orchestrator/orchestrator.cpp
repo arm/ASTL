@@ -1596,7 +1596,12 @@ auto Orchestrator::ProcessRawSampleCacheStream(const ITarget *target, std::istre
     }
   }
 
-  if (auto summarize_status = _metric_manager->SummarizeMetrics(); summarize_status != ASTL_STATUS_SUCCESS) {
+  // A single-metric replay must not summarize the entire inventory for every
+  // statistics request. ResetMetricOnTarget has validated ownership of this
+  // mutable metric, and the processing lock protects its state during replay.
+  auto *replayed_metric = const_cast<IMetric *>(g_batch_visit_metric);  // NOLINT(cppcoreguidelines-pro-type-const-cast)
+  if (auto summarize_status = replayed_metric ? replayed_metric->Summarize() : _metric_manager->SummarizeMetrics();
+      summarize_status != ASTL_STATUS_SUCCESS) {
     return summarize_status;
   }
 

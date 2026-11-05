@@ -618,8 +618,16 @@ TEST_CASE("Orchestrator::VisitProcessedMetricSampleBatches replays raw cache in 
   REQUIRE(astl::ProtobufSerDes::Serialize(batch2, cache_file) == ASTL_STATUS_SUCCESS);
   cache_file.close();
 
+  struct SummarizedMetric : TestMetricBase {
+    using TestMetricBase::TestMetricBase;
+    int  summaries{0};
+    auto Summarize() -> astl_status_code override {
+      ++summaries;
+      return ASTL_STATUS_SUCCESS;
+    }
+  };
   std::vector<std::vector<astl::RawSampledData>> replayed_batches;
-  TestMetricBase                                 metric{"batch-replay-metric"};
+  SummarizedMetric                               metric{"batch-replay-metric"};
   const auto                                     record_replayed_batch = [&](astl::RawSamplesMap& raw_samples) {
     REQUIRE(raw_samples.size() == 1);
     const auto target_samples_it = raw_samples.find(target);
@@ -642,7 +650,7 @@ TEST_CASE("Orchestrator::VisitProcessedMetricSampleBatches replays raw cache in 
       .IN_SEQUENCE(replay_sequence)
       .LR_SIDE_EFFECT(record_replayed_batch(_1))
       .RETURN(ASTL_STATUS_SUCCESS);
-  REQUIRE_CALL(*metric_manager_raw, SummarizeMetrics()).IN_SEQUENCE(replay_sequence).RETURN(ASTL_STATUS_SUCCESS);
+  FORBID_CALL(*metric_manager_raw, SummarizeMetrics());
 
   std::vector<astl::ProcessedSampledData> first_visit;
   std::vector<astl::ProcessedSampledData> copy_visit;
@@ -666,6 +674,7 @@ TEST_CASE("Orchestrator::VisitProcessedMetricSampleBatches replays raw cache in 
                 return ASTL_STATUS_SUCCESS;
               }) == ASTL_STATUS_SUCCESS);
 
+  REQUIRE(metric.summaries == 1);
   REQUIRE(replayed_batches.size() == 2);
   REQUIRE(replayed_batches[0].size() == 2);
   REQUIRE(replayed_batches[1].size() == 1);

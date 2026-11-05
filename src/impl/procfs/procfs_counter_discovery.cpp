@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <optional>
+#include <sstream>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -59,6 +60,19 @@ void AppendCpuStatCounterDescriptors(std::vector<MetricDescriptor>& descriptors,
   }
 }
 
+auto DescribeStatCounter(std::string_view label) -> std::string {
+  if (label == "processes") {
+    return "Cumulative task creations since boot (not current processes): ";
+  }
+  if (label == "procs_running") {
+    return "Current runnable tasks (not total tasks): ";
+  }
+  if (label == "procs_blocked") {
+    return "Current tasks blocked on I/O (not total tasks): ";
+  }
+  return "Procfs /proc/stat field ";
+}
+
 auto BuildScalarStatCounterDescriptor(std::string_view                                     label,
                                       const std::unordered_map<std::string, astl_units_t>& scalar_fields,
                                       const std::vector<std::string>& tokens) -> std::optional<MetricDescriptor> {
@@ -75,7 +89,7 @@ auto BuildScalarStatCounterDescriptor(std::string_view                          
   return MetricDescriptor{
       .metric_name      = "stat." + label_string,
       .metric_id_suffix = "stat::" + label_string,
-      .description      = "Procfs /proc/stat field " + label_string,
+      .description      = DescribeStatCounter(label) + label_string,
       .units            = it->second,
       .value_type       = ASTL_VALUE_UINT64,
       .input_value_type = ASTL_VALUE_UINT64,
@@ -226,15 +240,16 @@ auto DiscoverLoadavgCounterDescriptors(const FileInterface& file_interface) -> s
                        .identifier       = ASTL_METRIC_IDENTIFIER_COUNT,
                        .field_descriptor =
                            SplitTokenField{"loadavg", "", 3, '/', SplitTokenPart::BEFORE_DELIMITER, ASTL_VALUE_UINT64}},
-      MetricDescriptor{.metric_name      = "loadavg.total_tasks",
+      MetricDescriptor{
+                       .metric_name      = "loadavg.total_tasks",
                        .metric_id_suffix = "loadavg::total_tasks",
-                       .description      = "Procfs /proc/loadavg total tasks",
-                       .units            = ASTL_UNITS_NONE,
+                       .description =
+              "Current kernel scheduling entities (threads); kernel-global count, not a PID-namespace process total", .units            = ASTL_UNITS_NONE,
                        .value_type       = ASTL_VALUE_UINT64,
                        .input_value_type = ASTL_VALUE_UINT64,
                        .identifier       = ASTL_METRIC_IDENTIFIER_COUNT,
                        .field_descriptor =
-                           SplitTokenField{"loadavg", "", 3, '/', SplitTokenPart::AFTER_DELIMITER, ASTL_VALUE_UINT64} },
+              SplitTokenField{"loadavg", "", 3, '/', SplitTokenPart::AFTER_DELIMITER, ASTL_VALUE_UINT64}              },
       MetricDescriptor{.metric_name      = "loadavg.last_pid",
                        .metric_id_suffix = "loadavg::last_pid",
                        .description      = "Procfs /proc/loadavg last created pid",
@@ -293,6 +308,7 @@ auto DiscoverCounterDescriptors(const FileInterface& file_interface)
   append_descriptors(DiscoverStatCounterDescriptors(file_interface));
   append_descriptors(DiscoverLoadavgCounterDescriptors(file_interface));
   append_descriptors(DiscoverUptimeCounterDescriptors(file_interface));
+  append_descriptors(DiscoverSystemCounterDescriptors(file_interface));
 
   return descriptors;
 }

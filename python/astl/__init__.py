@@ -217,6 +217,8 @@ class Units(IntEnum):
     RPM = 11
     COUNT = 12
     PERCENT = 13
+    BYTESPERSEC = 14
+    COUNTPERSEC = 15
 
 
 class ValueType(IntEnum):

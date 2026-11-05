@@ -128,6 +128,8 @@ cdef extern from "astl/astl_telemetry.h":
         ASTL_UNITS_RPM
         ASTL_UNITS_COUNT
         ASTL_UNITS_PERCENT
+        ASTL_UNITS_BYTESPERSEC
+        ASTL_UNITS_COUNTPERSEC
     ctypedef int astl_units_t
 
     # Value types

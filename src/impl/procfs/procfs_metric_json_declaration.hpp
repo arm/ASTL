@@ -43,6 +43,7 @@ struct ProcfsMetricJsonCollectionSettings {
   std::optional<std::string>                       field_name;
   std::optional<std::string>                       line_prefix;
   std::optional<std::string>                       raw_value_type;
+  std::optional<size_t>                            token_index;
   std::optional<ProcfsMetricJsonExpansionSettings> expansion;
   std::vector<ProcfsMetricJsonInputSettings>       inputs;
   bool                                             requires_previous{false};

@@ -47,6 +47,9 @@ auto Trim(std::string_view text) -> std::string_view {
 
 auto ReadField(const FileInterface& file_interface, const FieldDescriptor& field_descriptor)
     -> std::expected<AstlValue, astl_status_code> {
+  if (const auto* field = std::get_if<SystemField>(&field_descriptor)) {
+    return ReadSystemField(file_interface, *field);
+  }
   const auto  relative_path = std::visit([](const auto& field) { return field.relative_path; }, field_descriptor);
   std::string contents;
   const auto  status = file_interface.Read(relative_path, contents);

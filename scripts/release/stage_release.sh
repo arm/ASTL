@@ -197,7 +197,8 @@ static_build_output_dir="${static_build_dir}/${build_arch}"
 profile_suffix=""
 [[ ${release_profile} == public ]] || profile_suffix="_${release_profile}"
 published_config="${REPO_ROOT}/build/config-inputs/${release_profile}"
-publish_args=(-o "${published_config}")
+reference_exclusions="${REPO_ROOT}/build/config-manifests/${release_profile}/excluded.txt"
+publish_args=(-o "${published_config}" --defer-reference-pruning "${reference_exclusions}")
 if [[ ${include_confidential} == true ]]; then
 	publish_args+=(--confidential)
 fi
@@ -216,6 +217,9 @@ for mapping in ${config_replacements[@]+"${config_replacements[@]}"}; do
 	mkdir -p "$(dirname "${published_config}/${destination}")"
 	install -m 0644 "${published_config}/${source}" "${published_config}/${destination}"
 done
+
+# Prune only after replacements can restore excluded dependencies with public content.
+python3 "${REPO_ROOT}/scripts/prune_config_references.py" --root "${published_config}" --excluded "${reference_exclusions}"
 
 # A skipped build must match the exact prepared input set, not just a profile label.
 python3 "${REPO_ROOT}/scripts/embed_config.py" --root "${published_config}" \

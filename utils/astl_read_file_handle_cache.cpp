@@ -41,6 +41,8 @@ astl_status_code ReadFileHandleCache::Read(const std::filesystem::path &path, st
 
   TrimToCapacity(cache_capacity);
   if (!can_cache_stream || cache_capacity == 0U) {
+    // Do not reuse an old inode if an observed missing source later reappears.
+    Invalidate(path);
     return ReadWithoutCaching(path, output);
   }
 

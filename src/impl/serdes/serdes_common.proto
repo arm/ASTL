@@ -21,6 +21,8 @@ enum AstlUnits {
   ASTL_UNITS_RPM          = 11;
   ASTL_UNITS_COUNT        = 12;
   ASTL_UNITS_PERCENT      = 13;
+  ASTL_UNITS_BYTESPERSEC  = 14;
+  ASTL_UNITS_COUNTPERSEC  = 15;
   // C unknown = 0xFFFFFFFF - handle that in conversion code.
   ASTL_UNITS_UNKNOWN_PROTO = 0xFF;
 }
