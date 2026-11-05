@@ -4,14 +4,16 @@ SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-s
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Portable system utilization
+# Windows PDH system utilization
 
-ASTL builds the Windows system collector by default on Windows. Disable it with
-`-DASTL_WINDOWS=OFF`. Enabling this option on another operating system is an error.
+ASTL builds the Windows PDH collector by default on Windows. Disable it with
+`-DASTL_WINDOWS_PDH=OFF`. Enabling this option on another operating system is an error.
+The collector and metric ID prefix are `windows_pdh`; the previous `windows`
+selector and `ASTL_WINDOWS` build option have been renamed without aliases.
 Set `ASTL_CONFIG_DIR` to the installed configuration directory and optionally set
-`ASTL_COLLECTORS=procfs,windows` to select the available system backend.
+`ASTL_COLLECTORS=procfs,windows_pdh` to select the available system backend.
 Both backends expose a target named `sysutil`; neither exposes its old target
-name as an alias. Backend selection still uses `procfs` and `windows`.
+name as an alias. Backend selection still uses `procfs` and `windows_pdh`.
 The ordinary C, Python, and Go discovery and collection APIs expose these metrics;
 no additional public API calls are required.
 
@@ -24,7 +26,7 @@ no additional public API calls are required.
 | `memory.utilization`    | percent | 100 × used / total physical memory      |
 
 Metrics belong to the existing `cpu` and `memory` groups. Byte values are uint64;
-percentages are float64. Windows metrics use a `windows::` ID prefix. Linux uses the same metric names. The old `stat.cpu*.utilization` and
+percentages are float64. Windows metrics use a `windows_pdh::` ID prefix. Linux uses the same metric names. The old `stat.cpu*.utilization` and
 `meminfo.MemTotal`, `meminfo.MemUsed`, and `meminfo.utilization` names are
 removed without aliases. Linux-only raw counters retain their existing names.
 
@@ -83,7 +85,7 @@ and [physical memory](https://learn.microsoft.com/en-us/windows/win32/api/sysinf
 
 ## Portable metric names
 
-The Windows collector uses the same target and metric names as procfs. See
+The Windows PDH collector uses the same target and metric names as procfs. See
 [System utilization](system_utilization.md) for the procfs naming migration and
 metric-template details. Backend-specific raw metrics, metric IDs, and accounting
 details are not promised to match across platforms.

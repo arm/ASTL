@@ -188,15 +188,15 @@ metric names. See [System utilization](doc/system_utilization.md) for the names,
 sampling semantics, and migration from the old procfs names.
 
 Windows builds include system CPU and physical-memory telemetry by default; see
-[Windows system telemetry](doc/windows_system_collector.md) for metrics and sampling semantics.
+[Windows PDH telemetry](doc/windows_pdh_system_collector.md) for metrics and sampling semantics.
 
 Use these environment variables to select collectors or redirect backend paths:
 
 - `ASTL_COLLECTORS`: comma-separated allowlist of collectors used for live
-  discovery. Supported names are `scmi`, `libsensors`, `procfs`, and `windows`. Unset or
+  discovery. Supported names are `scmi`, `libsensors`, `procfs`, and `windows_pdh`. Unset or
   empty enables every collector included in the build. Known unavailable backends
   are skipped; unknown names or an explicit list with no available backend fail.
-  Use `ASTL_COLLECTORS=procfs,windows` for portable system utilization through
+  Use `ASTL_COLLECTORS=procfs,windows_pdh` for portable system utilization through
   the `sysutil` target and `cpu.*` / `memory.*` metric names.
 - `ASTL_SCMI_INTERFACE`: SCMI backend preference. Accepted values are `auto`,
   `ioctl`, and `sysfs`; unset or unknown values use `auto`.

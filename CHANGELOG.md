@@ -25,9 +25,9 @@ All notable user-facing changes to the ASTL public API are recorded here.
   allocation percentages, and per-node allocations. Select with `ASTL_COLLECTORS=numa`;
   Android and non-Linux discovery are disabled. See `doc/numa.md` for sampling semantics.
 
-- Added an optional Windows system collector for aggregate and per-logical-processor CPU busy-time utilization,
+- Added an optional Windows PDH collector for aggregate and per-logical-processor CPU busy-time utilization,
   physical memory capacity, used bytes, and utilization through the `sysutil` target.
-  Select it with `ASTL_COLLECTORS=windows`, or use `procfs,windows` across platforms;
+  Select it with `ASTL_COLLECTORS=windows_pdh`, or use `procfs,windows_pdh` across platforms;
   known unavailable backends are skipped and selection fails if none are available.
 
 - Added native Android procfs support for API 28+ shell executables, with NDK builds,
@@ -43,6 +43,12 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 - Replaced `astlGetClockCorrelation` and its Python/Go getters with clock reference fields in `astlGetSystemInfo`.
   CSV and Perfetto reports no longer emit UTC columns or clock correlation metadata.
+
+- Rename the Windows PDH backend selector from `windows` to `windows_pdh` and
+  the CMake option from `ASTL_WINDOWS` to `ASTL_WINDOWS_PDH`, without aliases.
+  Update `ASTL_COLLECTORS` in C, Python, and Go applications and any stored
+  backend-specific metric IDs to use the `windows_pdh` prefix. The `sysutil`
+  target and portable CPU and memory metric names are unchanged.
 
 - Always embed configuration in the library. Select one source in order:
   `ASTL_CONFIG_DIR`, `config/` beside the library (or statically linked executable),

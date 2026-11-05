@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "windows/windows_system_api.hpp"
+#include "windows_pdh/windows_pdh_system_api.hpp"
 
-#if defined(ASTL_INCLUDE_WINDOWS)
+#if defined(ASTL_INCLUDE_WINDOWS_PDH)
 #  ifndef NOMINMAX
 #    define NOMINMAX
 #  endif
@@ -100,10 +100,10 @@ auto ProcessorInstances(const std::vector<wchar_t>& paths) -> std::vector<std::s
       instances.push_back(ProcessorInstance(path));
     }
   }
-  return SortWindowsProcessorInstances(std::move(instances));
+  return SortWindowsPdhProcessorInstances(std::move(instances));
 }
 
-class WindowsSystemApi final : public IWindowsSystemApi {
+class WindowsPdhSystemApi final : public IWindowsPdhSystemApi {
  public:
   auto DiscoverProcessors() -> std::expected<std::vector<std::string>, astl_status_code> override {
     PdhQuery query;
@@ -182,14 +182,14 @@ class WindowsSystemApi final : public IWindowsSystemApi {
     _primed = true;
     return samples;
   }
-  auto ReadMemory() -> std::expected<WindowsMemorySnapshot, astl_status_code> override {
+  auto ReadMemory() -> std::expected<WindowsPdhMemorySnapshot, astl_status_code> override {
     MEMORYSTATUSEX status{};
     status.dwLength = sizeof(status);
     if (!GlobalMemoryStatusEx(&status)) {
       ASTL_LOG_ERROR("Windows memory collection failed: {}", GetLastError());
       return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
-    return WindowsMemorySnapshot{status.ullTotalPhys, status.ullAvailPhys};
+    return WindowsPdhMemorySnapshot{status.ullTotalPhys, status.ullAvailPhys};
   }
 
  private:
@@ -200,7 +200,9 @@ class WindowsSystemApi final : public IWindowsSystemApi {
 };
 }  // namespace
 
-auto MakeWindowsSystemApi() -> std::unique_ptr<IWindowsSystemApi> { return std::make_unique<WindowsSystemApi>(); }
+auto MakeWindowsPdhSystemApi() -> std::unique_ptr<IWindowsPdhSystemApi> {
+  return std::make_unique<WindowsPdhSystemApi>();
+}
 }  // namespace astl
 
-#endif  // ASTL_INCLUDE_WINDOWS
+#endif  // ASTL_INCLUDE_WINDOWS_PDH

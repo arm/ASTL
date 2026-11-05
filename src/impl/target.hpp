@@ -42,8 +42,8 @@ inline auto CollectorTypeStableKeyPrefix(CollectorType collector_type) -> std::s
     case CollectorType::LIBSENSORS:
       prefix = "libsensors";
       break;
-    case CollectorType::WINDOWS:
-      prefix = "windows";
+    case CollectorType::WINDOWS_PDH:
+      prefix = "windows_pdh";
       break;
     case CollectorType::NUMA:
       prefix = "numa";

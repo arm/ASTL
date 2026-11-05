@@ -6,7 +6,7 @@
 
 #include "astl_logger.hpp"
 #include "common/monotonic_raw_clock.hpp"
-#include "windows/windows_system_collector.hpp"
+#include "windows_pdh/windows_pdh_system_collector.hpp"
 
 namespace astl {
 namespace {
@@ -23,7 +23,7 @@ auto WindowsNativeNow() -> uint64_t {
 
 struct BatchSnapshot {
   std::unordered_map<std::string, std::optional<double>> cpu;
-  WindowsMemorySnapshot                                  memory{};
+  WindowsPdhMemorySnapshot                               memory{};
 };
 
 struct BatchRequirements {
@@ -34,17 +34,17 @@ struct BatchRequirements {
 auto GetBatchRequirements(const OperationSequence& operations) -> std::expected<BatchRequirements, astl_status_code> {
   BatchRequirements required;
   for (const auto& operation : operations) {
-    const auto* read = dynamic_cast<const WindowsReadOperation*>(operation.get());
+    const auto* read = dynamic_cast<const WindowsPdhReadOperation*>(operation.get());
     if (!read) {
       return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
     }
-    required.cpu |= read->field == WindowsSystemField::CPU_UTILIZATION;
-    required.memory |= read->field != WindowsSystemField::CPU_UTILIZATION;
+    required.cpu |= read->field == WindowsPdhSystemField::CPU_UTILIZATION;
+    required.memory |= read->field != WindowsPdhSystemField::CPU_UTILIZATION;
   }
   return required;
 }
 
-auto ReadBatch(IWindowsSystemApi& api, const BatchRequirements& required)
+auto ReadBatch(IWindowsPdhSystemApi& api, const BatchRequirements& required)
     -> std::expected<BatchSnapshot, astl_status_code> {
   BatchSnapshot snapshot;
   if (required.cpu) {
@@ -76,16 +76,16 @@ auto CpuValue(const BatchSnapshot& snapshot, const std::string& instance) -> std
   return AstlValue{*found->second};
 }
 
-auto OperationValue(const WindowsReadOperation& read, const BatchSnapshot& snapshot) -> std::optional<AstlValue> {
+auto OperationValue(const WindowsPdhReadOperation& read, const BatchSnapshot& snapshot) -> std::optional<AstlValue> {
   const auto& memory = snapshot.memory;
   switch (read.field) {
-    case WindowsSystemField::CPU_UTILIZATION:
+    case WindowsPdhSystemField::CPU_UTILIZATION:
       return CpuValue(snapshot, read.instance);
-    case WindowsSystemField::MEMORY_TOTAL:
+    case WindowsPdhSystemField::MEMORY_TOTAL:
       return AstlValue{memory.total};
-    case WindowsSystemField::MEMORY_USED:
+    case WindowsPdhSystemField::MEMORY_USED:
       return AstlValue{memory.total - memory.available};
-    case WindowsSystemField::MEMORY_UTILIZATION:
+    case WindowsPdhSystemField::MEMORY_UTILIZATION:
       return AstlValue{kPercentageScale * static_cast<double>(memory.total - memory.available) /
                        static_cast<double>(memory.total)};
   }
@@ -93,11 +93,11 @@ auto OperationValue(const WindowsReadOperation& read, const BatchSnapshot& snaps
 }
 }  // namespace
 
-auto WindowsSystemCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> {
+auto WindowsPdhSystemCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> {
   std::scoped_lock lock{_collection_mutex};
   if (!_configuration.has_value()) {
     ASTL_LOG_WARNING(
-        "WindowsSystemCollector::GetNativeClockSnapshot called without configuration; returning empty map");
+        "WindowsPdhSystemCollector::GetNativeClockSnapshot called without configuration; returning empty map");
     return {};
   }
 
@@ -112,7 +112,7 @@ auto WindowsSystemCollector::GetNativeClockSnapshot() -> std::expected<ClockCorr
   return result;
 }
 
-auto WindowsSystemCollector::ExecuteCollectionOperations(const OperationSequence& operations) -> astl_status_code {
+auto WindowsPdhSystemCollector::ExecuteCollectionOperations(const OperationSequence& operations) -> astl_status_code {
   const auto required = GetBatchRequirements(operations);
   if (!required) {
     return required.error();
@@ -124,7 +124,7 @@ auto WindowsSystemCollector::ExecuteCollectionOperations(const OperationSequence
   std::vector<RawSampledData> samples;
   const auto                  native_tick = WindowsNativeNow();
   for (const auto& operation : operations) {
-    const auto& read = dynamic_cast<const WindowsReadOperation&>(*operation);
+    const auto& read = dynamic_cast<const WindowsPdhReadOperation&>(*operation);
     if (auto value = OperationValue(read, *snapshot)) {
       samples.emplace_back(operation->GetId(), std::move(*value), native_tick);
     }

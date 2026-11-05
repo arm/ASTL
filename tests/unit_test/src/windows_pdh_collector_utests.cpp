@@ -12,7 +12,7 @@
 #include "metric/metric_manager.hpp"
 #include "topology/topology_builder.hpp"
 #include "topology/topology_manager.hpp"
-#if defined(ASTL_INCLUDE_WINDOWS)
+#if defined(ASTL_INCLUDE_WINDOWS_PDH)
 #  ifndef NOMINMAX
 #    define NOMINMAX
 #  endif
@@ -20,8 +20,8 @@
 #  include <windows.h>
 #endif
 
-#include "windows/windows_metric_builder.hpp"
-#include "windows/windows_system_collector.hpp"
+#include "windows_pdh/windows_pdh_metric_builder.hpp"
+#include "windows_pdh/windows_pdh_system_collector.hpp"
 
 namespace {
 using astl::CollectionConfiguration;
@@ -30,18 +30,18 @@ using astl::CollectorCapability;
 using astl::CollectorType;
 using astl::IRawSampleSink;
 using astl::ITarget;
-using astl::IWindowsSystemApi;
+using astl::IWindowsPdhSystemApi;
 using astl::OperationSequence;
 using astl::RawSampledData;
-using astl::SortWindowsProcessorInstances;
-using astl::WindowsMemorySnapshot;
-using astl::WindowsReadOperation;
-using astl::WindowsSystemCollector;
-using astl::WindowsSystemField;
-using astl::WindowsSystemTarget;
-class FakeWindowsApi : public IWindowsSystemApi {
+using astl::SortWindowsPdhProcessorInstances;
+using astl::WindowsPdhMemorySnapshot;
+using astl::WindowsPdhReadOperation;
+using astl::WindowsPdhSystemCollector;
+using astl::WindowsPdhSystemField;
+using astl::WindowsPdhSystemTarget;
+class FakeWindowsPdhApi : public IWindowsPdhSystemApi {
  public:
-  WindowsMemorySnapshot    memory{1000, 250};
+  WindowsPdhMemorySnapshot memory{1000, 250};
   std::vector<std::string> instances;
   unsigned                 cpu_reads{}, memory_reads{}, resets{};
   bool                     primed{false};
@@ -71,7 +71,7 @@ class FakeWindowsApi : public IWindowsSystemApi {
     primed = true;
     return values;
   }
-  auto ReadMemory() -> std::expected<WindowsMemorySnapshot, astl_status_code> override {
+  auto ReadMemory() -> std::expected<WindowsPdhMemorySnapshot, astl_status_code> override {
     ++memory_reads;
     if (read_status != ASTL_STATUS_SUCCESS) {
       return std::unexpected(read_status);
@@ -88,29 +88,30 @@ class Sink : public IRawSampleSink {
   }
 };
 struct Fixture {
-  WindowsSystemTarget target{
+  WindowsPdhSystemTarget target{
       {"0,0", "1,0"}
   };
-  FakeWindowsApi*        api{};
-  Sink                   sink;
-  WindowsSystemCollector collector{MakeApi()};
-  auto                   MakeApi() -> std::unique_ptr<IWindowsSystemApi> {
-    auto result = std::make_unique<FakeWindowsApi>();
+  FakeWindowsPdhApi*        api{};
+  Sink                      sink;
+  WindowsPdhSystemCollector collector{MakeApi()};
+  auto                      MakeApi() -> std::unique_ptr<IWindowsPdhSystemApi> {
+    auto result = std::make_unique<FakeWindowsPdhApi>();
     api         = result.get();
     return result;
   }
   Fixture() { collector.SetRawSampleSink(&sink); }
-  void Configure(std::vector<WindowsSystemField> fields, astl_collection_mode_t mode = ASTL_COLLECTION_MODE_IMMEDIATE) {
+  void Configure(std::vector<WindowsPdhSystemField> fields,
+                 astl_collection_mode_t             mode = ASTL_COLLECTION_MODE_IMMEDIATE) {
     OperationSequence reads;
     for (const auto field : fields) {
-      reads.push_back(std::make_unique<WindowsReadOperation>(field, "0,0"));
+      reads.push_back(std::make_unique<WindowsPdhReadOperation>(field, "0,0"));
     }
     CollectionOperations     operations{.operationsBeforeStart{},
                                         .operationsAtStart{},
                                         .operationsOnSample{std::move(reads)},
                                         .operationsAtStop{},
                                         .samplingInterval{},
-                                        .requirements{CollectorCapability{CollectorType::WINDOWS}}};
+                                        .requirements{CollectorCapability{CollectorType::WINDOWS_PDH}}};
     astl_collection_params_t params{};
     params.collection_mode   = mode;
     params.sampling_interval = 1;
@@ -120,8 +121,8 @@ struct Fixture {
 };
 }  // namespace
 
-TEST_CASE("Windows processor indices sort numeric native identities and omit totals", "[windows_collector]") {
-  CHECK(SortWindowsProcessorInstances({"1,0", "0,10", "0,2", "_Total", "0,_Total", "x,0", "0,2", "0,", "2,1x"}) ==
+TEST_CASE("Windows processor indices sort numeric native identities and omit totals", "[windows_pdh_collector]") {
+  CHECK(SortWindowsPdhProcessorInstances({"1,0", "0,10", "0,2", "_Total", "0,_Total", "x,0", "0,2", "0,", "2,1x"}) ==
         std::vector<std::string>{"0,2", "0,10", "1,0"});
   std::vector<std::string> instances;
   for (unsigned group = 0; group < 3; ++group) {
@@ -129,16 +130,16 @@ TEST_CASE("Windows processor indices sort numeric native identities and omit tot
       instances.push_back(std::to_string(group) + "," + std::to_string(cpu));
     }
   }
-  const auto sorted = SortWindowsProcessorInstances(instances);
+  const auto sorted = SortWindowsPdhProcessorInstances(instances);
   REQUIRE(sorted.size() == 192);
   CHECK(sorted[64] == "1,0");
   CHECK(sorted.back() == "2,63");
 }
 
-TEST_CASE("Windows memory metrics share a snapshot and retain exact byte counts", "[windows_collector]") {
+TEST_CASE("Windows memory metrics share a snapshot and retain exact byte counts", "[windows_pdh_collector]") {
   Fixture fixture;
-  fixture.Configure(
-      {WindowsSystemField::MEMORY_TOTAL, WindowsSystemField::MEMORY_USED, WindowsSystemField::MEMORY_UTILIZATION});
+  fixture.Configure({WindowsPdhSystemField::MEMORY_TOTAL, WindowsPdhSystemField::MEMORY_USED,
+                     WindowsPdhSystemField::MEMORY_UTILIZATION});
   REQUIRE(fixture.collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
   REQUIRE(fixture.sink.samples.size() == 3);
   CHECK(fixture.api->memory_reads == 1);
@@ -148,10 +149,10 @@ TEST_CASE("Windows memory metrics share a snapshot and retain exact byte counts"
   CHECK(fixture.sink.samples[2].get<double>() == Catch::Approx(75.0));
 }
 
-TEST_CASE("Windows CPU warm-up does not suppress memory and reads all CPUs once", "[windows_collector]") {
+TEST_CASE("Windows CPU warm-up does not suppress memory and reads all CPUs once", "[windows_pdh_collector]") {
   Fixture fixture;
-  fixture.Configure(
-      {WindowsSystemField::CPU_UTILIZATION, WindowsSystemField::CPU_UTILIZATION, WindowsSystemField::MEMORY_TOTAL});
+  fixture.Configure({WindowsPdhSystemField::CPU_UTILIZATION, WindowsPdhSystemField::CPU_UTILIZATION,
+                     WindowsPdhSystemField::MEMORY_TOTAL});
   REQUIRE(fixture.collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
   REQUIRE(fixture.sink.samples.size() == 1);
   REQUIRE(fixture.api->instances.size() == 1);
@@ -163,9 +164,9 @@ TEST_CASE("Windows CPU warm-up does not suppress memory and reads all CPUs once"
   CHECK(fixture.api->cpu_reads == 2);
 }
 
-TEST_CASE("Windows collector resets CPU baselines on start and resume", "[windows_collector]") {
+TEST_CASE("Windows PDH collector resets CPU baselines on start and resume", "[windows_pdh_collector]") {
   Fixture fixture;
-  fixture.Configure({WindowsSystemField::CPU_UTILIZATION});
+  fixture.Configure({WindowsPdhSystemField::CPU_UTILIZATION});
   REQUIRE(fixture.collector.StartCollection() == ASTL_STATUS_SUCCESS);
   REQUIRE(fixture.collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
   CHECK(fixture.sink.samples.empty());
@@ -184,9 +185,10 @@ TEST_CASE("Windows collector resets CPU baselines on start and resume", "[window
   CHECK(fixture.collector.ReadImmediate() == ASTL_STATUS_BAD_CONFIGURATION);
 }
 
-TEST_CASE("Windows collector rejects failed memory reads and invalid memory accounting", "[windows_collector]") {
+TEST_CASE("Windows PDH collector rejects failed memory reads and invalid memory accounting",
+          "[windows_pdh_collector]") {
   Fixture fixture;
-  fixture.Configure({WindowsSystemField::MEMORY_UTILIZATION});
+  fixture.Configure({WindowsPdhSystemField::MEMORY_UTILIZATION});
   SECTION("API failure") { fixture.api->read_status = ASTL_STATUS_INTERNAL_ERROR; }
   SECTION("zero total") { fixture.api->memory.total = 0; }
   SECTION("available exceeds total") { fixture.api->memory.available = 1001; }
@@ -194,9 +196,9 @@ TEST_CASE("Windows collector rejects failed memory reads and invalid memory acco
   CHECK(fixture.sink.samples.empty());
 }
 
-TEST_CASE("Windows collector skips invalid CPU values rather than reporting idle", "[windows_collector]") {
+TEST_CASE("Windows PDH collector skips invalid CPU values rather than reporting idle", "[windows_pdh_collector]") {
   Fixture fixture;
-  fixture.Configure({WindowsSystemField::CPU_UTILIZATION});
+  fixture.Configure({WindowsPdhSystemField::CPU_UTILIZATION});
   REQUIRE(fixture.collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
   SECTION("missing") { fixture.api->utilization = std::nullopt; }
   SECTION("NaN") { fixture.api->utilization = std::numeric_limits<double>::quiet_NaN(); }
@@ -206,13 +208,13 @@ TEST_CASE("Windows collector skips invalid CPU values rather than reporting idle
   CHECK(fixture.sink.samples.empty());
 }
 
-#if defined(ASTL_INCLUDE_WINDOWS)
-TEST_CASE("Windows native API discovers processors and samples physical memory", "[windows_native]") {
-  auto       api        = astl::MakeWindowsSystemApi();
+#if defined(ASTL_INCLUDE_WINDOWS_PDH)
+TEST_CASE("Windows native API discovers processors and samples physical memory", "[windows_pdh_native]") {
+  auto       api        = astl::MakeWindowsPdhSystemApi();
   const auto processors = api->DiscoverProcessors();
   REQUIRE(processors.has_value());
   REQUIRE_FALSE(processors->empty());
-  CHECK(*processors == SortWindowsProcessorInstances(*processors));
+  CHECK(*processors == SortWindowsPdhProcessorInstances(*processors));
   REQUIRE(api->ConfigureCpu({"_Total", processors->front()}) == ASTL_STATUS_SUCCESS);
   // Independent query of the same counter used by Performance Monitor. Bracket
   // the collector's reads with the reference reads over the same interval.
@@ -255,22 +257,22 @@ TEST_CASE("Windows native API discovers processors and samples physical memory",
 }
 #endif
 
-TEST_CASE("Windows metric registration exposes portable names and groups", "[windows_collector]") {
+TEST_CASE("Windows metric registration exposes portable names and groups", "[windows_pdh_collector]") {
   auto configuration = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration.has_value());
-  astl::WindowsSystemTarget target{
+  astl::WindowsPdhSystemTarget target{
       {"0,0", "1,0"}
   };
-  astl::Capabilities  capabilities{{astl::CollectorCapability{astl::CollectorType::WINDOWS}},
+  astl::Capabilities  capabilities{{astl::CollectorCapability{astl::CollectorType::WINDOWS_PDH}},
                                    {astl::SystemCapability{}}};
   astl::MetricManager manager{
       capabilities, {{"cpu", "CPU"}, {"memory", "Memory"}}
   };
-  REQUIRE(astl::RegisterWindowsMetrics(*configuration,
-                                       {
-                                           {astl::CollectorType::WINDOWS, {&target}}
+  REQUIRE(astl::RegisterWindowsPdhMetrics(*configuration,
+                                          {
+                                              {astl::CollectorType::WINDOWS_PDH, {&target}}
   },
-                                       &manager) == ASTL_STATUS_SUCCESS);
+                                          &manager) == ASTL_STATUS_SUCCESS);
   const auto metrics = manager.GetAvailableMetrics(&target);
   REQUIRE(metrics.has_value());
   REQUIRE(metrics->size() == 6);
@@ -288,9 +290,9 @@ TEST_CASE("Windows metric registration exposes portable names and groups", "[win
   CHECK(groups->size() == 2);
 }
 
-TEST_CASE("Windows snapshot samples span collection start and stop", "[windows_collector]") {
+TEST_CASE("Windows snapshot samples span collection start and stop", "[windows_pdh_collector]") {
   Fixture fixture;
-  fixture.Configure({WindowsSystemField::CPU_UTILIZATION, WindowsSystemField::MEMORY_TOTAL},
+  fixture.Configure({WindowsPdhSystemField::CPU_UTILIZATION, WindowsPdhSystemField::MEMORY_TOTAL},
                     ASTL_COLLECTION_MODE_SNAPSHOT);
   REQUIRE(fixture.collector.StartCollection() == ASTL_STATUS_SUCCESS);
   REQUIRE(fixture.sink.samples.size() == 1);
@@ -301,9 +303,9 @@ TEST_CASE("Windows snapshot samples span collection start and stop", "[windows_c
   CHECK(fixture.api->memory_reads == 2);
 }
 
-TEST_CASE("Windows sampling stops before collector destruction and clearing", "[windows_collector]") {
+TEST_CASE("Windows sampling stops before collector destruction and clearing", "[windows_pdh_collector]") {
   Fixture fixture;
-  fixture.Configure({WindowsSystemField::MEMORY_TOTAL}, ASTL_COLLECTION_MODE_SAMPLING);
+  fixture.Configure({WindowsPdhSystemField::MEMORY_TOTAL}, ASTL_COLLECTION_MODE_SAMPLING);
   REQUIRE(fixture.collector.StartCollection() == ASTL_STATUS_SUCCESS);
   CHECK(fixture.collector.ClearCollectionState() == ASTL_STATUS_COLLECTION_ALREADY_RUNNING);
   std::this_thread::sleep_for(std::chrono::milliseconds{10});
@@ -312,20 +314,20 @@ TEST_CASE("Windows sampling stops before collector destruction and clearing", "[
   CHECK(fixture.api->instances.empty());
 }
 
-TEST_CASE("Windows CPU API errors propagate without producing a value", "[windows_collector]") {
+TEST_CASE("Windows CPU API errors propagate without producing a value", "[windows_pdh_collector]") {
   Fixture fixture;
-  fixture.Configure({WindowsSystemField::CPU_UTILIZATION});
+  fixture.Configure({WindowsPdhSystemField::CPU_UTILIZATION});
   fixture.api->read_status = ASTL_STATUS_INTERNAL_ERROR;
   CHECK(fixture.collector.ReadImmediate() == ASTL_STATUS_INTERNAL_ERROR);
   CHECK(fixture.sink.samples.empty());
 }
 
-TEST_CASE("Windows collector allowlist follows build availability", "[windows_collector]") {
-  EnvVarGuard selected(astl::EnvVar::ASTL_COLLECTORS, "windows");
+TEST_CASE("Windows PDH collector allowlist follows build availability", "[windows_pdh_collector]") {
+  EnvVarGuard selected(astl::EnvVar::ASTL_COLLECTORS, "windows_pdh");
   const auto  configuration = astl::AstlConfiguration::CreateConfiguration();
-#if defined(ASTL_INCLUDE_WINDOWS)
+#if defined(ASTL_INCLUDE_WINDOWS_PDH)
   REQUIRE(configuration.has_value());
-  CHECK(configuration->collectors.IsEnabled(astl::CollectorType::WINDOWS));
+  CHECK(configuration->collectors.IsEnabled(astl::CollectorType::WINDOWS_PDH));
   CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::SCMI));
   CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::PROCFS));
   CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::LIBSENSORS));
@@ -335,21 +337,21 @@ TEST_CASE("Windows collector allowlist follows build availability", "[windows_co
 #endif
 }
 
-TEST_CASE("Saved Windows topology and metrics can be loaded without a native collector", "[windows_collector]") {
+TEST_CASE("Saved Windows topology and metrics can be loaded without a native collector", "[windows_pdh_collector]") {
   auto configuration = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration.has_value());
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::WindowsSystemTarget>(std::vector<std::string>{"0,0"}));
-  astl::Capabilities  capabilities{{astl::CollectorCapability{astl::CollectorType::WINDOWS}},
+  targets.push_back(std::make_unique<astl::WindowsPdhSystemTarget>(std::vector<std::string>{"0,0"}));
+  astl::Capabilities  capabilities{{astl::CollectorCapability{astl::CollectorType::WINDOWS_PDH}},
                                    {astl::SystemCapability{}}};
   astl::MetricManager manager{
       capabilities, {{"cpu", "CPU"}, {"memory", "Memory"}}
   };
-  REQUIRE(astl::RegisterWindowsMetrics(*configuration,
-                                       {
-                                           {astl::CollectorType::WINDOWS, {targets.front().get()}}
+  REQUIRE(astl::RegisterWindowsPdhMetrics(*configuration,
+                                          {
+                                              {astl::CollectorType::WINDOWS_PDH, {targets.front().get()}}
   },
-                                       &manager) == ASTL_STATUS_SUCCESS);
+                                          &manager) == ASTL_STATUS_SUCCESS);
   std::stringstream metric_stream;
   REQUIRE(astl::ProtobufSerDes::Serialize(static_cast<const astl::IMetricManager&>(manager), metric_stream) ==
           ASTL_STATUS_SUCCESS);
@@ -360,20 +362,20 @@ TEST_CASE("Saved Windows topology and metrics can be loaded without a native col
   REQUIRE(restored_topology.has_value());
   const auto& restored_targets = (*restored_topology)->GetTargets();
   REQUIRE(restored_targets.size() == 1);
-  CHECK(restored_targets.front()->GetCollectorType() == astl::CollectorType::WINDOWS);
+  CHECK(restored_targets.front()->GetCollectorType() == astl::CollectorType::WINDOWS_PDH);
   auto restored_metrics =
       astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::IMetricManager>>(metric_stream, restored_targets);
   REQUIRE(restored_metrics.has_value());
   auto metrics = (*restored_metrics)->GetAvailableMetrics(restored_targets.front().get());
   REQUIRE(metrics.has_value());
   CHECK(metrics->size() == 5);
-  configuration->load_file_path = "saved-windows-session.astl";
+  configuration->load_file_path = "saved-windows_pdh-session.astl";
   CHECK(astl::BuildCollectorManager(restored_targets, *configuration).has_value());
 }
 
-#if defined(ASTL_INCLUDE_WINDOWS)
-TEST_CASE("Windows live discovery connects target metric and collector builders", "[windows_native]") {
-  EnvVarGuard selected(astl::EnvVar::ASTL_COLLECTORS, "windows");
+#if defined(ASTL_INCLUDE_WINDOWS_PDH)
+TEST_CASE("Windows live discovery connects target metric and collector builders", "[windows_pdh_native]") {
+  EnvVarGuard selected(astl::EnvVar::ASTL_COLLECTORS, "windows_pdh");
   auto        configuration = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration.has_value());
   auto topology = astl::BuildTopologyManager(*configuration, std::nullopt);

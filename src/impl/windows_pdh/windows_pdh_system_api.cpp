@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "windows/windows_system_api.hpp"
+#include "windows_pdh/windows_pdh_system_api.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -25,7 +25,7 @@ auto ParseProcessorIndex(std::string_view text) -> std::optional<unsigned> {
 }
 }  // namespace
 
-auto SortWindowsProcessorInstances(std::vector<std::string> instances) -> std::vector<std::string> {
+auto SortWindowsPdhProcessorInstances(std::vector<std::string> instances) -> std::vector<std::string> {
   std::map<std::pair<unsigned, unsigned>, std::string> sorted;
   for (auto& instance : instances) {
     const auto comma = instance.find(',');

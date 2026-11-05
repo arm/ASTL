@@ -56,7 +56,7 @@ def test_system_utilization_metrics_are_discoverable(embedded):
         env.pop("ASTL_CONFIG_DIR", None)
     else:
         env["ASTL_CONFIG_DIR"] = str(Path(__file__).resolve().parents[2] / "config")
-    env["ASTL_COLLECTORS"] = "procfs,windows"
+    env["ASTL_COLLECTORS"] = "procfs,windows_pdh"
     result = subprocess.run([sys.executable, "-c", """
 import astl
 system_targets = [target for target in astl.get_targets() if target.name == "sysutil"]

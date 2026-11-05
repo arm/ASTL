@@ -28,7 +28,7 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/scmi/scmi_backend.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/procfs/procfs_backend.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/libsensors/libsensors_backend.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_backend.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/windows_pdh/windows_pdh_backend.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/numa/numa_backend.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/numa/numa_source.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/numa/numa_collector.cpp"
@@ -136,13 +136,13 @@ endif()
 # Portable collector logic is also built on other hosts for deterministic API-mock tests.
 target_sources(
   ${LIBRARY_NAME}
-  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_system_api.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_system_collector.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_system_sampling.cpp"
-          "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_metric_builder.cpp")
-if(ASTL_INCLUDE_WINDOWS)
-  target_compile_definitions(${LIBRARY_NAME} PUBLIC ASTL_INCLUDE_WINDOWS)
-  target_sources(${LIBRARY_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/windows/windows_native_api.cpp")
+  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/windows_pdh/windows_pdh_system_api.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/windows_pdh/windows_pdh_system_collector.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/windows_pdh/windows_pdh_system_sampling.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/windows_pdh/windows_pdh_metric_builder.cpp")
+if(ASTL_INCLUDE_WINDOWS_PDH)
+  target_compile_definitions(${LIBRARY_NAME} PUBLIC ASTL_INCLUDE_WINDOWS_PDH)
+  target_sources(${LIBRARY_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/windows_pdh/windows_pdh_native_api.cpp")
   target_link_libraries(${LIBRARY_NAME} PRIVATE pdh)
 endif()
 

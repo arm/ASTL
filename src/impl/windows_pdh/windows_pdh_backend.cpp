@@ -5,15 +5,15 @@
 #include "collector/collector_backend.hpp"
 #include "collector/i_collector.hpp"
 #include "config/astl_configuration.hpp"
-#if defined(ASTL_INCLUDE_WINDOWS)
-#  include "windows/windows_metric_builder.hpp"
-#  include "windows/windows_system_collector.hpp"
+#if defined(ASTL_INCLUDE_WINDOWS_PDH)
+#  include "windows_pdh/windows_pdh_metric_builder.hpp"
+#  include "windows_pdh/windows_pdh_system_collector.hpp"
 #endif
 namespace astl {
 namespace {
-#if defined(ASTL_INCLUDE_WINDOWS)
+#if defined(ASTL_INCLUDE_WINDOWS_PDH)
 auto Discover(const AstlConfiguration& /*configuration*/) -> std::expected<BackendTargets, astl_status_code> {
-  auto api        = MakeWindowsSystemApi();
+  auto api        = MakeWindowsPdhSystemApi();
   auto processors = api->DiscoverProcessors();
   if (!processors) {
     return std::unexpected(processors.error());
@@ -23,27 +23,27 @@ auto Discover(const AstlConfiguration& /*configuration*/) -> std::expected<Backe
     return std::unexpected(memory.error());
   }
   BackendTargets targets;
-  targets.push_back(std::make_unique<WindowsSystemTarget>(std::move(*processors)));
+  targets.push_back(std::make_unique<WindowsPdhSystemTarget>(std::move(*processors)));
   return targets;
 }
 #endif
-auto BuildWindowsCollector(const ITarget& /*target*/, const AstlConfiguration& config)
+auto BuildWindowsPdhCollector(const ITarget& /*target*/, const AstlConfiguration& config)
     -> std::expected<std::unique_ptr<ICollector>, astl_status_code> {
   if (config.load_file_path) {
     return nullptr;
   }
-#if defined(ASTL_INCLUDE_WINDOWS)
-  return std::make_unique<WindowsSystemCollector>(MakeWindowsSystemApi());
+#if defined(ASTL_INCLUDE_WINDOWS_PDH)
+  return std::make_unique<WindowsPdhSystemCollector>(MakeWindowsPdhSystemApi());
 #else
   return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
 #endif
 }
 }  // namespace
-extern const CollectorBackend kWindowsBackend{CollectorType::WINDOWS, "windows",
-#if defined(ASTL_INCLUDE_WINDOWS)
-                                              Discover, BuildWindowsCollector, RegisterWindowsMetrics
+extern const CollectorBackend kWindowsPdhBackend{CollectorType::WINDOWS_PDH, "windows_pdh",
+#if defined(ASTL_INCLUDE_WINDOWS_PDH)
+                                                 Discover, BuildWindowsPdhCollector, RegisterWindowsPdhMetrics
 #else
-                                              nullptr, BuildWindowsCollector, nullptr
+                                                 nullptr, BuildWindowsPdhCollector, nullptr
 #endif
 };
 }  // namespace astl

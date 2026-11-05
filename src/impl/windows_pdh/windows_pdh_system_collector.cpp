@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "windows/windows_system_collector.hpp"
+#include "windows_pdh/windows_pdh_system_collector.hpp"
 
 #include <algorithm>
 #include <vector>
@@ -11,18 +11,19 @@
 
 namespace astl {
 
-WindowsSystemCollector::WindowsSystemCollector(std::unique_ptr<IWindowsSystemApi> api) : _api(std::move(api)) {}
+WindowsPdhSystemCollector::WindowsPdhSystemCollector(std::unique_ptr<IWindowsPdhSystemApi> api)
+    : _api(std::move(api)) {}
 
-WindowsSystemCollector::~WindowsSystemCollector() { StopIntervalSampling(); }
+WindowsPdhSystemCollector::~WindowsPdhSystemCollector() { StopIntervalSampling(); }
 
-auto WindowsSystemCollector::GetCapabilities() const -> CollectorCapability { return _collector_capability; }
+auto WindowsPdhSystemCollector::GetCapabilities() const -> CollectorCapability { return _collector_capability; }
 
-auto WindowsSystemCollector::SetRawSampleSink(IRawSampleSink* raw_sample_sink) -> void {
+auto WindowsPdhSystemCollector::SetRawSampleSink(IRawSampleSink* raw_sample_sink) -> void {
   std::scoped_lock lock{_collection_mutex};
   _sample_sink = raw_sample_sink;
 }
 
-auto WindowsSystemCollector::ConfigureCollection(CollectionConfiguration&& configuration) -> astl_status_code {
+auto WindowsPdhSystemCollector::ConfigureCollection(CollectionConfiguration&& configuration) -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (_collection_state != CollectionState::UNCONFIGURED && _collection_state != CollectionState::CONFIGURED &&
       _collection_state != CollectionState::STOPPED) {
@@ -33,11 +34,11 @@ auto WindowsSystemCollector::ConfigureCollection(CollectionConfiguration&& confi
   for (const auto* phase : {&phases.operationsBeforeStart, &phases.operationsAtStart, &phases.operationsOnSample,
                             &phases.operationsAtStop}) {
     for (const auto& operation : *phase) {
-      const auto* read = dynamic_cast<const WindowsReadOperation*>(operation.get());
+      const auto* read = dynamic_cast<const WindowsPdhReadOperation*>(operation.get());
       if (!read) {
         return ASTL_STATUS_BAD_ARGUMENT;
       }
-      if (read->field == WindowsSystemField::CPU_UTILIZATION &&
+      if (read->field == WindowsPdhSystemField::CPU_UTILIZATION &&
           std::find(instances.begin(), instances.end(), read->instance) == instances.end()) {
         instances.push_back(read->instance);
       }
@@ -53,7 +54,7 @@ auto WindowsSystemCollector::ConfigureCollection(CollectionConfiguration&& confi
   return ExecuteCollectionOperations(_configuration->Operations().operationsBeforeStart);
 }
 
-auto WindowsSystemCollector::ClearCollectionState() -> astl_status_code {
+auto WindowsPdhSystemCollector::ClearCollectionState() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (_collection_state == CollectionState::STARTED || _collection_state == CollectionState::PAUSED) {
     return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
@@ -66,7 +67,7 @@ auto WindowsSystemCollector::ClearCollectionState() -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
-auto WindowsSystemCollector::StartCollection() -> astl_status_code {
+auto WindowsPdhSystemCollector::StartCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::START);
       status != ASTL_STATUS_SUCCESS) {
@@ -86,7 +87,7 @@ auto WindowsSystemCollector::StartCollection() -> astl_status_code {
   return result;
 }
 
-auto WindowsSystemCollector::PauseCollection() -> astl_status_code {
+auto WindowsPdhSystemCollector::PauseCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::PAUSE);
       status != ASTL_STATUS_SUCCESS) {
@@ -95,13 +96,13 @@ auto WindowsSystemCollector::PauseCollection() -> astl_status_code {
   if (_periodic_sampler) {
     _periodic_sampler->Pause();
   } else {
-    ASTL_LOG_WARNING("WindowsSystemCollector: PauseCollection called without an active periodic sampler");
+    ASTL_LOG_WARNING("WindowsPdhSystemCollector: PauseCollection called without an active periodic sampler");
   }
   _collection_state = CollectionState::PAUSED;
   return ASTL_STATUS_SUCCESS;
 }
 
-auto WindowsSystemCollector::ResumeCollection() -> astl_status_code {
+auto WindowsPdhSystemCollector::ResumeCollection() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if (const auto status = CheckCollectionLifecycleAction(_collection_state, CollectionLifecycleAction::RESUME);
       status != ASTL_STATUS_SUCCESS) {
@@ -113,13 +114,13 @@ auto WindowsSystemCollector::ResumeCollection() -> astl_status_code {
   if (_periodic_sampler) {
     _periodic_sampler->Resume();
   } else {
-    ASTL_LOG_WARNING("WindowsSystemCollector: ResumeCollection called without an active periodic sampler");
+    ASTL_LOG_WARNING("WindowsPdhSystemCollector: ResumeCollection called without an active periodic sampler");
   }
   _collection_state = CollectionState::STARTED;
   return ASTL_STATUS_SUCCESS;
 }
 
-auto WindowsSystemCollector::StopCollection() -> astl_status_code {
+auto WindowsPdhSystemCollector::StopCollection() -> astl_status_code {
   StopIntervalSampling();
 
   std::scoped_lock lock{_collection_mutex};
@@ -141,7 +142,7 @@ auto WindowsSystemCollector::StopCollection() -> astl_status_code {
   return result;
 }
 
-auto WindowsSystemCollector::ReadImmediate() -> astl_status_code {
+auto WindowsPdhSystemCollector::ReadImmediate() -> astl_status_code {
   std::scoped_lock lock{_collection_mutex};
   if ((_collection_state != CollectionState::STARTED && _collection_state != CollectionState::CONFIGURED &&
        _collection_state != CollectionState::PAUSED) ||
@@ -151,7 +152,7 @@ auto WindowsSystemCollector::ReadImmediate() -> astl_status_code {
   return ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
 }
 
-auto WindowsSystemCollector::ExecuteStartModeOperations() -> astl_status_code {
+auto WindowsPdhSystemCollector::ExecuteStartModeOperations() -> astl_status_code {
   auto status = ExecuteCollectionOperations(_configuration->Operations().operationsAtStart);
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
@@ -174,7 +175,7 @@ auto WindowsSystemCollector::ExecuteStartModeOperations() -> astl_status_code {
   return status;
 }
 
-auto WindowsSystemCollector::ExecuteStopModeOperations() -> astl_status_code {
+auto WindowsPdhSystemCollector::ExecuteStopModeOperations() -> astl_status_code {
   astl_status_code status = ASTL_STATUS_SUCCESS;
   switch (_configuration->CollectionParams().collection_mode) {
     case ASTL_COLLECTION_MODE_IMMEDIATE:
@@ -195,7 +196,7 @@ auto WindowsSystemCollector::ExecuteStopModeOperations() -> astl_status_code {
   return status;
 }
 
-auto WindowsSystemCollector::StartIntervalSampling() -> astl_status_code {
+auto WindowsPdhSystemCollector::StartIntervalSampling() -> astl_status_code {
   if (_collection_state != CollectionState::CONFIGURED && _collection_state != CollectionState::STOPPED &&
       _collection_state != CollectionState::PAUSED) {
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -212,6 +213,6 @@ auto WindowsSystemCollector::StartIntervalSampling() -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
-auto WindowsSystemCollector::StopIntervalSampling() -> void { _periodic_sampler = nullptr; }
+auto WindowsPdhSystemCollector::StopIntervalSampling() -> void { _periodic_sampler = nullptr; }
 
 }  // namespace astl

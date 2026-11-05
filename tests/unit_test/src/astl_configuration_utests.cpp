@@ -209,10 +209,11 @@ TEST_CASE("AstlConfiguration::CreateConfiguration uses default procfs root when 
   REQUIRE(configuration_result->procfs_root_path == astl::procfs::kDefaultProcfsRootPath);
 }
 
-TEST_CASE("Portable system collector allowlist skips unavailable backends", "[AstlConfiguration][windows_collector]") {
-  EnvVarGuard selected(astl::EnvVar::ASTL_COLLECTORS, "procfs,windows");
+TEST_CASE("Portable system collector allowlist skips unavailable backends",
+          "[AstlConfiguration][windows_pdh_collector]") {
+  EnvVarGuard selected(astl::EnvVar::ASTL_COLLECTORS, "procfs,windows_pdh");
   auto        configuration = astl::AstlConfiguration::CreateConfiguration();
-#if defined(ASTL_INCLUDE_PROCFS) || defined(ASTL_INCLUDE_WINDOWS)
+#if defined(ASTL_INCLUDE_PROCFS) || defined(ASTL_INCLUDE_WINDOWS_PDH)
   REQUIRE(configuration.has_value());
   CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::SCMI));
   CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::LIBSENSORS));
@@ -221,10 +222,10 @@ TEST_CASE("Portable system collector allowlist skips unavailable backends", "[As
 #  else
   CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::PROCFS));
 #  endif
-#  if defined(ASTL_INCLUDE_WINDOWS)
-  CHECK(configuration->collectors.IsEnabled(astl::CollectorType::WINDOWS));
+#  if defined(ASTL_INCLUDE_WINDOWS_PDH)
+  CHECK(configuration->collectors.IsEnabled(astl::CollectorType::WINDOWS_PDH));
 #  else
-  CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::WINDOWS));
+  CHECK_FALSE(configuration->collectors.IsEnabled(astl::CollectorType::WINDOWS_PDH));
 #  endif
 #else
   REQUIRE_FALSE(configuration.has_value());

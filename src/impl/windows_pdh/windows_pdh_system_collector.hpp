@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#ifndef WINDOWS_SYSTEM_COLLECTOR_HPP_
-#define WINDOWS_SYSTEM_COLLECTOR_HPP_
+#ifndef WINDOWS_PDH_SYSTEM_COLLECTOR_HPP_
+#define WINDOWS_PDH_SYSTEM_COLLECTOR_HPP_
 
 #include <mutex>
 #include <optional>
@@ -15,23 +15,23 @@
 #include "collector/periodic_sampler.hpp"
 #include "common/collection_lifecycle.hpp"
 #include "operation/operation.hpp"
-#include "windows/windows_operation_builder.hpp"
-#include "windows/windows_system_api.hpp"
+#include "windows_pdh/windows_pdh_operation_builder.hpp"
+#include "windows_pdh/windows_pdh_system_api.hpp"
 
 namespace astl {
 
 /**
- * @brief Collector implementation for Windows system telemetry.
+ * @brief Collector implementation for Windows PDH system telemetry.
  */
-class WindowsSystemCollector : public ICollector {
+class WindowsPdhSystemCollector : public ICollector {
  public:
-  explicit WindowsSystemCollector(std::unique_ptr<IWindowsSystemApi> api);
-  ~WindowsSystemCollector() override;
+  explicit WindowsPdhSystemCollector(std::unique_ptr<IWindowsPdhSystemApi> api);
+  ~WindowsPdhSystemCollector() override;
 
-  WindowsSystemCollector(const WindowsSystemCollector&)            = delete;
-  WindowsSystemCollector& operator=(const WindowsSystemCollector&) = delete;
-  WindowsSystemCollector(WindowsSystemCollector&&)                 = delete;
-  WindowsSystemCollector& operator=(WindowsSystemCollector&&)      = delete;
+  WindowsPdhSystemCollector(const WindowsPdhSystemCollector&)            = delete;
+  WindowsPdhSystemCollector& operator=(const WindowsPdhSystemCollector&) = delete;
+  WindowsPdhSystemCollector(WindowsPdhSystemCollector&&)                 = delete;
+  WindowsPdhSystemCollector& operator=(WindowsPdhSystemCollector&&)      = delete;
 
   auto GetCapabilities() const -> CollectorCapability override;
   auto SetRawSampleSink(IRawSampleSink* raw_sample_sink) -> void override;
@@ -53,8 +53,8 @@ class WindowsSystemCollector : public ICollector {
   auto StartIntervalSampling() -> astl_status_code;
   auto StopIntervalSampling() -> void;
 
-  CollectorCapability                    _collector_capability{CollectorType::WINDOWS};
-  std::unique_ptr<IWindowsSystemApi>     _api;
+  CollectorCapability                    _collector_capability{CollectorType::WINDOWS_PDH};
+  std::unique_ptr<IWindowsPdhSystemApi>  _api;
   IRawSampleSink*                        _sample_sink{nullptr};
   CollectionState                        _collection_state{CollectionState::UNCONFIGURED};
   std::optional<CollectionConfiguration> _configuration;
@@ -64,4 +64,4 @@ class WindowsSystemCollector : public ICollector {
 
 }  // namespace astl
 
-#endif  // WINDOWS_SYSTEM_COLLECTOR_HPP_
+#endif  // WINDOWS_PDH_SYSTEM_COLLECTOR_HPP_

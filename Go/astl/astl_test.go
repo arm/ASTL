@@ -5,6 +5,9 @@
 package astl
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"testing"
@@ -173,6 +176,20 @@ func TestStoppedCollectionRequiresReconfiguration(t *testing.T) {
 func TestSystemUtilizationMetrics(t *testing.T) {
 	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
 		t.Skip("requires a system utilization collector")
+	}
+	if os.Getenv("ASTL_GO_SYSUTIL_TEST_CHILD") != "1" {
+		config, err := filepath.Abs("../../config")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Select the renamed PDH backend before ASTL initializes its global session.
+		// Known unavailable backends are skipped on the other operating system.
+		cmd := exec.Command(os.Args[0], "-test.run=^TestSystemUtilizationMetrics$")
+		cmd.Env = append(os.Environ(), "ASTL_GO_SYSUTIL_TEST_CHILD=1", "ASTL_COLLECTORS=procfs,windows_pdh", "ASTL_CONFIG_DIR="+config)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("system utilization child: %v\n%s", err, output)
+		}
+		return
 	}
 	targets, err := GetTargets()
 	if err != nil {
