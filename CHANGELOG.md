@@ -49,6 +49,16 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Changed
 
+- Capture native clock correlation once during metric or counter collection configuration and retain it through
+  immediate reads and start/pause/resume. This prevents mapping refreshes from making increasing SCMI timestamps
+  appear out of order. Correlation failures are reported by configuration, which must succeed before collection.
+  SCMI ioctl hardware correlation now makes twenty read attempts per DE, spaced at half its active firmware
+  update interval, and selects the minimum signed raw-minus-native clock offset. Failed reads and duplicate
+  timestamps count toward the twenty attempts; all valid observations are eligible and at least one is required.
+  Configuration takes longer, and selected offsets can still contain read-latency and stale-sample bias.
+  Stored conversion ratios are reduced to
+  avoid intermediate overflow from redundant scaling during long captures.
+
 ### Breaking
 
 - Group the readable UTC reference inside `astl_clock_correlation_t` and remove the redundant availability flag.

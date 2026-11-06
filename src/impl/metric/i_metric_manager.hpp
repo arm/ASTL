@@ -234,9 +234,9 @@ struct IMetricManager {
   /**
    * @brief Store per-operation clock correlation data used to normalize raw sample timestamps.
    *
-   * Must be called once per collection start, after ConfigureCollection and before the first
-   * ProcessRawSamples call.  Existing entries for the same OperationIds are replaced so that
-   * re-starting collection always uses fresh anchors.
+   * Called once when completing collection configuration, before the first ProcessRawSamples call.
+   * Keep these anchors unchanged until reconfiguration clears the previous sample history.
+   * Existing entries for the same OperationIds are replaced when loading a saved collection.
    *
    * @param correlations Map from OperationId to paired (CLOCK_MONOTONIC_RAW, native-clock) snapshots.
    */

@@ -369,6 +369,11 @@ before configuring again. The next configure call clears previous collection-sco
 cached samples, processed samples, clock correlations, and operation mappings. Target discovery,
 metric definitions, and metric handles remain available.
 
+Configuration also captures a clock correlation for each sample operation, after enabling its data source.
+Immediate reads and start/pause/resume reuse that mapping until reconfiguration, keeping sample timestamps
+on a consistent timeline. If correlation fails, configuration returns an error and the affected target
+must be configured successfully before collecting samples.
+
 ```cpp
 uint32_t metric_count{};
 ASTL_INIT_STRUCT(astl_get_metric_count_params_t, get_metric_count_params,

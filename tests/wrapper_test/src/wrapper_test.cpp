@@ -989,11 +989,12 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
   auto* mock_target_1_ptr      = mock_target_1.get();
   auto* mock_target_2_ptr      = mock_target_2.get();
   auto  mock_collector_manager = std::make_unique<MockCollectorManager>();
+  auto* collector_manager_ptr  = mock_collector_manager.get();
   REQUIRE_CALL(*mock_collector_manager, ConfigureCollectionOnTarget(_, _, _)).TIMES(2).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*mock_collector_manager, GetNativeClockSnapshot(_))
       .TIMES(2)
       .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
-  REQUIRE_CALL(*mock_collector_manager, ReadImmediateOnTarget(_)).TIMES(2).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE_CALL(*mock_collector_manager, ReadImmediateOnTarget(_)).TIMES(4).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*mock_collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*mock_collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target_1, GetProperties(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -1039,6 +1040,8 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
 
   TestOrchestratorInjector injector(std::move(orchestrator));
 
+  FORBID_CALL(*collector_manager_ptr, GetNativeClockSnapshot(_));
+  REQUIRE(ReadImmediate() == ASTL_STATUS_SUCCESS);
   REQUIRE(ReadImmediate() == ASTL_STATUS_SUCCESS);
 }
 
@@ -1094,8 +1097,7 @@ TEST_CASE("astlReadImmediate reads paused targets", "[wrapper]") {
   std::array<astl_counter_handle_t, 1> counters{counter_handle};
   REQUIRE(orchestrator_raw->ConfigureCounterCollection(target, &params, counters) == ASTL_STATUS_SUCCESS);
 
-  ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+  FORBID_CALL(*collector_mgr, GetNativeClockSnapshot(_));
   REQUIRE_CALL(*collector_mgr, StartOnTarget(target)).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*collector_mgr, PauseOnTarget(target)).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*collector_mgr, ReadImmediateOnTarget(target)).RETURN(ASTL_STATUS_SUCCESS);

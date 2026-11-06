@@ -79,9 +79,9 @@ struct ICollector {
    * @brief Take a paired snapshot of CLOCK_MONOTONIC_RAW and this collector's native clock for every
    *        configured sample operation, returning a per-OperationId correlation map.
    *
-   * Must be called after ConfigureCollection and before (or at) StartCollection so that all
-   * operations and their clock sources are known.  The implementation reads from the hardware
-   * counter (SCMI) or the host steady clock (libsensors) once per operation.
+   * Called once while completing configuration, after ConfigureCollection has prepared all
+   * operations and their clock sources. Collectors may select a mapping from multiple
+   * paired observations, as SCMI ioctl does for hardware timestamps.
    */
   virtual auto GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> = 0;
 

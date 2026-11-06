@@ -28,46 +28,6 @@ auto ScmiIoctlCollector::ReadImmediate() -> astl_status_code {
 }
 
 /**
- * @brief Builds clock-correlation snapshots for configured SCMI read operations.
- *
- * @return Clock correlation map, or an ASTL status when an ioctl read fails.
- */
-auto ScmiIoctlCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> {
-  std::scoped_lock lock{_collection_mutex};
-  if (!_configuration.has_value()) {
-    ASTL_LOG_WARNING("ScmiIoctlCollector::GetNativeClockSnapshot called without configuration; returning empty map");
-    return {};
-  }
-  ClockCorrelationMap result;
-  for (const auto& operation_ptr : _configuration->Operations().operationsOnSample) {
-    const auto* scmi_op = dynamic_cast<const ScmiReadOperation*>(operation_ptr.get());
-    if (!scmi_op) {
-      continue;
-    }
-    if (_use_software_clock_timestamps) {
-      const auto raw_now       = ClockMonotonicRaw::now();
-      const auto native_anchor = static_cast<HwClockTicks>(raw_now.time_since_epoch().count());
-      result[scmi_op->GetId()] = OperationClockCorrelation{
-          raw_now, native_anchor, NativeToMonotonicRawRatio{1, 1}
-      };
-      continue;
-    }
-
-    scmi_tlm_de_sample sample{};
-    const auto         read_result = _scmi_ioctl_interface->ReadDataEventValue(scmi_op->scmi_data_event_id, sample);
-    const auto         raw_now     = ClockMonotonicRaw::now();
-    if (read_result != ASTL_STATUS_SUCCESS) {
-      ASTL_LOG_ERROR("ScmiIoctlCollector::GetNativeClockSnapshot: ioctl read failed for DE_ID {:04X}",
-                     scmi_op->scmi_data_event_id);
-      return std::unexpected{read_result};
-    }
-    const auto raw_ratio     = NativeToMonotonicRawRatio{1'000'000LL, static_cast<intmax_t>(scmi_op->tstamp_rate)};
-    result[scmi_op->GetId()] = OperationClockCorrelation{raw_now, sample.tstamp, raw_ratio};
-  }
-  return result;
-}
-
-/**
  * @brief Executes a sequence of configured SCMI read operations.
  *
  * @param operations Operations to execute in order.

@@ -138,6 +138,11 @@ struct MockTopologyManager : public astl::ITopologyManager {
 struct MockCollectorManager : public astl::ICollectorManager {
   static constexpr bool trompeloeil_movable_mock = true;
 
+  MockCollectorManager() {
+    default_clock_snapshot_ = NAMED_ALLOW_CALL(*this, GetNativeClockSnapshot(trompeloeil::_))
+                                  .RETURN(ClockSnapshotRtype{astl::ClockCorrelationMap{}});
+  }
+
   using CollectionCapabilitiesRtype = std::unordered_map<const astl::ITarget*, std::vector<astl::CollectorCapability>>;
   MAKE_CONST_MOCK0(ReportCollectionCapabilities, CollectionCapabilitiesRtype(), override);
   MAKE_MOCK1(RegisterRawSampleSink, astl_status_code(astl::IRawSampleSink* sink), override);
@@ -148,6 +153,7 @@ struct MockCollectorManager : public astl::ICollectorManager {
                               astl::CollectionOperations&& configuration),
              override);
   auto ClearConfiguredCollections() -> astl_status_code override { return ASTL_STATUS_SUCCESS; }
+  MAKE_MOCK1(ClearConfiguredCollectionOnTarget, astl_status_code(const astl::ITarget* target), override);
 
   MAKE_MOCK1(StartOnTarget, astl_status_code(const astl::ITarget* target), override);
   using ClockSnapshotRtype = std::expected<astl::ClockCorrelationMap, astl_status_code>;
@@ -159,6 +165,7 @@ struct MockCollectorManager : public astl::ICollectorManager {
   MAKE_MOCK0(IsAnyTargetBeingCollected, bool(), const override);
 
  private:
+  std::unique_ptr<trompeloeil::expectation> default_clock_snapshot_;
 };
 
 struct MockCollector : public astl::ICollector {
@@ -249,6 +256,10 @@ struct MockMetric : public astl::IMetric {
 
 struct MockMetricManager : public astl::IMetricManager {
   static constexpr bool trompeloeil_movable_mock = true;
+
+  MockMetricManager() {
+    default_clock_correlations_ = NAMED_ALLOW_CALL(*this, SetClockCorrelations(trompeloeil::_));
+  }
 
   using expected_collection_operations = std::expected<astl::CollectionOperations, astl_status_code>;
   using expected_metric_interface      = std::expected<std::span<const astl_metric_handle_t>, astl_status_code>;
@@ -376,6 +387,9 @@ struct MockMetricManager : public astl::IMetricManager {
    * @return astl_status_code indicating success or failure of the summarization process.
    */
   MAKE_MOCK0(SummarizeMetrics, astl_status_code(), override);
+
+ private:
+  std::unique_ptr<trompeloeil::expectation> default_clock_correlations_;
 };
 
 struct MockOutput : public astl::IOutput {

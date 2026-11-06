@@ -5,6 +5,48 @@ SPDX-License-Identifier: Apache-2.0
 
 # Collection clock references in system information
 
+## Native SCMI clock mapping
+
+Completing metric or counter configuration establishes the mapping from each
+collector's native timestamps to `CLOCK_MONOTONIC_RAW`. That mapping stays fixed
+through immediate reads, start, and pause/resume; reconfiguration establishes a
+new mapping after clearing the affected sample history.
+
+For SCMI ioctl hardware timestamps, ASTL makes twenty read attempts per configured
+DE. Attempts are interleaved across DEs and spaced at half the active firmware
+update interval, using the DE's group interval when applicable. The interval is
+read from firmware, independently of the collection sampling interval, and the
+half-interval spacing is rounded up to whole nanoseconds.
+For a reported 1.2 ms interval, the nineteen scheduled gaps total 11.4 ms, with
+read and scheduling overhead potentially extending configuration. The internal
+`kClockCorrelationReadAttempts` constant controls the attempt count.
+
+Each hardware read is immediately paired with a raw-clock reading. Among valid
+successful reads, ASTL selects the smallest signed offset:
+`CLOCK_MONOTONIC_RAW - converted firmware timestamp`. Negative offsets are
+compared by signed value, not absolute magnitude. Duplicate timestamps remain
+eligible; equal offsets retain the earliest observation. Sensor values do not
+participate in selection.
+
+Failed reads, zero timestamps, and duplicates consume attempts; ASTL does not
+retry beyond twenty attempts. One usable pair retains its original mapping.
+No usable samples, unavailable or invalid intervals, and backward timestamps
+fail configuration. Diagnostics report attempts, distinct timestamps, and
+failed/zero-timestamp reads for each DE.
+
+The selected pair supplies the existing native/raw anchors and archive
+representation. Offset comparisons use exact, bounded integer arithmetic,
+without multiplying absolute clock epochs. The stored conversion ratio is
+reduced to avoid redundant scaling during normalization of long captures.
+Selection state is local to configuration; subsequent acquisitions reuse the
+completed mapping. Software-clock mode and legacy sysfs behavior are unchanged.
+
+For a stable clock relationship, stale firmware samples and read delays increase
+the observed offset. Minimum selection reduces that positive bias, but an
+unknown residual delay remains; it does not establish absolute clock alignment.
+
+## Raw-clock to wall-clock reference
+
 ASTL samples retain `CLOCK_MONOTONIC_RAW` timestamps on Linux. Live initialization
 captures a reference connecting raw time to
 `CLOCK_REALTIME`. It reads raw time, realtime, then raw time again, and pairs the

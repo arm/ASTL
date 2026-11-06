@@ -39,6 +39,8 @@ target_sources(
           "${CMAKE_CURRENT_SOURCE_DIR}/collector/collector_manager.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/scmi/scmi_ioctl_collector.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/scmi/scmi_ioctl_collector_configuration.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/scmi/scmi_ioctl_collector_clock.cpp"
+          "${CMAKE_CURRENT_SOURCE_DIR}/scmi/scmi_clock_correlation.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/scmi/scmi_ioctl_collector_data_events.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/scmi/scmi_ioctl_collector_sampling.cpp"
           "${CMAKE_CURRENT_SOURCE_DIR}/scmi/scmi_ioctl_collector_single_read.cpp"

@@ -213,6 +213,11 @@ jobs:
           Get-ComputerInfo -Property WindowsProductName, WindowsVersion, OsBuildNumber, OsArchitecture | Format-List
           ctest --preset windows-release -L "windows_pdh_native|windows_pdh_collector" --output-on-failure --no-tests=error
 
+      - name: 🧪 Validate portable SCMI clock correlation on Windows
+        if: matrix.os == 'windows-2022'
+        shell: pwsh
+        run: ctest --preset windows-release -L "scmi_clock_correlation|ClockCorrelation" --output-on-failure --no-tests=error
+
       - name: 🧪 CMake - Run Unit Tests Without Valgrind
         if: contains(matrix.os, 'ubuntu') && matrix.cmake_preset != 'debug-valgrind'
         # Execute tests defined by the CMake configuration.

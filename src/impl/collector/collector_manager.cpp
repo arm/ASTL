@@ -94,6 +94,25 @@ auto CollectorManager::ClearConfiguredCollections() -> astl_status_code {
   return result;
 }
 
+auto CollectorManager::ClearConfiguredCollectionOnTarget(const ITarget* target) -> astl_status_code {
+  std::lock_guard<std::mutex> lock(_mutex);
+  if (_targets_with_active_collection.contains(target)) {
+    return ASTL_STATUS_COLLECTION_ALREADY_RUNNING;
+  }
+  const auto collectors = _collectors.find(target);
+  if (collectors == _collectors.end() || collectors->second.empty()) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
+  }
+  astl_status_code result = ASTL_STATUS_SUCCESS;
+  for (auto& collector : collectors->second) {
+    const auto status = collector->ClearCollectionState();
+    if (status != ASTL_STATUS_SUCCESS) {
+      result = status;
+    }
+  }
+  return result;
+}
+
 auto CollectorManager::StartOnTarget(const ITarget* target) -> astl_status_code {
   ICollector* selected_collector = nullptr;
   {

@@ -42,10 +42,8 @@ inline auto operator==(std::nullptr_t lhs, span<T, Extent> rhs) -> bool {
 inline void StartTestCollection(astl::Orchestrator& orchestrator, MockCollectorManager& collectors,
                                 MockMetricManager& metrics, const astl::ITarget* target) {
   using trompeloeil::_;
-  ALLOW_CALL(collectors, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(collectors, StartOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
-  ALLOW_CALL(metrics, SetClockCorrelations(_));
+  (void)metrics;
   REQUIRE(orchestrator.StartCollection(target) == ASTL_STATUS_SUCCESS);
 }
 

@@ -27,6 +27,7 @@
 #include "metric/sampled_value_metric.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "procfs/procfs_composite_metricconfig.hpp"
+#include "scmi/scmi_clock_correlation.hpp"
 #include "scmi/scmi_operation_builder.hpp"
 #include "scmi/scmi_target.hpp"
 #include "serdes/metrics.pb.h"
@@ -763,11 +764,16 @@ TEST_CASE("Loaded MetricManager replays two metrics independently without live r
   auto operations = manager.GetRequiredOperations(*handles, target);
   REQUIRE(operations.has_value());
   REQUIRE(operations->operationsOnSample.size() == 2);
-  const auto operation0 = operations->operationsOnSample[0]->GetId();
-  const auto operation1 = operations->operationsOnSample[1]->GetId();
+  const auto                                 operation0 = operations->operationsOnSample[0]->GetId();
+  const auto                                 operation1 = operations->operationsOnSample[1]->GetId();
+  astl::scmi_detail::ClockCorrelationMinimum minimum{1000};
+  REQUIRE(minimum.ConsiderSample(1000, astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{1'000'000}}) ==
+          ASTL_STATUS_SUCCESS);
+  REQUIRE(minimum.ConsiderSample(2000, astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{1'998'000}}) ==
+          ASTL_STATUS_SUCCESS);
+  REQUIRE(minimum.Correlation());
   manager.SetClockCorrelations({
-      {operation0, astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}},
-                                                   uint64_t{0}, astl::MakeTickRatio<astl::SampleMicroseconds>()}},
+      {operation0, *minimum.Correlation()                                                                                         },
       {operation1, astl::OperationClockCorrelation{astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{0}},
                                                    uint64_t{0}, astl::MakeTickRatio<astl::SampleMicroseconds>()}},
   });
@@ -777,6 +783,7 @@ TEST_CASE("Loaded MetricManager replays two metrics independently without live r
   stream.seekg(0);
   auto loaded = astl::ProtobufSerDes::Deserialize<std::unique_ptr<astl::MetricManager>>(stream, targets);
   REQUIRE(loaded.has_value());
+  CHECK((*loaded)->GetClockCorrelations() == manager.GetClockCorrelations());
   auto loaded_handles = (*loaded)->GetAvailableMetrics(target);
   REQUIRE(loaded_handles.has_value());
   REQUIRE(loaded_handles->size() == 2);
@@ -795,6 +802,7 @@ TEST_CASE("Loaded MetricManager replays two metrics independently without live r
   REQUIRE(sink.producers == std::vector<const astl::IMetric*>{metric0});
   REQUIRE(sink.samples.size() == 1);
   REQUIRE(sink.samples.front().value == AstlValue{uint64_t{17}});
+  CHECK(sink.samples.front().timestamp.time_since_epoch().count() == 998'000);
 
   sink.producers.clear();
   sink.samples.clear();

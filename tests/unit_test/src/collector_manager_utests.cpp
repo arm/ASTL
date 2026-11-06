@@ -11,7 +11,7 @@
 #include "collector/collector_builder.hpp"
 #include "collector/collector_manager.hpp"
 #include "scmi/scmi_target.hpp"
-#if defined(ASTL_INCLUDE_PROCFS)
+#ifdef ASTL_INCLUDE_PROCFS
 #  include "procfs/procfs_target.hpp"
 #endif
 
@@ -184,7 +184,7 @@ TEST_CASE("CollectorManager::BuildCollectorManager creates SCMI collectors for S
 
 TEST_CASE("CollectorManager::BuildCollectorManager creates procfs collectors for procfs targets",
           "[collector_manager]") {
-#if !defined(ASTL_INCLUDE_PROCFS)
+#ifndef ASTL_INCLUDE_PROCFS
   SKIP("ASTL was built without procfs support");
 #else
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
@@ -437,4 +437,35 @@ TEST_CASE("CollectorManager::SinkRawSamples - one sink", "collector_manager") {
 
   // with no registered sinks, SinkRawSamples should succeed but do nothing
   REQUIRE(collector_manager.SinkRawSamples(mock_target.get(), samples) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("CollectorManager clears only the requested inactive target", "[collector_manager][ClockCorrelation]") {
+  TestTargetBase target0{"clear-target-0"};
+  TestTargetBase target1{"clear-target-1"};
+  TestTargetBase missing{"missing-target"};
+  auto           first      = std::make_unique<MockCollector>();
+  auto           second     = std::make_unique<MockCollector>();
+  auto*          first_ptr  = first.get();
+  auto*          second_ptr = second.get();
+  ALLOW_CALL(*first, SetRawSampleSink(trompeloeil::_));
+  ALLOW_CALL(*second, SetRawSampleSink(trompeloeil::_));
+  REQUIRE_CALL(*second, StartCollection()).RETURN(ASTL_STATUS_SUCCESS);
+  FORBID_CALL(*second, ClearCollectionState());
+  std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors;
+  collectors[&target0].push_back(std::move(first));
+  collectors[&target1].push_back(std::move(second));
+  astl::CollectorManager manager{std::move(collectors)};
+  REQUIRE(manager.StartOnTarget(&target1) == ASTL_STATUS_SUCCESS);
+  REQUIRE(manager.ClearConfiguredCollectionOnTarget(&target1) == ASTL_STATUS_COLLECTION_ALREADY_RUNNING);
+  REQUIRE(manager.ClearConfiguredCollectionOnTarget(&missing) == ASTL_STATUS_INVALID_TARGET_HANDLE);
+  SECTION("Successful cleanup") {
+    REQUIRE_CALL(*first_ptr, ClearCollectionState()).RETURN(ASTL_STATUS_SUCCESS);
+    REQUIRE(manager.ClearConfiguredCollectionOnTarget(&target0) == ASTL_STATUS_SUCCESS);
+  }
+  SECTION("Cleanup error is propagated") {
+    REQUIRE_CALL(*first_ptr, ClearCollectionState()).RETURN(ASTL_STATUS_FILE_ERROR);
+    REQUIRE(manager.ClearConfiguredCollectionOnTarget(&target0) == ASTL_STATUS_FILE_ERROR);
+  }
+  REQUIRE_CALL(*second_ptr, StopCollection()).RETURN(ASTL_STATUS_SUCCESS);
+  REQUIRE(manager.StopOnTarget(&target1) == ASTL_STATUS_SUCCESS);
 }

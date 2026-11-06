@@ -6,6 +6,7 @@
 #include <chrono>
 #include <deque>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <system_error>
 #include <unordered_map>
@@ -14,6 +15,7 @@
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
+#include "scmi/scmi_clock_correlation.hpp"
 #include "scmi/scmi_ioctl_collector.hpp"
 #include "scmi/scmi_read_operation.hpp"
 #include "scmi/scmi_target.hpp"
@@ -24,11 +26,14 @@ using trompeloeil::_;
 namespace {
 
 struct ScriptedScmiIoctlInterface : public astl::IScmiIoctlInterface {
-  std::filesystem::path device_path{"/dev/scmi/tlm_0"};
-  scmi_tlm_config       telemetry_config{};
-  std::string           de_implementation_version{"00000000000000000000000000000000"};
-  uint32_t              data_event_count{};
-  bool                  supports_single_read{};
+  std::filesystem::path                                                       device_path{"/dev/scmi/tlm_0"};
+  scmi_tlm_config                                                             telemetry_config{};
+  std::unordered_map<uint32_t, scmi_tlm_config>                               group_configs;
+  std::vector<scmi_tlm_config>                                                config_reads;
+  std::function<astl_status_code(astl::ScmiDataEventId, scmi_tlm_de_sample&)> read_hook;
+  std::string de_implementation_version{"00000000000000000000000000000000"};
+  uint32_t    data_event_count{};
+  bool        supports_single_read{};
   std::unordered_map<astl::ScmiDataEventId, scmi_tlm_de_config> data_event_configs;
   std::unordered_map<astl::ScmiDataEventId, scmi_tlm_de_info>   data_event_infos;
   std::deque<scmi_tlm_de_sample>                                samples;
@@ -46,6 +51,8 @@ struct ScriptedScmiIoctlInterface : public astl::IScmiIoctlInterface {
   astl_status_code                                              read_data_event_value_status{ASTL_STATUS_SUCCESS};
   astl_status_code                                              read_single_status{ASTL_STATUS_SUCCESS};
   astl_status_code                                              reset_status{ASTL_STATUS_SUCCESS};
+
+  ScriptedScmiIoctlInterface() { telemetry_config.active = {1, -6}; }
 
   auto DevicePath() const -> const std::filesystem::path& override { return device_path; }
 
@@ -73,7 +80,16 @@ struct ScriptedScmiIoctlInterface : public astl::IScmiIoctlInterface {
   }
 
   auto GetConfig(scmi_tlm_config& config) -> astl_status_code override {
-    config = telemetry_config;
+    config_reads.push_back(config);
+    if (SCMI_TLM_CONFIG_IS_GROUP(config.flags) != 0) {
+      const auto found = group_configs.find(config.grp_id);
+      if (found == group_configs.end()) {
+        return ASTL_STATUS_BAD_CONFIGURATION;
+      }
+      config = found->second;
+    } else {
+      config = telemetry_config;
+    }
     return get_config_status;
   }
 
@@ -108,6 +124,9 @@ struct ScriptedScmiIoctlInterface : public astl::IScmiIoctlInterface {
   auto ReadDataEventValue(astl::ScmiDataEventId data_event_id, scmi_tlm_de_sample& sample)
       -> astl_status_code override {
     sample_reads.push_back(data_event_id);
+    if (read_hook) {
+      return read_hook(data_event_id, sample);
+    }
     if (read_data_event_value_status != ASTL_STATUS_SUCCESS) {
       return read_data_event_value_status;
     }
@@ -140,7 +159,7 @@ struct ScriptedScmiIoctlInterface : public astl::IScmiIoctlInterface {
 struct NonScmiOperation : public astl::Operation {};
 
 auto MissingIoctlDeviceStatus() -> astl_status_code {
-#if defined(__linux__)
+#ifdef __linux__
   return ASTL_STATUS_NO_TARGET_FOUND;
 #else
   return ASTL_STATUS_NOT_SUPPORTED;
@@ -185,7 +204,193 @@ auto MakeSample(astl::ScmiDataEventId data_event_id, uint64_t timestamp, uint64_
   return sample;
 }
 
+struct CorrelationFixture {
+  EnvVarGuard                                 software_clock{astl::EnvVar::ASTL_SCMI_USE_SOFTWARE_CLOCK_TIMESTAMPS, ""};
+  std::unique_ptr<ScriptedScmiIoctlInterface> scripted{std::make_unique<ScriptedScmiIoctlInterface>()};
+  ScriptedScmiIoctlInterface&                 interface{*scripted};
+  astl::ScmiTarget                            target{"scmi_tlm-0", "correlation target", "tlm-0", nullptr};
+  astl::ScmiIoctlCollector                    collector{std::move(scripted)};
+  std::vector<astl::OperationId>              operation_ids;
+
+  CorrelationFixture(std::initializer_list<astl::ScmiDataEventId> ids) {
+    interface.telemetry_config.enable = 1;
+    astl::CollectionOperations operations{.operationsBeforeStart = {},
+                                          .operationsAtStart     = {},
+                                          .operationsOnSample    = {},
+                                          .operationsAtStop      = {},
+                                          .samplingInterval      = {},
+                                          .requirements = astl::CollectorCapability{astl::CollectorType::SCMI}};
+    for (const auto id : ids) {
+      interface.data_event_configs[id] = MakeDataEventConfig(id, 1, 1);
+      interface.data_event_infos[id]   = MakeDataEventInfo(id, 1'000'000);
+      auto operation                   = MakeScmiReadOperation(id);
+      operation_ids.push_back(operation->GetId());
+      operations.operationsOnSample.push_back(std::move(operation));
+    }
+    REQUIRE(collector.ConfigureCollection(MakeCollectionConfiguration(&target, std::move(operations))) ==
+            ASTL_STATUS_SUCCESS);
+    interface.config_reads.clear();
+  }
+
+  ~CorrelationFixture() { astl::ClockMonotonicRaw::ResetTestTime(); }
+  CorrelationFixture(const CorrelationFixture&)                    = delete;
+  CorrelationFixture(CorrelationFixture&&)                         = delete;
+  auto operator=(const CorrelationFixture&) -> CorrelationFixture& = delete;
+  auto operator=(CorrelationFixture&&) -> CorrelationFixture&      = delete;
+};
+
 }  // namespace
+
+TEST_CASE("SCMI correlation interleaves twenty attempts per DE and shares mappings for duplicate operations",
+          "[scmi_ioctl_collector][scmi_clock_correlation]") {
+  CorrelationFixture                                 fixture{0x41, 0x42, 0x41};
+  std::unordered_map<astl::ScmiDataEventId, int64_t> attempts;
+  fixture.interface.read_hook = [&](auto de_id, auto& sample) {
+    const auto attempt = attempts[de_id]++;
+    sample             = MakeSample(de_id, static_cast<uint64_t>(100 + (attempt * 100)), 42);
+    astl::ClockMonotonicRaw::SetTestTime(
+        astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{1000 + (attempt * 150)}});
+    return ASTL_STATUS_SUCCESS;
+  };
+  const auto result = fixture.collector.GetNativeClockSnapshot();
+  REQUIRE(result);
+  REQUIRE(result->size() == 3);
+  REQUIRE(fixture.interface.sample_reads.size() == 40);
+  for (size_t attempt = 0; attempt < 20; ++attempt) {
+    CHECK(fixture.interface.sample_reads[attempt * 2] == 0x41);
+    CHECK(fixture.interface.sample_reads[(attempt * 2) + 1] == 0x42);
+  }
+  for (const auto id : fixture.operation_ids) {
+    const auto& correlation = result->at(id);
+    CHECK(correlation.native_at_start == 100);
+    CHECK(correlation.raw_monotonic_at_start.time_since_epoch().count() == 1000);
+  }
+  CHECK(result->at(fixture.operation_ids[0]) == result->at(fixture.operation_ids[2]));
+  REQUIRE(fixture.interface.config_reads.size() == 1);
+  CHECK(fixture.interface.config_reads.front().flags == 0);
+}
+
+TEST_CASE("SCMI correlation selects the minimum from available timestamps after duplicate and failed attempts",
+          "[scmi_ioctl_collector][scmi_clock_correlation]") {
+  CorrelationFixture fixture{0x41};
+  int64_t            attempt  = 0;
+  fixture.interface.read_hook = [&](auto de_id, auto& sample) {
+    const auto index = attempt++;
+    astl::ClockMonotonicRaw::SetTestTime(
+        astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{1000 + (index * 100)}});
+    sample = MakeSample(de_id, 500, 42);
+    return index == 1 || index == 7 ? ASTL_STATUS_FILE_ERROR : ASTL_STATUS_SUCCESS;
+  };
+  const auto result = fixture.collector.GetNativeClockSnapshot();
+  REQUIRE(result);
+  CHECK(attempt == 20);
+  CHECK(result->at(fixture.operation_ids[0]).raw_monotonic_at_start.time_since_epoch().count() == 1000);
+  CHECK(result->at(fixture.operation_ids[0]).native_at_start == 500);
+}
+
+TEST_CASE("SCMI correlation rejects all failed reads, zero timestamps, and backward clocks",
+          "[scmi_ioctl_collector][scmi_clock_correlation]") {
+  CorrelationFixture fixture{0x41};
+  SECTION("all attempts fail") {
+    fixture.interface.read_data_event_value_status = ASTL_STATUS_FILE_ERROR;
+    const auto result                              = fixture.collector.GetNativeClockSnapshot();
+    REQUIRE_FALSE(result);
+    CHECK(result.error() == ASTL_STATUS_FILE_ERROR);
+    CHECK(fixture.interface.sample_reads.size() == 20);
+  }
+  SECTION("zero timestamps are unusable") {
+    const auto result = fixture.collector.GetNativeClockSnapshot();
+    REQUIRE_FALSE(result);
+    CHECK(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+    CHECK(fixture.interface.sample_reads.size() == 20);
+  }
+  SECTION("backward clock invalidates the mapping") {
+    fixture.interface.samples.push_back(MakeSample(0x41, 100, 42));
+    fixture.interface.samples.push_back(MakeSample(0x41, 99, 42));
+    const auto result = fixture.collector.GetNativeClockSnapshot();
+    REQUIRE_FALSE(result);
+    CHECK(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+    CHECK(fixture.interface.sample_reads.size() == 2);
+  }
+}
+
+TEST_CASE("SCMI minimum uses a single valid observation without replacement attempts",
+          "[scmi_ioctl_collector][scmi_clock_correlation]") {
+  CorrelationFixture fixture{0x41};
+  size_t             attempt  = 0;
+  fixture.interface.read_hook = [&](auto de_id, auto& sample) {
+    ++attempt;
+    sample = MakeSample(de_id, attempt == 10 ? 500 : 0, 42);
+    astl::ClockMonotonicRaw::SetTestTime(astl::ProcessedSampleTimestamp{std::chrono::nanoseconds{1000}});
+    return attempt % 2 == 0 ? ASTL_STATUS_SUCCESS : ASTL_STATUS_FILE_ERROR;
+  };
+  const auto result = fixture.collector.GetNativeClockSnapshot();
+  REQUIRE(result);
+  CHECK(attempt == 20);
+  CHECK(result->at(fixture.operation_ids[0]).native_at_start == 500);
+  CHECK(result->at(fixture.operation_ids[0]).raw_monotonic_at_start.time_since_epoch().count() == 1000);
+}
+
+TEST_CASE("SCMI backward timestamps terminate interleaved sampling immediately",
+          "[scmi_ioctl_collector][scmi_clock_correlation]") {
+  CorrelationFixture fixture{0x41, 0x42};
+  size_t             attempt  = 0;
+  fixture.interface.read_hook = [&](auto de_id, auto& sample) {
+    sample = MakeSample(de_id, ++attempt == 3 ? 99 : 100, 42);
+    return ASTL_STATUS_SUCCESS;
+  };
+  const auto result = fixture.collector.GetNativeClockSnapshot();
+  REQUIRE_FALSE(result);
+  CHECK(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
+  CHECK(fixture.interface.sample_reads == std::vector<astl::ScmiDataEventId>{0x41, 0x42, 0x41});
+}
+
+TEST_CASE("SCMI correlation reads target and group intervals and respects their spacing",
+          "[scmi_ioctl_collector][scmi_clock_correlation]") {
+  CorrelationFixture fixture{0x41, 0x42};
+  fixture.interface.telemetry_config.active       = {1200, -6};
+  fixture.interface.data_event_infos[0x42].flags  = SCMI_TLM_DEINFO_GROUP;
+  fixture.interface.data_event_infos[0x42].grp_id = 7;
+  auto& group_config                              = fixture.interface.group_configs[7];
+  group_config.enable                             = 1;
+  group_config.flags                              = SCMI_TLM_CONFIG_GROUP;
+  group_config.grp_id                             = 7;
+  group_config.active                             = {2, -3};
+  std::unordered_map<astl::ScmiDataEventId, std::vector<std::chrono::steady_clock::time_point>> observations;
+  fixture.interface.read_hook = [&](auto de_id, auto& sample) {
+    observations[de_id].push_back(std::chrono::steady_clock::now());
+    sample = MakeSample(de_id, observations[de_id].size(), 42);
+    return ASTL_STATUS_SUCCESS;
+  };
+  REQUIRE(fixture.collector.GetNativeClockSnapshot());
+  REQUIRE(fixture.interface.config_reads.size() == 2);
+  CHECK(fixture.interface.config_reads[0].flags == 0);
+  CHECK(fixture.interface.config_reads[1].flags == SCMI_TLM_CONFIG_GROUP);
+  CHECK(fixture.interface.config_reads[1].grp_id == 7);
+  for (const auto& [id, times] : observations) {
+    REQUIRE(times.size() == 20);
+    const auto minimum = std::chrono::microseconds{id == 0x41 ? 600 : 1000};
+    for (size_t index = 1; index < times.size(); ++index) {
+      // Allow only the small difference between the collector's start measurement
+      // and entry into this mock, not an early poll by a whole interval.
+      CHECK(times[index] - times[index - 1] >= minimum - std::chrono::microseconds{100});
+    }
+  }
+}
+
+TEST_CASE("SCMI correlation rejects unavailable or invalid active intervals before sampling",
+          "[scmi_ioctl_collector][scmi_clock_correlation]") {
+  CorrelationFixture fixture{0x41};
+  SECTION("configuration read fails") { fixture.interface.get_config_status = ASTL_STATUS_FILE_ERROR; }
+  SECTION("active interval is zero") { fixture.interface.telemetry_config.active = {0, -6}; }
+  SECTION("active interval overflows") { fixture.interface.telemetry_config.active = {1, 100}; }
+  SECTION("group configuration is unavailable") {
+    fixture.interface.data_event_infos[0x41].flags  = SCMI_TLM_DEINFO_GROUP;
+    fixture.interface.data_event_infos[0x41].grp_id = 7;
+  }
+  CHECK_FALSE(fixture.collector.GetNativeClockSnapshot());
+  CHECK(fixture.interface.sample_reads.empty());
+}
 
 TEST_CASE("ScmiIoctlCollector reports capabilities and handles unconfigured lifecycle calls",
           "[scmi_ioctl_collector]") {
@@ -376,8 +581,8 @@ TEST_CASE("ScmiIoctlCollector snapshots native clocks and reports ioctl read fai
   REQUIRE(correlations.has_value());
   REQUIRE(correlations->count(operation_id) == 1);
   CHECK(correlations->at(operation_id).native_at_start == 2500);
-  CHECK(correlations->at(operation_id).ticks == astl::NativeToMonotonicRawRatio{1'000'000LL, 4});
-  REQUIRE(interface.sample_reads.size() == 1);
+  CHECK(correlations->at(operation_id).ticks == astl::NativeToMonotonicRawRatio{250'000, 1});
+  REQUIRE(interface.sample_reads.size() == astl::scmi_detail::kClockCorrelationReadAttempts);
   CHECK(interface.sample_reads.back() == data_event_id);
 
   interface.read_data_event_value_status = ASTL_STATUS_FILE_ERROR;
@@ -432,7 +637,9 @@ TEST_CASE("ScmiIoctlCollector uses the default counter rate when ioctl reports z
   interface.telemetry_config.enable           = 1;
   interface.data_event_configs[data_event_id] = MakeDataEventConfig(data_event_id, 0, 0);
   interface.data_event_infos[data_event_id]   = MakeDataEventInfo(data_event_id, 0);
-  interface.samples.push_back(MakeSample(data_event_id, 1'000'000'000, 0xAA));
+  for (size_t attempt = 0; attempt < astl::scmi_detail::kClockCorrelationReadAttempts; ++attempt) {
+    interface.samples.push_back(MakeSample(data_event_id, 1'000'000'000, 0xAA));
+  }
   interface.samples.push_back(MakeSample(data_event_id, 1'000'000'100, 0xBB));
 
   astl::ScmiTarget           target{"scmi_tlm-0", "unit-test target", "tlm-0", nullptr};
@@ -464,7 +671,7 @@ TEST_CASE("ScmiIoctlCollector uses the default counter rate when ioctl reports z
   REQUIRE(correlations.has_value());
   REQUIRE(correlations->count(operation_id) == 1);
   CHECK(correlations->at(operation_id).native_at_start == 1'000'000'000);
-  CHECK(correlations->at(operation_id).ticks == astl::NativeToMonotonicRawRatio{1'000'000LL, 1'000'000});
+  CHECK(correlations->at(operation_id).ticks == astl::NativeToMonotonicRawRatio{1, 1});
 
   REQUIRE(collector.StartCollection() == ASTL_STATUS_SUCCESS);
   REQUIRE(collector.ReadImmediate() == ASTL_STATUS_SUCCESS);

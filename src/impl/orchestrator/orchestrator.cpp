@@ -390,31 +390,7 @@ auto Orchestrator::ConfigureCounterCollection(const ITarget *target, const astl_
     ASTL_LOG_ERROR("Failed to configure collection on target: {}", astlStatusString(status));
     return status;
   }
-  status = _metric_manager->ClearStaleOperationStateForTarget(target, active_operation_ids);
-  if (status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("Failed to prune stale operation state on target {}: {}", target->Name(), astlStatusString(status));
-    return status;
-  }
-  status = ResetTargetCollectionArtifacts(target);
-  if (status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("Failed to reset collection artifacts on target {}: {}", target->Name(), astlStatusString(status));
-    return status;
-  }
-  ResetFinalOutputEmissionState();
-  {
-    std::lock_guard raw_samples_lock(_raw_samples_mtx);
-    if ((collection_params->flags & ASTL_NO_CACHING) != 0U) {
-      _no_cache_targets.insert(target);
-    } else {
-      _no_cache_targets.erase(target);
-    }
-  }
-  {
-    std::lock_guard state_lock(_collection_state_mutex);
-    _target_collection_states[target] = TargetCollectionState::CONFIGURED;
-  }
-
-  return status;
+  return CompleteCollectionConfiguration(target, *collection_params, active_operation_ids);
 }
 
 auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_collection_params_t *collection_params,
@@ -464,20 +440,36 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_c
     ASTL_LOG_ERROR("Failed to configure collection on target: {}", astlStatusString(status));
     return status;
   }
-  status = _metric_manager->ClearStaleOperationStateForTarget(target, active_operation_ids);
+  return CompleteCollectionConfiguration(target, *collection_params, active_operation_ids);
+}
+
+auto Orchestrator::CompleteCollectionConfiguration(const ITarget *target, const astl_collection_params_t &params,
+                                                   std::span<const OperationId> active_operation_ids)
+    -> astl_status_code {
+  // The caller holds _configure_mutex through publication of both the mapping and CONFIGURED state.
+  auto status = _metric_manager->ClearStaleOperationStateForTarget(target, active_operation_ids);
+  if (status == ASTL_STATUS_SUCCESS) {
+    status = ResetTargetCollectionArtifacts(target);
+  }
   if (status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("Failed to prune stale operation state on target {}: {}", target->Name(), astlStatusString(status));
+    ClearFailedCollectionConfiguration(target);
     return status;
   }
-  status = ResetTargetCollectionArtifacts(target);
-  if (status != ASTL_STATUS_SUCCESS) {
-    ASTL_LOG_ERROR("Failed to reset collection artifacts on target {}: {}", target->Name(), astlStatusString(status));
-    return status;
+
+  // SCMI data events and timestamp rates are ready now. Keep these per-operation anchors for
+  // every acquisition in this configuration: replacing an anchor while retaining sample history
+  // can move normalized timestamps backwards even when the hardware timestamps increase.
+  auto correlations = _collector_manager->GetNativeClockSnapshot(target);
+  if (!correlations) {
+    const auto error = correlations.error();
+    ClearFailedCollectionConfiguration(target);
+    return error;
   }
+  _metric_manager->SetClockCorrelations(*correlations);
   ResetFinalOutputEmissionState();
   {
     std::lock_guard raw_samples_lock(_raw_samples_mtx);
-    if ((collection_params->flags & ASTL_NO_CACHING) != 0U) {
+    if ((params.flags & ASTL_NO_CACHING) != 0U) {
       _no_cache_targets.insert(target);
     } else {
       _no_cache_targets.erase(target);
@@ -487,8 +479,29 @@ auto Orchestrator::ConfigureMetricCollection(const ITarget *target, const astl_c
     std::lock_guard state_lock(_collection_state_mutex);
     _target_collection_states[target] = TargetCollectionState::CONFIGURED;
   }
+  return ASTL_STATUS_SUCCESS;
+}
 
-  return status;
+auto Orchestrator::ClearFailedCollectionConfiguration(const ITarget *target) -> void {
+  {
+    std::lock_guard state_lock(_collection_state_mutex);
+    _target_collection_states[target] = TargetCollectionState::UNCONFIGURED;
+  }
+  // Attempt every cleanup step even if one fails, preserving the original configuration error.
+  const auto collector_status = _collector_manager->ClearConfiguredCollectionOnTarget(target);
+  const auto metric_status    = _metric_manager->ClearStaleOperationStateForTarget(target, {});
+  const auto artifact_status  = ResetTargetCollectionArtifacts(target);
+  if (collector_status != ASTL_STATUS_SUCCESS || metric_status != ASTL_STATUS_SUCCESS ||
+      artifact_status != ASTL_STATUS_SUCCESS) {
+    ASTL_LOG_ERROR("Failed configuration cleanup on target {}: collector={}, metric={}, artifacts={}", target->Name(),
+                   astlStatusString(collector_status), astlStatusString(metric_status),
+                   astlStatusString(artifact_status));
+  }
+  {
+    std::lock_guard raw_samples_lock(_raw_samples_mtx);
+    _no_cache_targets.erase(target);
+  }
+  ResetFinalOutputEmissionState();
 }
 
 auto Orchestrator::ResetTargetCollectionArtifacts(const ITarget *target) -> astl_status_code {
@@ -644,6 +657,7 @@ auto Orchestrator::FinishFinalOutputEmission(std::atomic<FinalOutputEmissionStat
                        std::memory_order_release);
 }
 auto Orchestrator::StartCollectionImpl(const ITarget *target, bool start_paused) -> astl_status_code {
+  std::lock_guard configure_lock(_configure_mutex);
   if (!_collector_manager) {
     ASTL_LOG_ERROR("Orchestrator::StartCollection called with null CollectorManager");
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -669,16 +683,6 @@ auto Orchestrator::StartCollectionImpl(const ITarget *target, bool start_paused)
   std::unique_lock lock{_raw_samples_mtx};
   _raw_samples[target].clear();
   lock.unlock();  // in case _collector_manager runs operations on Start that try to sink samples to us
-
-  // Take per-operation clock correlation snapshots before StartOnTarget so that the native clock
-  // anchor is as close in time as possible to when the first samples will be produced.
-  // Each OperationId maps to its own (CLOCK_MONOTONIC_RAW, native-clock) pair to handle the case
-  // where different SCMI data events reference independent hardware timers.
-  auto clock_correlations = _collector_manager->GetNativeClockSnapshot(target);
-  if (!clock_correlations) {
-    return clock_correlations.error();
-  }
-  _metric_manager->SetClockCorrelations(*clock_correlations);
 
   const auto start_status = _collector_manager->StartOnTarget(target);
   if (start_status != ASTL_STATUS_SUCCESS) {
@@ -775,6 +779,7 @@ auto Orchestrator::RollbackStartedCollectionToConfigured(const ITarget *target) 
 }
 
 auto Orchestrator::ReadImmediate(const ITarget *target) -> astl_status_code {
+  std::lock_guard configure_lock(_configure_mutex);
   if (!_collector_manager) {
     ASTL_LOG_ERROR("Orchestrator::ReadImmediate called with null CollectorManager");
     return ASTL_STATUS_INTERNAL_ERROR;
@@ -784,20 +789,12 @@ auto Orchestrator::ReadImmediate(const ITarget *target) -> astl_status_code {
     return ASTL_STATUS_INTERNAL_ERROR;
   }
 
-  auto should_capture_clock_correlation = false;
   {
     std::lock_guard state_lock(_collection_state_mutex);
-    const auto      state_iterator   = _target_collection_states.find(target);
-    should_capture_clock_correlation = state_iterator != _target_collection_states.end() &&
-                                       state_iterator->second == TargetCollectionState::CONFIGURED;
-  }
-
-  if (should_capture_clock_correlation) {
-    auto clock_correlations = _collector_manager->GetNativeClockSnapshot(target);
-    if (!clock_correlations) {
-      return clock_correlations.error();
+    const auto      state = _target_collection_states.find(target);
+    if (state != _target_collection_states.end() && state->second == TargetCollectionState::UNCONFIGURED) {
+      return ASTL_STATUS_COLLECTION_NOT_CONFIGURED;
     }
-    _metric_manager->SetClockCorrelations(*clock_correlations);
   }
 
   return _collector_manager->ReadImmediateOnTarget(target);

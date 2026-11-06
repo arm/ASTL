@@ -66,6 +66,8 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
 
   [[nodiscard]] auto ClearConfiguredCollections() -> astl_status_code override;
 
+  [[nodiscard]] auto ClearConfiguredCollectionOnTarget(const ITarget* target) -> astl_status_code override;
+
   [[nodiscard]] auto StartOnTarget(const ITarget* target) -> astl_status_code override;
 
   /**

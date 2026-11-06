@@ -436,6 +436,9 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   auto CropSamplesOnTarget(const ITarget *target, std::span<const astl_crop_window_t> windows) -> astl_status_code;
 
  private:
+  auto CompleteCollectionConfiguration(const ITarget *target, const astl_collection_params_t &params,
+                                       std::span<const OperationId> active_operation_ids) -> astl_status_code;
+  auto ClearFailedCollectionConfiguration(const ITarget *target) -> void;
   auto StartCollectionImpl(const ITarget *target, bool start_paused) -> astl_status_code;
   auto ValidateStopCollectionTarget(const ITarget *target) const -> astl_status_code;
   auto FlushPendingRawSamples(const ITarget *target) -> astl_status_code;
@@ -631,7 +634,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   std::unordered_map<const ITarget *, std::chrono::steady_clock::time_point>
                      _target_resume_timestamps;  // last resume time
   mutable std::mutex _collection_state_mutex;    // protects lifecycle state and pause/resume timestamp maps
-  std::mutex         _configure_mutex;           // serializes configure-time global reset decisions
+  std::mutex         _configure_mutex;           // serializes configuration, start, and immediate acquisition
   bool               _clean_configure_reset_pending{false};
 
   std::unique_ptr<ITopologyManager>   _topology_manager;       // manages the set of Targets

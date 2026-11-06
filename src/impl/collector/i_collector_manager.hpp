@@ -56,6 +56,9 @@ struct ICollectorManager {
    */
   [[nodiscard]] virtual auto ClearConfiguredCollections() -> astl_status_code = 0;
 
+  /** Discard one target's configuration after a failed configure; reject an active target. */
+  [[nodiscard]] virtual auto ClearConfiguredCollectionOnTarget(const ITarget* target) -> astl_status_code = 0;
+
   /* Start the configured collection for the given target */
   [[nodiscard]] virtual auto StartOnTarget(const ITarget* target) -> astl_status_code = 0;
 
@@ -66,7 +69,8 @@ struct ICollectorManager {
    * CLOCK_MONOTONIC_RAW and collector-native-clock snapshot so that MetricManager can later
    * translate raw timestamps to the common CLOCK_MONOTONIC_RAW reference.
    *
-   * Must be called after ConfigureCollectionOnTarget and before StartOnTarget.
+   * Called once while completing configuration, before any acquisition. The resulting mapping
+   * remains valid for that configuration and must not be replaced between samples.
    * Returns std::unexpected on I/O or parse failure.
    */
   [[nodiscard]] virtual auto GetNativeClockSnapshot(const ITarget* target)

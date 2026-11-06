@@ -46,8 +46,11 @@ constexpr auto MakeTickRatio() noexcept -> NativeToMonotonicRawRatio {
 }
 
 /**
- * @brief A paired snapshot of CLOCK_MONOTONIC_RAW and a collector's native clock
- *        taken simultaneously for a single operation at collection-start time.
+ * @brief An affine mapping from a collector's native clock to CLOCK_MONOTONIC_RAW,
+ *        established for one operation when completing collection configuration.
+ *
+ * Collectors establish this mapping from paired clock observations; SCMI ioctl
+ * selects the pair with the minimum signed raw-minus-native offset.
  *
  * The MetricManager uses this to translate each RawSampledData::raw_tick
  * (in the collector's native clock domain) to the common CLOCK_MONOTONIC_RAW
@@ -58,11 +61,12 @@ constexpr auto MakeTickRatio() noexcept -> NativeToMonotonicRawRatio {
  *       raw_monotonic_at_start_ns +
  *       (raw_tick - native_at_start) * ticks.num / ticks.den
  *
- * Every collector **must** supply `ticks` explicitly via `MakeTickRatio<NativeDuration>()`.
+ * Every collector must supply `ticks` explicitly; `MakeTickRatio<NativeDuration>()`
+ * provides the ratio for compile-time clock rates.
  */
 struct OperationClockCorrelation {
-  ProcessedSampleTimestamp  raw_monotonic_at_start;  ///< CLOCK_MONOTONIC_RAW snapshot taken at collection start
-  HwClockTicks              native_at_start{0};      ///< Collector-native clock tick count at collection start
+  ProcessedSampleTimestamp  raw_monotonic_at_start;  ///< CLOCK_MONOTONIC_RAW anchor established during configuration
+  HwClockTicks              native_at_start{0};      ///< Collector-native clock anchor captured during configuration
   NativeToMonotonicRawRatio ticks;                   ///< 1 native tick expressed in CLOCK_MONOTONIC_RAW (ns) ticks
 
   bool operator==(const OperationClockCorrelation&) const = default;
@@ -75,7 +79,7 @@ struct OperationClockCorrelation {
  * nanoseconds, producing a `ProcessedSampleTimestamp` suitable for `NormalizedSampledData`.
  *
  * @param native_tick Collector-native hardware clock tick read from `RawSampledData::raw_tick`.
- * @param correlation Per-operation anchor snapshot recorded at collection-start time.
+ * @param correlation Per-operation anchor snapshot recorded during configuration.
  * @return CLOCK_MONOTONIC_RAW timestamp (nanosecond resolution).
  */
 inline auto NormalizeToCorrelatedRawTimestamp(HwClockTicks                     native_tick,

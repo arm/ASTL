@@ -127,7 +127,7 @@ class ScmiIoctlCollector : public ICollector {
   /**
    * @brief Builds clock-correlation snapshots for configured SCMI read operations.
    *
-   * @return Clock correlation map, or an ASTL status when an ioctl read fails.
+   * @return Clock correlation map, or an ASTL status when no valid mapping can be established.
    */
   std::expected<ClockCorrelationMap, astl_status_code> GetNativeClockSnapshot() override;
 
