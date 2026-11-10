@@ -1137,10 +1137,12 @@ Raw ASTL metrics:
 - `astlConfigureCounterCollection()` still returns
   `ASTL_STATUS_NOT_IMPLEMENTED` for cross-target counter configuration. Only the
   on-target counter configuration path is implemented today.
-- `astlPauseCollectionOnTarget()`, `astlPauseCollection()`,
-  `astlResumeCollectionOnTarget()`, and `astlResumeCollection()` currently call
-  through to the orchestrator and then unconditionally overwrite the result with
-  `ASTL_STATUS_NOT_IMPLEMENTED`.
+- Pause and resume are implemented by `astlPauseCollectionOnTarget()`,
+  `astlPauseCollection()`, `astlResumeCollectionOnTarget()`, and
+  `astlResumeCollection()`. The calls propagate the orchestrator result through
+  the public status-code mapping. Collector-dependent unsupported operations
+  return `ASTL_STATUS_PAUSE_UNSUPPORTED` or `ASTL_STATUS_RESUME_UNSUPPORTED`;
+  the target transitions to PAUSED or STARTED only after the collector succeeds.
 - Metric-manager protobuf serialization does not yet cover all metric types and
   still omits counters. Residency metric deserialization is still treated as not
   implemented, and counters are explicitly cleared on deserialize.
@@ -1178,9 +1180,10 @@ Raw ASTL metrics:
   are available.
 - Session replay preserves metric and metric-group data, but counter data is not
   yet part of the serialized metric-manager payload.
-- Pause and resume are exposed in the API surface but should still be treated as
-  unavailable for release planning until the collector and metric-manager paths
-  stop returning `ASTL_STATUS_NOT_IMPLEMENTED`.
+- Pause and resume are implemented for individual targets and through the
+  all-target APIs. The all-target calls attempt the operation on every target
+  and return the first non-success status, or `ASTL_STATUS_SUCCESS` if all calls
+  succeed. Support depends on the selected collector and valid lifecycle state.
 - The Python wrapper is the most feature-complete high-level interface in-tree.
   The Go wrapper is now part of the supported wrapper surface, but it remains
   build-layout-sensitive.

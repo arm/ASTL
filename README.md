@@ -577,7 +577,7 @@ Key rules:
 > [!CAUTION]
 > The crop operation is **irreversible**. Once samples are discarded they cannot be recovered.
 
-- Collection must be **stopped** before cropping; calling while a target is STARTED or PAUSED will return `ASTL_STATUS_COLLECTION_NOT_STOPPED` once implemented.
+- Collection must be **stopped** before cropping; calling while a target is STARTED or PAUSED will return `ASTL_STATUS_COLLECTION_NOT_STOPPED`.
 - A window with `start_ts = 0` has no lower bound; `end_ts = 0` has no upper bound.
 - `window_count` must be ≥ 1.
 
@@ -596,7 +596,7 @@ params.size         = sizeof(astl_crop_samples_params_t);
 params.windows      = &window;
 params.window_count = 1;
 
-astl_status_code rc = astlCropSamples(&params);  // returns NOT_IMPLEMENTED for now
+astl_status_code rc = astlCropSamples(&params);
 ```
 
 #### Crop a specific target
@@ -615,7 +615,7 @@ params.target_handle = target_props.handle;
 params.windows       = &window;
 params.window_count  = 1;
 
-astl_status_code rc = astlCropSamplesOnTarget(&params);  // returns NOT_IMPLEMENTED for now
+astl_status_code rc = astlCropSamplesOnTarget(&params);
 ```
 
 8. Retrieve metric samples. Logs are written to:
@@ -994,8 +994,9 @@ static astl_status_code read_counter_samples_in_chunks(astl_target_handle_t targ
 
 ### Filter Status Codes
 
-If either filter field is non-zero, the API currently returns
-`ASTL_STATUS_NOT_IMPLEMENTED`. Full filtering support will be added in a future release.
+Timestamp filtering is implemented for the APIs listed above. Non-zero bounds are
+inclusive; a zero bound leaves that end of the range open. If both bounds are
+non-zero and `start_ts > end_ts`, the API returns `ASTL_STATUS_BAD_ARGUMENT`.
 
 ---
 
@@ -1006,10 +1007,10 @@ only those samples whose timestamp falls within a caller-supplied time window.
 
 ### Overview
 
-| Function                  | Scope                                                                                                       |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `astlCropSamples`         | All configured targets and all collected counters/metrics (returns `ASTL_STATUS_NOT_IMPLEMENTED` currently) |
-| `astlCropSamplesOnTarget` | A single target (returns `ASTL_STATUS_NOT_IMPLEMENTED` currently)                                           |
+| Function                  | Scope                                                     |
+| ------------------------- | --------------------------------------------------------- |
+| `astlCropSamples`         | All configured targets and all collected counters/metrics |
+| `astlCropSamplesOnTarget` | A single target                                           |
 
 After cropping, all subsequent calls to sample-retrieval, summary, and histogram APIs operate on
 the reduced dataset. If no samples remain, data APIs return `ASTL_STATUS_NO_DATA_COLLECTED`.
@@ -1046,7 +1047,6 @@ Same as `astl_crop_samples_params_t` with an additional `target_handle` field sp
 | ------------------------------------ | ----------------------------------------------------------------------------- |
 | `ASTL_STATUS_SUCCESS`                | Crop applied successfully.                                                    |
 | `ASTL_STATUS_COLLECTION_NOT_STOPPED` | A target is still in STARTED or PAUSED state.                                 |
-| `ASTL_STATUS_NOT_IMPLEMENTED`        | `astlCropSamples` and `astlCropSamplesOnTarget` are not yet implemented.      |
 | `ASTL_STATUS_BAD_ARGUMENT`           | `params` or `windows` is `NULL`, `window_count` is 0, or `start_ts > end_ts`. |
 | `ASTL_STATUS_INVALID_FLAG_VALUE`     | `params->flags != 0` or any window has `flags != 0`.                          |
 | `ASTL_STATUS_OLD_STRUCT_VERSION`     | `params->size` or `windows[0].size` is smaller than expected.                 |

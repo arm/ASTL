@@ -4,6 +4,7 @@
 
 %% System Phase: Interval Collection & Immediate Read
 %% Focus: start, paused start, sampling loop, immediate read, pause/resume
+%%{init: {"sequence": {"width": 300, "actorMargin": 150, "wrap": false}}}%%
 sequenceDiagram
     autonumber
     participant User
@@ -19,7 +20,7 @@ sequenceDiagram
     CollectorManager-->>Orchestrator: status
     Orchestrator-->>API: status
 
-    opt Start directly into paused state
+    opt Paused start
         User->>API: astlStartCollectionOnTargetPaused(start_paused_params)
         API->>Orchestrator: StartCollectionPaused(target)
         Orchestrator->>CollectorManager: StartOnTarget()
@@ -43,11 +44,35 @@ sequenceDiagram
         Orchestrator->>Orchestrator: buffer raw samples
     end
 
-    opt Pause/Resume (planned)
-        Note over User,Collectors: Pause/Resume functionality<br/>scheduled for future implementation<br/>(currently returns NOT_IMPLEMENTED)
+    opt Pause/Resume
         User->>API: astlPauseCollectionOnTarget(pause_params)
-        API-->>User: ASTL_STATUS_NOT_IMPLEMENTED
-        
+        API->>Orchestrator: PauseCollection(target)
+        Orchestrator->>Orchestrator: Validate target and lifecycle state
+        Orchestrator->>CollectorManager: PauseOnTarget(target)
+        CollectorManager->>Collectors: PauseCollection()
+        Collectors-->>CollectorManager: status
+        CollectorManager-->>Orchestrator: status
+        alt Collector succeeds
+            Orchestrator->>Orchestrator: Set state = PAUSED
+        else Pause unsupported
+            Note over Orchestrator,CollectorManager: Return ASTL_STATUS_PAUSE_UNSUPPORTED<br/>without changing target state
+        end
+        Orchestrator-->>API: status
+        API-->>User: Public status
+
         User->>API: astlResumeCollectionOnTarget(resume_params)
-        API-->>User: ASTL_STATUS_NOT_IMPLEMENTED
+        API->>Orchestrator: ResumeCollection(target)
+        Orchestrator->>Orchestrator: Validate target and lifecycle state
+        Orchestrator->>CollectorManager: ResumeOnTarget(target)
+        CollectorManager->>Collectors: ResumeCollection()
+        Collectors-->>CollectorManager: status
+        CollectorManager-->>Orchestrator: status
+        alt Collector succeeds
+            Orchestrator->>Orchestrator: Set state = STARTED
+        else Resume unsupported
+            Note over Orchestrator,CollectorManager: Return ASTL_STATUS_RESUME_UNSUPPORTED<br/>without changing target state
+        end
+        Orchestrator-->>API: status
+        API-->>User: Public status
+        Note over API,Orchestrator: Other errors propagate without changing target state.<br/>All-target APIs attempt every target and return the first error.
     end
