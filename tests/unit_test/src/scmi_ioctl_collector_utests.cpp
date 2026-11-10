@@ -356,26 +356,32 @@ TEST_CASE("SCMI correlation reads target and group intervals and respects their 
   group_config.flags                              = SCMI_TLM_CONFIG_GROUP;
   group_config.grp_id                             = 7;
   group_config.active                             = {2, -3};
-  std::unordered_map<astl::ScmiDataEventId, std::vector<std::chrono::steady_clock::time_point>> observations;
+  std::chrono::microseconds minimum_spacing{};
+  SECTION("group interval limits polling") { minimum_spacing = std::chrono::microseconds{1000}; }
+  SECTION("target interval limits polling") {
+    fixture.interface.telemetry_config.active = {4, -3};
+    minimum_spacing                           = std::chrono::microseconds{2000};
+  }
+  std::unordered_map<astl::ScmiDataEventId, size_t> observations;
   fixture.interface.read_hook = [&](auto de_id, auto& sample) {
-    observations[de_id].push_back(std::chrono::steady_clock::now());
-    sample = MakeSample(de_id, observations[de_id].size(), 42);
+    sample = MakeSample(de_id, ++observations[de_id], 42);
     return ASTL_STATUS_SUCCESS;
   };
+  const auto start = std::chrono::steady_clock::now();
   REQUIRE(fixture.collector.GetNativeClockSnapshot());
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  // The collector spaces read starts, before entering the mock. Scheduler pauses
+  // or instrumentation between those points can shorten mock-entry deltas by an
+  // arbitrary amount. Bracket the full capture instead: 20 reads require at least
+  // 19 spacings for the slower event, regardless of where execution is delayed.
+  CHECK(elapsed >= 19 * minimum_spacing);
   REQUIRE(fixture.interface.config_reads.size() == 2);
   CHECK(fixture.interface.config_reads[0].flags == 0);
   CHECK(fixture.interface.config_reads[1].flags == SCMI_TLM_CONFIG_GROUP);
   CHECK(fixture.interface.config_reads[1].grp_id == 7);
-  for (const auto& [id, times] : observations) {
-    REQUIRE(times.size() == 20);
-    const auto minimum = std::chrono::microseconds{id == 0x41 ? 600 : 1000};
-    for (size_t index = 1; index < times.size(); ++index) {
-      // Allow only the small difference between the collector's start measurement
-      // and entry into this mock, not an early poll by a whole interval.
-      CHECK(times[index] - times[index - 1] >= minimum - std::chrono::microseconds{100});
-    }
-  }
+  REQUIRE(observations.size() == 2);
+  CHECK(observations.at(0x41) == 20);
+  CHECK(observations.at(0x42) == 20);
 }
 
 TEST_CASE("SCMI correlation rejects unavailable or invalid active intervals before sampling",
