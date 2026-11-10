@@ -1,0 +1,61 @@
+%% SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+%%
+%% SPDX-License-Identifier: Apache-2.0
+
+%% SCMI ioctl requests during configuration, periodic collection, and stop.
+%% ASTL represents the public API and internal layers, including the SCMI collector.
+%% Successful path with native timestamps; metric-specific lifecycle reads are omitted.
+%% ABI information may already have been queried during discovery.
+%% Encoded spaces keep manually broken labels together with the repository DOM renderer.
+sequenceDiagram
+    participant Caller as External caller
+    participant ASTL
+    participant Driver as SCMI driver
+
+    Caller->>ASTL: astlConfigureMetricCollectionOnTarget()
+    opt Driver#32;capabilities<br/>not#32;yet#32;queried
+        ASTL->>Driver: ioctl(SCMI_TLM_GET_ABI_INFO)
+    end
+    ASTL->>Driver: ioctl(SCMI_TLM_GET_CFG)
+    opt Telemetry#32;disabled
+        ASTL->>Driver: ioctl(SCMI_TLM_SET_CFG,#32;enable=1)
+    end
+    loop Each#32;required#32;data#32;event
+        ASTL->>Driver: ioctl(SCMI_TLM_GET_DE_CFG)
+        ASTL->>Driver: ioctl(SCMI_TLM_GET_DE_INFO)
+        ASTL->>Driver: ioctl(SCMI_TLM_SET_DE_CFG)<br/>enable=1,#32;t_enable=1
+    end
+
+    Note over ASTL,Driver: Clock#32;correlation#32;during#32;configuration
+    loop Each#32;unique#32;sampled#32;DE
+        ASTL->>Driver: ioctl(SCMI_TLM_GET_DE_INFO)
+        opt Active#32;interval#32;not#32;yet#32;read<br/>for#32;this#32;group#32;or#32;target
+            ASTL->>Driver: ioctl(SCMI_TLM_GET_CFG)<br/>group#32;if#32;present,#32;otherwise#32;target
+        end
+    end
+    loop 20#32;attempts#32;per#32;DE<br/>interleaved#32;across#32;DEs
+        Note over ASTL: Space#32;each#32;DE's#32;attempts#32;by<br/>half#32;the#32;active#32;interval<br/>(rounded#32;up#32;to#32;whole#32;ns)
+        ASTL->>Driver: ioctl(SCMI_TLM_DE_READ)
+        Note over ASTL: Capture#32;raw#32;clock<br/>(CLOCK_MONOTONIC_RAW)<br/>immediately#32;after#32;read
+    end
+    Note over ASTL: Per#32;DE:#32;select#32;minimum#32;offset<br/>Store#32;selected#32;anchors#32;and#32;ratio
+
+    Caller->>ASTL: astlStartCollection()
+    Note over ASTL: Reuse#32;configured#32;mapping<br/>also#32;for#32;immediate#32;reads<br/>and#32;pause/resume
+
+    loop While#32;collecting#32;-#32;each#32;sample
+        alt Single-read#32;capability#32;supported
+            ASTL->>Driver: ioctl(SCMI_TLM_SINGLE_READ)
+        else Individual#32;data-event#32;reads
+            loop Each#32;configured#32;read#32;operation
+                ASTL->>Driver: ioctl(SCMI_TLM_DE_READ)
+            end
+        end
+    end
+
+    Caller->>ASTL: astlStopCollection()
+    Note over ASTL: Stop#32;periodic#32;sampling
+    loop Restore#32;each#32;configured<br/>data#32;event
+        ASTL->>Driver: ioctl(SCMI_TLM_GET_DE_CFG)
+        ASTL->>Driver: ioctl(SCMI_TLM_SET_DE_CFG)<br/>original#32;enable/t_enable
+    end
