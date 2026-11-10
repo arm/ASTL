@@ -53,7 +53,7 @@ concurrency:
 jobs:
   aacr-review:
     if: github.repository_owner == 'Arm-Debug'
-    uses: Arm-Debug/devops-workflows/.github/workflows/aacr-review.yml@0178a0455c3a0b8e2d3a90a53c9a196adf492d7a
+    uses: Arm-Debug/devops-workflows/.github/workflows/aacr-review.yml@29be14ae59051432dfe10d77a6e11d82be7fc5d1
     with:
       aacr_image_options: --user 1000:1000 --env AACR_COMMENT_TEMPLATE_FILE=.aacr/comment-template.md --env AACR_SUPPRESS_NO_ISSUES_COMMENT=1
       aacr_review_mode: codex
