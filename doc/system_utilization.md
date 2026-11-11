@@ -14,7 +14,8 @@ discovery APIs expose the same names; no additional API calls are required.
 ## Migration
 
 The previous target and utilization metric names are removed without aliases.
-Update application target lookups, metric filters, and ATX or AMX configurations.
+Update application target lookups, metric filters, and any application
+configuration that refers to the old names.
 
 | Item                        | Previous name           | New name                |
 | --------------------------- | ----------------------- | ----------------------- |

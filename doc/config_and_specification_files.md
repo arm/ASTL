@@ -74,12 +74,8 @@ These files enumerate the in-band telemetry sensors accessible through SCMI.
 ```
 
 This example defines a register named `FREQUENCY` for the `CORE` component with data event ID `0x00001A68`.
-With other metric definitions, and a automatically detected lm-sensors target,
-we might see metrics with names like the table below:
-
-```bash
-./build/debug/bin/atx --help
-```
+With other metric definitions and an automatically detected lm-sensors target,
+ASTL's discovery APIs can expose metric properties such as:
 
 ```text
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐
@@ -149,11 +145,8 @@ This definition would imply two measurable counters for FREQUENCY for cores 0 an
 Essentially, ASTL will build metric names with <component>.<instance>.<name> where instance counts up
 from 0 to the 'count' element containing these members.
 
-```bash
-./build/debug/bin/atx --help
-```
-
-The output shows available metrics with their descriptions, units, and types:
+An application using ASTL's discovery APIs can present the available metrics
+with their descriptions, units, and types:
 
 ```text
 ┌────────────────────────┌───────────────────────────────────────────────┌─────────┌─────────────┐

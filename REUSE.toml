@@ -40,7 +40,7 @@ SPDX-License-Identifier = "Apache-2.0"
 
 # documentation
 [[annotations]]
-path = ["doc/*.pdf", "tools/ATX/doc/*.pdf", "doc/**/*.svg"]
+path = ["doc/*.pdf", "tools/ATX/doc/*.pdf", "doc/**/*.svg", "doc/images/*.png"]
 SPDX-FileCopyrightText = "Copyright (C) 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>"
 SPDX-License-Identifier = "Apache-2.0"
 

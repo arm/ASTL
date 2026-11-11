@@ -7,12 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 # ASTL
 
 [![Integration](https://github.com/Arm-Debug/ASTL/actions/workflows/integration.yml/badge.svg)](https://github.com/Arm-Debug/ASTL/actions/workflows/integration.yml)
-[![Maintainability](https://qlty.sh/badges/6f288530-d295-4eb4-a8d3-9fab05020fcb/maintainability.svg)](https://qlty.sh/gh/Arm-Debug/projects/ASTL)
 [![Test coverage](https://raw.githubusercontent.com/arm/ASTL/badges/coverage.svg)](https://github.com/arm/ASTL/tree/badges)
 [![Fuzz coverage](https://raw.githubusercontent.com/arm/ASTL/badges/fuzz-coverage.svg)](https://github.com/arm/ASTL/blob/badges/fuzz-coverage.json)
-<a href="https://arm.app.blackduck.com/api/projects/bb3f58ac-a952-4b1c-8561-61a04d23bf57">
-<img src="https://github.com/Arm-Debug/ASTL/actions/workflows/blackduck.yaml/badge.svg" alt="Blackduck"/>
-</a>
 
 Arm SoC Telemetry Library
 
@@ -21,26 +17,25 @@ Arm SoC Telemetry Library
 ASTL is a library for SoC telemetry collection at Arm. It abstracts low level
 interfaces to telemetry data sources on the system. Using a predefined API, a telemetry
 collection tool or an AI framework can dynamically discover available supported telemetry on
-the target platform, configure, start, (pause, resume), stop a collection and process
-collected data. Collected data can be streamed directly to a user provided buffer or can be
-written to a specified output file format, such as a Perfetto JSON file for data visualization.
+the target platform, configure, start, pause, resume, and stop a collection, then process
+collected data. Collected data can be streamed directly to a user provided buffer or exported
+through the experimental Perfetto JSON trace, Interval CSV, and Summary CSV outputs.
 
-See the dedicated "Output Formats" section near the end of this document for full details on the
-currently supported output mechanisms (in-memory buffer, Perfetto trace, Interval CSV, and Summary CSV).
+See [Output Formats](#output-formats) for details on in-memory buffer output and the
+experimental file outputs.
 
-The initial implementation focuses on the System Control and Management Interface (SCMI)
-specification through the Linux SCMI telemetry ioctl and legacy sysfs interfaces. It also supports
-hwmon telemetry through libsensors. It may eventually be expanded to add support for other
-interfaces such as: BIOS mailboxes, PCIe configuration spaces, direct register accesses,
-PROCFS, OS provided data or other sources of data.
+ASTL supports telemetry from the following sources, depending on the platform and build options:
 
-The library has a C-interface for the API and a C++ implementation. A comprehensive experimental
-Python wrapper layer (Cython bindings + high-level utilities) is now available—refer to the
-**[Python User Guide](python/doc/USER_GUIDE.md)**.
+- System Control and Management Interface (SCMI) through Linux telemetry ioctl and legacy sysfs interfaces.
+- Linux procfs system telemetry.
+- hwmon sensors through libsensors.
+- Linux NUMA allocation statistics through sysfs; see [NUMA telemetry](doc/numa.md).
+- Windows Performance Data Helper (PDH) system metrics; see
+  [Windows PDH telemetry](doc/windows_pdh_system_collector.md).
 
-A native Go wrapper is also available under
-**[Go/](Go/README.md)** for Go programs that want to call the ASTL C API
-through cgo.
+The library has a C API and a C++ implementation. Language wrappers are available for
+**[Python](python/doc/USER_GUIDE.md)** through Cython bindings and high-level utilities,
+and **[Go](Go/README.md)** through cgo bindings to the ASTL C API.
 
 ## Key Goals and Properties
 
@@ -56,7 +51,7 @@ through cgo.
 ### Portable
 
 - Rebuild on Windows or other OSs with the same user API interface.
-- Python wrapper layer support.
+- Python (Cython) and Go (cgo) wrapper support.
 
 ### Extensible
 
@@ -69,53 +64,55 @@ through cgo.
 - Can be deployed across IoT, automotive, client, data center, GPU, and NPU platforms.
 - Can be used by telemetry collection tools, AI frameworks, or directly to instrument workloads.
 
-## High Level Architecture Diagram
+## Architecture and collection flow
 
-![image](https://github.com/user-attachments/assets/0cc5580e-eb22-4219-9118-adb486972032)
+Telemetry tools and AI frameworks use ASTL's C API, directly or through the Python
+(Cython) and Go (cgo) bindings, to discover telemetry sources, configure collection, and retrieve
+samples and summaries.
 
-## Telemetry Collection Tool Usage Example Diagram
+### High-level architecture
 
-![image](https://github.com/user-attachments/assets/ee543a10-fae6-45a8-8305-7cce78a3521b)
+![Telemetry tools and AI frameworks access OS and hardware telemetry through ASTL](doc/images/high_level_architecture.png)
 
-## AI Framework Usage Example Diagram
+### Telemetry collection tool usage example
 
-![image](https://github.com/user-attachments/assets/e514cfb8-7d15-45f6-899e-2b70c2c6c5db)
+![Telemetry collection tool and ASTL initialization, collection, and post-processing phases](doc/images/tool_usage_model.png)
 
-## High level Internal Design and status
+### AI framework usage example
 
-<img width="708" height="436" alt="image" src="https://github.com/user-attachments/assets/16aceb9e-b837-47fc-a2d9-e7fee2a3d236" />
+![Illustrative PyTorch profiler flow through LibKineto, ASTL, SCMI, and hardware telemetry](doc/images/AI_usage_model.png)
+
+### Implementation architecture
+
+![ASTL interfaces, orchestrator, managers, collectors, metric plugins, and output writers](doc/images/implementation_architecture.png)
+
+See the [detailed class relationships](doc/design/orchestrator.svg) and
+[Mermaid source](doc/design/orchestrator.mmd) for the orchestrator, managers,
+collectors, targets, and metrics.
 
 ## Testing and Isolation Methodology
 
-![image](https://github.com/user-attachments/assets/0a2b1e39-cb08-4e04-9f62-bba5329bfe56)
+![ASTL validation harness with output checkers, mock SCMI driver, and synthetic sysfs data](doc/images/testing_isolation_methodology.png)
 
 - Complete isolation from all dependencies
 - Mock mode SCMI sysfs file/folder generator
 - Mock mode data generator
 
 - Bench testing suite
-- Trompleil and Catch2 unit testing
+- trompeloeil and Catch2 unit testing
 - Mock command line collector executable
 
 ## Installation and usage
 
-### Confidential overlay development
+### Installation
 
-Keep the `ASTL` and `ASTL-confidential` repositories in sibling directories,
-then enable the confidential checkout from this repository:
+Clone the public repository, then follow the
+[build steps for developers](#build-steps-for-developers):
 
 ```sh
-just overlay-enable ../ASTL-confidential
+git clone https://github.com/arm/ASTL.git
+cd ASTL
 ```
-
-The command uses an existing `ossmosis` installation when it supports the
-required `materialize` command. Otherwise, it installs a pinned ossmosis commit
-from GitHub into the isolated `.venv-ossmosis` virtual environment. This
-requires Python 3.10 or newer and Git, but does not require activating the
-environment or installing `uv`. Set `OSSMOSIS_BIN` to use a specific ossmosis
-executable, or run `just overlay-install-ossmosis` to install it separately.
-
-### Installation
 
 For native Android builds and procfs collection through `adb shell`, see
 [Android development and CI](doc/android.md). Apple Silicon Macs can build and
@@ -139,34 +136,40 @@ selected config directory. Absolute paths and paths escaping that directory are
 rejected.
 
 Every build embeds configuration. `ASTL_EMBED_CONFIG_DIR` selects the prepared input
-tree at configure time (default: this project's `config/`). Apply ossmosis
-and release-profile filtering before configuration. `ASTL_RELEASE_PROFILE`
+tree at configure time (default: this project's `config/`). Prepare any custom
+configuration input tree before configuring the build. `ASTL_RELEASE_PROFILE`
 identifies the embedded input set in the generated resource manifest.
 
 See [Build steps for developers](#build-steps-for-developers) for more detailed build instructions.
 
-> Looking for the Python telemetry wrapper? See the
+> Looking for language wrappers? See the
 > **[ASTL Python User Guide](python/doc/USER_GUIDE.md)** for: initialization, streaming (sync &
 > async), diagnostics CLI, derived metrics, DataFrame integration, benchmarking,
 > metric state discovery (`get_metric_states_on_target` / `MetricState`), and
-> exception model.
+> exception model. For Go/cgo installation and usage, see the
+> **[Go User Guide](Go/README.md)**.
 
 ### Usage
 
-The complete flow is demonstrated in [`samples/sample_test.cpp`](samples/sample_test.cpp). Below are the minimal snippets you need:
+The complete flow is demonstrated in
+[`samples/sample_test/src/sample_test.cpp`](samples/sample_test/src/sample_test.cpp).
+Below are the minimal snippets you need:
 
 ```cpp
-#include "astl/astl.h"          // core API
+#include "astl/astl.h"
+#include "astl/astl_telemetry.h"
 
-#include "astl/astl_telemetry.h"     // Function calls
+#include <string>
+#include <vector>
 ```
 
 `astl_telemetry.h` is self-contained for pure C consumers as well. The helper macros
 `ASTL_INIT_STRUCT`, `ASTL_ALLOC_ARRAY`, and `ASTL_FREE_ARRAY` are intended to work in both C and C++ translation units.
 
-1. Provide an SCMI telemetry interface.
+1. Provide a telemetry source.
 
-By default, ASTL automatically probes SCMI telemetry ioctl character devices under
+ASTL discovers available telemetry sources through the collectors included in the build.
+For SCMI telemetry, ASTL automatically probes ioctl character devices under
 `/dev/scmi` and uses them when available. If no usable ioctl target is found,
 ASTL falls back to the legacy SCMI telemetry sysfs interface under
 `/sys/fs/arm_telemetry`.
@@ -190,10 +193,14 @@ sampling semantics, and migration from the old procfs names.
 Windows builds include system CPU and physical-memory telemetry by default; see
 [Windows PDH telemetry](doc/windows_pdh_system_collector.md) for metrics and sampling semantics.
 
+On Linux, the NUMA collector exposes the `numa` target when readable NUMA statistics
+are available in sysfs. See [NUMA telemetry](doc/numa.md) for allocation counters,
+locality percentages, and sampling semantics.
+
 Use these environment variables to select collectors or redirect backend paths:
 
 - `ASTL_COLLECTORS`: comma-separated allowlist of collectors used for live
-  discovery. Supported names are `scmi`, `libsensors`, `procfs`, and `windows_pdh`. Unset or
+  discovery. Supported names are `scmi`, `libsensors`, `procfs`, `numa`, and `windows_pdh`. Unset or
   empty enables every collector included in the build. Known unavailable backends
   are skipped; unknown names or an explicit list with no available backend fail.
   Use `ASTL_COLLECTORS=procfs,windows_pdh` for portable system utilization through
@@ -205,6 +212,7 @@ Use these environment variables to select collectors or redirect backend paths:
   `/sys/fs/arm_telemetry`.
 - `ASTL_PROCFS_ROOT`: procfs root used for topology discovery, metric discovery,
   and collection. Defaults to `/proc`.
+- `ASTL_NUMA_ROOT`: NUMA sysfs node root. Defaults to `/sys/devices/system/node`.
 - `ASTL_SAMPLE_BATCH_SIZE`: maximum number of samples retained or visited in one
   batch. It must be an integer from `1` through `1048576` and defaults to
   `1024`. Invalid values are ignored with a warning.
@@ -223,6 +231,8 @@ export ASTL_SCMI_IOCTL_DEV_ROOT="/path/to/scmi-devices"
 export ASTL_SCMI_SYSFS_TELEMETRY_ROOT="/sys/fs/arm_telemetry"
 # optional - use a synthetic procfs tree (for example in deterministic tests)
 export ASTL_PROCFS_ROOT="/path/to/procfs-fixture"
+# optional - use a synthetic NUMA sysfs node tree
+export ASTL_NUMA_ROOT="/path/to/numa-fixture"
 # optional - tune the bounded sample batch size
 export ASTL_SAMPLE_BATCH_SIZE="2048"
 # optional - if you're hacking around with metric definitions
@@ -255,9 +265,12 @@ unsupported or unavailable derived metric keys are silently skipped if the corre
 on the current system. When an exact target file is used as an allowlist, ASTL instead emits a warning for each
 declared derived metric whose subfeature is not observed on the current system.
 
-Within the ASTL_CONFIG_DIR path, you can override definitions of metrics, which look like:
+Within the selected configuration directory, metric declaration files contain a
+`metrics` object. For example:
 
 ```json
+{
+  "metrics": {
     "Throttle Counts": {
       "description": "Number of thermal throttling events",
       "unit": "",
@@ -269,15 +282,19 @@ Within the ASTL_CONFIG_DIR path, you can override definitions of metrics, which 
         "protocol": "scmi"
       }
     }
-
+  }
+}
 ```
 
-Each metric: has a name as a key, along with the following fields:
+Each metric uses its name as the object key. Its fields include:
 
-register: the exact name of the register where ASTL should read this metric's data (e.g. a `layout/member` key in the SCMI spec)
-unit: selects which `astl_units_t` the metric is associated with
-metric_type: selects the `astl_metric_type_t` for this data
-collection_protocol: selects which collectors should measure it
+- `description`: describes the metric.
+- `collection.register`: names the register or source value to read.
+- `collection.protocol`: selects the collector, for example `scmi`.
+- `unit`: selects the output unit. For SCMI, an empty value inherits the source
+  unit; a nonempty value must match it unless an explicit formula overrides the
+  output unit.
+- `metric_type`: selects the metric's processing, for example `value`, `delta`, or `rate`.
 
 For more details on metrics declarations and platform-specific scmi spec, see [doc/config_and_specification_files.md](doc/config_and_specification_files.md)
 
@@ -293,24 +310,41 @@ ASTL supports flexible data transformation through formulas that can be applied 
 #### Formula Types
 
 **String Expressions** (using [tinyexpr++](https://github.com/Blake-Madden/tinyexpr-plusplus) in uint64_t mode):
-Express transformations as mathematical expressions using the variable name `value`:
+Express transformations as mathematical expressions using the variable name `value`.
+The following declarations illustrate the schema; replace the placeholder register
+names with registers from your platform's telemetry specification:
 
 ```json
 {
   "metrics": {
     "scaled_value": {
-      "register": "sensor_raw",
+      "description": "Scale a raw sensor value using integer division",
+      "metric_type": "value",
       "unit": "none",
+      "collection": {
+        "register": "sensor_raw",
+        "protocol": "scmi"
+      },
       "formula": "value / 1000"
     },
     "power_watts": {
-      "register": "power_sensor",
-      "unit": "watts",
+      "description": "Convert a raw milliwatt reading to watts",
+      "metric_type": "value",
+      "unit": "W",
+      "collection": {
+        "register": "power_sensor",
+        "protocol": "scmi"
+      },
       "formula": "value / 1000"
     },
     "combined_bits": {
-      "register": "control_reg",
+      "description": "Mask and combine raw register bits",
+      "metric_type": "value",
       "unit": "none",
+      "collection": {
+        "register": "control_reg",
+        "protocol": "scmi"
+      },
       "formula": "(value & 0xFF00) | 0x42"
     }
   }
@@ -327,13 +361,14 @@ Express transformations as mathematical expressions using the variable name `val
 - Parentheses for grouping
 
 **UINT64_T Mode:**
-TinyExpr++ is compiled with `TE_UINT64` and `TE_BITWISE_OPERATORS`, providing exact uint64_t arithmetic without floating-point conversion. All operations preserve full 64-bit precision.
+TinyExpr++ is compiled with `TE_UINT64` and `TE_BITWISE_OPERATORS`.
+Expressions use unsigned 64-bit integer arithmetic; integer division discards any remainder.
 
 **Important Notes:**
 
-- **Floating-point literals** (e.g., `0.001`, `0.5`) will be truncated to integers, causing precision loss
-- ❌ **Incorrect**: `"value * 0.001"` → truncates `0.001` to `0`, resulting in `value * 0 = 0`
-- ✅ **Correct**: `"value / 1000"` → proper integer division
+- Only integer numeric literals are accepted. Decimal literals such as `0.001` and
+  scientific notation such as `1e3` are rejected with `ASTL_STATUS_BAD_CONFIGURATION`.
+- Use `"value / 1000"` for integer scaling; `"value * 0.001"` is rejected.
 - For more details on expression syntax, see the [tinyexpr++ documentation](https://github.com/Blake-Madden/tinyexpr-plusplus#functions)
 
 ---
@@ -341,22 +376,29 @@ TinyExpr++ is compiled with `TE_UINT64` and `TE_BITWISE_OPERATORS`, providing ex
 3. Discover targets
 
 ```cpp
+uint32_t target_count = 0;
 ASTL_INIT_STRUCT(astl_get_target_count_params_t, get_target_count_params,
                  .flags = 0,
                  .target_count = &target_count);
-status = astlGetTargetCount(&get_target_count_params);
+astl_status_code status = astlGetTargetCount(&get_target_count_params);
 if (status != ASTL_STATUS_SUCCESS || target_count == 0) {
   // skip astlGetTargets when target_count == 0
   return;
 }
 // allocate an array to hold the properties of each target
 ASTL_ALLOC_ARRAY(astl_target_props_t, target_properties_buffer, target_count);
+if (!target_properties_buffer) {
+  return;
+}
 ASTL_INIT_STRUCT(astl_get_targets_params_t, get_targets_params,
                  .flags = 0,
                  .targets = target_properties_buffer,
                  .target_count = &target_count);
 status = astlGetTargets(&get_targets_params);
-...
+if (status != ASTL_STATUS_SUCCESS || target_count == 0) {
+  ASTL_FREE_ARRAY(target_properties_buffer);
+  return;
+}
 // using the first target
 astl_target_props_t target_properties = target_properties_buffer[0];
 ```
@@ -380,9 +422,10 @@ ASTL_INIT_STRUCT(astl_get_metric_count_params_t, get_metric_count_params,
     .flags = 0,
     .target_handle = target_properties.handle,
     .metric_count = &metric_count);
-astlGetMetricCountOnTarget(&get_metric_count_params);
-if (metric_count == 0) {
+status = astlGetMetricCountOnTarget(&get_metric_count_params);
+if (status != ASTL_STATUS_SUCCESS || metric_count == 0) {
     // skip astlGetMetricsOnTarget when metric_count == 0
+    ASTL_FREE_ARRAY(target_properties_buffer);
     return;
 }
 std::vector<astl_metric_props_t> metric_buffer(metric_count);
@@ -393,6 +436,18 @@ ASTL_INIT_STRUCT(astl_get_metrics_params_t, get_metrics_params,
     .metrics = metric_buffer.data(),
     .metric_count = &metric_count);
 status = astlGetMetricsOnTarget(&get_metrics_params);
+if (status != ASTL_STATUS_SUCCESS || metric_count == 0) {
+    ASTL_FREE_ARRAY(target_properties_buffer);
+    return;
+}
+metric_buffer.resize(metric_count);
+
+// Handles are fields within property structs, so gather them into a separate array.
+std::vector<astl_metric_handle_t> metric_handles;
+metric_handles.reserve(metric_buffer.size());
+for (const auto& metric : metric_buffer) {
+    metric_handles.push_back(metric.handle);
+}
 
 ASTL_INIT_STRUCT(astl_collection_params_t, collection_params,
     .flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
@@ -403,9 +458,13 @@ ASTL_INIT_STRUCT(astl_configure_metric_collection_on_target_params_t, configure_
     .flags = 0,
     .target_handle = target_properties.handle,
     .collection_params = &collection_params,
-    .metric_handles = &metric_buffer.front().handle,
+    .metric_handles = metric_handles.data(),
     .metric_count = metric_count);
 status = astlConfigureMetricCollectionOnTarget(&configure_metric_params);
+if (status != ASTL_STATUS_SUCCESS) {
+    ASTL_FREE_ARRAY(target_properties_buffer);
+    return;
+}
 ```
 
 After a target is configured, ASTL can also create a native event metric for that target named
@@ -436,13 +495,16 @@ may refer to an empty string, uses no fixed character buffer, and is not truncat
 Alternatively, we can configure collection by metric groups
 
 ```cpp
-auto     CollectFirstGroup(astl_target_handle_t target) -> void {
+auto CollectFirstGroup(astl_target_handle_t target) -> void {
 uint32_t metric_group_count{};
 ASTL_INIT_STRUCT(astl_get_metric_group_count_on_target_params_t, get_group_count_params,
                  .flags = 0,
                  .target_handle = target,
                  .metric_group_count = &metric_group_count);
 auto status = astlGetMetricGroupCountOnTarget(&get_group_count_params);
+if (status != ASTL_STATUS_SUCCESS || metric_group_count == 0) {
+    return;
+}
 
 std::vector<astl_metric_group_props_t> metric_groups_properties(metric_group_count);
 metric_groups_properties[0].size = sizeof(astl_metric_group_props_t);
@@ -454,13 +516,16 @@ ASTL_INIT_STRUCT(astl_get_metric_groups_on_target_params_t, get_groups_params,
                  .metric_groups = metric_groups_properties.data(),
                  .metric_group_count = &metric_group_count);
 status = astlGetMetricGroupsOnTarget(&get_groups_params);
+if (status != ASTL_STATUS_SUCCESS || metric_group_count == 0) {
+    return;
+}
 
 // collect on the first group (you could instead look at the properties and filter by name)
 std::vector<astl_metric_group_handle_t> groups{metric_groups_properties[0].handle};
 const uint32_t groups_count = static_cast<uint32_t>(groups.size());
 ASTL_INIT_STRUCT(astl_collection_params_t, collection_params,
                  .flags = ASTL_COLLECTION_PARAMETERS_FLAG_OPTIMIZE_OVERHEAD,
-                 .sampling_interval = 100,
+                 .sampling_interval = 0,
                  .collection_mode = ASTL_COLLECTION_MODE_IMMEDIATE);
 
 ASTL_INIT_STRUCT(astl_configure_metric_group_collection_on_target_params_t, configure_group_params,
@@ -485,28 +550,42 @@ target.
 
 5. Start, read, and stop collection (including paused start)
 
+Choose one start mode for a configured target. For a normal start:
+
 ```cpp
 ASTL_INIT_STRUCT(astl_start_collection_on_target_params_t, start_params,
                  .flags = 0,
                  .target_handle = target_properties.handle);
 status = astlStartCollectionOnTarget(&start_params);
+```
 
+To start the target paused instead, use this alternative:
+
+```cpp
 ASTL_INIT_STRUCT(astl_start_collection_on_target_paused_params_t, start_paused_params,
                  .flags = 0,
                  .target_handle = target_properties.handle);
 status = astlStartCollectionOnTargetPaused(&start_paused_params);  // final state after call: PAUSED
+```
 
+For all configured targets, choose either `astlStartCollection(...)` or
+`astlStartCollectionPaused(...)` instead of either per-target start above. For example:
+
+```cpp
 ASTL_INIT_STRUCT(astl_start_collection_paused_params_t, start_all_paused_params,
                  .flags = 0);
 status = astlStartCollectionPaused(&start_all_paused_params);  // all CONFIGURED targets -> PAUSED
+```
 
-ASTL_INIT_STRUCT(astl_start_collection_params_t, start_all_params,
-                 .flags = 0);
-status = astlStartCollection(&start_all_params);  // all CONFIGURED targets -> STARTED
+Aggregate starts are transactional: if one configured target fails to start,
+ASTL stops any earlier targets started by the same call before returning.
 
-// Aggregate starts are transactional: if one CONFIGURED target fails to start,
-// ASTL stops any earlier targets started by the same call before returning.
+After a successful normal start, sampling can be paused and resumed. A target
+started paused only needs the resume call. Collectors can return
+`ASTL_STATUS_PAUSE_UNSUPPORTED` or `ASTL_STATUS_RESUME_UNSUPPORTED` when the
+operation is unavailable.
 
+```cpp
 // Optional: temporarily suspend sampling after a normal start
 ASTL_INIT_STRUCT(astl_pause_collection_on_target_params_t, pause_params,
                  .flags = 0,
@@ -516,7 +595,12 @@ ASTL_INIT_STRUCT(astl_resume_collection_on_target_params_t, resume_params,
                  .flags = 0,
                  .target_handle = target_properties.handle);
 status = astlResumeCollectionOnTarget(&resume_params);  // back to STARTED
+```
 
+Read an immediate sample when the target is configured, started, or paused, then
+stop after a successful start:
+
+```cpp
 ASTL_INIT_STRUCT(astl_read_immediate_on_target_params_t, immediate_params,
                  .flags = 0,
                  .target_handle = target_properties.handle);
@@ -536,6 +620,8 @@ Key rules:
 
 - Always set the struct `size` field to `sizeof(struct)`.
 - `flags` must be `0` (reserved for future use).
+- The save output path must be non-NULL and non-empty; otherwise the API returns
+  `ASTL_STATUS_BAD_ARGUMENT`.
 - Call `astlSaveCollection()` after stopping collection.
 - Save before calling any configure API for a new collection if you need to keep the stopped
   session's samples.
@@ -547,7 +633,7 @@ Key rules:
 #include "astl/astl_telemetry.h"
 
 ASTL_INIT_STRUCT(astl_save_params_t, params,
-                 .output_file_path = "/tmp/session.astl",  // nullptr/empty => temp files only
+                 .output_file_path = "/tmp/session.astl",
                  .flags = 0);
 
 astl_status_code rc = astlSaveCollection(&params);
@@ -618,10 +704,12 @@ params.window_count  = 1;
 astl_status_code rc = astlCropSamplesOnTarget(&params);
 ```
 
-8. Retrieve metric samples. Logs are written to:
+8. Retrieve metric samples
 
-- `raw_samples.log` and `sampled_value_summary.log` - metric data (raw + summarized)
-- `sysfs.log` - mock SCMI driver output
+Query `astlGetMetricSampleCountOnTarget(...)`, allocate an `astl_sample_t` array
+with that capacity, and fill it with `astlGetMetricSamplesOnTarget(...)`.
+See [Timestamp Filtering](#timestamp-filtering) for a count-and-retrieve example
+and [Output Formats](#output-formats) for optional file outputs.
 
 9. Compute min/max/avg summary for a metric (post-collection)
 
@@ -635,24 +723,22 @@ the minimum, maximum, average, and sample count over all collected samples. See 
 #include <stdio.h>
 
 // Retrieve metric statistics (min/max/avg)
-astl_target_props_t* target_properties = /* initialized from astlGetTargets */;
-astl_metric_props_t* metric_buffer = /* initialized from astlGetMetricsOnTarget */;
+// target_properties and metric_buffer are populated by the discovery steps above.
 
 astl_metric_statistics_t summary = {0}; // zero-initialize
 summary.size = sizeof(astl_metric_statistics_t);
 summary.flags = ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG;
 
 ASTL_INIT_STRUCT(astl_get_metric_statistics_on_target_params_t, get_metric_stats_params,
-.flags = 0,
-.target_handle = target_properties.handle,
-.metric_handle = metric_buffer[0].handle,
-.summary = &summary);
+                 .flags = 0,
+                 .target_handle = target_properties.handle,
+                 .metric_handle = metric_buffer[0].handle,
+                 .summary = &summary);
 astl_status_code rc = astlGetMetricStatisticsOnTarget(&get_metric_stats_params);
 
 if (rc == ASTL_STATUS_SUCCESS && summary.count > 0) {
-// avg is always fp64 — safe for all arithmetic metric types
-printf("count=%" PRIu64 " avg=%.2f\n",
-summary.count, summary.avg.fp64);
+    // avg is always fp64 — safe for all arithmetic metric types
+    printf("count=%" PRIu64 " avg=%.2f\n", summary.count, summary.avg.fp64);
 }
 
 ```
@@ -665,6 +751,8 @@ use the two-step `astlGetMetricDiscreteHistogramBinCountOnTarget` /
 See the [Discrete Histogram API](#discrete-histogram-api) section for full details.
 
 ```cpp
+#include <inttypes.h>
+
 uint32_t bin_count = 0;
 ASTL_INIT_STRUCT(astl_get_metric_discrete_histogram_bin_count_on_target_params_t,
                  bin_count_params,
@@ -688,9 +776,10 @@ if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
     rc = astlGetMetricDiscreteHistogramOnTarget(&histogram_params);
 
     if (rc == ASTL_STATUS_SUCCESS) {
-        for (uint32_t i = 0; i < bin_count; ++i)
-            printf("value=%.0f  count=%u\n",
-                   (double)bins[i].value.ui64, bins[i].count);
+        // This example assumes an unsigned 64-bit metric value.
+        for (uint32_t i = 0; i < bin_count; ++i) {
+            printf("value=%" PRIu64 "  count=%" PRIu64 "\n", bins[i].value.ui64, bins[i].count);
+        }
     }
 }
 ```
@@ -698,12 +787,11 @@ if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
 11. Clean up allocated resources
 
 ```cpp
-ASTL_FREE_ARRAY(target_properties_buffer)
+ASTL_FREE_ARRAY(target_properties_buffer);
 ```
 
-Run `scripts/demo.sh` to run this flow. This sets up the mock driver and performs a sample run.
-To run manually, start a mock server and execute `build/debug/bin/sample_test`. Use `--help`
-for usage details.
+For a runnable example, follow the [Linux procfs quick start](#linux-procfs-quick-start).
+Use the optional [MockScmi setup](#running-mockscmi) to exercise SCMI telemetry.
 
 ## Metric Summary API
 
@@ -727,8 +815,9 @@ Common status codes:
 - `ASTL_STATUS_NEW_STRUCT_VERSION`
 - `ASTL_STATUS_NOT_SUPPORTED`
 
-`astl_status_code` numbering is contiguous for public statuses (`0..43`), with
-`ASTL_STATUS_UNKNOWN_ERROR = -1` and `ASTL_STATUS_INTERNAL_ERROR = 127` reserved.
+Public status values are defined in [`astl_errors.h`](include/astl/astl_errors.h).
+Their numeric values have reserved gaps. Internal failures are normalized to
+`ASTL_STATUS_INTERNAL_ERROR` (`127`) at the public API boundary.
 
 ## String Pointer Lifetimes and Ownership
 
@@ -739,57 +828,44 @@ strings. There is no caller-provided character-array size and ASTL does not trun
 
 ### Lifetime Guarantees
 
-State and event name pointers are valid only for the current collection session:
-
-1. **During a collection session**: All state and event name pointers returned by the discovery APIs remain valid throughout the current collection session (across start/stop/pause/resume cycles).
-
-2. **After reconfiguration**: State and event name pointers become **invalid** immediately when ASTL is reconfigured for a subsequent collection. Accessing these pointers after reconfiguration results in undefined behavior.
+The public contract keeps borrowed event strings valid for the active ASTL session.
+Use state and event strings while their owning session is active, and copy any
+strings needed beyond that session.
 
 ### Usage Recommendations
 
 - **Within a session**: If you only need state name values during a single collection session, use the pointers directly without copying.
 
-- **Across sessions**: If you need to retain state name values across multiple collection sessions or after reconfiguration, **copy the strings** into your own storage:
+- **Across sessions**: Copy names and descriptions into your own storage before
+  retaining them beyond the owning session:
 
   ```cpp
-  // Safe: Copy the string for long-term storage across sessions
+  // Copy the string while the owning session is active.
   std::string state_name = states[i].name;
 
-  // Safe: Use within the same collection session
+  // Use the borrowed pointer within the active session.
   printf("State: %s\n", states[i].name);
 
-  // UNSAFE: Storing pointer for use after reconfiguration
-  const char* saved_ptr = states[i].name;  // ❌ Dangling pointer after reconfiguration
-  // ... reconfigure ASTL for next collection ...
-  printf("State: %s\n", saved_ptr);  // ❌ Undefined behavior
+  // Retain the owned copy when the session is replaced or released.
+  printf("Saved state: %s\n", state_name.c_str());
   ```
-
-## Design Diagrams (Mermaid)
-
-The detailed runtime and structural diagrams are authored in Mermaid (`doc/design/*.mmd`) and rendered to SVG with:
-
-```sh
-node scripts/render_mermaid.js --all
-```
-
-1. `system_phase_init_discovery.mmd` – Initialization & target/metric discovery
-2. `system_phase_metric_config.mmd` – Metric configuration & operations derivation
-3. `system_phase_collection.mmd` – Interval sampling loop, immediate reads, pause/resume stubs
-4. `system_phase_stop_processing.mmd` – Deferred processing at stop & summarization
-5. `system_phase_retrieval_shutdown.mmd` – Retrieval APIs, shutdown, representative errors
-
-`system_end_to_end_sequence.mmd` remains as an overview referencing those phases.
 
 ## Discrete Histogram API
 
 `astlGetMetricDiscreteHistogramBinCountOnTarget` and `astlGetMetricDiscreteHistogramOnTarget` implement a
-two-step API that returns the exact distribution of observed values for a metric — one bin
-per unique value. Both functions are called after `astlStopCollectionOnTarget` (or after `astlLoadCollection`).
+two-step API that returns one bin per unique value for supported metrics with at most
+1,000 distinct values. Above that limit, the summarizer logs a warning and omits
+the bins, so a successful bin-count query returns zero. Zero bins can therefore
+mean an empty selection or an exceeded distinct-value limit.
+
+Call both functions after `astlStopCollectionOnTarget` or `astlLoadCollection`.
+Skip the second call when the reported count is zero.
 
 ### Two-step Usage Pattern
 
 ```c
 #include "astl/astl_telemetry.h"
+#include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -821,8 +897,8 @@ if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
 
         if (rc == ASTL_STATUS_SUCCESS) {
             for (uint32_t i = 0; i < bin_count; ++i) {
-                /* value union member matches the metric's native value type */
-                printf("value=%" PRIu64 "  count=%u\n",
+                /* This example assumes an unsigned 64-bit metric value. */
+                printf("value=%" PRIu64 "  count=%" PRIu64 "\n",
                        bins[i].value.ui64, bins[i].count);
             }
         }
@@ -845,11 +921,11 @@ if (rc == ASTL_STATUS_SUCCESS && bin_count > 0) {
 
 #### `astlGetMetricDiscreteHistogramBinCountOnTarget`
 
-| Code                        | Meaning                                                           |
-| --------------------------- | ----------------------------------------------------------------- |
-| `ASTL_STATUS_SUCCESS`       | `bin_count` set to the number of unique values (0 if no samples). |
-| `ASTL_STATUS_BAD_ARGUMENT`  | A pointer argument is `NULL`.                                     |
-| `ASTL_STATUS_NOT_SUPPORTED` | Metric type not supported by the discrete histogram summarizer.   |
+| Code                        | Meaning                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| `ASTL_STATUS_SUCCESS`       | `bin_count` set to the number of bins; 0 for an empty selection or more than 1,000 unique values. |
+| `ASTL_STATUS_BAD_ARGUMENT`  | A pointer argument is `NULL`.                                                                     |
+| `ASTL_STATUS_NOT_SUPPORTED` | Metric type not supported by the discrete histogram summarizer.                                   |
 
 #### `astlGetMetricDiscreteHistogramOnTarget`
 
@@ -879,10 +955,10 @@ includes all collected samples.
 
 ### Clock Source
 
-All sample timestamps are expressed in nanoseconds on the **`CLOCK_MONOTONIC_RAW`** clock
-(`clock_gettime(CLOCK_ID_MONOTONIC_RAW, ...)`). Regardless of the underlying hardware
-collector's native clock, ASTL converts every timestamp to `CLOCK_MONOTONIC_RAW` before storing
-the sample. Use the same clock when computing the filter bounds:
+Sample timestamps are normalized to nanoseconds in ASTL's common monotonic clock
+domain. On Linux this uses **`CLOCK_MONOTONIC_RAW`**; other platforms use a
+`std::chrono::steady_clock` fallback. Compute filter bounds in the same clock
+domain as the samples. On Linux:
 
 ```c
 #include <time.h>
@@ -909,86 +985,91 @@ The following APIs honour `start_ts` / `end_ts`:
 
 ### Usage Example
 
+For a stopped collection or a loaded session, query the count for the desired
+time range, allocate that capacity, and retrieve the samples using the same
+bounds. Metric retrieval requires space for the whole selected range and returns
+`ASTL_STATUS_BUFFER_TOO_SMALL` when capacity is insufficient; it does not return
+a partial page. If the data can change between calls, resize to the returned
+required count and retry.
+
+The helpers below use nanosecond bounds; pass zero for an open end of the range.
+Process the returned samples before freeing their arrays.
+
 ```c
 #include "astl/astl_telemetry.h"
 #include <stdint.h>
+#include <stdlib.h>
 
-enum { SAMPLE_CHUNK_CAPACITY = 4 };
-
-static astl_status_code read_metric_samples_in_chunks(astl_target_handle_t target_handle,
-                                                      astl_metric_handle_t metric_handle) {
-    uint32_t expected_samples = 0;
+static astl_status_code read_metric_samples(astl_target_handle_t target_handle,
+                                            astl_metric_handle_t metric_handle,
+                                            uint64_t start_ts, uint64_t end_ts) {
+    uint32_t sample_count = 0;
     ASTL_INIT_STRUCT(astl_get_metric_sample_count_on_target_params_t, count_params,
         .flags         = 0,
         .target_handle = target_handle,
         .metric_handle = metric_handle,
-        .sample_count  = &expected_samples,
-        .start_ts      = 0,
-        .end_ts        = 0);
+        .sample_count  = &sample_count,
+        .start_ts      = start_ts,
+        .end_ts        = end_ts);
     astl_status_code rc = astlGetMetricSampleCountOnTarget(&count_params);
-    if (rc != ASTL_STATUS_SUCCESS) {
+    if (rc != ASTL_STATUS_SUCCESS || sample_count == 0) {
         return rc;
     }
 
-    uint64_t      next_start_ts = 0;
-    uint32_t      total_written = 0;
-    astl_sample_t chunk[SAMPLE_CHUNK_CAPACITY];
-    while (total_written < expected_samples) {
-        uint32_t chunk_count = SAMPLE_CHUNK_CAPACITY;
-        ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, sample_params,
-            .flags         = 0,
-            .target_handle = target_handle,
-            .metric_handle = metric_handle,
-            .samples       = chunk,
-            .sample_count  = &chunk_count,
-            .start_ts      = next_start_ts,
-            .end_ts        = 0);
-        rc = astlGetMetricSamplesOnTarget(&sample_params);
-        if (rc != ASTL_STATUS_SUCCESS || chunk_count == 0) {
-            return rc;
-        }
-        total_written += chunk_count;
-        next_start_ts = chunk[chunk_count - 1].timestamp + 1;
+    astl_sample_t* samples = (astl_sample_t*)calloc(sample_count, sizeof(*samples));
+    if (!samples) {
+        return ASTL_STATUS_OUT_OF_MEMORY;
     }
-    return ASTL_STATUS_SUCCESS;
+    ASTL_INIT_STRUCT(astl_get_metric_samples_on_target_params_t, sample_params,
+        .flags         = 0,
+        .target_handle = target_handle,
+        .metric_handle = metric_handle,
+        .samples       = samples,
+        .sample_count  = &sample_count,
+        .start_ts      = start_ts,
+        .end_ts        = end_ts);
+    rc = astlGetMetricSamplesOnTarget(&sample_params);
+    if (rc == ASTL_STATUS_SUCCESS) {
+        /* Process samples[0 .. sample_count) here. */
+    }
+    free(samples);
+    return rc;
 }
 
-static astl_status_code read_counter_samples_in_chunks(astl_target_handle_t target_handle,
-                                                       astl_counter_handle_t counter_handle) {
-    uint32_t expected_samples = 0;
+static astl_status_code read_counter_samples(astl_target_handle_t target_handle,
+                                             astl_counter_handle_t counter_handle,
+                                             uint64_t start_ts, uint64_t end_ts) {
+    uint32_t sample_count = 0;
     ASTL_INIT_STRUCT(astl_get_counter_sample_count_on_target_params_t, count_params,
         .flags          = 0,
         .target_handle  = target_handle,
         .counter_handle = counter_handle,
-        .sample_count   = &expected_samples,
-        .start_ts       = 0,
-        .end_ts         = 0);
+        .sample_count   = &sample_count,
+        .start_ts       = start_ts,
+        .end_ts         = end_ts);
     astl_status_code rc = astlGetCounterSampleCountOnTarget(&count_params);
-    if (rc != ASTL_STATUS_SUCCESS) {
+    if (rc != ASTL_STATUS_SUCCESS || sample_count == 0) {
         return rc;
     }
 
-    uint64_t      next_start_ts = 0;
-    uint32_t      total_written = 0;
-    astl_sample_t chunk[SAMPLE_CHUNK_CAPACITY];
-    while (total_written < expected_samples) {
-        uint32_t chunk_count = SAMPLE_CHUNK_CAPACITY;
-        ASTL_INIT_STRUCT(astl_get_counter_samples_on_target_params_t, sample_params,
-            .flags          = 0,
-            .target_handle  = target_handle,
-            .counter_handle = counter_handle,
-            .samples        = chunk,
-            .sample_count   = &chunk_count,
-            .start_ts       = next_start_ts,
-            .end_ts         = 0);
-        rc = astlGetCounterSamplesOnTarget(&sample_params);
-        if (rc != ASTL_STATUS_SUCCESS || chunk_count == 0) {
-            return rc;
-        }
-        total_written += chunk_count;
-        next_start_ts = chunk[chunk_count - 1].timestamp + 1;
+    astl_sample_t* samples = (astl_sample_t*)calloc(sample_count, sizeof(*samples));
+    if (!samples) {
+        return ASTL_STATUS_OUT_OF_MEMORY;
     }
-    return ASTL_STATUS_SUCCESS;
+    ASTL_INIT_STRUCT(astl_get_counter_samples_on_target_params_t, sample_params,
+        .flags          = 0,
+        .target_handle  = target_handle,
+        .counter_handle = counter_handle,
+        .samples        = samples,
+        .sample_count   = &sample_count,
+        .start_ts       = start_ts,
+        .end_ts         = end_ts);
+    rc = astlGetCounterSamplesOnTarget(&sample_params);
+    if (rc == ASTL_STATUS_SUCCESS) {
+        /* Process samples[0 .. sample_count) here. */
+    }
+    free(samples);
+    return rc;
 }
 ```
 
@@ -1002,8 +1083,8 @@ non-zero and `start_ts > end_ts`, the API returns `ASTL_STATUS_BAD_ARGUMENT`.
 
 ## Crop Samples API
 
-`astlCropSamples` and `astlCropSamplesOnTarget` permanently reduce the in-memory sample set to
-only those samples whose timestamp falls within a caller-supplied time window.
+`astlCropSamples` and `astlCropSamplesOnTarget` permanently reduce the in-memory
+sample set to samples within one or more caller-supplied time windows.
 
 ### Overview
 
@@ -1012,8 +1093,10 @@ only those samples whose timestamp falls within a caller-supplied time window.
 | `astlCropSamples`         | All configured targets and all collected counters/metrics |
 | `astlCropSamplesOnTarget` | A single target                                           |
 
-After cropping, all subsequent calls to sample-retrieval, summary, and histogram APIs operate on
-the reduced dataset. If no samples remain, data APIs return `ASTL_STATUS_NO_DATA_COLLECTED`.
+After cropping, sample-retrieval, summary, and histogram APIs operate on the
+reduced dataset. When no samples remain, sample-count queries return
+`ASTL_STATUS_SUCCESS` with a count of zero. Check each API's status and result
+count rather than expecting a common no-data error.
 
 ### Structs
 
@@ -1056,226 +1139,256 @@ Same as `astl_crop_samples_params_t` with an additional `target_handle` field sp
 
 ## Output Formats
 
-ASTL supports multiple output mechanisms for processed telemetry samples:
+ASTL provides in-memory buffer output for programmatic use. Perfetto JSON trace,
+Interval CSV, and Summary CSV are **experimental outputs**.
 
 1. Buffer Output (in-memory)
 
-- Samples are written into a caller-provided contiguous buffer via `BufferOutput`.
-- Use when integrating directly with a higher-level runtime (e.g., Python wrapper) or when you want zero file IO.
-- Capacity mismatch semantics are reflected through status codes (e.g., `ASTL_STATUS_BUFFER_TOO_SMALL`).
-- Suitable for low-latency pipelines or streaming directly into analytics code.
+The sample-retrieval APIs copy samples into a caller-provided contiguous buffer.
+Query the sample count, allocate the buffer, then retrieve the samples and check
+the returned count and status. Use this path with the C, Python, or Go API when
+you want programmatic access to the collected data.
 
-2. Perfetto JSON Trace Output (Visualization)
+2. Perfetto JSON Trace Output (Visualization) — **experimental**
 
-- Opt-in: only produced if the environment variable `ASTL_OUTPUT_PERFETTO` is set to a file path.
-- Deferred emission: The variable is evaluated during `StopCollection` after metrics are summarized. No file is opened during sampling; the complete trace is written once at the end.
-- Enable with:
+Set the output path before stopping collection:
 
-  ```bash
-  export ASTL_OUTPUT_PERFETTO=/tmp/astl_trace.json
-  ```
+```bash
+export ASTL_OUTPUT_PERFETTO=/tmp/astl_trace.json
+```
 
-- Emits a single JSON array; each sample becomes one event object.
-- Numeric values (integral or floating) → counter events (`ph:"C"`). String values → instant events (`ph:"I"`, thread scope `s:"t"`).
-- Stable `pid` per target; distinct `tid` per metric under that target for separate tracks.
-- Category/unit mapping (selected): WATTS → Power, JOULES → Energy, CELSIUS → Temperature, MHZ → Frequency,
-  VOLTS → Voltage, AMPS → Current, BYTES → Bytes, MBYTESPERSEC → Bandwidth, TICKS → Ticks, SECONDS → Time.
-- String sample without quantitative unit → State; fallback → (empty category string).
-- Name sanitization (whitespace & quotes → `_`); string values safely JSON-escaped.
-- Compatible with Perfetto UI imports (Chrome Trace Event viewer also accepts similar structure; Perfetto is primary target).
-- Skips null targets/metrics and empty sample vectors silently.
-- Large runs can produce large files; consider compression or slicing or enabling compression post-generation.
+ASTL writes the trace after collection stops, rather than incrementally during
+sampling. The file is a JSON array containing trace/system metadata, target and
+metric track metadata, and sample events.
 
-```jsonc
+- Numeric and boolean samples become counter events (`ph: "C"`).
+- Each target has its own `pid`, with a distinct `tid` for each metric.
+- Timestamps use microseconds on ASTL's sample clock.
+- Units select categories such as Power, Energy, Temperature, and Frequency.
+- Whitespace and quotes in target and metric names are replaced with `_`.
+
+Example sample event, excluding the surrounding array and metadata:
+
+```json
 {
   "ph": "C",
   "cat": "Power",
-
   "name": "SoC.Power",
-
   "ts": 1234567,
   "pid": 1,
   "tid": 1,
-  "args": { "target": "SoC", "metric": "Power", "value": 3.14 },
+  "args": { "target": "SoC", "metric": "Power", "value": 3.14 }
 }
 ```
 
-- Import via Perfetto UI (<https://ui.perfetto.dev>) using "Open trace file".
-  Choose Buffer Output for programmatic consumption; choose Perfetto for timeline visualization and exploratory analysis.
+Import the file in [Perfetto UI](https://ui.perfetto.dev) using "Open trace file".
 
-3. Interval CSV Output (Post-Collection Time Series)
-   - Opt-in: produced only if the environment variable `ASTL_OUTPUT_INTERVAL_CSV` is set to a file path
-     before `StopCollection`.
-   - Deferred emission: identical lifecycle to Perfetto; CSV file is written once after metrics are
-     summarized (no incremental writes during sampling).
-   - Enable with:
+3. Interval CSV Output (Post-Collection Time Series) — **experimental**
 
-     ```bash
-     export ASTL_OUTPUT_INTERVAL_CSV=/tmp/astl_intervals.csv
-     ```
+Set the output path before stopping collection:
 
-   - ATX-compatible interval format: one section is written per metric/target pair.
-     Each section begins with `metric_name on target_name`, followed by `timestamp_us,value`
-     and then one row per sample. Sections are emitted in stable alphabetical order by metric name,
-     then target name. Blank line separates sections.
-   - Samples: `timestamp_us` is raw microseconds (same base as Perfetto). Value is numeric.
-   - Empty collection yields collection metadata only.
+```bash
+export ASTL_OUTPUT_INTERVAL_CSV=/tmp/astl_intervals.csv
+```
 
-Example snippet (two metrics, one sample each):
+The report starts with collection metadata, followed by one section per
+metric/target pair. Each section contains its name, a blank line, the
+`timestamp_us,value` header, and sample rows. Sections are ordered by metric
+name and then target name; samples within a section are ordered by timestamp.
+Timestamps use microseconds on ASTL's sample clock. Floating-point values are
+formatted to two decimal places.
+
+Example report:
 
 ```csv
+ASTL Build Version,"0.0.1"
+Collection Date/Time,"2026-01-01 12:00:00"
+Command Line,"<not captured>"
+Platform SoC,"<unknown>"
+Platform Vendor,"<unknown>"
+Platform OS,"Linux"
+Platform Kernel,"<unknown>"
+Platform Host,"example-host"
+Platform Architecture,"aarch64"
+
 SoC Power on SoC
 
 timestamp_us,value
-1734735123456789,3.14
+1234567,3.14
 
 SoC Temp on SoC
 
 timestamp_us,value
-1734735124456790,55.0
+1234567,55.00
+
 ```
 
-Import into Python:
+An empty collection produces the collection metadata only.
 
-```python
-import pandas as pd
-df = pd.read_csv("/tmp/astl_intervals.csv")
+4. Summary CSV Output (Post-Collection Statistical Summaries) — **experimental**
+
+Set the output path before stopping collection:
+
+```bash
+export ASTL_OUTPUT_SUMMARY_CSV=/tmp/astl_summary.csv
 ```
 
-4. Summary CSV Output (Post-Collection Statistical Summaries)
-   - Opt-in: produced only if the environment variable `ASTL_OUTPUT_SUMMARY_CSV` is set to a file path
-     before `StopCollection`.
-   - Deferred emission: same lifecycle as Perfetto and Interval CSV; the file is written once after collection
-     completes (no incremental writes during sampling).
-   - Enable with:
+The report starts with the same collection metadata as Interval CSV, then groups
+results by metric. Each metric header includes its name, description when
+available, and units. Its `Summary Statistics` table has one row per target:
 
-     ```bash
-     export ASTL_OUTPUT_SUMMARY_CSV=/tmp/astl_summary.csv
-     ```
+```text
+Target,Min,Max,Average,Time Weighted Average,Count
+```
 
-   MinMaxAvg CSV Table
-   - Format: One header line then one row per (metric, target) pair summarizing all samples gathered for that pair.
+Min/max, arithmetic average, and time-weighted average are available for
+arithmetic `ASTL_METRIC_VALUE`, `ASTL_METRIC_DELTA`, and `ASTL_METRIC_RATE`
+metrics. Unsupported statistics are written as `N/A`; `Count` reports the sample
+count for that metric/target pair. Floating-point report values use two decimal
+places.
 
-   - Columns:
+For `ASTL_METRIC_VALUE`, `ASTL_METRIC_FINITE_SET_VALUE`, and
+`ASTL_METRIC_EVENT` metrics, a `Histogram Summary` table follows when discrete
+bins are available. It has one row per target and one column per distinct
+numeric or boolean value; each cell contains that target's sample count for the
+value. Missing values have a count of zero. Histogram bins are omitted when a
+metric/target pair has more than 1,000 unique values.
 
-   - `MetricName` – metric name (sanitized where necessary)
-   - `Target` – target name
-   - `Min` – minimum numeric sample value (or `N/A` if no numeric samples)
-   - `Max` – maximum numeric sample value (or `N/A` if no numeric samples)
-   - `Average` – arithmetic mean of numeric samples (or `N/A` if no numeric samples)
-   - `SampleCount` – total sample count (numeric + string) collected for the metric/target pair
-
-   - Header: `MetricName,Target,Min,Max,Average,SampleCount`.
-   - Grouping: Rows are grouped by metric name internally; current implementation does not insert blank lines between groups (compact listing).
-   - Value Handling:
-     - Min/max/avg summary values are only produced when the metric is of type `ASTL_METRIC_VALUE`,
-       `ASTL_METRIC_DELTA`, or `ASTL_METRIC_RATE`.
-     - If a metric produced only string samples (no numeric values), Min/Max/Average are `N/A`.
-     - Numeric formatting matches the internal `to_string` representation (no forced scientific notation).
-   - Empty collection yields an empty file (no header).
-     - Rationale: Provides a quick, space-efficient statistical overview of all collected metrics to support
-       rapid triage and selection of metrics for deeper time-series analysis (Interval CSV or Perfetto). Often
-       significantly smaller than full interval dumps for long runs.
-
-Example snippet:
+Example report:
 
 ```csv
-MetricName,Target,Min,Max,Average,SampleCount
-SoC Power,SoC,2.91,3.42,3.14,150
-SoC Temp,SoC,44.0,57.0,52.3,150
-Cluster0 Freq,Cluster0,900.0,1500.0,1200.5,150
-GPU State,GPU,N/A,N/A,N/A,12
+ASTL Build Version,"0.0.1"
+Collection Date/Time,"2026-01-01 12:00:00"
+Command Line,"<not captured>"
+Platform SoC,"<unknown>"
+Platform Vendor,"<unknown>"
+Platform OS,"Linux"
+Platform Kernel,"<unknown>"
+Platform Host,"example-host"
+Platform Architecture,"aarch64"
+
+Metric: Temperature - Board temperature (Celsius)
+
+Summary Statistics
+Target,Min,Max,Average,Time Weighted Average,Count
+Target1,10.00,30.00,20.00,15.00,3
+Target2,15.00,35.00,25.00,20.00,3
+
+Histogram Summary
+Target,Type,10.00,20.00,30.00,15.00,25.00,35.00
+Target1,Discrete,1,1,1,0,0,0
+Target2,Discrete,0,0,0,1,1,1
 
 ```
 
-Histogram CSV Table
+An empty collection produces the collection metadata only.
 
-- Format: one header line, then one row per bin for each (metric, target) pair.
-
-- Columns:
-  `MetricName` – metric name (sanitized where necessary)
-  `Target` – target name
-  `Type` – `discrete` or `ranged` histogram type.
-  `Value/Range` – numeric range. For `discrete`, the exact value.
-  `Count` – number of samples falling in this bin.
-
-- Header: `MetricName,Target,Type,Value/Range, Count`.
-  Grouping: Rows are grouped by metric name internally; current implementation does not insert blank lines between groups (compact listing).
-  Value Handling:
-- Discrete histograms are only produced when the metric is of type ASTL_METRIC_VALUE, ASTL_METRIC_FINITE_SET_VALUE or ASTL_METRIC_EVENT
-- They are appropriate when the samples yield non-rangeable categories (categorical data, small integer ranges, or finite sets).
-- Each unique value becomes a bin.
-
-Example snippet:
-
-```csv
-MetricName,Target,Type,Value,Count
-CPU State,TLM_0,discrete,Idle,200
-CPU State,TLM_0,discrete,Busy,300
-CPU State,TLM_1,discrete,Idle,100
-CPU State,TLM_1,discrete,Busy,400
-
-```
-
-Import into Python:
-
-```python
-import pandas as pd
-df_summary = pd.read_csv("/tmp/astl_summary.csv")
-```
+Both CSV formats contain multiple sections, rather than one rectangular table.
+Extract the desired table before passing it to `pandas.read_csv()`. For DataFrame
+analysis without parsing these reports, the Python
+[`to_dataframe()` helper](python/astl/dataframe.py) accepts a mapping of entity
+names to lists of `(timestamp, value)` pairs and requires pandas by default.
 
 ## Running MockScmi
 
-To run MockScmi:
+MockScmi is an optional Linux FUSE test tool supplied by the `tools/mock_scmi`
+submodule. Its availability depends on access to that separate repository. The
+public library build and the [Linux procfs quick start](#linux-procfs-quick-start)
+work without it.
 
-1. **Create a Mount Directory**
-
-Create a directory to serve as the mount point (e.g., `/tmp/scmi`):
+If the submodule is available to you, initialize it before configuring and building
+ASTL, then run the mock in the foreground from the repository root:
 
 ```sh
+git submodule update --init --recursive tools/mock_scmi
+cmake -S . --preset debug
+cmake --build --preset debug --target MockScmi
+ASTL_HOST_ARCH="$(./scripts/host_arch.sh)"
 mkdir -p /tmp/scmi
+"./build/debug/${ASTL_HOST_ARCH}/bin/MockScmi" \
+  -f -s --tlm-json-path tools/mock_scmi/config/tlm.json /tmp/scmi
 ```
 
-2. **Run MockScmi**
+The mock requires the Linux FUSE 3 runtime, including `fusermount3`, and access to
+`/dev/fuse`. `-f` keeps it in the foreground, `-s` selects single-threaded operation,
+and `--help` lists its options. In a separate
+terminal, select its legacy sysfs interface before running an ASTL application:
 
 ```sh
-ASTL/build/debug/bin/MockScmi /tmp/scmi
+export ASTL_COLLECTORS=scmi
+export ASTL_SCMI_INTERFACE=sysfs
+export ASTL_SCMI_SYSFS_TELEMETRY_ROOT=/tmp/scmi
 ```
 
-### Optional Flags
-
-- Display help message: -h
-- Single-threaded operation: -s
-- Run in foreground: -f
-
-3. **Terminating MockScmi**
-
-- Foreground mode: Simply press Ctrl+C to exit.
-- Background mode: kill -SIGINT \<PID\>
+Press Ctrl+C in the mock's terminal to stop it. If the mount remains, unmount it
+with `fusermount3 -u /tmp/scmi`.
 
 ## Build steps for developers
 
+The steps below use the public source tree. Arm contributors with access to the
+internal repositories can also follow the
+[internal development guide](doc/internal_development.md). That guide covers
+additional setup and maintainer workflows; it is optional for public builds.
+
 ### Third-Party Components
 
-ASTL incorporates the following third-party libraries:
+The [vcpkg manifest](vcpkg.json) lists the managed build dependencies. See
+[THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) for dependency notices and licenses.
+Formula evaluation also uses the vendored
+[tinyexpr++](https://github.com/Blake-Madden/tinyexpr-plusplus) expression parser.
 
-- **[tinyexpr++](https://github.com/Blake-Madden/tinyexpr-plusplus)** - C++20 mathematical expression parser used for formula evaluation
-  - Supports arithmetic, bitwise, and mathematical operations
-  - Header-only library with minimal dependencies
-  - Licensed under zlib/libpng license
-  - Used for the Formula feature to transform raw metric values
+### Prerequisites
+
+Install these tools before using the CMake presets:
+
+- CMake 3.21 or newer and Ninja.
+- A C99 compiler and a C++23 compiler/standard-library pair providing `std::expected`,
+  `std::format`, and `std::optional::transform`.
+- Git and Python 3; Python generates the configuration embedded in the library.
+- On Unix-like hosts, `jq`, `curl`, `zip`, `unzip`, and `tar` for the default
+  vcpkg bootstrap; Linux dependency builds also use `pkg-config`. Windows bootstrap
+  uses PowerShell.
+
+With the default vcpkg configuration, the first configure/build downloads the
+pinned vcpkg revision and its dependencies, so it requires network access. Install
+the libsensors development package when hwmon collection is needed; the default
+`ASTL_LIBSENSORS=AUTO` build omits that backend when the library is unavailable.
 
 ### Compile and test
 
-These commands will generate a workspace under `build` with auto-detected reasonable default
-build systems and compilers, build it, and execute tests. Supported presets are found in
-[CMakePresets.json](CMakePresets.json).
+Run these commands from the repository root. The `debug` preset selects Ninja,
+configures `build/debug/`, builds the library, samples, and native tests, and runs
+CTest. See [CMakePresets.json](CMakePresets.json) for the other presets.
 
 ```sh
 cmake -S . --preset debug
 cmake --build --preset debug
 ctest --preset debug
 ```
+
+Native binaries are written under `build/debug/<arch>/bin/` and libraries under
+`build/debug/<arch>/lib/`; `scripts/host_arch.sh` prints the host architecture
+directory name, such as `arm64` or `x86_64`.
+
+### Linux procfs quick start
+
+After building, collect CPU utilization from the host without SCMI hardware or
+MockScmi:
+
+```sh
+ASTL_HOST_ARCH="$(./scripts/host_arch.sh)"
+env -u ASTL_CONFIG_DIR ASTL_COLLECTORS=procfs \
+  "./build/debug/${ASTL_HOST_ARCH}/bin/sample_test" \
+  --target=sysutil --group=cpu --interval=100 --duration=1
+```
+
+This selects the `sysutil` target and samples its CPU metrics every 100 ms for one
+second. Clearing `ASTL_CONFIG_DIR` for this command selects the normal configuration
+fallbacks, including the resources embedded by the build. The sample prints the
+discovered metrics, samples, and summaries. See [System utilization](doc/system_utilization.md)
+for metric names and sampling semantics.
+
+### Optional collectors and sanitizer builds
 
 For deterministic native tests under AddressSanitizer plus UndefinedBehaviorSanitizer or under ThreadSanitizer, see
 [Sanitizer builds](doc/sanitizers.md).
@@ -1287,17 +1400,17 @@ default. Developers can omit that support from a build with:
 cmake -S . --preset debug -DASTL_PROCFS=OFF
 ```
 
-Procfs collection and its target-specific metric discovery are included by
-default. Developers can omit that support from a build with:
+NUMA collection is included by default on Linux, excluding Android. Developers can
+omit that support from a build with:
 
 ```sh
-cmake -S . --preset debug -DASTL_PROCFS=OFF
+cmake -S . --preset debug -DASTL_NUMA=OFF
 ```
 
 ### Development hooks
 
-ASTL uses the [pre-commit](https://pre-commit.com/) framework to format staged
-files and run local quality checks.
+ASTL uses the [pre-commit](https://pre-commit.com/) framework to format files and
+run local quality checks.
 
 To enable this, ensure you have the following dev tools installed:
 
@@ -1309,7 +1422,7 @@ To enable this, ensure you have the following dev tools installed:
 - REUSE 3.3 or later
 - `jq`.
 
-Configure the debug preset once so that cppcheck can
+Configure the debug preset once so that cppcheck can use
 `build/debug/compile_commands.json`, then install the hooks:
 
 ```sh
@@ -1317,24 +1430,19 @@ cmake -S . --preset debug
 ./scripts/hooks/install_hooks.sh
 ```
 
-The installer selects the Arm-Debug configuration only when `origin` is
-`github.com/Arm-Debug/ASTL`; all other clones use the public configuration. Use
-`--internal` or `--public` to override detection for a fork or unusual remote
-layout.
+The installer detects the hook configuration for the checkout. Use `--public`
+to select `.pre-commit-config.yaml` explicitly for a fork or unusual remote layout.
 
-Before each commit, staged files are formatted and re-staged, then Qlty and the
-license checks run. Cppcheck runs when staged C or C++ source or header files
+The formatting hook currently formats source, CMake, and supporting files across
+the checkout, then re-stages files that were already staged. It can therefore
+modify unstaged files too; inspect the working tree after it runs. Qlty and the
+license checks then run. Cppcheck runs when staged C or C++ source or header files
 change. After those checks pass, the commit-message hook adds a
 `Pre-Commit-Ran: true` trailer. Pull requests report non-blocking warnings for
 non-merge commits without this trailer to help the team identify checkouts that
 have not installed the hooks. A bot comment makes the warning visible in the
 pull request conversation and is removed once every non-merge commit has the
-trailer. The Arm-Debug configuration also installs
-ossmosis staged-content and commit-message checks. Without the confidential
-overlay, ossmosis uses its zero-config public policy. If the overlay later
-supplies `.ossmosis.json`, the next commit automatically uses that policy
-without reinstalling the hooks. The public configuration never downloads or
-runs ossmosis.
+trailer.
 
 Run every public hook manually with:
 
@@ -1342,10 +1450,9 @@ Run every public hook manually with:
 pre-commit run --config .pre-commit-config.yaml --all-files
 ```
 
-For an Arm-Debug checkout, substitute
-`.pre-commit-config-arm-debug.yaml`. Run one hook by appending its id, or skip
-selected hooks for one commit with a comma-separated list such as
-`SKIP=cppcheck,license-lint git commit`. To uninstall, run:
+Run one hook by appending its id, or skip selected hooks for one commit with a
+comma-separated list such as `SKIP=cppcheck,license-lint git commit`.
+To uninstall, run:
 
 ```sh
 pre-commit uninstall --hook-type pre-commit
@@ -1355,14 +1462,18 @@ pre-commit uninstall --hook-type commit-msg
 ### Compile and test with specific compiler or build type
 
 If you want to choose a specific compiler that's not specified in `CMakePresets.json`, you
-can add arguments in the first configure step (be sure to set `EXPORT_COMPILE_COMMANDS` so
+can add arguments in the first configure step (be sure to set `CMAKE_EXPORT_COMPILE_COMMANDS` so
 that clang-tidy can find system headers for linting).
 
 ```sh
-cmake -B ./build/debug -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=DEBUG -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -S .
-cmake --build ./build/debug --config DEBUG
-cd ./build/debug && ctest
+cmake -S . -B build/custom -G Ninja -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc \
+  -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build/custom
+ctest --test-dir build/custom --output-on-failure
 ```
+
+Use a fresh build directory when changing compilers. The selected compiler and
+standard library must still provide the C++23 features listed above.
 
 ### C++ standard library and cross-compilation
 
@@ -1391,18 +1502,14 @@ To use `clang-format` to check formatting, use
 [scripts/check_format.sh](scripts/check_format.sh) or the `cmake` target `check_format`.
 
 ```sh
-cd build && cmake --build . --target check_format
-# or
-cd build && make check_format
+cmake --build --preset debug --target check_format
 ```
 
 To use `clang-format` to format code, use [scripts/format.sh](scripts/format.sh) or the target
 `format`.
 
 ```sh
-cd build && cmake --build . --target format
-# or
-cd build && make format
+cmake --build --preset debug --target format
 ```
 
 #### Linting
@@ -1410,9 +1517,8 @@ cd build && make format
 To use `clang-tidy` to lint code, use [scripts/lint.sh](scripts/lint.sh) or the target `lint`
 
 ```sh
-cd build && cmake --build . --target lint
-# or just
-cd build && make lint
+cmake --build --preset debug --target proto_gen
+cmake --build --preset debug --target lint
 ```
 
 #### Doxygen
@@ -1420,7 +1526,7 @@ cd build && make lint
 Automatically generate class diagrams, function call graphs, and API reference docs:
 
 ```sh
-cd build/debug && cmake --build . --target doxygen
+cmake --build --preset debug --target doxygen
 ```
 
 Output will be at: `<ASTL>/doc/html/index.html`.
@@ -1430,6 +1536,11 @@ Note: you need to install both doxygen and dot on your system:
 ```sh
 sudo apt-get -y install doxygen graphviz
 ```
+
+## Go API and usage
+
+For cgo installation, linking, and API usage, see the **[Go User Guide](Go/README.md)**.
+The [basic Go example](Go/examples/basic/main.go) demonstrates system information and target discovery.
 
 ## Experimental Python API and usage
 
@@ -1446,10 +1557,14 @@ The Python layer includes a Sphinx scaffold under `python/doc/`.
 
 #### Build HTML Docs
 
+First build and install the Python wrapper from this checkout, following the
+[Python User Guide](python/doc/USER_GUIDE.md). Sphinx imports `astl` to generate API
+documentation, so its native extension and shared library must match the Python sources.
+
 ```bash
 # (Optional) create / activate a virtual environment
 python -m pip install --upgrade pip
-python -m pip install sphinx
+python -m pip install sphinx myst-parser
 
 # From repository root
 sphinx-build -b html python/doc python/doc/_build/html
@@ -1518,76 +1633,14 @@ Optional:
 python/scripts/vendor_headers.sh --build-dir build/debug
 ```
 
+## Releases
+
+Download stable packages and read release notes on the
+[GitHub releases page](https://github.com/arm/ASTL/releases).
+
 ## Preparing Release Metadata
 
-Stable releases use two manually initiated phases:
-
-1. Dispatch the **Prepare Release** workflow from `main` for a major or minor
-   release, or from an existing `release/` branch for a patch. Select the desired
-   bump type and, if needed, the intended release date. The workflow validates the
-   candidate, promotes `Unreleased`, updates `VERSION.md`, and opens a
-   release-preparation PR containing both files.
-2. Review and merge that PR through the normal CI and branch-protection process.
-   The merge creates `releases/VERSION` and the immutable
-   `release-candidate/VERSION-rc.1` tag at the reviewed merge commit.
-3. Test that candidate with **Test Release Candidate**. If it needs a fix, merge
-   the fix into `releases/VERSION` (and separately backport it to `main`), then
-   dispatch **Prepare Release Candidate** with the next candidate number.
-4. Dispatch **Release** with release type `STABLE` and the selected numbered
-   candidate tag as `source_ref`. It verifies, builds, and publishes that exact
-   candidate. A retry reuses an existing complete release instead of replacing
-   its artifacts.
-5. After the private stable release is complete, automation creates the matching
-   `Go/vVERSION` module tag and publishes the release to
-   [Arm/ASTL](https://github.com/Arm/ASTL/releases). The public publisher mirrors
-   `release/VERSION`, `Go/vVERSION`, and `releases/VERSION`, then copies the
-   release name, notes, and assets. A nightly run retries publication of any
-   completed stable release that was missed.
-
-### Normal Stable Release Flow
-
-Start with **Prepare Release** when the team decides to cut a normal major or
-minor release from `main`. The diagram distinguishes actions taken by a release
-manager or reviewer from work performed by GitHub Actions and the release
-scripts.
-
-![Normal stable release workflow](doc/design/release_process.svg)
-
-[View the Mermaid source](doc/design/release_process.mmd).
-
-Numbered candidate tags decouple release stabilization from later changes to
-`main` and let public and confidential testing use the same reviewed ASTL
-commit. Stable publication rejects branches and raw SHAs; use an immutable
-`release-candidate/VERSION-rc.N` tag. After final publication, use a new patch
-version rather than moving an existing candidate or stable tag.
-Configure a repository tag ruleset for `release-candidate/*` so only the release
-automation identity can create tags and no identity can update or delete them.
-Candidate tags are mirrored to `Arm/ASTL` as immutable Git refs so public clients
-can test a precisely identified source revision, but candidates do not create
-public GitHub Release records or publish release assets.
-
-The stabilization branch is created before candidate testing. After final
-publication, the workflow reads the current version from `origin/main` and
-opens a `VERSION.post` PR only when it advances that version. A release of
-`0.2.0` therefore cannot change `0.3.0` or `0.3.0.post` back to `0.2.0.post`.
-The post-release PR always starts from current `origin/main`, so release-only
-fixes are not accidentally included.
-
-The reusable **Resolve Release Source** workflow validates candidate and stable
-references without publishing. ASTL-confidential uses it to test candidates and
-to verify that a complete public stable release already exists.
-
-For a release prepared before numbered candidates were introduced, dispatch
-**Prepare Release Candidate** with candidate number `1` and the existing
-prepared tag or commit as `source_ref`. This bootstraps `releases/VERSION` and
-`release-candidate/VERSION-rc.1` without moving the legacy tag.
-
-Scheduled and manually selected `ROLLING` releases remain single-phase: they
-package the selected source revision without promoting the changelog. Rolling
-tags, branches, GitHub Releases, and artifacts remain private and are not
-published to `Arm/ASTL`.
-
-To perform the first-phase metadata edit locally, run:
+To prepare the changelog and version for a local release, run:
 
 ```bash
 scripts/release/prepare_release.py --release-version 1.2.0
@@ -1612,41 +1665,40 @@ public library release package with:
 scripts/release/stage_release.sh
 ```
 
-No source overlay or private repository is required. Use `--version` to stage a
-different version without editing `VERSION.md`, `--output-dir` to choose the
-artifact directory, or repeated `--variant` options to request other variants
+Use `--version` to stage a different version without editing `VERSION.md`,
+`--output-dir` to choose the artifact directory, or repeated `--variant` options to request other variants
 when their corresponding tools are present. Run `--help` for the full interface.
 Unlike `prepare_release.py`, `stage_release.sh` does not modify `CHANGELOG.md` or
 `VERSION.md`; it builds, tests, and packages the source tree as it currently exists.
 
-## Design Diagrams
-
-Mermaid source (`.mmd`) and rendered SVG documentation diagrams live in `doc/design/`.
-See `doc/design/DIAGRAMS.md` for:
-
-- Diagram inventory and purposes
-- Regeneration instructions (`node scripts/render_mermaid.js --all`)
-- Optional vertical height compression for tall sequence diagrams via `SEQ_MAX_HEIGHT` environment variable
-- CI drift detection snippet
-
-Please regenerate diagrams whenever you change a `.mmd` file.
-
 ### Embedded release profiles
 
 Release staging prepares filtered config inputs before compiling the library.
-The public profile retains the public artifact names. Named confidential/customer
-profiles use separate build directories under `build/release-profiles/<profile>/`
-and include the profile in artifact names. Apply the approved ossmosis profile
-first; the confidential release wrapper resolves this selection.
+The default `public` profile retains the public artifact names. Custom profiles
+use separate build directories under `build/release-profiles/<profile>/` and
+include the profile in artifact names.
 
 `scripts/release/stage_release.sh --release-profile NAME` records the prepared
-profile. It does not itself select a product overlay. Config replacements are
-applied to build inputs, not to files after compilation. `--skip-build` requires
+profile. Prepare its configuration input tree before staging. Config replacements
+are applied to build inputs, not to files after compilation. `--skip-build` requires
 matching embedded-input and binary-checksum manifests from a previous staging
 build. Switching profiles cannot reuse another profile's binary.
 
 Embedded library packages contain no `lib/config/` tree or config ZIP. The library
 binary holds the runtime resources; SDK packages still include headers, licenses,
 documentation and a resource manifest. Runtime environment overrides remain
-available for customer additions. ATX's own CLI configuration is separate from
-ASTL's embedded library configuration.
+available for customer additions.
+
+## Design Diagrams
+
+Mermaid source (`.mmd`) and rendered SVG documentation diagrams live in `doc/design/`.
+See the [diagram documentation](doc/design/DIAGRAMS.md) for:
+
+- Diagram inventory and purposes
+- Regeneration instructions (`node scripts/render_mermaid.js --all`)
+- Optional vertical height compression for tall sequence diagrams via `SEQ_MAX_HEIGHT` environment variable
+- CI drift detection snippet
+
+Please regenerate diagrams whenever you change a `.mmd` file. Store diagram images
+in the repository and use relative image paths so they are available in clones
+and mirrors.

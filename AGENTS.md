@@ -41,7 +41,7 @@ Prefer targeted runs while iterating, then finish with `just test debug`. Native
 
 ## Commit & Pull Request Guidelines
 
-Recent history uses concise, imperative subjects with issue tags, for example `[ASTL-314] Add read-immediate subcommand to atx` or `[NO-JIRA] Add pre-commit hook to auto-format code`. Follow that format and keep unrelated changes out of the same commit.
+Recent history uses concise, imperative subjects with issue tags, for example `[ASTL-314] Add read-immediate collection support` or `[NO-JIRA] Add pre-commit hook to auto-format code`. Follow that format and keep unrelated changes out of the same commit.
 
 When opening a PR, use `.github/PULL_REQUEST_TEMPLATE.md` and complete all applicable sections. In particular, select exactly one option under **Public API declaration** so the API and user-flow impact is explicit. Describe the behavior change and list validation performed (`ctest`, `just python-pytest`, `just go-test debug`, etc.). Include logs or screenshots only when they clarify docs, tooling, or user-facing output.
 

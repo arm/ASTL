@@ -25,10 +25,8 @@ different permissions. See [Android development](../../../doc/android.md).
 ## Linux system telemetry
 
 These additions are exposed through ASTL's existing metric and raw-counter
-discovery and collection APIs. They add no ATX aliases, commands, or options.
-ATX consumes ASTL discovery, so the new canonical metric names are naturally
-selectable there and appear in expert help. ATX fixture and gold-file updates
-maintain compatibility with the expanded inventory.
+discovery and collection APIs. Applications can discover and select the canonical
+metric names without additional API calls.
 
 Default discovery now includes the following metrics. Counters are unsigned
 cumulative values; names ending in `_per_second` are floating-point interval

@@ -620,7 +620,7 @@ class Logger {
             }
           }
 
-          // Formatted loggers append so multiple logger instances (for example ATX + ASTL) can share one file.
+          // Formatted loggers append so the application and library can share one file.
           // Unformatted writer-style loggers truncate to keep generated output files fresh per run.
           auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(_log_name, !_default_formatting_enabled);
           file_sink->set_level(spdlog_level);

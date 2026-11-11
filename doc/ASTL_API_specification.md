@@ -68,7 +68,7 @@ Current stack:
    - Python wrapper
    - Go wrapper
 5. Tools built on top
-   - For example, `atx`
+   - Telemetry collection and visualization applications
 
 ## API Layers
 

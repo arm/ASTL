@@ -52,7 +52,7 @@ Use a **clean internal canonical repo** for day-to-day development, and mirror t
 These files include references to all UUIds and product codenames in the SCMI config directory and metrics.
 We need to restructure this so the lookup tables are split and we can exclude whole product directories without modifying individual lines of files.
 
-### Make CMakeLists optionally build ATX and turbostat-arm only if present
+### Make CMakeLists build optional companion tools only when present
 
 These projects are going to be NDA at first, so we can't have CMake fall on its face if they're not present
 

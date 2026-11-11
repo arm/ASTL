@@ -66,9 +66,8 @@ Memory utilization measures physical memory, not commit charge or page-file
 utilization. Windows available memory includes standby, free, and zero lists.
 It is a useful counterpart to Linux MemAvailable, but the definitions differ.
 
-The ATX and AMX companion configurations map `avg-cpu-utilization`, `cpuN-utilization`,
-`cpu-utilization`, and `avg-mem-utilization` to these metrics. That configuration
-must accompany the library update to use the same aliases on Windows.
+If an application maintains its own metric aliases, update those mappings to
+reference the canonical metric names above.
 
 ## Validation
 

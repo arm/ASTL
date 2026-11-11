@@ -10,7 +10,7 @@
  *  - Similar to Perfetto output: only produced at StopCollection when
  *    ASTL_OUTPUT_INTERVAL_CSV env var is set to a path. Lifetime is a single write.
  *
- * Format (ATX-compatible interval sections):
+ * Format (per-metric interval sections):
  *  For each metric/target pair encountered:
  *    <metric_name> on <target_name>
  *
@@ -36,7 +36,7 @@ namespace astl {
 
 /** @class IntervalCsvOutput
  *  @ingroup output_writers
- *  @brief Emits processed interval samples in an ATX-compatible CSV format.
+ *  @brief Emits processed interval samples in a per-metric CSV format.
  *  @details Usage is deferred: file opens on construction but rows are only
  *           written once via WriteProcessedSamples (called from orchestrator
  *           stop path when ASTL_OUTPUT_INTERVAL_CSV is set). Each metric-target
