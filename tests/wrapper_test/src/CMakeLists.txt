@@ -13,6 +13,7 @@ endif()
 add_executable(
   wrapper_test
   wrapper_test.cpp
+  empty_result_api_tests.cpp
   numa_api_tests.cpp
   metric_groups_tests.cpp
   metric_state_discovery_tests.cpp
@@ -26,6 +27,7 @@ if(MSVC)
   foreach(
     wrapper_src IN
     ITEMS wrapper_test.cpp
+          empty_result_api_tests.cpp
           metric_groups_tests.cpp
           metric_state_discovery_tests.cpp
           summary_api_tests.cpp

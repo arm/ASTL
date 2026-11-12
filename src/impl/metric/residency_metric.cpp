@@ -147,23 +147,38 @@ auto ResidencyMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) 
   // If this is the first sample for this state, store it and return
   if (_previous_samples[state_name] == std::nullopt) {
     _previous_samples[state_name] = raw_sample;
-    return ASTL_STATUS_SUCCESS;
+    return ASTL_STATUS_NO_NEW_SAMPLE;
   }
 
+  auto interval = ProcessStateInterval(raw_sample, *state_config);
+  if (!interval) {
+    return interval.error();
+  }
+  const auto status = FlushCompletedInterval(interval.value(), raw_sample.timestamp);
+  if (status == ASTL_STATUS_SUCCESS || status == ASTL_STATUS_NO_NEW_SAMPLE) {
+    _previous_samples[state_name] = raw_sample;
+  }
+  return status;
+}
+
+auto ResidencyMetric::ProcessStateInterval(const NormalizedSampledData&            raw_sample,
+                                           const ResidencyMetricConfig::StateInfo& state_config)
+    -> std::expected<std::chrono::microseconds, astl_status_code> {
+  const auto& state_name = state_config.state_name;
   // Calculate delta between current and previous sample for this state
   auto delta_result = CalculateDelta(raw_sample.value, _previous_samples[state_name]->value);
   if (!delta_result.has_value()) {
     ASTL_LOG_ERROR("ResidencyMetric: failed to calculate delta for state {} in metric {}: {}", state_name,
                    _configuration->Name(), astlStatusString(delta_result.error()));
-    return delta_result.error();
+    return std::unexpected(delta_result.error());
   }
 
   // Convert delta ticks to time in microseconds
-  auto time_result = ConvertTicksToMicroseconds(delta_result.value(), *state_config);
+  auto time_result = ConvertTicksToMicroseconds(delta_result.value(), state_config);
   if (!time_result.has_value()) {
     ASTL_LOG_ERROR("ResidencyMetric: failed to convert ticks to microseconds for state {} in metric {}: {}", state_name,
                    _configuration->Name(), astlStatusString(time_result.error()));
-    return time_result.error();
+    return std::unexpected(time_result.error());
   }
   // Collect processed sample (do not sink yet; enforce ordering across states later)
   // Use insert_or_assign to avoid default-constructing ProcessedSampledData (no default ctor)
@@ -180,19 +195,25 @@ auto ResidencyMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) 
   if (!percentage_result.has_value()) {
     ASTL_LOG_ERROR("ResidencyMetric: failed to calculate percentage for state {} in metric {}: {}", state_name,
                    _configuration->Name(), astlStatusString(percentage_result.error()));
-    return percentage_result.error();
+    return std::unexpected(percentage_result.error());
   }
 
   // Update state residency statistics
   auto status = UpdateStateResidencyStatistics(state_name, time_result.value(), percentage_result.value());
   if (status != ASTL_STATUS_SUCCESS) {
-    return status;
+    return std::unexpected(status);
   }
 
+  return time_interval;
+}
+
+auto ResidencyMetric::FlushCompletedInterval(std::chrono::microseconds time_interval,
+                                             ProcessedSampleTimestamp  timestamp) -> astl_status_code {
+  bool emitted_samples = false;
   // Calculate inferred state residency if configured and all states have been processed for this timestamp
   if (_residency_configuration->InferredState().has_value() &&
       (_state_configs.size() == _processed_states_per_timestamp.size())) {
-    auto inferred_status = CalculateInferredStateResidencyForInterval(time_interval, raw_sample.timestamp);
+    auto inferred_status = CalculateInferredStateResidencyForInterval(time_interval, timestamp);
     if (inferred_status != ASTL_STATUS_SUCCESS) {
       ASTL_LOG_ERROR("ResidencyMetric: failed to calculate inferred state residency for metric {}: {}",
                      _configuration->Name(), astlStatusString(inferred_status));
@@ -207,16 +228,14 @@ auto ResidencyMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) 
       return sink_status;
     }
 
+    emitted_samples = true;
     // Clear the tracking set since we've processed all states for this timestamp
     _processed_states_per_timestamp.clear();
     _pending_processed_samples.clear();
     _pending_inferred_sample.reset();
   }
 
-  // Store current sample as previous for next iteration for this state
-  _previous_samples[state_name] = raw_sample;
-
-  return ASTL_STATUS_SUCCESS;
+  return emitted_samples ? ASTL_STATUS_SUCCESS : ASTL_STATUS_NO_NEW_SAMPLE;
 }
 
 auto ResidencyMetric::Summarize() -> astl_status_code {

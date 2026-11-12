@@ -69,7 +69,8 @@ TEST_CASE("NUMA public metric discovery and percentage collection", "[wrapper][n
   ASTL_INIT_STRUCT(astl_start_collection_on_target_params_t, start, .flags = 0, .target_handle = target.handle);
   REQUIRE(astlStartCollectionOnTarget(&start) == ASTL_STATUS_SUCCESS);
   ASTL_INIT_STRUCT(astl_read_immediate_on_target_params_t, read, .flags = 0, .target_handle = target.handle);
-  REQUIRE(astlReadImmediateOnTarget(&read) == ASTL_STATUS_SUCCESS);
+  // NUMA retains its baseline inside the collector and emits no raw sample on this read.
+  REQUIRE(astlReadImmediateOnTarget(&read) == ASTL_STATUS_NO_DATA_COLLECTED);
   write(175, 125);
   REQUIRE(astlReadImmediateOnTarget(&read) == ASTL_STATUS_SUCCESS);
   ASTL_INIT_STRUCT(astl_stop_collection_on_target_params_t, stop, .flags = 0, .target_handle = target.handle);

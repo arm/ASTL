@@ -60,7 +60,9 @@ struct IMetric {
    * The Metric Manager ensures that the raw samples are monotonically increasing in time.
    *
    * @param sample The normalized sample (CLOCK_MONOTONIC_RAW timestamp, nanosecond resolution).
-   * @return astl_status_code
+   * @return SUCCESS on normal processing, NO_NEW_SAMPLE when the accepted sample
+   * requires more input before output is available, or an error. The manager records
+   * NO_NEW_SAMPLE per metric and continues processing the remaining queue.
    */
   virtual auto ReceiveRawSample(const NormalizedSampledData &raw_sample) -> astl_status_code = 0;
 

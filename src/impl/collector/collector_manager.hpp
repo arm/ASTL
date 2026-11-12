@@ -49,14 +49,14 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
   /**
    * @brief Register a sink for raw sample fan-out.
    *
-   * Must not be called from inside a SinkRawSamples callback.
+   * Must not be called from inside SinkRawSamples or SinkRawSampleOutcome callbacks.
    */
   [[nodiscard]] auto RegisterRawSampleSink(IRawSampleSink* sink) -> astl_status_code override;
 
   /**
    * @brief Unregister a previously registered raw sample sink.
    *
-   * Must not be called from inside a SinkRawSamples callback.
+   * Must not be called from inside SinkRawSamples or SinkRawSampleOutcome callbacks.
    */
   [[nodiscard]] auto UnregisterRawSampleSink(IRawSampleSink* sink) -> astl_status_code override;
 
@@ -88,6 +88,9 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
   [[nodiscard]] auto IsAnyTargetBeingCollected() const -> bool override;
 
   // IRawSampleSink implementation
+  auto SinkRawSampleOutcome(const ITarget* target, OperationId operation_id, astl::EmptyResultReason reason)
+      -> void override;
+
   [[nodiscard]] auto SinkRawSamples(const ITarget* target, std::span<RawSampledData> samples)
       -> astl_status_code override;
 

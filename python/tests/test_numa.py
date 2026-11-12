@@ -22,6 +22,15 @@ def test_numa_discovery_and_percentage_collection(tmp_path):
 import os
 from pathlib import Path
 import astl
+
+def read_baseline(target):
+    try:
+        astl.read_immediate(target)
+    except astl.ASTLError as error:
+        assert error.code == astl.Status.NO_DATA_COLLECTED, error
+    else:
+        raise AssertionError("NUMA baseline must report no raw samples")
+
 root = Path(os.environ["ASTL_NUMA_ROOT"])
 def write(node, local, remote):
     path = root / node
@@ -48,7 +57,7 @@ params = astl.CollectionParameters(sampling_interval=10, mode=astl.CollectionMod
 counter = next(counter for counter in counters if counter.name == "Linux_numa_local_percent")
 astl.configure_counters_on_target(target, params, [counter])
 astl.start_collection(target)
-astl.read_immediate(target)
+read_baseline(target)
 write("node0", 175, 125)
 astl.read_immediate(target)
 astl.stop_collection(target)
@@ -57,7 +66,7 @@ assert len(samples) == 1 and samples[0][1] == 7500, samples
 metric = next(metric for metric in astl.get_metrics(target) if metric.name == "Linux_numa_local_percent")
 astl.configure_metrics_on_target(target, params, [metric])
 astl.start_collection(target)
-astl.read_immediate(target)
+read_baseline(target)
 write("node0", 250, 150)
 astl.read_immediate(target)
 astl.stop_collection(target)

@@ -10,6 +10,45 @@
 #include "astl/astl.h"
 #include "collection_configuration.hpp"
 namespace astl {
+namespace {
+// Collector callbacks are synchronous. Thread-local scope excludes periodic reads on other threads.
+struct ImmediateReadOutcome {
+  static thread_local ImmediateReadOutcome* current_;
+  const CollectorManager*                   manager;
+  const ITarget*                            target;
+  bool                                      has_samples = false;
+  EmptyResultReason                         reason      = EmptyResultReason::UNKNOWN;
+  ImmediateReadOutcome*                     previous    = current_;
+
+  ImmediateReadOutcome(const CollectorManager* owner, const ITarget* read_target)
+      : manager(owner), target(read_target) {
+    current_ = this;
+  }
+  ImmediateReadOutcome(const ImmediateReadOutcome&)                    = delete;
+  auto operator=(const ImmediateReadOutcome&) -> ImmediateReadOutcome& = delete;
+  ImmediateReadOutcome(ImmediateReadOutcome&&)                         = delete;
+  auto operator=(ImmediateReadOutcome&&) -> ImmediateReadOutcome&      = delete;
+  ~ImmediateReadOutcome() { current_ = previous; }
+
+  static auto For(const CollectorManager* owner, const ITarget* read_target) -> ImmediateReadOutcome* {
+    return current_ && current_->manager == owner && current_->target == read_target ? current_ : nullptr;
+  }
+  auto Status() const -> astl_status_code {
+    if (has_samples) {
+      return ASTL_STATUS_SUCCESS;
+    }
+    switch (reason) {
+      case EmptyResultReason::SAMPLE_DROPPED:
+        return ASTL_STATUS_SAMPLE_DROPPED;
+      case EmptyResultReason::NO_NEW_SAMPLE:
+        return ASTL_STATUS_NO_NEW_SAMPLE;
+      default:
+        return ASTL_STATUS_NO_DATA_COLLECTED;
+    }
+  }
+};
+thread_local ImmediateReadOutcome* ImmediateReadOutcome::current_ = nullptr;
+}  // namespace
 
 CollectorManager::CollectorManager(
     std::unordered_map<const ITarget*, std::vector<std::unique_ptr<ICollector>>>&& collectors)
@@ -184,7 +223,9 @@ auto CollectorManager::ReadImmediateOnTarget(const ITarget* target) -> astl_stat
       return ASTL_STATUS_INVALID_TARGET_HANDLE;
     }
   }
-  return selected_collector->ReadImmediate();
+  ImmediateReadOutcome outcome{this, target};
+  const auto           status = selected_collector->ReadImmediate();
+  return status == ASTL_STATUS_SUCCESS ? outcome.Status() : status;
 }
 
 auto CollectorManager::StopOnTarget(const ITarget* target) -> astl_status_code {
@@ -213,6 +254,20 @@ auto CollectorManager::IsAnyTargetBeingCollected() const -> bool {
 ////////////////////////////////////////////////////////////////////////////////
 // IRawSampleSink implementation
 ////////////////////////////////////////////////////////////////////////////////
+auto CollectorManager::SinkRawSampleOutcome(const ITarget* target, OperationId operation_id,
+                                            astl::EmptyResultReason reason) -> void {
+  std::lock_guard<std::mutex> lock(_mutex);
+  if (auto* outcome = ImmediateReadOutcome::For(this, target)) {
+    if (reason == EmptyResultReason::SAMPLE_DROPPED ||
+        (reason == EmptyResultReason::NO_NEW_SAMPLE && outcome->reason == EmptyResultReason::UNKNOWN)) {
+      outcome->reason = reason;
+    }
+  }
+  for (auto* sink : _registered_raw_sample_sinks) {
+    sink->SinkRawSampleOutcome(target, operation_id, reason);
+  }
+}
+
 auto CollectorManager::SinkRawSamples(const ITarget* target, std::span<RawSampledData> raw_samples)
     -> astl_status_code {
   // NOTE:
@@ -220,7 +275,11 @@ auto CollectorManager::SinkRawSamples(const ITarget* target, std::span<RawSample
   // RegisterRawSampleSink()/UnregisterRawSampleSink() must NOT be called from
   // within SinkRawSamples callbacks, directly or indirectly, or this can deadlock.
   std::lock_guard<std::mutex> lock(_mutex);
-  astl_status_code            result = ASTL_STATUS_SUCCESS;
+  if (auto* outcome = ImmediateReadOutcome::For(this, target)) {
+    outcome->has_samples |=
+        std::ranges::any_of(raw_samples, [](const auto& sample) { return !sample.IsPauseResumeMarker(); });
+  }
+  astl_status_code result = ASTL_STATUS_SUCCESS;
   for (auto* sink : _registered_raw_sample_sinks) {
     auto sink_result = sink->SinkRawSamples(target, raw_samples);
     // will return the most recent failure, but continues trying to send samples to all sinks

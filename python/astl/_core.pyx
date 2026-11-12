@@ -190,6 +190,8 @@ class Status:
     INVALID_STATE_TRANSITION = ASTL_STATUS_INVALID_STATE_TRANSITION
     PAUSE_UNSUPPORTED = ASTL_STATUS_PAUSE_UNSUPPORTED
     RESUME_UNSUPPORTED = ASTL_STATUS_RESUME_UNSUPPORTED
+    NO_NEW_SAMPLE = ASTL_STATUS_NO_NEW_SAMPLE
+    SAMPLE_DROPPED = ASTL_STATUS_SAMPLE_DROPPED
     INTERNAL_ERROR = ASTL_STATUS_INTERNAL_ERROR
 
 from .exceptions import map_status_to_exception
@@ -980,6 +982,7 @@ cpdef list get_counter_samples(Target target, Counter counter):
         free(arr)
 
 cpdef list get_metric_samples(Target target, Metric metric):
+    """Retrieve samples; empty outcomes raise ASTLError with the native status code."""
     cdef uint32_t count = 0
     cdef astl_get_metric_sample_count_on_target_params_t count_params
     cdef astl_get_metric_samples_on_target_params_t params
@@ -993,7 +996,7 @@ cpdef list get_metric_samples(Target target, Metric metric):
     count_params.end_ts = 0
     _check(astlGetMetricSampleCountOnTarget(&count_params))
     if count == 0:
-        return []
+        count = 1  # Always retrieve: a zero count must not hide an empty-result status.
     cdef astl_sample_t* arr = <astl_sample_t*>calloc(count, sizeof(astl_sample_t))
     if arr == NULL:
         raise MemoryError()

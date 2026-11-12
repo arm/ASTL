@@ -2237,3 +2237,106 @@ TEST_CASE("MetricManager::ProcessRawSamples fails with missing correlation for o
   REQUIRE(metric_ptr->received[0].get<uint64_t>() == 1);
   REQUIRE(metric_ptr->received[0].timestamp.time_since_epoch().count() == 100000);
 }
+
+TEST_CASE("Metric input outcomes are target-local and reset with operation state", "[MetricManager][empty_reason]") {
+  MetricManager manager(MakeCaps(CollectorType::SCMI));
+  MockTarget    target0;
+  MockTarget    target1;
+  const auto    register_metric = [&](const MockTarget* target) {
+    auto  owner  = std::make_unique<TestMetric>();
+    auto* metric = owner.get();
+    astl::MetricManagerTestAccessor::InjectMetric(
+        manager, std::move(owner),
+        std::make_unique<MetricConfig>("m", "desc", ASTL_UNITS_NONE, ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                          ASTL_METRIC_VALUE, CollectorType::SCMI, astl::NullOperationBuilder{}),
+        target);
+    astl::MetricManagerTestAccessor::InjectOperation(manager, target, 7, metric);
+    return metric;
+  };
+  auto* metric0 = register_metric(&target0);
+  auto* metric1 = register_metric(&target1);
+  manager.RecordRawSampleOutcome(&target0, 7, astl::EmptyResultReason::NO_NEW_SAMPLE);
+  CHECK(manager.GetEmptyResultReason(metric0) == astl::EmptyResultReason::NO_NEW_SAMPLE);
+  CHECK(manager.GetEmptyResultReason(metric1) == astl::EmptyResultReason::UNKNOWN);
+  manager.RecordRawSampleOutcome(&target1, 7, astl::EmptyResultReason::SAMPLE_DROPPED);
+  manager.RecordRawSampleOutcome(&target0, 99, astl::EmptyResultReason::NO_NEW_SAMPLE);
+  CHECK(manager.GetEmptyResultReason(metric0) == astl::EmptyResultReason::NO_NEW_SAMPLE);
+  REQUIRE(manager.ResetMetricsOnTarget(&target0) == ASTL_STATUS_SUCCESS);
+  CHECK(manager.GetEmptyResultReason(metric0) == astl::EmptyResultReason::UNKNOWN);
+  CHECK(manager.GetEmptyResultReason(metric1) == astl::EmptyResultReason::SAMPLE_DROPPED);
+  const std::array<astl::OperationId, 1> active{7};
+  REQUIRE(manager.ClearStaleOperationStateForTarget(&target1, active) == ASTL_STATUS_SUCCESS);
+  CHECK(manager.GetEmptyResultReason(metric1) == astl::EmptyResultReason::UNKNOWN);
+  manager.RecordRawSampleOutcome(&target1, 7, astl::EmptyResultReason::NO_NEW_SAMPLE);
+  manager.ClearCollectionOperationState();
+  CHECK(manager.GetEmptyResultReason(metric1) == astl::EmptyResultReason::UNKNOWN);
+  manager.RecordRawSampleOutcome(&target1, 7, astl::EmptyResultReason::NO_NEW_SAMPLE);
+  CHECK(manager.GetEmptyResultReason(metric1) == astl::EmptyResultReason::UNKNOWN);  // stale route no longer exists
+}
+
+TEST_CASE("MetricManager remembers waiting outcomes without stopping dispatch", "[MetricManager][empty_reason]") {
+  MetricManager manager{MakeCaps(CollectorType::SCMI)};
+  MockTarget    target;
+  std::string   target_name{"waiting-target"};
+  ALLOW_CALL(target, Name()).RETURN(target_name);
+  std::array<TestMetric*, 2> metrics{};
+  for (size_t index = 0; index < metrics.size(); ++index) {
+    auto owned        = std::make_unique<TestMetric>();
+    owned->lastStatus = ASTL_STATUS_NO_NEW_SAMPLE;
+    metrics.at(index) = owned.get();
+    astl::MetricManagerTestAccessor::InjectMetric(
+        manager, std::move(owned),
+        std::make_unique<MetricConfig>("waiting" + std::to_string(index), "test", ASTL_UNITS_NONE, ASTL_VALUE_UINT64,
+                                       ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE, CollectorType::SCMI,
+                                       astl::NullOperationBuilder{}),
+        &target);
+    astl::MetricManagerTestAccessor::InjectOperation(manager, &target, static_cast<astl::OperationId>(10 + index),
+                                                     metrics.at(index));
+  }
+  astl::ClockCorrelationMap clocks;
+  for (astl::OperationId id : std::array<astl::OperationId, 2>{10, 11}) {
+    clocks[id] = astl::OperationClockCorrelation{
+        astl::ProcessedSampleTimestamp{},
+        0, astl::NativeToMonotonicRawRatio{1, 1}
+    };
+  }
+  manager.SetClockCorrelations(clocks);
+  astl::RawSamplesMap inputs;
+  inputs[&target] = {astl::RawSampledData(10, astl::AstlValue{uint64_t{1}}, 100),
+                     astl::RawSampledData(11, astl::AstlValue{uint64_t{1}}, 100),
+                     astl::RawSampledData(10, astl::AstlValue{uint64_t{2}}, 200),
+                     astl::RawSampledData(11, astl::AstlValue{uint64_t{2}}, 200)};
+  REQUIRE(manager.ProcessRawSamples(inputs) == ASTL_STATUS_SUCCESS);
+  for (auto* metric : metrics) {
+    CHECK(metric->received.size() == 2);
+    CHECK(manager.GetEmptyResultReason(metric) == astl::EmptyResultReason::NO_NEW_SAMPLE);
+  }
+  // Accepted warm-up inputs advance timestamps; an older subsequent input must be dropped.
+  inputs[&target] = {astl::RawSampledData(10, astl::AstlValue{uint64_t{3}}, 150)};
+  REQUIRE(manager.ProcessRawSamples(inputs) == ASTL_STATUS_SUCCESS);
+  CHECK(metrics[0]->received.size() == 2);
+  CHECK(manager.GetEmptyResultReason(metrics[0]) == astl::EmptyResultReason::SAMPLE_DROPPED);
+
+  // The targeted replay path uses the same dispatcher and must also keep processing.
+  inputs[&target] = {astl::RawSampledData(10, astl::AstlValue{uint64_t{4}}, 300),
+                     astl::RawSampledData(10, astl::AstlValue{uint64_t{5}}, 400)};
+  REQUIRE(manager.ProcessRawSamplesForMetric(inputs, metrics[0]) == ASTL_STATUS_SUCCESS);
+  CHECK(metrics[0]->received.size() == 4);
+  CHECK(manager.GetEmptyResultReason(metrics[0]) == astl::EmptyResultReason::NO_NEW_SAMPLE);
+  CHECK(metrics[1]->received.size() == 2);
+
+  SECTION("Success clears waiting") {
+    metrics[0]->lastStatus = ASTL_STATUS_SUCCESS;
+    inputs[&target]        = {astl::RawSampledData(10, astl::AstlValue{uint64_t{6}}, 500)};
+    REQUIRE(manager.ProcessRawSamples(inputs) == ASTL_STATUS_SUCCESS);
+    CHECK(manager.GetEmptyResultReason(metrics[0]) == astl::EmptyResultReason::UNKNOWN);
+  }
+  SECTION("Real errors propagate and clear stale outcomes") {
+    metrics[0]->lastStatus = ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE;
+    inputs[&target]        = {astl::RawSampledData(10, astl::AstlValue{uint64_t{6}}, 500),
+                              astl::RawSampledData(10, astl::AstlValue{uint64_t{7}}, 600)};
+    REQUIRE(manager.ProcessRawSamples(inputs) == ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+    CHECK(metrics[0]->received.size() == 5);
+    CHECK(manager.GetEmptyResultReason(metrics[0]) == astl::EmptyResultReason::UNKNOWN);
+  }
+}

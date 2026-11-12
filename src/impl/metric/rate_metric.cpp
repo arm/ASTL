@@ -80,7 +80,7 @@ auto RateMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> as
   if (!_previous_sample.has_value()) {
     // Store the processed value for next rate calculation
     _previous_sample = NormalizedSampledData{raw_sample.operation_id, *processed_value, raw_sample.timestamp};
-    return ASTL_STATUS_SUCCESS;
+    return ASTL_STATUS_NO_NEW_SAMPLE;
   }
 
   // Calculate delta between current and previous sample (both processed)

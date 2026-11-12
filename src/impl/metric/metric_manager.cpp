@@ -170,24 +170,11 @@ auto EnqueueTargetSamples(const MetricManager::TargetOperationToMetricMap& targe
   return ASTL_STATUS_SUCCESS;
 }
 
-auto IsTimestampRegression(std::mutex&                                                   mutex,
-                           const std::unordered_map<IMetric*, ProcessedSampleTimestamp>& last_processed_timestamps,
-                           IMetric* metric, const NormalizedSampledData& sample) -> bool {
-  std::lock_guard<std::mutex> lock(mutex);
-  const auto                  last_it = last_processed_timestamps.find(metric);
-  if (last_it != last_processed_timestamps.end() && sample.timestamp < last_it->second) {
-    ASTL_LOG_WARNING("ProcessRawSamples: dropping out-of-order sample for metric '{}': {} < {}", metric->Name(),
-                     sample.timestamp.time_since_epoch().count(), last_it->second.time_since_epoch().count());
-    return true;
-  }
-  return false;
-}
-
 auto DispatchNormalizedSample(IMetric* metric, const NormalizedSampledData& sample) -> astl_status_code {
   const auto status =
       sample.IsPauseResumeMarker() ? metric->ProcessPauseSample(sample.timestamp) : metric->ReceiveRawSample(sample);
-  if (status == ASTL_STATUS_SUCCESS) {
-    return ASTL_STATUS_SUCCESS;
+  if (status == ASTL_STATUS_SUCCESS || status == ASTL_STATUS_NO_NEW_SAMPLE) {
+    return status;
   }
 
   if (sample.IsPauseResumeMarker()) {
@@ -198,36 +185,6 @@ auto DispatchNormalizedSample(IMetric* metric, const NormalizedSampledData& samp
                    sample.operation_id, metric->Name(), astlStatusString(status));
   }
   return status;
-}
-
-auto RememberMetricTimestamp(std::mutex&                                             mutex,
-                             std::unordered_map<IMetric*, ProcessedSampleTimestamp>& last_processed_timestamps,
-                             IMetric* metric, ProcessedSampleTimestamp timestamp) -> void {
-  std::lock_guard<std::mutex> lock(mutex);
-  last_processed_timestamps[metric] = timestamp;
-}
-
-auto DispatchProcessingQueue(ProcessingQueue& processing_queue, std::mutex& mutex,
-                             std::unordered_map<IMetric*, ProcessedSampleTimestamp>& last_processed_timestamps)
-    -> astl_status_code {
-  std::sort(processing_queue.begin(), processing_queue.end(), [](const auto& lhs, const auto& rhs) {
-    if (lhs.first != rhs.first) {
-      return std::less<IMetric*>{}(lhs.first, rhs.first);
-    }
-    return lhs.second.timestamp < rhs.second.timestamp;
-  });
-
-  for (const auto& [metric, normalized_sample] : processing_queue) {
-    if (IsTimestampRegression(mutex, last_processed_timestamps, metric, normalized_sample)) {
-      continue;
-    }
-    const auto status = DispatchNormalizedSample(metric, normalized_sample);
-    if (status != ASTL_STATUS_SUCCESS) {
-      return status;
-    }
-    RememberMetricTimestamp(mutex, last_processed_timestamps, metric, normalized_sample.timestamp);
-  }
-  return ASTL_STATUS_SUCCESS;
 }
 
 struct TargetedReplayInput {
@@ -294,6 +251,41 @@ auto BuildTargetedReplayInput(const TargetedReplayContext& context, std::span<co
 }
 
 }  // namespace
+
+auto MetricManager::DispatchProcessingQueue(ProcessingQueue& processing_queue) -> astl_status_code {
+  std::sort(processing_queue.begin(), processing_queue.end(), [](const auto& lhs, const auto& rhs) {
+    if (lhs.first != rhs.first) {
+      return std::less<IMetric*>{}(lhs.first, rhs.first);
+    }
+    return lhs.second.timestamp < rhs.second.timestamp;
+  });
+
+  for (const auto& [metric, sample] : processing_queue) {
+    {
+      std::lock_guard<std::mutex> lock(_mutex);
+      const auto                  last = _last_processed_timestamp_by_metric.find(metric);
+      if (last != _last_processed_timestamp_by_metric.end() && sample.timestamp < last->second) {
+        ASTL_LOG_WARNING("ProcessRawSamples: dropping out-of-order sample for metric '{}': {} < {}", metric->Name(),
+                         sample.timestamp.time_since_epoch().count(), last->second.time_since_epoch().count());
+        _empty_result_reasons[metric] = EmptyResultReason::SAMPLE_DROPPED;
+        continue;
+      }
+      _empty_result_reasons.erase(metric);
+    }
+    // Dispatch without holding _mutex: emitting processed samples calls back into this manager.
+    const auto status = DispatchNormalizedSample(metric, sample);
+    if (status != ASTL_STATUS_SUCCESS && status != ASTL_STATUS_NO_NEW_SAMPLE) {
+      return status;
+    }
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (status == ASTL_STATUS_NO_NEW_SAMPLE) {
+      _empty_result_reasons[metric] = EmptyResultReason::NO_NEW_SAMPLE;
+    }
+    // Waiting still accepted this input. Remember its timestamp and continue the entire queue.
+    _last_processed_timestamp_by_metric[metric] = sample.timestamp;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
 
 /**
  * @brief Helper to look up an ICounter handle representing a counter for a specific target from a metric API handle
@@ -930,6 +922,7 @@ auto MetricManager::ClearStaleOperationStateForTarget(const ITarget*            
     if (counter_it != counter_handle->target_to_counter_map.end() && counter_it->second) {
       counter_it->second->Reset();
       _last_processed_timestamp_by_metric.erase(counter_it->second.get());
+      _empty_result_reasons.erase(counter_it->second.get());
     }
   }
 
@@ -938,6 +931,7 @@ auto MetricManager::ClearStaleOperationStateForTarget(const ITarget*            
     if (metric_it != metric_handle->target_to_metric_map.end() && metric_it->second) {
       metric_it->second->Reset();
       _last_processed_timestamp_by_metric.erase(metric_it->second.get());
+      _empty_result_reasons.erase(metric_it->second.get());
     }
   }
 
@@ -949,6 +943,7 @@ auto MetricManager::ClearCollectionOperationState() -> void {
   _target_to_operation_to_metric_map.clear();
   _clock_correlations.clear();
   _last_processed_timestamp_by_metric.clear();
+  _empty_result_reasons.clear();
 
   for (const auto& counter_handle : _counter_handles) {
     for (const auto& [target, counter] : counter_handle->target_to_counter_map) {
@@ -985,7 +980,7 @@ auto MetricManager::ProcessRawSamples(RawSamplesMap& raw_samples) -> astl_status
     }
   }
 
-  const auto dispatch_status = DispatchProcessingQueue(processing_queue, _mutex, _last_processed_timestamp_by_metric);
+  const auto dispatch_status = DispatchProcessingQueue(processing_queue);
   return dispatch_status == ASTL_STATUS_SUCCESS ? enqueue_status : dispatch_status;
 }
 
@@ -1019,7 +1014,7 @@ auto MetricManager::ProcessRawSamplesForMetric(RawSamplesMap& raw_samples, const
     }
   }
   if (status == ASTL_STATUS_SUCCESS) {
-    status = DispatchProcessingQueue(processing_queue, _mutex, _last_processed_timestamp_by_metric);
+    status = DispatchProcessingQueue(processing_queue);
   }
   return status;
 }
@@ -1036,6 +1031,7 @@ auto MetricManager::ResetMetricsOnTarget(const ITarget* target) -> astl_status_c
     if (counter_it != counter_handle->target_to_counter_map.end() && counter_it->second) {
       counter_it->second->Reset();
       _last_processed_timestamp_by_metric.erase(counter_it->second.get());
+      _empty_result_reasons.erase(counter_it->second.get());
     }
   }
 
@@ -1044,6 +1040,7 @@ auto MetricManager::ResetMetricsOnTarget(const ITarget* target) -> astl_status_c
     if (metric_it != metric_handle->target_to_metric_map.end() && metric_it->second) {
       metric_it->second->Reset();
       _last_processed_timestamp_by_metric.erase(metric_it->second.get());
+      _empty_result_reasons.erase(metric_it->second.get());
     }
   }
 
@@ -1076,6 +1073,7 @@ auto MetricManager::ResetMetricOnTarget(const ITarget* target, const IMetric* me
   auto* mutable_metric = const_cast<IMetric*>(metric);  // NOLINT(cppcoreguidelines-pro-type-const-cast)
   mutable_metric->Reset();
   _last_processed_timestamp_by_metric.erase(mutable_metric);
+  _empty_result_reasons.erase(mutable_metric);
   return ASTL_STATUS_SUCCESS;
 }
 
@@ -1152,6 +1150,34 @@ auto MetricManager::SummarizeMetrics() -> astl_status_code {
   return ASTL_STATUS_SUCCESS;
 }
 
+auto MetricManager::RecordRawSampleOutcome(const ITarget* target, OperationId operation_id,
+                                           astl::EmptyResultReason reason) -> void {
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto                  routes = _target_to_operation_to_metric_map.find(target);
+  if (routes == _target_to_operation_to_metric_map.end()) {
+    return;
+  }
+  const auto metric = routes->second.find(operation_id);
+  if (metric != routes->second.end()) {
+    if (reason == astl::EmptyResultReason::UNKNOWN) {
+      _empty_result_reasons.erase(metric->second);
+    } else {
+      _empty_result_reasons[metric->second] = reason;
+    }
+  }
+}
+
+auto MetricManager::GetEmptyResultReason(const IMetric* metric) const -> astl::EmptyResultReason {
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto                  it = _empty_result_reasons.find(metric);
+  return it == _empty_result_reasons.end() ? astl::EmptyResultReason::UNKNOWN : it->second;
+}
+
+auto MetricManager::ClearEmptyResultReason(const IMetric* metric) -> void {
+  std::lock_guard<std::mutex> lock(_mutex);
+  _empty_result_reasons.erase(metric);
+}
+
 auto MetricManager::RemoveAllMetrics() -> void {
   std::lock_guard<std::mutex> lock(_mutex);
   _metric_handles.clear();
@@ -1163,6 +1189,7 @@ auto MetricManager::RemoveAllMetrics() -> void {
   _replay_operation_to_metric_map.clear();
   _clock_correlations.clear();
   _last_processed_timestamp_by_metric.clear();
+  _empty_result_reasons.clear();
   _target_to_lifecycle_event_metric.clear();
 }
 
@@ -1300,7 +1327,10 @@ auto MetricManager::SinkProcessedSamples(const ITarget* target, const IMetric* m
   // RegisterProcessedSampleSink()/UnregisterProcessedSampleSink() must NOT be called from
   // within SinkProcessedSamples callbacks, directly or indirectly, or this can deadlock.
   std::lock_guard<std::mutex> lock(_mutex);
-  astl_status_code            result = ASTL_STATUS_SUCCESS;
+  if (!processed_samples.empty()) {
+    _empty_result_reasons.erase(metric);
+  }
+  astl_status_code result = ASTL_STATUS_SUCCESS;
   for (auto* sink : _registered_processed_sample_sinks) {
     const auto sink_result = sink->SinkProcessedSamples(target, metric, processed_samples);
     if (sink_result != ASTL_STATUS_SUCCESS) {

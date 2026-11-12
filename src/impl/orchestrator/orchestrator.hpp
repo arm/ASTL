@@ -379,6 +379,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   /**
    * @brief Implementation of the IRawSampleSink interface - Receives raw samples from CollectorManager
    */
+  auto SinkRawSampleOutcome(const ITarget *target, OperationId operation_id, astl::EmptyResultReason reason)
+      -> void override;
   auto SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) -> astl_status_code override;
 
   // std::expected cannot hold reference types directly (C++23 lib enforces this),
@@ -400,7 +402,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
                                          const ProcessedSampleBatchConsumer &consumer) const -> astl_status_code;
   auto VisitProcessedMetricSampleBatchesTwice(const IMetric *metric, const ITarget *target,
                                               const ProcessedSampleBatchConsumer &first_consumer,
-                                              const ProcessedSampleBatchConsumer &second_consumer) const
+                                              const ProcessedSampleBatchConsumer &second_consumer,
+                                              astl::EmptyResultReason            *empty_reason = nullptr) const
       -> astl_status_code;
 
   /**
@@ -436,6 +439,12 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
   auto CropSamplesOnTarget(const ITarget *target, std::span<const astl_crop_window_t> windows) -> astl_status_code;
 
  private:
+  auto VisitUncachedMetricSamplesWithReason(const IMetric *metric, const ITarget *target,
+                                            const ProcessedSampleBatchConsumer &first_consumer,
+                                            const ProcessedSampleBatchConsumer &second_consumer,
+                                            astl::EmptyResultReason            &empty_reason) const
+      -> std::optional<astl_status_code>;
+
   auto CompleteCollectionConfiguration(const ITarget *target, const astl_collection_params_t &params,
                                        std::span<const OperationId> active_operation_ids) -> astl_status_code;
   auto ClearFailedCollectionConfiguration(const ITarget *target) -> void;

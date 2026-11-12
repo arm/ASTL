@@ -71,6 +71,8 @@ const (
 	StatusInvalidStateTransition          Status = Status(C.ASTL_STATUS_INVALID_STATE_TRANSITION)
 	StatusPauseUnsupported                Status = Status(C.ASTL_STATUS_PAUSE_UNSUPPORTED)
 	StatusResumeUnsupported               Status = Status(C.ASTL_STATUS_RESUME_UNSUPPORTED)
+	StatusNoNewSample                     Status = Status(C.ASTL_STATUS_NO_NEW_SAMPLE)
+	StatusSampleDropped                   Status = Status(C.ASTL_STATUS_SAMPLE_DROPPED)
 	StatusInternalError                   Status = Status(C.ASTL_STATUS_INTERNAL_ERROR)
 )
 
@@ -794,60 +796,73 @@ func GetCounterSamples(target Target, counter Counter, filter SampleFilter) ([]S
 	return samples, nil
 }
 
+// GetMetricSamples returns empty outcomes as Error values carrying the native Status.
+// Callers may continue other metrics on StatusNoDataCollected, StatusNoNewSample,
+// or StatusSampleDropped. StatusNoNewSample suggests retrying after fresh input;
+// the other outcomes do not guarantee progress on retry. This function does not retry.
 func GetMetricSamples(target Target, metric Metric, filter SampleFilter) ([]Sample, error) {
-	count, releaseCount, err := allocUint32("GetMetricSamples")
+	return getMetricSamples(
+		func() (uint32, error) {
+			count, release, err := allocUint32("GetMetricSamples")
+			if err != nil {
+				return 0, err
+			}
+			defer release()
+			params := C.astl_get_metric_sample_count_on_target_params_t{
+				size:          C.size_t(C.sizeof_astl_get_metric_sample_count_on_target_params_t),
+				target_handle: cTargetHandle(target),
+				metric_handle: cMetricHandle(metric),
+				sample_count:  count,
+				start_ts:      C.uint64_t(filter.StartTS),
+				end_ts:        C.uint64_t(filter.EndTS),
+			}
+			err = checkStatus("astlGetMetricSampleCountOnTarget", C.astlGetMetricSampleCountOnTarget(&params))
+			return uint32(*count), err
+		},
+		func(capacity uint32) ([]Sample, error) {
+			count, release, err := allocUint32("GetMetricSamples")
+			if err != nil {
+				return nil, err
+			}
+			defer release()
+			*count = C.uint32_t(capacity)
+			ptr := (*C.astl_sample_t)(C.calloc(C.size_t(capacity), C.size_t(C.sizeof_astl_sample_t)))
+			if ptr == nil {
+				return nil, Error{Op: "GetMetricSamples", Status: StatusOutOfMemory}
+			}
+			defer C.free(unsafe.Pointer(ptr))
+			params := C.astl_get_metric_samples_on_target_params_t{
+				size:          C.size_t(C.sizeof_astl_get_metric_samples_on_target_params_t),
+				target_handle: cTargetHandle(target),
+				metric_handle: cMetricHandle(metric),
+				samples:       ptr,
+				sample_count:  count,
+				start_ts:      C.uint64_t(filter.StartTS),
+				end_ts:        C.uint64_t(filter.EndTS),
+			}
+			if err := checkStatus("astlGetMetricSamplesOnTarget", C.astlGetMetricSamplesOnTarget(&params)); err != nil {
+				return nil, err
+			}
+			samples := make([]Sample, 0, int(*count))
+			for _, item := range unsafe.Slice(ptr, int(*count)) {
+				samples = append(samples, Sample{Timestamp: uint64(item.timestamp), Value: decodeValue(item.value, metric.ValueType)})
+			}
+			return samples, nil
+		},
+	)
+}
+
+// Keep count/get sequencing shared with hardware-independent tests. Native retrieval
+// still runs when the count is zero, and its result is authoritative if data arrives meanwhile.
+func getMetricSamples(countSamples func() (uint32, error), readSamples func(uint32) ([]Sample, error)) ([]Sample, error) {
+	count, err := countSamples()
 	if err != nil {
 		return nil, err
 	}
-	defer releaseCount()
-
-	countParams := C.astl_get_metric_sample_count_on_target_params_t{
-		size:          C.size_t(C.sizeof_astl_get_metric_sample_count_on_target_params_t),
-		flags:         0,
-		target_handle: cTargetHandle(target),
-		metric_handle: cMetricHandle(metric),
-		sample_count:  count,
-		start_ts:      C.uint64_t(filter.StartTS),
-		end_ts:        C.uint64_t(filter.EndTS),
+	if count == 0 {
+		count = 1
 	}
-
-	if err := checkStatus("astlGetMetricSampleCountOnTarget", C.astlGetMetricSampleCountOnTarget(&countParams)); err != nil {
-		return nil, err
-	}
-	if *count == 0 {
-		return []Sample{}, nil
-	}
-
-	ptr := (*C.astl_sample_t)(C.calloc(C.size_t(*count), C.size_t(C.sizeof_astl_sample_t)))
-	if ptr == nil {
-		return nil, Error{Op: "GetMetricSamples", Status: StatusOutOfMemory}
-	}
-	defer C.free(unsafe.Pointer(ptr))
-
-	request := C.astl_get_metric_samples_on_target_params_t{
-		size:          C.size_t(C.sizeof_astl_get_metric_samples_on_target_params_t),
-		flags:         0,
-		target_handle: cTargetHandle(target),
-		metric_handle: cMetricHandle(metric),
-		samples:       ptr,
-		sample_count:  count,
-		start_ts:      C.uint64_t(filter.StartTS),
-		end_ts:        C.uint64_t(filter.EndTS),
-	}
-
-	if err := checkStatus("astlGetMetricSamplesOnTarget", C.astlGetMetricSamplesOnTarget(&request)); err != nil {
-		return nil, err
-	}
-
-	samplesBuf := unsafe.Slice(ptr, int(*count))
-	samples := make([]Sample, 0, int(*count))
-	for _, item := range samplesBuf {
-		samples = append(samples, Sample{
-			Timestamp: uint64(item.timestamp),
-			Value:     decodeValue(item.value, metric.ValueType),
-		})
-	}
-	return samples, nil
+	return readSamples(count)
 }
 
 func GetMetricStatisticsOnTarget(target Target, metric Metric, filter SampleFilter, flags MetricStatisticsFlags) (MetricStatistics, error) {

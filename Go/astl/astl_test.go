@@ -226,3 +226,10 @@ func TestSystemInfoClockCorrelationAvailability(t *testing.T) {
 		t.Fatal("available clock reference must have a UTC value")
 	}
 }
+
+func TestGetMetricSamplesInvalidHandles(t *testing.T) {
+	_, err := GetMetricSamples(Target{}, Metric{}, SampleFilter{})
+	if err == nil {
+		t.Fatal("expected invalid handle error")
+	}
+}

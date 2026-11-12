@@ -14,6 +14,7 @@
 #include "collector/collection_operations.hpp"
 #include "common/astl_defines.hpp"
 #include "common/clock_correlation.hpp"
+#include "common/empty_result_reason.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "common/metric_config.hpp"
 #include "operation/operation.hpp"
@@ -30,6 +31,15 @@ namespace astl {
 struct IMetricManager {
   static constexpr bool kSerializable{true};
   virtual ~IMetricManager() = default;
+
+  virtual auto RecordRawSampleOutcome(const ITarget* /*target*/, OperationId /*operation_id*/,
+                                      astl::EmptyResultReason /*reason*/) -> void {}
+  /** Latest outcome for a target-specific metric instance, or UNKNOWN when unavailable. */
+  [[nodiscard]] virtual auto GetEmptyResultReason(const IMetric* /*metric*/) const -> astl::EmptyResultReason {
+    return astl::EmptyResultReason::UNKNOWN;
+  }
+  /** Clear the diagnostic after consuming available uncached output. */
+  virtual auto ClearEmptyResultReason(const IMetric* /*metric*/) -> void {}
 
   IMetricManager()                                 = default;
   IMetricManager(const IMetricManager&)            = default;

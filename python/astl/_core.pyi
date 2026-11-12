@@ -75,6 +75,9 @@ class MetricIdentifier:
 
 class Status:
     SUCCESS: int
+    NO_DATA_COLLECTED: int
+    NO_NEW_SAMPLE: int
+    SAMPLE_DROPPED: int
 
 # Functions
 

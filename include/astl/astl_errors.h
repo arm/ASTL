@@ -82,6 +82,8 @@ typedef enum _astl_status_code {
   ASTL_STATUS_INVALID_STATE_TRANSITION   = 41,            //!< Generic lifecycle transition not permitted.
   ASTL_STATUS_PAUSE_UNSUPPORTED          = 42,            //!< Collector/hardware cannot pause (treated as no-op error).
   ASTL_STATUS_RESUME_UNSUPPORTED         = 43,  //!< Collector/hardware cannot resume (treated as no-op error).
+  ASTL_STATUS_NO_NEW_SAMPLE  = 44,  //!< No new input/output, including metric warm-up. Retry after fresh input.
+  ASTL_STATUS_SAMPLE_DROPPED = 45,  //!< Empty result: input discarded. Retry does not guarantee progress.
   // Add new status codes here
 
   ASTL_STATUS_INTERNAL_ERROR = 127,  //!< Internal failure

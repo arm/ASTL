@@ -862,8 +862,8 @@ auto ParseMetricSamplesRequest(const astl_get_metric_samples_on_target_params_t&
   };
 }
 
-auto PopulateMetricSamplesOutput(const MetricSamplesRequest& request, uint64_t start_ts, uint64_t end_ts)
-    -> astl_status_code {
+auto PopulateMetricSamplesOutput(const MetricSamplesRequest& request, uint64_t start_ts, uint64_t end_ts,
+                                 astl::EmptyResultReason* empty_reason = nullptr) -> astl_status_code {
   auto                  orchestrator_or_error = astl::Orchestrator::GetInstance();
   auto                  status = orchestrator_or_error ? ASTL_STATUS_SUCCESS : orchestrator_or_error.error();
   std::size_t           filtered_count{0};
@@ -877,7 +877,8 @@ auto PopulateMetricSamplesOutput(const MetricSamplesRequest& request, uint64_t s
         [&](std::span<const astl::ProcessedSampledData> batch) {
           copy_state.filtered_count = filtered_count;
           return CopyMetricSamplesBatch(batch, copy_state);
-        });
+        },
+        empty_reason);
   }
   if (status == ASTL_STATUS_SUCCESS || status == ASTL_STATUS_BUFFER_TOO_SMALL) {
     const auto capacity_status = SetMetricSampleCountAndValidateCapacity(request, filtered_count);
@@ -2618,13 +2619,29 @@ auto astlReadImmediate(const astl_read_immediate_params_t* params) noexcept -> a
     }
     const auto& orchestrator     = orchestrator_or_error->get();
     const auto  readable_targets = GetReadImmediateTargets(*orchestrator);
+    bool        any_samples      = readable_targets.empty();
+    auto        empty_status     = ASTL_STATUS_NO_DATA_COLLECTED;
     for (const auto* target : readable_targets) {
-      auto result = orchestrator->ReadImmediate(target);
-      if (result != ASTL_STATUS_SUCCESS) {
-        return result;
+      const auto result = orchestrator->ReadImmediate(target);
+      switch (result) {
+        case ASTL_STATUS_SUCCESS:
+          any_samples = true;
+          break;
+        case ASTL_STATUS_SAMPLE_DROPPED:
+          empty_status = result;
+          break;
+        case ASTL_STATUS_NO_NEW_SAMPLE:
+          if (empty_status != ASTL_STATUS_SAMPLE_DROPPED) {
+            empty_status = result;
+          }
+          break;
+        case ASTL_STATUS_NO_DATA_COLLECTED:
+          break;
+        default:
+          return result;
       }
     }
-    return ASTL_STATUS_SUCCESS;
+    return any_samples ? ASTL_STATUS_SUCCESS : empty_status;
   });
 }
 
@@ -2965,10 +2982,8 @@ auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params
     -> astl_status_code {
   return RunPublicApi([&]() noexcept -> astl_status_code {
     std::lock_guard<std::mutex> api_lock{GetCApiMutex()};
-    auto                        status = ValidateApiParams(params);
-    if (status == ASTL_STATUS_SUCCESS) {
-      status = ValidateTimestampRange("astlGetMetricSamplesOnTarget", params->start_ts, params->end_ts);
-    }
+    astl::EmptyResultReason     empty_reason = astl::EmptyResultReason::UNKNOWN;
+    auto                        status       = ValidateTimestampedApiParams(params, "astlGetMetricSamplesOnTarget");
 
     MetricSamplesRequest request;
     if (status == ASTL_STATUS_SUCCESS) {
@@ -2981,7 +2996,18 @@ auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params
     }
 
     if (status == ASTL_STATUS_SUCCESS) {
-      status = PopulateMetricSamplesOutput(request, params->start_ts, params->end_ts);
+      status = PopulateMetricSamplesOutput(request, params->start_ts, params->end_ts, &empty_reason);
+      // Translate only after successful bookkeeping; the shared counter path retains its contract.
+      if (status == ASTL_STATUS_SUCCESS && *request.out_sample_count == 0) {
+        switch (empty_reason) {
+          case astl::EmptyResultReason::NO_NEW_SAMPLE:
+            return ASTL_STATUS_NO_NEW_SAMPLE;
+          case astl::EmptyResultReason::SAMPLE_DROPPED:
+            return ASTL_STATUS_SAMPLE_DROPPED;
+          case astl::EmptyResultReason::UNKNOWN:
+            return ASTL_STATUS_NO_DATA_COLLECTED;
+        }
+      }
     }
 
     return status;

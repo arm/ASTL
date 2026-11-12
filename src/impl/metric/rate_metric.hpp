@@ -79,7 +79,7 @@ class RateMetric : public DeltaMetric {
    * dividing delta by time interval between samples.
    *
    * @param sample A single sampled data point to be processed.
-   * @return astl_status_code indicating success or failure.
+   * @return NO_NEW_SAMPLE for the initial baseline; otherwise SUCCESS or an error.
    */
   auto ReceiveRawSample(const NormalizedSampledData &raw_sample) -> astl_status_code override;
 

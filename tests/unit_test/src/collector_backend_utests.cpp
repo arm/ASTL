@@ -94,7 +94,7 @@ TEST_CASE("An independently registered backend works through common builders", "
   CHECK((*collectors)->ConfigureCollectionOnTarget(targets.front().get(), {}, std::move(*operations)) ==
         ASTL_STATUS_SUCCESS);
   CHECK((*collectors)->StartOnTarget(targets.front().get()) == ASTL_STATUS_SUCCESS);
-  CHECK((*collectors)->ReadImmediateOnTarget(targets.front().get()) == ASTL_STATUS_SUCCESS);
+  CHECK((*collectors)->ReadImmediateOnTarget(targets.front().get()) == ASTL_STATUS_NO_DATA_COLLECTED);
   CHECK((*collectors)->StopOnTarget(targets.front().get()) == ASTL_STATUS_SUCCESS);
 }
 

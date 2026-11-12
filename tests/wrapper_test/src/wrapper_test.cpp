@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <cstdint>
 #include <utility>
@@ -983,6 +984,21 @@ TEST_CASE("astlReadImmediate", "[with 0 targets][wrapper]") {
 }
 
 TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
+  const auto first    = GENERATE(ASTL_STATUS_SUCCESS, ASTL_STATUS_NO_DATA_COLLECTED, ASTL_STATUS_NO_NEW_SAMPLE,
+                                 ASTL_STATUS_SAMPLE_DROPPED, ASTL_STATUS_INTERNAL_ERROR);
+  const auto second   = GENERATE(ASTL_STATUS_SUCCESS, ASTL_STATUS_NO_DATA_COLLECTED, ASTL_STATUS_NO_NEW_SAMPLE,
+                                 ASTL_STATUS_SAMPLE_DROPPED, ASTL_STATUS_INTERNAL_ERROR);
+  auto       expected = ASTL_STATUS_NO_DATA_COLLECTED;
+  if (first == ASTL_STATUS_INTERNAL_ERROR || second == ASTL_STATUS_INTERNAL_ERROR) {
+    expected = ASTL_STATUS_INTERNAL_ERROR;
+  } else if (first == ASTL_STATUS_SUCCESS || second == ASTL_STATUS_SUCCESS) {
+    expected = ASTL_STATUS_SUCCESS;
+  } else if (first == ASTL_STATUS_SAMPLE_DROPPED || second == ASTL_STATUS_SAMPLE_DROPPED) {
+    expected = ASTL_STATUS_SAMPLE_DROPPED;
+  } else if (first == ASTL_STATUS_NO_NEW_SAMPLE || second == ASTL_STATUS_NO_NEW_SAMPLE) {
+    expected = ASTL_STATUS_NO_NEW_SAMPLE;
+  }
+  int calls = 0;
   // mock 2 targets
   auto  mock_target_1          = std::make_unique<MockTarget>();
   auto  mock_target_2          = std::make_unique<MockTarget>();
@@ -994,7 +1010,14 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
   REQUIRE_CALL(*mock_collector_manager, GetNativeClockSnapshot(_))
       .TIMES(2)
       .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
-  REQUIRE_CALL(*mock_collector_manager, ReadImmediateOnTarget(_)).TIMES(4).RETURN(ASTL_STATUS_SUCCESS);
+  std::unique_ptr<trompeloeil::expectation> read_expectation;
+  if (first == ASTL_STATUS_INTERNAL_ERROR) {
+    read_expectation = NAMED_REQUIRE_CALL(*mock_collector_manager, ReadImmediateOnTarget(_)).RETURN(first);
+  } else {
+    read_expectation = NAMED_REQUIRE_CALL(*mock_collector_manager, ReadImmediateOnTarget(_))
+                           .TIMES(2)
+                           .LR_RETURN(calls++ == 0 ? first : second);
+  }
   REQUIRE_CALL(*mock_collector_manager, RegisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*mock_collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*mock_target_1, GetProperties(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -1041,8 +1064,7 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
   TestOrchestratorInjector injector(std::move(orchestrator));
 
   FORBID_CALL(*collector_manager_ptr, GetNativeClockSnapshot(_));
-  REQUIRE(ReadImmediate() == ASTL_STATUS_SUCCESS);
-  REQUIRE(ReadImmediate() == ASTL_STATUS_SUCCESS);
+  REQUIRE(ReadImmediate() == expected);
 }
 
 TEST_CASE("astlReadImmediate reads paused targets", "[wrapper]") {
@@ -1805,6 +1827,13 @@ TEST_CASE("astlGetCounterSamplesOnTarget", "[wrapper][Orchestrator]") {
   REQUIRE(GetCounterSamplesOnTarget(nullptr, nullptr, nullptr, nullptr) == ASTL_STATUS_BAD_ARGUMENT);
   REQUIRE(GetCounterSampleCountOnTarget(mock_target_handle, counter_api_handle, &sample_count, 10, 5) ==
           ASTL_STATUS_BAD_ARGUMENT);
+
+  // Empty counters retain SUCCESS even though empty metric retrieval returns a status.
+  astl_sample_t empty_sample{};
+  sample_count = 1;
+  REQUIRE(GetCounterSamplesOnTarget(mock_target_handle, counter_api_handle, &empty_sample, &sample_count) ==
+          ASTL_STATUS_SUCCESS);
+  REQUIRE(sample_count == 0);
 
   std::vector<astl::ProcessedSampledData> samples;
   samples.emplace_back(astl::AstlValue{uint64_t{10}},

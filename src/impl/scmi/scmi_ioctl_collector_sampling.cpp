@@ -54,6 +54,13 @@ auto ScmiIoctlCollector::SampleCollectionOperations(OperationSequence const& ope
   if (operations.empty()) {
     return ASTL_STATUS_SUCCESS;
   }
+  // Clear prior outcomes before attempting this batch, including operations a failure may skip.
+  if (_raw_sample_sink) {
+    for (const auto& operation : operations) {
+      _raw_sample_sink->SinkRawSampleOutcome(_configuration->Target(), operation->GetId(),
+                                             astl::EmptyResultReason::UNKNOWN);
+    }
+  }
   const auto supports_single_read = _scmi_ioctl_interface->SupportsSingleRead();
   if (!supports_single_read) {
     return supports_single_read.error();
@@ -98,6 +105,10 @@ auto ScmiIoctlCollector::EmitScmiSample(ScmiReadOperation const& operation, cons
     ASTL_LOG_WARNING(
         "ScmiIoctlCollector: discarding sample with duplicate timestamp for data event ID: {:04X}, timestamp: {}",
         operation.scmi_data_event_id, timestamp);
+    if (_raw_sample_sink) {
+      _raw_sample_sink->SinkRawSampleOutcome(_configuration->Target(), operation.GetId(),
+                                             astl::EmptyResultReason::NO_NEW_SAMPLE);
+    }
     return ASTL_STATUS_SUCCESS;
   }
 

@@ -8,7 +8,7 @@ import astl
 
 
 def test_sample_retrieval_graceful_empty():
-    """Sample retrieval should return a list (possibly empty) and not raise.
+    """Counter retrieval may be empty; metric retrieval reports empty status codes.
 
     If there are no targets or no counters/metrics, the test is skipped to
     avoid false failures in minimal environments.
@@ -52,6 +52,42 @@ def test_sample_retrieval_graceful_empty():
         except astl.ASTLError as exc:
             if exc.code == astl.Status.METRIC_NOT_SUPPORTED_ON_TARGET:
                 pytest.skip(f"Metric {m.name!r} is no longer supported on target {t.name!r}")
-            raise
+            if exc.code not in (astl.Status.NO_DATA_COLLECTED, astl.Status.NO_NEW_SAMPLE,
+                                astl.Status.SAMPLE_DROPPED):
+                raise
         finally:
             astl.stop_collection(t)
+
+
+@pytest.mark.parametrize("status", [
+    astl.Status.NO_DATA_COLLECTED,
+    astl.Status.NO_NEW_SAMPLE,
+    astl.Status.SAMPLE_DROPPED,
+])
+def test_empty_status_exposure_and_exception_code(status):
+    from astl import _core
+    from astl.exceptions import map_status_to_exception
+
+    assert getattr(_core.Status, status.name) == int(status)
+    assert astl.status_name(int(status)) == status.name
+    candidate = map_status_to_exception(int(status))
+    exception_type = (candidate if isinstance(candidate, type) and issubclass(candidate, astl.ASTLError)
+                      else astl.ASTLError)
+    with pytest.raises(astl.ASTLError) as raised:
+        raise exception_type(int(status))
+    assert raised.value.code == int(status)
+    assert status.name in str(raised.value)
+
+
+def test_metric_samples_empty_native_result():
+    for target in astl.get_targets():
+        metrics = astl.get_metrics(target)
+        if not metrics:
+            continue
+        try:
+            samples = astl.get_metric_samples(target, metrics[0])
+            assert samples  # Native success now always means a nonempty metric result.
+        except astl.ASTLError as exc:
+            assert exc.code == astl.Status.NO_DATA_COLLECTED
+        return
+    pytest.skip("No metric available for native empty-result retrieval")

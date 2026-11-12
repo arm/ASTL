@@ -87,6 +87,8 @@ struct ICollector {
 
   /*
    * @brief Collect a single sample of all the configured metrics, including while a collection is paused.
+   * Deliver raw samples and outcome notifications synchronously on the calling thread before returning.
+   * CollectorManager uses these callbacks to determine the public immediate-read outcome.
    */
   virtual auto ReadImmediate() -> astl_status_code = 0;
 };

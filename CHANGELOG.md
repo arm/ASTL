@@ -61,6 +61,17 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Breaking
 
+- **Breaking behavioral API change (ASTL-680):** empty metric retrieval now returns
+  `NO_NEW_SAMPLE`, `SAMPLE_DROPPED`, or `NO_DATA_COLLECTED`
+  instead of `SUCCESS`. The C parameter layout is unchanged. Go exposes these outcomes
+  through `astl.Error`; Python raises `ASTLError` with the native status. Both wrappers
+  retrieve the status even when the initial sample-count query returns zero. Count queries
+  and counter retrieval retain their existing behavior. ReadImmediate also returns these empty
+  statuses when the current call collects no raw samples; a delta/rate baseline counts as success.
+  All-target reads continue past empty outcomes, and succeed if any target collects raw samples.
+  Actual errors retain precedence; no automatic retries are introduced. ATX read-immediate
+  continues past empty targets so available samples from other targets can still be printed.
+
 - Group the readable UTC reference inside `astl_clock_correlation_t` and remove the redundant availability flag.
   A null `clock_reference_utc` indicates an unavailable reference. Python and Go expose UTC within the correlation.
 

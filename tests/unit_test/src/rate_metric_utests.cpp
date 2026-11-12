@@ -70,7 +70,7 @@ TEST_CASE("RateMetric: single sample - no rate calculated", "[RateMetric]") {
   astl::AstlValue             val1{uint64_t{100}};
   astl::NormalizedSampledData sample1(1, val1);
   auto                        status1 = metric.ReceiveRawSample(sample1);
-  REQUIRE(status1 == ASTL_STATUS_SUCCESS);
+  REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
 
   // Verify no rate was calculated
   auto summary = metric.GetRateSummaryData();
@@ -90,7 +90,7 @@ TEST_CASE("RateMetric: two samples - rate calculated", "[RateMetric]") {
   astl::AstlValue             val1{uint64_t{100}};
   astl::NormalizedSampledData sample1(1, val1, astl::ProcessedSampleTimestamp{nanoseconds{1'000'000'000}});  // t=1s
   auto                        status1 = metric.ReceiveRawSample(sample1);
-  REQUIRE(status1 == ASTL_STATUS_SUCCESS);
+  REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
 
   // Second sample - should produce rate (delta=50, time=1s = 50 units/second)
   astl::AstlValue             val2{uint64_t{150}};

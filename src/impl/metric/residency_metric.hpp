@@ -106,7 +106,7 @@ class ResidencyMetric : public DeltaMetric {
    * converts ticks to time, and calculates percentage residency.
    *
    * @param sample A single sampled data point containing state counter value.
-   * @return astl_status_code indicating success or failure.
+   * @return NO_NEW_SAMPLE while baseline or state inputs are pending; SUCCESS after flushing output, or an error.
    */
   auto ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code override;
 
@@ -206,6 +206,12 @@ class ResidencyMetric : public DeltaMetric {
                                                   ProcessedSampleTimestamp  timestamp) -> astl_status_code;
 
  private:
+  auto ProcessStateInterval(const NormalizedSampledData&            raw_sample,
+                            const ResidencyMetricConfig::StateInfo& state_config)
+      -> std::expected<std::chrono::microseconds, astl_status_code>;
+  auto FlushCompletedInterval(std::chrono::microseconds time_interval, ProcessedSampleTimestamp timestamp)
+      -> astl_status_code;
+
   // non-owned pointer to the configuration for this metric (owned by the MetricHandle)
   const ResidencyMetricConfig*                  _residency_configuration;
   std::vector<ResidencyMetricConfig::StateInfo> _state_configs;  ///< Configuration for all states

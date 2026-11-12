@@ -19,7 +19,9 @@
  * first element's `size`), then call the getter to populate data. For APIs
  * with caller-provided arrays, getter calls require non-NULL buffers and
  * input capacities > 0; if the discovered required count is 0, skip the
- * corresponding getter call. For APIs that return ASTL_STATUS_BUFFER_TOO_SMALL, the
+ * corresponding getter call unless requesting an empty-result status from
+ * astlGetMetricSamplesOnTarget (which still requires at least one sample slot).
+ * For APIs that return ASTL_STATUS_BUFFER_TOO_SMALL, the
  * corresponding in/out count is set to the required capacity (when representable
  * in uint32_t).
  */
@@ -1038,6 +1040,11 @@ typedef struct astl_read_immediate_on_target_params_t {
  * @brief Do an immediate sample capture of configured counters or metrics on a specific target
  *
  * This can be called while collection is configured, started, or paused.
+ * SUCCESS means this call collected raw samples, including a delta/rate baseline that produces no metric output.
+ * With no raw samples, returns NO_NEW_SAMPLE for duplicate input, SAMPLE_DROPPED for collector-discarded input,
+ * or NO_DATA_COLLECTED without a specific reason. Actual errors take precedence. No automatic retry is performed.
+ * NO_NEW_SAMPLE suggests retrying after fresh input; the other empty outcomes do not promise data on retry.
+ * Timestamp regressions rejected during metric processing still count as collected raw input here.
  *
  * @param params Parameters for this call (see astl_read_immediate_on_target_params_t).
  * @return astl_status_code   ASTL_STATUS_SUCCESS on success. Error code otherwise.
@@ -1056,6 +1063,10 @@ typedef struct astl_read_immediate_params_t {
  * @brief Do an immediate sample capture of configured counters or metrics on all configured targets
  *
  * This reads targets with configured, started, or paused collection state.
+ * Empty outcomes described by astlReadImmediateOnTarget do not stop reads of remaining targets.
+ * Returns SUCCESS if any target collects raw samples, or if there are no eligible targets.
+ * Otherwise returns SAMPLE_DROPPED, NO_NEW_SAMPLE, or NO_DATA_COLLECTED, in that precedence order.
+ * Actual errors stop the operation and take precedence over successful or empty reads.
  *
  * @param params Parameters for this call (see astl_read_immediate_params_t).
  *
@@ -1358,8 +1369,7 @@ typedef struct astl_get_metric_sample_count_on_target_params_t {
 ASTL_API astl_status_code
 astlGetMetricSampleCountOnTarget(const astl_get_metric_sample_count_on_target_params_t* params) ASTL_API_NOEXCEPT;
 
-/** A parameter structure describes inputs and outputs for this API call.
- */
+/** A parameter structure describes inputs and outputs for this API call. */
 typedef struct astl_get_metric_samples_on_target_params_t {
   size_t size;                         //!< Size of this struct for versioning; set size to
                                        //!< sizeof(astl_get_metric_samples_on_target_params_t).
@@ -1377,6 +1387,21 @@ typedef struct astl_get_metric_samples_on_target_params_t {
 
 /**
  * @brief Get the samples collected for specific metric on a specific target
+ *
+ * Nonempty results return ASTL_STATUS_SUCCESS. Empty results set sample_count to zero
+ * and return ASTL_STATUS_NO_NEW_SAMPLE, ASTL_STATUS_SAMPLE_DROPPED, or
+ * ASTL_STATUS_NO_DATA_COLLECTED.
+ * Specific outcomes describe the latest input for live ASTL_NO_CACHING collection;
+ * cached/loaded sessions and filter-only empty results return NO_DATA_COLLECTED.
+ * A later input replaces the outcome; reconfiguration/reset and consumption of
+ * available samples clear it. For multiple inputs, the last processed input wins.
+ * NO_NEW_SAMPLE includes metric warm-up or incomplete inputs and suggests retrying
+ * after fresh input. Continue collecting other metrics meanwhile; retrying this
+ * getter alone does not collect data.
+ * SAMPLE_DROPPED and NO_DATA_COLLECTED do not promise progress on retry.
+ * Validation, buffer-capacity and internal errors take precedence over empty outcomes.
+ * Supply at least one sample slot even when the count query returns zero; the count
+ * query itself still returns SUCCESS with zero and does not report these outcomes.
  *
  * @param params Parameters for this call (see astl_get_metric_samples_on_target_params_t).
  *

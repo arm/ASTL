@@ -116,12 +116,12 @@ TEST_CASE("ResidencyMetric: deterministic processed sample sink order", "[Reside
   auto timestamp1 = ResidencyMetricTestFixture::CreateTimestamp(base_time);
 
   // Initial baseline samples (no processed samples expected yet)
-  metric.ReceiveRawSample(
-      astl::NormalizedSampledData(operations[0]->GetId(), astl::AstlValue{uint64_t{1000}}, timestamp1));
-  metric.ReceiveRawSample(
-      astl::NormalizedSampledData(operations[1]->GetId(), astl::AstlValue{uint64_t{500}}, timestamp1));
-  metric.ReceiveRawSample(
-      astl::NormalizedSampledData(operations[2]->GetId(), astl::AstlValue{uint64_t{250}}, timestamp1));
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData(operations[0]->GetId(), astl::AstlValue{uint64_t{1000}},
+                                                              timestamp1)) == ASTL_STATUS_NO_NEW_SAMPLE);
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData(operations[1]->GetId(), astl::AstlValue{uint64_t{500}},
+                                                              timestamp1)) == ASTL_STATUS_NO_NEW_SAMPLE);
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData(operations[2]->GetId(), astl::AstlValue{uint64_t{250}},
+                                                              timestamp1)) == ASTL_STATUS_NO_NEW_SAMPLE);
   REQUIRE(recording_sink.values_in_order.empty());
 
   // Second timestamp (delta interval)
@@ -130,14 +130,17 @@ TEST_CASE("ResidencyMetric: deterministic processed sample sink order", "[Reside
   // Provide second samples in an intentionally shuffled order (not matching configured order) to verify
   // that sink order is independent from arrival order.
   // Arrival order: C1, C2, C6
-  metric.ReceiveRawSample(
-      astl::NormalizedSampledData(operations[1]->GetId(), astl::AstlValue{uint64_t{525}}, timestamp2));  // C1 delta 25
-  metric.ReceiveRawSample(
-      astl::NormalizedSampledData(operations[2]->GetId(), astl::AstlValue{uint64_t{265}}, timestamp2));  // C2 delta 15
+  REQUIRE(metric.ReceiveRawSample(
+              astl::NormalizedSampledData(operations[1]->GetId(), astl::AstlValue{uint64_t{525}}, timestamp2)) ==
+          ASTL_STATUS_NO_NEW_SAMPLE);  // C1 delta 25
+  REQUIRE(metric.ReceiveRawSample(
+              astl::NormalizedSampledData(operations[2]->GetId(), astl::AstlValue{uint64_t{265}}, timestamp2)) ==
+          ASTL_STATUS_NO_NEW_SAMPLE);  // C2 delta 15
   // At this point not all states processed yet -> no sinking
   REQUIRE(recording_sink.values_in_order.empty());
-  metric.ReceiveRawSample(astl::NormalizedSampledData(operations[0]->GetId(), astl::AstlValue{uint64_t{1050}},
-                                                      timestamp2));  // C6 delta 50 (triggers flush)
+  REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData(operations[0]->GetId(), astl::AstlValue{uint64_t{1050}},
+                                                              timestamp2)) ==
+          ASTL_STATUS_SUCCESS);  // C6 delta 50 (triggers flush)
 
   // After processing all three, inferred state (Active) also added => total samples sunk should be 4.
   REQUIRE(recording_sink.values_in_order.size() == 4);
@@ -173,9 +176,9 @@ TEST_CASE("ResidencyMetric: deterministic processed sample sink order", "[Reside
   recording_sink.timestamps_in_order.clear();
   const auto timestamp3 = ResidencyMetricTestFixture::CreateTimestamp(base_time + 100ms);
   REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{operations[1]->GetId(), astl::AstlValue{uint64_t{575}},
-                                                              timestamp3}) == ASTL_STATUS_SUCCESS);
+                                                              timestamp3}) == ASTL_STATUS_NO_NEW_SAMPLE);
   REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{operations[0]->GetId(), astl::AstlValue{uint64_t{1150}},
-                                                              timestamp3}) == ASTL_STATUS_SUCCESS);
+                                                              timestamp3}) == ASTL_STATUS_NO_NEW_SAMPLE);
   REQUIRE(recording_sink.values_in_order.empty());
   REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{operations[2]->GetId(), astl::AstlValue{uint64_t{295}},
                                                               timestamp3}) == ASTL_STATUS_SUCCESS);
@@ -309,7 +312,7 @@ TEST_CASE("ResidencyMetric: single sample processing", "[ResidencyMetric]") {
   astl::NormalizedSampledData c6_sample1(first_operation_id, c6_val1, timestamp1);
 
   auto status = fixture.ReceiveRawSample(c6_sample1);
-  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  REQUIRE(status == ASTL_STATUS_NO_NEW_SAMPLE);
 
   // No residency data should be generated yet
   REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
@@ -341,7 +344,7 @@ TEST_CASE("ResidencyMetric: two samples processing", "[ResidencyMetric]") {
   astl::NormalizedSampledData c6_sample2(first_operation_id, c6_val2, timestamp2);
 
   auto status = fixture.ReceiveRawSample(c6_sample2);
-  REQUIRE(status == ASTL_STATUS_SUCCESS);
+  REQUIRE(status == ASTL_STATUS_NO_NEW_SAMPLE);
 
   REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
   const auto& totals = fixture.GetResidencySummaryData().total_time_seconds;
@@ -562,9 +565,9 @@ TEST_CASE("ResidencyMetric: inferred state baseline samples", "[ResidencyMetric]
   auto status3 = fixture.ReceiveRawSample(
       astl::NormalizedSampledData(c2_operation_id, astl::AstlValue{uint64_t{250}}, timestamp1));
 
-  REQUIRE(status1 == ASTL_STATUS_SUCCESS);
-  REQUIRE(status2 == ASTL_STATUS_SUCCESS);
-  REQUIRE(status3 == ASTL_STATUS_SUCCESS);
+  REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
+  REQUIRE(status2 == ASTL_STATUS_NO_NEW_SAMPLE);
+  REQUIRE(status3 == ASTL_STATUS_NO_NEW_SAMPLE);
 
   // No residency data should be generated yet (need deltas)
   REQUIRE(fixture.Summarize() == ASTL_STATUS_SUCCESS);
@@ -673,7 +676,7 @@ TEST_CASE("ResidencyMetric: consecutive intervals accumulate statistics and rese
     const auto timestamp =
         astl::ProcessedSampleTimestamp{std::chrono::duration_cast<astl::ProcessedSampleTimestamp::duration>(elapsed)};
     REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{operation_id, astl::AstlValue{value}, timestamp}) ==
-                          ASTL_STATUS_SUCCESS);
+                          ASTL_STATUS_NO_NEW_SAMPLE);
   };
   feed(1000, 0ms);
   feed(2000, 10ms);

@@ -1089,6 +1089,18 @@ auto Orchestrator::RebuildProcessedSamplesForAllTargets() const -> void {
   }
 }
 
+auto Orchestrator::SinkRawSampleOutcome(const ITarget *target, OperationId operation_id, astl::EmptyResultReason reason)
+    -> void {
+  {
+    std::scoped_lock raw_lock{_raw_samples_mtx};
+    if (!_no_cache_targets.contains(target)) {
+      return;
+    }
+  }
+  std::scoped_lock processing_lock{_metric_processing_mtx};
+  _metric_manager->RecordRawSampleOutcome(target, operation_id, reason);
+}
+
 auto Orchestrator::SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) -> astl_status_code {
   if (!target) {
     ASTL_LOG_ERROR("Orchestrator::SinkSamples called with null target");
@@ -1173,14 +1185,20 @@ auto Orchestrator::ConsumeProcessedMetricSamplesIfUncached(const IMetric *metric
     }
   }
 
-  std::scoped_lock processed_lock{_processed_samples_mtx};
-  auto             target_it = _processed_samples.find(target);
-  if (target_it == _processed_samples.end()) {
-    return;
+  std::scoped_lock processing_lock{_metric_processing_mtx};
+  bool             consumed = false;
+  {
+    std::scoped_lock processed_lock{_processed_samples_mtx};
+    auto             target_it = _processed_samples.find(target);
+    if (target_it != _processed_samples.end()) {
+      consumed = target_it->second.erase(metric) != 0;
+      if (target_it->second.empty()) {
+        _processed_samples.erase(target_it);
+      }
+    }
   }
-  target_it->second.erase(metric);
-  if (target_it->second.empty()) {
-    _processed_samples.erase(target_it);
+  if (consumed) {
+    _metric_manager->ClearEmptyResultReason(metric);
   }
 }
 
@@ -1281,7 +1299,8 @@ auto Orchestrator::VisitRawMetricSampleBatchesAndRemember(const RawMetricBatchSo
 
 auto Orchestrator::VisitProcessedMetricSampleBatchesTwice(const IMetric *metric, const ITarget *target,
                                                           const ProcessedSampleBatchConsumer &first_consumer,
-                                                          const ProcessedSampleBatchConsumer &second_consumer) const
+                                                          const ProcessedSampleBatchConsumer &second_consumer,
+                                                          astl::EmptyResultReason            *empty_reason) const
     -> astl_status_code {
   auto status = ASTL_STATUS_SUCCESS;
   if (metric == nullptr) {
@@ -1298,6 +1317,14 @@ auto Orchestrator::VisitProcessedMetricSampleBatchesTwice(const IMetric *metric,
 
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
+  }
+
+  if (empty_reason) {
+    *empty_reason = astl::EmptyResultReason::UNKNOWN;
+    if (const auto uncached_status =
+            VisitUncachedMetricSamplesWithReason(metric, target, first_consumer, second_consumer, *empty_reason)) {
+      return *uncached_status;
+    }
   }
 
   std::scoped_lock visit_lock{_batch_visit_mtx};
@@ -1319,14 +1346,40 @@ auto Orchestrator::VisitProcessedMetricSampleBatchesTwice(const IMetric *metric,
   const fs::path cache_path = _cache_dir / (GetStableTargetKey(*target) + kAstlFileExtension);
   const bool     has_cache  = fs::exists(cache_path);
   if (!has_cache && trailing_samples.empty()) {
-    return VisitInMemoryProcessedMetricSampleBatchesTwice(metric, target, first_consumer, second_consumer);
+    status = VisitInMemoryProcessedMetricSampleBatchesTwice(metric, target, first_consumer, second_consumer);
+  } else if (has_cache && !fs::is_regular_file(cache_path)) {
+    status = ASTL_STATUS_INTERNAL_ERROR;
+  } else {
+    status = VisitRawMetricSampleBatchesTwice(
+        RawMetricBatchSource{metric, target, has_cache ? cache_path : fs::path{}, trailing_samples}, first_consumer,
+        second_consumer);
   }
-  if (has_cache && !fs::is_regular_file(cache_path)) {
-    return ASTL_STATUS_INTERNAL_ERROR;
+  return status;
+}
+
+auto Orchestrator::VisitUncachedMetricSamplesWithReason(const IMetric *metric, const ITarget *target,
+                                                        const ProcessedSampleBatchConsumer &first_consumer,
+                                                        const ProcessedSampleBatchConsumer &second_consumer,
+                                                        astl::EmptyResultReason            &empty_reason) const
+    -> std::optional<astl_status_code> {
+  {
+    std::scoped_lock raw_lock{_raw_samples_mtx};
+    if (!_no_cache_targets.contains(target)) {
+      return std::nullopt;
+    }
   }
-  return VisitRawMetricSampleBatchesTwice(
-      RawMetricBatchSource{metric, target, has_cache ? cache_path : fs::path{}, trailing_samples}, first_consumer,
-      second_consumer);
+  // Snapshot samples and their diagnostic while collector processing is excluded.
+  std::scoped_lock processing_lock{_metric_processing_mtx};
+  bool             has_samples = false;
+  const auto       inspect     = [&](std::span<const ProcessedSampledData> samples) {
+    has_samples = has_samples || !samples.empty();
+    return first_consumer(samples);
+  };
+  const auto status = VisitInMemoryProcessedMetricSampleBatchesTwice(metric, target, inspect, second_consumer);
+  if (status == ASTL_STATUS_SUCCESS && !has_samples) {
+    empty_reason = _metric_manager->GetEmptyResultReason(metric);
+  }
+  return status;
 }
 
 auto Orchestrator::VisitRawMetricSampleBatchesTwice(const RawMetricBatchSource         &source,

@@ -4,6 +4,8 @@
 
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <thread>
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
@@ -366,7 +368,7 @@ TEST_CASE("CollectorManager with one viable collector", "collector_manager") {
 
   REQUIRE(collector_manager.StartOnTarget(mock_target.get()) == ASTL_STATUS_SUCCESS);
   REQUIRE(collector_manager.PauseOnTarget(mock_target.get()) == ASTL_STATUS_SUCCESS);
-  REQUIRE(collector_manager.ReadImmediateOnTarget(mock_target.get()) == ASTL_STATUS_SUCCESS);
+  REQUIRE(collector_manager.ReadImmediateOnTarget(mock_target.get()) == ASTL_STATUS_NO_DATA_COLLECTED);
   REQUIRE(collector_manager.ResumeOnTarget(mock_target.get()) == ASTL_STATUS_SUCCESS);
   REQUIRE(collector_manager.StopOnTarget(mock_target.get()) == ASTL_STATUS_SUCCESS);
 }
@@ -468,4 +470,79 @@ TEST_CASE("CollectorManager clears only the requested inactive target", "[collec
   }
   REQUIRE_CALL(*second_ptr, StopCollection()).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE(manager.StopOnTarget(&target1) == ASTL_STATUS_SUCCESS);
+}
+
+TEST_CASE("Immediate read accounts only for current synchronous raw input", "[collector_manager]") {
+  MockTarget target;
+  MockTarget other_target;
+  auto       collector = std::make_unique<MockCollector>();
+  auto*      mock      = collector.get();
+  ALLOW_CALL(*mock, SetRawSampleSink(trompeloeil::_));
+  std::unordered_map<const astl::ITarget*, std::vector<std::unique_ptr<astl::ICollector>>> collectors;
+  collectors[&target].push_back(std::move(collector));
+  astl::CollectorManager manager{std::move(collectors)};
+  std::array             samples{
+      astl::RawSampledData{astl::kFirstAssignableOperationId, astl::AstlValue{uint64_t{42}}}
+  };
+  auto                  expected = ASTL_STATUS_NO_DATA_COLLECTED;
+  auto                  status   = ASTL_STATUS_SUCCESS;
+  std::function<void()> emit     = [] {};
+  SECTION("unexplained empty") {}
+  SECTION("duplicate") {
+    expected = ASTL_STATUS_NO_NEW_SAMPLE;
+    emit     = [&] { manager.SinkRawSampleOutcome(&target, {}, astl::EmptyResultReason::NO_NEW_SAMPLE); };
+  }
+  SECTION("drop dominates duplicate and reset notifications") {
+    expected = ASTL_STATUS_SAMPLE_DROPPED;
+    emit     = [&] {
+      manager.SinkRawSampleOutcome(&target, {}, astl::EmptyResultReason::SAMPLE_DROPPED);
+      manager.SinkRawSampleOutcome(&target, {}, astl::EmptyResultReason::NO_NEW_SAMPLE);
+      manager.SinkRawSampleOutcome(&target, {}, astl::EmptyResultReason::UNKNOWN);
+    };
+  }
+  SECTION("samples dominate empty operations") {
+    expected = ASTL_STATUS_SUCCESS;
+    emit     = [&] {
+      manager.SinkRawSampleOutcome(&target, {}, astl::EmptyResultReason::SAMPLE_DROPPED);
+      CHECK(manager.SinkRawSamples(&target, samples) == ASTL_STATUS_SUCCESS);
+    };
+  }
+  SECTION("actual errors dominate samples") {
+    expected = status = ASTL_STATUS_INTERNAL_ERROR;
+    emit              = [&] { CHECK(manager.SinkRawSamples(&target, samples) == ASTL_STATUS_SUCCESS); };
+  }
+  SECTION("lifecycle markers are not samples") {
+    emit = [&] {
+      std::array markers{astl::RawSampledData::PauseMarker({}), astl::RawSampledData::ResumeMarker({})};
+      CHECK(manager.SinkRawSamples(&target, markers) == ASTL_STATUS_SUCCESS);
+    };
+  }
+  SECTION("other targets are excluded") {
+    emit = [&] { CHECK(manager.SinkRawSamples(&other_target, samples) == ASTL_STATUS_SUCCESS); };
+  }
+  SECTION("background reads are excluded") {
+    emit = [&] {
+      astl_status_code background_status{};
+      std::thread      background([&] {
+        manager.SinkRawSampleOutcome(&target, {}, astl::EmptyResultReason::SAMPLE_DROPPED);
+        background_status = manager.SinkRawSamples(&target, samples);
+      });
+      background.join();
+      CHECK(background_status == ASTL_STATUS_SUCCESS);
+    };
+  }
+  SECTION("exceptions restore the accounting scope") {
+    {
+      REQUIRE_CALL(*mock, ReadImmediate()).THROW(std::runtime_error("read failed"));
+      CHECK_THROWS_AS(manager.ReadImmediateOnTarget(&target), std::runtime_error);
+    }
+  }
+  CHECK(manager.SinkRawSamples(&target, samples) == ASTL_STATUS_SUCCESS);
+  {
+    REQUIRE_CALL(*mock, ReadImmediate()).LR_SIDE_EFFECT(emit()).LR_RETURN(status);
+    CHECK(manager.ReadImmediateOnTarget(&target) == expected);
+  }
+  // Neither earlier buffered samples nor the preceding call's diagnostics carry over.
+  REQUIRE_CALL(*mock, ReadImmediate()).RETURN(ASTL_STATUS_SUCCESS);
+  CHECK(manager.ReadImmediateOnTarget(&target) == ASTL_STATUS_NO_DATA_COLLECTED);
 }

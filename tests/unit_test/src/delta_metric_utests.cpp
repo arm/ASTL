@@ -76,7 +76,7 @@ TEST_CASE("DeltaMetric: single sample - no delta calculated", "[DeltaMetric]") {
   astl::AstlValue             val1{uint64_t{100}};
   astl::NormalizedSampledData sample1(1, val1);
   auto                        status1 = metric.ReceiveRawSample(sample1);
-  REQUIRE(status1 == ASTL_STATUS_SUCCESS);
+  REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
 
   // Verify no delta was calculated
   auto summary = metric.GetDeltaSummaryData();
@@ -94,7 +94,7 @@ TEST_CASE("DeltaMetric: two samples - delta calculated", "[DeltaMetric]") {
   astl::AstlValue             val1{uint64_t{100}};
   astl::NormalizedSampledData sample1(1, val1);
   auto                        status1 = metric.ReceiveRawSample(sample1);
-  REQUIRE(status1 == ASTL_STATUS_SUCCESS);
+  REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
 
   // Second sample - should produce delta
   astl::AstlValue             val2{uint64_t{150}};
@@ -124,7 +124,7 @@ TEST_CASE("DeltaMetric: multiple samples - deltas calculated", "[DeltaMetric]") 
     astl::AstlValue             sample_value{uint64_t{values[i]}};
     astl::NormalizedSampledData sample(static_cast<astl::OperationId>(i + 1), sample_value);
     auto                        status = metric.ReceiveRawSample(sample);
-    REQUIRE(status == ASTL_STATUS_SUCCESS);
+    REQUIRE(status == (i == 0 ? ASTL_STATUS_NO_NEW_SAMPLE : ASTL_STATUS_SUCCESS));
   }
 
   // Verify deltas were calculated correctly
@@ -180,7 +180,7 @@ TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
     auto status1 = metric.ReceiveRawSample(sample1);
     auto status2 = metric.ReceiveRawSample(sample2);
 
-    REQUIRE(status1 == ASTL_STATUS_SUCCESS);
+    REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
     REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
     // Verify delta was captured in sink
@@ -200,7 +200,7 @@ TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
     auto status1 = metric.ReceiveRawSample(sample1);
     auto status2 = metric.ReceiveRawSample(sample2);
 
-    REQUIRE(status1 == ASTL_STATUS_SUCCESS);
+    REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
     REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
     REQUIRE(sink.captured.size() == 1);
@@ -220,7 +220,7 @@ TEST_CASE("DeltaMetric: different value types", "[DeltaMetric]") {
     auto status1 = metric.ReceiveRawSample(sample1);
     auto status2 = metric.ReceiveRawSample(sample2);
 
-    REQUIRE(status1 == ASTL_STATUS_SUCCESS);
+    REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
     REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
     REQUIRE(sink.captured.size() == 1);
@@ -242,7 +242,7 @@ TEST_CASE("DeltaMetric: edge cases", "[DeltaMetric]") {
     auto status1 = metric.ReceiveRawSample(sample1);
     auto status2 = metric.ReceiveRawSample(sample2);
 
-    REQUIRE(status1 == ASTL_STATUS_SUCCESS);
+    REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
     REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
     REQUIRE(sink.captured.size() == 1);
@@ -261,7 +261,7 @@ TEST_CASE("DeltaMetric: edge cases", "[DeltaMetric]") {
     auto status1 = metric.ReceiveRawSample(sample1);
     auto status2 = metric.ReceiveRawSample(sample2);
 
-    REQUIRE(status1 == ASTL_STATUS_SUCCESS);
+    REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
     REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
     REQUIRE(sink.captured.size() == 1);
@@ -282,7 +282,7 @@ TEST_CASE("DeltaMetric: summarize calculates statistics", "[DeltaMetric]") {
     astl::AstlValue             sample_value{uint64_t{values[i]}};
     astl::NormalizedSampledData sample(static_cast<astl::OperationId>(i + 1), sample_value);
     auto                        status = metric.ReceiveRawSample(sample);
-    REQUIRE(status == ASTL_STATUS_SUCCESS);
+    REQUIRE(status == (i == 0 ? ASTL_STATUS_NO_NEW_SAMPLE : ASTL_STATUS_SUCCESS));
   }
 
   // Summarize to calculate statistics
@@ -312,7 +312,7 @@ TEST_CASE("DeltaMetric: min/max statistics for datatype : double", "[DeltaMetric
     astl::AstlValue             sample_value{double{values[i]}};
     astl::NormalizedSampledData sample(static_cast<astl::OperationId>(i + 1), sample_value);
     auto                        status = metric.ReceiveRawSample(sample);
-    REQUIRE(status == ASTL_STATUS_SUCCESS);
+    REQUIRE(status == (i == 0 ? ASTL_STATUS_NO_NEW_SAMPLE : ASTL_STATUS_SUCCESS));
   }
 
   // Summarize to calculate statistics
@@ -353,7 +353,7 @@ TEST_CASE("DeltaMetric: Reset functionality", "[DeltaMetric]") {
     astl::AstlValue             sample_value{uint64_t{values[i]}};
     astl::NormalizedSampledData sample(static_cast<astl::OperationId>(i + 1), sample_value);
     auto                        status = metric.ReceiveRawSample(sample);
-    REQUIRE(status == ASTL_STATUS_SUCCESS);
+    REQUIRE(status == (i == 0 ? ASTL_STATUS_NO_NEW_SAMPLE : ASTL_STATUS_SUCCESS));
   }
 
   // Verify state exists
@@ -373,7 +373,7 @@ TEST_CASE("DeltaMetric: consecutive intervals preserve the baseline and accumula
   MockSampleSink    sink;
   astl::DeltaMetric metric{GetDeltaConfig(), nullptr, &sink};
   REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{1, astl::AstlValue{uint64_t{100}}}) ==
-          ASTL_STATUS_SUCCESS);
+          ASTL_STATUS_NO_NEW_SAMPLE);
   REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{1, astl::AstlValue{uint64_t{150}}}) ==
           ASTL_STATUS_SUCCESS);
   REQUIRE(metric.ReceiveRawSample(astl::NormalizedSampledData{1, astl::AstlValue{uint64_t{250}}}) ==
@@ -400,7 +400,7 @@ TEST_CASE("DeltaMetric: Delta processing with sink", "[DeltaMetric]") {
   auto status1 = metric.ReceiveRawSample(sample1);
   auto status2 = metric.ReceiveRawSample(sample2);
 
-  REQUIRE(status1 == ASTL_STATUS_SUCCESS);
+  REQUIRE(status1 == ASTL_STATUS_NO_NEW_SAMPLE);
   REQUIRE(status2 == ASTL_STATUS_SUCCESS);
 
   // DeltaMetric should have processed the delta and sent it to the sink

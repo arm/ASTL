@@ -134,7 +134,8 @@ auto CheckCollectionMemory(bool residency) -> void {
     const auto value  = residency ? sequence : sequence % 100;
     const auto status = (*metric)->ReceiveRawSample({operation_id, astl::AstlValue{value}, timestamp});
     // Avoid millions of successful Catch assertions; errors still fail at their source.
-    if (status != ASTL_STATUS_SUCCESS) {
+    const auto expected = residency && sequence == 1 ? ASTL_STATUS_NO_NEW_SAMPLE : ASTL_STATUS_SUCCESS;
+    if (status != expected) {
       FAIL("Synthetic sample processing failed: " << astlStatusString(status));
     }
   };

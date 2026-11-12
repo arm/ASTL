@@ -10,6 +10,7 @@
 
 #include "astl/astl.h"
 #include "astl_value.hpp"
+#include "common/empty_result_reason.hpp"
 #include "common/monotonic_raw_clock.hpp"
 #include "operation/operation.hpp"
 #include "target.hpp"
@@ -155,6 +156,10 @@ struct NormalizedSampledData {
  */
 struct IRawSampleSink {
   virtual ~IRawSampleSink() = default;
+
+  /** Report an input outcome when no raw sample is emitted. Optional for data-only sinks. */
+  virtual auto SinkRawSampleOutcome(const ITarget * /*target*/, OperationId /*operation_id*/,
+                                    astl::EmptyResultReason /*reason*/) -> void {}
 
   IRawSampleSink()                                  = default;
   IRawSampleSink(const IRawSampleSink &)            = default;

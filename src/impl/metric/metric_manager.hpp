@@ -280,6 +280,11 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    */
   auto RemoveAllMetrics() -> void override;
 
+  auto RecordRawSampleOutcome(const ITarget* target, OperationId operation_id, astl::EmptyResultReason reason)
+      -> void override;
+  auto GetEmptyResultReason(const IMetric* metric) const -> astl::EmptyResultReason override;
+  auto ClearEmptyResultReason(const IMetric* metric) -> void override;
+
   /**
    * @brief Finalize and summarize metrics after data processing.
    * @return ASTL_STATUS_SUCCESS or an appropriate error code.
@@ -330,6 +335,9 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
       -> std::expected<std::unique_ptr<MetricManager>, astl_status_code>;
 
  private:
+  auto DispatchProcessingQueue(std::vector<std::pair<IMetric*, NormalizedSampledData>>& processing_queue)
+      -> astl_status_code;
+
   /**
    * @brief Determine whether a collector type required by a metric configuration is supported.
    *
@@ -365,7 +373,9 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
   auto AddMetricGroupToTargets(astl_metric_group_handle_t group_handle, const std::vector<const ITarget*>& targets)
       -> astl_status_code;
 
-  Capabilities _capabilities;
+  // Metric instances are target-specific. Protected by _mutex; bounded by registered metrics.
+  std::unordered_map<const IMetric*, astl::EmptyResultReason> _empty_result_reasons;
+  Capabilities                                                _capabilities;
 
   std::unordered_set<IProcessedSampleSink*> _registered_processed_sample_sinks;
 

@@ -1012,10 +1012,14 @@ static astl_status_code read_metric_samples(astl_target_handle_t target_handle,
         .start_ts      = start_ts,
         .end_ts        = end_ts);
     astl_status_code rc = astlGetMetricSampleCountOnTarget(&count_params);
-    if (rc != ASTL_STATUS_SUCCESS || sample_count == 0) {
+    if (rc != ASTL_STATUS_SUCCESS) {
         return rc;
     }
 
+    /* Retrieve even when the count is zero, so the empty status reaches the caller. */
+    if (sample_count == 0) {
+        sample_count = 1;
+    }
     astl_sample_t* samples = (astl_sample_t*)calloc(sample_count, sizeof(*samples));
     if (!samples) {
         return ASTL_STATUS_OUT_OF_MEMORY;
@@ -1029,8 +1033,20 @@ static astl_status_code read_metric_samples(astl_target_handle_t target_handle,
         .start_ts      = start_ts,
         .end_ts        = end_ts);
     rc = astlGetMetricSamplesOnTarget(&sample_params);
-    if (rc == ASTL_STATUS_SUCCESS) {
+    switch (rc) {
+    case ASTL_STATUS_SUCCESS:
         /* Process samples[0 .. sample_count) here. */
+        break;
+    case ASTL_STATUS_NO_NEW_SAMPLE:
+        /* Skip this metric for now; retry after fresh input. */
+        break;
+    case ASTL_STATUS_SAMPLE_DROPPED:
+    case ASTL_STATUS_NO_DATA_COLLECTED:
+        /* Skip this metric; retrying does not guarantee data. */
+        break;
+    default:
+        /* Apply the caller's normal error policy after freeing the buffer. */
+        break;
     }
     free(samples);
     return rc;
