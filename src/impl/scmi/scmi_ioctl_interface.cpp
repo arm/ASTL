@@ -16,6 +16,7 @@
 #include <string>
 #include <utility>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 
 #if defined(__linux__)
@@ -266,10 +267,10 @@ auto ScmiIoctlInterface::Probe() -> astl_status_code {
 #endif
 }
 
-auto ScmiIoctlInterface::DeImplementationVersion() -> std::expected<std::string, astl_status_code> {
+auto ScmiIoctlInterface::DeImplementationVersion() -> astl::compat::expected<std::string, astl_status_code> {
   const auto status = Probe();
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
 
   std::string result;
@@ -281,18 +282,18 @@ auto ScmiIoctlInterface::DeImplementationVersion() -> std::expected<std::string,
   return result;
 }
 
-auto ScmiIoctlInterface::DataEventCount() -> std::expected<uint32_t, astl_status_code> {
+auto ScmiIoctlInterface::DataEventCount() -> astl::compat::expected<uint32_t, astl_status_code> {
   const auto status = Probe();
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   return _abi_info->num_des;
 }
 
-auto ScmiIoctlInterface::SupportsSingleRead() -> std::expected<bool, astl_status_code> {
+auto ScmiIoctlInterface::SupportsSingleRead() -> astl::compat::expected<bool, astl_status_code> {
   const auto status = Probe();
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   return HasScmiFeature(*_abi_info, SCMI_TLM_SCMI_SUPPORT_SINGLE_SAMPLE);
 }
@@ -544,7 +545,7 @@ auto ScmiIoctlInterface::IsLikelyTelemetryDeviceName(std::string_view device_nam
  * @return true when the data event exists, false when absent, or an ASTL status on unexpected failure.
  */
 auto ScmiIoctlDataEventExists(const std::filesystem::path& device_path, ScmiDataEventId data_event_id)
-    -> std::expected<bool, astl_status_code> {
+    -> astl::compat::expected<bool, astl_status_code> {
   ScmiIoctlInterface ioctl_interface{device_path};
   scmi_tlm_de_info   info{};
   const auto         status = ioctl_interface.GetDataEventInfo(data_event_id, info);
@@ -554,7 +555,7 @@ auto ScmiIoctlDataEventExists(const std::filesystem::path& device_path, ScmiData
   if (status == ASTL_STATUS_BAD_ARGUMENT || status == ASTL_STATUS_NO_TARGET_FOUND) {
     return false;
   }
-  return std::unexpected(status);
+  return astl::compat::unexpected(status);
 }
 
 /**
@@ -564,7 +565,8 @@ auto ScmiIoctlDataEventExists(const std::filesystem::path& device_path, ScmiData
  * @return true when the target answers SCMI_TLM_GET_ABI_INFO, false when unavailable, or an ASTL status on unexpected
  * failure.
  */
-auto ScmiIoctlTargetAvailable(const std::filesystem::path& device_path) -> std::expected<bool, astl_status_code> {
+auto ScmiIoctlTargetAvailable(const std::filesystem::path& device_path)
+    -> astl::compat::expected<bool, astl_status_code> {
   ScmiIoctlInterface ioctl_interface{device_path};
   const auto         status = ioctl_interface.Probe();
   if (status == ASTL_STATUS_SUCCESS) {
@@ -573,7 +575,7 @@ auto ScmiIoctlTargetAvailable(const std::filesystem::path& device_path) -> std::
   if (status == ASTL_STATUS_NO_TARGET_FOUND || status == ASTL_STATUS_FILE_OPEN_FAILED) {
     return false;
   }
-  return std::unexpected(status);
+  return astl::compat::unexpected(status);
 }
 
 }  // namespace astl

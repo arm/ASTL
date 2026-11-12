@@ -125,7 +125,7 @@ license-lint:
     ./scripts/license_lint.sh
 
 # run C++ tests
-test preset='debug': build
+test preset='debug': (build preset)
     #!/usr/bin/env bash
     set -eu -o pipefail
     echo "[test] Using preset={{preset}}"
@@ -137,7 +137,7 @@ test preset='debug': build
     just go-test {{preset}}
 
 # run all tests: C++, Python wrapper, and Go wrapper
-test-all preset='debug': build
+test-all preset='debug': (build preset)
     #!/usr/bin/env bash
     set -eu -o pipefail
     echo "[test-all] Using preset={{preset}}"
@@ -310,7 +310,7 @@ go-test preset='debug':
     echo "[go-test] Using preset={{preset}}"
     case "{{preset}}" in
         debug*) LIB_NAME="astl-0d" ;;
-        release) LIB_NAME="astl-0" ;;
+        release*) LIB_NAME="astl-0" ;;
         *)
             echo "[go-test][ERROR] Unsupported preset: {{preset}}" >&2
             exit 2

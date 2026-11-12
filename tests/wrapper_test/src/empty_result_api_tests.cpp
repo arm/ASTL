@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <memory>
 
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_manager.hpp"
 #include "scmi/scmi_ioctl_collector.hpp"
 #include "scmi/scmi_operation_builder.hpp"
@@ -17,9 +18,9 @@ namespace {
 using trompeloeil::_;
 
 struct MockScmiIoctlInterface : astl::IScmiIoctlInterface {
-  using ExpectedString = std::expected<std::string, astl_status_code>;
-  using ExpectedCount  = std::expected<uint32_t, astl_status_code>;
-  using ExpectedBool   = std::expected<bool, astl_status_code>;
+  using ExpectedString = astl::compat::expected<std::string, astl_status_code>;
+  using ExpectedCount  = astl::compat::expected<uint32_t, astl_status_code>;
+  using ExpectedBool   = astl::compat::expected<bool, astl_status_code>;
 
   MAKE_CONST_MOCK0(DevicePath, const std::filesystem::path&(), override);
   MAKE_MOCK0(Probe, astl_status_code(), override);

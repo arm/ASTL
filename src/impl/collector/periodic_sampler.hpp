@@ -10,9 +10,10 @@
 #include <chrono>
 #include <initializer_list>
 #include <memory>
-#include <optional>
 #include <string_view>
 #include <thread>
+
+#include "astl_cxx_compat.hpp"
 
 // Enable native extensions for OS-level thread priority
 #define BS_THREAD_POOL_NATIVE_EXTENSIONS
@@ -91,8 +92,8 @@ auto StartPeriodicSamplerForCollector(CollectorT* collector, CollectionConfigura
 }
 
 template <typename CollectionStateT>
-auto CheckPeriodicSamplerStart(CollectionStateT                              collection_state,
-                               std::optional<CollectionConfiguration> const& configuration,
+auto CheckPeriodicSamplerStart(CollectionStateT                                       collection_state,
+                               astl::compat::optional<CollectionConfiguration> const& configuration,
                                std::initializer_list<CollectionStateT> startable_states, std::string_view log_prefix)
     -> astl_status_code {
   if (std::ranges::find(startable_states, collection_state) == startable_states.end()) {

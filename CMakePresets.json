@@ -19,6 +19,13 @@
       "binaryDir": "${sourceDir}/build/${presetName}"
     },
     {
+      "name": "debug-cxx20",
+      "inherits": "debug",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20"
+      }
+    },
+    {
       "name": "debug-coverage",
       "inherits": "debug",
       "cacheVariables": {
@@ -106,12 +113,27 @@
       "binaryDir": "${sourceDir}/build/${presetName}"
     },
     {
+      "name": "release-cxx20",
+      "inherits": "release",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20"
+      }
+    },
+    {
       "name": "release-static",
       "inherits": "release",
       "cacheVariables": {
         "ATX_STATIC_LINK": "ON"
       },
       "binaryDir": "${sourceDir}/build/release-static"
+    },
+    {
+      "name": "release-static-cxx20",
+      "inherits": "release-static",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20"
+      }
     },
     {
       "name": "windows-release",
@@ -123,6 +145,11 @@
     {
       "name": "debug",
       "configurePreset": "debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "debug-cxx20",
+      "configurePreset": "debug-cxx20",
       "configuration": "Debug"
     },
     {
@@ -161,8 +188,18 @@
       "configuration": "Release"
     },
     {
+      "name": "release-cxx20",
+      "configurePreset": "release-cxx20",
+      "configuration": "Release"
+    },
+    {
       "name": "release-static",
       "configurePreset": "release-static",
+      "configuration": "Release"
+    },
+    {
+      "name": "release-static-cxx20",
+      "configurePreset": "release-static-cxx20",
       "configuration": "Release"
     },
     {
@@ -175,6 +212,14 @@
     {
       "name": "debug",
       "configurePreset": "debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug-cxx20",
+      "configurePreset": "debug-cxx20",
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true
@@ -234,6 +279,16 @@
       "output": {
         "outputOnFailure": true
       }
+    },
+    {
+      "name": "release-cxx20",
+      "inherits": "release",
+      "configurePreset": "release-cxx20"
+    },
+    {
+      "name": "release-static-cxx20",
+      "inherits": "release",
+      "configurePreset": "release-static-cxx20"
     },
     {
       "name": "windows-release",

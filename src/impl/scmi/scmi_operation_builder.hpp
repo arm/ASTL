@@ -5,6 +5,7 @@
 #ifndef I_SCMI_OPERATION_BUILDER_HPP_
 #define I_SCMI_OPERATION_BUILDER_HPP_
 
+#include "astl_cxx_compat.hpp"
 #include "operation/operation.hpp"
 #include "scmi/scmi_read_operation.hpp"
 #include "target.hpp"
@@ -19,7 +20,8 @@ class ScmiOperationBuilder {
  public:
   explicit ScmiOperationBuilder(ScmiDataEventId data_event_id);
 
-  [[nodiscard]] auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code>;
+  [[nodiscard]] auto BuildOperations(const ITarget* target) const
+      -> astl::compat::expected<OperationSequence, astl_status_code>;
 
   [[nodiscard]] auto GetDataEventId() const -> ScmiDataEventId;
 
@@ -35,7 +37,8 @@ class ScmiMultiTargetOperationBuilder {
  public:
   explicit ScmiMultiTargetOperationBuilder(ScmiTargetToDataEventIdMap data_event_ids);
 
-  [[nodiscard]] auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code>;
+  [[nodiscard]] auto BuildOperations(const ITarget* target) const
+      -> astl::compat::expected<OperationSequence, astl_status_code>;
 
  private:
   ScmiTargetToDataEventIdMap _data_event_ids;

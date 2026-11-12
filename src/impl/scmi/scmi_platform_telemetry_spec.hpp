@@ -7,12 +7,12 @@
 
 #include <filesystem>
 #include <map>
-#include <nlohmann/json.hpp>
-#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "astl_logger.hpp"
 #include "scmi/scmi_read_operation.hpp"
 #include "scmi/uuid.hpp"
@@ -128,7 +128,7 @@ inline void from_json(const json& json_data, RepoMeta& repo_meta) {
  * If multiple entries match, the match with the longest significant byte match (i.e. most specific) will be returned.
  */
 inline auto FindSpecFileByUuid(const RepoMeta& repo_meta, const scmi::spec::Uuid& uuid)
-    -> std::optional<TelemetrySpecFile> {
+    -> astl::compat::optional<TelemetrySpecFile> {
   const RepoMetaEntry* best_match = nullptr;
   for (const auto& entry : repo_meta.spec_files_by_uuid) {
     if (entry.uuid != uuid) {
@@ -141,7 +141,7 @@ inline auto FindSpecFileByUuid(const RepoMeta& repo_meta, const scmi::spec::Uuid
   if (best_match) {
     return best_match->spec_file;
   }
-  return std::nullopt;
+  return astl::compat::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -409,7 +409,7 @@ struct ResidencyStateRegisterDefinitions {
  */
 auto FindMatchingScmiRegistersForResidency(astl::metrics::spec::MetricJsonDeclaration const& metric_declaration,
                                            ScmiSpecification const&                          scmi_spec)
-    -> std::expected<ResidencyStateRegisterDefinitions, astl_status_code>;
+    -> astl::compat::expected<ResidencyStateRegisterDefinitions, astl_status_code>;
 
 }  // namespace astl::scmi::spec
 

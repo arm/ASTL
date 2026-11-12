@@ -5,10 +5,10 @@
 #include "topology/topology_manager.hpp"
 
 #include <memory>
-#include <nlohmann/json.hpp>
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl_json.hpp"
 
 using json = nlohmann::json;
 

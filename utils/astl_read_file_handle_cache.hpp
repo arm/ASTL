@@ -6,15 +6,14 @@
 #define ASTL_READ_FILE_HANDLE_CACHE_HPP
 
 #include <cstddef>
-#include <expected>
 #include <filesystem>
 #include <fstream>
 #include <list>
-#include <optional>
 #include <string>
 #include <unordered_map>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 
 namespace astl {
 
@@ -26,10 +25,10 @@ class ReadFileHandleCache {
   ReadFileHandleCache() = default;
   /**
    * @brief Create a cache with a specified maximum number of cached read handles.
-   * If the value is std::nullopt, the cache uses the default cap of 64.
+   * If the value is astl::compat::nullopt, the cache uses the default cap of 64.
    *
    */
-  explicit ReadFileHandleCache(std::optional<std::size_t> maxCachedReadHandles)
+  explicit ReadFileHandleCache(astl::compat::optional<std::size_t> maxCachedReadHandles)
       : _maxCachedReadHandles(maxCachedReadHandles) {}
 
   /** @brief Read the contents of a file, using the cache if possible. */
@@ -56,8 +55,8 @@ class ReadFileHandleCache {
   auto GetReadCacheCapacity() const -> std::size_t;
 #ifdef __linux__
   static auto ComputeLinuxReadCacheCapacity() -> std::size_t;
-  static auto GetSoftFileHandleLimit() -> std::optional<std::size_t>;
-  static auto GetOpenFileHandleCount() -> std::optional<std::size_t>;
+  static auto GetSoftFileHandleLimit() -> astl::compat::optional<std::size_t>;
+  static auto GetOpenFileHandleCount() -> astl::compat::optional<std::size_t>;
 #endif
 
   void TrimToCapacity(std::size_t capacity) const;
@@ -65,13 +64,13 @@ class ReadFileHandleCache {
   void Touch(StreamMap::iterator stream_it) const;
   void Evict(StreamMap::iterator stream_it) const;
   void EvictLeastRecentlyUsed() const;
-  auto Open(const std::filesystem::path &path) const -> std::expected<StreamAccess, astl_status_code>;
+  auto Open(const std::filesystem::path &path) const -> astl::compat::expected<StreamAccess, astl_status_code>;
   auto GetOrOpen(const std::filesystem::path &path, std::size_t capacity) const
-      -> std::expected<StreamAccess, astl_status_code>;
+      -> astl::compat::expected<StreamAccess, astl_status_code>;
 
-  mutable std::optional<std::size_t>       _maxCachedReadHandles;
-  mutable std::list<std::filesystem::path> _usage;
-  mutable StreamMap                        _streams;
+  mutable astl::compat::optional<std::size_t> _maxCachedReadHandles;
+  mutable std::list<std::filesystem::path>    _usage;
+  mutable StreamMap                           _streams;
 };
 
 }  // namespace astl

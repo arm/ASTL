@@ -6,12 +6,12 @@
 #define ASTL_SCMI_UUID_HPP_
 
 #include <algorithm>
-#include <expected>
 #include <stdexcept>
 #include <string>
 #include <utility>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 
 namespace astl::scmi::spec {
@@ -45,20 +45,21 @@ inline auto operator!=(const Uuid& uuid_a, const Uuid& uuid_b) { return !(uuid_a
  * @brief normalize a UUID string to lowercase, without hyphens, without leading 0x and leading trailing spaces.
  * return as a pair of Uuid (normalized), and the number of significant bytes if specified by / postfix (else 16)
  */
-inline auto GetNormalizedUuid(std::string const& input_uuid) -> std::expected<scmi::spec::Uuid, astl_status_code> {
+inline auto GetNormalizedUuid(std::string const& input_uuid)
+    -> astl::compat::expected<scmi::spec::Uuid, astl_status_code> {
   std::string normalizing_input = input_uuid;
   // remove leading/trailing spaces
   constexpr char const* whitespace      = " \t\n\r\f\v";
   const auto            first_non_space = normalizing_input.find_first_not_of(whitespace);
   if (first_non_space == std::string::npos) {
     ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} is empty or all whitespace", input_uuid);
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   normalizing_input.erase(0, first_non_space);
   const auto last_non_space = normalizing_input.find_last_not_of(whitespace);
   if (last_non_space == std::string::npos) {
     ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} is empty or all whitespace", input_uuid);
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   normalizing_input.erase(last_non_space + 1);
 
@@ -81,23 +82,23 @@ inline auto GetNormalizedUuid(std::string const& input_uuid) -> std::expected<sc
     } catch (const std::invalid_argument&) {
       ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} has invalid significant bytes specifier '{}'", input_uuid,
                        sig_bytes_str);
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
     } catch (const std::out_of_range&) {
       ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} has out of range significant bytes specifier '{}'", input_uuid,
                        sig_bytes_str);
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
     }
     normalizing_input = normalizing_input.substr(0, slash_pos);
   }
   if (normalizing_input.size() < num_significant_bytes * 2) {
     ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} is {} characters long, less than the {} significant bytes required",
                      normalizing_input, normalizing_input.size(), num_significant_bytes * 2);
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   if (num_significant_bytes == 0) {
     ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} is specified with 0 significant bytes {}", input_uuid,
                      num_significant_bytes);
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   return scmi::spec::Uuid{normalizing_input, num_significant_bytes};
 };

@@ -5,12 +5,12 @@
 #ifndef SCMI_TARGET_CONFIGURATION_HPP_
 #define SCMI_TARGET_CONFIGURATION_HPP_
 
-#include <expected>
 #include <filesystem>
 #include <memory>
 #include <string_view>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "config/astl_configuration.hpp"
 #include "scmi/scmi_platform_telemetry_spec.hpp"
 
@@ -34,7 +34,7 @@ struct ScmiUuidSpecificationInfo {
 
 [[nodiscard]] auto LookUpScmiSpecificationFiles(const AstlConfiguration&           configuration,
                                                 const std::vector<const ITarget*>& scmi_targets)
-    -> std::expected<std::vector<ScmiUuidSpecificationInfo>, astl_status_code>;
+    -> astl::compat::expected<std::vector<ScmiUuidSpecificationInfo>, astl_status_code>;
 
 }  // namespace astl
 

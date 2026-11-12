@@ -6,6 +6,7 @@
 #define WINDOWS_PDH_OPERATION_BUILDER_HPP_
 #include <string>
 
+#include "astl_cxx_compat.hpp"
 #include "operation/operation.hpp"
 #include "target.hpp"
 
@@ -21,9 +22,9 @@ class WindowsPdhOperationBuilder {
  public:
   explicit WindowsPdhOperationBuilder(WindowsPdhSystemField field, std::string instance = {})
       : _field(field), _instance(std::move(instance)) {}
-  auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code> {
+  auto BuildOperations(const ITarget* target) const -> astl::compat::expected<OperationSequence, astl_status_code> {
     if (target == nullptr || target->GetCollectorType() != CollectorType::WINDOWS_PDH) {
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
     }
     OperationSequence operations;
     operations.push_back(std::make_unique<WindowsPdhReadOperation>(_field, _instance));

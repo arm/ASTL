@@ -11,6 +11,7 @@
 #include <unordered_set>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "common/i_raw_sample_sink.hpp"
 #include "i_collector.hpp"
 #include "i_collector_manager.hpp"
@@ -73,10 +74,10 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
   /**
    * @brief Delegate GetNativeClockSnapshot to the configured collector for the given target.
    *
-   * Returns std::unexpected with ASTL_STATUS_INVALID_TARGET_HANDLE if no collector is registered.
+   * Returns astl::compat::unexpected with ASTL_STATUS_INVALID_TARGET_HANDLE if no collector is registered.
    */
   [[nodiscard]] auto GetNativeClockSnapshot(const ITarget* target)
-      -> std::expected<ClockCorrelationMap, astl_status_code> override;
+      -> astl::compat::expected<ClockCorrelationMap, astl_status_code> override;
 
   [[nodiscard]] auto PauseOnTarget(const ITarget* target) -> astl_status_code override;
 
@@ -114,7 +115,7 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
    * @todo ASTL-145 It's a bit of an anti-pattern to take a raw pointer to a unique_ptr for ITarget*
    */
   auto SelectCollectorLocked(const ITarget* target, CollectorCapability const& requirements)
-      -> std::expected<ICollector*, astl_status_code>;
+      -> astl::compat::expected<ICollector*, astl_status_code>;
 };
 
 }  // namespace astl

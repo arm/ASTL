@@ -14,6 +14,7 @@
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_defines.hpp"
 #include "astl_internal_status.hpp"
 #include "astl_logger.hpp"
@@ -248,7 +249,7 @@ auto Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topolog
 }
 
 auto Orchestrator::GetInstance() noexcept
-    -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code> {
+    -> astl::compat::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code> {
   // Fast path under lock: instance already initialized.
   {
     std::scoped_lock lock(GetMutex());
@@ -259,29 +260,29 @@ auto Orchestrator::GetInstance() noexcept
 
   auto configuration = astl::ConfigurationManager::GetConfiguration();
   if (!configuration) {
-    return std::unexpected(configuration.error());
+    return astl::compat::unexpected(configuration.error());
   }
 
   // One-shot in-process override used by explicit load/import APIs.
   auto load_override = astl::ConfigurationManager::GetLoadFilePathOverride();
   if (load_override) {
     configuration->load_file_path = *load_override;
-    astl::ConfigurationManager::SetLoadFilePathOverride(std::nullopt);
+    astl::ConfigurationManager::SetLoadFilePathOverride(astl::compat::nullopt);
   }
   try {
     astl_status_code status = BuildOrchestrator(configuration.value());
     if (status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(status);
+      return astl::compat::unexpected(status);
     }
-  } catch (const std::bad_expected_access<astl_status_code> &ex) {
+  } catch (const astl::compat::bad_expected_access<astl_status_code> &ex) {
     ASTL_LOG_ERROR("Exception during Orchestrator initialization: {}", ex.what());
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   // Re-check under lock after construction attempt.
   {
     std::scoped_lock lock(GetMutex());
     if (!instance_) {
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
     return std::reference_wrapper<std::unique_ptr<Orchestrator>>(instance_);
   }
@@ -1361,11 +1362,11 @@ auto Orchestrator::VisitUncachedMetricSamplesWithReason(const IMetric *metric, c
                                                         const ProcessedSampleBatchConsumer &first_consumer,
                                                         const ProcessedSampleBatchConsumer &second_consumer,
                                                         astl::EmptyResultReason            &empty_reason) const
-    -> std::optional<astl_status_code> {
+    -> astl::compat::optional<astl_status_code> {
   {
     std::scoped_lock raw_lock{_raw_samples_mtx};
     if (!_no_cache_targets.contains(target)) {
-      return std::nullopt;
+      return astl::compat::nullopt;
     }
   }
   // Snapshot samples and their diagnostic while collector processing is excluded.
@@ -1414,9 +1415,9 @@ auto Orchestrator::VisitRawMetricSampleBatchesTwice(const RawMetricBatchSource  
 
 auto Orchestrator::VisitRecentProcessedMetricSamples(const IMetric *metric, const ITarget *target,
                                                      const ProcessedSampleBatchConsumer &consumer) const
-    -> std::optional<astl_status_code> {
+    -> astl::compat::optional<astl_status_code> {
   if (_recent_processed_metric != metric || _recent_processed_target != target) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return VisitSampleSpanBatches(_recent_processed_samples, consumer, _sample_batch_size);
 }
@@ -1424,7 +1425,7 @@ auto Orchestrator::VisitRecentProcessedMetricSamples(const IMetric *metric, cons
 auto Orchestrator::VisitRecentProcessedMetricSamplesTwice(const IMetric *metric, const ITarget *target,
                                                           const ProcessedSampleBatchConsumer &first_consumer,
                                                           const ProcessedSampleBatchConsumer &second_consumer) const
-    -> std::optional<astl_status_code> {
+    -> astl::compat::optional<astl_status_code> {
   const auto first_status = VisitRecentProcessedMetricSamples(metric, target, first_consumer);
   if (!first_status || *first_status != ASTL_STATUS_SUCCESS) {
     return first_status;
@@ -1720,21 +1721,21 @@ auto Orchestrator::MaterializeProcessedMetricSamplesForMutation(const IMetric *m
 }
 
 auto Orchestrator::GetTargetCollectionState(const ITarget *target) const
-    -> std::expected<TargetCollectionState, astl_status_code> {
+    -> astl::compat::expected<TargetCollectionState, astl_status_code> {
   if (!target) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   // Verify target is part of current topology to avoid stale pointer queries after SetTargets.
   const auto &targets = _topology_manager->GetTargets();
   auto        index   = std::find_if(std::begin(targets), std::end(targets),
                                      [target](auto const &owned_target) { return owned_target.get() == target; });
   if (index == std::end(targets)) {
-    return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
+    return astl::compat::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
   }
   std::lock_guard state_lock(_collection_state_mutex);
   auto            state_iterator = _target_collection_states.find(target);
   if (state_iterator == _target_collection_states.end()) {
-    return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
+    return astl::compat::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
   }
   return state_iterator->second;
 }
@@ -1986,7 +1987,7 @@ auto WriteFilteredRawSampleBatch(std::ofstream &out_stream, const fs::path &temp
 
 auto WriteFilteredRawSampleBatches(std::istream &in_stream, const fs::path &temp_cache_file_path,
                                    const ClockCorrelationMap &correlations, std::span<const astl_crop_window_t> windows)
-    -> std::expected<bool, astl_status_code> {
+    -> astl::compat::expected<bool, astl_status_code> {
   std::ofstream                        out_stream;
   bool                                 wrote_filtered_samples = false;
   ProtobufSerDes::RawSampleBatchReader reader{in_stream};
@@ -1994,7 +1995,7 @@ auto WriteFilteredRawSampleBatches(std::istream &in_stream, const fs::path &temp
   while (true) {
     auto raw_samples_or_error = reader.ReadNext();
     if (!raw_samples_or_error) {
-      return std::unexpected(raw_samples_or_error.error());
+      return astl::compat::unexpected(raw_samples_or_error.error());
     }
     if (raw_samples_or_error->empty()) {
       return wrote_filtered_samples;
@@ -2008,7 +2009,7 @@ auto WriteFilteredRawSampleBatches(std::istream &in_stream, const fs::path &temp
 
     const auto write_status = WriteFilteredRawSampleBatch(out_stream, temp_cache_file_path, raw_samples);
     if (write_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(write_status);
+      return astl::compat::unexpected(write_status);
     }
 
     wrote_filtered_samples = true;

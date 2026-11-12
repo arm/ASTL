@@ -1358,8 +1358,9 @@ Formula evaluation also uses the vendored
 Install these tools before using the CMake presets:
 
 - CMake 3.21 or newer and Ninja.
-- A C99 compiler and a C++23 compiler/standard-library pair providing `std::expected`,
-  `std::format`, and `std::optional::transform`.
+- A C99 compiler and a C++20-or-newer compiler/standard-library pair providing `std::format`.
+  C++23 is the default; `tl-expected` and `tl-optional` provide fallbacks when the standard
+  library lacks `std::expected` or the C++23 optional operations.
 - Git and Python 3; Python generates the configuration embedded in the library.
 - On Unix-like hosts, `jq`, `curl`, `zip`, `unzip`, and `tar` for the default
   vcpkg bootstrap; Linux dependency builds also use `pkg-config`. Windows bootstrap
@@ -1488,15 +1489,32 @@ cmake --build build/custom
 ctest --test-dir build/custom --output-on-failure
 ```
 
-Use a fresh build directory when changing compilers. The selected compiler and
-standard library must still provide the C++23 features listed above.
+Use a fresh build directory when changing compilers. Select a C++20 preset with `just`:
+
+| Build          | C++23 (default)             | C++20                             |
+| -------------- | --------------------------- | --------------------------------- |
+| Debug          | `just build debug`          | `just build debug-cxx20`          |
+| Release        | `just build release`        | `just build release-cxx20`        |
+| Release static | `just build release-static` | `just build release-static-cxx20` |
+
+Each preset uses its own `build/<preset>` directory. ASTL's static library archive is built
+in every configuration. Set `ASTL_BUILD_SHARED=OFF` to omit the shared-library wrapper.
+Use `just test debug-cxx20` or `just test release-cxx20` to run the corresponding test workflow.
+Custom builds can select `-DCMAKE_CXX_STANDARD=20` or `23`.
 
 ### C++ standard library and cross-compilation
 
-ASTL uses the C++ standard library selected by the compiler or toolchain. Configuration checks
-that it provides `std::expected`, `std::format`, and `std::optional::transform` in C++23 mode.
-Use a compatible compiler/library pair and build C++ dependencies with the same toolchain;
-ASTL does not override compiler feature-test macros to enable unsupported library features.
+ASTL uses the C++ standard library selected by the compiler or toolchain. Internal code uses
+`astl::compat::expected` and `astl::compat::optional`, including `.transform()`. A shared header
+selects the standard implementation when its library feature is available, otherwise the
+header-only `tl-expected` or `tl-optional` fallback. These dependencies are included in the
+vcpkg manifest; builds using `ASTL_USE_VCPKG=OFF` must provide their CMake packages too.
+The public C API is independent of these internal types.
+
+Configuration checks the selected implementations and `std::format` in the requested C++ mode.
+Build C++ dependencies with the same toolchain and use one C++ mode across ASTL's implementation
+and internal tests. ASTL does not override compiler feature-test macros to enable unsupported
+library features.
 
 For Android NDK integrations, use the NDK's `build/cmake/android.toolchain.cmake` and select
 C++ runtime linkage with `-DANDROID_STL=c++_static` when static libc++ linkage is needed, or

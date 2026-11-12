@@ -5,15 +5,14 @@
 #ifndef ASTL_SUMMARIZER_HPP_
 #define ASTL_SUMMARIZER_HPP_
 
-#include <expected>
 #include <map>
-#include <optional>
 #include <span>
 #include <string>
 #include <variant>
 #include <vector>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "common/astl_value.hpp"
 #include "common/monotonic_raw_clock.hpp"
 
@@ -31,30 +30,30 @@ using SummaryResult = std::variant<struct MinMaxAvgSummary, struct HistogramSumm
  * @brief Summary data for min/max/average statistics.
  */
 struct MinMaxAvgSummary {
-  std::optional<AstlValue> min;       ///< Minimum value
-  std::optional<AstlValue> max;       ///< Maximum value
-  std::optional<AstlValue> avg;       ///< Average value
-  std::size_t              count{0};  ///< Number of samples processed
+  astl::compat::optional<AstlValue> min;       ///< Minimum value
+  astl::compat::optional<AstlValue> max;       ///< Maximum value
+  astl::compat::optional<AstlValue> avg;       ///< Average value
+  std::size_t                       count{0};  ///< Number of samples processed
 };
 
 /** Incremental min/max/average calculation suitable for streamed sample batches. */
 class MinMaxAvgAccumulator {
  public:
   auto Add(std::span<const ProcessedSampledData> samples) -> astl_status_code;
-  auto Result() const -> std::expected<MinMaxAvgSummary, astl_status_code>;
+  auto Result() const -> astl::compat::expected<MinMaxAvgSummary, astl_status_code>;
 
  private:
-  MinMaxAvgSummary         _summary{};
-  std::optional<AstlValue> _sum;
-  std::size_t              _arithmetic_count{0};
+  MinMaxAvgSummary                  _summary{};
+  astl::compat::optional<AstlValue> _sum;
+  std::size_t                       _arithmetic_count{0};
 };
 
 /**
  * @brief Summary data for time-weighted average statistics.
  */
 struct TimeWeightedAvgSummary {
-  std::optional<AstlValue> time_weighted_avg;  ///< Time-weighted average value
-  std::size_t              count{0};           ///< Number of samples processed
+  astl::compat::optional<AstlValue> time_weighted_avg;  ///< Time-weighted average value
+  std::size_t                       count{0};           ///< Number of samples processed
 };
 
 /** Incremental left-hold time-weighted average across batch boundaries. */
@@ -62,19 +61,19 @@ class TimeWeightedAvgAccumulator {
  public:
   explicit TimeWeightedAvgAccumulator(std::span<const ProcessedSampleTimestamp> pause_markers = {});
   auto Add(std::span<const ProcessedSampledData> samples) -> astl_status_code;
-  auto Result() const -> std::expected<TimeWeightedAvgSummary, astl_status_code>;
+  auto Result() const -> astl::compat::expected<TimeWeightedAvgSummary, astl_status_code>;
 
  private:
-  auto                                    AddArithmeticSample(const ProcessedSampledData& sample) -> astl_status_code;
-  auto                                    AddWeightedInterval(const ProcessedSampledData& sample) -> astl_status_code;
-  std::vector<ProcessedSampleTimestamp>   _pause_markers;
-  std::optional<AstlValue>                _previous_value;
-  std::optional<ProcessedSampleTimestamp> _previous_timestamp;
-  double                                  _weighted_sum{0.0};
-  double                                  _total_weight{0.0};
-  double                                  _arithmetic_sum{0.0};
-  std::size_t                             _arithmetic_count{0};
-  std::size_t                             _count{0};
+  auto                                  AddArithmeticSample(const ProcessedSampledData& sample) -> astl_status_code;
+  auto                                  AddWeightedInterval(const ProcessedSampledData& sample) -> astl_status_code;
+  std::vector<ProcessedSampleTimestamp> _pause_markers;
+  astl::compat::optional<AstlValue>     _previous_value;
+  astl::compat::optional<ProcessedSampleTimestamp> _previous_timestamp;
+  double                                           _weighted_sum{0.0};
+  double                                           _total_weight{0.0};
+  double                                           _arithmetic_sum{0.0};
+  std::size_t                                      _arithmetic_count{0};
+  std::size_t                                      _count{0};
 };
 
 /**
@@ -90,7 +89,7 @@ class TimeWeightedAvgAccumulator {
  */
 auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData>     samples,
                                 std::span<const ProcessedSampleTimestamp> pause_markers)
-    -> std::expected<std::optional<AstlValue>, astl_status_code>;
+    -> astl::compat::expected<astl::compat::optional<AstlValue>, astl_status_code>;
 
 /**
  * @brief Histogram bin data structure.
@@ -156,7 +155,7 @@ class ISummarizer {
    * @return Summary result or error status
    */
   virtual auto Summarize(std::span<const ProcessedSampledData> samples) const
-      -> std::expected<SummaryResult, astl_status_code> = 0;
+      -> astl::compat::expected<SummaryResult, astl_status_code> = 0;
 
   /**
    * @brief Get the type of summary this summarizer produces.
@@ -184,7 +183,7 @@ class ISummarizer {
 class MinMaxAvgSummarizer : public ISummarizer {
  public:
   auto Summarize(std::span<const ProcessedSampledData> samples) const
-      -> std::expected<SummaryResult, astl_status_code> override;
+      -> astl::compat::expected<SummaryResult, astl_status_code> override;
 
   auto GetSummaryType() const -> std::string override { return "MinMaxAvg"; }
 
@@ -200,7 +199,7 @@ class MinMaxAvgSummarizer : public ISummarizer {
 class TimeWeightedAvgSummarizer : public ISummarizer {
  public:
   auto Summarize(std::span<const ProcessedSampledData> samples) const
-      -> std::expected<SummaryResult, astl_status_code> override;
+      -> astl::compat::expected<SummaryResult, astl_status_code> override;
 
   /**
    * @brief Pause-aware overload: clips each inter-sample interval at the first pause
@@ -211,7 +210,7 @@ class TimeWeightedAvgSummarizer : public ISummarizer {
    */
   static auto Summarize(std::span<const ProcessedSampledData>     samples,
                         std::span<const ProcessedSampleTimestamp> pause_markers)
-      -> std::expected<SummaryResult, astl_status_code>;
+      -> astl::compat::expected<SummaryResult, astl_status_code>;
 
   auto GetSummaryType() const -> std::string override { return "TimeWeightedAvg"; }
 
@@ -270,7 +269,7 @@ class HistogramSummarizer : public ISummarizer {
   explicit HistogramSummarizer(std::size_t num_bins) : use_discrete_bins_(false), num_bins_(num_bins) {}
 
   auto Summarize(std::span<const ProcessedSampledData> samples) const
-      -> std::expected<SummaryResult, astl_status_code> override;
+      -> astl::compat::expected<SummaryResult, astl_status_code> override;
 
   auto GetSummaryType() const -> std::string override {
     return use_discrete_bins_ ? "DiscreteHistogram" : "RangeHistogram";
@@ -287,14 +286,14 @@ class HistogramSummarizer : public ISummarizer {
    */
   // cppcheck-suppress unusedPrivateFunction
   auto SummarizeDiscrete(std::span<const ProcessedSampledData> samples) const  // NOLINT
-      -> std::expected<SummaryResult, astl_status_code>;
+      -> astl::compat::expected<SummaryResult, astl_status_code>;
 
   /**
    * @brief Generate histogram with fixed-width range bins.
    */
   // cppcheck-suppress unusedPrivateFunction
   auto SummarizeRanged(std::span<const ProcessedSampledData> samples) const  // NOLINT
-      -> std::expected<SummaryResult, astl_status_code>;
+      -> astl::compat::expected<SummaryResult, astl_status_code>;
 };
 
 }  // namespace astl

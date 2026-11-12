@@ -5,9 +5,10 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
-#include <nlohmann/json.hpp>
 
 #include "../../test_includes.hpp"  // include before catch2
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "common/astl_value.hpp"
 #include "metric/expression_formula.hpp"
 #include "metric/formula_builder.hpp"
@@ -54,14 +55,14 @@ TEST_CASE("IdentityFormula - Pass-through", "[IdentityFormula]") {
 TEST_CASE("FormulaBuilder - Null/Empty", "[FormulaBuilder]") {
   SECTION("Null JSON") {
     nlohmann::json json   = nullptr;
-    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    auto           result = astl::BuildFormula(astl::compat::optional<nlohmann::json>{json});
     REQUIRE(result.has_value());
     REQUIRE(std::holds_alternative<astl::IdentityFormula>(*result));
   }
 
   SECTION("Empty string") {
     nlohmann::json json   = "";
-    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    auto           result = astl::BuildFormula(astl::compat::optional<nlohmann::json>{json});
     REQUIRE(result.has_value());
     REQUIRE(std::holds_alternative<astl::IdentityFormula>(*result));
   }
@@ -71,7 +72,7 @@ TEST_CASE("FormulaBuilder - Invalid Input", "[FormulaBuilder]") {
   SECTION("Non-string, non-null type") {
     nlohmann::json json = nlohmann::json::array();
     json.push_back("invalid");
-    auto result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    auto result = astl::BuildFormula(astl::compat::optional<nlohmann::json>{json});
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
@@ -81,35 +82,35 @@ TEST_CASE("FormulaBuilder - Invalid Input", "[FormulaBuilder]") {
         {"transformation", "BITMASK"},
         {"value",          "0xFF"   }
     };
-    auto result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    auto result = astl::BuildFormula(astl::compat::optional<nlohmann::json>{json});
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   SECTION("Invalid expression syntax") {
     nlohmann::json json   = "value +* 2";
-    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    auto           result = astl::BuildFormula(astl::compat::optional<nlohmann::json>{json});
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   SECTION("Undefined variable") {
     nlohmann::json json   = "y * 2";  // Should use 'x', not 'y'
-    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    auto           result = astl::BuildFormula(astl::compat::optional<nlohmann::json>{json});
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   SECTION("Decimal literals are rejected") {
     nlohmann::json json   = "value * 0.001";
-    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    auto           result = astl::BuildFormula(astl::compat::optional<nlohmann::json>{json});
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   SECTION("Scientific notation literals are rejected") {
     nlohmann::json json   = "value * 1e-3";
-    auto           result = astl::BuildFormula(std::optional<nlohmann::json>{json});
+    auto           result = astl::BuildFormula(astl::compat::optional<nlohmann::json>{json});
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
@@ -670,7 +671,7 @@ TEST_CASE("BuildFormula - String Expression Support", "[BuildFormula]") {
     // Note: >> is native operator, but & is logical AND in tinyexpr++
     // Use bitand() function for bitwise AND
     nlohmann::json formula_json = "bitand(value >> 8, 0xFF)";
-    auto           result       = astl::BuildFormula(std::optional<nlohmann::json>{formula_json});
+    auto           result       = astl::BuildFormula(astl::compat::optional<nlohmann::json>{formula_json});
     REQUIRE(result.has_value());
 
     astl::AstlValue input{uint64_t{0x12345678}};
@@ -681,21 +682,21 @@ TEST_CASE("BuildFormula - String Expression Support", "[BuildFormula]") {
 
   SECTION("Empty string returns IdentityFormula") {
     nlohmann::json formula_json = "";
-    auto           result       = astl::BuildFormula(std::optional<nlohmann::json>{formula_json});
+    auto           result       = astl::BuildFormula(astl::compat::optional<nlohmann::json>{formula_json});
     REQUIRE(result.has_value());
     REQUIRE(std::holds_alternative<astl::IdentityFormula>(result.value()));
   }
 
   SECTION("Invalid string expression") {
     nlohmann::json formula_json = "invalid syntax !!!";
-    auto           result       = astl::BuildFormula(std::optional<nlohmann::json>{formula_json});
+    auto           result       = astl::BuildFormula(astl::compat::optional<nlohmann::json>{formula_json});
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   SECTION("String expression in variant") {
     nlohmann::json formula_json = "value * 1000";
-    auto           result       = astl::BuildFormula(std::optional<nlohmann::json>{formula_json});
+    auto           result       = astl::BuildFormula(astl::compat::optional<nlohmann::json>{formula_json});
     REQUIRE(result.has_value());
     REQUIRE(std::holds_alternative<astl::ExpressionFormula>(result.value()));
 

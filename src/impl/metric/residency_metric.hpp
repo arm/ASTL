@@ -6,13 +6,12 @@
 #define RESIDENCY_METRIC_HPP_
 
 #include <chrono>
-#include <expected>
-#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
 #include "common/metric_config.hpp"
@@ -33,8 +32,8 @@ struct ResidencySummaryData {
   std::unordered_map<std::string, double> average_percentage;         ///< Average percentage per state
   std::unordered_map<std::string, double> min_percentage;             ///< Minimum percentage per state
   std::unordered_map<std::string, double> max_percentage;             ///< Maximum percentage per state
-  std::optional<double>                   inferred_state_percentage;  ///< Percentage for inferred state
-  std::optional<double>                   inferred_state_time;        ///< Total time for inferred state
+  astl::compat::optional<double>          inferred_state_percentage;  ///< Percentage for inferred state
+  astl::compat::optional<double>          inferred_state_time;        ///< Total time for inferred state
 };
 
 /**
@@ -128,7 +127,7 @@ class ResidencyMetric : public DeltaMetric {
    *
    * @return OperationSequence containing operations for all states, or error code on failure.
    */
-  std::expected<OperationSequence, astl_status_code> GetOperations() override;
+  astl::compat::expected<OperationSequence, astl_status_code> GetOperations() override;
 
   /**
    * @brief Retrieve the complete residency summary data.
@@ -168,7 +167,7 @@ class ResidencyMetric : public DeltaMetric {
    * @param config The state configuration containing the tick frequency.
    * @return Expected time as std::chrono::microseconds or error code.
    */
-  static std::expected<std::chrono::microseconds, astl_status_code> ConvertTicksToMicroseconds(
+  static astl::compat::expected<std::chrono::microseconds, astl_status_code> ConvertTicksToMicroseconds(
       const AstlValue& ticks, const ResidencyMetricConfig::StateInfo& config);
 
   /**
@@ -178,8 +177,8 @@ class ResidencyMetric : public DeltaMetric {
    * @param total_interval Total time interval between samples (microseconds).
    * @return Expected percentage value or error code.
    */
-  static std::expected<double, astl_status_code> CalculatePercentage(std::chrono::microseconds time_in_state,
-                                                                     std::chrono::microseconds total_interval);
+  static astl::compat::expected<double, astl_status_code> CalculatePercentage(std::chrono::microseconds time_in_state,
+                                                                              std::chrono::microseconds total_interval);
 
   /**
    * @brief Update residency statistics for a specific state.
@@ -208,7 +207,7 @@ class ResidencyMetric : public DeltaMetric {
  private:
   auto ProcessStateInterval(const NormalizedSampledData&            raw_sample,
                             const ResidencyMetricConfig::StateInfo& state_config)
-      -> std::expected<std::chrono::microseconds, astl_status_code>;
+      -> astl::compat::expected<std::chrono::microseconds, astl_status_code>;
   auto FlushCompletedInterval(std::chrono::microseconds time_interval, ProcessedSampleTimestamp timestamp)
       -> astl_status_code;
 
@@ -219,8 +218,8 @@ class ResidencyMetric : public DeltaMetric {
   std::unordered_map<OperationId, const ResidencyMetricConfig::StateInfo*>
       _operation_id_to_config;  ///< Fast lookup map from operation_id to state config
   // First (smallest) operation id assigned (captures ordering baseline). Set when operations are built.
-  std::optional<OperationId> _first_operation_id;
-  std::unordered_map<std::string, std::optional<NormalizedSampledData>>
+  astl::compat::optional<OperationId> _first_operation_id;
+  std::unordered_map<std::string, astl::compat::optional<NormalizedSampledData>>
                        _previous_samples;  ///< Previous samples per state
   ResidencySummaryData _summary_data;      ///< Summary statistics
 
@@ -235,8 +234,8 @@ class ResidencyMetric : public DeltaMetric {
 
   // Pending processed samples keyed by OperationId (raw sample source). Inferred state (derived) stored separately.
   std::unordered_map<OperationId, ProcessedSampledData>
-                                      _pending_processed_samples;  ///< Collected samples awaiting ordered sink
-  std::optional<ProcessedSampledData> _pending_inferred_sample;    ///< Inferred sample (if any) for interval
+                                               _pending_processed_samples;  ///< Collected samples awaiting ordered sink
+  astl::compat::optional<ProcessedSampledData> _pending_inferred_sample;    ///< Inferred sample (if any) for interval
 
   // Sink all pending processed samples in the order of _state_configs then inferred state (if any)
   astl_status_code SinkOrderedStateSamples();

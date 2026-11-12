@@ -10,16 +10,18 @@
 #include <string_view>
 #include <utility>
 
+#include "astl_cxx_compat.hpp"
+
 namespace astl {
 namespace {
-auto ParseProcessorIndex(std::string_view text) -> std::optional<unsigned> {
+auto ParseProcessorIndex(std::string_view text) -> astl::compat::optional<unsigned> {
   unsigned value{};
   // from_chars requires a contiguous pointer range; this points one past the view.
   // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
   const auto* end    = text.data() + text.size();
   const auto  parsed = std::from_chars(text.data(), end, value);
   if (parsed.ec != std::errc{} || parsed.ptr != end) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return value;
 }

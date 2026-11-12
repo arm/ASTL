@@ -117,6 +117,12 @@ jobs:
             c_compiler: gcc
             cpp_compiler: g++
 
+          # Exercise expected and optional fallbacks with C++20.
+          - os: ubuntu-24.04-arm
+            cmake_preset: debug-cxx20
+            c_compiler: gcc
+            cpp_compiler: g++
+
           # Run memory checks in sharded test suites without coverage instrumentation.
           - os: ubuntu-24.04-arm
             cmake_preset: debug-valgrind

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_backend.hpp"
 #include "collector/i_collector.hpp"
 #if defined(ASTL_INCLUDE_PROCFS)
@@ -12,14 +13,14 @@
 namespace astl {
 namespace {
 auto BuildProcfsCollector(const ITarget& target, const AstlConfiguration& /*configuration*/)
-    -> std::expected<std::unique_ptr<ICollector>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<ICollector>, astl_status_code> {
 #if defined(ASTL_INCLUDE_PROCFS)
   const auto* procfs_target = dynamic_cast<const ProcfsTarget*>(&target);
   return std::make_unique<ProcfsCollector>(
       FileInterface{procfs_target ? procfs_target->ProcfsRootPath() : procfs::kDefaultProcfsRootPath});
 #else
   (void)target;
-  return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+  return astl::compat::unexpected(ASTL_STATUS_NOT_SUPPORTED);
 #endif
 }
 #if defined(ASTL_INCLUDE_PROCFS)

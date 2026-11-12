@@ -6,12 +6,12 @@
 #define ASTL_RESOURCE_LIFECYCLE_STRESS_UTILS_HPP_
 
 #include <cstddef>
-#include <expected>
 #include <memory>
 #include <span>
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "collector/collection_configuration.hpp"
 #include "common/clock_correlation.hpp"
 #include "mock_classes.hpp"
@@ -49,13 +49,13 @@ inline auto operator==(std::nullptr_t lhs, span<T, Extent> rhs) -> bool {
 namespace astl::testing {
 constexpr int kResourceLifecycleStressIterations = 64;
 
-inline auto MakeSingleSampleOperation() -> std::expected<CollectionOperations, astl_status_code> {
+inline auto MakeSingleSampleOperation() -> astl::compat::expected<CollectionOperations, astl_status_code> {
   CollectionOperations operations{{}, {}, {}, {}, SamplingInterval{0}, CollectorCapability{CollectorType::UNKNOWN}};
   operations.operationsOnSample.push_back(std::make_unique<Operation>());
   return operations;
 }
 
-inline auto MakeTestClockCorrelations() -> std::expected<ClockCorrelationMap, astl_status_code> {
+inline auto MakeTestClockCorrelations() -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   return ClockCorrelationMap{};
 }
 
@@ -71,7 +71,7 @@ inline auto MakeMetricLifecycleCollectionExpectations(MockMetricManager&        
       NAMED_ALLOW_CALL(metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS));
   expectations.push_back(
       NAMED_ALLOW_CALL(metric_manager, GetAvailableMetrics(_))
-          .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics}));
+          .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics}));
   expectations.push_back(
       NAMED_ALLOW_CALL(metric_manager, GetRequiredOperations(_, _)).LR_RETURN(MakeSingleSampleOperation()));
   expectations.push_back(NAMED_ALLOW_CALL(metric_manager, SetClockCorrelations(_)));

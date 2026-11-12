@@ -4,6 +4,7 @@
 
 #include "procfs/procfs_operation_builder.hpp"
 
+#include "astl_cxx_compat.hpp"
 #include "procfs/procfs_read_operation.hpp"
 
 namespace astl {
@@ -12,7 +13,7 @@ ProcfsOperationBuilder::ProcfsOperationBuilder(procfs::FieldDescriptor field_des
     : _field_descriptor(std::move(field_descriptor)) {}
 
 auto ProcfsOperationBuilder::BuildOperations(const ITarget* target) const
-    -> std::expected<OperationSequence, astl_status_code> {
+    -> astl::compat::expected<OperationSequence, astl_status_code> {
   (void)target;
   OperationSequence sequence;
   sequence.push_back(std::make_unique<ProcfsReadOperation>(_field_descriptor));

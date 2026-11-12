@@ -8,6 +8,7 @@
 #if defined(ASTL_INCLUDE_LIBSENSORS)
 #  include <sensors/sensors.h>
 
+#  include "astl_cxx_compat.hpp"
 #  include "operation/operation.hpp"
 #  include "target.hpp"
 
@@ -17,7 +18,8 @@ class LibsensorsOperationBuilder {
  public:
   LibsensorsOperationBuilder(const sensors_chip_name* chip, int subfeature_number);
 
-  [[nodiscard]] auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code>;
+  [[nodiscard]] auto BuildOperations(const ITarget* target) const
+      -> astl::compat::expected<OperationSequence, astl_status_code>;
 
  private:
   const sensors_chip_name* _chip;

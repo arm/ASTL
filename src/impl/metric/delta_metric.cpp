@@ -4,6 +4,7 @@
 
 #include "delta_metric.hpp"
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
 
@@ -12,7 +13,7 @@ namespace astl {
 DeltaMetric::DeltaMetric(const MetricConfig* configuration, const ITarget* target,
                          IProcessedSampleSink* processed_sample_sink)
     : RawMetric(configuration, target, processed_sample_sink),
-      _previous_sample{std::nullopt},
+      _previous_sample{astl::compat::nullopt},
       _delta_summary_data{},
       _sum_delta_value{uint64_t{0}} {
   InitializeSamples();
@@ -70,9 +71,9 @@ auto DeltaMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> a
 }
 
 /* static */ auto DeltaMetric::CalculateDelta(const AstlValue& current_sample, const AstlValue& previous_sample)
-    -> std::expected<AstlValue, astl_status_code> {
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   if (!current_sample.IsArithmetic() || !previous_sample.IsArithmetic()) {
-    return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+    return astl::compat::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
 
   // Calculate delta: current - previous
@@ -81,7 +82,7 @@ auto DeltaMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> a
     ASTL_LOG_ERROR(
         "DeltaMetric: error {} when computing delta between current and previous samples. Current: {}, Previous: {}",
         astlStatusString(delta_result.error()), to_string(current_sample), to_string(previous_sample));
-    return std::unexpected(delta_result.error());
+    return astl::compat::unexpected(delta_result.error());
   }
 
   return delta_result.value();
@@ -90,7 +91,7 @@ auto DeltaMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> a
 auto DeltaMetric::ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> astl_status_code {
   // Drop the previous sample so the first post-resume raw sample starts a fresh delta
   // window rather than computing a delta across the pause gap.
-  _previous_sample = std::nullopt;
+  _previous_sample = astl::compat::nullopt;
   ASTL_LOG_INFO("DeltaMetric {}: reset previous sample on pause at {} ns", _configuration->Name(),
                 pause_timestamp.time_since_epoch().count());
   // Propagate the pause-marker sentinel downstream.
@@ -181,7 +182,8 @@ auto DeltaMetric::InitializeSamples() -> void {
   // Initialize delta summary data based on the value type
   auto zero_val = AstlValue::FromZero(_configuration->ValueType());
   if (zero_val.has_value()) {
-    _delta_summary_data = {.min_delta = std::nullopt, .max_delta = std::nullopt, .avg_delta = zero_val.value()};
+    _delta_summary_data = {
+        .min_delta = astl::compat::nullopt, .max_delta = astl::compat::nullopt, .avg_delta = zero_val.value()};
   } else {
     ASTL_LOG_INFO("DeltaMetric: unsupported type {} for delta statistics for metric: {}", _configuration->ValueType(),
                   _configuration->Name());

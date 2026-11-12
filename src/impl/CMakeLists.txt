@@ -10,6 +10,8 @@ set(LIBRARY_NAME "${PROJECT_NAME}_static")
 add_library(${LIBRARY_NAME} STATIC)
 # add an alias for the library for unambiguous FindPackage
 add_library(Astl::${LIBRARY_NAME} ALIAS ${LIBRARY_NAME})
+target_link_libraries(${LIBRARY_NAME} PUBLIC tl::expected tl::optional)
+target_compile_features(${LIBRARY_NAME} PUBLIC cxx_std_${CMAKE_CXX_STANDARD})
 include(EmbeddedConfig)
 target_sources(${LIBRARY_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/config/config_source.cpp")
 target_link_libraries(${LIBRARY_NAME} PRIVATE ${CMAKE_DL_LIBS})

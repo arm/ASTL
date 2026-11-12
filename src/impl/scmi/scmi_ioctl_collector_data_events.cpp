@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <expected>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
 #include "scmi/scmi_data_event.hpp"
@@ -19,27 +19,27 @@ namespace astl {
  * @return Original data event states to restore later, or an ASTL status on failure.
  */
 auto ScmiIoctlCollector::EnableDataEvents(std::unordered_set<ScmiDataEventId> const& data_events_to_enable)
-    -> std::expected<std::vector<ScmiDataEvent>, astl_status_code> {
+    -> astl::compat::expected<std::vector<ScmiDataEvent>, astl_status_code> {
   std::vector<ScmiDataEvent> enabled_data_events;
   for (const auto& data_event_id : data_events_to_enable) {
     scmi_tlm_de_config original_config{};
     auto               result = _scmi_ioctl_interface->GetDataEventConfig(data_event_id, original_config);
     if (result != ASTL_STATUS_SUCCESS) {
       static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
-      return std::unexpected{result};
+      return astl::compat::unexpected{result};
     }
 
     scmi_tlm_de_info info{};
     result = _scmi_ioctl_interface->GetDataEventInfo(data_event_id, info);
     if (result != ASTL_STATUS_SUCCESS) {
       static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
-      return std::unexpected{result};
+      return astl::compat::unexpected{result};
     }
 
-    const bool               originally_enabled = original_config.enable != 0;
-    const bool               can_use_timestamps = !_use_software_clock_timestamps;
-    std::optional<bool>      original_timestamp_enabled;
-    std::optional<kilohertz> timestamp_rate;
+    const bool                        originally_enabled = original_config.enable != 0;
+    const bool                        can_use_timestamps = !_use_software_clock_timestamps;
+    astl::compat::optional<bool>      original_timestamp_enabled;
+    astl::compat::optional<kilohertz> timestamp_rate;
     if (can_use_timestamps) {
       original_timestamp_enabled = original_config.t_enable != 0;
       timestamp_rate             = info.ts_rate != 0 ? kilohertz{info.ts_rate} : kDefaultScmiTimestampRate;
@@ -53,7 +53,7 @@ auto ScmiIoctlCollector::EnableDataEvents(std::unordered_set<ScmiDataEventId> co
     result = _scmi_ioctl_interface->SetDataEventConfig(new_config);
     if (result != ASTL_STATUS_SUCCESS) {
       static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
-      return std::unexpected{result};
+      return astl::compat::unexpected{result};
     }
 
     enabled_data_events.emplace_back(data_event_id, originally_enabled, original_timestamp_enabled, timestamp_rate);

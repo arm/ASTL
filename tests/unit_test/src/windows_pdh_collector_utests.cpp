@@ -7,6 +7,7 @@
 
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_builder.hpp"
 #include "metric/metric_builder.hpp"
 #include "metric/metric_manager.hpp"
@@ -41,13 +42,13 @@ using astl::WindowsPdhSystemField;
 using astl::WindowsPdhSystemTarget;
 class FakeWindowsPdhApi : public IWindowsPdhSystemApi {
  public:
-  WindowsPdhMemorySnapshot memory{1000, 250};
-  std::vector<std::string> instances;
-  unsigned                 cpu_reads{}, memory_reads{}, resets{};
-  bool                     primed{false};
-  astl_status_code         read_status{ASTL_STATUS_SUCCESS};
-  std::optional<double>    utilization{37.5};
-  auto                     DiscoverProcessors() -> std::expected<std::vector<std::string>, astl_status_code> override {
+  WindowsPdhMemorySnapshot       memory{1000, 250};
+  std::vector<std::string>       instances;
+  unsigned                       cpu_reads{}, memory_reads{}, resets{};
+  bool                           primed{false};
+  astl_status_code               read_status{ASTL_STATUS_SUCCESS};
+  astl::compat::optional<double> utilization{37.5};
+  auto DiscoverProcessors() -> astl::compat::expected<std::vector<std::string>, astl_status_code> override {
     return std::vector<std::string>{"0,0", "1,0"};
   }
   auto ConfigureCpu(const std::vector<std::string>& selected) -> astl_status_code override {
@@ -59,22 +60,23 @@ class FakeWindowsPdhApi : public IWindowsPdhSystemApi {
     primed = false;
     return ASTL_STATUS_SUCCESS;
   }
-  auto ReadCpu() -> std::expected<std::unordered_map<std::string, std::optional<double>>, astl_status_code> override {
+  auto ReadCpu() -> astl::compat::expected<std::unordered_map<std::string, astl::compat::optional<double>>,
+                                           astl_status_code> override {
     ++cpu_reads;
     if (read_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(read_status);
+      return astl::compat::unexpected(read_status);
     }
-    std::unordered_map<std::string, std::optional<double>> values;
+    std::unordered_map<std::string, astl::compat::optional<double>> values;
     for (const auto& instance : instances) {
-      values[instance] = primed ? utilization : std::nullopt;
+      values[instance] = primed ? utilization : astl::compat::nullopt;
     }
     primed = true;
     return values;
   }
-  auto ReadMemory() -> std::expected<WindowsPdhMemorySnapshot, astl_status_code> override {
+  auto ReadMemory() -> astl::compat::expected<WindowsPdhMemorySnapshot, astl_status_code> override {
     ++memory_reads;
     if (read_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(read_status);
+      return astl::compat::unexpected(read_status);
     }
     return memory;
   }
@@ -200,7 +202,7 @@ TEST_CASE("Windows PDH collector skips invalid CPU values rather than reporting 
   Fixture fixture;
   fixture.Configure({WindowsPdhSystemField::CPU_UTILIZATION});
   REQUIRE(fixture.collector.ReadImmediate() == ASTL_STATUS_SUCCESS);
-  SECTION("missing") { fixture.api->utilization = std::nullopt; }
+  SECTION("missing") { fixture.api->utilization = astl::compat::nullopt; }
   SECTION("NaN") { fixture.api->utilization = std::numeric_limits<double>::quiet_NaN(); }
   SECTION("negative") { fixture.api->utilization = -1.0; }
   SECTION("out of range") { fixture.api->utilization = 101.0; }
@@ -378,12 +380,12 @@ TEST_CASE("Windows live discovery connects target metric and collector builders"
   EnvVarGuard selected(astl::EnvVar::ASTL_COLLECTORS, "windows_pdh");
   auto        configuration = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration.has_value());
-  auto topology = astl::BuildTopologyManager(*configuration, std::nullopt);
+  auto topology = astl::BuildTopologyManager(*configuration, astl::compat::nullopt);
   REQUIRE(topology.has_value());
   const auto& targets = (*topology)->GetTargets();
   REQUIRE(targets.size() == 1);
   CHECK(targets.front()->Name() == "sysutil");
-  auto metrics = astl::BuildMetricManager(targets, *configuration, std::nullopt);
+  auto metrics = astl::BuildMetricManager(targets, *configuration, astl::compat::nullopt);
   REQUIRE(metrics.has_value());
   auto available = (*metrics)->GetAvailableMetrics(targets.front().get());
   REQUIRE(available.has_value());

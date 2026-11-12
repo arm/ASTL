@@ -7,6 +7,7 @@
 #include <limits>
 #include <string_view>
 
+#include "astl_cxx_compat.hpp"
 #include "procfs/procfs_utils_readers.hpp"
 #include "procfs/procfs_utils_readers_primitives.hpp"
 
@@ -40,9 +41,10 @@ auto IsCpuLinePrefix(std::string_view token) -> bool {
   });
 }
 
-auto ParseCpuSnapshotTokens(const std::vector<std::string>& tokens) -> std::expected<CpuSnapshot, astl_status_code> {
+auto ParseCpuSnapshotTokens(const std::vector<std::string>& tokens)
+    -> astl::compat::expected<CpuSnapshot, astl_status_code> {
   if (tokens.size() < kCpuSnapshotRequiredTokenCount) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   uint64_t     total_ticks{0};
@@ -52,10 +54,10 @@ auto ParseCpuSnapshotTokens(const std::vector<std::string>& tokens) -> std::expe
   for (size_t token_index = 1; token_index <= last_token_index; ++token_index) {
     auto token_value = ParseUint64Token(tokens[token_index]);
     if (!token_value.has_value()) {
-      return std::unexpected(token_value.error());
+      return astl::compat::unexpected(token_value.error());
     }
     if (*token_value > std::numeric_limits<uint64_t>::max() - total_ticks) {
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     total_ticks += *token_value;
     if (token_index == kCpuIoWaitTokenIndex) {
@@ -75,15 +77,16 @@ auto ParseCpuSnapshotTokens(const std::vector<std::string>& tokens) -> std::expe
 }  // namespace
 
 auto ParseCpuSnapshotFromContents(std::string_view contents, std::string_view line_prefix)
-    -> std::expected<CpuSnapshot, astl_status_code> {
+    -> astl::compat::expected<CpuSnapshot, astl_status_code> {
   auto tokens_or_error = ReadPrefixedLineTokens(contents, line_prefix);
   if (!tokens_or_error.has_value()) {
-    return std::unexpected(tokens_or_error.error());
+    return astl::compat::unexpected(tokens_or_error.error());
   }
   return ParseCpuSnapshotTokens(*tokens_or_error);
 }
 
-auto ParseCpuSnapshotsFromContents(std::string_view contents) -> std::expected<CpuSnapshotMap, astl_status_code> {
+auto ParseCpuSnapshotsFromContents(std::string_view contents)
+    -> astl::compat::expected<CpuSnapshotMap, astl_status_code> {
   CpuSnapshotMap snapshots;
   size_t         position = 0;
   while (position <= contents.size()) {
@@ -95,10 +98,10 @@ auto ParseCpuSnapshotsFromContents(std::string_view contents) -> std::expected<C
     if (IsCpuLinePrefix(line_prefix)) {
       auto snapshot_or_error = ParseCpuSnapshotTokens(SplitWhitespace(line));
       if (!snapshot_or_error.has_value()) {
-        return std::unexpected(snapshot_or_error.error());
+        return astl::compat::unexpected(snapshot_or_error.error());
       }
       if (!snapshots.emplace(line_prefix, *snapshot_or_error).second) {
-        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+        return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
       }
     }
     if (end == std::string_view::npos) {
@@ -108,7 +111,7 @@ auto ParseCpuSnapshotsFromContents(std::string_view contents) -> std::expected<C
   }
 
   if (snapshots.empty()) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return snapshots;
 }

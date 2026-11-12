@@ -17,6 +17,7 @@
 #include <ostream>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/raw_samples.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
 #include "serdes/serdes_util.hpp"
@@ -89,14 +90,14 @@ auto Serialize(const std::vector<RawSampledData>& samples, std::ostream& output_
 
 template <>
 auto Deserialize<std::vector<RawSampledData>>(std::istream& input_stream)
-    -> std::expected<std::vector<RawSampledData>, astl_status_code> {
+    -> astl::compat::expected<std::vector<RawSampledData>, astl_status_code> {
   std::vector<RawSampledData> result;
   RawSampleBatchReader        reader{input_stream};
 
   while (true) {
     auto batch_or_error = reader.ReadNext();
     if (!batch_or_error) {
-      return std::unexpected(batch_or_error.error());
+      return astl::compat::unexpected(batch_or_error.error());
     }
     auto& batch_samples = *batch_or_error;
     if (batch_samples.empty()) {
@@ -129,11 +130,11 @@ RawSampleBatchReader::RawSampleBatchReader(RawSampleBatchReader&&) noexcept = de
 
 auto RawSampleBatchReader::operator=(RawSampleBatchReader&&) noexcept -> RawSampleBatchReader& = default;
 
-auto RawSampleBatchReader::ReadNext() -> std::expected<std::vector<RawSampledData>, astl_status_code> {
+auto RawSampleBatchReader::ReadNext() -> astl::compat::expected<std::vector<RawSampledData>, astl_status_code> {
   using google::protobuf::util::ParseDelimitedFromZeroCopyStream;
 
   if (!_impl) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   astl::protobuf::RawSampleBatch batch;
@@ -143,13 +144,13 @@ auto RawSampleBatchReader::ReadNext() -> std::expected<std::vector<RawSampledDat
       return std::vector<RawSampledData>{};
     }
     ASTL_LOG_ERROR("Failed to parse RawSampleBatch from input stream");
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
   std::vector<RawSampledData> batch_samples;
   auto                        conversion_status = ConvertRawSampleBatch(batch, batch_samples);
   if (conversion_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(conversion_status);
+    return astl::compat::unexpected(conversion_status);
   }
 
   return batch_samples;

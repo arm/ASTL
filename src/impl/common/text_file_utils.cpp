@@ -6,6 +6,7 @@
 
 #include <string_view>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_file_interface.hpp"
 #include "procfs/procfs_utils.hpp"
 
@@ -20,18 +21,18 @@ auto SharedFileInterface() -> const FileInterface& {
 
 }  // namespace
 
-auto ReadTextFile(const std::filesystem::path& path) -> std::optional<std::string> {
+auto ReadTextFile(const std::filesystem::path& path) -> astl::compat::optional<std::string> {
   std::string contents;
   if (SharedFileInterface().Read(path, contents) != ASTL_STATUS_SUCCESS || contents.empty()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return contents;
 }
 
-auto ReadFirstTrimmedLine(const std::filesystem::path& path) -> std::optional<std::string> {
+auto ReadFirstTrimmedLine(const std::filesystem::path& path) -> astl::compat::optional<std::string> {
   const auto contents = ReadTextFile(path);
   if (!contents.has_value()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   const auto newline = contents->find('\n');
@@ -39,19 +40,19 @@ auto ReadFirstTrimmedLine(const std::filesystem::path& path) -> std::optional<st
       std::string_view{*contents}.substr(0, newline == std::string::npos ? std::string_view::npos : newline);
   const auto trimmed = procfs::Trim(line);
   if (trimmed.empty()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return std::string{trimmed};
 }
 
-auto ReadFirstAvailableLine(std::initializer_list<std::filesystem::path> paths) -> std::optional<std::string> {
+auto ReadFirstAvailableLine(std::initializer_list<std::filesystem::path> paths) -> astl::compat::optional<std::string> {
   for (const auto& path : paths) {
     auto value = ReadFirstTrimmedLine(path);
     if (value.has_value()) {
       return value;
     }
   }
-  return std::nullopt;
+  return astl::compat::nullopt;
 }
 
 }  // namespace astl::text

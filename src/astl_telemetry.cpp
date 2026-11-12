@@ -3,11 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
-#include <expected>
 #include <iterator>
 #include <limits>
 #include <mutex>
-#include <optional>
 #include <span>
 #include <string>
 #include <unordered_set>
@@ -16,6 +14,7 @@
 #include <vector>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
 #include "common/astl_defines.hpp"
 #include "common/metric_config.hpp"
@@ -39,10 +38,10 @@
 
 /** @brief Confirms that the given non-null target_handle matches some known ITarget */
 auto GetTargetFromHandle(astl_target_handle_t target_handle) noexcept
-    -> std::expected<const astl::ITarget*, astl_status_code> {
+    -> astl::compat::expected<const astl::ITarget*, astl_status_code> {
   auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
-    return std::unexpected{orchestrator_or_error.error()};
+    return astl::compat::unexpected{orchestrator_or_error.error()};
   }
   const auto& orchestrator      = orchestrator_or_error->get();
   auto const& available_targets = orchestrator->GetTargets();
@@ -53,19 +52,19 @@ auto GetTargetFromHandle(astl_target_handle_t target_handle) noexcept
   if (std::any_of(begin(available_targets), end(available_targets), is_handle_match)) {
     return target;
   }
-  return std::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
+  return astl::compat::unexpected(ASTL_STATUS_INVALID_TARGET_HANDLE);
 }
 
-auto GetMetricManager() noexcept -> std::expected<astl::IMetricManager*, astl_status_code> {
+auto GetMetricManager() noexcept -> astl::compat::expected<astl::IMetricManager*, astl_status_code> {
   auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
-    return std::unexpected{orchestrator_or_error.error()};
+    return astl::compat::unexpected{orchestrator_or_error.error()};
   }
   const auto& orchestrator   = orchestrator_or_error->get();
   const auto& metric_manager = orchestrator->GetMetricManager();
   if (!metric_manager) {
     ASTL_LOG_ERROR("No metric manager assigned to orchestrator");
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   return metric_manager.get();
 }
@@ -168,42 +167,42 @@ auto StartConfiguredTargets(astl::Orchestrator& orchestrator, bool start_paused)
 }
 
 auto GetCounterFromHandle(astl_counter_handle_t counter_handle, const astl::ITarget* target) noexcept
-    -> std::expected<const astl::IMetric*, astl_status_code> {
+    -> astl::compat::expected<const astl::IMetric*, astl_status_code> {
   auto const& orchestrator = astl::Orchestrator::GetInstance();
   if (!orchestrator) {
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
   auto get_metric_manager_result = GetMetricManager();
   if (!get_metric_manager_result) {
-    return std::unexpected(get_metric_manager_result.error());
+    return astl::compat::unexpected(get_metric_manager_result.error());
   }
   auto* metric_manager   = *get_metric_manager_result;
   auto  counter_or_error = metric_manager->GetCounterOnTarget(counter_handle, target);
   if (!counter_or_error.has_value()) {
-    return std::unexpected{counter_or_error.error()};
+    return astl::compat::unexpected{counter_or_error.error()};
   }
   const auto* counter = *counter_or_error;
   return counter;
 }
 
 auto GetMetricFromHandle(astl_metric_handle_t metric_handle, astl_target_handle_t target_handle) noexcept
-    -> std::expected<const astl::IMetric*, astl_status_code> {
+    -> astl::compat::expected<const astl::IMetric*, astl_status_code> {
   auto get_metric_manager_result = GetMetricManager();
   if (!get_metric_manager_result) {
-    return std::unexpected(get_metric_manager_result.error());
+    return astl::compat::unexpected(get_metric_manager_result.error());
   }
   auto* metric_manager = *get_metric_manager_result;
 
   auto get_target_result = GetTargetFromHandle(target_handle);
   if (!get_target_result) {
-    return std::unexpected(get_target_result.error());
+    return astl::compat::unexpected(get_target_result.error());
   }
   const astl::ITarget* target = *get_target_result;
 
   auto metric_or_error = metric_manager->GetMetricOnTarget(metric_handle, target);
   if (!metric_or_error.has_value()) {
-    return std::unexpected{metric_or_error.error()};
+    return astl::compat::unexpected{metric_or_error.error()};
   }
   const astl::IMetric* metric = *metric_or_error;
 
@@ -326,14 +325,14 @@ auto ValidateApiParams(const ParamsT* params) noexcept -> astl_status_code {
 
 template <typename ParamsT>
 auto ResolveTargetFromApiParams(const ParamsT* params) noexcept
-    -> std::expected<const astl::ITarget*, astl_status_code> {
+    -> astl::compat::expected<const astl::ITarget*, astl_status_code> {
   const auto params_status = ValidateApiParams(params);
   if (params_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected{params_status};
+    return astl::compat::unexpected{params_status};
   }
   const auto* target_handle = params->target_handle;
   if (!target_handle) {
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
   return GetTargetFromHandle(target_handle);
 }
@@ -364,18 +363,18 @@ struct ResolvedTargetAndMetricManager {
 
 template <typename Container>
 auto GetFirstElementSizeField(Container const& elements) noexcept
-    -> std::expected<decltype(elements[kFirstElementIdx].size), astl_status_code>;
+    -> astl::compat::expected<decltype(elements[kFirstElementIdx].size), astl_status_code>;
 
 auto ResolveTargetAndMetricManager(astl_target_handle_t target_handle) noexcept
-    -> std::expected<ResolvedTargetAndMetricManager, astl_status_code> {
+    -> astl::compat::expected<ResolvedTargetAndMetricManager, astl_status_code> {
   auto get_metric_manager_result = GetMetricManager();
   if (!get_metric_manager_result) {
-    return std::unexpected(get_metric_manager_result.error());
+    return astl::compat::unexpected(get_metric_manager_result.error());
   }
 
   auto get_target_result = GetTargetFromHandle(target_handle);
   if (!get_target_result) {
-    return std::unexpected(get_target_result.error());
+    return astl::compat::unexpected(get_target_result.error());
   }
 
   return ResolvedTargetAndMetricManager{
@@ -450,9 +449,9 @@ auto PopulateMetricPropertiesForHandles(astl::IMetricManager*          metric_ma
 // structs
 template <typename Container>
 auto GetFirstElementSizeField(Container const& elements) noexcept
-    -> std::expected<decltype(elements[kFirstElementIdx].size), astl_status_code> {
+    -> astl::compat::expected<decltype(elements[kFirstElementIdx].size), astl_status_code> {
   if (std::size(elements) == 0) {
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   return elements[kFirstElementIdx].size;
 }
@@ -483,10 +482,10 @@ auto PopulateMetricPropertiesForHandles(astl::IMetricManager*                 me
   return ASTL_STATUS_SUCCESS;
 }
 
-auto GetOrchestratorInstance() -> std::expected<astl::Orchestrator*, astl_status_code> {
+auto GetOrchestratorInstance() -> astl::compat::expected<astl::Orchestrator*, astl_status_code> {
   auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
   if (!orchestrator_or_error) {
-    return std::unexpected(orchestrator_or_error.error());
+    return astl::compat::unexpected(orchestrator_or_error.error());
   }
   return orchestrator_or_error->get().get();
 }
@@ -497,16 +496,16 @@ struct MetricGroupOutputRequest {
 };
 
 auto ParseMetricGroupOutputRequest(astl_metric_group_props_t* metric_groups, uint32_t* metric_group_count)
-    -> std::expected<MetricGroupOutputRequest, astl_status_code> {
+    -> astl::compat::expected<MetricGroupOutputRequest, astl_status_code> {
   if (!metric_groups || !metric_group_count || *metric_group_count == 0) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   auto output                           = std::span<astl_metric_group_props_t>{metric_groups, *metric_group_count};
   *metric_group_count                   = 0;
   const auto metric_group_struct_status = GetStructVersionStatus(output.front());
   if (metric_group_struct_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(metric_group_struct_status);
+    return astl::compat::unexpected(metric_group_struct_status);
   }
 
   return MetricGroupOutputRequest{
@@ -544,9 +543,9 @@ struct MetricPropertiesOutputRequest {
 };
 
 auto ParseMetricPropertiesOutputRequest(astl_metric_props_t* metrics, uint32_t* metric_count)
-    -> std::expected<MetricPropertiesOutputRequest, astl_status_code> {
+    -> astl::compat::expected<MetricPropertiesOutputRequest, astl_status_code> {
   if (!metrics || !metric_count || *metric_count == 0) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   return MetricPropertiesOutputRequest{
       .output    = std::span<astl_metric_props_t>{metrics, *metric_count},
@@ -563,9 +562,9 @@ struct MetricsOnTargetRequest {
 };
 
 auto ParseMetricsOnTargetRequest(const astl_get_metrics_params_t& params)
-    -> std::expected<MetricsOnTargetRequest, astl_status_code> {
+    -> astl::compat::expected<MetricsOnTargetRequest, astl_status_code> {
   if (!params.target_handle || !params.metrics || !params.metric_count || *params.metric_count == 0) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   const auto output_metric_capacity = *params.metric_count;
@@ -574,7 +573,7 @@ auto ParseMetricsOnTargetRequest(const astl_get_metrics_params_t& params)
 
   auto resolved_components = ResolveTargetAndMetricManager(params.target_handle);
   if (!resolved_components) {
-    return std::unexpected(resolved_components.error());
+    return astl::compat::unexpected(resolved_components.error());
   }
 
   return MetricsOnTargetRequest{
@@ -652,21 +651,21 @@ struct SampleCountRequest {
 };
 
 auto ParseCounterSampleCountRequest(const astl_get_counter_sample_count_on_target_params_t& params)
-    -> std::expected<SampleCountRequest, astl_status_code> {
+    -> astl::compat::expected<SampleCountRequest, astl_status_code> {
   const bool missing_required_ptr =
       (params.target_handle == nullptr) || (params.counter_handle == nullptr) || (params.sample_count == nullptr);
   if (missing_required_ptr) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   auto target_or_error = GetTargetFromHandle(params.target_handle);
   if (!target_or_error) {
-    return std::unexpected(target_or_error.error());
+    return astl::compat::unexpected(target_or_error.error());
   }
 
   auto counter_or_error = GetCounterFromHandle(params.counter_handle, *target_or_error);
   if (!counter_or_error) {
-    return std::unexpected(counter_or_error.error());
+    return astl::compat::unexpected(counter_or_error.error());
   }
 
   return SampleCountRequest{
@@ -677,23 +676,23 @@ auto ParseCounterSampleCountRequest(const astl_get_counter_sample_count_on_targe
 }
 
 auto ParseMetricSampleCountRequest(const astl_get_metric_sample_count_on_target_params_t& params)
-    -> std::expected<SampleCountRequest, astl_status_code> {
+    -> astl::compat::expected<SampleCountRequest, astl_status_code> {
   const bool missing_required_ptr =
       (params.target_handle == nullptr) || (params.metric_handle == nullptr) || (params.sample_count == nullptr);
   if (missing_required_ptr) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   auto target_or_error = GetTargetFromHandle(params.target_handle);
   if (!target_or_error) {
-    return std::unexpected(target_or_error.error());
+    return astl::compat::unexpected(target_or_error.error());
   }
 
   auto metric_or_error = GetMetricFromHandle(params.metric_handle, params.target_handle);
   if (!metric_or_error.has_value()) {
     ASTL_LOG_ERROR("GetProcessedSamples: Failed to get metric on target {} for handle {}", (*target_or_error)->Name(),
                    params.metric_handle);
-    return std::unexpected(metric_or_error.error());
+    return astl::compat::unexpected(metric_or_error.error());
   }
 
   return SampleCountRequest{
@@ -754,23 +753,23 @@ struct CounterSamplesRequest {
 };
 
 auto ParseCounterSamplesRequest(const astl_get_counter_samples_on_target_params_t& params)
-    -> std::expected<CounterSamplesRequest, astl_status_code> {
+    -> astl::compat::expected<CounterSamplesRequest, astl_status_code> {
   const bool missing_required_ptr = (params.target_handle == nullptr) || (params.counter_handle == nullptr) ||
                                     (params.samples == nullptr) || (params.sample_count == nullptr);
   if (missing_required_ptr) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   if (*params.sample_count == 0) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   auto target_result = GetTargetFromHandle(params.target_handle);
   if (!target_result) {
-    return std::unexpected(target_result.error());
+    return astl::compat::unexpected(target_result.error());
   }
   auto counter_result = GetCounterFromHandle(params.counter_handle, *target_result);
   if (!counter_result) {
-    return std::unexpected(counter_result.error());
+    return astl::compat::unexpected(counter_result.error());
   }
 
   return CounterSamplesRequest{
@@ -835,23 +834,23 @@ auto SetMetricSampleCountAndValidateCapacity(const MetricSamplesRequest& request
 }
 
 auto ParseMetricSamplesRequest(const astl_get_metric_samples_on_target_params_t& params)
-    -> std::expected<MetricSamplesRequest, astl_status_code> {
+    -> astl::compat::expected<MetricSamplesRequest, astl_status_code> {
   const bool missing_required_ptr = (params.target_handle == nullptr) || (params.metric_handle == nullptr) ||
                                     (params.samples == nullptr) || (params.sample_count == nullptr);
   if (missing_required_ptr) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   if (*params.sample_count == 0) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   auto target_result = GetTargetFromHandle(params.target_handle);
   if (!target_result) {
-    return std::unexpected(target_result.error());
+    return astl::compat::unexpected(target_result.error());
   }
   auto metric_result = GetMetricFromHandle(params.metric_handle, params.target_handle);
   if (!metric_result) {
-    return std::unexpected(metric_result.error());
+    return astl::compat::unexpected(metric_result.error());
   }
 
   return MetricSamplesRequest{
@@ -907,14 +906,14 @@ struct MetricHistogramOutputRequest {
 };
 
 auto ParseMetricHistogramOutputRequest(const astl_get_metric_discrete_histogram_on_target_params_t& params)
-    -> std::expected<MetricHistogramOutputRequest, astl_status_code> {
+    -> astl::compat::expected<MetricHistogramOutputRequest, astl_status_code> {
   if (!params.target_handle || !params.metric_handle || !params.bins || !params.bin_count) {
     ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramOnTarget: Invalid argument(s)");
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   if (*params.bin_count == 0) {
     ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramOnTarget: bin_count must be > 0");
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   auto       bins_span                   = std::span<astl_discrete_histogram_bin_t>{params.bins, *params.bin_count};
@@ -922,7 +921,7 @@ auto ParseMetricHistogramOutputRequest(const astl_get_metric_discrete_histogram_
   if (histogram_bin_struct_status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("astlGetMetricDiscreteHistogramOnTarget: Invalid bin struct size: {} (expected {})",
                    bins_span.front().size, sizeof(astl_discrete_histogram_bin_t));
-    return std::unexpected(histogram_bin_struct_status);
+    return astl::compat::unexpected(histogram_bin_struct_status);
   }
 
   return MetricHistogramOutputRequest{
@@ -966,31 +965,31 @@ struct SelectedSystemInfoData {
 };
 
 auto ValidateSystemInfoRequest(astl_platform_props_t* system_info) noexcept
-    -> std::expected<uint32_t, astl_status_code> {
+    -> astl::compat::expected<uint32_t, astl_status_code> {
   if (system_info == nullptr) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   const auto system_info_struct_status = GetStructVersionStatus(*system_info);
   if (system_info_struct_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(system_info_struct_status);
+    return astl::compat::unexpected(system_info_struct_status);
   }
 
   const uint32_t request_flags          = system_info->flags;
   const uint32_t k_allowed_source_flags = (ASTL_SYSTEM_INFO_FLAG_HOST | ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION);
   if ((request_flags & ~k_allowed_source_flags) != 0U) {
-    return std::unexpected(ASTL_STATUS_INVALID_FLAG_VALUE);
+    return astl::compat::unexpected(ASTL_STATUS_INVALID_FLAG_VALUE);
   }
   if ((request_flags & ASTL_SYSTEM_INFO_FLAG_HOST) != 0U &&
       (request_flags & ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION) != 0U) {
-    return std::unexpected(ASTL_STATUS_INVALID_FLAG_VALUE);
+    return astl::compat::unexpected(ASTL_STATUS_INVALID_FLAG_VALUE);
   }
 
   return request_flags;
 }
 
 auto ResolveSystemInfoSource(uint32_t request_flags) noexcept
-    -> std::expected<SelectedSystemInfoData, astl_status_code> {
+    -> astl::compat::expected<SelectedSystemInfoData, astl_status_code> {
   SelectedSystemInfoData resolved;
   if ((request_flags & ASTL_SYSTEM_INFO_FLAG_HOST) != 0U) {
     resolved.info          = &astl::GetHostPlatformInfo();
@@ -1001,7 +1000,7 @@ auto ResolveSystemInfoSource(uint32_t request_flags) noexcept
     resolved.loaded_info_ref = astl::GetLoadedPlatformInfo();
     resolved.info            = resolved.loaded_info_ref.get();
     if (resolved.info == nullptr) {
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
     }
     resolved.selected_flag = ASTL_SYSTEM_INFO_FLAG_LOADED_SESSION;
     return resolved;
@@ -1048,37 +1047,36 @@ auto PopulateSystemInfo(astl_platform_props_t* system_info, const astl::Platform
 }
 
 template <typename ParamsT>
-auto UnpackParamsForGetMetricGroups(const ParamsT* params)
-    -> std::expected<std::tuple<const astl::ITarget*, astl::IMetricManager*, astl_metric_group_handle_t, uint32_t*>,
-                     astl_status_code> {
+auto UnpackParamsForGetMetricGroups(const ParamsT* params) -> astl::compat::expected<
+    std::tuple<const astl::ITarget*, astl::IMetricManager*, astl_metric_group_handle_t, uint32_t*>, astl_status_code> {
   const auto params_status = ValidateApiParams(params);
   if (params_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(params_status);
+    return astl::compat::unexpected(params_status);
   }
   const auto target_handle       = params->target_handle;
   const auto metric_group_handle = params->metric_group_handle;
   auto*      metric_count        = params->metric_count;
   if (!target_handle) {
     ASTL_LOG_ERROR("UnpackParamsForGetMetricGroups: target_handle cannot be null");
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   if (!metric_group_handle) {
     ASTL_LOG_ERROR("UnpackParamsForGetMetricGroups: metric_group_handle cannot be null");
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   if (!metric_count) {
     ASTL_LOG_ERROR("UnpackParamsForGetMetricGroups: metric_count ptr cannot be null");
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   auto get_target_result = GetTargetFromHandle(target_handle);
   if (!get_target_result) {
-    return std::unexpected(get_target_result.error());
+    return astl::compat::unexpected(get_target_result.error());
   }
   const auto* target = *get_target_result;
 
   auto get_metric_manager_result = GetMetricManager();
   if (!get_metric_manager_result) {
-    return std::unexpected(get_metric_manager_result.error());
+    return astl::compat::unexpected(get_metric_manager_result.error());
   }
   auto* metric_manager = *get_metric_manager_result;
   return std::make_tuple(target, metric_manager, metric_group_handle, metric_count);
@@ -1086,14 +1084,14 @@ auto UnpackParamsForGetMetricGroups(const ParamsT* params)
 
 auto GetMetricHandlesInGroupForTarget(astl::IMetricManager* metric_manager, astl_metric_group_handle_t group,
                                       const astl::ITarget* target) noexcept
-    -> std::expected<std::vector<astl_metric_handle_t>, astl_status_code> {
+    -> astl::compat::expected<std::vector<astl_metric_handle_t>, astl_status_code> {
   if (metric_manager == nullptr || target == nullptr) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   auto metrics_in_group = metric_manager->GetMetricsInGroup(group);
   if (!metrics_in_group) {
-    return std::unexpected(metrics_in_group.error());
+    return astl::compat::unexpected(metrics_in_group.error());
   }
 
   std::vector<astl_metric_handle_t> filtered_metrics;
@@ -1105,7 +1103,7 @@ auto GetMetricHandlesInGroupForTarget(astl::IMetricManager* metric_manager, astl
       continue;
     }
     if (metric_on_target.error() != ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET) {
-      return std::unexpected(metric_on_target.error());
+      return astl::compat::unexpected(metric_on_target.error());
     }
   }
 
@@ -1187,19 +1185,19 @@ using VersionedPropertiesSpan = std::variant<std::span<astl_target_props_t>>;
  * @brief Retrieve either an error code or a span of astl_target_props_t.
  */
 auto GetVersionedTargetPropertiesSpan(astl_target_props_t* targets, uint32_t target_count) noexcept
-    -> std::expected<VersionedPropertiesSpan, astl_status_code> {
+    -> astl::compat::expected<VersionedPropertiesSpan, astl_status_code> {
   // at first, assume the caller's targets are the same size as the astl_target_props_t struct in our header.
   std::span<astl_target_props_t> target_span{targets, target_count};
   auto                           given_struct_size = GetFirstElementSizeField(target_span);
   if (!given_struct_size) {
-    return std::unexpected(given_struct_size.error());
+    return astl::compat::unexpected(given_struct_size.error());
   }
   switch (*given_struct_size) {
     case sizeof(astl_target_props_t):
       return target_span;
     default:
       const auto target_struct_status = GetStructVersionStatus(target_span.front());
-      return std::unexpected(target_struct_status);
+      return astl::compat::unexpected(target_struct_status);
   }
 }
 
@@ -1209,9 +1207,9 @@ struct GetTargetsRequest {
 };
 
 auto ValidateGetTargetsRequest(const astl_get_targets_params_t* params) noexcept
-    -> std::expected<GetTargetsRequest, astl_status_code> {
+    -> astl::compat::expected<GetTargetsRequest, astl_status_code> {
   if (params->targets == nullptr || params->target_count == nullptr || *params->target_count == 0) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   return GetTargetsRequest{.targets = params->targets, .target_count = params->target_count};
 }
@@ -1446,7 +1444,7 @@ auto astlGetMetricsOnTarget(const astl_get_metrics_params_t* params) noexcept ->
  **********************************************************************************/
 
 static auto GetMetricStateCountHelper(astl_metric_props_t const& properties, astl::IMetric const* metric) noexcept
-    -> std::expected<uint32_t, astl_status_code> {
+    -> astl::compat::expected<uint32_t, astl_status_code> {
   size_t count = 0;
   if (properties.metric_type == ASTL_METRIC_FINITE_SET_VALUE) {
     const auto* finite_set_metric = dynamic_cast<const astl::FiniteSetMetric*>(metric);
@@ -2106,7 +2104,7 @@ auto GetKnownMetricGroups(astl::IMetricManager* metric_manager) -> std::unordere
 }
 
 auto GetTargetMetricGroups(astl::IMetricManager* metric_manager, const astl::ITarget* target)
-    -> std::expected<std::unordered_set<astl_metric_group_handle_t>, astl_status_code> {
+    -> astl::compat::expected<std::unordered_set<astl_metric_group_handle_t>, astl_status_code> {
   std::unordered_set<astl_metric_group_handle_t> target_groups;
   if (target == nullptr) {
     return target_groups;
@@ -2114,7 +2112,7 @@ auto GetTargetMetricGroups(astl::IMetricManager* metric_manager, const astl::ITa
 
   auto target_groups_result = metric_manager->GetMetricGroups(target);
   if (!target_groups_result) {
-    return std::unexpected{target_groups_result.error()};
+    return astl::compat::unexpected{target_groups_result.error()};
   }
   target_groups.insert(target_groups_result->begin(), target_groups_result->end());
   return target_groups;
@@ -2123,36 +2121,37 @@ auto GetTargetMetricGroups(astl::IMetricManager* metric_manager, const astl::ITa
 auto ValidateRequestedGroupOnTarget(astl_metric_group_handle_t group_handle, const astl::ITarget* target,
                                     const std::unordered_set<astl_metric_group_handle_t>& known_groups,
                                     const std::unordered_set<astl_metric_group_handle_t>& target_groups,
-                                    bool fail_if_group_missing_on_target) -> std::expected<bool, astl_status_code> {
+                                    bool fail_if_group_missing_on_target)
+    -> astl::compat::expected<bool, astl_status_code> {
   if (!known_groups.contains(group_handle)) {
-    return std::unexpected{ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE};
+    return astl::compat::unexpected{ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE};
   }
   if (target == nullptr || target_groups.contains(group_handle)) {
     return true;
   }
   if (fail_if_group_missing_on_target) {
-    return std::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
+    return astl::compat::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
   }
   return false;
 }
 
 auto GetMetricHandlesForGroup(astl::IMetricManager* metric_manager, const astl::ITarget* target,
                               astl_metric_group_handle_t group_handle, bool fail_if_group_missing_on_target)
-    -> std::expected<std::vector<astl_metric_handle_t>, astl_status_code> {
+    -> astl::compat::expected<std::vector<astl_metric_handle_t>, astl_status_code> {
   if (target == nullptr) {
     auto global_group_metrics = metric_manager->GetMetricsInGroup(group_handle);
     if (!global_group_metrics) {
-      return std::unexpected{global_group_metrics.error()};
+      return astl::compat::unexpected{global_group_metrics.error()};
     }
     return std::vector<astl_metric_handle_t>{global_group_metrics->begin(), global_group_metrics->end()};
   }
 
   auto group_metrics = GetMetricHandlesInGroupForTarget(metric_manager, group_handle, target);
   if (!group_metrics) {
-    return std::unexpected{group_metrics.error()};
+    return astl::compat::unexpected{group_metrics.error()};
   }
   if (group_metrics->empty() && fail_if_group_missing_on_target) {
-    return std::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
+    return astl::compat::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
   }
   return group_metrics;
 }
@@ -2173,15 +2172,15 @@ auto AppendUniqueMetricHandles(std::vector<astl_metric_handle_t>&        metric_
 auto ExpandMetricGroupHandlesForTarget(astl::IMetricManager* metric_manager, const astl::ITarget* target,
                                        std::span<const astl_metric_group_handle_t> requested_groups,
                                        bool                                        fail_if_group_missing_on_target)
-    -> std::expected<std::vector<astl_metric_handle_t>, astl_status_code> {
+    -> astl::compat::expected<std::vector<astl_metric_handle_t>, astl_status_code> {
   if (!metric_manager) {
-    return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+    return astl::compat::unexpected{ASTL_STATUS_INTERNAL_ERROR};
   }
 
   const auto known_groups_or_error  = GetKnownMetricGroups(metric_manager);
   auto       target_groups_or_error = GetTargetMetricGroups(metric_manager, target);
   if (!target_groups_or_error) {
-    return std::unexpected{target_groups_or_error.error()};
+    return astl::compat::unexpected{target_groups_or_error.error()};
   }
 
   std::vector<astl_metric_handle_t>        metric_handles;
@@ -2193,7 +2192,7 @@ auto ExpandMetricGroupHandlesForTarget(astl::IMetricManager* metric_manager, con
     auto requested_group_is_supported = ValidateRequestedGroupOnTarget(group_handle, target, known_groups,
                                                                        target_groups, fail_if_group_missing_on_target);
     if (!requested_group_is_supported) {
-      return std::unexpected{requested_group_is_supported.error()};
+      return astl::compat::unexpected{requested_group_is_supported.error()};
     }
     if (!*requested_group_is_supported) {
       continue;
@@ -2202,7 +2201,7 @@ auto ExpandMetricGroupHandlesForTarget(astl::IMetricManager* metric_manager, con
     auto group_metrics =
         GetMetricHandlesForGroup(metric_manager, target, group_handle, fail_if_group_missing_on_target);
     if (!group_metrics) {
-      return std::unexpected{group_metrics.error()};
+      return astl::compat::unexpected{group_metrics.error()};
     }
     if (group_metrics->empty()) {
       continue;
@@ -2249,15 +2248,15 @@ struct TargetMetricHandles {
   std::vector<astl_metric_handle_t> metric_handles;
 };
 
-auto ResolveMetricGroupCollectionContext() -> std::expected<MetricGroupCollectionContext, astl_status_code> {
+auto ResolveMetricGroupCollectionContext() -> astl::compat::expected<MetricGroupCollectionContext, astl_status_code> {
   auto orchestrator_or_error = GetOrchestratorInstance();
   if (!orchestrator_or_error) {
-    return std::unexpected(orchestrator_or_error.error());
+    return astl::compat::unexpected(orchestrator_or_error.error());
   }
 
   auto get_metric_manager_result = GetMetricManager();
   if (!get_metric_manager_result) {
-    return std::unexpected(get_metric_manager_result.error());
+    return astl::compat::unexpected(get_metric_manager_result.error());
   }
 
   return MetricGroupCollectionContext{
@@ -2267,31 +2266,31 @@ auto ResolveMetricGroupCollectionContext() -> std::expected<MetricGroupCollectio
 }
 
 auto ParseConfigureCounterCollectionOnTargetRequest(const astl_configure_counter_collection_on_target_params_t& params)
-    -> std::expected<ConfigureCounterCollectionOnTargetRequest, astl_status_code> {
-  return [&]() -> std::expected<ConfigureCounterCollectionOnTargetRequest, astl_status_code> {
+    -> astl::compat::expected<ConfigureCounterCollectionOnTargetRequest, astl_status_code> {
+  return [&]() -> astl::compat::expected<ConfigureCounterCollectionOnTargetRequest, astl_status_code> {
     if (!params.target_handle || !params.collection_params || !params.counter_handles || params.counter_count == 0) {
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
     }
     const auto collection_params_struct_status = GetStructVersionStatus(*params.collection_params);
     if (collection_params_struct_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(collection_params_struct_status);
+      return astl::compat::unexpected(collection_params_struct_status);
     }
     const auto collection_flags_status = ValidateCollectionParamsFlags(params.collection_params);
     if (collection_flags_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(collection_flags_status);
+      return astl::compat::unexpected(collection_flags_status);
     }
 
     auto resolved_components = ResolveTargetAndMetricManager(params.target_handle);
     if (!resolved_components) {
-      return std::unexpected(resolved_components.error());
+      return astl::compat::unexpected(resolved_components.error());
     }
     const auto available_counters =
         resolved_components->metric_manager->GetAvailableCounters(resolved_components->target);
     if (!available_counters) {
-      return std::unexpected(available_counters.error());
+      return astl::compat::unexpected(available_counters.error());
     }
     if (params.counter_count > available_counters->size()) {
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
     }
 
     return ConfigureCounterCollectionOnTargetRequest{
@@ -2305,10 +2304,10 @@ auto ParseConfigureCounterCollectionOnTargetRequest(const astl_configure_counter
 
 auto ResolveMetricGroupHandlesOnTargets(const MetricGroupCollectionContext&         context,
                                         std::span<const astl_metric_group_handle_t> metric_group_handles)
-    -> std::expected<std::vector<TargetMetricHandles>, astl_status_code> {
+    -> astl::compat::expected<std::vector<TargetMetricHandles>, astl_status_code> {
   const auto& targets = context.orchestrator->GetTargets();
   if (targets.empty()) {
-    return std::unexpected{ASTL_STATUS_NO_TARGET_FOUND};
+    return astl::compat::unexpected{ASTL_STATUS_NO_TARGET_FOUND};
   }
 
   std::vector<TargetMetricHandles> target_metric_handles;
@@ -2317,7 +2316,7 @@ auto ResolveMetricGroupHandlesOnTargets(const MetricGroupCollectionContext&     
     auto metric_handles_or_error =
         ExpandMetricGroupHandlesForTarget(context.metric_manager, target_ptr.get(), metric_group_handles, false);
     if (!metric_handles_or_error) {
-      return std::unexpected{metric_handles_or_error.error()};
+      return astl::compat::unexpected{metric_handles_or_error.error()};
     }
     if (!metric_handles_or_error->empty()) {
       target_metric_handles.push_back(
@@ -2325,7 +2324,7 @@ auto ResolveMetricGroupHandlesOnTargets(const MetricGroupCollectionContext&     
     }
   }
   if (target_metric_handles.empty()) {
-    return std::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
+    return astl::compat::unexpected{ASTL_STATUS_METRIC_GROUP_NOT_SUPPORTED_ON_TARGET};
   }
   return target_metric_handles;
 }
@@ -2899,7 +2898,8 @@ auto astlLoadCollection(const astl_load_params_t* params) noexcept -> astl_statu
       }
 
       astl::Orchestrator::ResetInstance();
-      astl::ConfigurationManager::SetLoadFilePathOverride(std::optional<std::filesystem::path>{*expanded_path});
+      astl::ConfigurationManager::SetLoadFilePathOverride(
+          astl::compat::optional<std::filesystem::path>{*expanded_path});
 
       auto const& orchestrator_or_error = astl::Orchestrator::GetInstance();
       if (!orchestrator_or_error) {
@@ -3020,23 +3020,24 @@ auto astlGetMetricSamplesOnTarget(const astl_get_metric_samples_on_target_params
 
 namespace {
 
-auto SelectRequestedAverageMode(astl_metric_statistics_t* summary) -> std::expected<uint32_t, astl_status_code> {
+auto SelectRequestedAverageMode(astl_metric_statistics_t* summary)
+    -> astl::compat::expected<uint32_t, astl_status_code> {
   const auto summary_struct_status = GetStructVersionStatus(*summary);
   if (summary_struct_status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Invalid summary struct size: {} (expected {})", summary->size,
                    sizeof(astl_metric_statistics_t));
-    return std::unexpected(summary_struct_status);
+    return astl::compat::unexpected(summary_struct_status);
   }
 
   const uint32_t k_allowed_summary_flags =
       (ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG | ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG);
   const uint32_t request_flags = summary->flags;
   if ((request_flags & ~k_allowed_summary_flags) != 0U) {
-    return std::unexpected(ASTL_STATUS_INVALID_FLAG_VALUE);
+    return astl::compat::unexpected(ASTL_STATUS_INVALID_FLAG_VALUE);
   }
   if ((request_flags & ASTL_METRIC_STATISTICS_FLAG_REGULAR_AVG) != 0U &&
       (request_flags & ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG) != 0U) {
-    return std::unexpected(ASTL_STATUS_INVALID_FLAG_VALUE);
+    return astl::compat::unexpected(ASTL_STATUS_INVALID_FLAG_VALUE);
   }
 
   const uint32_t selected_avg_mode = ((request_flags & ASTL_METRIC_STATISTICS_FLAG_TIME_WEIGHTED_AVG) != 0U)
@@ -3062,10 +3063,10 @@ struct MetricStatisticsRequest {
 };
 
 auto ParseMetricStatisticsRequest(const astl_get_metric_statistics_on_target_params_t& params)
-    -> std::expected<MetricStatisticsRequest, astl_status_code> {
+    -> astl::compat::expected<MetricStatisticsRequest, astl_status_code> {
   if (!params.target_handle || !params.metric_handle || !params.summary) {
     ASTL_LOG_ERROR("astlGetMetricStatisticsOnTarget: Invalid argument(s)");
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   return MetricStatisticsRequest{
       .target_handle = params.target_handle,
@@ -3084,24 +3085,24 @@ struct MetricStatisticsComponents {
 };
 
 auto ResolveMetricStatisticsComponents(const MetricStatisticsRequest& request)
-    -> std::expected<MetricStatisticsComponents, astl_status_code> {
+    -> astl::compat::expected<MetricStatisticsComponents, astl_status_code> {
   auto target = GetTargetFromHandle(request.target_handle);
   if (!target) {
-    return std::unexpected(target.error());
+    return astl::compat::unexpected(target.error());
   }
   auto metric = GetMetricFromHandle(request.metric_handle, request.target_handle);
   if (!metric) {
-    return std::unexpected(metric.error());
+    return astl::compat::unexpected(metric.error());
   }
   auto orchestrator = astl::Orchestrator::GetInstance();
   if (!orchestrator) {
-    return std::unexpected(orchestrator.error());
+    return astl::compat::unexpected(orchestrator.error());
   }
 
   astl_metric_props_t properties{};
   properties.size = sizeof(astl_metric_props_t);
   if (const auto status = (*metric)->GetProperties(&properties); status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   return MetricStatisticsComponents{*target, *metric, orchestrator->get().get(), properties};
 }
@@ -3122,14 +3123,14 @@ auto PopulateMinMaxFields(astl_metric_statistics_t& output, const astl::MinMaxAv
 
 auto CalculateRegularMetricStatistics(const MetricStatisticsRequest&    request,
                                       const MetricStatisticsComponents& components)
-    -> std::expected<astl::MinMaxAvgSummary, astl_status_code> {
+    -> astl::compat::expected<astl::MinMaxAvgSummary, astl_status_code> {
   astl::MinMaxAvgAccumulator accumulator;
   const auto                 status = components.orchestrator->VisitProcessedMetricSampleBatches(
       components.metric, components.target, [&](std::span<const astl::ProcessedSampledData> batch) {
         return accumulator.Add(FilterSamplesInTimestampRange(batch, request.start_ts, request.end_ts));
       });
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   return accumulator.Result();
 }
@@ -3167,7 +3168,7 @@ auto AddTimeWeightedStatisticsBatch(astl::MinMaxAvgAccumulator& minmax, astl::Ti
 }
 
 auto CollectPauseMarkers(const MetricStatisticsComponents& components)
-    -> std::expected<std::vector<astl::ProcessedSampleTimestamp>, astl_status_code> {
+    -> astl::compat::expected<std::vector<astl::ProcessedSampleTimestamp>, astl_status_code> {
   std::vector<astl::ProcessedSampleTimestamp> pause_markers;
   const auto*                                 pause_metric =
       components.orchestrator->GetMetricManager()->GetLifecycleEventMetricOnTarget(components.target);
@@ -3185,7 +3186,7 @@ auto CollectPauseMarkers(const MetricStatisticsComponents& components)
         return ASTL_STATUS_SUCCESS;
       });
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   return pause_markers;
 }
@@ -3193,7 +3194,7 @@ auto CollectPauseMarkers(const MetricStatisticsComponents& components)
 auto CalculateTimeWeightedMetricStatistics(const MetricStatisticsRequest&                  request,
                                            const MetricStatisticsComponents&               components,
                                            std::span<const astl::ProcessedSampleTimestamp> pause_markers)
-    -> std::expected<TimeWeightedStatisticsResults, astl_status_code> {
+    -> astl::compat::expected<TimeWeightedStatisticsResults, astl_status_code> {
   astl::MinMaxAvgAccumulator       minmax;
   astl::TimeWeightedAvgAccumulator twa{pause_markers};
   const auto                       status = components.orchestrator->VisitProcessedMetricSampleBatches(
@@ -3202,15 +3203,15 @@ auto CalculateTimeWeightedMetricStatistics(const MetricStatisticsRequest&       
                                                                     FilterSamplesInTimestampRange(batch, request.start_ts, request.end_ts));
       });
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   auto minmax_result = minmax.Result();
   if (!minmax_result) {
-    return std::unexpected(minmax_result.error());
+    return astl::compat::unexpected(minmax_result.error());
   }
   auto twa_result = twa.Result();
   if (!twa_result) {
-    return std::unexpected(twa_result.error());
+    return astl::compat::unexpected(twa_result.error());
   }
   return TimeWeightedStatisticsResults{std::move(*minmax_result), std::move(*twa_result)};
 }
@@ -3290,16 +3291,16 @@ namespace {
  *        target/metric and return the HistogramSummary, or an error status.
  */
 auto ComputeDiscreteHistogram(astl_target_handle_t target_handle, astl_metric_handle_t metric_handle, uint64_t start_ts,
-                              uint64_t end_ts) -> std::expected<astl::HistogramSummary, astl_status_code> {
+                              uint64_t end_ts) -> astl::compat::expected<astl::HistogramSummary, astl_status_code> {
   const MetricStatisticsRequest request{target_handle, metric_handle, nullptr, start_ts, end_ts};
   auto                          components = ResolveMetricStatisticsComponents(request);
   if (!components) {
-    return std::unexpected(components.error());
+    return astl::compat::unexpected(components.error());
   }
   astl::HistogramSummarizer summarizer;  // default constructor = discrete mode
   if (!summarizer.IsSupported(components->properties.value_type, components->properties.metric_type)) {
     ASTL_LOG_ERROR("ComputeDiscreteHistogram: Metric type not supported by HistogramSummarizer");
-    return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+    return astl::compat::unexpected(ASTL_STATUS_NOT_SUPPORTED);
   }
 
   astl::DiscreteHistogramAccumulator accumulator;
@@ -3309,7 +3310,7 @@ auto ComputeDiscreteHistogram(astl_target_handle_t target_handle, astl_metric_ha
         return accumulator.Add(filtered);
       });
   if (visit_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(visit_status);
+    return astl::compat::unexpected(visit_status);
   }
   return accumulator.Result();
 }
@@ -3431,10 +3432,10 @@ struct CropSamplesRequest {
 };
 
 auto ParseCropSamplesRequest(const astl_crop_samples_params_t& params)
-    -> std::expected<CropSamplesRequest, astl_status_code> {
+    -> astl::compat::expected<CropSamplesRequest, astl_status_code> {
   const auto windows_status = ValidateCropWindows(params.windows, params.window_count);
   if (windows_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(windows_status);
+    return astl::compat::unexpected(windows_status);
   }
 
   return CropSamplesRequest{
@@ -3443,19 +3444,19 @@ auto ParseCropSamplesRequest(const astl_crop_samples_params_t& params)
 }
 
 auto ParseCropSamplesOnTargetRequest(const astl_crop_samples_on_target_params_t& params)
-    -> std::expected<CropSamplesOnTargetRequest, astl_status_code> {
+    -> astl::compat::expected<CropSamplesOnTargetRequest, astl_status_code> {
   if (!params.target_handle) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   const auto windows_status = ValidateCropWindows(params.windows, params.window_count);
   if (windows_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(windows_status);
+    return astl::compat::unexpected(windows_status);
   }
 
   auto target_or_error = GetTargetFromHandle(params.target_handle);
   if (!target_or_error) {
-    return std::unexpected(target_or_error.error());
+    return astl::compat::unexpected(target_or_error.error());
   }
 
   return CropSamplesOnTargetRequest{

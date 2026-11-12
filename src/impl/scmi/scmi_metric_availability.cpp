@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <filesystem>
 #include <format>
-#include <optional>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "scmi/scmi_backend_selection.hpp"
 #include "scmi/scmi_ioctl_interface.hpp"
@@ -28,8 +28,9 @@ static auto GetScmiDataEventDirectoryPath(const AstlConfiguration& configuration
 
 static auto TryScmiIoctlDataEventAvailability(const AstlConfiguration& configuration, const MetricConfig& metric_config,
                                               const ITarget& target, ScmiDataEventId data_event_id,
-                                              ScmiBackendPreference backend_preference) -> std::optional<bool> {
-  std::optional<bool> data_event_exists;
+                                              ScmiBackendPreference backend_preference)
+    -> astl::compat::optional<bool> {
+  astl::compat::optional<bool> data_event_exists;
   if (ScmiPreferenceAllowsIoctl(backend_preference)) {
     const auto telemetry_subdirectory = GetScmiTelemetrySubdirectory(target);
     const auto ioctl_device_path      = ScmiIoctlInterface::DevicePathFromTelemetrySubdirectory(

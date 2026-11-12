@@ -9,6 +9,7 @@
 #include <span>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "metric/residency_metric.hpp"
 #include "scmi/scmi_operation_builder.hpp"
 
@@ -63,13 +64,13 @@ class ResidencyMetricTestFixture : public astl::ResidencyMetric {
       : astl::ResidencyMetric(GetResidencyConfig(), CreateTestStateInfos(frequency), nullptr, nullptr) {}
 
   // Expose protected methods for testing
-  static std::expected<std::chrono::microseconds, astl_status_code> TestConvertTicksToMicroseconds(
+  static astl::compat::expected<std::chrono::microseconds, astl_status_code> TestConvertTicksToMicroseconds(
       const astl::AstlValue& ticks, const astl::ResidencyMetricConfig::StateInfo& config) {
     return astl::ResidencyMetric::ConvertTicksToMicroseconds(ticks, config);
   }
 
-  static std::expected<double, astl_status_code> TestCalculatePercentage(std::chrono::microseconds time_in_state,
-                                                                         std::chrono::microseconds total_interval) {
+  static astl::compat::expected<double, astl_status_code> TestCalculatePercentage(
+      std::chrono::microseconds time_in_state, std::chrono::microseconds total_interval) {
     return astl::ResidencyMetric::CalculatePercentage(time_in_state, total_interval);
   }
 

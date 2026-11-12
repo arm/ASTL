@@ -5,15 +5,14 @@
 #ifndef SCMI_IOCTL_COLLECTOR_HPP_
 #define SCMI_IOCTL_COLLECTOR_HPP_
 
-#include <expected>
 #include <filesystem>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
 #include "collector/periodic_sampler.hpp"
@@ -129,7 +128,7 @@ class ScmiIoctlCollector : public ICollector {
    *
    * @return Clock correlation map, or an ASTL status when no valid mapping can be established.
    */
-  std::expected<ClockCorrelationMap, astl_status_code> GetNativeClockSnapshot() override;
+  astl::compat::expected<ClockCorrelationMap, astl_status_code> GetNativeClockSnapshot() override;
 
  private:
   /** @brief Internal collection lifecycle states. */
@@ -167,7 +166,7 @@ class ScmiIoctlCollector : public ICollector {
    * @return Original data-event states to restore later, or an ASTL status on failure.
    */
   auto EnableDataEvents(std::unordered_set<ScmiDataEventId> const& data_events_to_enable)
-      -> std::expected<std::vector<ScmiDataEvent>, astl_status_code>;
+      -> astl::compat::expected<std::vector<ScmiDataEvent>, astl_status_code>;
 
   /**
    * @brief Restores data event enable and timestamp-enable state saved during configuration.
@@ -200,7 +199,7 @@ class ScmiIoctlCollector : public ICollector {
    *
    * @return Returned samples, or an ioctl failure status.
    */
-  auto ReadSingleSamples() -> std::expected<std::vector<scmi_tlm_de_sample>, astl_status_code>;
+  auto ReadSingleSamples() -> astl::compat::expected<std::vector<scmi_tlm_de_sample>, astl_status_code>;
 
   /**
    * @brief Matches single-read samples to operations and emits them.
@@ -270,7 +269,7 @@ class ScmiIoctlCollector : public ICollector {
   CollectionState _collection_state{CollectionState::UNCONFIGURED};
 
   /** @brief Active collection configuration, present after successful ConfigureCollection(). */
-  std::optional<CollectionConfiguration> _configuration;
+  astl::compat::optional<CollectionConfiguration> _configuration;
 
   /** @brief Ioctl interface for the target telemetry device. */
   std::unique_ptr<IScmiIoctlInterface> _scmi_ioctl_interface;

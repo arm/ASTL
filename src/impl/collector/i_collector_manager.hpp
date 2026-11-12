@@ -5,10 +5,10 @@
 #ifndef I_COLLECTOR_MANAGER_HPP_
 #define I_COLLECTOR_MANAGER_HPP_
 
-#include <expected>
 #include <unordered_map>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "collection_operations.hpp"
 #include "common/capabilities.hpp"
 #include "common/clock_correlation.hpp"
@@ -71,10 +71,10 @@ struct ICollectorManager {
    *
    * Called once while completing configuration, before any acquisition. The resulting mapping
    * remains valid for that configuration and must not be replaced between samples.
-   * Returns std::unexpected on I/O or parse failure.
+   * Returns astl::compat::unexpected on I/O or parse failure.
    */
   [[nodiscard]] virtual auto GetNativeClockSnapshot(const ITarget* target)
-      -> std::expected<ClockCorrelationMap, astl_status_code> = 0;
+      -> astl::compat::expected<ClockCorrelationMap, astl_status_code> = 0;
 
   [[nodiscard]] virtual auto PauseOnTarget(const ITarget* target) -> astl_status_code = 0;
 

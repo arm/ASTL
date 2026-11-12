@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <expected>
 #include <limits>
 #include <vector>
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
+#include "astl_cxx_compat.hpp"
 #include "metric/delta_metric.hpp"
 #include "operation/operation_builder.hpp"
 
@@ -54,8 +54,8 @@ class DeltaMetricTestFixture : public astl::DeltaMetric {
   DeltaMetricTestFixture() : astl::DeltaMetric(GetDeltaConfig(), nullptr, nullptr) {}
 
   // Expose protected methods for testing
-  static std::expected<astl::AstlValue, astl_status_code> TestCalculateDelta(const astl::AstlValue& current_sample,
-                                                                             const astl::AstlValue& previous_sample) {
+  static astl::compat::expected<astl::AstlValue, astl_status_code> TestCalculateDelta(
+      const astl::AstlValue& current_sample, const astl::AstlValue& previous_sample) {
     return CalculateDelta(current_sample, previous_sample);
   }
 };

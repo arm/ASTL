@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <optional>
 #include <span>
 #include <string_view>
 #include <system_error>
@@ -15,6 +14,8 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "astl_cxx_compat.hpp"
 #ifdef __linux__
 #  include <sys/wait.h>
 #  include <unistd.h>
@@ -131,11 +132,12 @@ struct MapScmiFileInterface {
 
   static auto Key(const std::filesystem::path& path) -> std::string { return path.lexically_normal().generic_string(); }
 
-  auto IsValid(const std::filesystem::path& path) const noexcept -> std::expected<bool, astl_status_code> {
+  auto IsValid(const std::filesystem::path& path) const noexcept -> astl::compat::expected<bool, astl_status_code> {
     return files.contains(Key(path));
   }
 
-  auto GetSubdirectories() const -> std::expected<std::vector<std::filesystem::directory_entry>, astl_status_code> {
+  auto GetSubdirectories() const
+      -> astl::compat::expected<std::vector<std::filesystem::directory_entry>, astl_status_code> {
     std::unordered_set<std::string>               seen;
     std::vector<std::filesystem::directory_entry> subdirectories;
     for (const auto& [file_path, contents] : files) {
@@ -150,12 +152,13 @@ struct MapScmiFileInterface {
     return subdirectories;
   }
 
-  auto HasReadPermission(const std::filesystem::path& path) const noexcept -> std::expected<bool, astl_status_code> {
+  auto HasReadPermission(const std::filesystem::path& path) const noexcept
+      -> astl::compat::expected<bool, astl_status_code> {
     return IsValid(path);
   }
 
   static auto HasWritePermission(const std::filesystem::path& /*path*/) noexcept
-      -> std::expected<bool, astl_status_code> {
+      -> astl::compat::expected<bool, astl_status_code> {
     return true;
   }
 
@@ -199,7 +202,7 @@ auto AddCommonScmiFiles(MapScmiFileInterface& file_interface) -> void {
 }
 
 auto AddScmiDataEvent(MapScmiFileInterface& file_interface, astl::ScmiDataEventId data_event_id,
-                      std::optional<std::string_view> timestamp_rate, std::string_view value) -> void {
+                      astl::compat::optional<std::string_view> timestamp_rate, std::string_view value) -> void {
   file_interface.files[MapScmiFileInterface::Key(DataEventPath(data_event_id, "enable"))]        = "0";
   file_interface.files[MapScmiFileInterface::Key(DataEventPath(data_event_id, "tstamp_enable"))] = "0";
   file_interface.files[MapScmiFileInterface::Key(DataEventPath(data_event_id, "value"))]         = std::string{value};
@@ -773,7 +776,7 @@ TEST_CASE("ScmiSysfsCollector falls back when timestamp rate is missing",
 
   MapScmiFileInterface file_interface;
   AddCommonScmiFiles(file_interface);
-  AddScmiDataEvent(file_interface, astl::ScmiDataEventId{0x1234}, std::nullopt, "1234567890 42");
+  AddScmiDataEvent(file_interface, astl::ScmiDataEventId{0x1234}, astl::compat::nullopt, "1234567890 42");
 
   CapturingRawSampleSink                         sample_sink;
   astl::ScmiSysfsCollector<MapScmiFileInterface> collector(std::move(file_interface));
@@ -842,7 +845,7 @@ TEST_CASE("ScmiSysfsCollector applies per-DE_ID validation failure to all DE_ID"
   MapScmiFileInterface file_interface;
   AddCommonScmiFiles(file_interface);
   AddScmiDataEvent(file_interface, valid_de_id, std::string_view{"1"}, "100 10");
-  AddScmiDataEvent(file_interface, missing_rate_de_id, std::nullopt, "200 20");
+  AddScmiDataEvent(file_interface, missing_rate_de_id, astl::compat::nullopt, "200 20");
 
   CapturingRawSampleSink                         sample_sink;
   astl::ScmiSysfsCollector<MapScmiFileInterface> collector(std::move(file_interface));

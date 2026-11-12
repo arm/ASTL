@@ -7,6 +7,8 @@
 #include <limits>
 #include <numeric>
 
+#include "astl_cxx_compat.hpp"
+
 namespace astl::scmi_detail {
 namespace {
 
@@ -41,21 +43,21 @@ auto HasSmallerOffset(HwClockTicks native, ProcessedSampleTimestamp raw, const O
 }  // namespace
 
 auto ClockCorrelationReadSpacing(scmi_tlm_update_interval interval)
-    -> std::expected<std::chrono::nanoseconds, astl_status_code> {
+    -> astl::compat::expected<std::chrono::nanoseconds, astl_status_code> {
   if (interval.secs == 0) {
-    return std::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
   }
   auto       nanoseconds = static_cast<int64_t>(interval.secs) * kHalfIntervalMultiplier;
   const auto exponent    = static_cast<int64_t>(interval.exp) + kHalfIntervalNanosecondExponent;
   if (exponent > kMaxNanosecondExponent) {
-    return std::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
   }
   if (exponent < kMinNanosecondExponent) {
     return std::chrono::nanoseconds{1};
   }
   for (int64_t digit = 0; digit < exponent; ++digit) {
     if (nanoseconds > std::numeric_limits<int64_t>::max() / kDecimalBase) {
-      return std::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
+      return astl::compat::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
     }
     nanoseconds *= kDecimalBase;
   }
@@ -85,9 +87,10 @@ auto ClockCorrelationMinimum::ConsiderSample(HwClockTicks native, ProcessedSampl
   return ASTL_STATUS_SUCCESS;
 }
 
-auto ClockCorrelationMinimum::Correlation() const -> std::expected<OperationClockCorrelation, astl_status_code> {
+auto ClockCorrelationMinimum::Correlation() const
+    -> astl::compat::expected<OperationClockCorrelation, astl_status_code> {
   if (!_best) {
-    return std::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
   }
   return *_best;
 }

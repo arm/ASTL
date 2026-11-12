@@ -4,6 +4,7 @@
 
 #include "metric/counter.hpp"
 
+#include "astl_cxx_compat.hpp"
 #include "common/string_pool.hpp"
 
 namespace astl {
@@ -34,7 +35,7 @@ auto Counter::GetProperties(astl_counter_props_t *properties) const -> astl_stat
  *
  * @return OperationSequence
  */
-auto Counter::GetOperations() -> std::expected<OperationSequence, astl_status_code> {
+auto Counter::GetOperations() -> astl::compat::expected<OperationSequence, astl_status_code> {
   return BuildOperations(_configuration->GetOperationBuilder(), _target);
 }
 

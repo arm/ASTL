@@ -5,14 +5,13 @@
 #ifndef METRIC_JSON_DECLARATION_HPP_
 #define METRIC_JSON_DECLARATION_HPP_
 
-#include <expected>
 #include <map>
-#include <nlohmann/json.hpp>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "common/metric_config.hpp"
 
 namespace astl::metrics::spec {
@@ -28,11 +27,11 @@ namespace astl::metrics::spec {
  * protocol-specific helpers instead of accumulating in this shared type.
  */
 struct MetricJsonCollectionSettings {
-  std::string                protocol;
-  std::string                register_name;
-  std::optional<std::string> scmi_component_filter;
-  std::optional<std::string> scmi_instance_filter;
-  nlohmann::json             raw_json;
+  std::string                         protocol;
+  std::string                         register_name;
+  astl::compat::optional<std::string> scmi_component_filter;
+  astl::compat::optional<std::string> scmi_instance_filter;
+  nlohmann::json                      raw_json;
 };
 
 inline void from_json(const nlohmann::json& json_data, MetricJsonCollectionSettings& collection_setting) {
@@ -50,12 +49,12 @@ inline void from_json(const nlohmann::json& json_data, MetricJsonCollectionSetti
 }
 
 struct DerivedMetricJsonDeclaration {
-  std::optional<std::string>              description;
-  std::optional<std::string>              register_suffix;
-  std::optional<std::string>              unit;
-  std::optional<std::string>              identifier;
-  std::optional<std::string>              metric_type;
-  std::optional<std::vector<std::string>> metric_groups;
+  astl::compat::optional<std::string>              description;
+  astl::compat::optional<std::string>              register_suffix;
+  astl::compat::optional<std::string>              unit;
+  astl::compat::optional<std::string>              identifier;
+  astl::compat::optional<std::string>              metric_type;
+  astl::compat::optional<std::vector<std::string>> metric_groups;
 };
 
 inline void from_json(const nlohmann::json& json_data, DerivedMetricJsonDeclaration& derived_metric) {
@@ -92,8 +91,8 @@ struct MetricJsonDeclaration {
 
   //!< Unit of measurement for the metric. Could be defined in the SCMI spec json instead, in which case this acts as a
   //!< filter or output-unit override when paired with an explicit formula.
-  std::optional<std::string> unit;
-  std::optional<std::string> value_type;
+  astl::compat::optional<std::string> unit;
+  astl::compat::optional<std::string> value_type;
 
   //!< Type of metric (e.g., value, delta, rate)
   std::string metric_type;
@@ -102,15 +101,15 @@ struct MetricJsonDeclaration {
   std::string identifier;
 
   //!< Groups this metric is associated with
-  std::optional<std::vector<std::string>> metric_groups;
-  MetricJsonCollectionSettings            collection;
-  std::optional<nlohmann::json>           formula;
+  astl::compat::optional<std::vector<std::string>> metric_groups;
+  MetricJsonCollectionSettings                     collection;
+  astl::compat::optional<nlohmann::json>           formula;
 
-  std::optional<ResidencyMetricConfig::InferredStateInfo>            inferred_state;
-  std::optional<std::map<std::string, nlohmann::json>>               states;
-  std::optional<std::map<std::string, nlohmann::json>>               finite_set_values;
-  std::optional<std::map<std::string, nlohmann::json>>               event_values;
-  std::optional<std::map<std::string, DerivedMetricJsonDeclaration>> derived_metrics;
+  astl::compat::optional<ResidencyMetricConfig::InferredStateInfo>            inferred_state;
+  astl::compat::optional<std::map<std::string, nlohmann::json>>               states;
+  astl::compat::optional<std::map<std::string, nlohmann::json>>               finite_set_values;
+  astl::compat::optional<std::map<std::string, nlohmann::json>>               event_values;
+  astl::compat::optional<std::map<std::string, DerivedMetricJsonDeclaration>> derived_metrics;
 };
 
 inline void from_json(const nlohmann::json& json_data, MetricJsonDeclaration& metric) {
@@ -160,8 +159,8 @@ inline void from_json(const nlohmann::json& json_data, MetricJsonDeclaration& me
 }
 
 struct MetricsDeclarationDocument {
-  std::optional<std::string> last_updated;
-  std::optional<bool>        confidential;
+  astl::compat::optional<std::string> last_updated;
+  astl::compat::optional<bool>        confidential;
 };
 
 inline void from_json(const nlohmann::json& json_data, MetricsDeclarationDocument& document) {
@@ -174,9 +173,9 @@ inline void from_json(const nlohmann::json& json_data, MetricsDeclarationDocumen
 }
 
 struct MetricsDeclaration {
-  std::optional<MetricsDeclarationDocument>    document;
-  std::map<std::string, MetricJsonDeclaration> metrics;
-  std::optional<std::string>                   extends;
+  astl::compat::optional<MetricsDeclarationDocument> document;
+  std::map<std::string, MetricJsonDeclaration>       metrics;
+  astl::compat::optional<std::string>                extends;
 };
 
 inline void from_json(const nlohmann::json& json_data, MetricsDeclaration& metrics_declaration) {
@@ -189,11 +188,11 @@ inline void from_json(const nlohmann::json& json_data, MetricsDeclaration& metri
   json_data.at("metrics").get_to(metrics_declaration.metrics);
 }
 
-auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> std::optional<CollectorType>;
+auto ParseCollectorType(const MetricJsonDeclaration& metric_declaration) -> astl::compat::optional<CollectorType>;
 
 auto ParseEventValueInfo(std::string_view metric_key_name, const MetricJsonDeclaration& metric_declaration,
                          astl_value_type_t value_type)
-    -> std::expected<EventMetricConfig::ValueToInfoMap, astl_status_code>;
+    -> astl::compat::expected<EventMetricConfig::ValueToInfoMap, astl_status_code>;
 
 }  // namespace astl::metrics::spec
 

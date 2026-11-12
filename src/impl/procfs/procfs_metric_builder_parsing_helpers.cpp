@@ -4,9 +4,9 @@
 
 #include "procfs/procfs_metric_builder_parsing_helpers.hpp"
 
-#include <optional>
 #include <string>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
 
@@ -15,34 +15,35 @@ namespace astl::procfs_metric_builder_helpers::detail {
 namespace {
 
 struct ProcfsFieldDescriptorDeclaration {
-  std::filesystem::path      relative_path;
-  std::string                field_type;
-  std::optional<std::string> field_name;
-  std::optional<std::string> line_prefix;
-  std::optional<size_t>      token_index;
-  std::optional<size_t>      token_start_index;
-  std::optional<size_t>      token_end_index;
-  std::optional<char>        delimiter;
-  std::optional<std::string> split_part;
-  std::optional<std::string> raw_value_type;
+  std::filesystem::path               relative_path;
+  std::string                         field_type;
+  astl::compat::optional<std::string> field_name;
+  astl::compat::optional<std::string> line_prefix;
+  astl::compat::optional<size_t>      token_index;
+  astl::compat::optional<size_t>      token_start_index;
+  astl::compat::optional<size_t>      token_end_index;
+  astl::compat::optional<char>        delimiter;
+  astl::compat::optional<std::string> split_part;
+  astl::compat::optional<std::string> raw_value_type;
 };
 
 struct SplitTokenFieldDescriptorParams {
-  std::filesystem::path      relative_path;
-  std::string                line_prefix;
-  std::optional<size_t>      token_index;
-  std::optional<char>        delimiter;
-  std::optional<std::string> split_part;
-  std::optional<std::string> raw_value_type;
+  std::filesystem::path               relative_path;
+  std::string                         line_prefix;
+  astl::compat::optional<size_t>      token_index;
+  astl::compat::optional<char>        delimiter;
+  astl::compat::optional<std::string> split_part;
+  astl::compat::optional<std::string> raw_value_type;
 };
 
-auto ParseConfiguredValueType(const std::optional<std::string>& value_type_text) -> std::optional<astl_value_type_t> {
+auto ParseConfiguredValueType(const astl::compat::optional<std::string>& value_type_text)
+    -> astl::compat::optional<astl_value_type_t> {
   if (!value_type_text.has_value()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
-  const auto                       lowered = ToLowerCopy(*value_type_text);
-  std::optional<astl_value_type_t> parsed_value_type;
+  const auto                                lowered = ToLowerCopy(*value_type_text);
+  astl::compat::optional<astl_value_type_t> parsed_value_type;
   if (lowered == "uint64") {
     parsed_value_type = ASTL_VALUE_UINT64;
   } else if (lowered == "uint32") {
@@ -55,22 +56,22 @@ auto ParseConfiguredValueType(const std::optional<std::string>& value_type_text)
   return parsed_value_type;
 }
 
-auto ParseProcfsRawValueType(const std::optional<std::string>& raw_value_type_text,
-                             astl_value_type_t                 default_value_type)
-    -> std::expected<astl_value_type_t, astl_status_code> {
+auto ParseProcfsRawValueType(const astl::compat::optional<std::string>& raw_value_type_text,
+                             astl_value_type_t                          default_value_type)
+    -> astl::compat::expected<astl_value_type_t, astl_status_code> {
   if (!raw_value_type_text.has_value()) {
     return default_value_type;
   }
   const auto parsed_value_type = ParseConfiguredValueType(raw_value_type_text);
   if (!parsed_value_type.has_value()) {
     ASTL_LOG_ERROR("Unsupported PROCFS raw_value_type '{}'", *raw_value_type_text);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return *parsed_value_type;
 }
 
-auto ParseSplitTokenPart(const std::optional<std::string>& split_part)
-    -> std::expected<procfs::SplitTokenPart, astl_status_code> {
+auto ParseSplitTokenPart(const astl::compat::optional<std::string>& split_part)
+    -> astl::compat::expected<procfs::SplitTokenPart, astl_status_code> {
   const auto lowered = ToLowerCopy(split_part.value_or("before_delimiter"));
   if (lowered == "before_delimiter" || lowered == "before") {
     return procfs::SplitTokenPart::BEFORE_DELIMITER;
@@ -80,64 +81,64 @@ auto ParseSplitTokenPart(const std::optional<std::string>& split_part)
   }
 
   ASTL_LOG_ERROR("Unsupported PROCFS split_part '{}'", lowered);
-  return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
 }
 
-auto ParseKeyValueFieldDescriptor(const std::filesystem::path&      relative_path,
-                                  const std::optional<std::string>& field_name,
-                                  const std::optional<std::string>& raw_value_type)
-    -> std::expected<procfs::FieldDescriptor, astl_status_code> {
+auto ParseKeyValueFieldDescriptor(const std::filesystem::path&               relative_path,
+                                  const astl::compat::optional<std::string>& field_name,
+                                  const astl::compat::optional<std::string>& raw_value_type)
+    -> astl::compat::expected<procfs::FieldDescriptor, astl_status_code> {
   if (!field_name.has_value()) {
     ASTL_LOG_ERROR("PROCFS key_value declaration missing field_name");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   auto parsed_raw_type = ParseProcfsRawValueType(raw_value_type, ASTL_VALUE_UINT64);
   if (!parsed_raw_type.has_value()) {
-    return std::unexpected(parsed_raw_type.error());
+    return astl::compat::unexpected(parsed_raw_type.error());
   }
   return procfs::KeyValueField{relative_path, *field_name, *parsed_raw_type};
 }
 
 auto ParseTokenFieldDescriptor(const std::filesystem::path& relative_path, const std::string& line_prefix,
-                               const std::optional<size_t>&      token_index,
-                               const std::optional<std::string>& raw_value_type)
-    -> std::expected<procfs::FieldDescriptor, astl_status_code> {
+                               const astl::compat::optional<size_t>&      token_index,
+                               const astl::compat::optional<std::string>& raw_value_type)
+    -> astl::compat::expected<procfs::FieldDescriptor, astl_status_code> {
   if (!token_index.has_value()) {
     ASTL_LOG_ERROR("PROCFS token declaration missing token_index");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   auto parsed_raw_type = ParseProcfsRawValueType(raw_value_type, ASTL_VALUE_UINT64);
   if (!parsed_raw_type.has_value()) {
-    return std::unexpected(parsed_raw_type.error());
+    return astl::compat::unexpected(parsed_raw_type.error());
   }
   return procfs::TokenField{relative_path, line_prefix, *token_index, *parsed_raw_type};
 }
 
 auto ParseSplitTokenFieldDescriptor(const SplitTokenFieldDescriptorParams& params)
-    -> std::expected<procfs::FieldDescriptor, astl_status_code> {
+    -> astl::compat::expected<procfs::FieldDescriptor, astl_status_code> {
   if (!params.token_index.has_value()) {
     ASTL_LOG_ERROR("PROCFS split_token declaration missing token_index");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   auto parsed_raw_type = ParseProcfsRawValueType(params.raw_value_type, ASTL_VALUE_UINT64);
   if (!parsed_raw_type.has_value()) {
-    return std::unexpected(parsed_raw_type.error());
+    return astl::compat::unexpected(parsed_raw_type.error());
   }
   auto parsed_part = ParseSplitTokenPart(params.split_part);
   if (!parsed_part.has_value()) {
-    return std::unexpected(parsed_part.error());
+    return astl::compat::unexpected(parsed_part.error());
   }
   return procfs::SplitTokenField{params.relative_path,           params.line_prefix, *params.token_index,
                                  params.delimiter.value_or('/'), *parsed_part,       *parsed_raw_type};
 }
 
 auto ParseTokenSumFieldDescriptor(const std::filesystem::path& relative_path, const std::string& line_prefix,
-                                  const std::optional<size_t>& token_start_index,
-                                  const std::optional<size_t>& token_end_index)
-    -> std::expected<procfs::FieldDescriptor, astl_status_code> {
+                                  const astl::compat::optional<size_t>& token_start_index,
+                                  const astl::compat::optional<size_t>& token_end_index)
+    -> astl::compat::expected<procfs::FieldDescriptor, astl_status_code> {
   if (!token_start_index.has_value() || !token_end_index.has_value()) {
     ASTL_LOG_ERROR("PROCFS token_sum declaration missing token_start_index or token_end_index");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return procfs::TokenSumField{relative_path, line_prefix, *token_start_index, *token_end_index};
 }
@@ -145,7 +146,7 @@ auto ParseTokenSumFieldDescriptor(const std::filesystem::path& relative_path, co
 }  // namespace
 
 auto ParseProcfsInputValueType(const metrics::spec::ProcfsMetricJsonCollectionSettings& collection_settings)
-    -> std::expected<astl_value_type_t, astl_status_code> {
+    -> astl::compat::expected<astl_value_type_t, astl_status_code> {
   if (!collection_settings.inputs.empty()) {
     return ASTL_VALUE_UNKNOWN;
   }
@@ -155,8 +156,8 @@ auto ParseProcfsInputValueType(const metrics::spec::ProcfsMetricJsonCollectionSe
     return ParseProcfsRawValueType(collection_settings.raw_value_type, ASTL_VALUE_UINT64);
   }
 
-  std::expected<astl_value_type_t, astl_status_code> parsed_input_value_type =
-      std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+  astl::compat::expected<astl_value_type_t, astl_status_code> parsed_input_value_type =
+      astl::compat::unexpected(ASTL_STATUS_NOT_SUPPORTED);
   if (field_type == "system") {
     return collection_settings.field_name == "swap_occupancy" ? ASTL_VALUE_FLOAT64 : ASTL_VALUE_UINT64;
   }
@@ -175,12 +176,12 @@ auto ParseProcfsInputValueType(const metrics::spec::ProcfsMetricJsonCollectionSe
 
 auto ParseProcfsOutputValueType(astl_value_type_t                           input_value_type,
                                 const metrics::spec::MetricJsonDeclaration& metric_declaration, bool is_composite)
-    -> std::expected<astl_value_type_t, astl_status_code> {
+    -> astl::compat::expected<astl_value_type_t, astl_status_code> {
   if (metric_declaration.value_type.has_value()) {
     const auto configured_value_type = ParseConfiguredValueType(metric_declaration.value_type);
     if (!configured_value_type.has_value()) {
       ASTL_LOG_ERROR("Unsupported PROCFS metric value_type '{}'", *metric_declaration.value_type);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     return *configured_value_type;
   }
@@ -195,17 +196,17 @@ auto ParseProcfsOutputValueType(astl_value_type_t                           inpu
   return input_value_type;
 }
 
-auto ParseProcfsFieldDescriptor(const ProcfsFieldDescriptorDeclaration& declaration,
-                                const std::optional<std::string>&       line_prefix_override)
-    -> std::expected<procfs::FieldDescriptor, astl_status_code> {
+auto ParseProcfsFieldDescriptor(const ProcfsFieldDescriptorDeclaration&    declaration,
+                                const astl::compat::optional<std::string>& line_prefix_override)
+    -> astl::compat::expected<procfs::FieldDescriptor, astl_status_code> {
   const auto lowered_field_type   = ToLowerCopy(declaration.field_type);
   const auto rendered_line_prefix = line_prefix_override.has_value() ? line_prefix_override : declaration.line_prefix;
 
-  std::expected<procfs::FieldDescriptor, astl_status_code> parsed_descriptor =
-      std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+  astl::compat::expected<procfs::FieldDescriptor, astl_status_code> parsed_descriptor =
+      astl::compat::unexpected(ASTL_STATUS_NOT_SUPPORTED);
   if (lowered_field_type == "system" || lowered_field_type == "system_rate") {
     if (!declaration.field_name.has_value()) {
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     return procfs::SystemField{declaration.relative_path, rendered_line_prefix.value_or(""), *declaration.field_name,
                                lowered_field_type == "system_rate"};
@@ -244,8 +245,8 @@ auto ParseProcfsFieldDescriptor(const ProcfsFieldDescriptorDeclaration& declarat
 }
 
 auto ParseProcfsFieldDescriptor(const metrics::spec::ProcfsMetricJsonCollectionSettings& collection_settings,
-                                const std::optional<std::string>&                        line_prefix_override)
-    -> std::expected<procfs::FieldDescriptor, astl_status_code> {
+                                const astl::compat::optional<std::string>&               line_prefix_override)
+    -> astl::compat::expected<procfs::FieldDescriptor, astl_status_code> {
   return ParseProcfsFieldDescriptor(
       ProcfsFieldDescriptorDeclaration{
           .relative_path     = collection_settings.relative_path,
@@ -253,18 +254,18 @@ auto ParseProcfsFieldDescriptor(const metrics::spec::ProcfsMetricJsonCollectionS
           .field_name        = collection_settings.field_name,
           .line_prefix       = collection_settings.line_prefix,
           .token_index       = collection_settings.token_index,
-          .token_start_index = std::nullopt,
-          .token_end_index   = std::nullopt,
-          .delimiter         = std::nullopt,
-          .split_part        = std::nullopt,
+          .token_start_index = astl::compat::nullopt,
+          .token_end_index   = astl::compat::nullopt,
+          .delimiter         = astl::compat::nullopt,
+          .split_part        = astl::compat::nullopt,
           .raw_value_type    = collection_settings.raw_value_type,
       },
       line_prefix_override);
 }
 
 auto ParseProcfsFieldDescriptor(const metrics::spec::ProcfsMetricJsonInputSettings& input_settings,
-                                const std::optional<std::string>&                   line_prefix_override)
-    -> std::expected<procfs::FieldDescriptor, astl_status_code> {
+                                const astl::compat::optional<std::string>&          line_prefix_override)
+    -> astl::compat::expected<procfs::FieldDescriptor, astl_status_code> {
   return ParseProcfsFieldDescriptor(
       ProcfsFieldDescriptorDeclaration{
           .relative_path     = input_settings.relative_path,

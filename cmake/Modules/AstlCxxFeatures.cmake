@@ -4,18 +4,23 @@
 
 # Check the selected target compiler and library without executing target code when cross-compiling.
 function(astl_check_cxx_features)
+  find_package(tl-expected CONFIG REQUIRED)
+  find_package(tl-optional CONFIG REQUIRED)
   include(CheckCXXSourceCompiles)
+  set(CMAKE_REQUIRED_INCLUDES "${PROJECT_SOURCE_DIR}/utils")
+  set(CMAKE_REQUIRED_LIBRARIES tl::expected tl::optional)
+  # A standard change must recheck the selected implementations in an existing build directory.
+  unset(ASTL_HAVE_REQUIRED_CXX_FEATURES CACHE)
   check_cxx_source_compiles(
     [[
-      #include <expected>
+      #include "astl_cxx_compat.hpp"
       #include <format>
-      #include <optional>
       #include <string>
 
       int main() {
-        std::expected<int, int> value{42};
-        std::expected<void, int> status{};
-        auto transformed = std::optional<int>{*value}.transform([](int n) { return n + 1; });
+        astl::compat::expected<int, int> value{42};
+        astl::compat::expected<void, int> status{};
+        auto transformed = astl::compat::optional<int>{*value}.transform([](int n) { return n + 1; });
         auto formatted = std::format("{}", transformed.value());
         return !status || formatted.empty();
       }
@@ -25,8 +30,9 @@ function(astl_check_cxx_features)
   if(NOT ASTL_HAVE_REQUIRED_CXX_FEATURES)
     message(
       FATAL_ERROR
-        "ASTL requires a C++23 compiler and standard library providing std::expected, std::format, "
-        "and std::optional::transform. Select a compatible toolchain and rebuild its C++ dependencies. "
+        "ASTL requires C++20 or newer with std::format and compatible expected/optional implementations. "
+        "Provide tl-expected and tl-optional for standard-library fallbacks. "
+        "Select a compatible toolchain and rebuild its C++ dependencies. "
         "For the Android NDK, select libc++ with ANDROID_STL=c++_static or ANDROID_STL=c++_shared.")
   endif()
 endfunction()

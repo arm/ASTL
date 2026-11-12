@@ -3,27 +3,28 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cstdint>
-#include <expected>
 #include <unordered_map>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "scmi/scmi_ioctl_collector.hpp"
 #include "scmi/scmi_read_operation.hpp"
 
 namespace astl {
 
-auto ScmiIoctlCollector::ReadSingleSamples() -> std::expected<std::vector<scmi_tlm_de_sample>, astl_status_code> {
+auto ScmiIoctlCollector::ReadSingleSamples()
+    -> astl::compat::expected<std::vector<scmi_tlm_de_sample>, astl_status_code> {
   const auto data_event_count = _scmi_ioctl_interface->DataEventCount();
   if (!data_event_count) {
-    return std::unexpected{data_event_count.error()};
+    return astl::compat::unexpected{data_event_count.error()};
   }
 
   std::vector<scmi_tlm_de_sample> samples(*data_event_count);
   uint32_t                        sample_count{};
   const auto                      read_status = _scmi_ioctl_interface->ReadSingle(samples, sample_count);
   if (read_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected{read_status};
+    return astl::compat::unexpected{read_status};
   }
   samples.resize(sample_count);
   return samples;

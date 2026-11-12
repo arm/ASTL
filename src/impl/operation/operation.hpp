@@ -9,12 +9,12 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <expected>
 #include <limits>
 #include <memory>
 #include <stdexcept>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
 
 namespace astl {
@@ -119,7 +119,9 @@ struct ITarget;  // forward declaration so we can get OperationBuilder concept d
  */
 template <typename OperationBuilderType>
 concept OperationBuilder = requires(const OperationBuilderType& operation_builder, const ITarget* target) {
-  { operation_builder.BuildOperations(target) } -> std::same_as<std::expected<OperationSequence, astl_status_code>>;
+  {
+    operation_builder.BuildOperations(target)
+  } -> std::same_as<astl::compat::expected<OperationSequence, astl_status_code>>;
 };
 
 }  // namespace astl

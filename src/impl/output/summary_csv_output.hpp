@@ -26,12 +26,12 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
-#include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "common/astl_defines.hpp"    // ProcessedSamplesMap, ITarget, IMetric
 #include "output/summarizer.hpp"      // MinMaxAvgSummary
 #include "output/summary_output.hpp"  // Base class
@@ -82,11 +82,11 @@ class SummaryCsvOutput : public SummaryOutput {
 
  private:
   struct MetricTargetSummary {
-    const ITarget*                        target{nullptr};
-    const IMetric*                        metric{nullptr};
-    std::optional<MinMaxAvgSummary>       minmax;
-    std::optional<HistogramSummary>       histogram;
-    std::optional<TimeWeightedAvgSummary> twa;
+    const ITarget*                                 target{nullptr};
+    const IMetric*                                 metric{nullptr};
+    astl::compat::optional<MinMaxAvgSummary>       minmax;
+    astl::compat::optional<HistogramSummary>       histogram;
+    astl::compat::optional<TimeWeightedAvgSummary> twa;
   };
 
   std::filesystem::path _path;

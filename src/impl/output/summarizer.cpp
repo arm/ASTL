@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../common/i_processed_sample_sink.hpp"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
 
@@ -41,14 +42,14 @@ constexpr auto IsArithmeticValueType(astl_value_type_t value_type) -> bool {
 
 auto ComputeTimeWeightedAverage(std::span<const ProcessedSampledData>     samples,
                                 std::span<const ProcessedSampleTimestamp> pause_markers)
-    -> std::expected<std::optional<AstlValue>, astl_status_code> {
+    -> astl::compat::expected<astl::compat::optional<AstlValue>, astl_status_code> {
   TimeWeightedAvgAccumulator accumulator{pause_markers};
   if (const auto status = accumulator.Add(samples); status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   auto result = accumulator.Result();
   if (!result) {
-    return std::unexpected(result.error());
+    return astl::compat::unexpected(result.error());
   }
   return result->time_weighted_avg;
 }
@@ -113,7 +114,7 @@ auto TimeWeightedAvgAccumulator::AddWeightedInterval(const ProcessedSampledData&
   return ASTL_STATUS_SUCCESS;
 }
 
-auto TimeWeightedAvgAccumulator::Result() const -> std::expected<TimeWeightedAvgSummary, astl_status_code> {
+auto TimeWeightedAvgAccumulator::Result() const -> astl::compat::expected<TimeWeightedAvgSummary, astl_status_code> {
   TimeWeightedAvgSummary summary{};
   summary.count = _count;
   if (_total_weight > 0.0) {
@@ -156,14 +157,14 @@ auto MinMaxAvgAccumulator::Add(std::span<const ProcessedSampledData> samples) ->
   return ASTL_STATUS_SUCCESS;
 }
 
-auto MinMaxAvgAccumulator::Result() const -> std::expected<MinMaxAvgSummary, astl_status_code> {
+auto MinMaxAvgAccumulator::Result() const -> astl::compat::expected<MinMaxAvgSummary, astl_status_code> {
   auto result = _summary;
   if (_arithmetic_count == 0) {
     return result;
   }
   auto average = AstlValue::Divide(*_sum, static_cast<double>(_arithmetic_count));
   if (!average) {
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   const double rounded = std::round(std::get<double>(average->value) * 100.0) / 100.0;
   result.avg           = AstlValue{rounded};
@@ -171,14 +172,14 @@ auto MinMaxAvgAccumulator::Result() const -> std::expected<MinMaxAvgSummary, ast
 }
 
 auto MinMaxAvgSummarizer::Summarize(std::span<const ProcessedSampledData> samples) const
-    -> std::expected<SummaryResult, astl_status_code> {
+    -> astl::compat::expected<SummaryResult, astl_status_code> {
   MinMaxAvgAccumulator accumulator;
   if (const auto status = accumulator.Add(samples); status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   auto result = accumulator.Result();
   if (!result) {
-    return std::unexpected(result.error());
+    return astl::compat::unexpected(result.error());
   }
   return *result;
 }
@@ -190,16 +191,16 @@ auto MinMaxAvgSummarizer::IsSupported(astl_value_type_t value_type, astl_metric_
 
 // TimeWeightedAvgSummarizer Implementation
 auto TimeWeightedAvgSummarizer::Summarize(std::span<const ProcessedSampledData> samples) const
-    -> std::expected<SummaryResult, astl_status_code> {
+    -> astl::compat::expected<SummaryResult, astl_status_code> {
   return Summarize(samples, {});
 }
 
 auto TimeWeightedAvgSummarizer::Summarize(std::span<const ProcessedSampledData>     samples,
                                           std::span<const ProcessedSampleTimestamp> pause_markers)
-    -> std::expected<SummaryResult, astl_status_code> {
+    -> astl::compat::expected<SummaryResult, astl_status_code> {
   if (samples.empty()) {
     ASTL_LOG_TRACE("TimeWeightedAvgSummarizer: No samples to summarize");
-    return TimeWeightedAvgSummary{std::nullopt, 0};
+    return TimeWeightedAvgSummary{astl::compat::nullopt, 0};
   }
 
   TimeWeightedAvgSummary summary{};
@@ -208,7 +209,7 @@ auto TimeWeightedAvgSummarizer::Summarize(std::span<const ProcessedSampledData> 
   auto result = ComputeTimeWeightedAverage(samples, pause_markers);
   if (!result.has_value()) {
     ASTL_LOG_ERROR("TimeWeightedAvgSummarizer: Failed to compute time-weighted average");
-    return std::unexpected(result.error());
+    return astl::compat::unexpected(result.error());
   }
 
   summary.time_weighted_avg = result.value();
@@ -223,7 +224,7 @@ auto TimeWeightedAvgSummarizer::IsSupported(astl_value_type_t value_type, astl_m
 
 // HistogramSummarizer Implementation
 auto HistogramSummarizer::Summarize(std::span<const ProcessedSampledData> samples) const
-    -> std::expected<SummaryResult, astl_status_code> {
+    -> astl::compat::expected<SummaryResult, astl_status_code> {
   if (samples.empty()) {
     ASTL_LOG_TRACE("HistogramSummarizer: No samples to summarize");
     HistogramSummary empty_summary{};
@@ -237,10 +238,10 @@ auto HistogramSummarizer::Summarize(std::span<const ProcessedSampledData> sample
 
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 auto HistogramSummarizer::SummarizeDiscrete(std::span<const ProcessedSampledData> samples) const
-    -> std::expected<SummaryResult, astl_status_code> {
+    -> astl::compat::expected<SummaryResult, astl_status_code> {
   DiscreteHistogramAccumulator accumulator;
   if (const auto status = accumulator.Add(samples); status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   return accumulator.Result();
 }
@@ -283,7 +284,7 @@ auto DiscreteHistogramAccumulator::Result() const -> HistogramSummary {
 }
 
 auto HistogramSummarizer::SummarizeRanged(std::span<const ProcessedSampledData> samples) const
-    -> std::expected<SummaryResult, astl_status_code> {
+    -> astl::compat::expected<SummaryResult, astl_status_code> {
   HistogramSummary summary{};
   summary.total_count = samples.size();
   summary.is_discrete = false;
@@ -297,14 +298,14 @@ auto HistogramSummarizer::SummarizeRanged(std::span<const ProcessedSampledData> 
   for (const auto& sample : samples) {
     if (!sample.value.IsArithmetic()) {
       ASTL_LOG_ERROR("HistogramSummarizer: Non-arithmetic value encountered in range mode");
-      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+      return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
 
     // Convert to double for histogram processing
     auto double_result = sample.value.ToDouble();
     if (!double_result) {
       ASTL_LOG_ERROR("HistogramSummarizer: Non-arithmetic value encountered in range mode");
-      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+      return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
 
     arithmetic_values.push_back(double_result.value());

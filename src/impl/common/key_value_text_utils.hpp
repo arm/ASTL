@@ -9,9 +9,10 @@
 #include <functional>
 #include <initializer_list>
 #include <map>
-#include <optional>
 #include <string>
 #include <string_view>
+
+#include "astl_cxx_compat.hpp"
 
 namespace astl::text {
 
@@ -22,7 +23,7 @@ struct KeyValueLineView {
 
 using KeyValueMap = std::map<std::string, std::string, std::less<>>;
 
-auto ParseKeyValueLine(std::string_view line, char separator = ':') -> std::optional<KeyValueLineView>;
+auto ParseKeyValueLine(std::string_view line, char separator = ':') -> astl::compat::optional<KeyValueLineView>;
 
 auto ParseKeyValueText(std::string_view text, char separator = ':') -> KeyValueMap;
 
@@ -32,7 +33,7 @@ auto FindFirstKeyValue(std::string_view text, std::initializer_list<std::string_
     -> std::string;
 
 auto ReadFirstMatchingKeyValueFromFile(const std::filesystem::path& path, std::initializer_list<std::string_view> keys,
-                                       char separator = ':') -> std::optional<std::string>;
+                                       char separator = ':') -> astl::compat::optional<std::string>;
 
 }  // namespace astl::text
 

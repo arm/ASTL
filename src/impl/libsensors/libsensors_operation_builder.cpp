@@ -4,6 +4,7 @@
 
 #include "libsensors/libsensors_operation_builder.hpp"
 
+#include "astl_cxx_compat.hpp"
 #include "libsensors/libsensors_read_operation.hpp"
 #include "operation/operation.hpp"
 #include "target.hpp"
@@ -15,7 +16,7 @@ LibsensorsOperationBuilder::LibsensorsOperationBuilder(const sensors_chip_name* 
     : _chip(chip), _subfeature_number(subfeature_number) {}
 
 [[nodiscard]] auto LibsensorsOperationBuilder::BuildOperations(const ITarget* target) const
-    -> std::expected<OperationSequence, astl_status_code> {
+    -> astl::compat::expected<OperationSequence, astl_status_code> {
   (void)target;
   OperationSequence seq;
   seq.push_back(std::make_unique<LibsensorsReadOperation>(_chip, _subfeature_number));

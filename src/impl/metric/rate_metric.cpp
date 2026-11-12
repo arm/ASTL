@@ -7,10 +7,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <expected>
-#include <optional>
 #include <string>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
 
@@ -38,7 +37,8 @@ RateMetric::RateMetric(const MetricConfig* configuration, const ITarget* target,
   astl_value_t val{0};
   auto         zero_val = AstlValue::FromUnion(val, _configuration->ValueType());
   if (zero_val.has_value()) {
-    _rate_summary_data = {.min_rate = std::nullopt, .max_rate = std::nullopt, .avg_rate = std::nullopt};
+    _rate_summary_data = {
+        .min_rate = astl::compat::nullopt, .max_rate = astl::compat::nullopt, .avg_rate = astl::compat::nullopt};
   } else {
     ASTL_LOG_INFO("RateMetric: unsupported type {} for rate statistics for metric: {}", _configuration->ValueType(),
                   _configuration->Name());
@@ -131,9 +131,9 @@ auto RateMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) -> as
 }
 
 auto RateMetric::CalculateRate(const AstlValue& delta_value, std::chrono::microseconds time_interval)
-    -> std::expected<AstlValue, astl_status_code> {
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   if (!delta_value.IsArithmetic()) {
-    return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+    return astl::compat::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
 
   // Convert time interval to seconds (as double) for rate calculation
@@ -142,7 +142,7 @@ auto RateMetric::CalculateRate(const AstlValue& delta_value, std::chrono::micros
   // Calculate rate: delta / time using the template Divide method
   auto rate_result = AstlValue::Divide(delta_value, time_in_seconds);
   if (!rate_result.has_value()) {
-    return std::unexpected(rate_result.error());
+    return astl::compat::unexpected(rate_result.error());
   }
 
   return rate_result.value();

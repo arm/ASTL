@@ -5,7 +5,6 @@
 #ifndef ASTL_MOCK_CLASSES_H_
 #define ASTL_MOCK_CLASSES_H_
 
-#include <expected>
 #include <filesystem>
 #include <span>
 #include <string>
@@ -14,6 +13,7 @@
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
 #include "collector/i_collector_manager.hpp"
@@ -67,7 +67,8 @@ struct MockOrchestrator {
   MAKE_MOCK1(PauseCollection, astl_status_code(const astl::ITarget* target));
   MAKE_MOCK1(ResumeCollection, astl_status_code(const astl::ITarget* target));
   MAKE_MOCK1(StopCollection, astl_status_code(const astl::ITarget* target));
-  using RType = std::expected<uint32_t, astl_status_code>;  // define this separately to avoid MACRO expansion quirk
+  using RType =
+      astl::compat::expected<uint32_t, astl_status_code>;  // define this separately to avoid MACRO expansion quirk
   MAKE_CONST_MOCK2(GetCounterSampleCount, RType(const astl::ITarget* target, const astl::ICounter*));
 };
 
@@ -82,7 +83,7 @@ struct MockCounter : public astl::ICounter {
   MAKE_MOCK1(GetProperties, auto(astl_counter_props_t*) -> astl_status_code, const override);
 
   // IMetric functions, since ICounter extends it
-  using expected_operation_sequence = std::expected<astl::OperationSequence, astl_status_code>;
+  using expected_operation_sequence = astl::compat::expected<astl::OperationSequence, astl_status_code>;
 
   MAKE_MOCK1(CheckCapabilities, auto(const astl::Capabilities& capabilities)->bool, const override);
   MAKE_MOCK0(GetOperations, auto()->expected_operation_sequence, override);
@@ -110,9 +111,9 @@ struct MockCounterHandle : public astl::CounterHandle {
 struct MockFileInterface {
   static constexpr bool trompeloeil_movable_mock = true;
 
-  using expected_bool = std::expected<bool, astl_status_code>;
+  using expected_bool = astl::compat::expected<bool, astl_status_code>;
   MAKE_MOCK1(IsValid, auto(const std::filesystem::path&)->expected_bool, const noexcept);
-  using expected_children = std::expected<std::vector<std::filesystem::directory_entry>, astl_status_code>;
+  using expected_children = astl::compat::expected<std::vector<std::filesystem::directory_entry>, astl_status_code>;
   MAKE_MOCK0(GetSubdirectories, auto()->expected_children, const);
   MAKE_MOCK1(HasReadPermission, auto(const std::filesystem::path&)->expected_bool, const noexcept);
   MAKE_MOCK1(HasWritePermission, auto(const std::filesystem::path&)->expected_bool, const noexcept);
@@ -156,7 +157,7 @@ struct MockCollectorManager : public astl::ICollectorManager {
   MAKE_MOCK1(ClearConfiguredCollectionOnTarget, astl_status_code(const astl::ITarget* target), override);
 
   MAKE_MOCK1(StartOnTarget, astl_status_code(const astl::ITarget* target), override);
-  using ClockSnapshotRtype = std::expected<astl::ClockCorrelationMap, astl_status_code>;
+  using ClockSnapshotRtype = astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>;
   MAKE_MOCK1(GetNativeClockSnapshot, ClockSnapshotRtype(const astl::ITarget* target), override);
   MAKE_MOCK1(PauseOnTarget, astl_status_code(const astl::ITarget* target), override);
   MAKE_MOCK1(ResumeOnTarget, astl_status_code(const astl::ITarget* target), override);
@@ -213,7 +214,7 @@ struct MockCollector : public astl::ICollector {
   MAKE_MOCK0(ReadImmediate, astl_status_code(), override);
 
   /* @brief Take per-operation clock correlation snapshots for all configured sample operations. */
-  using ClockSnapshotRtype = std::expected<astl::ClockCorrelationMap, astl_status_code>;
+  using ClockSnapshotRtype = astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>;
   MAKE_MOCK0(GetNativeClockSnapshot, ClockSnapshotRtype(), override);
 };
 
@@ -238,7 +239,7 @@ struct MockProcessedSampleSink : public astl::IProcessedSampleSink {
 };
 
 struct MockMetric : public astl::IMetric {
-  using expected_operation_sequence = std::expected<astl::OperationSequence, astl_status_code>;
+  using expected_operation_sequence = astl::compat::expected<astl::OperationSequence, astl_status_code>;
 
   MAKE_MOCK1(CheckCapabilities, auto(const astl::Capabilities& capabilities)->bool, const override);
   MAKE_MOCK0(GetOperations, auto()->expected_operation_sequence, override);
@@ -261,11 +262,11 @@ struct MockMetricManager : public astl::IMetricManager {
     default_clock_correlations_ = NAMED_ALLOW_CALL(*this, SetClockCorrelations(trompeloeil::_));
   }
 
-  using expected_collection_operations = std::expected<astl::CollectionOperations, astl_status_code>;
-  using expected_metric_interface      = std::expected<std::span<const astl_metric_handle_t>, astl_status_code>;
-  using metric_expected_t              = std::expected<astl::IMetric*, astl_status_code>;
-  using expected_counter = std::expected<astl::IMetric*, astl_status_code>;
-  using expected_counter_span = std::expected<std::span<const astl_counter_handle_t>, astl_status_code>;
+  using expected_collection_operations = astl::compat::expected<astl::CollectionOperations, astl_status_code>;
+  using expected_metric_interface      = astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>;
+  using metric_expected_t              = astl::compat::expected<astl::IMetric*, astl_status_code>;
+  using expected_counter = astl::compat::expected<astl::IMetric*, astl_status_code>;
+  using expected_counter_span = astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code>;
 
   MAKE_MOCK2(GetCounterOnTarget, auto (astl_counter_handle_t counter_handle, const astl::ITarget* target)
       -> expected_counter, const override);
@@ -321,7 +322,7 @@ struct MockMetricManager : public astl::IMetricManager {
    * @brief Determine the required operations to support the specified metrics.
    *
    * @param metrics A span of metric pointers for which to determine the required operations.
-   * @return A std::expected containing the required CollectionOperations struct if successful,
+   * @return A astl::compat::expected containing the required CollectionOperations struct if successful,
    *         or an astl_status_code on failure.
    */
   MAKE_MOCK2(GetRequiredOperations,
@@ -367,7 +368,7 @@ struct MockMetricManager : public astl::IMetricManager {
              override);
 
   MAKE_MOCK0(GetMetricGroups, auto()->std::span<const astl_metric_group_handle_t>, const override);
-  using expected_metric_groups_handles = std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code>;
+  using expected_metric_groups_handles = astl::compat::expected<std::span<const astl_metric_group_handle_t>, astl_status_code>;
   MAKE_MOCK1(GetMetricGroups, auto(const astl::ITarget* target)->expected_metric_groups_handles, const override);
 
   MAKE_MOCK2(GetMetricGroupProperties,
@@ -454,7 +455,7 @@ class TestMetricBase : public astl::IMetric {
     (void)caps;
     return true;
   }
-  std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
+  astl::compat::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
     return astl::OperationSequence{};
   }
   astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& raw) override {

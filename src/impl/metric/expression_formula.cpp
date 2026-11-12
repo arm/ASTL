@@ -8,15 +8,16 @@
 #include <sstream>
 #include <type_traits>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "tinyexpr.h"
 
 namespace astl {
 
-auto ExpressionFormula::Create(std::string expression) -> std::expected<ExpressionFormula, astl_status_code> {
+auto ExpressionFormula::Create(std::string expression) -> astl::compat::expected<ExpressionFormula, astl_status_code> {
   if (expression.empty()) {
     ASTL_LOG_ERROR("Expression formula cannot be empty");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   // Allocate variable storage on heap (needs to persist for compiled expression)
@@ -36,7 +37,7 @@ auto ExpressionFormula::Create(std::string expression) -> std::expected<Expressi
     } else {
       ASTL_LOG_ERROR("Failed to parse expression '{}'", expression);
     }
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   // Transfer ownership
@@ -65,9 +66,9 @@ auto ExpressionFormula::operator=(ExpressionFormula&& other) noexcept -> Express
 
 ExpressionFormula::~ExpressionFormula() = default;
 
-auto ExpressionFormula::Apply(const AstlValue& value) const -> std::expected<AstlValue, astl_status_code> {
+auto ExpressionFormula::Apply(const AstlValue& value) const -> astl::compat::expected<AstlValue, astl_status_code> {
   return std::visit(
-      [this](auto&& val) -> std::expected<AstlValue, astl_status_code> {
+      [this](auto&& val) -> astl::compat::expected<AstlValue, astl_status_code> {
         using T = std::decay_t<decltype(val)>;
 
         // Only support arithmetic types (not bool or string)
@@ -88,7 +89,7 @@ auto ExpressionFormula::Apply(const AstlValue& value) const -> std::expected<Ast
           return AstlValue{static_cast<T>(result)};
         } else {
           ASTL_LOG_ERROR("Expression formula does not support non-arithmetic types");
-          return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+          return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
         }
       },
       value.value);

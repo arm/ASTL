@@ -6,12 +6,12 @@
 
 #include <compare>
 #include <cstdint>
-#include <expected>
 #include <format>
 #include <limits>
 #include <string>
 #include <variant>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 
 namespace astl {
@@ -92,7 +92,7 @@ auto AstlValue::operator<=>(const AstlValue& other) const -> std::partial_orderi
  * @return an AstlValue instance with the same value as val, or a ASTL_STATUS_INVALID_VALUE_TYPE
  */
 auto AstlValue::FromUnion(const astl_value_t& val, astl_value_type_t type)
-    -> std::expected<AstlValue, astl_status_code> {
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   // clang-format off
   switch (type) {
     case ASTL_VALUE_UINT8:       return AstlValue{val.ui8};
@@ -102,13 +102,13 @@ auto AstlValue::FromUnion(const astl_value_t& val, astl_value_type_t type)
     case ASTL_VALUE_FLOAT32:     return AstlValue{val.fp32};
     case ASTL_VALUE_FLOAT64:     return AstlValue{val.fp64};
     case ASTL_VALUE_BOOL8:       return AstlValue{val.b8};
-    case ASTL_VALUE_UNKNOWN:     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    default:                     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    case ASTL_VALUE_UNKNOWN:     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    default:                     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
   // clang-format on
 }
 
-auto AstlValue::FromUnionPromoting(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code> {
+auto AstlValue::FromUnionPromoting(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code> {
   // clang-format off
   switch (type) {
     case ASTL_VALUE_UINT8:     return AstlValue{uint64_t{0}};
@@ -118,8 +118,8 @@ auto AstlValue::FromUnionPromoting(astl_value_type_t type) -> std::expected<Astl
     case ASTL_VALUE_FLOAT32:   return AstlValue{0.0};
     case ASTL_VALUE_FLOAT64:   return AstlValue{0.0};
     case ASTL_VALUE_BOOL8:     return AstlValue{uint64_t{0}};
-    case ASTL_VALUE_UNKNOWN:   return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    default:                   return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    case ASTL_VALUE_UNKNOWN:   return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    default:                   return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
   // clang-format on
 }
@@ -129,7 +129,7 @@ auto AstlValue::FromUnionPromoting(astl_value_type_t type) -> std::expected<Astl
  *
  * @return an AstlValue instance with the minimum possible value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
  */
-auto AstlValue::FromMinimum(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code> {
+auto AstlValue::FromMinimum(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code> {
   // clang-format off
   switch (type) {
     case ASTL_VALUE_UINT8:       return AstlValue{std::numeric_limits<uint8_t>::min()};
@@ -139,8 +139,8 @@ auto AstlValue::FromMinimum(astl_value_type_t type) -> std::expected<AstlValue, 
     case ASTL_VALUE_FLOAT32:     return AstlValue{std::numeric_limits<float>::lowest()};
     case ASTL_VALUE_FLOAT64:     return AstlValue{std::numeric_limits<double>::lowest()};
     case ASTL_VALUE_BOOL8:       return AstlValue{std::numeric_limits<bool>::min()};
-    case ASTL_VALUE_UNKNOWN:     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    default:                     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    case ASTL_VALUE_UNKNOWN:     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    default:                     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
   // clang-format on
 }
@@ -150,7 +150,7 @@ auto AstlValue::FromMinimum(astl_value_type_t type) -> std::expected<AstlValue, 
  *
  * @return an AstlValue instance of 0 value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
  */
-auto AstlValue::FromZero(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code> {
+auto AstlValue::FromZero(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code> {
   // clang-format off
   switch (type) {
     case ASTL_VALUE_UINT8:       return AstlValue{uint8_t{0}};
@@ -160,8 +160,8 @@ auto AstlValue::FromZero(astl_value_type_t type) -> std::expected<AstlValue, ast
     case ASTL_VALUE_FLOAT32:     return AstlValue{0.0F};
     case ASTL_VALUE_FLOAT64:     return AstlValue{0.0};
     case ASTL_VALUE_BOOL8:       return AstlValue{false};
-    case ASTL_VALUE_UNKNOWN:     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    default:                     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    case ASTL_VALUE_UNKNOWN:     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    default:                     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
   // clang-format on
 }
@@ -171,7 +171,7 @@ auto AstlValue::FromZero(astl_value_type_t type) -> std::expected<AstlValue, ast
  *
  * @return an AstlValue instance with the max representable value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
  */
-auto AstlValue::FromMaximum(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code> {
+auto AstlValue::FromMaximum(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code> {
   // clang-format off
   switch (type) {
     case ASTL_VALUE_UINT8:       return AstlValue{std::numeric_limits<uint8_t>::max()};
@@ -181,8 +181,8 @@ auto AstlValue::FromMaximum(astl_value_type_t type) -> std::expected<AstlValue, 
     case ASTL_VALUE_FLOAT32:     return AstlValue{std::numeric_limits<float>::max()};
     case ASTL_VALUE_FLOAT64:     return AstlValue{std::numeric_limits<double>::max()};
     case ASTL_VALUE_BOOL8:       return AstlValue{std::numeric_limits<bool>::max()};
-    case ASTL_VALUE_UNKNOWN:     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    default:                     return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    case ASTL_VALUE_UNKNOWN:     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    default:                     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
   // clang-format on
 }
@@ -223,9 +223,10 @@ auto AstlValue::ToAstlUnionValue() const -> std::pair<astl_value_t, astl_value_t
  *   - ASTL_STATUS_METRIC_OVERFLOW_DETECTED if this would overflow their representations
  *   - ASTL_STATUS_INVALID_VALUE_TYPE if operands aren't similar types
  */
-auto AstlValue::Add(const AstlValue& addend, const AstlValue& augend) -> std::expected<AstlValue, astl_status_code> {
+auto AstlValue::Add(const AstlValue& addend, const AstlValue& augend)
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   return std::visit(
-      [](auto&& left, auto&& right) -> std::expected<AstlValue, astl_status_code> {
+      [](auto&& left, auto&& right) -> astl::compat::expected<AstlValue, astl_status_code> {
         // X is the type of the left, but promote bool to uint8_t to avoid unsafe arithmetic
         using X = std::conditional_t<std::is_same_v<std::decay_t<decltype(left)>, bool>, uint8_t,
                                      std::decay_t<decltype(left)>>;
@@ -237,7 +238,7 @@ auto AstlValue::Add(const AstlValue& addend, const AstlValue& augend) -> std::ex
         if constexpr ((std::is_integral_v<X> && !std::is_integral_v<Y>) ||
                       (!std::is_integral_v<X> && std::is_integral_v<Y>)) {
           ASTL_LOG_ERROR("Cannot add integral type with floating point type");
-          return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+          return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
         }
 
         if constexpr (std::is_arithmetic_v<X> && std::is_arithmetic_v<Y>) {
@@ -250,13 +251,13 @@ auto AstlValue::Add(const AstlValue& addend, const AstlValue& augend) -> std::ex
           // Check for overflow (only for unsigned integers)
           if constexpr (std::is_integral_v<Result> && std::is_unsigned_v<Result>) {
             if ((std::numeric_limits<Result>::max() - left_cast) < right_cast) [[unlikely]] {
-              return std::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
+              return astl::compat::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
             }
           }
           Result sum{static_cast<Result>(left_cast + right_cast)};
           return AstlValue{sum};
         } else {
-          return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+          return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
         }
       },
       addend.value, augend.value);
@@ -270,7 +271,7 @@ auto AstlValue::Add(const AstlValue& addend, const AstlValue& augend) -> std::ex
  *   - ASTL_STATUS_INVALID_VALUE_TYPE if operands aren't similar types
  */
 auto AstlValue::Subtract(const AstlValue& minuend, const AstlValue& subtrahend)
-    -> std::expected<AstlValue, astl_status_code> {
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   // Helper performs unsigned underflow check; bool is promoted to uint8_t first to avoid unsafe comparisons.
   auto underflow_check = [](auto lhs, auto rhs) -> bool {
     // T is the lhs type, but promote bool to uint8_t to avoid unsafe arithmetic
@@ -284,7 +285,7 @@ auto AstlValue::Subtract(const AstlValue& minuend, const AstlValue& subtrahend)
   };
 
   return std::visit(
-      [&underflow_check](auto&& left, auto&& right) -> std::expected<AstlValue, astl_status_code> {
+      [&underflow_check](auto&& left, auto&& right) -> astl::compat::expected<AstlValue, astl_status_code> {
         using LX = std::decay_t<decltype(left)>;
         using RX = std::decay_t<decltype(right)>;
         if constexpr (std::is_arithmetic_v<LX> && std::is_arithmetic_v<RX>) {
@@ -293,13 +294,13 @@ auto AstlValue::Subtract(const AstlValue& minuend, const AstlValue& subtrahend)
           Result right_cast = static_cast<Result>(right);
 
           if (underflow_check(left_cast, right_cast)) [[unlikely]] {
-            return std::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
+            return astl::compat::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
           }
 
           Result difference = static_cast<Result>(left_cast - right_cast);
           return AstlValue{difference};
         } else {
-          return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+          return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
         }
       },
       minuend.value, subtrahend.value);

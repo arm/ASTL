@@ -6,11 +6,11 @@
 #define ASTL_API_TARGET_H_
 
 #include <algorithm>
-#include <optional>
 #include <string>
 #include <string_view>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "common/capabilities.hpp"
 
 namespace astl {
@@ -28,7 +28,7 @@ struct ITarget {
 
   virtual auto GetProperties(astl_target_props_t* target) const -> astl_status_code = 0;
   virtual auto Name() const -> std::string const&                                   = 0;
-  virtual auto CollectorTargetPath() const -> std::optional<std::string_view> { return std::nullopt; }
+  virtual auto CollectorTargetPath() const -> astl::compat::optional<std::string_view> { return astl::compat::nullopt; }
 
   virtual auto GetCollectorType() const -> CollectorType = 0;
 };
@@ -85,8 +85,8 @@ class Target : public astl::ITarget {
  public:
   Target() = default;
   Target(std::string name, std::string description, CollectorType collector_type, Target* parent = nullptr,
-         std::optional<std::string> uuid                  = std::nullopt,
-         std::optional<std::string> collector_target_path = std::nullopt);
+         astl::compat::optional<std::string> uuid                  = astl::compat::nullopt,
+         astl::compat::optional<std::string> collector_target_path = astl::compat::nullopt);
   ~Target() override               = default;
   Target(const Target&)            = default;
   Target& operator=(const Target&) = default;
@@ -95,20 +95,20 @@ class Target : public astl::ITarget {
 
   auto GetProperties(astl_target_props_t* target) const -> astl_status_code override;
   auto Name() const -> std::string const& override;
-  auto CollectorTargetPath() const -> std::optional<std::string_view> override;
+  auto CollectorTargetPath() const -> astl::compat::optional<std::string_view> override;
   auto GetCollectorType() const -> CollectorType override;
   auto GetParent() const -> const Target*;
-  auto GetUuid() const -> const std::optional<std::string>& { return _uuid; }
+  auto GetUuid() const -> const astl::compat::optional<std::string>& { return _uuid; }
   auto SetName(std::string name) -> void;
-  auto SetCollectorTargetPath(std::optional<std::string> collector_target_path) -> void;
+  auto SetCollectorTargetPath(astl::compat::optional<std::string> collector_target_path) -> void;
 
  private:
-  std::string                _name;
-  std::string                _description;
-  CollectorType              _collector_type{CollectorType::UNKNOWN};
-  Target*                    _parent{nullptr};
-  std::optional<std::string> _uuid;
-  std::optional<std::string> _collector_target_path;
+  std::string                         _name;
+  std::string                         _description;
+  CollectorType                       _collector_type{CollectorType::UNKNOWN};
+  Target*                             _parent{nullptr};
+  astl::compat::optional<std::string> _uuid;
+  astl::compat::optional<std::string> _collector_target_path;
 };
 
 }  // namespace astl

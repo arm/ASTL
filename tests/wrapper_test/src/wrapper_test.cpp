@@ -16,6 +16,7 @@
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl/astl_test_hooks.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
 #include "collector/collector_manager.hpp"
 #include "common/metric_config.hpp"
@@ -1009,7 +1010,7 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
   REQUIRE_CALL(*mock_collector_manager, ConfigureCollectionOnTarget(_, _, _)).TIMES(2).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*mock_collector_manager, GetNativeClockSnapshot(_))
       .TIMES(2)
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   std::unique_ptr<trompeloeil::expectation> read_expectation;
   if (first == ASTL_STATUS_INTERNAL_ERROR) {
     read_expectation = NAMED_REQUIRE_CALL(*mock_collector_manager, ReadImmediateOnTarget(_)).RETURN(first);
@@ -1038,9 +1039,9 @@ TEST_CASE("astlReadImmediate", "[success with 2 targets][wrapper]") {
   astl_counter_handle_t              counter_handle        = &dummy_counter_storage;
   std::vector<astl_counter_handle_t> available_counters{counter_handle};
   ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
-      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+      .RETURN(astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
   ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1085,9 +1086,9 @@ TEST_CASE("astlReadImmediate reads paused targets", "[wrapper]") {
   astl_counter_handle_t              counter_handle        = &dummy_counter_storage;
   std::vector<astl_counter_handle_t> available_counters{counter_handle};
   ALLOW_CALL(*metric_mgr, GetAvailableCounters(_))
-      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+      .RETURN(astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
   ALLOW_CALL(*metric_mgr, GetCounterRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1227,7 +1228,7 @@ TEST_CASE("astlStartCollection", "[wrapper]") {
   REQUIRE(orchestrator->ConfigureMetricCollection(target_1, &params, metrics) == ASTL_STATUS_SUCCESS);
 
   ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
   REQUIRE_CALL(*collector_mgr, StartOnTarget(target_1)).RETURN(ASTL_STATUS_SUCCESS);
 
@@ -1296,7 +1297,7 @@ TEST_CASE("astlStartCollection starts counter-configured targets", "[wrapper]") 
   REQUIRE(orchestrator->ConfigureCounterCollection(target_1, &params, counters) == ASTL_STATUS_SUCCESS);
 
   ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
   REQUIRE_CALL(*collector_mgr, StartOnTarget(target_1)).RETURN(ASTL_STATUS_SUCCESS);
 
@@ -1399,7 +1400,7 @@ TEST_CASE("astlStartCollectionPaused", "[wrapper]") {
   REQUIRE(orchestrator->ConfigureMetricCollection(target_2, &params, metrics) == ASTL_STATUS_SUCCESS);
 
   ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
   REQUIRE_CALL(*collector_mgr, StartOnTarget(target_2)).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*collector_mgr, PauseOnTarget(target_2)).RETURN(ASTL_STATUS_SUCCESS);
@@ -1470,7 +1471,7 @@ TEST_CASE("astlStartCollectionPaused starts counter-configured targets", "[wrapp
   REQUIRE(orchestrator->ConfigureCounterCollection(target_2, &params, counters) == ASTL_STATUS_SUCCESS);
 
   ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
   REQUIRE_CALL(*collector_mgr, StartOnTarget(target_2)).RETURN(ASTL_STATUS_SUCCESS);
   REQUIRE_CALL(*collector_mgr, PauseOnTarget(target_2)).RETURN(ASTL_STATUS_SUCCESS);
@@ -1543,7 +1544,7 @@ TEST_CASE("astlStartCollection rolls back previously started targets when a late
   REQUIRE(orchestrator->ConfigureMetricCollection(target_2, &params, metrics) == ASTL_STATUS_SUCCESS);
 
   ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
   trompeloeil::sequence sequence;
   REQUIRE_CALL(*collector_mgr, StartOnTarget(target_1)).IN_SEQUENCE(sequence).RETURN(ASTL_STATUS_SUCCESS);
@@ -1622,7 +1623,7 @@ TEST_CASE("astlStartCollectionPaused rolls back previously started targets when 
   REQUIRE(orchestrator->ConfigureMetricCollection(target_2, &params, metrics) == ASTL_STATUS_SUCCESS);
 
   ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
   trompeloeil::sequence sequence;
   REQUIRE_CALL(*collector_mgr, StartOnTarget(target_1)).IN_SEQUENCE(sequence).RETURN(ASTL_STATUS_SUCCESS);
@@ -1730,7 +1731,7 @@ TEST_CASE("astlGetCounterSampleCountOnTarget", "[Count the number of calls to Re
       .RETURN(ASTL_STATUS_SUCCESS);
   const auto* invalid_counter_handle = static_cast<astl_counter_handle_t>(&junk);
   ALLOW_CALL(*mock_metric_manager, GetCounterOnTarget(invalid_counter_handle, _))
-      .RETURN(std::unexpected(ASTL_STATUS_INVALID_COUNTER_HANDLE));
+      .RETURN(astl::compat::unexpected(ASTL_STATUS_INVALID_COUNTER_HANDLE));
   auto [orchestrator, expectations] = MakeMinimalOrchestrator(std::move(mock_metric_manager));
   orchestrator->SetTargets(std::move(mock_targets));
   TestOrchestratorInjector injector(std::move(orchestrator));
@@ -2743,7 +2744,7 @@ TEST_CASE("astlPauseCollection and astlResumeCollection route through orchestrat
   REQUIRE(orchestrator_raw->ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_SUCCESS);
 
   ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
 
   using State = astl::Orchestrator::TargetCollectionState;
@@ -2815,7 +2816,7 @@ TEST_CASE("astlStopCollection routes through orchestrator", "[wrapper]") {
   REQUIRE(orchestrator_raw->ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_SUCCESS);
 
   ALLOW_CALL(*collector_mgr, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*metric_mgr, SetClockCorrelations(_));
 
   using State = astl::Orchestrator::TargetCollectionState;

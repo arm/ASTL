@@ -4,21 +4,22 @@
 
 #include "common/key_value_text_utils.hpp"
 
+#include "astl_cxx_compat.hpp"
 #include "common/text_file_utils.hpp"
 #include "procfs/procfs_utils.hpp"
 
 namespace astl::text {
 
-auto ParseKeyValueLine(std::string_view line, char separator) -> std::optional<KeyValueLineView> {
+auto ParseKeyValueLine(std::string_view line, char separator) -> astl::compat::optional<KeyValueLineView> {
   const auto split = line.find(separator);
   if (split == std::string_view::npos) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   const auto key   = procfs::Trim(line.substr(0, split));
   const auto value = procfs::Trim(line.substr(split + 1));
   if (key.empty() || value.empty()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   return KeyValueLineView{.key = key, .value = value};
@@ -73,15 +74,15 @@ auto FindFirstKeyValue(std::string_view text, std::initializer_list<std::string_
 }
 
 auto ReadFirstMatchingKeyValueFromFile(const std::filesystem::path& path, std::initializer_list<std::string_view> keys,
-                                       char separator) -> std::optional<std::string> {
+                                       char separator) -> astl::compat::optional<std::string> {
   const auto contents = ReadTextFile(path);
   if (!contents.has_value()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   auto value = FindFirstKeyValue(*contents, keys, separator);
   if (value.empty()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return value;
 }

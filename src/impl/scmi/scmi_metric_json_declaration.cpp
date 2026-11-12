@@ -6,14 +6,14 @@
 
 #include <cstdint>
 #include <format>
-#include <nlohmann/json.hpp>
-#include <optional>
 #include <string>
 #include <vector>
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
+#include "astl_json.hpp"
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
 #include "common/capabilities.hpp"
@@ -28,10 +28,10 @@ using json = nlohmann::json;
 namespace astl::metrics::spec {
 
 auto ParseScmiMetricJsonCollectionSettings(const MetricJsonCollectionSettings& collection_setting)
-    -> std::expected<ScmiMetricJsonCollectionSettings, astl_status_code> {
+    -> astl::compat::expected<ScmiMetricJsonCollectionSettings, astl_status_code> {
   if (ToLowerCopy(collection_setting.protocol) != "scmi") {
     ASTL_LOG_ERROR("SCMI collection parser received unsupported protocol '{}'", collection_setting.protocol);
-    return std::unexpected(astl::kInternalNotImplemented);
+    return astl::compat::unexpected(astl::kInternalNotImplemented);
   }
 
   ScmiMetricJsonCollectionSettings settings;
@@ -40,7 +40,7 @@ auto ParseScmiMetricJsonCollectionSettings(const MetricJsonCollectionSettings& c
   }
   if (!collection_setting.raw_json.is_object()) {
     ASTL_LOG_ERROR("SCMI collection settings must be a JSON object");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   if (collection_setting.raw_json.contains("register")) {
@@ -142,7 +142,7 @@ auto BuildScmiMetricId(std::string_view metric_name, const ITarget& target) -> s
 }
 
 auto ParseJsonValueToAstlValue(const nlohmann::json& val, const std::string& label, std::string_view metric_key_name,
-                               std::string_view field_name) -> std::expected<AstlValue, astl_status_code> {
+                               std::string_view field_name) -> astl::compat::expected<AstlValue, astl_status_code> {
   if (val.is_number_integer()) {
     return AstlValue{val.get<uint64_t>()};
   }
@@ -154,26 +154,26 @@ auto ParseJsonValueToAstlValue(const nlohmann::json& val, const std::string& lab
   }
 
   ASTL_LOG_ERROR("Unsupported JSON value type for label '{}' in {} (metric {})", label, field_name, metric_key_name);
-  return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
 }
 
 auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
                                   scmi::spec::ScmiSpecification const& scmi_spec,
                                   std::vector<const ITarget*> const&   applicable_targets)
-    -> std::expected<MetricConfigOnTargets, astl_status_code> {
+    -> astl::compat::expected<MetricConfigOnTargets, astl_status_code> {
   if (!metric_declaration.finite_set_values.has_value()) {
     ASTL_LOG_ERROR("Finite set metric {} missing 'finite_set_values' configuration", metric_key_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   auto collector_type = ParseCollectorType(metric_declaration);
   if (!collector_type) {
     ASTL_LOG_ERROR("Unsupported collector type '{}' for finite set metric {}", metric_declaration.collection.protocol,
                    metric_key_name);
-    return std::unexpected(astl::kInternalNotImplemented);
+    return astl::compat::unexpected(astl::kInternalNotImplemented);
   }
   auto scmi_collection = ParseScmiMetricJsonCollectionSettings(metric_declaration.collection);
   if (!scmi_collection.has_value()) {
-    return std::unexpected(scmi_collection.error());
+    return astl::compat::unexpected(scmi_collection.error());
   }
 
   FiniteSetMetricConfig::FiniteSet      finite_set;
@@ -182,23 +182,23 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   for (const auto& [label, entry] : metric_declaration.finite_set_values.value()) {
     if (label.empty()) {
       ASTL_LOG_ERROR("Empty label in finite_set_values for metric {}", metric_key_name);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     if (!entry.is_object() || !entry.contains("value") || !entry.contains("description")) {
       ASTL_LOG_ERROR(
           "finite_set_values entry '{}' for metric {} must be an object with 'value' and 'description' fields", label,
           metric_key_name);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
 
     auto parsed_value_result = ParseJsonValueToAstlValue(entry["value"], label, metric_key_name, "finite_set_values");
     if (!parsed_value_result) {
-      return std::unexpected(parsed_value_result.error());
+      return astl::compat::unexpected(parsed_value_result.error());
     }
 
     if (!finite_set.emplace(*parsed_value_result).second) {
       ASTL_LOG_ERROR("Duplicate finite set value for label '{}' in metric {}", label, metric_key_name);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     value_to_info[*parsed_value_result] =
         FiniteSetMetricConfig::StateInfo{label, entry["description"].get<std::string>()};
@@ -206,7 +206,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
 
   if (finite_set.empty()) {
     ASTL_LOG_ERROR("Empty finite set for metric {}", metric_key_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   ASTL_LOG_INFO("Parsed finite set metric '{}' with {} labels and {} unique values", metric_key_name,
@@ -224,7 +224,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
     if (target_index == 0 && metric_registers.empty()) {
       ASTL_LOG_ERROR("No Data Event IDs found for finite set metric {} (register '{}')", metric_key_name,
                      scmi_collection->register_name);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     for (const auto& scmi_metric_declaration : metric_registers) {
       const auto              units                = scmi_metric_declaration.units;
@@ -240,7 +240,7 @@ auto CreateFiniteSetMetricConfigs(std::string_view metric_key_name, MetricJsonDe
 
       auto formula_result = BuildFormula(metric_declaration.formula);
       if (!formula_result.has_value()) {
-        return std::unexpected(formula_result.error());
+        return astl::compat::unexpected(formula_result.error());
       }
       auto composed_formula = ComposeFormulas(std::move(formula_result.value()),
                                               BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
@@ -262,19 +262,19 @@ auto GetResidencyMetricStateToInfoMapForInstance(
     std::string_view                                     metric_key_name,
     scmi::spec::ResidencyStateRegisterDefinitions const& matching_scmi_register_definitions,
     scmi::spec::InstanceId instance, MetricJsonDeclaration const& metric_declaration)
-    -> std::expected<ResidencyMetricConfig::StateToInfoMap, astl_status_code> {
+    -> astl::compat::expected<ResidencyMetricConfig::StateToInfoMap, astl_status_code> {
   ResidencyMetricConfig::StateToInfoMap state_to_info_map;
 
   for (const auto& [state_name, state_config] : metric_declaration.states.value()) {
     if (!state_config.contains("tick_frequency")) {
       ASTL_LOG_ERROR("State '{}' in residency metric {} missing required 'tick_frequency' field", state_name,
                      metric_key_name);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     if (!state_config.contains("description")) {
       ASTL_LOG_ERROR("State '{}' in residency metric {} missing required 'description' field", state_name,
                      metric_key_name);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     double      tick_frequency    = state_config["tick_frequency"].get<double>();
     std::string state_description = state_config["description"].get<std::string>();
@@ -283,7 +283,7 @@ auto GetResidencyMetricStateToInfoMapForInstance(
     if (state_iter == matching_scmi_register_definitions.state_to_register_def.end()) {
       ASTL_LOG_ERROR("State '{}' in residency metric {} not found in matching SCMI registers", state_name,
                      metric_key_name);
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
     auto                 data_event_id = scmi::spec::GetDataEventId(state_iter->second.base_data_event_id, instance);
     ScmiOperationBuilder operation_builder{data_event_id};
@@ -297,7 +297,7 @@ auto GetResidencyMetricStateToInfoMapForInstance(
 auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
                                   scmi::spec::ScmiSpecification const& scmi_spec,
                                   std::vector<const ITarget*> const&   applicable_targets)
-    -> std::expected<MetricConfigOnTargets, astl_status_code> {
+    -> astl::compat::expected<MetricConfigOnTargets, astl_status_code> {
   MetricConfigOnTargets metric_configs_on_targets;
 
   const auto identifier     = ParseMetricIdentifier(metric_declaration.identifier);
@@ -305,15 +305,15 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   if (!collector_type || collector_type != CollectorType::SCMI) {
     ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection.protocol,
                    metric_key_name);
-    return std::unexpected(astl::kInternalNotImplemented);
+    return astl::compat::unexpected(astl::kInternalNotImplemented);
   }
   auto scmi_collection = ParseScmiMetricJsonCollectionSettings(metric_declaration.collection);
   if (!scmi_collection.has_value()) {
-    return std::unexpected(scmi_collection.error());
+    return astl::compat::unexpected(scmi_collection.error());
   }
   auto matching_scmi_register_definitions = FindMatchingScmiRegistersForResidency(metric_declaration, scmi_spec);
   if (!matching_scmi_register_definitions) {
-    return std::unexpected(matching_scmi_register_definitions.error());
+    return astl::compat::unexpected(matching_scmi_register_definitions.error());
   }
   const auto value_type       = ParseValueType();
   const auto input_value_type = value_type;
@@ -339,12 +339,12 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
       auto        state_to_info_map_result = GetResidencyMetricStateToInfoMapForInstance(
           metric_key_name, *matching_scmi_register_definitions, local_instance, metric_declaration);
       if (!state_to_info_map_result.has_value()) {
-        return std::unexpected(state_to_info_map_result.error());
+        return astl::compat::unexpected(state_to_info_map_result.error());
       }
 
       auto formula_result = BuildFormula(metric_declaration.formula);
       if (!formula_result.has_value()) {
-        return std::unexpected(formula_result.error());
+        return astl::compat::unexpected(formula_result.error());
       }
 
       auto new_config = std::make_unique<ResidencyMetricConfig>(
@@ -361,16 +361,16 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
 auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
                               scmi::spec::ScmiSpecification const& scmi_spec, astl_metric_type_t metric_type,
                               std::vector<const ITarget*> const& applicable_targets)
-    -> std::expected<MetricConfigOnTargets, astl_status_code> {
+    -> astl::compat::expected<MetricConfigOnTargets, astl_status_code> {
   auto collector_type = ParseCollectorType(metric_declaration);
   if (!collector_type || collector_type != CollectorType::SCMI) {
     ASTL_LOG_ERROR("Unsupported collector type '{}' for metric {}", metric_declaration.collection.protocol,
                    metric_key_name);
-    return std::unexpected(astl::kInternalNotImplemented);
+    return astl::compat::unexpected(astl::kInternalNotImplemented);
   }
   auto scmi_collection = ParseScmiMetricJsonCollectionSettings(metric_declaration.collection);
   if (!scmi_collection.has_value()) {
-    return std::unexpected(scmi_collection.error());
+    return astl::compat::unexpected(scmi_collection.error());
   }
   MetricConfigOnTargets metric_configs_on_targets;
   const auto            identifier       = ParseMetricIdentifier(metric_declaration.identifier);
@@ -396,7 +396,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
 
       auto formula_result = BuildFormula(metric_declaration.formula);
       if (!formula_result.has_value()) {
-        return std::unexpected(formula_result.error());
+        return astl::compat::unexpected(formula_result.error());
       }
       auto composed_formula = ComposeFormulas(std::move(formula_result.value()),
                                               BuildScalingFormulaFromBase10Modifier(base10_unit_modifier));
@@ -407,7 +407,7 @@ auto CreateBasicMetricConfigs(std::string_view metric_key_name, MetricJsonDeclar
       if (metric_type == ASTL_METRIC_EVENT) {
         auto event_value_info = ParseEventValueInfo(metric_key_name, metric_declaration, value_type);
         if (!event_value_info) {
-          return std::unexpected(event_value_info.error());
+          return astl::compat::unexpected(event_value_info.error());
         }
         auto new_metric_config = std::make_unique<EventMetricConfig>(
             metric_name, description, units, value_type, identifier, collector_type.value(),
@@ -474,11 +474,11 @@ auto BuildScalingFormulaFromBase10Modifier(int32_t base10_unit_modifier) -> AnyF
 auto CreateScmiMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
                              scmi::spec::ScmiSpecification const& scmi_spec,
                              std::vector<const ITarget*> const&   applicable_targets)
-    -> std::expected<MetricConfigOnTargets, astl_status_code> {
+    -> astl::compat::expected<MetricConfigOnTargets, astl_status_code> {
   auto metric_type = ParseMetricType(metric_declaration.metric_type);
   if (metric_type != ASTL_METRIC_EVENT && metric_declaration.event_values.has_value()) {
     ASTL_LOG_ERROR("event_values is only valid for event metrics (metric {})", metric_key_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   switch (metric_type) {
     case ASTL_METRIC_VALUE:
@@ -493,7 +493,7 @@ auto CreateScmiMetricConfigs(std::string_view metric_key_name, MetricJsonDeclara
     default:
       ASTL_LOG_ERROR("Unsupported or unknown metric type '{}' for metric {}", metric_declaration.metric_type,
                      metric_key_name);
-      return std::unexpected(astl::kInternalNotImplemented);
+      return astl::compat::unexpected(astl::kInternalNotImplemented);
   }
 }
 

@@ -17,6 +17,7 @@
 #include "../../mock_classes.hpp"
 #include "../../test_utilities.hpp"
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "capabilities.hpp"
 #include "common/lifecycle_event.hpp"
 #include "metric/delta_metric.hpp"
@@ -70,8 +71,9 @@ RawSampledData MakeSample(OperationId operation_id, AstlValue value, int64_t ts_
 }
 
 auto MakeTarget(std::string name, std::string description, astl::CollectorType collector_type,
-                std::optional<std::string> uuid                = std::nullopt,
-                std::optional<std::string> collector_path_name = std::nullopt) -> std::unique_ptr<astl::Target> {
+                astl::compat::optional<std::string> uuid                = astl::compat::nullopt,
+                astl::compat::optional<std::string> collector_path_name = astl::compat::nullopt)
+    -> std::unique_ptr<astl::Target> {
   return std::make_unique<astl::Target>(std::move(name), std::move(description), collector_type, nullptr,
                                         std::move(uuid), std::move(collector_path_name));
 }

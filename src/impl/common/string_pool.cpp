@@ -12,8 +12,8 @@
 #include <shared_mutex>
 #include <unordered_set>
 
+#include "astl_json.hpp"
 #include "astl_logger.hpp"
-#include "nlohmann/json.hpp"
 
 namespace astl {
 namespace {

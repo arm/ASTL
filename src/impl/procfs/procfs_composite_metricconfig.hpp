@@ -5,14 +5,13 @@
 #ifndef PROCFS_COMPOSITE_METRICCONFIG_HPP_
 #define PROCFS_COMPOSITE_METRICCONFIG_HPP_
 
-#include <expected>
 #include <memory>
-#include <optional>
 #include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "common/metric_config.hpp"
 #include "metric/raw_metric.hpp"
 #include "procfs/procfs_read_operation.hpp"
@@ -69,7 +68,7 @@ class ProcfsCompositeMetric final : public RawMetric {
   auto operator=(ProcfsCompositeMetric&&) noexcept -> ProcfsCompositeMetric& = delete;
   ~ProcfsCompositeMetric() override;
 
-  auto GetOperations() -> std::expected<OperationSequence, astl_status_code> override;
+  auto GetOperations() -> astl::compat::expected<OperationSequence, astl_status_code> override;
   auto ReceiveRawSample(const NormalizedSampledData& raw_sample) -> astl_status_code override;
   auto Reset() -> void override;
   auto Summarize() -> astl_status_code override;
@@ -77,20 +76,20 @@ class ProcfsCompositeMetric final : public RawMetric {
 
  private:
   struct PendingBatch {
-    std::optional<ProcessedSampleTimestamp>    timestamp;
-    std::unordered_map<std::string, AstlValue> values;
-    bool                                       emitted{false};
+    astl::compat::optional<ProcessedSampleTimestamp> timestamp;
+    std::unordered_map<std::string, AstlValue>       values;
+    bool                                             emitted{false};
   };
 
   auto EmitPendingBatch() -> astl_status_code;
   auto InitializeExpressionFormulaParser(const std::string& expression_formula) -> astl_status_code;
   auto EvaluateExpressionFormula(const std::unordered_map<std::string, AstlValue>& current_inputs,
                                  const std::unordered_map<std::string, AstlValue>& previous_inputs) const
-      -> std::expected<double, astl_status_code>;
+      -> astl::compat::expected<double, astl_status_code>;
   auto ResolveVariable(std::string_view variable_name, const std::unordered_map<std::string, AstlValue>& current_inputs,
                        const std::unordered_map<std::string, AstlValue>& previous_inputs) const
-      -> std::expected<double, astl_status_code>;
-  auto ConvertOutputValue(double value) const -> std::expected<AstlValue, astl_status_code>;
+      -> astl::compat::expected<double, astl_status_code>;
+  auto ConvertOutputValue(double value) const -> astl::compat::expected<AstlValue, astl_status_code>;
 
   struct ExpressionFormulaContext;
 

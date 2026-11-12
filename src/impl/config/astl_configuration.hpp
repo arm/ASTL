@@ -5,14 +5,13 @@
 #ifndef ASTL_CONFIGURATION_HPP_
 #define ASTL_CONFIGURATION_HPP_
 
-#include <expected>
 #include <filesystem>
-#include <nlohmann/json.hpp>
-#include <optional>
 #include <vector>
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "common/capabilities.hpp"
 #include "common/metric_config.hpp"
 #include "config/config_source.hpp"
@@ -22,7 +21,7 @@ namespace astl {
 
 /** @brief Collectors enabled for live topology and metric discovery. */
 struct CollectorSelection {
-  std::optional<std::vector<CollectorType>> enabled;
+  astl::compat::optional<std::vector<CollectorType>> enabled;
 
   [[nodiscard]] auto IsEnabled(CollectorType collector_type) const -> bool;
 };
@@ -63,14 +62,14 @@ struct AstlConfiguration {
   std::filesystem::path scmi_specification_dir;
 
   /** @brief Path to load ASTL components from a saved session (.astl file). */
-  std::optional<std::filesystem::path> load_file_path;
+  astl::compat::optional<std::filesystem::path> load_file_path;
 
   /** @brief Collector allowlist used for live discovery. */
   CollectorSelection collectors;
 
   std::shared_ptr<const config::ConfigSource> resources;
 
-  [[nodiscard]] static auto CreateConfiguration() -> std::expected<AstlConfiguration, astl_status_code>;
+  [[nodiscard]] static auto CreateConfiguration() -> astl::compat::expected<AstlConfiguration, astl_status_code>;
 
  private:
   /**
@@ -87,7 +86,7 @@ struct AstlConfiguration {
    */
   AstlConfiguration(std::filesystem::path const& scmi_sysfs_path, std::filesystem::path const& scmi_ioctl_device_root,
                     std::filesystem::path const& procfs_root_path, std::filesystem::path const& config_dir_path,
-                    std::optional<std::filesystem::path> const& load_file_path = std::nullopt);
+                    astl::compat::optional<std::filesystem::path> const& load_file_path = astl::compat::nullopt);
 };
 
 }  // namespace astl

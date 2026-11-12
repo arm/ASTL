@@ -5,11 +5,10 @@
 #ifndef CONFIGURATION_MANAGER_HPP_
 #define CONFIGURATION_MANAGER_HPP_
 
-#include <expected>
 #include <filesystem>
-#include <optional>
 
 #include "astl/astl_telemetry.h"
+#include "astl_cxx_compat.hpp"
 #include "config/astl_configuration.hpp"
 
 namespace astl {
@@ -21,30 +20,30 @@ namespace ConfigurationManager {
  * @return If successful, returns the path the configuration JSON file.
  * If unsuccessful, returns an appropriate astl_status_code error.
  */
-auto GetConfiguration() -> std::expected<AstlConfiguration, astl_status_code>;
+auto GetConfiguration() -> astl::compat::expected<AstlConfiguration, astl_status_code>;
 
 /**
  * @brief Set an in-process override for the ASTL load file path.
  *
  * When an override path is set, subsequent Orchestrator constructions will use
  * the specified .astl file as the source of persisted state instead of any
- * default or auto-detected location. Passing std::nullopt clears any
+ * default or auto-detected location. Passing astl::compat::nullopt clears any
  * previously configured override and restores the default load behavior.
  *
  * @param load_file_path Optional filesystem path to a .astl file to use as
- *        the explicit load target. Use std::nullopt to remove the override.
+ *        the explicit load target. Use astl::compat::nullopt to remove the override.
  *
  * @note Thread-safety: This function is not guaranteed to be thread-safe.
  *       If multiple threads may set or clear the override concurrently, the
  *       caller must provide external synchronization.
  */
-auto SetLoadFilePathOverride(const std::optional<std::filesystem::path>& load_file_path) -> void;
+auto SetLoadFilePathOverride(const astl::compat::optional<std::filesystem::path>& load_file_path) -> void;
 
 /**
  * @brief Get the current in-process override for the ASTL load file path.
  *
  * @return The currently configured override path if one has been set via
- *         SetLoadFilePathOverride; otherwise, std::nullopt to indicate that
+ *         SetLoadFilePathOverride; otherwise, astl::compat::nullopt to indicate that
  *         the default load behavior will be used.
  *
  * @note Thread-safety: This function is not guaranteed to be thread-safe.
@@ -52,7 +51,7 @@ auto SetLoadFilePathOverride(const std::optional<std::filesystem::path>& load_fi
  *       the caller must ensure appropriate synchronization around both
  *       setter and getter calls.
  */
-auto GetLoadFilePathOverride() -> std::optional<std::filesystem::path>;
+auto GetLoadFilePathOverride() -> astl::compat::optional<std::filesystem::path>;
 
 }  // namespace ConfigurationManager
 

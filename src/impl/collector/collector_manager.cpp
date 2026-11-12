@@ -5,9 +5,9 @@
 #include "collector_manager.hpp"
 
 #include <algorithm>
-#include <expected>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "collection_configuration.hpp"
 namespace astl {
 namespace {
@@ -171,7 +171,7 @@ auto CollectorManager::StartOnTarget(const ITarget* target) -> astl_status_code 
 }
 
 auto CollectorManager::GetNativeClockSnapshot(const ITarget* target)
-    -> std::expected<ClockCorrelationMap, astl_status_code> {
+    -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   ICollector* selected_collector = nullptr;
   {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -181,7 +181,7 @@ auto CollectorManager::GetNativeClockSnapshot(const ITarget* target)
   }
   if (!selected_collector) {
     ASTL_LOG_WARNING("CollectorManager::GetNativeClockSnapshot: no collector found for target");
-    return std::unexpected{ASTL_STATUS_INVALID_TARGET_HANDLE};
+    return astl::compat::unexpected{ASTL_STATUS_INVALID_TARGET_HANDLE};
   }
   return selected_collector->GetNativeClockSnapshot();
 }
@@ -300,11 +300,11 @@ auto CollectorManager::SinkRawSamples(const ITarget* target, std::span<RawSample
  * Requires: caller holds `_mutex`.
  */
 auto CollectorManager::SelectCollectorLocked(const ITarget* target, CollectorCapability const& requirements)
-    -> std::expected<ICollector*, astl_status_code> {
+    -> astl::compat::expected<ICollector*, astl_status_code> {
   // find a set of collectors associated with the given target
   const auto& potential_collectors = _collectors.find(target);
   if (potential_collectors == _collectors.end()) {
-    return std::unexpected(ASTL_STATUS_NO_TARGET_FOUND);
+    return astl::compat::unexpected(ASTL_STATUS_NO_TARGET_FOUND);
   }
 
   // choose a collector that meets the requirements
@@ -317,7 +317,7 @@ auto CollectorManager::SelectCollectorLocked(const ITarget* target, CollectorCap
       });
 
   if (first_matching_collector == potential_collectors->second.end()) {
-    return std::unexpected(ASTL_STATUS_INVALID_COLLECTION_MODE);
+    return astl::compat::unexpected(ASTL_STATUS_INVALID_COLLECTION_MODE);
   }
   return first_matching_collector->get();
 }

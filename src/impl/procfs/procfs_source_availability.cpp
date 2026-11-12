@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_utils.hpp"
 #include "procfs/procfs_composite_metricconfig.hpp"
 #include "procfs/procfs_metric_builder_parsing_helpers.hpp"
@@ -40,10 +41,10 @@ ProcfsSourceAvailability::ProcfsSourceAvailability(const FileInterface&         
 
 auto ProcfsSourceAvailability::Create(const FileInterface&                                     files,
                                       const metrics::spec::ProcfsMetricJsonCollectionSettings& settings)
-    -> std::optional<ProcfsSourceAvailability> {
+    -> astl::compat::optional<ProcfsSourceAvailability> {
   ProcfsSourceAvailability availability{files, settings};
   if (!availability.ReadSnapshots()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return availability;
 }
@@ -80,7 +81,8 @@ auto ProcfsSourceAvailability::SupportsCpuLabel(const std::string& label) const 
 }
 
 auto ProcfsSourceAvailability::SupportsMetric(const MetricConfig& config, bool is_composite,
-                                              const std::string& label) const -> std::expected<bool, astl_status_code> {
+                                              const std::string& label) const
+    -> astl::compat::expected<bool, astl_status_code> {
   if (is_composite && !ReadableCompositeInputs(*_files, config)) {
     return false;
   }
@@ -89,9 +91,9 @@ auto ProcfsSourceAvailability::SupportsMetric(const MetricConfig& config, bool i
     return true;
   }
   auto field = ParseProcfsFieldDescriptor(
-      *_settings, label.empty() ? std::optional<std::string>{} : std::optional<std::string>{label});
+      *_settings, label.empty() ? astl::compat::optional<std::string>{} : astl::compat::optional<std::string>{label});
   if (!field) {
-    return std::unexpected(field.error());
+    return astl::compat::unexpected(field.error());
   }
   if (_interrupt_counters) {
     return _interrupt_counters->contains(std::get<procfs::SystemField>(*field).label);

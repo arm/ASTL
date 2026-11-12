@@ -5,7 +5,6 @@
 #ifndef SERDES_METRICS_DETAIL_HPP_
 #define SERDES_METRICS_DETAIL_HPP_
 
-#include <expected>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -13,6 +12,7 @@
 
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "serdes/metrics.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
 
 namespace astl {
@@ -40,17 +40,18 @@ struct RebuiltCounterHandles {
 };
 
 auto SerializeBasicMetricConfig(const MetricConfig& config)
-    -> std::expected<astl::protobuf::MetricConfig, astl_status_code>;
+    -> astl::compat::expected<astl::protobuf::MetricConfig, astl_status_code>;
 
 auto DeserializeBasicMetricConfig(const astl::protobuf::MetricConfig& proto_cfg, const std::string& metric_id)
-    -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code>;
+    -> astl::compat::expected<std::unique_ptr<MetricConfig>, astl_status_code>;
 
 auto SerializeCounterHandles(const std::vector<std::unique_ptr<CounterHandle>>& counter_handles,
-                             astl::protobuf::MetricManager& proto_mgr) -> std::expected<void, astl_status_code>;
+                             astl::protobuf::MetricManager&                     proto_mgr)
+    -> astl::compat::expected<void, astl_status_code>;
 
 auto RebuildCounterHandles(const astl::protobuf::MetricManager&         proto_manager,
                            const std::vector<std::unique_ptr<ITarget>>& targets, const Capabilities& capabilities)
-    -> std::expected<RebuiltCounterHandles, astl_status_code>;
+    -> astl::compat::expected<RebuiltCounterHandles, astl_status_code>;
 
 }  // namespace ProtobufSerDes::detail
 

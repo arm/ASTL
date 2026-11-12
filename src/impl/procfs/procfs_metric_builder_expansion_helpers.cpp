@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <optional>
 #include <regex>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "procfs/procfs_metric_builder_parsing_helpers.hpp"
 
@@ -20,18 +20,18 @@ constexpr std::string_view kProcfsMetricPlaceholder = "{label}";
 
 auto TryExtractExpandedLabel(std::string_view line, const std::regex& label_pattern,
                              const metrics::spec::ProcfsMetricJsonExpansionSettings& expansion_settings)
-    -> std::optional<std::string> {
+    -> astl::compat::optional<std::string> {
   const auto trimmed = procfs::Trim(line);
   if (trimmed.empty()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   const auto tokens = procfs::SplitWhitespace(trimmed);
   if (expansion_settings.label_token_index >= tokens.size()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   if (!std::regex_match(tokens[expansion_settings.label_token_index], label_pattern)) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return tokens[expansion_settings.label_token_index];
 }
@@ -113,10 +113,10 @@ auto MakeProcfsMetricIdSuffix(std::string_view metric_name) -> std::string {
   return metric_id_suffix;
 }
 
-auto RenderTemplateValue(const std::optional<std::string>& value_template, std::string_view label)
-    -> std::optional<std::string> {
+auto RenderTemplateValue(const astl::compat::optional<std::string>& value_template, std::string_view label)
+    -> astl::compat::optional<std::string> {
   if (!value_template.has_value()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return ReplaceLabelPlaceholder(*value_template, label);
 }

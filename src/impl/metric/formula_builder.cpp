@@ -7,12 +7,13 @@
 #include <algorithm>
 #include <cctype>
 #include <iterator>
-#include <nlohmann/json.hpp>
 #include <regex>
 #include <string>
 #include <type_traits>
 #include <utility>
 
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
 
@@ -48,8 +49,8 @@ static auto ContainsNonIntegerNumericLiteral(std::string_view expression) -> boo
          std::regex_search(expression_text, scientific_literal_pattern);
 }
 
-static auto BuildFormulaHelper(const std::optional<nlohmann::json>& formula_json)
-    -> std::expected<AnyFormula, astl_status_code> {
+static auto BuildFormulaHelper(const astl::compat::optional<nlohmann::json>& formula_json)
+    -> astl::compat::expected<AnyFormula, astl_status_code> {
   // No formula specified - use identity (pass-through)
   if (!formula_json.has_value() || formula_json->is_null()) {
     return AnyFormula{IdentityFormula{}};
@@ -64,14 +65,14 @@ static auto BuildFormulaHelper(const std::optional<nlohmann::json>& formula_json
     }
     if (ContainsNonIntegerNumericLiteral(expression)) {
       ASTL_LOG_ERROR("Only integer numeric literals are allowed in formulas: '{}'.", expression);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
 
     ASTL_LOG_DEBUG("Parsing formula expression: '{}'", expression);
     auto result = ExpressionFormula::Create(std::move(expression));
     if (!result.has_value()) {
       ASTL_LOG_ERROR("Failed to create ExpressionFormula: {}", astlStatusString(result.error()));
-      return std::unexpected(result.error());
+      return astl::compat::unexpected(result.error());
     }
     AnyFormula formula{std::move(result.value())};
     ASTL_LOG_DEBUG("Successfully parsed formula: {}", GetFormulaDescription(formula));
@@ -79,7 +80,7 @@ static auto BuildFormulaHelper(const std::optional<nlohmann::json>& formula_json
   }
 
   ASTL_LOG_ERROR("Formula must be a string expression (e.g., \"value / 1000\" or \"bitand(value >> 8, 0xFF)\")");
-  return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
 }
 
 static auto IsIdentityFormula(const AnyFormula& formula) -> bool {
@@ -111,13 +112,13 @@ static auto AppendPipelineSteps(std::vector<FormulaPipeline::PipelineStep>& step
                  std::back_inserter(steps), [](FormulaPipeline::PipelineStep&& step) { return std::move(step); });
 }
 
-auto BuildFormula(const std::optional<nlohmann::json>& formula_json) noexcept
-    -> std::expected<AnyFormula, astl_status_code> {
+auto BuildFormula(const astl::compat::optional<nlohmann::json>& formula_json) noexcept
+    -> astl::compat::expected<AnyFormula, astl_status_code> {
   try {
     return BuildFormulaHelper(formula_json);
   } catch (const std::exception& ex) {
     ASTL_LOG_ERROR("Exception while building formula: {}", ex.what());
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 }
 

@@ -5,9 +5,8 @@
 #ifndef SAMPLED_VALUE_METRIC_HPP_
 #define SAMPLED_VALUE_METRIC_HPP_
 
-#include <optional>
-
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
 #include "raw_metric.hpp"
@@ -20,9 +19,9 @@ namespace astl {
  * from sampled data in SampledValueMetric.
  */
 struct MinMaxAvgSummaryData {
-  std::optional<AstlValue> min;  ///< Minimum sample value seen
-  std::optional<AstlValue> max;  ///< Maximum sample value seen
-  std::optional<AstlValue> avg;  ///< Computed average of sample values
+  astl::compat::optional<AstlValue> min;  ///< Minimum sample value seen
+  astl::compat::optional<AstlValue> max;  ///< Maximum sample value seen
+  astl::compat::optional<AstlValue> avg;  ///< Computed average of sample values
 };
 
 /**

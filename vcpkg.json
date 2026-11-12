@@ -11,6 +11,8 @@
     "nlohmann-json",
     "tabulate",
     "tomlplusplus",
+    "tl-expected",
+    "tl-optional",
     "trompeloeil",
     "magic-enum",
     "protobuf",

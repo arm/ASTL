@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <fstream>
 
+#include "astl_cxx_compat.hpp"
+
 #ifdef __linux__
 #  include <link.h>
 
@@ -31,11 +33,11 @@ namespace astl::config {
 namespace {
 auto Key(const std::filesystem::path& path) -> std::string { return path.lexically_normal().generic_string(); }
 auto ReadDirectory(const std::filesystem::path& root)
-    -> std::expected<std::map<std::string, nlohmann::json>, astl_status_code> {
+    -> astl::compat::expected<std::map<std::string, nlohmann::json>, astl_status_code> {
   try {
     if (!std::filesystem::is_directory(root)) {
       ASTL_LOG_ERROR("Config directory does not exist: {}", root.string());
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     std::map<std::string, nlohmann::json> result;
     for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
@@ -49,7 +51,7 @@ auto ReadDirectory(const std::filesystem::path& root)
     return result;
   } catch (const std::exception& error) {
     ASTL_LOG_ERROR("Unable to read config directory {}: {}", root.string(), error.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 }
 
@@ -157,7 +159,7 @@ const auto kBinaryLocation = BinaryPath();
 }  // namespace
 
 auto ConfigSource::Create(const std::filesystem::path& binary_path)
-    -> std::expected<std::shared_ptr<const ConfigSource>, astl_status_code> {
+    -> astl::compat::expected<std::shared_ptr<const ConfigSource>, astl_status_code> {
   try {
     auto                  source             = std::make_shared<ConfigSource>();
     bool                  explicit_directory = false;
@@ -166,7 +168,7 @@ auto ConfigSource::Create(const std::filesystem::path& binary_path)
     if (explicit_directory) {
       if (configured.empty()) {
         ASTL_LOG_ERROR("ASTL_CONFIG_DIR is empty");
-        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+        return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
       }
       directory = configured;
     } else {
@@ -178,11 +180,11 @@ auto ConfigSource::Create(const std::filesystem::path& binary_path)
     if (!directory.empty()) {
       auto documents = ReadDirectory(directory);
       if (!documents) {
-        return std::unexpected(documents.error());
+        return astl::compat::unexpected(documents.error());
       }
       if (documents->empty()) {
         ASTL_LOG_ERROR("Config directory contains no JSON resources: {}", directory.string());
-        return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+        return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
       }
       source->documents_ = std::move(*documents);
     } else {
@@ -192,23 +194,24 @@ auto ConfigSource::Create(const std::filesystem::path& binary_path)
     }
     for (const auto& [path, doc] : source->documents_) {
       if (const auto status = ValidateReferences(doc, path, source->documents_); status != ASTL_STATUS_SUCCESS) {
-        return std::unexpected(status);
+        return astl::compat::unexpected(status);
       }
     }
     return source;
   } catch (const std::exception& error) {
     ASTL_LOG_ERROR("Unable to load ASTL configuration: {}", error.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 }
-auto ConfigSource::Load(const std::filesystem::path& path) const -> std::expected<nlohmann::json, astl_status_code> {
+auto ConfigSource::Load(const std::filesystem::path& path) const
+    -> astl::compat::expected<nlohmann::json, astl_status_code> {
   const auto key   = Key(path);
   const auto found = documents_.find(key);
   if (found != documents_.end()) {
     return found->second;
   }
   ASTL_LOG_ERROR("Config resource not found: {}", path.string());
-  return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
 }
 auto ConfigSource::Exists(const std::filesystem::path& path) const -> bool {
   const auto key = Key(path);

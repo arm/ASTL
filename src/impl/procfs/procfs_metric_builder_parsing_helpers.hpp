@@ -5,12 +5,11 @@
 #ifndef PROCFS_METRIC_BUILDER_PARSING_HELPERS_HPP_
 #define PROCFS_METRIC_BUILDER_PARSING_HELPERS_HPP_
 
-#include <expected>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_file_interface.hpp"
 #include "config/metric_json_declaration.hpp"
 #include "procfs/procfs_metric_json_declaration.hpp"
@@ -25,22 +24,22 @@ auto RenderExpandedMetricName(std::string_view metric_name_template, std::string
 auto MakeProcfsMetricIdSuffix(std::string_view metric_name) -> std::string;
 
 auto ParseProcfsInputValueType(const metrics::spec::ProcfsMetricJsonCollectionSettings& collection_settings)
-    -> std::expected<astl_value_type_t, astl_status_code>;
+    -> astl::compat::expected<astl_value_type_t, astl_status_code>;
 
 auto ParseProcfsOutputValueType(astl_value_type_t                           input_value_type,
                                 const metrics::spec::MetricJsonDeclaration& metric_declaration, bool is_composite)
-    -> std::expected<astl_value_type_t, astl_status_code>;
+    -> astl::compat::expected<astl_value_type_t, astl_status_code>;
 
-auto RenderTemplateValue(const std::optional<std::string>& value_template, std::string_view label)
-    -> std::optional<std::string>;
+auto RenderTemplateValue(const astl::compat::optional<std::string>& value_template, std::string_view label)
+    -> astl::compat::optional<std::string>;
 
 auto ParseProcfsFieldDescriptor(const metrics::spec::ProcfsMetricJsonCollectionSettings& collection_settings,
-                                const std::optional<std::string>& line_prefix_override = std::nullopt)
-    -> std::expected<procfs::FieldDescriptor, astl_status_code>;
+                                const astl::compat::optional<std::string>& line_prefix_override = astl::compat::nullopt)
+    -> astl::compat::expected<procfs::FieldDescriptor, astl_status_code>;
 
 auto ParseProcfsFieldDescriptor(const metrics::spec::ProcfsMetricJsonInputSettings& input_settings,
-                                const std::optional<std::string>&                   line_prefix_override = std::nullopt)
-    -> std::expected<procfs::FieldDescriptor, astl_status_code>;
+                                const astl::compat::optional<std::string>& line_prefix_override = astl::compat::nullopt)
+    -> astl::compat::expected<procfs::FieldDescriptor, astl_status_code>;
 
 auto ExpandProcfsLabels(const FileInterface&                                    file_interface,
                         const metrics::spec::ProcfsMetricJsonExpansionSettings& expansion_settings)

@@ -4,13 +4,13 @@
 
 #include <algorithm>
 #include <array>
-#include <optional>
 #include <sstream>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "common/key_value_text_utils.hpp"
 #include "procfs/procfs_utils.hpp"
@@ -26,12 +26,12 @@ constexpr size_t   kLoadavgRequiredTokenCount = 5;
 using CpuFieldNames = std::array<std::string_view, kCpuFieldNameCount>;
 
 auto TryReadFile(const FileInterface& file_interface, const std::filesystem::path& relative_path)
-    -> std::optional<std::string> {
+    -> astl::compat::optional<std::string> {
   std::string contents;
   const auto  status = file_interface.Read(relative_path, contents);
   if (status != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_DEBUG("procfs TryReadFile: unable to read {}", relative_path.string());
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return contents;
 }
@@ -75,15 +75,16 @@ auto DescribeStatCounter(std::string_view label) -> std::string {
 
 auto BuildScalarStatCounterDescriptor(std::string_view                                     label,
                                       const std::unordered_map<std::string, astl_units_t>& scalar_fields,
-                                      const std::vector<std::string>& tokens) -> std::optional<MetricDescriptor> {
+                                      const std::vector<std::string>&                      tokens)
+    -> astl::compat::optional<MetricDescriptor> {
   if (tokens.size() <= 1) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   const auto label_string = std::string{label};
   const auto it           = scalar_fields.find(label_string);
   if (it == scalar_fields.end()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   return MetricDescriptor{
@@ -296,7 +297,7 @@ auto DiscoverUptimeCounterDescriptors(const FileInterface& file_interface) -> st
 }  // namespace
 
 auto DiscoverCounterDescriptors(const FileInterface& file_interface)
-    -> std::expected<std::vector<MetricDescriptor>, astl_status_code> {
+    -> astl::compat::expected<std::vector<MetricDescriptor>, astl_status_code> {
   std::vector<MetricDescriptor> descriptors;
 
   auto append_descriptors = [&descriptors](std::vector<MetricDescriptor> source) -> void {

@@ -4,11 +4,12 @@
 
 #pragma once
 
+#include "astl_cxx_compat.hpp"
 #include "mock_classes.hpp"
 #include "orchestrator/orchestrator.hpp"
 #include "test_includes.hpp"
 
-// Work around unconstrained std::expected/nullptr comparisons in the mock library.
+// Work around unconstrained astl::compat::expected/nullptr comparisons in the mock library.
 namespace astl {
 inline auto operator==(const CollectionOperations& lhs, std::nullptr_t rhs) -> bool {
   (void)lhs;
@@ -51,10 +52,10 @@ inline void ConfigureAndStartTestCollection(astl::Orchestrator& orchestrator, Mo
                                             MockMetricManager& metrics, const astl::ITarget* target) {
   using trompeloeil::_;
   ALLOW_CALL(metrics, GetAvailableCounters(_))
-      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{
+      .RETURN(astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code>{
           std::span<const astl_counter_handle_t>{}});
   ALLOW_CALL(metrics, GetCounterRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });

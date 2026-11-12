@@ -5,11 +5,11 @@
 #ifndef ASTL_FILE_INTERFACE_HPP
 #define ASTL_FILE_INTERFACE_HPP
 
-#include <expected>
 #include <filesystem>
 #include <fstream>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_read_file_handle_cache.hpp"
 
@@ -18,17 +18,19 @@ namespace astl {
 /**
  * @brief Expand `~` into user home path and return a file path or error message
  */
-inline auto ExpandFilePath(std::string const &file_path_str) -> std::expected<std::filesystem::path, std::string> {
+inline auto ExpandFilePath(std::string const &file_path_str)
+    -> astl::compat::expected<std::filesystem::path, std::string> {
   try {
     if (file_path_str.empty()) {
-      return std::unexpected<std::string>("File path string is empty");
+      return astl::compat::unexpected<std::string>("File path string is empty");
     }
     // if starts with ~, expand to home directory
     std::string expanded_path_str = file_path_str;
     if (file_path_str[0] == '~') {
       const auto home_dir = GetEnvVar(astl::EnvVar::HOME);
       if (home_dir.empty()) {
-        return std::unexpected<std::string>("Cannot expand '~' in file path: HOME environment variable is not set");
+        return astl::compat::unexpected<std::string>(
+            "Cannot expand '~' in file path: HOME environment variable is not set");
       }
       expanded_path_str = home_dir + file_path_str.substr(1);
     }
@@ -37,7 +39,8 @@ inline auto ExpandFilePath(std::string const &file_path_str) -> std::expected<st
   } catch (const std::exception &e) {
     const auto *what = e.what() ? e.what() : "Unknown error";
     /* coverity[uncaught_exception:FALSE] */  // I _promise_ this is  a valid format expression
-    return std::unexpected<std::string>(std::format("Failed to parse file path '{}': {}", file_path_str, what));
+    return astl::compat::unexpected<std::string>(
+        std::format("Failed to parse file path '{}': {}", file_path_str, what));
   }
 }
 
@@ -66,20 +69,21 @@ class FileInterface {
    * @param path Relative or absolute path to check.
    * @return true if the file or directory exists, false otherwise.
    */
-  std::expected<bool, astl_status_code> IsValid(const std::filesystem::path &path) const noexcept {
+  astl::compat::expected<bool, astl_status_code> IsValid(const std::filesystem::path &path) const noexcept {
     try {
       return std::filesystem::exists(Resolve(path));
     } catch (const std::bad_alloc &e) {
       ASTL_LOG_ERROR("IsValid: {}", e.what());
-      return std::unexpected(ASTL_STATUS_OUT_OF_MEMORY);
+      return astl::compat::unexpected(ASTL_STATUS_OUT_OF_MEMORY);
     } catch (const std::filesystem::filesystem_error &e) {
       ASTL_LOG_ERROR("IsValid: {}", e.what());
-      return std::unexpected(ASTL_STATUS_FILE_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_FILE_ERROR);
     }
     // TODO(https://jira.arm.com/browse/ASTL-76) - Unhandled exception are caught at the top level.
   }
 
-  auto GetSubdirectories() const -> std::expected<std::vector<std::filesystem::directory_entry>, astl_status_code> {
+  auto GetSubdirectories() const
+      -> astl::compat::expected<std::vector<std::filesystem::directory_entry>, astl_status_code> {
     try {
       std::vector<std::filesystem::directory_entry> entries;
       for (const auto &entry : std::filesystem::directory_iterator(Resolve(std::filesystem::path{}))) {
@@ -90,10 +94,10 @@ class FileInterface {
       return entries;
     } catch (const std::bad_alloc &e) {
       ASTL_LOG_ERROR("GetSubdirectories: {}", e.what());
-      return std::unexpected(ASTL_STATUS_OUT_OF_MEMORY);
+      return astl::compat::unexpected(ASTL_STATUS_OUT_OF_MEMORY);
     } catch (const std::filesystem::filesystem_error &e) {
       ASTL_LOG_ERROR("GetSubdirectories: {}", e.what());
-      return std::unexpected(ASTL_STATUS_FILE_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_FILE_ERROR);
     }
   }
 
@@ -102,17 +106,17 @@ class FileInterface {
    * @param path Relative or absolute path to the file.
    * @return true if readable by owner, group, or others; false otherwise.
    */
-  std::expected<bool, astl_status_code> HasReadPermission(const std::filesystem::path &path) const noexcept {
+  astl::compat::expected<bool, astl_status_code> HasReadPermission(const std::filesystem::path &path) const noexcept {
     using perms = std::filesystem::perms;
     try {
       auto permissions = std::filesystem::status(Resolve(path)).permissions();
       return (permissions & (perms::owner_read | perms::group_read | perms::others_read)) != perms::none;
     } catch (const std::bad_alloc &e) {
       ASTL_LOG_ERROR("HasReadPermission: {}", e.what());
-      return std::unexpected(ASTL_STATUS_OUT_OF_MEMORY);
+      return astl::compat::unexpected(ASTL_STATUS_OUT_OF_MEMORY);
     } catch (const std::filesystem::filesystem_error &e) {
       ASTL_LOG_ERROR("HasReadPermission: {}", e.what());
-      return std::unexpected(ASTL_STATUS_FILE_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_FILE_ERROR);
     }
     // TODO(https://jira.arm.com/browse/ASTL-76) - Unhandled exception are caught at the top level.
   }
@@ -122,17 +126,17 @@ class FileInterface {
    * @param path Relative or absolute path to the file.
    * @return true if writable by owner, group, or others; false otherwise.
    */
-  std::expected<bool, astl_status_code> HasWritePermission(const std::filesystem::path &path) const noexcept {
+  astl::compat::expected<bool, astl_status_code> HasWritePermission(const std::filesystem::path &path) const noexcept {
     using perms = std::filesystem::perms;
     try {
       auto permissions = std::filesystem::status(Resolve(path)).permissions();
       return (permissions & (perms::owner_write | perms::group_write | perms::others_write)) != perms::none;
     } catch (const std::bad_alloc &e) {
       ASTL_LOG_ERROR("HasWritePermission: {}", e.what());
-      return std::unexpected(ASTL_STATUS_OUT_OF_MEMORY);
+      return astl::compat::unexpected(ASTL_STATUS_OUT_OF_MEMORY);
     } catch (const std::filesystem::filesystem_error &e) {
       ASTL_LOG_ERROR("HasWritePermission: {}", e.what());
-      return std::unexpected(ASTL_STATUS_FILE_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_FILE_ERROR);
     }
     // TODO(https://jira.arm.com/browse/ASTL-76) - Unhandled exception are caught at the top level.
   }

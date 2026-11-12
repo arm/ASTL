@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../../test_includes.hpp"  // include before catch2
+#include "astl_cxx_compat.hpp"
 #include "metric/sampled_value_metric.hpp"
 #include "operation/operation_builder.hpp"
 
@@ -76,7 +77,7 @@ TEST_CASE("SampledValueMetric: GetSummaryData returns correct summary", "[Sample
   // Retrieve summary
   auto summary = metric.GetSummaryData();
   // Expected: min=10, max=40, avg=(10+20+30+40)/4 = 25
-  auto as_u64 = [](const std::optional<astl::AstlValue>& val) -> uint64_t {
+  auto as_u64 = [](const astl::compat::optional<astl::AstlValue>& val) -> uint64_t {
     return std::get<uint64_t>(val.value().value);
   };
   REQUIRE(as_u64(summary.min) == 10);

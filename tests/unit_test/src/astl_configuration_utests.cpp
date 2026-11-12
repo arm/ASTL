@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <expected>
 #include <filesystem>
 #include <fstream>
 #include <string_view>
 
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "astl_utils.hpp"
 #include "config/astl_configuration.hpp"
 #include "procfs/procfs_utils.hpp"
@@ -29,7 +29,7 @@ void CreateConfigTree(const fs::path& config_dir) {
 
 auto CreateConfigurationWithRootOverride(std::string_view config_dir_name, astl::EnvVar root_env_var,
                                          const fs::path& root_override)
-    -> std::expected<astl::AstlConfiguration, astl_status_code> {
+    -> astl::compat::expected<astl::AstlConfiguration, astl_status_code> {
   const fs::path config_dir = fs::temp_directory_path() / std::string{config_dir_name};
   TempFileGuard  config_guard(config_dir);
   CreateConfigTree(config_dir);

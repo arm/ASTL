@@ -5,9 +5,9 @@
 #include "scmi/scmi_target_configuration.hpp"
 
 #include <algorithm>
-#include <optional>
 #include <string>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "config/config_lookup_loader.hpp"
 #include "scmi/scmi_metric_json_declaration.hpp"
@@ -45,22 +45,22 @@ static auto ResolveScmiTargetNameTemplate(std::string_view name_template, const 
 }
 
 /** @brief best-effort helper to get the normalized SCMI UUID from a target, returning nullopt if any step fails. */
-static auto GetUuidFromTarget(const ITarget* target) -> std::optional<scmi::spec::Uuid> {
+static auto GetUuidFromTarget(const ITarget* target) -> astl::compat::optional<scmi::spec::Uuid> {
   const auto* concrete_target = dynamic_cast<const Target*>(target);
   if (!concrete_target) {
     ASTL_LOG_WARNING("Target cannot be cast to concrete Target type");
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   auto uuid_opt = concrete_target->GetUuid();
   if (!uuid_opt.has_value() || uuid_opt->empty()) {
     ASTL_LOG_WARNING("Target {} has no UUID", target->Name());
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   const auto uuid_res = scmi::spec::GetNormalizedUuid(uuid_opt.value());
   if (!uuid_res) {
     ASTL_LOG_WARNING("Target {} has invalid SCMI UUID {}: error code {}", target->Name(), uuid_opt.value(),
                      astlStatusString(uuid_res.error()));
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return *uuid_res;
 }
@@ -173,16 +173,16 @@ static auto AddScmiSpecificationInfoForTarget(std::vector<ScmiUuidSpecificationI
 
 auto LookUpScmiSpecificationFiles(const AstlConfiguration&           configuration,
                                   const std::vector<const ITarget*>& scmi_targets)
-    -> std::expected<std::vector<ScmiUuidSpecificationInfo>, astl_status_code> {
+    -> astl::compat::expected<std::vector<ScmiUuidSpecificationInfo>, astl_status_code> {
   auto repo_meta = config::LoadRepoMetaFragments(configuration.scmi_specification_dir, configuration.resources.get());
   if (!repo_meta.has_value()) {
-    return std::unexpected(repo_meta.error());
+    return astl::compat::unexpected(repo_meta.error());
   }
 
   auto platform_lookup =
       config::LoadPlatformLookupFragments(configuration.metrics_dir_path, configuration.resources.get());
   if (!platform_lookup.has_value()) {
-    return std::unexpected(platform_lookup.error());
+    return astl::compat::unexpected(platform_lookup.error());
   }
 
   std::vector<ScmiUuidSpecificationInfo> platform_specifications;

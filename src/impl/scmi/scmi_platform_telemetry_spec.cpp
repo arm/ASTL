@@ -4,16 +4,15 @@
 
 #include "scmi/scmi_platform_telemetry_spec.hpp"
 
-#include <expected>
 #include <map>
-#include <nlohmann/json.hpp>
-#include <optional>
 #include <ranges>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
+#include "astl_json.hpp"
 #include "scmi/scmi_metric_json_declaration.hpp"
 #include "scmi/scmi_read_operation.hpp"
 
@@ -29,7 +28,7 @@ namespace astl::scmi::spec {
  * to override the output units while still matching the SCMI source register.
  */
 inline auto GetUnitsIfCompatible(metrics::spec::MetricJsonDeclaration const& metric_declaration,
-                                 std::string_view                            spec_unit) -> std::optional<astl_units_t> {
+                                 std::string_view spec_unit) -> astl::compat::optional<astl_units_t> {
   const auto metric_unit = metric_declaration.unit.value_or("");
   // if either unit is empty, we consider it a match (no restriction), so use the other.
   if (metric_unit.empty()) {
@@ -48,7 +47,7 @@ inline auto GetUnitsIfCompatible(metrics::spec::MetricJsonDeclaration const& met
   if (metric_declaration.formula.has_value()) {
     return parsed_metric_units;
   }
-  return std::nullopt;
+  return astl::compat::nullopt;
 }
 
 /**
@@ -82,7 +81,7 @@ static auto AddMetricInstancesIfScmiElementMatches(
   }
   // if the metric declaration and the scmi spec both specify units, they must match
   auto units = GetUnitsIfCompatible(metric_declaration, scmi_spec_layout_member.unit);
-  if (units == std::nullopt) {
+  if (units == astl::compat::nullopt) {
     return;  // metric's specified unit doesn't match this scmi register, move along.
   }
   if (scmi_spec_layout_member_instance_count > std::numeric_limits<InstanceId>::max()) {
@@ -164,7 +163,7 @@ auto GetMetricRegistersScmiData(metrics::spec::MetricJsonDeclaration const& metr
 }
 
 auto FindMatchingResidencyStateName(metrics::spec::MetricJsonDeclaration const& metric_declaration,
-                                    std::string_view register_name) -> std::optional<std::string> {
+                                    std::string_view register_name) -> astl::compat::optional<std::string> {
   for (const auto& [state_name, state_json] : metric_declaration.states.value()) {
     if (!state_json.contains("register")) {
       continue;
@@ -176,7 +175,7 @@ auto FindMatchingResidencyStateName(metrics::spec::MetricJsonDeclaration const& 
       return state_name;
     }
   }
-  return std::nullopt;
+  return astl::compat::nullopt;
 }
 
 auto MatchesResidencyComponentFilter(metrics::spec::ScmiMetricJsonCollectionSettings const& collection_settings,
@@ -200,11 +199,12 @@ auto UpdateResidencyInstanceCount(ResidencyStateRegisterDefinitions& result, uin
 }
 
 auto AddResidencyRegisterMatch(ResidencyStateRegisterDefinitions& result, std::string_view state_name,
-                               scmi::spec::DataEvent const& block_member) -> std::expected<void, astl_status_code> {
+                               scmi::spec::DataEvent const& block_member)
+    -> astl::compat::expected<void, astl_status_code> {
   if (block_member.base10_unit_modifier != 0) {
     ASTL_LOG_ERROR("SCMI residency register {} has non-zero base10 unit modifier {}, which is currently not supported",
                    block_member.name, block_member.base10_unit_modifier);
-    return std::unexpected(astl::kInternalNotImplemented);
+    return astl::compat::unexpected(astl::kInternalNotImplemented);
   }
 
   result.state_to_register_def.emplace(
@@ -221,11 +221,11 @@ auto AddResidencyRegisterMatch(ResidencyStateRegisterDefinitions& result, std::s
  */
 auto FindMatchingScmiRegistersForResidency(astl::metrics::spec::MetricJsonDeclaration const& metric_declaration,
                                            ScmiSpecification const&                          scmi_spec)
-    -> std::expected<ResidencyStateRegisterDefinitions, astl_status_code> {
+    -> astl::compat::expected<ResidencyStateRegisterDefinitions, astl_status_code> {
   ResidencyStateRegisterDefinitions result;
   auto collection_settings = metrics::spec::ParseScmiMetricJsonCollectionSettings(metric_declaration.collection);
   if (!collection_settings.has_value()) {
-    return std::unexpected(collection_settings.error());
+    return astl::compat::unexpected(collection_settings.error());
   }
 
   // if the component is specified, we must match it
@@ -247,7 +247,7 @@ auto FindMatchingScmiRegistersForResidency(astl::metrics::spec::MetricJsonDeclar
 
       auto add_match_result = AddResidencyRegisterMatch(result, *matching_state_name, block_member);
       if (!add_match_result.has_value()) {
-        return std::unexpected(add_match_result.error());
+        return astl::compat::unexpected(add_match_result.error());
       }
     }
   }
@@ -259,7 +259,7 @@ auto FindMatchingScmiRegistersForResidency(astl::metrics::spec::MetricJsonDeclar
   }
   if (result.state_to_register_def.size() != metric_declaration.states->size()) {
     ASTL_LOG_ERROR("Some residency metric states were not found in scmi spec!");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return result;
 }

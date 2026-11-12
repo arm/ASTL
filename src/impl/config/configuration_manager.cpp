@@ -4,13 +4,12 @@
 
 #include "config/configuration_manager.hpp"
 
-#include <expected>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
-#include <optional>
 
 #include "astl/astl_telemetry.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "config/astl_configuration.hpp"
 
@@ -25,23 +24,23 @@ auto GetOverrideMutex() -> std::mutex& {
   return override_mtx;
 }
 
-auto GetLoadFilePathOverrideStorage() -> std::optional<fs::path>& {
-  static std::optional<fs::path> load_file_path_override;
+auto GetLoadFilePathOverrideStorage() -> astl::compat::optional<fs::path>& {
+  static astl::compat::optional<fs::path> load_file_path_override;
   return load_file_path_override;
 }
 
 }  // namespace
 
-auto GetConfiguration() -> std::expected<AstlConfiguration, astl_status_code> {
+auto GetConfiguration() -> astl::compat::expected<AstlConfiguration, astl_status_code> {
   return AstlConfiguration::CreateConfiguration();
 };
 
-auto SetLoadFilePathOverride(const std::optional<fs::path>& load_file_path) -> void {
+auto SetLoadFilePathOverride(const astl::compat::optional<fs::path>& load_file_path) -> void {
   std::scoped_lock lock{GetOverrideMutex()};
   GetLoadFilePathOverrideStorage() = load_file_path;
 }
 
-auto GetLoadFilePathOverride() -> std::optional<fs::path> {
+auto GetLoadFilePathOverride() -> astl::compat::optional<fs::path> {
   std::scoped_lock lock{GetOverrideMutex()};
   return GetLoadFilePathOverrideStorage();
 }

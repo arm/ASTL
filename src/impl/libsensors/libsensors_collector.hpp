@@ -6,8 +6,8 @@
 #define SENSORS_COLLECTOR_HPP_
 
 #include <mutex>
-#include <optional>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
@@ -86,7 +86,7 @@ class LibsensorsCollector : public ICollector {
    *        All libsensors operations share the same steady_clock source, so a single pair of
    *        snapshots is applied to every OperationId in operationsOnSample.
    */
-  std::expected<ClockCorrelationMap, astl_status_code> GetNativeClockSnapshot() override;
+  astl::compat::expected<ClockCorrelationMap, astl_status_code> GetNativeClockSnapshot() override;
 
  private:
   // internal classes + enums
@@ -99,7 +99,8 @@ class LibsensorsCollector : public ICollector {
   CollectorCapability _collector_capability{CollectorType::LIBSENSORS};  //!< The capabilities of this collector
   IRawSampleSink*     _sample_sink = nullptr;  //!< The (optional) destination for where sampled data should be sent
   CollectionState     _collection_state = CollectionState::UNCONFIGURED;
-  std::optional<CollectionConfiguration> _configuration;  //!< The current active configuration for this collector
+  astl::compat::optional<CollectionConfiguration>
+      _configuration;  //!< The current active configuration for this collector
 
   // prevent the collection configuration from being accessed by two threads at once
   mutable std::mutex               _collection_mutex;

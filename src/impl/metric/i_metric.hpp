@@ -5,11 +5,11 @@
 #ifndef I_METRIC_HPP_
 #define I_METRIC_HPP_
 
-#include <expected>
 #include <span>
 #include <string>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "common/i_raw_sample_sink.hpp"
@@ -52,7 +52,7 @@ struct IMetric {
    *
    * @return OperationSequence
    */
-  virtual auto GetOperations() -> std::expected<OperationSequence, astl_status_code> = 0;
+  virtual auto GetOperations() -> astl::compat::expected<OperationSequence, astl_status_code> = 0;
 
   /**
    * @brief Process the individual raw sample routed to metric.

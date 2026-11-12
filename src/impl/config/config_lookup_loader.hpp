@@ -6,13 +6,13 @@
 #define CONFIG_LOOKUP_LOADER_HPP_
 
 #include <algorithm>
-#include <expected>
 #include <filesystem>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "config/json_file_utils.hpp"
 #include "scmi/scmi_metric_json_declaration.hpp"
@@ -32,7 +32,7 @@ inline auto ResolvePathRelativeTo(const std::filesystem::path& base_dir, const s
 
 inline auto FindLookupFiles(const std::filesystem::path& root_dir, std::string_view file_name,
                             const ConfigSource* source = nullptr)
-    -> std::expected<std::vector<std::filesystem::path>, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::filesystem::path>, astl_status_code> {
   std::vector<std::filesystem::path> lookup_files;
 
   if (source) {
@@ -46,7 +46,7 @@ inline auto FindLookupFiles(const std::filesystem::path& root_dir, std::string_v
   try {
     if (!std::filesystem::is_directory(root_dir)) {
       ASTL_LOG_ERROR("Lookup root directory does not exist: {}", root_dir.string());
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
 
     for (const auto& entry : std::filesystem::recursive_directory_iterator(root_dir)) {
@@ -59,7 +59,7 @@ inline auto FindLookupFiles(const std::filesystem::path& root_dir, std::string_v
     }
   } catch (const std::exception& e) {
     ASTL_LOG_ERROR("Failed to scan lookup files under {}: {}", root_dir.string(), e.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   std::ranges::sort(lookup_files);
@@ -69,17 +69,17 @@ inline auto FindLookupFiles(const std::filesystem::path& root_dir, std::string_v
 }  // namespace detail
 
 inline auto LoadPlatformLookupFragments(const std::filesystem::path& metrics_dir, const ConfigSource* source = nullptr)
-    -> std::expected<metrics::spec::PlatformLookup, astl_status_code> {
+    -> astl::compat::expected<metrics::spec::PlatformLookup, astl_status_code> {
   auto lookup_files = detail::FindLookupFiles(metrics_dir, "platform_lookup.json", source);
   if (!lookup_files.has_value()) {
-    return std::unexpected(lookup_files.error());
+    return astl::compat::unexpected(lookup_files.error());
   }
 
   metrics::spec::PlatformLookup merged_lookup;
   for (const auto& lookup_file : *lookup_files) {
     auto lookup = TryParseJsonFile<metrics::spec::PlatformLookup>(lookup_file, source);
     if (!lookup.has_value()) {
-      return std::unexpected(lookup.error());
+      return astl::compat::unexpected(lookup.error());
     }
 
     merged_lookup.last_updated = lookup->last_updated;
@@ -104,17 +104,17 @@ inline auto LoadPlatformLookupFragments(const std::filesystem::path& metrics_dir
 
 inline auto LoadRepoMetaFragments(const std::filesystem::path& scmi_specification_dir,
                                   const ConfigSource*          source = nullptr)
-    -> std::expected<scmi::spec::RepoMeta, astl_status_code> {
+    -> astl::compat::expected<scmi::spec::RepoMeta, astl_status_code> {
   auto repo_meta_files = detail::FindLookupFiles(scmi_specification_dir, "repometa.json", source);
   if (!repo_meta_files.has_value()) {
-    return std::unexpected(repo_meta_files.error());
+    return astl::compat::unexpected(repo_meta_files.error());
   }
 
   scmi::spec::RepoMeta merged_repo_meta;
   for (const auto& repo_meta_file : *repo_meta_files) {
     auto repo_meta = TryParseJsonFile<scmi::spec::RepoMeta>(repo_meta_file, source);
     if (!repo_meta.has_value()) {
-      return std::unexpected(repo_meta.error());
+      return astl::compat::unexpected(repo_meta.error());
     }
 
     merged_repo_meta.last_updated = repo_meta->last_updated;

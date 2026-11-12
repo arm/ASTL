@@ -5,10 +5,10 @@
 #ifndef PROCFS_TOPOLOGY_PLUGIN_HPP_
 #define PROCFS_TOPOLOGY_PLUGIN_HPP_
 
-#include <expected>
 #include <memory>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_file_interface.hpp"
 #include "config/astl_configuration.hpp"
 #include "procfs/procfs_target.hpp"
@@ -22,30 +22,30 @@ namespace detail {
 
 template <typename FileInterfaceType>
 auto ReadValidatedFlag(FileInterfaceType& procfs_file_interface, const std::filesystem::path& relative_path)
-    -> std::expected<bool, astl_status_code> {
+    -> astl::compat::expected<bool, astl_status_code> {
   const auto source_is_valid = procfs_file_interface.IsValid(relative_path);
   if (!source_is_valid.has_value()) {
-    return std::unexpected(source_is_valid.error());
+    return astl::compat::unexpected(source_is_valid.error());
   }
   if (!source_is_valid.value()) {
     return false;
   }
   const auto readable = procfs_file_interface.HasReadPermission(relative_path);
   if (!readable.has_value()) {
-    return std::unexpected(readable.error());
+    return astl::compat::unexpected(readable.error());
   }
   return readable.value();
 }
 
 template <typename FileInterfaceType>
 auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileInterfaceType procfs_file_interface)
-    -> std::expected<std::vector<std::unique_ptr<ITarget>>, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::unique_ptr<ITarget>>, astl_status_code> {
   (void)configuration;
   std::vector<std::unique_ptr<ITarget>> targets;
 
   const auto root_is_valid = procfs_file_interface.IsValid(procfs_file_interface.GetBasePath());
   if (!root_is_valid.has_value()) {
-    return std::unexpected(root_is_valid.error());
+    return astl::compat::unexpected(root_is_valid.error());
   }
   if (!root_is_valid.value()) {
     return targets;
@@ -56,7 +56,7 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
                                     std::filesystem::path{"loadavg"}, std::filesystem::path{"uptime"}}) {
     const auto source_is_supported = ReadValidatedFlag(procfs_file_interface, relative_path);
     if (!source_is_supported.has_value()) {
-      return std::unexpected(source_is_supported.error());
+      return astl::compat::unexpected(source_is_supported.error());
     }
     if (source_is_supported.value()) {
       has_supported_procfs_source = true;
@@ -76,7 +76,7 @@ auto ScanForTargetsOnFileInterface(const AstlConfiguration& configuration, FileI
 }  // namespace detail
 
 inline auto ScanForTargets(const AstlConfiguration& configuration)
-    -> std::expected<std::vector<std::unique_ptr<ITarget>>, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::unique_ptr<ITarget>>, astl_status_code> {
   FileInterface procfs_file_interface{configuration.procfs_root_path};
   return detail::ScanForTargetsOnFileInterface(configuration, std::move(procfs_file_interface));
 }

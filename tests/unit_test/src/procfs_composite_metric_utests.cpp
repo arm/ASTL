@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "../../test_includes.hpp"
+#include "astl_cxx_compat.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "procfs/procfs_composite_metricconfig.hpp"
 
@@ -45,8 +46,8 @@ auto MakeMemUsedConfig() -> astl::ProcfsCompositeMetricConfig {
   };
 }
 
-auto FeedCompositeBatch(astl::ProcfsCompositeMetric&                                    metric,
-                        const std::expected<astl::OperationSequence, astl_status_code>& operations_or_error,
+auto FeedCompositeBatch(astl::ProcfsCompositeMetric&                                             metric,
+                        const astl::compat::expected<astl::OperationSequence, astl_status_code>& operations_or_error,
                         const astl::ProcessedSampleTimestamp& timestamp, uint64_t first_value, uint64_t second_value)
     -> astl_status_code {
   const auto first_status = metric.ReceiveRawSample(

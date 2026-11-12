@@ -9,6 +9,7 @@
 #include "../../orchestrator_lifecycle_test_utils.hpp"
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "catch2/generators/catch_generators.hpp"
 #include "common/clock_correlation.hpp"
 #include "metric/metric_manager.hpp"
@@ -107,13 +108,13 @@ struct ClockConfigurationFixture {
     return orchestrator->ConfigureMetricCollection(target, &params, metrics->GetAvailableMetrics(target)->first(1));
   }
 
-  auto Snapshot(const astl::ITarget* target) -> std::expected<astl::ClockCorrelationMap, astl_status_code> {
+  auto Snapshot(const astl::ITarget* target) -> astl::compat::expected<astl::ClockCorrelationMap, astl_status_code> {
     ++captures[target];
     if (before_snapshot) {
       before_snapshot();
     }
     if (target == fail_snapshot) {
-      return std::unexpected{ASTL_STATUS_FILE_ERROR};
+      return astl::compat::unexpected{ASTL_STATUS_FILE_ERROR};
     }
     return astl::ClockCorrelationMap{
         {operations.at(target),

@@ -4,11 +4,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
-#include <nlohmann/json.hpp>
 #include <string>
 
 #include "../../mock_classes.hpp"
 #include "../../test_utilities.hpp"
+#include "astl_json.hpp"
 #include "common/system_info.hpp"
 #include "output/interval_csv_output.hpp"
 

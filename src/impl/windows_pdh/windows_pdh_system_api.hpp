@@ -6,14 +6,13 @@
 #define WINDOWS_PDH_SYSTEM_API_HPP_
 
 #include <cstdint>
-#include <expected>
 #include <memory>
-#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 
 namespace astl {
 
@@ -28,18 +27,19 @@ auto SortWindowsPdhProcessorInstances(std::vector<std::string> instances) -> std
 
 class IWindowsPdhSystemApi {
  public:
-  IWindowsPdhSystemApi()                                                                         = default;
-  IWindowsPdhSystemApi(const IWindowsPdhSystemApi&)                                              = delete;
-  auto operator=(const IWindowsPdhSystemApi&) -> IWindowsPdhSystemApi&                           = delete;
-  IWindowsPdhSystemApi(IWindowsPdhSystemApi&&)                                                   = delete;
-  auto operator=(IWindowsPdhSystemApi&&) -> IWindowsPdhSystemApi&                                = delete;
-  virtual ~IWindowsPdhSystemApi()                                                                = default;
-  virtual auto DiscoverProcessors() -> std::expected<std::vector<std::string>, astl_status_code> = 0;
-  virtual auto ConfigureCpu(const std::vector<std::string>& instances) -> astl_status_code       = 0;
-  virtual auto ResetCpu() -> astl_status_code                                                    = 0;
+  IWindowsPdhSystemApi()                                                                                  = default;
+  IWindowsPdhSystemApi(const IWindowsPdhSystemApi&)                                                       = delete;
+  auto operator=(const IWindowsPdhSystemApi&) -> IWindowsPdhSystemApi&                                    = delete;
+  IWindowsPdhSystemApi(IWindowsPdhSystemApi&&)                                                            = delete;
+  auto operator=(IWindowsPdhSystemApi&&) -> IWindowsPdhSystemApi&                                         = delete;
+  virtual ~IWindowsPdhSystemApi()                                                                         = default;
+  virtual auto DiscoverProcessors() -> astl::compat::expected<std::vector<std::string>, astl_status_code> = 0;
+  virtual auto ConfigureCpu(const std::vector<std::string>& instances) -> astl_status_code                = 0;
+  virtual auto ResetCpu() -> astl_status_code                                                             = 0;
   // Missing optional values mean warm-up or an invalid sample, never 0% utilization.
-  virtual auto ReadCpu() -> std::expected<std::unordered_map<std::string, std::optional<double>>, astl_status_code> = 0;
-  virtual auto ReadMemory() -> std::expected<WindowsPdhMemorySnapshot, astl_status_code>                            = 0;
+  virtual auto ReadCpu()
+      -> astl::compat::expected<std::unordered_map<std::string, astl::compat::optional<double>>, astl_status_code> = 0;
+  virtual auto ReadMemory() -> astl::compat::expected<WindowsPdhMemorySnapshot, astl_status_code>                  = 0;
 };
 
 #if defined(ASTL_INCLUDE_WINDOWS_PDH)

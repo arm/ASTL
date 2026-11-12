@@ -6,9 +6,9 @@
 
 #include <algorithm>
 #include <chrono>
-#include <expected>
 #include <string>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
 #include "common/string_pool.hpp"
@@ -18,8 +18,8 @@ namespace astl {
 // Static member definitions — one shared logger and header-init flag for all RawMetric instances.
 // _raw_sample_logger starts empty; it is emplaced inside call_once so that ASTL_LOG_RAW_SAMPLES is
 // consulted at first construction time, not at static-initialization time.
-std::optional<astl::Logger> RawMetric::_raw_sample_logger;
-std::once_flag              RawMetric::_raw_sample_logger_header_flag;
+astl::compat::optional<astl::Logger> RawMetric::_raw_sample_logger;
+std::once_flag                       RawMetric::_raw_sample_logger_header_flag;
 
 RawMetric::RawMetric(const MetricConfig *configuration, const ITarget *target,
                      IProcessedSampleSink *processed_sample_sink)
@@ -110,7 +110,7 @@ auto RawMetric::CheckCapabilities(const Capabilities &capabilities) const -> boo
  *
  * @return OperationSequence
  */
-auto RawMetric::GetOperations() -> std::expected<OperationSequence, astl_status_code> {
+auto RawMetric::GetOperations() -> astl::compat::expected<OperationSequence, astl_status_code> {
   // Default implementation returns an empty operation sequence.
   // Derived classes should override this method to provide actual operations.
   // TODO(ASTL-114) use a operation_builder to create operations from config
@@ -147,7 +147,7 @@ auto RawMetric::ProcessPauseSample(ProcessedSampleTimestamp pause_timestamp) -> 
   return ASTL_STATUS_SUCCESS;
 }
 
-auto RawMetric::ApplyFormula(const AstlValue &raw_value) const -> std::expected<AstlValue, astl_status_code> {
+auto RawMetric::ApplyFormula(const AstlValue &raw_value) const -> astl::compat::expected<AstlValue, astl_status_code> {
   // Use the formula from configuration
   return astl::ApplyFormula(_configuration->GetFormula(), raw_value);
 }

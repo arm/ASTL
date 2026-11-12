@@ -10,6 +10,7 @@
 
 #include "../../test_includes.hpp"  // must come first before any Catch2 usage
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "astl_utils.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_processed_sample_sink.hpp"
@@ -57,7 +58,7 @@ struct SummaryTestMetric : public astl::IMetric {
     (void)caps;
     return true;
   }
-  std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
+  astl::compat::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
     return astl::OperationSequence{};
   }
   astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& sample) override {

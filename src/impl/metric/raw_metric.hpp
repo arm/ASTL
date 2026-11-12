@@ -7,10 +7,10 @@
 
 #include <cctype>
 #include <mutex>
-#include <optional>
 #include <string>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "common/metric_config.hpp"
 #include "i_metric.hpp"
@@ -60,7 +60,7 @@ class RawMetric : public virtual IMetric {
    *
    * @return OperationSequence
    */
-  auto GetOperations() -> std::expected<OperationSequence, astl_status_code> override;
+  auto GetOperations() -> astl::compat::expected<OperationSequence, astl_status_code> override;
 
   /**
    * @brief Receive a single normalized sample for this metric.
@@ -159,7 +159,7 @@ class RawMetric : public virtual IMetric {
    * @param raw_value The raw sample value to process
    * @return Processed AstlValue if formula application succeeds, or an error status code
    */
-  auto ApplyFormula(const AstlValue &raw_value) const -> std::expected<AstlValue, astl_status_code>;
+  auto ApplyFormula(const AstlValue &raw_value) const -> astl::compat::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Sanitize a metric name for use as a filename.
@@ -188,8 +188,8 @@ class RawMetric : public virtual IMetric {
   // Single logger shared across all RawMetric instances — one "raw_samples.csv" file for all metrics.
   // Lazily configured on first RawMetric construction so that ASTL_LOG_RAW_SAMPLES is read at runtime
   // rather than at static-initialization time (which would break test isolation via EnvVarGuard).
-  static std::optional<astl::Logger> _raw_sample_logger;
-  static std::once_flag              _raw_sample_logger_header_flag;  // ensures init + CSV header happen exactly once
+  static astl::compat::optional<astl::Logger> _raw_sample_logger;
+  static std::once_flag _raw_sample_logger_header_flag;  // ensures init + CSV header happen exactly once
 
   // NOLINTEND - End of clang-tidy checks for protected members.
 };  // End of RawMetric class

@@ -7,6 +7,7 @@
 #include <sstream>
 #include <unordered_set>
 
+#include "astl_cxx_compat.hpp"
 #include "procfs/procfs_utils.hpp"
 #include "procfs/procfs_utils_readers_primitives.hpp"
 
@@ -94,28 +95,28 @@ struct InterruptTable {
 
 auto ReadInterruptCounters(const FileInterface& files, const std::filesystem::path& path, std::string* source_identity,
                            std::vector<uint64_t>* component_counts)
-    -> std::expected<InterruptCounterMap, astl_status_code> {
+    -> astl::compat::expected<InterruptCounterMap, astl_status_code> {
   std::string contents;
   const auto  status = files.Read(path, contents);
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   std::istringstream stream{contents};
   std::string        line;
   InterruptTable     table{component_counts, path == "interrupts", path == "softirqs"};
   if (!std::getline(stream, line) || !table.ReadHeader(line)) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   if (component_counts) {
     component_counts->clear();
   }
   while (std::getline(stream, line)) {
     if (!table.AddRow(line)) {
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
   }
   if (table.rows.empty()) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   if (source_identity) {
     *source_identity = std::move(table.identity);

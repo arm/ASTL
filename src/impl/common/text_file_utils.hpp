@@ -7,16 +7,17 @@
 
 #include <filesystem>
 #include <initializer_list>
-#include <optional>
 #include <string>
+
+#include "astl_cxx_compat.hpp"
 
 namespace astl::text {
 
-auto ReadTextFile(const std::filesystem::path& path) -> std::optional<std::string>;
+auto ReadTextFile(const std::filesystem::path& path) -> astl::compat::optional<std::string>;
 
-auto ReadFirstTrimmedLine(const std::filesystem::path& path) -> std::optional<std::string>;
+auto ReadFirstTrimmedLine(const std::filesystem::path& path) -> astl::compat::optional<std::string>;
 
-auto ReadFirstAvailableLine(std::initializer_list<std::filesystem::path> paths) -> std::optional<std::string>;
+auto ReadFirstAvailableLine(std::initializer_list<std::filesystem::path> paths) -> astl::compat::optional<std::string>;
 
 }  // namespace astl::text
 

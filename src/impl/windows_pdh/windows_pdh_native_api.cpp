@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "astl_cxx_compat.hpp"
 #include "windows_pdh/windows_pdh_system_api.hpp"
 
 #if defined(ASTL_INCLUDE_WINDOWS_PDH)
@@ -39,7 +40,7 @@ class PdhQuery {
 };
 
 // Translate the English wildcard before expanding paths on localized Windows.
-auto LocalizedCpuWildcard(PDH_HQUERY query) -> std::expected<std::wstring, astl_status_code> {
+auto LocalizedCpuWildcard(PDH_HQUERY query) -> astl::compat::expected<std::wstring, astl_status_code> {
   PDH_HCOUNTER wildcard{};
   const auto   status = PdhAddEnglishCounterW(query, L"\\Processor Information(*)\\% Processor Time", 0, &wildcard);
   if (status != ERROR_SUCCESS) {
@@ -48,29 +49,29 @@ auto LocalizedCpuWildcard(PDH_HQUERY query) -> std::expected<std::wstring, astl_
   }
   DWORD bytes{};
   if (PdhGetCounterInfoW(wildcard, FALSE, &bytes, nullptr) != PDH_MORE_DATA) {
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   std::vector<unsigned char> buffer(bytes);
   auto*                      info = reinterpret_cast<PDH_COUNTER_INFO_W*>(buffer.data());
   if (PdhGetCounterInfoW(wildcard, FALSE, &bytes, info) != ERROR_SUCCESS) {
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   return std::wstring{info->szFullPath};
 }
 
-auto ExpandCpuPaths(const std::wstring& wildcard) -> std::expected<std::vector<wchar_t>, astl_status_code> {
+auto ExpandCpuPaths(const std::wstring& wildcard) -> astl::compat::expected<std::vector<wchar_t>, astl_status_code> {
   DWORD chars{};
   auto  status = PdhExpandWildCardPathW(nullptr, wildcard.c_str(), nullptr, &chars, 0);
   if (status == PDH_CSTATUS_NO_OBJECT || status == PDH_CSTATUS_NO_COUNTER) {
     return std::vector<wchar_t>{};
   }
   if (status != PDH_MORE_DATA) {
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   std::vector<wchar_t> paths(chars);
   status = PdhExpandWildCardPathW(nullptr, wildcard.c_str(), paths.data(), &chars, 0);
   if (status != ERROR_SUCCESS) {
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
   return paths;
 }
@@ -105,21 +106,21 @@ auto ProcessorInstances(const std::vector<wchar_t>& paths) -> std::vector<std::s
 
 class WindowsPdhSystemApi final : public IWindowsPdhSystemApi {
  public:
-  auto DiscoverProcessors() -> std::expected<std::vector<std::string>, astl_status_code> override {
+  auto DiscoverProcessors() -> astl::compat::expected<std::vector<std::string>, astl_status_code> override {
     PdhQuery query;
     if (!query.Open()) {
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
     const auto wildcard = LocalizedCpuWildcard(query.handle);
     if (!wildcard) {
-      return std::unexpected(wildcard.error());
+      return astl::compat::unexpected(wildcard.error());
     }
     if (wildcard->empty()) {
       return std::vector<std::string>{};
     }
     const auto paths = ExpandCpuPaths(*wildcard);
     if (!paths) {
-      return std::unexpected(paths.error());
+      return astl::compat::unexpected(paths.error());
     }
     return ProcessorInstances(*paths);
   }
@@ -156,8 +157,9 @@ class WindowsPdhSystemApi final : public IWindowsPdhSystemApi {
     _primed = false;
     return ASTL_STATUS_SUCCESS;
   }
-  auto ReadCpu() -> std::expected<std::unordered_map<std::string, std::optional<double>>, astl_status_code> override {
-    std::unordered_map<std::string, std::optional<double>> samples;
+  auto ReadCpu() -> astl::compat::expected<std::unordered_map<std::string, astl::compat::optional<double>>,
+                                           astl_status_code> override {
+    std::unordered_map<std::string, astl::compat::optional<double>> samples;
     if (_counters.empty()) {
       return samples;
     }
@@ -165,10 +167,10 @@ class WindowsPdhSystemApi final : public IWindowsPdhSystemApi {
     if (status != ERROR_SUCCESS) {
       _primed = false;
       ASTL_LOG_WARNING("Windows CPU collection failed: {}", status);
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
     for (const auto& [instance, counter] : _counters) {
-      std::optional<double> value;
+      astl::compat::optional<double> value;
       if (_primed) {
         PDH_FMT_COUNTERVALUE formatted{};
         const auto           result = PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, nullptr, &formatted);
@@ -182,12 +184,12 @@ class WindowsPdhSystemApi final : public IWindowsPdhSystemApi {
     _primed = true;
     return samples;
   }
-  auto ReadMemory() -> std::expected<WindowsPdhMemorySnapshot, astl_status_code> override {
+  auto ReadMemory() -> astl::compat::expected<WindowsPdhMemorySnapshot, astl_status_code> override {
     MEMORYSTATUSEX status{};
     status.dwLength = sizeof(status);
     if (!GlobalMemoryStatusEx(&status)) {
       ASTL_LOG_ERROR("Windows memory collection failed: {}", GetLastError());
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
     return WindowsPdhMemorySnapshot{status.ullTotalPhys, status.ullAvailPhys};
   }

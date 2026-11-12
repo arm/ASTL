@@ -5,8 +5,7 @@
 #ifndef I_COLLECTOR_HPP_
 #define I_COLLECTOR_HPP_
 
-#include <expected>
-
+#include "astl_cxx_compat.hpp"
 #include "collection_configuration.hpp"
 #include "common/capabilities.hpp"
 #include "common/clock_correlation.hpp"
@@ -83,7 +82,7 @@ struct ICollector {
    * operations and their clock sources. Collectors may select a mapping from multiple
    * paired observations, as SCMI ioctl does for hardware timestamps.
    */
-  virtual auto GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> = 0;
+  virtual auto GetNativeClockSnapshot() -> astl::compat::expected<ClockCorrelationMap, astl_status_code> = 0;
 
   /*
    * @brief Collect a single sample of all the configured metrics, including while a collection is paused.

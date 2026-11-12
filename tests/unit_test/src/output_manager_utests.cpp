@@ -5,11 +5,12 @@
 #include <array>
 #include <chrono>
 #include <cstdlib>
-#include <nlohmann/json.hpp>
 #include <vector>
 
 #include "../../test_includes.hpp"   // must come first before any Catch2 usage
 #include "../../test_utilities.hpp"  // TempFileGuard
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "common/system_info.hpp"
 #include "config/astl_configuration.hpp"
@@ -115,7 +116,7 @@ struct TinyMetric : public astl::IMetric {
     (void)caps;
     return true;
   }
-  std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
+  astl::compat::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
     return astl::OperationSequence{};
   }
   astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& sample) override {

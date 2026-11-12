@@ -310,9 +310,9 @@ run_justfile_lint() {
 
 EXTRA_ARGS=()
 # exclude the C-level headers from this C++ lint - we'll do them as a separate step
-EXTRA_ARGS+=(-std=c++23)
-# enable std::expected in clang-tidy
-EXTRA_ARGS+=(-D__cpp_concepts=202002L)
+# Match the configured mode rather than enabling unavailable standard-library features.
+CXX_STANDARD=$(sed -n 's/^CMAKE_CXX_STANDARD:STRING=//p' "${BUILD_DIR}/CMakeCache.txt")
+EXTRA_ARGS+=("-std=c++${CXX_STANDARD:-23}")
 # set the version of the FUSE library. this should match the FUSE_USE_VERSION defined in tools/mock_scmi/CMakeLists.txt
 EXTRA_ARGS+=(-DFUSE_USE_VERSION=316)
 # Match the unit-test definition when linting with explicit compiler arguments.

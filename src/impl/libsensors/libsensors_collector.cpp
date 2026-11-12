@@ -5,10 +5,10 @@
 #include "libsensors/libsensors_collector.hpp"
 
 #include <mutex>
-#include <optional>
 #include <utility>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "collector/collection_configuration.hpp"
 #include "collector/collector_lifecycle_helpers.hpp"
@@ -187,7 +187,7 @@ auto LibsensorsCollector::ReadImmediate() -> astl_status_code {
  *        All libsensors operations share steady_clock as their native clock, so one pair of
  *        snapshots is sufficient and is mapped to every OperationId.
  */
-auto LibsensorsCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> {
+auto LibsensorsCollector::GetNativeClockSnapshot() -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   std::scoped_lock lock{_collection_mutex};
   if (!_configuration.has_value()) {
     ASTL_LOG_WARNING("LibsensorsCollector::GetNativeClockSnapshot called without configuration; returning empty map");

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "procfs/procfs_collector.hpp"
 #include "procfs/procfs_utils.hpp"
@@ -39,7 +40,7 @@ auto ProcfsCollector::PrepareInterruptSnapshot(const std::filesystem::path& path
 }
 
 auto ProcfsCollector::PrepareOperations(const OperationSequence& operations)
-    -> std::expected<PreparedOperations, astl_status_code> {
+    -> astl::compat::expected<PreparedOperations, astl_status_code> {
   PreparedOperations prepared;
   prepared.operations.reserve(operations.size());
 
@@ -47,14 +48,14 @@ auto ProcfsCollector::PrepareOperations(const OperationSequence& operations)
     const auto* procfs_operation = dynamic_cast<const ProcfsReadOperation*>(operation.get());
     if (procfs_operation == nullptr) {
       ASTL_LOG_ERROR("ProcfsCollector: invalid operation type");
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
     }
     prepared.operations.push_back(procfs_operation);
     if (const auto* field = std::get_if<procfs::SystemField>(&procfs_operation->field_descriptor);
         field && field->kind == "interrupts" && !prepared.interrupt_snapshots.contains(field->relative_path)) {
       const auto status = PrepareInterruptSnapshot(field->relative_path, prepared);
       if (status != ASTL_STATUS_SUCCESS) {
-        return std::unexpected(status);
+        return astl::compat::unexpected(status);
       }
     }
 
@@ -66,7 +67,7 @@ auto ProcfsCollector::PrepareOperations(const OperationSequence& operations)
     auto snapshots_or_error = procfs::ReadCpuSnapshots(_procfs_file_interface, cpu_field->relative_path);
     if (!snapshots_or_error.has_value()) {
       ASTL_LOG_ERROR("ProcfsCollector: failed to read procfs CPU snapshots");
-      return std::unexpected(snapshots_or_error.error());
+      return astl::compat::unexpected(snapshots_or_error.error());
     }
     prepared.cpu_snapshots.emplace(cpu_field->relative_path, std::move(*snapshots_or_error));
   }

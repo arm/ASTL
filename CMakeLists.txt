@@ -156,7 +156,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions(ASTL_DEBUG)
 endif()
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD
+    23
+    CACHE STRING "C++ standard used to build ASTL (20 or newer)")
+if(CMAKE_CXX_STANDARD LESS 20)
+  message(FATAL_ERROR "ASTL requires C++20 or newer")
+endif()
 
 if(MSVC)
   # Enable UTF-8 file encoding and standard C++ exception handling (no SEH). /wd4267: suppress size_t->int conversion

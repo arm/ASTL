@@ -5,9 +5,9 @@
 #ifndef SCMI_TARGET_HPP_
 #define SCMI_TARGET_HPP_
 
-#include <optional>
 #include <string>
 
+#include "astl_cxx_compat.hpp"
 #include "target.hpp"
 
 namespace astl {
@@ -20,7 +20,7 @@ class ScmiTarget : public astl::Target {
   static constexpr std::string_view kNamePrefix{"scmi_"};
 
   ScmiTarget(std::string name, std::string description, std::string telemetry_subdirectory, Target* parent = nullptr,
-             std::optional<std::string> uuid = std::nullopt)
+             astl::compat::optional<std::string> uuid = astl::compat::nullopt)
       : astl::Target(std::move(name), std::move(description), CollectorType::SCMI, parent, std::move(uuid),
                      telemetry_subdirectory),
         _telemetry_subdirectory(std::move(telemetry_subdirectory)) {}
@@ -37,14 +37,15 @@ class ScmiTarget : public astl::Target {
     return std::string{kNamePrefix} + std::string{telemetry_subdirectory};
   }
 
-  static auto TryInferTelemetrySubdirectoryFromName(std::string_view target_name) -> std::optional<std::string_view> {
+  static auto TryInferTelemetrySubdirectoryFromName(std::string_view target_name)
+      -> astl::compat::optional<std::string_view> {
     if (target_name.starts_with(kNamePrefix)) {
       return target_name.substr(kNamePrefix.size());
     }
     if (!target_name.empty()) {
       return target_name;
     }
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
  private:

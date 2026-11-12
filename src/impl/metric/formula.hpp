@@ -5,10 +5,10 @@
 #ifndef FORMULA_HPP_
 #define FORMULA_HPP_
 
-#include <expected>
 #include <string_view>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "common/astl_value.hpp"
 
 namespace astl {
@@ -20,12 +20,12 @@ namespace astl {
  * Examples: ExpressionFormula evaluates expressions including bitwise operations.
  *
  * This concept defines the interface that all formula types must satisfy:
- * - Apply(const AstlValue&) -> std::expected<AstlValue, astl_status_code>
+ * - Apply(const AstlValue&) -> astl::compat::expected<AstlValue, astl_status_code>
  * - Description() const -> std::string_view
  */
 template <typename T>
 concept Formula = requires(const T& formula, const AstlValue& value) {
-  { formula.Apply(value) } -> std::same_as<std::expected<AstlValue, astl_status_code>>;
+  { formula.Apply(value) } -> std::same_as<astl::compat::expected<AstlValue, astl_status_code>>;
   { formula.Description() } -> std::same_as<std::string_view>;
 };
 

@@ -7,12 +7,13 @@
 #include <string>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "common/string_pool.hpp"
 
 namespace astl {
 
 Target::Target(std::string name, std::string description, CollectorType collector_type, Target* parent,
-               std::optional<std::string> uuid, std::optional<std::string> collector_target_path)
+               astl::compat::optional<std::string> uuid, astl::compat::optional<std::string> collector_target_path)
     : _name{std::move(name)},
       _description{std::move(description)},
       _collector_type{collector_type},
@@ -32,16 +33,16 @@ auto Target::GetProperties(astl_target_props_t* target) const -> astl_status_cod
 }
 
 auto Target::Name() const -> std::string const& { return _name; }
-auto Target::CollectorTargetPath() const -> std::optional<std::string_view> {
+auto Target::CollectorTargetPath() const -> astl::compat::optional<std::string_view> {
   if (!_collector_target_path.has_value()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return std::string_view{*_collector_target_path};
 }
 auto Target::GetCollectorType() const -> CollectorType { return _collector_type; }
 auto Target::GetParent() const -> const Target* { return _parent; }
 auto Target::SetName(std::string name) -> void { _name = std::move(name); }
-auto Target::SetCollectorTargetPath(std::optional<std::string> collector_target_path) -> void {
+auto Target::SetCollectorTargetPath(astl::compat::optional<std::string> collector_target_path) -> void {
   _collector_target_path = std::move(collector_target_path);
 }
 

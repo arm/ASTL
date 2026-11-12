@@ -11,6 +11,7 @@
 
 #include <memory>
 
+#include "astl_cxx_compat.hpp"
 #include "output/i_output_manager.hpp"
 
 namespace astl {
@@ -22,10 +23,10 @@ namespace astl {
  * output sinks. On success ownership of the manager is returned to the caller.
  *
  * Error Handling:
- *  - Returns `std::unexpected(astl_status_code)` if configuration parsing, allocation, or output
+ *  - Returns `astl::compat::unexpected(astl_status_code)` if configuration parsing, allocation, or output
  *    instantiation fails.
  */
-[[nodiscard]] auto BuildOutputManager() -> std::expected<std::unique_ptr<IOutputManager>, astl_status_code>;
+[[nodiscard]] auto BuildOutputManager() -> astl::compat::expected<std::unique_ptr<IOutputManager>, astl_status_code>;
 
 }  // namespace astl
 

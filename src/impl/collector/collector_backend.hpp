@@ -5,7 +5,6 @@
 #ifndef COLLECTOR_BACKEND_HPP_
 #define COLLECTOR_BACKEND_HPP_
 
-#include <expected>
 #include <memory>
 #include <span>
 #include <string_view>
@@ -13,6 +12,7 @@
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "common/capabilities.hpp"
 
 namespace astl {
@@ -28,8 +28,9 @@ using BackendTargetMap = std::unordered_map<CollectorType, std::vector<const ITa
 struct CollectorBackend {
   CollectorType    type;
   std::string_view name;
-  std::expected<BackendTargets, astl_status_code> (*discover)(const AstlConfiguration&);
-  std::expected<std::unique_ptr<ICollector>, astl_status_code> (*create)(const ITarget&, const AstlConfiguration&);
+  astl::compat::expected<BackendTargets, astl_status_code> (*discover)(const AstlConfiguration&);
+  astl::compat::expected<std::unique_ptr<ICollector>, astl_status_code> (*create)(const ITarget&,
+                                                                                  const AstlConfiguration&);
   astl_status_code (*register_metrics)(const AstlConfiguration&, const BackendTargetMap&, IMetricManager*);
   astl_status_code (*prepare_targets)(const AstlConfiguration&, const BackendTargets&) = nullptr;
 };

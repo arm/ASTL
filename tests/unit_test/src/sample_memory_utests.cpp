@@ -9,7 +9,6 @@
 #include <fstream>
 #include <iomanip>
 #include <memory>
-#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -17,6 +16,7 @@
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "metric/metric_manager.hpp"
 #include "scmi/scmi_operation_builder.hpp"
 
@@ -32,7 +32,7 @@ static_assert(kMaxMemoryFactor > 1.0);
 static_assert(kMemorySampleCount > 0 && kMeasuredSamples % kMemorySampleCount == 0);
 
 // smaps_rollup reports current resident memory across all mappings, rather than a historical peak.
-auto ReadResidentKiB() -> std::optional<uint64_t> {
+auto ReadResidentKiB() -> astl::compat::optional<uint64_t> {
   std::ifstream input{"/proc/self/smaps_rollup"};
   std::string   line;
   while (std::getline(input, line)) {
@@ -44,10 +44,10 @@ auto ReadResidentKiB() -> std::optional<uint64_t> {
       if (fields >> name >> rss >> units && units == "kB" && rss > 0) {
         return rss;
       }
-      return std::nullopt;
+      return astl::compat::nullopt;
     }
   }
-  return std::nullopt;
+  return astl::compat::nullopt;
 }
 #endif
 

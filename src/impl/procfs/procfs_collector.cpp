@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "common/monotonic_raw_clock.hpp"
 #include "procfs/procfs_read_operation.hpp"
@@ -145,7 +146,7 @@ auto ProcfsCollector::ReadImmediate() -> astl_status_code {
   return ExecuteCollectionOperations(_configuration->Operations().operationsOnSample);
 }
 
-auto ProcfsCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> {
+auto ProcfsCollector::GetNativeClockSnapshot() -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   std::scoped_lock lock{_collection_mutex};
   if (!_configuration.has_value()) {
     ASTL_LOG_WARNING("ProcfsCollector::GetNativeClockSnapshot called without configuration; returning empty map");

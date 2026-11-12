@@ -13,6 +13,7 @@
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl/astl_test_hooks.h"
+#include "astl_cxx_compat.hpp"
 #include "common/astl_value.hpp"
 #include "common/metric_config.hpp"
 #include "metric/event_metric.hpp"
@@ -227,7 +228,7 @@ TEST_CASE("astlGetMetricStatesOnTarget - Residency Metric", "[wrapper][MetricSta
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
       "CPUResidency", "CPU C-State residency", ASTL_UNITS_SECONDS, ASTL_VALUE_UINT64, ASTL_METRIC_RESIDENCY,
-      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::UNKNOWN, std::move(state_info), std::nullopt,
+      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::UNKNOWN, std::move(state_info), astl::compat::nullopt,
       astl::IdentityFormula{});
 
   std::vector<astl::ResidencyMetricConfig::StateInfo> state_configs;

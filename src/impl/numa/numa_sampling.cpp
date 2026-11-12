@@ -4,6 +4,7 @@
 
 #include <limits>
 
+#include "astl_cxx_compat.hpp"
 #include "common/monotonic_raw_clock.hpp"
 #include "numa/numa_collector.hpp"
 namespace astl {
@@ -12,13 +13,13 @@ auto NumaNativeNow() -> uint64_t {
   return static_cast<uint64_t>(
       std::chrono::time_point_cast<SampleMicroseconds>(ClockMonotonicRaw::now()).time_since_epoch().count());
 }
-auto NumaValue(const NumaReadOperation& read, const numa::Counts& delta) -> std::optional<AstlValue> {
+auto NumaValue(const NumaReadOperation& read, const numa::Counts& delta) -> astl::compat::optional<AstlValue> {
   const auto index = static_cast<size_t>(read.field);
   if (index < numa::kFields.size()) {
     return AstlValue{delta.at(index)};
   }
   if (delta[4] > std::numeric_limits<uint64_t>::max() - delta[3]) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   const auto total = delta[3] + delta[4];
   if (read.field == NumaField::ALLOCATIONS) {
@@ -26,7 +27,7 @@ auto NumaValue(const NumaReadOperation& read, const numa::Counts& delta) -> std:
   }
   // Raw percentages are basis points (10000 = 100%); the metric formula scales to percent.
   if (read.field != NumaField::LOCAL_PERCENT && read.field != NumaField::REMOTE_PERCENT) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   const auto part = read.field == NumaField::LOCAL_PERCENT ? delta[3] : delta[4];
   return AstlValue{total == 0
@@ -34,7 +35,7 @@ auto NumaValue(const NumaReadOperation& read, const numa::Counts& delta) -> std:
                        : static_cast<uint64_t>(static_cast<long double>(numa::kBasisPointsPerWhole) * part / total)};
 }
 }  // namespace
-auto NumaCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> {
+auto NumaCollector::GetNativeClockSnapshot() -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   std::scoped_lock    lock{_collection_mutex};
   ClockCorrelationMap result;
   if (!_configuration) {

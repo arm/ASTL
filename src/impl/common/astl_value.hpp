@@ -7,12 +7,12 @@
 
 #include <compare>
 #include <cstdint>
-#include <expected>
 #include <format>
 #include <string>
 #include <variant>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
 
 namespace astl {
@@ -70,12 +70,12 @@ struct AstlValue {
   /**
    * @brief Convert the AstlValue to a double if it holds an arithmetic type
    *
-   * @return std::expected containing the double value if successful, or ASTL_STATUS_INVALID_VALUE_TYPE if not
+   * @return astl::compat::expected containing the double value if successful, or ASTL_STATUS_INVALID_VALUE_TYPE if not
    * arithmetic
    */
-  auto ToDouble() const -> std::expected<double, astl_status_code> {
+  auto ToDouble() const -> astl::compat::expected<double, astl_status_code> {
     return std::visit(
-        [](auto&& arg) -> std::expected<double, astl_status_code> {
+        [](auto&& arg) -> astl::compat::expected<double, astl_status_code> {
           using T = std::decay_t<decltype(arg)>;
           if constexpr (std::is_same_v<T, uint8_t>) {
             return static_cast<double>(arg);
@@ -91,7 +91,7 @@ struct AstlValue {
             return arg;
           } else {
             // type - cannot convert to double
-            return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+            return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
           }
         },
         value);
@@ -100,12 +100,12 @@ struct AstlValue {
   /**
    * @brief Convert the AstlValue to an int64 if it holds an arithmetic type
    *
-   * @return std::expected containing the int64 value if successful, or ASTL_STATUS_INVALID_VALUE_TYPE if not
+   * @return astl::compat::expected containing the int64 value if successful, or ASTL_STATUS_INVALID_VALUE_TYPE if not
    * arithmetic
    */
-  auto ToInt64() const -> std::expected<int64_t, astl_status_code> {
+  auto ToInt64() const -> astl::compat::expected<int64_t, astl_status_code> {
     return std::visit(
-        [](auto&& arg) -> std::expected<int64_t, astl_status_code> {
+        [](auto&& arg) -> astl::compat::expected<int64_t, astl_status_code> {
           using T = std::decay_t<decltype(arg)>;
           if constexpr (std::is_same_v<T, uint8_t>) {
             return static_cast<int64_t>(arg);
@@ -121,7 +121,7 @@ struct AstlValue {
             return static_cast<int64_t>(arg);
           } else {
             // type - cannot convert to int64
-            return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+            return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
           }
         },
         value);
@@ -132,7 +132,8 @@ struct AstlValue {
    *
    * @return an AstlValue instance with the same value as val, or a ASTL_STATUS_INVALID_VALUE_TYPE
    */
-  static auto FromUnion(const astl_value_t& val, astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
+  static auto FromUnion(const astl_value_t& val, astl_value_type_t type)
+      -> astl::compat::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Create an AstlValue of 0 value of the largest representative of the given type
@@ -141,28 +142,28 @@ struct AstlValue {
    *
    *        This is useful for creating a base for arithmetic operations, like a running sum for average
    */
-  static auto FromUnionPromoting(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
+  static auto FromUnionPromoting(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Create an AstlValue of the given type with the minimal possible value
    *
    * @return an AstlValue instance with the minimum possible value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
    */
-  static auto FromMinimum(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
+  static auto FromMinimum(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Create an AstlValue of the given type as close to '0' as possible
    *
    * @return an AstlValue instance of 0 value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
    */
-  static auto FromZero(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
+  static auto FromZero(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Create an AstlValue of the given type with the maximum possible value
    *
    * @return an AstlValue instance with the max representable value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
    */
-  static auto FromMaximum(astl_value_type_t type) -> std::expected<AstlValue, astl_status_code>;
+  static auto FromMaximum(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Compute the sum of two AstlValues of the same underlying type.
@@ -171,7 +172,8 @@ struct AstlValue {
    *   - ASTL_STATUS_METRIC_OVERFLOW_DETECTED if this would overflow their representations
    *   - ASTL_STATUS_INVALID_VALUE_TYPE if operands aren't similar types
    */
-  static auto Add(const AstlValue& addend, const AstlValue& augend) -> std::expected<AstlValue, astl_status_code>;
+  static auto Add(const AstlValue& addend, const AstlValue& augend)
+      -> astl::compat::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Compute the difference of two AstlValues of the same underlying type.
@@ -181,7 +183,7 @@ struct AstlValue {
    *   - ASTL_STATUS_INVALID_VALUE_TYPE if operands aren't similar types
    */
   static auto Subtract(const AstlValue& minuend, const AstlValue& subtrahend)
-      -> std::expected<AstlValue, astl_status_code>;
+      -> astl::compat::expected<AstlValue, astl_status_code>;
 
   /**
    * @brief Divide the dividend by the divisor. May truncate if dividend or divisor are integral types
@@ -189,15 +191,15 @@ struct AstlValue {
    */
   template <typename DivisorType>
   static auto Divide(const AstlValue& dividend, const DivisorType divisor)
-      -> std::expected<AstlValue, astl_status_code> {
+      -> astl::compat::expected<AstlValue, astl_status_code> {
     return std::visit(
-        [=](auto&& dividend_x) -> std::expected<AstlValue, astl_status_code> {
+        [=](auto&& dividend_x) -> astl::compat::expected<AstlValue, astl_status_code> {
           // Dividenttype is the simplified type of divident, but promoted from bool to uint8_t if needed
           using DividendType = std::conditional_t<std::is_same_v<std::decay_t<decltype(dividend_x)>, bool>, uint8_t,
                                                   std::decay_t<decltype(dividend_x)>>;
           if constexpr (std::is_arithmetic_v<DividendType>) {
             if (divisor == 0) {
-              return std::unexpected(astl::kInternalDivideByZero);
+              return astl::compat::unexpected(astl::kInternalDivideByZero);
             }
 
             auto promote_if_bool = [](auto value) {
@@ -219,7 +221,7 @@ struct AstlValue {
               return AstlValue{result};
             }
           } else {
-            return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+            return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
           }
         },
         dividend.value);

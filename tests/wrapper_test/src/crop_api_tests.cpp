@@ -24,12 +24,12 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
-#include <optional>
 #include <vector>
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "common/clock_correlation.hpp"
 #include "common/i_processed_sample_sink.hpp"
 #include "common/i_raw_sample_sink.hpp"
@@ -284,15 +284,15 @@ inline auto ReadRawCacheFile(const std::filesystem::path& path) -> std::vector<a
 /// Fixture for tests that need a single-target, single-metric orchestrator with three
 /// processed samples pre-sunk at 100, 200, and 300 nanoseconds.
 struct SingleMetricCropFixture {
-  std::vector<expectation>                expectations;
-  std::unique_ptr<astl::MetricHandle>     mh_storage{std::make_unique<astl::MetricHandle>()};
-  TestMetricBase                          metric;
-  astl_metric_handle_t                    metric_hdl;
-  std::unique_ptr<TestTargetBase>         target_storage;
-  TestTargetBase*                         target_ptr;
-  astl_target_handle_t                    target_hdl;
-  astl::Orchestrator*                     orch_raw{};
-  std::optional<TestOrchestratorInjector> injector;
+  std::vector<expectation>                         expectations;
+  std::unique_ptr<astl::MetricHandle>              mh_storage{std::make_unique<astl::MetricHandle>()};
+  TestMetricBase                                   metric;
+  astl_metric_handle_t                             metric_hdl;
+  std::unique_ptr<TestTargetBase>                  target_storage;
+  TestTargetBase*                                  target_ptr;
+  astl_target_handle_t                             target_hdl;
+  astl::Orchestrator*                              orch_raw{};
+  astl::compat::optional<TestOrchestratorInjector> injector;
 
   SingleMetricCropFixture(std::string target_name, std::string metric_name)
       : metric{std::move(metric_name)},
@@ -575,7 +575,7 @@ TEST_CASE(
       NAMED_ALLOW_CALL(*cm_raw, ConfigureCollectionOnTarget(target_active_ptr, _, _)).RETURN(ASTL_STATUS_SUCCESS));
   expectations.push_back(
       NAMED_ALLOW_CALL(*cm_raw, GetNativeClockSnapshot(target_active_ptr))
-          .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}}));
+          .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}}));
   expectations.push_back(NAMED_ALLOW_CALL(*mm_raw, SetClockCorrelations(_)));
   expectations.push_back(NAMED_ALLOW_CALL(*cm_raw, StartOnTarget(target_active_ptr)).RETURN(ASTL_STATUS_SUCCESS));
 

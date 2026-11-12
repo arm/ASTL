@@ -6,10 +6,9 @@
 #define RATE_METRIC_HPP_
 
 #include <chrono>
-#include <expected>
-#include <optional>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
 #include "delta_metric.hpp"
@@ -31,9 +30,9 @@ struct RateData {
  * This structure is used to store computed rate statistics.
  */
 struct RateSummaryData {
-  std::optional<double> min_rate;  ///< Minimum rate value seen
-  std::optional<double> max_rate;  ///< Maximum rate value seen
-  std::optional<double> avg_rate;  ///< Computed average of rate values
+  astl::compat::optional<double> min_rate;  ///< Minimum rate value seen
+  astl::compat::optional<double> max_rate;  ///< Maximum rate value seen
+  astl::compat::optional<double> avg_rate;  ///< Computed average of rate values
 };
 
 /**
@@ -111,8 +110,8 @@ class RateMetric : public DeltaMetric {
    * @param time_interval The time interval between samples in microseconds.
    * @return Expected rate value or error code.
    */
-  static std::expected<AstlValue, astl_status_code> CalculateRate(const AstlValue          &delta_value,
-                                                                  std::chrono::microseconds time_interval);
+  static astl::compat::expected<AstlValue, astl_status_code> CalculateRate(const AstlValue          &delta_value,
+                                                                           std::chrono::microseconds time_interval);
 
   /**
    * @brief Update rate statistics with a new rate value.

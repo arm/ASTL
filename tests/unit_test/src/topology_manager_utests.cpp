@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <expected>
 #include <string_view>
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "config/astl_configuration.hpp"
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/targets.pb.h"
@@ -39,26 +39,26 @@ void WriteTextFile(const fs::path& path, std::string_view contents) {
 }
 
 struct ScriptedScmiFileInterface {
-  fs::path                                                          base_path;
-  std::expected<bool, astl_status_code>                             is_valid_result{true};
-  std::expected<bool, astl_status_code>                             has_read_permission_result{true};
-  astl_status_code                                                  read_status{ASTL_STATUS_SUCCESS};
-  std::string                                                       read_content{"CAFEBABECAFEBABECAFEBABEBEEF0000"};
-  std::expected<std::vector<fs::directory_entry>, astl_status_code> subdirectories_result{
+  fs::path                                       base_path;
+  astl::compat::expected<bool, astl_status_code> is_valid_result{true};
+  astl::compat::expected<bool, astl_status_code> has_read_permission_result{true};
+  astl_status_code                               read_status{ASTL_STATUS_SUCCESS};
+  std::string                                    read_content{"CAFEBABECAFEBABECAFEBABEBEEF0000"};
+  astl::compat::expected<std::vector<fs::directory_entry>, astl_status_code> subdirectories_result{
       std::vector<fs::directory_entry>{}};
 
   auto GetBasePath() const -> const fs::path& { return base_path; }
-  auto IsValid(const fs::path& /*path*/) const noexcept -> std::expected<bool, astl_status_code> {
+  auto IsValid(const fs::path& /*path*/) const noexcept -> astl::compat::expected<bool, astl_status_code> {
     return is_valid_result;
   }
-  auto HasReadPermission(const fs::path& /*path*/) const noexcept -> std::expected<bool, astl_status_code> {
+  auto HasReadPermission(const fs::path& /*path*/) const noexcept -> astl::compat::expected<bool, astl_status_code> {
     return has_read_permission_result;
   }
   auto Read(const fs::path& /*path*/, std::string& output) const -> astl_status_code {
     output = read_content;
     return read_status;
   }
-  auto GetSubdirectories() const -> std::expected<std::vector<fs::directory_entry>, astl_status_code> {
+  auto GetSubdirectories() const -> astl::compat::expected<std::vector<fs::directory_entry>, astl_status_code> {
     return subdirectories_result;
   }
 };
@@ -128,7 +128,7 @@ TEST_CASE("Topology::ScmiPlugin handles sysfs target metadata failures", "[Topol
 
   SECTION("validity check error is returned") {
     ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
-    file_interface.is_valid_result = std::unexpected(ASTL_STATUS_FILE_ERROR);
+    file_interface.is_valid_result = astl::compat::unexpected(ASTL_STATUS_FILE_ERROR);
 
     auto target = astl::ScmiTopologyPlugin::detail::DetectTarget(file_interface, "tlm-0");
 
@@ -148,7 +148,7 @@ TEST_CASE("Topology::ScmiPlugin handles sysfs target metadata failures", "[Topol
 
   SECTION("permission check error is returned") {
     ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
-    file_interface.has_read_permission_result = std::unexpected(ASTL_STATUS_FILE_ERROR);
+    file_interface.has_read_permission_result = astl::compat::unexpected(ASTL_STATUS_FILE_ERROR);
 
     auto target = astl::ScmiTopologyPlugin::detail::DetectTarget(file_interface, "tlm-0");
 
@@ -191,7 +191,7 @@ TEST_CASE("Topology::ScmiPlugin handles sysfs root listing outcomes", "[Topology
 
   SECTION("root validity check error is returned") {
     ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
-    file_interface.is_valid_result = std::unexpected(ASTL_STATUS_FILE_ERROR);
+    file_interface.is_valid_result = astl::compat::unexpected(ASTL_STATUS_FILE_ERROR);
 
     auto directories = astl::ScmiTopologyPlugin::detail::ListSortedTelemetryDirectories(file_interface);
 
@@ -211,7 +211,7 @@ TEST_CASE("Topology::ScmiPlugin handles sysfs root listing outcomes", "[Topology
 
   SECTION("child listing failure returns an empty list") {
     ScriptedScmiFileInterface file_interface{.base_path = scmi_sysfs_path};
-    file_interface.subdirectories_result = std::unexpected(ASTL_STATUS_FILE_ERROR);
+    file_interface.subdirectories_result = astl::compat::unexpected(ASTL_STATUS_FILE_ERROR);
 
     auto directories = astl::ScmiTopologyPlugin::detail::ListSortedTelemetryDirectories(file_interface);
 
@@ -310,7 +310,7 @@ TEST_CASE("TopologyBuilder::BuildTopologyManager rejects load_file_path without 
   auto configuration           = configuration_result.value();
   configuration.load_file_path = "/tmp/unit_test_session.astl";
 
-  auto result = astl::BuildTopologyManager(configuration, std::nullopt);
+  auto result = astl::BuildTopologyManager(configuration, astl::compat::nullopt);
 
   REQUIRE_FALSE(result.has_value());
   REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
@@ -322,7 +322,7 @@ TEST_CASE("TopologyBuilder::BuildTopologyManager honors disabled collectors", "[
   auto configuration       = configuration_result.value();
   configuration.collectors = astl::CollectorSelection{std::vector<astl::CollectorType>{}};
 
-  auto result = astl::BuildTopologyManager(configuration, std::nullopt);
+  auto result = astl::BuildTopologyManager(configuration, astl::compat::nullopt);
 
   REQUIRE(result.has_value());
   REQUIRE(result.value()->GetTargets().empty());

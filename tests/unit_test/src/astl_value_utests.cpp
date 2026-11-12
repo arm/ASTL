@@ -5,9 +5,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <format>
-#include <optional>
 
 #include "../../test_includes.hpp"  // include before catch2
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
 #include "common/astl_value.hpp"
 
@@ -20,7 +20,7 @@ TEST_CASE("AstlValue as u8", "[AstlValue]") {
 
   SECTION("std::max works", "[AstlValue]") {
     REQUIRE(std::max(one, val) == val);
-    REQUIRE(std::max(std::optional<astl::AstlValue>{one}, std::optional<astl::AstlValue>{}) == one);
+    REQUIRE(std::max(astl::compat::optional<astl::AstlValue>{one}, astl::compat::optional<astl::AstlValue>{}) == one);
     astl::AstlValue max_u8 = astl::AstlValue::FromMaximum(ASTL_VALUE_UINT8).value();
     REQUIRE(std::max(max_u8, one) == max_u8);
     REQUIRE(max_u8 == max_val);
@@ -102,7 +102,7 @@ TEST_CASE("AstlValue as ui64", "[AstlValue]") {
 
   SECTION("std::max works", "[AstlValue]") {
     REQUIRE(std::max(one, val) == val);
-    REQUIRE(std::max(std::optional<astl::AstlValue>{one}, std::optional<astl::AstlValue>{}) == one);
+    REQUIRE(std::max(astl::compat::optional<astl::AstlValue>{one}, astl::compat::optional<astl::AstlValue>{}) == one);
   }
 
   SECTION("std::min works", "[AstlValue]") {

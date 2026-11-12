@@ -12,6 +12,7 @@
 #include <unordered_set>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
 #include "collector/collection_operations.hpp"
 #include "common/astl_defines.hpp"
@@ -216,7 +217,7 @@ auto FindSoleMetricOnTarget(const std::vector<std::unique_ptr<MetricHandle>>& me
 }
 
 auto BuildTargetedReplayInput(const TargetedReplayContext& context, std::span<const RawSampledData> samples)
-    -> std::expected<TargetedReplayInput, astl_status_code> {
+    -> astl::compat::expected<TargetedReplayInput, astl_status_code> {
   TargetedReplayInput input;
   auto&               target_routes = input.routes[context.target];
   if (const auto routes = context.routes->find(context.target); routes != context.routes->end()) {
@@ -231,7 +232,7 @@ auto BuildTargetedReplayInput(const TargetedReplayContext& context, std::span<co
   } else {
     const auto [registered_metric, registered_count] = FindSoleMetricOnTarget(*context.metric_handles, context.target);
     if (registered_count != 1 || registered_metric != context.metric) {
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     for (const auto& sample : samples) {
       if (!sample.IsPauseResumeMarker()) {
@@ -291,20 +292,20 @@ auto MetricManager::DispatchProcessingQueue(ProcessingQueue& processing_queue) -
  * @brief Helper to look up an ICounter handle representing a counter for a specific target from a metric API handle
  */
 auto MetricManager::GetCounterOnTarget(astl_counter_handle_t counter_handle, const ITarget* target) const
-    -> std::expected<IMetric*, astl_status_code> {
+    -> astl::compat::expected<IMetric*, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
   const auto*                 counter_details = static_cast<const CounterHandle*>(counter_handle);
   if (const auto index = std::ranges::find_if(
           _counter_handles, [counter_handle](const auto& handle) { return handle.get() == counter_handle; });
       index == _counter_handles.end()) {
     ASTL_LOG_ERROR("GetCounterOnTarget: Invalid counter handle {}", counter_handle);
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
   auto target_iter = counter_details->target_to_counter_map.find(target);
   if (target_iter == counter_details->target_to_counter_map.end()) {
     ASTL_LOG_ERROR("GetCounterOnTarget: Target '{:#010x}' not found for counter handle '{:#010x}'",
                    reinterpret_cast<intptr_t>(target), reinterpret_cast<intptr_t>(counter_handle));
-    return std::unexpected{ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET};
+    return astl::compat::unexpected{ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET};
   }
   return target_iter->second.get();
 }
@@ -374,7 +375,7 @@ auto MetricManager::GetNumAvailableCounters(const ITarget* target) const -> size
  * @return A span<astl_counter_handle_t> containing all registered counters, or an error.
  */
 auto MetricManager::GetAvailableCounters(const ITarget* target) const
-    -> std::expected<std::span<const astl_counter_handle_t>, astl_status_code> {
+    -> astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
   const auto                  target_iter = _target_to_counters_map.find(target);
   if (target_iter == _target_to_counters_map.end()) {
@@ -382,7 +383,8 @@ auto MetricManager::GetAvailableCounters(const ITarget* target) const
     return std::span<const astl_counter_handle_t>{};
   }
   std::span<const astl_counter_handle_t> handles_span(target_iter->second);
-  return std::expected<std::span<const astl_metric_handle_t>, astl_status_code>(std::in_place, handles_span);
+  return astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>(astl::compat::in_place,
+                                                                                         handles_span);
 }
 
 /**
@@ -424,7 +426,7 @@ auto MetricManager::GetCounterProperties(astl_counter_handle_t counter, astl_cou
  *         OR a status code indicating the nature of an error
  */
 auto MetricManager::GetCounterRequiredOperations(std::span<const astl_counter_handle_t> counters, const ITarget* target)
-    -> std::expected<CollectionOperations, astl_status_code> {
+    -> astl::compat::expected<CollectionOperations, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
   /**
    * This method performs the following steps for each given counter:
@@ -439,15 +441,15 @@ auto MetricManager::GetCounterRequiredOperations(std::span<const astl_counter_ha
 
   if (target == nullptr) {
     ASTL_LOG_ERROR("GetCounterRequiredOperations: target is null");
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
   // Reject empty requests up front instead of falling through to collector_type.value() below.
   if (counters.empty()) {
     ASTL_LOG_ERROR("GetCounterRequiredOperations: no counters requested");
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
 
-  std::optional<CollectorType> collector_type;
+  astl::compat::optional<CollectorType> collector_type;
 
   for (const auto* counter_api_handle : counters) {
     const auto* counter_handle = static_cast<const CounterHandle*>(counter_api_handle);
@@ -456,24 +458,24 @@ auto MetricManager::GetCounterRequiredOperations(std::span<const astl_counter_ha
             _counter_handles, [counter_handle](const auto& counter) { return counter.get() == counter_handle; });
         iter == _counter_handles.end()) {
       ASTL_LOG_ERROR("GetCounterRequiredOperations: Counter handle {} not registered", config->Name());
-      return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+      return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
     }
 
     if (collector_type.has_value() && collector_type != config->GetCollectorType()) {
       ASTL_LOG_ERROR("GetCounterRequiredOperations: Mixed collector types in requested counters not supported");
-      return std::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
+      return astl::compat::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
     }
     collector_type = config->GetCollectorType();
 
     if (!IsCollectorTypeSupported(collector_type.value())) {
-      return std::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
+      return astl::compat::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
     }
 
     auto counter_iter = counter_handle->target_to_counter_map.find(target);
     if (counter_iter == counter_handle->target_to_counter_map.end()) {
       ASTL_LOG_ERROR("GetCounterRequiredOperations: Failed to get counter {} on target {}", config->Name(),
                      target->Name());
-      return std::unexpected{ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET};
+      return astl::compat::unexpected{ASTL_STATUS_COUNTER_NOT_SUPPORTED_ON_TARGET};
     }
     auto* counter = counter_iter->second.get();
 
@@ -481,7 +483,7 @@ auto MetricManager::GetCounterRequiredOperations(std::span<const astl_counter_ha
     if (!operations_result.has_value()) {
       ASTL_LOG_ERROR("GetCounterRequiredOperations: Failed to get operations for residency counter '{}'",
                      config->Name());
-      return std::unexpected{operations_result.error()};
+      return astl::compat::unexpected{operations_result.error()};
     }
     auto counter_operations = std::move(operations_result.value());
     for (auto& operation : counter_operations) {
@@ -522,18 +524,18 @@ auto MetricManager::SinkProcessedSamples(const IMetric* metric, std::span<const 
  */
 auto CreateResidencyMetricFromConfig(const MetricConfig* metric_config, const ITarget* target,
                                      IProcessedSampleSink* sink)
-    -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<IMetric>, astl_status_code> {
   const auto& metric_name = metric_config->Name();
   ASTL_LOG_INFO("CreateMetricFromConfig: Creating ResidencyMetric '{}'", metric_name);
 
   const auto* residency_config = dynamic_cast<const ResidencyMetricConfig*>(metric_config);
   if (!residency_config) {
     ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to ResidencyMetricConfig for metric '{}'", metric_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   if (residency_config->GetStateInfo().empty()) {
     ASTL_LOG_ERROR("CreateMetricFromConfig: No state info found in ResidencyMetricConfig for metric '{}'", metric_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   std::vector<ResidencyMetricConfig::StateInfo> state_configs;
@@ -548,34 +550,34 @@ auto CreateResidencyMetricFromConfig(const MetricConfig* metric_config, const IT
 
 auto CreateFiniteSetMetricFromConfig(const MetricConfig* metric_config, const ITarget* target,
                                      IProcessedSampleSink* sink)
-    -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<IMetric>, astl_status_code> {
   const auto& metric_name = metric_config->Name();
   ASTL_LOG_INFO("CreateMetricFromConfig: Creating FiniteSetMetric '{}'", metric_name);
 
   const auto* finite_set_config = dynamic_cast<const FiniteSetMetricConfig*>(metric_config);
   if (!finite_set_config) {
     ASTL_LOG_ERROR("CreateMetricFromConfig: Failed to cast to FiniteSetMetricConfig for metric '{}'", metric_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return std::make_unique<FiniteSetMetric>(finite_set_config, target, sink);
 }
 
 auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* target, IProcessedSampleSink* sink)
-    -> std::expected<std::unique_ptr<IMetric>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<IMetric>, astl_status_code> {
   if (!target) {
     ASTL_LOG_ERROR("CreateMetricFromConfig: Invalid target");
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
 
   if (!metric_config) {
     ASTL_LOG_ERROR("CreateMetricFromConfig: Invalid metric config");
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   const auto  metric_type = metric_config->MetricType();
   const auto& metric_name = metric_config->Name();
 
-  std::expected<std::unique_ptr<IMetric>, astl_status_code> metric_or_error =
-      std::unexpected(astl::kInternalNotImplemented);
+  astl::compat::expected<std::unique_ptr<IMetric>, astl_status_code> metric_or_error =
+      astl::compat::unexpected(astl::kInternalNotImplemented);
   if (const auto* procfs_composite_config = dynamic_cast<const ProcfsCompositeMetricConfig*>(metric_config)) {
     ASTL_LOG_INFO("CreateMetricFromConfig: Creating ProcfsCompositeMetric '{}'", metric_name);
     metric_or_error = std::make_unique<ProcfsCompositeMetric>(procfs_composite_config, target, sink);
@@ -605,7 +607,7 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
           metric_or_error = std::make_unique<EventMetric>(event_config, target, sink);
         } else {
           ASTL_LOG_ERROR("CreateMetricFromConfig: Event metric '{}' does not use EventMetricConfig", metric_name);
-          metric_or_error = std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+          metric_or_error = astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
         }
         break;
       // handle additional MetricType cases here
@@ -621,11 +623,11 @@ auto CreateMetricFromConfig(const MetricConfig* metric_config, const ITarget* ta
  * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
  */
 auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target) const
-    -> std::expected<IMetric*, astl_status_code> {
+    -> astl::compat::expected<IMetric*, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
   if (!metric_handle) {
     ASTL_LOG_ERROR("GetMetricOnTarget: Invalid metric handle {}", metric_handle);
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
 
   const auto* metric_details = static_cast<const MetricHandle*>(metric_handle);
@@ -633,18 +635,18 @@ auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const 
                                        [metric_details](const auto& handle) { return handle.get() == metric_details; });
       iter == _metric_handles.end()) {
     ASTL_LOG_ERROR("GetMetricOnTarget: Metric handle {} is not registered", metric_handle);
-    return std::unexpected{ASTL_STATUS_INVALID_METRIC_HANDLE};
+    return astl::compat::unexpected{ASTL_STATUS_INVALID_METRIC_HANDLE};
   }
 
   auto target_iter = metric_details->target_to_metric_map.find(target);
   if (target_iter == metric_details->target_to_metric_map.end()) {
     ASTL_LOG_DEBUG("GetMetricOnTarget: Target '{}' not found for metric handle {}", target->Name(), metric_handle);
-    return std::unexpected{ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET};
+    return astl::compat::unexpected{ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET};
   }
   if (!target_iter->second) {
     ASTL_LOG_ERROR("GetMetricOnTarget: No metric found for target '{}' and metric handle {}", target->Name(),
                    metric_details->config->Name());
-    return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+    return astl::compat::unexpected{ASTL_STATUS_INTERNAL_ERROR};
   }
   return target_iter->second.get();
 }
@@ -745,7 +747,7 @@ auto MetricManager::GetNumAvailableMetrics(const ITarget* target) const -> size_
 }
 
 auto MetricManager::GetAvailableMetrics(const ITarget* target) const
-    -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> {
+    -> astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
   const auto                  target_iter = _target_to_metrics_map.find(target);
   if (target_iter == _target_to_metrics_map.end()) {
@@ -753,7 +755,8 @@ auto MetricManager::GetAvailableMetrics(const ITarget* target) const
     return std::span<const astl_metric_handle_t>{};
   }
   std::span<const astl_metric_handle_t> handles_span(target_iter->second);
-  return std::expected<std::span<const astl_metric_handle_t>, astl_status_code>(std::in_place, handles_span);
+  return astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>(astl::compat::in_place,
+                                                                                         handles_span);
 }
 
 /**
@@ -786,7 +789,7 @@ auto MetricManager::GetProperties(astl_metric_handle_t metric, astl_metric_props
 }
 
 auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> metrics, const ITarget* target)
-    -> std::expected<CollectionOperations, astl_status_code> {
+    -> astl::compat::expected<CollectionOperations, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
   /**
    * This method performs the following steps for each given metric:
@@ -801,15 +804,15 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
 
   if (target == nullptr) {
     ASTL_LOG_ERROR("GetRequiredOperations: target is null");
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
   // Reject empty requests up front instead of falling through to collector_type.value() below.
   if (metrics.empty()) {
     ASTL_LOG_ERROR("GetRequiredOperations: no metrics requested");
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
 
-  std::optional<CollectorType> collector_type;
+  astl::compat::optional<CollectorType> collector_type;
 
   for (const auto* metric_api_handle : metrics) {
     const auto* metric_handle = static_cast<const MetricHandle*>(metric_api_handle);
@@ -817,25 +820,25 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
                                          [metric_handle](const auto& handle) { return handle.get() == metric_handle; });
         iter == _metric_handles.end()) {
       ASTL_LOG_ERROR("GetRequiredOperations: Metric '{}' not registered", metric_api_handle);
-      return std::unexpected{ASTL_STATUS_INVALID_METRIC_HANDLE};
+      return astl::compat::unexpected{ASTL_STATUS_INVALID_METRIC_HANDLE};
     }
 
     const auto& config = metric_handle->config;
 
     if (collector_type.has_value() && collector_type != config->GetCollectorType()) {
       ASTL_LOG_ERROR("GetRequiredOperations: Mixed collector types in requested metrics not supported");
-      return std::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
+      return astl::compat::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
     }
     collector_type = config->GetCollectorType();
 
     if (!IsCollectorTypeSupported(config->GetCollectorType())) {
-      return std::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
+      return astl::compat::unexpected{ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE};
     }
 
     auto metric_iter = metric_handle->target_to_metric_map.find(target);
     if (metric_iter == metric_handle->target_to_metric_map.end() || !metric_iter->second) {
       ASTL_LOG_ERROR("GetRequiredOperations: Failed to get metric {} on target {}", config->Name(), target->Name());
-      return std::unexpected{ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET};
+      return astl::compat::unexpected{ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET};
     }
     IMetric* metric = metric_iter->second.get();
 
@@ -846,7 +849,7 @@ auto MetricManager::GetRequiredOperations(std::span<const astl_metric_handle_t> 
     auto operations_result = metric->GetOperations();
     if (!operations_result.has_value()) {
       ASTL_LOG_ERROR("GetRequiredOperations: Failed to get operations for residency metric '{}'", config->Name());
-      return std::unexpected{operations_result.error()};
+      return astl::compat::unexpected{operations_result.error()};
     }
     auto metric_operations = std::move(operations_result.value());
     for (auto& operation : metric_operations) {
@@ -1083,11 +1086,11 @@ auto MetricManager::GetMetricGroups() const -> std::span<const astl_metric_group
 }
 
 auto MetricManager::GetMetricGroups(const ITarget* target) const
-    -> std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> {
+    -> astl::compat::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
   if (target == nullptr) {
     ASTL_LOG_ERROR("GetMetricGroups: target is null");
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
   if (_target_to_metric_groups_map.empty()) {
     ASTL_LOG_WARNING("GetMetricGroups: No metric groups registered in manager");
@@ -1099,7 +1102,8 @@ auto MetricManager::GetMetricGroups(const ITarget* target) const
     return std::span<const astl_metric_group_handle_t>{};
   }
   std::span<const astl_metric_group_handle_t> handles_span(target_iter->second);
-  return std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code>(std::in_place, handles_span);
+  return astl::compat::expected<std::span<const astl_metric_group_handle_t>, astl_status_code>(astl::compat::in_place,
+                                                                                               handles_span);
 }
 
 auto MetricManager::GetMetricGroupProperties(astl_metric_group_handle_t group,
@@ -1121,15 +1125,15 @@ auto MetricManager::GetMetricGroupProperties(astl_metric_group_handle_t group,
  * @brief Retrieve the metric handles associated with a given metric group instance
  */
 auto MetricManager::GetMetricsInGroup(astl_metric_group_handle_t group) const
-    -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> {
+    -> astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
   if (group == nullptr) {
     ASTL_LOG_ERROR("GetMetricsInGroup: Invalid metric group handle {}", group);
-    return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
   }
   if (std::ranges::find(_metric_group_api_handles, group) == _metric_group_api_handles.end()) {
     ASTL_LOG_ERROR("GetMetricsInGroup: Unknown metric group handle {}", group);
-    return std::unexpected{ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE};
+    return astl::compat::unexpected{ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE};
   }
   const MetricGroup* metric_group = MetricGroup::FromApiHandle(group);
   return std::span<const astl_metric_handle_t>{metric_group->metrics};
@@ -1307,7 +1311,8 @@ auto MetricManager::AddMetricGroupToTargets(astl_metric_group_handle_t         g
   return ASTL_STATUS_SUCCESS;
 }
 
-auto MetricManager::GetTargetForMetric(const IMetric* metric) const -> std::expected<const ITarget*, astl_status_code> {
+auto MetricManager::GetTargetForMetric(const IMetric* metric) const
+    -> astl::compat::expected<const ITarget*, astl_status_code> {
   std::lock_guard<std::mutex> lock(_mutex);
   for (const auto& metric_details : _metric_handles) {
     for (const auto& [target, metric_instance] : metric_details->target_to_metric_map) {
@@ -1317,7 +1322,7 @@ auto MetricManager::GetTargetForMetric(const IMetric* metric) const -> std::expe
     }
   }
   ASTL_LOG_ERROR("GetTargetForMetric: Metric instance not found in any registered metrics.");
-  return std::unexpected{ASTL_STATUS_BAD_ARGUMENT};
+  return astl::compat::unexpected{ASTL_STATUS_BAD_ARGUMENT};
 }
 
 auto MetricManager::SinkProcessedSamples(const ITarget* target, const IMetric* metric,

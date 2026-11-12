@@ -5,12 +5,12 @@
 #ifndef ARCHIVE_UTILS_HPP_
 #define ARCHIVE_UTILS_HPP_
 
-#include <expected>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 
 namespace astl::mz {
 namespace fs = std::filesystem;
@@ -32,7 +32,7 @@ auto UnzipDirectory(const fs::path& zip_path, const fs::path& dst_dir) -> astl_s
 /*
  * @Brief Lists all entries in the specified zip file.
  */
-auto ListEntries(const fs::path& zip_path) -> std::expected<std::vector<std::string>, astl_status_code>;
+auto ListEntries(const fs::path& zip_path) -> astl::compat::expected<std::vector<std::string>, astl_status_code>;
 
 }  // namespace astl::mz
 

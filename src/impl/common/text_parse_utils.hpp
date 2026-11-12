@@ -7,17 +7,17 @@
 
 #include <charconv>
 #include <cstdint>
-#include <optional>
 #include <string_view>
 
+#include "astl_cxx_compat.hpp"
 #include "procfs/procfs_utils.hpp"
 
 namespace astl::text {
 
-inline auto ParseUint64(std::string_view text) -> std::optional<uint64_t> {
+inline auto ParseUint64(std::string_view text) -> astl::compat::optional<uint64_t> {
   const auto trimmed = procfs::Trim(text);
   if (trimmed.empty()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   uint64_t    value{0};
@@ -25,15 +25,15 @@ inline auto ParseUint64(std::string_view text) -> std::optional<uint64_t> {
   const auto* last   = trimmed.data() + trimmed.size();
   const auto  result = std::from_chars(first, last, value);
   if (result.ec != std::errc{} || result.ptr != last) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return value;
 }
 
-inline auto ParseLeadingUint64(std::string_view text) -> std::optional<uint64_t> {
+inline auto ParseLeadingUint64(std::string_view text) -> astl::compat::optional<uint64_t> {
   const auto trimmed = procfs::Trim(text);
   if (trimmed.empty()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   const auto end = trimmed.find_first_of(" \t\n\r");

@@ -5,10 +5,10 @@
 #ifndef METRIC_BUILDER_HPP_
 #define METRIC_BUILDER_HPP_
 
-#include <expected>
 #include <memory>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_backend.hpp"
 #include "config/astl_configuration.hpp"
 #include "metric/i_metric_manager.hpp"
@@ -17,11 +17,11 @@ namespace astl {
 
 /** @brief Builds a metric manager from the given set of targets and the configuration
  */
-[[nodiscard]] auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets,
-                                      const AstlConfiguration&                     configuration,
-                                      std::optional<std::filesystem::path>         cache_dir_path,
+[[nodiscard]] auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>&  targets,
+                                      const AstlConfiguration&                      configuration,
+                                      astl::compat::optional<std::filesystem::path> cache_dir_path,
                                       CollectorBackends backends = BuiltinCollectorBackends())
-    -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code>;
+    -> astl::compat::expected<std::unique_ptr<IMetricManager>, astl_status_code>;
 
 }  // namespace astl
 

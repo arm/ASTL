@@ -7,6 +7,7 @@
 
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_backend.hpp"
 #include "collector/collector_builder.hpp"
 #include "metric/metric_builder.hpp"
@@ -183,12 +184,12 @@ TEST_CASE("NUMA backend integrates with common builders and platform selection",
 #endif
   REQUIRE(config);
   CHECK(config->numa_root_path == fixture.root);
-  auto topology = astl::BuildTopologyManager(*config, std::nullopt);
+  auto topology = astl::BuildTopologyManager(*config, astl::compat::nullopt);
   REQUIRE(topology);
 #if defined(ASTL_INCLUDE_NUMA)
   const auto& targets = (*topology)->GetTargets();
   REQUIRE(targets.size() == 1);
-  auto metrics = astl::BuildMetricManager(targets, *config, std::nullopt);
+  auto metrics = astl::BuildMetricManager(targets, *config, astl::compat::nullopt);
   REQUIRE(metrics);
   auto available = (*metrics)->GetAvailableMetrics(targets[0].get());
   REQUIRE(available);

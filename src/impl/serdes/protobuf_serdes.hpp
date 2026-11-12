@@ -23,13 +23,13 @@
 #ifndef ASTL_PROTOBUF_SERDES_HPP_
 #define ASTL_PROTOBUF_SERDES_HPP_
 
-#include <expected>
 #include <filesystem>
 #include <iosfwd>
 #include <memory>
 #include <type_traits>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "i_raw_sample_sink.hpp"
 #include "topology/i_topology_manager.hpp"
 
@@ -70,7 +70,7 @@ class RawSampleBatchReader {
   RawSampleBatchReader(const RawSampleBatchReader&)                    = delete;
   auto operator=(const RawSampleBatchReader&) -> RawSampleBatchReader& = delete;
 
-  auto ReadNext() -> std::expected<std::vector<RawSampledData>, astl_status_code>;
+  auto ReadNext() -> astl::compat::expected<std::vector<RawSampledData>, astl_status_code>;
 
  private:
   class Impl;
@@ -91,7 +91,7 @@ class RawSampleBatchReader {
  *
  * @tparam T The output type. Must satisfy `Deserializable`.
  * @param[in] input_stream Stream containing protobuf-encoded data.
- * @return std::expected<T, astl_status_code>
+ * @return astl::compat::expected<T, astl_status_code>
  *         Returns the decoded payload on success, or an error code on failure.
  */
 namespace detail {
@@ -120,11 +120,11 @@ concept Deserializable =
     (StdVector<T> && StdUniquePtr<typename T::value_type> && DeserializableBase<typename T::value_type::element_type>);
 
 template <Deserializable T>
-auto Deserialize(std::istream& input_stream) -> std::expected<T, astl_status_code>;
+auto Deserialize(std::istream& input_stream) -> astl::compat::expected<T, astl_status_code>;
 
 template <Deserializable T>
 auto Deserialize(std::istream&, const std::vector<std::unique_ptr<ITarget>>& targets)
-    -> std::expected<T, astl_status_code>;
+    -> astl::compat::expected<T, astl_status_code>;
 /**
  * @brief Serializes the current batch of samples to a file on disk.
  *

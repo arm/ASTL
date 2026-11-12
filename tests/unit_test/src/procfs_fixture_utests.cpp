@@ -14,6 +14,7 @@
 #include "../../../fuzz/fixtures/minimal_procfs_fixture.hpp"
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "astl_utils.hpp"
 #include "collector/collector_builder.hpp"
 #include "common/i_raw_sample_sink.hpp"
@@ -99,7 +100,7 @@ TEST_CASE("Configured procfs root is retained by discovered targets", "[procfs_f
   REQUIRE(target != nullptr);
   REQUIRE(target->ProcfsRootPath() == root);
 
-  auto metric_manager = astl::BuildMetricManager(*targets, *configuration, std::nullopt);
+  auto metric_manager = astl::BuildMetricManager(*targets, *configuration, astl::compat::nullopt);
   REQUIRE(metric_manager.has_value());
   auto counters = (*metric_manager)->GetAvailableCounters(target);
   REQUIRE(counters.has_value());

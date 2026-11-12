@@ -13,6 +13,7 @@
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
 #include "astl/astl_test_hooks.h"
+#include "astl_cxx_compat.hpp"
 #include "common/metric_config.hpp"
 #include "metric/counter.hpp"
 #include "metric/metric_manager.hpp"
@@ -267,7 +268,7 @@ TEST_CASE("astlGetMetricGroupMetrics APIs", "[MetricGroups][wrapper]") {
   ALLOW_CALL(*metric_manager, GetMetricsInGroup(group0_handle)).RETURN(available_metrics_span);
   ALLOW_CALL(*metric_manager, GetMetricsInGroup(group1_handle)).RETURN(group1_metrics_span);
   ALLOW_CALL(*metric_manager, GetMetricsInGroup(wrong_type_group_handle))
-      .RETURN(std::unexpected(ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE));
+      .RETURN(astl::compat::unexpected(ASTL_STATUS_INVALID_METRIC_GROUP_HANDLE));
   ALLOW_CALL(*metric_manager, GetMetricOnTarget(mock_metric_ptr, mock_target_raw)).RETURN(mock_metric_ptr);
   ALLOW_CALL(*metric_manager, GetMetricGroupProperties(_, _))
       .SIDE_EFFECT({
@@ -840,9 +841,9 @@ TEST_CASE("astlGetMetricGroupMetricsOnTarget filters group members to the reques
   ALLOW_CALL(*metric_manager_raw, GetMetricsInGroup(group_raw->ToApiHandle())).RETURN(group_metrics_span);
   ALLOW_CALL(*metric_manager_raw, GetMetricOnTarget(metric0_raw, target0_raw)).RETURN(metric0_raw);
   ALLOW_CALL(*metric_manager_raw, GetMetricOnTarget(metric1_raw, target0_raw))
-      .RETURN(std::unexpected(ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET));
+      .RETURN(astl::compat::unexpected(ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET));
   ALLOW_CALL(*metric_manager_raw, GetMetricOnTarget(metric0_raw, target1_raw))
-      .RETURN(std::unexpected(ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET));
+      .RETURN(astl::compat::unexpected(ASTL_STATUS_METRIC_NOT_SUPPORTED_ON_TARGET));
   ALLOW_CALL(*metric_manager_raw, GetMetricOnTarget(metric1_raw, target1_raw)).RETURN(metric1_raw);
   ALLOW_CALL(*metric_manager_raw, GetMetricGroupProperties(_, _))
       .SIDE_EFFECT({

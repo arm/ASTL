@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cstdint>
-#include <expected>
 
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"

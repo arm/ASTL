@@ -5,7 +5,6 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
-#include <nlohmann/json.hpp>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -14,6 +13,8 @@
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
 #include "astl/astl_telemetry.h"
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "common/capabilities.hpp"
 #include "config/astl_configuration.hpp"
 #include "metric/i_metric_manager.hpp"
@@ -268,7 +269,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager with empty targets", "[MetricBuilde
   REQUIRE(configuration_result.has_value());
   auto configuration = configuration_result.value();
 
-  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  auto result = astl::BuildMetricManager(targets, configuration, astl::compat::nullopt);
 
   REQUIRE(result.has_value());
   REQUIRE(result.value() != nullptr);
@@ -286,7 +287,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager with unknown collector type", "[Met
 
   auto configuration_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(configuration_result.has_value());
-  auto result = astl::BuildMetricManager(targets, configuration_result.value(), std::nullopt);
+  auto result = astl::BuildMetricManager(targets, configuration_result.value(), astl::compat::nullopt);
 
   REQUIRE(result.has_value());
 }
@@ -304,7 +305,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager with SCMI target but no config", "[
   auto create_config_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(create_config_result.has_value());
   auto config = create_config_result.value();
-  auto result = astl::BuildMetricManager(targets, config, std::nullopt);
+  auto result = astl::BuildMetricManager(targets, config, astl::compat::nullopt);
   (void)result;
   // Note this will pass only if publish_data.sh has been run to move config files to the expected location
   // like ./build/debug/lib/data
@@ -328,7 +329,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager with libsensors target", "[MetricBu
   auto create_config_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(create_config_result.has_value());
   auto config = create_config_result.value();
-  auto result = astl::BuildMetricManager(targets, config, std::nullopt);
+  auto result = astl::BuildMetricManager(targets, config, astl::compat::nullopt);
 
   // MockTarget doesn't implement LibsensorsTarget, so BuildMetricManager should fail right now
   REQUIRE(!result.has_value());
@@ -357,7 +358,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager with mixed collector types", "[Metr
   auto create_config_result = astl::AstlConfiguration::CreateConfiguration();
   REQUIRE(create_config_result.has_value());
   auto config = create_config_result.value();
-  auto result = astl::BuildMetricManager(targets, config, std::nullopt);
+  auto result = astl::BuildMetricManager(targets, config, astl::compat::nullopt);
 
   // MockTarget doesn't implement LibsensorsTarget, so BuildMetricManager should fail right now
   REQUIRE(!result.has_value());
@@ -396,7 +397,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager uses qualified names and JSON descr
   const auto* target_ptr  = scmi_target.get();
   targets.push_back(std::move(scmi_target));
 
-  auto metric_manager_or_error = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  auto metric_manager_or_error = astl::BuildMetricManager(targets, configuration, astl::compat::nullopt);
   REQUIRE(metric_manager_or_error.has_value());
 
   auto& metric_manager    = *metric_manager_or_error.value();
@@ -434,7 +435,7 @@ TEST_CASE("MetricBuilder exposes supported SCMI types but skips Histogram raw co
                                                                "0xCAFEBABECAFEBABECAFEBABEBEEF0000");
   const auto* target      = scmi_target.get();
   targets.push_back(std::move(scmi_target));
-  auto manager_or_error = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  auto manager_or_error = astl::BuildMetricManager(targets, configuration, astl::compat::nullopt);
   REQUIRE(manager_or_error.has_value());
   auto metrics_or_error = manager_or_error.value()->GetAvailableMetrics(target);
   REQUIRE(metrics_or_error.has_value());
@@ -468,7 +469,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager rejects load_file_path without cach
   auto configuration           = configuration_result.value();
   configuration.load_file_path = "/tmp/unit_test_session.astl";
 
-  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  auto result = astl::BuildMetricManager(targets, configuration, astl::compat::nullopt);
 
   REQUIRE_FALSE(result.has_value());
   REQUIRE(result.error() == ASTL_STATUS_BAD_CONFIGURATION);
@@ -548,7 +549,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from tempora
   targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "unit-test target", "tlm-0", nullptr,
                                                        "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
 
-  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  auto result = astl::BuildMetricManager(targets, configuration, astl::compat::nullopt);
 
   REQUIRE(result.has_value());
   REQUIRE(result.value() != nullptr);
@@ -584,7 +585,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager registers SCMI metrics from wide-on
   targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "unit-test target", "tlm-0", nullptr,
                                                        "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
 
-  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  auto result = astl::BuildMetricManager(targets, configuration, astl::compat::nullopt);
 
   REQUIRE(result.has_value());
   REQUIRE(result.value() != nullptr);
@@ -626,7 +627,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager skips SCMI metrics when sysfs DE di
   targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "unit-test target", "tlm-0", nullptr,
                                                        "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
 
-  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  auto result = astl::BuildMetricManager(targets, configuration, astl::compat::nullopt);
 
   REQUIRE(result.has_value());
   REQUIRE(result.value() != nullptr);
@@ -652,7 +653,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager applies SCMI target name template f
   targets.push_back(std::make_unique<astl::ScmiTarget>("scmi_tlm-0", "unit-test target", "tlm-0", nullptr,
                                                        "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
 
-  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  auto result = astl::BuildMetricManager(targets, configuration, astl::compat::nullopt);
 
   REQUIRE(result.has_value());
   REQUIRE(targets[0]->Name() == "tlm-0");
@@ -689,7 +690,7 @@ TEST_CASE("MetricBuilder::BuildMetricManager loads metric group metadata without
   targets.push_back(std::make_unique<astl::ScmiTarget>("tlm-0", "unit-test target", "tlm-0", nullptr,
                                                        "CAFEBABE-CAFE-BABE-CAFE-BABEBEEF0000"));
 
-  auto result = astl::BuildMetricManager(targets, configuration, std::nullopt);
+  auto result = astl::BuildMetricManager(targets, configuration, astl::compat::nullopt);
 
   REQUIRE(result.has_value());
   REQUIRE(result.value() != nullptr);

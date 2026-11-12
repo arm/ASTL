@@ -6,10 +6,10 @@
 #define WINDOWS_PDH_SYSTEM_COLLECTOR_HPP_
 
 #include <mutex>
-#include <optional>
 #include <unordered_map>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
 #include "collector/periodic_sampler.hpp"
@@ -41,7 +41,7 @@ class WindowsPdhSystemCollector : public ICollector {
   auto PauseCollection() -> astl_status_code override;
   auto ResumeCollection() -> astl_status_code override;
   auto StopCollection() -> astl_status_code override;
-  auto GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> override;
+  auto GetNativeClockSnapshot() -> astl::compat::expected<ClockCorrelationMap, astl_status_code> override;
   auto ReadImmediate() -> astl_status_code override;
 
  private:
@@ -53,13 +53,13 @@ class WindowsPdhSystemCollector : public ICollector {
   auto StartIntervalSampling() -> astl_status_code;
   auto StopIntervalSampling() -> void;
 
-  CollectorCapability                    _collector_capability{CollectorType::WINDOWS_PDH};
-  std::unique_ptr<IWindowsPdhSystemApi>  _api;
-  IRawSampleSink*                        _sample_sink{nullptr};
-  CollectionState                        _collection_state{CollectionState::UNCONFIGURED};
-  std::optional<CollectionConfiguration> _configuration;
-  mutable std::mutex                     _collection_mutex;
-  std::unique_ptr<PeriodicSampler>       _periodic_sampler;
+  CollectorCapability                             _collector_capability{CollectorType::WINDOWS_PDH};
+  std::unique_ptr<IWindowsPdhSystemApi>           _api;
+  IRawSampleSink*                                 _sample_sink{nullptr};
+  CollectionState                                 _collection_state{CollectionState::UNCONFIGURED};
+  astl::compat::optional<CollectionConfiguration> _configuration;
+  mutable std::mutex                              _collection_mutex;
+  std::unique_ptr<PeriodicSampler>                _periodic_sampler;
 };
 
 }  // namespace astl

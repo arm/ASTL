@@ -7,12 +7,12 @@
 
 #include <charconv>
 #include <cstdint>
-#include <expected>
 #include <format>
 #include <string>
 #include <string_view>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "scmi/scmi_constants.hpp"
 #include "scmi/scmi_read_operation.hpp"
 
@@ -24,8 +24,8 @@ namespace astl {
 struct ScmiDataEvent {
  public:
   ScmiDataEvent() = delete;
-  ScmiDataEvent(ScmiDataEventId event_id, bool originally_enabled, std::optional<bool> timestamp_enabled,
-                std::optional<kilohertz> timestamp_rate)
+  ScmiDataEvent(ScmiDataEventId event_id, bool originally_enabled, astl::compat::optional<bool> timestamp_enabled,
+                astl::compat::optional<kilohertz> timestamp_rate)
       : id{event_id},
         originally_enabled{originally_enabled},
         timestamp_enabled{timestamp_enabled},
@@ -34,9 +34,9 @@ struct ScmiDataEvent {
   ScmiDataEventId id;              //<!< The unique identifier for this data event
   bool originally_enabled{false};  //!< Whether this data event was originally enabled before collection started
   //!< Whether this data event has timestamp enabled (or nullopt if no file exists)
-  std::optional<bool> timestamp_enabled;
+  astl::compat::optional<bool> timestamp_enabled;
   // constant value representing the rate at which this DE's timestamp is updated.
-  std::optional<kilohertz> timestamp_rate;
+  astl::compat::optional<kilohertz> timestamp_rate;
 };
 
 /*
@@ -74,7 +74,7 @@ struct ScmiDataEventValue {
    * @param str - a substring of a SCMI DataEvent "value" file represented as a hexadecimal number that fits in 64 bits
    * @return Usually a ScmiDataEventValue with the parsed result. Maybe a ASTL_STATUS_BAD_ARGUMENT on a parse error
    */
-  static std::expected<ScmiDataEventValue, astl_status_code> FromString(std::string_view text) {
+  static astl::compat::expected<ScmiDataEventValue, astl_status_code> FromString(std::string_view text) {
     constexpr int base16 = 16;
 
     decltype(ScmiDataEventValue::value) value{0};
@@ -82,7 +82,7 @@ struct ScmiDataEventValue {
     if (parse_result.ec != std::errc()) {
       ASTL_LOG_ERROR("Failed to parse ScmiDataEventValue from text: {} with error: {}", text,
                      std::make_error_code(parse_result.ec).message());
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);  // Conversion failed
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);  // Conversion failed
     }
     return ScmiDataEventValue(value);
   }

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "astl_cxx_compat.hpp"
 #include "astl_file_interface.hpp"
 #include "collector/collector_backend.hpp"
 #include "scmi/scmi_backend_selection.hpp"
@@ -16,11 +17,11 @@ namespace astl {
 namespace {
 using ScmiSysfsFileCollector = ScmiSysfsCollector<FileInterface>;
 auto BuildScmiCollector(const ITarget& target, const AstlConfiguration& configuration)
-    -> std::expected<std::unique_ptr<ICollector>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<ICollector>, astl_status_code> {
   const auto scmi_target_directory = target.CollectorTargetPath();
   if (!scmi_target_directory.has_value() || scmi_target_directory->empty()) {
     ASTL_LOG_ERROR("BuildCollectorManager: SCMI target '{}' is missing collector path metadata", target.Name());
-    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
 
   const auto backend_preference = GetScmiBackendPreference();
@@ -28,7 +29,7 @@ auto BuildScmiCollector(const ITarget& target, const AstlConfiguration& configur
       configuration.scmi_ioctl_device_root_path, *scmi_target_directory);
   const auto ioctl_available = ScmiPreferenceAllowsIoctl(backend_preference)
                                    ? ScmiIoctlTargetAvailable(ioctl_device_path)
-                                   : std::expected<bool, astl_status_code>{false};
+                                   : astl::compat::expected<bool, astl_status_code>{false};
 
   if ((ioctl_available && *ioctl_available) || backend_preference == ScmiBackendPreference::IOCTL) {
     ASTL_LOG_INFO("BuildCollectorManager: using SCMI ioctl collector for target '{}' at {}", target.Name(),

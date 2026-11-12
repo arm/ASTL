@@ -7,8 +7,8 @@
 
 #include <chrono>
 #include <limits>
-#include <optional>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_wall_clock.hpp"
 #include "common/monotonic_raw_clock.hpp"
 
@@ -25,16 +25,16 @@ struct WallClockCorrelation {
 namespace detail {
 
 inline auto MakeWallClockCorrelation(int64_t before, int64_t realtime, int64_t after)
-    -> std::optional<WallClockCorrelation> {
+    -> astl::compat::optional<WallClockCorrelation> {
   if (after < before || (before < 0 && after > std::numeric_limits<int64_t>::max() + before)) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   const auto elapsed = after - before;
   return WallClockCorrelation{before + (elapsed / 2), realtime, (elapsed / 2) + (elapsed % 2)};
 }
 
 #ifdef __linux__
-inline auto TimespecToNanoseconds(const timespec& time) -> std::optional<int64_t> {
+inline auto TimespecToNanoseconds(const timespec& time) -> astl::compat::optional<int64_t> {
   constexpr int64_t factor           = 1'000'000'000;
   constexpr auto    min              = std::numeric_limits<int64_t>::min();
   constexpr auto    max              = std::numeric_limits<int64_t>::max();
@@ -44,7 +44,7 @@ inline auto TimespecToNanoseconds(const timespec& time) -> std::optional<int64_t
   const auto        nanos            = static_cast<int64_t>(time.tv_nsec);
   if (nanos < 0 || nanos >= factor || seconds < first_second || seconds > max / factor ||
       (seconds == first_second && nanos < first_nanosecond) || (seconds == max / factor && nanos > max % factor)) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   if (seconds == first_second) {
     return min + (nanos - first_nanosecond);
@@ -56,20 +56,20 @@ inline auto TimespecToNanoseconds(const timespec& time) -> std::optional<int64_t
 }  // namespace detail
 
 /** Bracket CLOCK_REALTIME with raw reads; use the midpoint and retain the read uncertainty. */
-inline auto CaptureWallClockCorrelation() -> std::optional<WallClockCorrelation> {
+inline auto CaptureWallClockCorrelation() -> astl::compat::optional<WallClockCorrelation> {
 #ifdef __linux__
   timespec before{};
   timespec wall{};
   timespec after{};
   if (::clock_gettime(CLOCK_MONOTONIC_RAW, &before) != 0 || ::clock_gettime(CLOCK_REALTIME, &wall) != 0 ||
       ::clock_gettime(CLOCK_MONOTONIC_RAW, &after) != 0) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   const auto start    = detail::TimespecToNanoseconds(before);
   const auto end      = detail::TimespecToNanoseconds(after);
   const auto realtime = detail::TimespecToNanoseconds(wall);
   if (!start || !end || !realtime) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return detail::MakeWallClockCorrelation(*start, *realtime, *end);
 #else
@@ -83,7 +83,7 @@ inline auto CaptureWallClockCorrelation() -> std::optional<WallClockCorrelation>
 
 /** Convert a sample using the shared checked nanosecond conversion. */
 inline auto CorrelateWallClock(ProcessedSampleTimestamp timestamp, const WallClockCorrelation& reference)
-    -> std::optional<int64_t> {
+    -> astl::compat::optional<int64_t> {
   return CorrelateWallClockNanoseconds(timestamp.time_since_epoch().count(), reference.raw_ns, reference.realtime_ns);
 }
 

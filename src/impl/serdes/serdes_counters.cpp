@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "common/capabilities.hpp"
 #include "metric/counter.hpp"
@@ -30,20 +31,20 @@ RebuiltCounterHandles::RebuiltCounterHandles(RebuiltCounterHandles&&) noexcept =
 auto RebuiltCounterHandles::operator=(RebuiltCounterHandles&&) noexcept -> RebuiltCounterHandles& = default;
 
 static auto ValidateCounterHandleForSerialization(const CounterHandle& handle, const MetricConfig& cfg)
-    -> std::expected<void, astl_status_code> {
+    -> astl::compat::expected<void, astl_status_code> {
   if (handle.target_to_counter_map.empty()) {
     ASTL_LOG_ERROR("SerializeCounterHandleToRawMetric: handle for counter {} has no targets", cfg.Name());
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
   for (const auto& [target, counter] : handle.target_to_counter_map) {
     if (!target) {
       ASTL_LOG_ERROR("SerializeCounterHandleToRawMetric: null target for counter {}", cfg.Name());
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
     if (!counter) {
       ASTL_LOG_ERROR("SerializeCounterHandleToRawMetric: null counter instance for counter {}", cfg.Name());
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
   }
 
@@ -51,16 +52,16 @@ static auto ValidateCounterHandleForSerialization(const CounterHandle& handle, c
 }
 
 static auto SerializeCounterHandleToRawMetric(const CounterHandle& handle)
-    -> std::expected<astl::protobuf::RawMetric, astl_status_code> {
+    -> astl::compat::expected<astl::protobuf::RawMetric, astl_status_code> {
   if (!handle.config) {
     ASTL_LOG_ERROR("SerializeCounterHandleToRawMetric: CounterHandle has null MetricConfig");
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
   const MetricConfig& cfg               = *handle.config;
   auto                validation_status = ValidateCounterHandleForSerialization(handle, cfg);
   if (!validation_status) {
-    return std::unexpected(validation_status.error());
+    return astl::compat::unexpected(validation_status.error());
   }
 
   astl::protobuf::RawMetric raw;
@@ -69,7 +70,7 @@ static auto SerializeCounterHandleToRawMetric(const CounterHandle& handle)
   auto cfg_or_err = SerializeBasicMetricConfig(cfg);
   if (!cfg_or_err) {
     ASTL_LOG_ERROR("SerializeCounterHandleToRawMetric: failed to serialize config for counter {}", cfg.Name());
-    return std::unexpected(cfg_or_err.error());
+    return astl::compat::unexpected(cfg_or_err.error());
   }
   *raw.mutable_config() = std::move(cfg_or_err.value());
 
@@ -81,18 +82,19 @@ static auto SerializeCounterHandleToRawMetric(const CounterHandle& handle)
 }
 
 auto SerializeCounterHandles(const std::vector<std::unique_ptr<CounterHandle>>& counter_handles,
-                             astl::protobuf::MetricManager& proto_mgr) -> std::expected<void, astl_status_code> {
+                             astl::protobuf::MetricManager&                     proto_mgr)
+    -> astl::compat::expected<void, astl_status_code> {
   auto* counters = proto_mgr.mutable_counters();
 
   for (const auto& handle_ptr : counter_handles) {
     if (!handle_ptr) {
       ASTL_LOG_ERROR("Serialize(MetricManager): null CounterHandle pointer in _counter_handles");
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+      return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     }
 
     auto raw_or_err = SerializeCounterHandleToRawMetric(*handle_ptr);
     if (!raw_or_err) {
-      return std::unexpected(raw_or_err.error());
+      return astl::compat::unexpected(raw_or_err.error());
     }
 
     *counters->add_metrics() = std::move(raw_or_err.value());
@@ -103,11 +105,11 @@ auto SerializeCounterHandles(const std::vector<std::unique_ptr<CounterHandle>>& 
 
 static auto ResolveRawMetricTargets(const astl::protobuf::RawMetric&             raw,
                                     const std::vector<std::unique_ptr<ITarget>>& targets, std::string_view object_kind)
-    -> std::expected<std::vector<const ITarget*>, astl_status_code> {
+    -> astl::compat::expected<std::vector<const ITarget*>, astl_status_code> {
   const auto& target_ids = raw.target_ids();
   if (target_ids.empty()) {
     ASTL_LOG_ERROR("ResolveRawMetricTargets: {} '{}' has zero target_ids", object_kind, raw.metric_id());
-    return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
 
   std::vector<const ITarget*> resolved_targets;
@@ -118,7 +120,7 @@ static auto ResolveRawMetricTargets(const astl::protobuf::RawMetric&            
     if (!seen_target_ids.insert(target_id).second) {
       ASTL_LOG_ERROR("ResolveRawMetricTargets: duplicate target id '{}' for {} '{}'", target_id, object_kind,
                      raw.metric_id());
-      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+      return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
 
     auto it = std::find_if(targets.begin(), targets.end(), [&target_id](const std::unique_ptr<ITarget>& target) {
@@ -127,7 +129,7 @@ static auto ResolveRawMetricTargets(const astl::protobuf::RawMetric&            
     if (it == targets.end()) {
       ASTL_LOG_ERROR("ResolveRawMetricTargets: No target found with id '{}' for {} '{}'", target_id, object_kind,
                      raw.metric_id());
-      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+      return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
 
     resolved_targets.push_back(it->get());
@@ -150,7 +152,7 @@ static auto IsCollectorTypeSupported(const Capabilities& capabilities, Collector
 
 auto RebuildCounterHandles(const astl::protobuf::MetricManager&         proto_manager,
                            const std::vector<std::unique_ptr<ITarget>>& targets, const Capabilities& capabilities)
-    -> std::expected<RebuiltCounterHandles, astl_status_code> {
+    -> astl::compat::expected<RebuiltCounterHandles, astl_status_code> {
   RebuiltCounterHandles           rebuilt_counter_handles{{}, {}};
   std::unordered_set<std::string> seen_counter_ids;
   const auto&                     proto_counters_vec = proto_manager.counters();
@@ -160,22 +162,22 @@ auto RebuildCounterHandles(const astl::protobuf::MetricManager&         proto_ma
     const auto& raw = proto_counters_vec.metrics(i);
     if (!seen_counter_ids.insert(raw.metric_id()).second) {
       ASTL_LOG_ERROR("Deserialize<MetricManager>: duplicate counter metric_id '{}'", raw.metric_id());
-      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+      return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
 
     auto cfg_or_err = DeserializeBasicMetricConfig(raw.config(), raw.metric_id());
     if (!cfg_or_err) {
       ASTL_LOG_ERROR("Deserialize<MetricManager>: failed to deserialize counter config '{}'", raw.metric_id());
-      return std::unexpected(cfg_or_err.error());
+      return astl::compat::unexpected(cfg_or_err.error());
     }
 
     if (!IsCollectorTypeSupported(capabilities, cfg_or_err.value()->GetCollectorType())) {
-      return std::unexpected(ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE);
+      return astl::compat::unexpected(ASTL_STATUS_UNSUPPORTED_COLLECTOR_TYPE);
     }
 
     auto targets_or_err = ResolveRawMetricTargets(raw, targets, "counter");
     if (!targets_or_err) {
-      return std::unexpected(targets_or_err.error());
+      return astl::compat::unexpected(targets_or_err.error());
     }
 
     std::unordered_map<const ITarget*, std::unique_ptr<ICounter>> target_specific_counters;

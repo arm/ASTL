@@ -56,11 +56,13 @@ MINGW* | MSYS* | CYGWIN*)
 	;;
 esac
 
+CXX_STANDARD=$(sed -n 's/^CMAKE_CXX_STANDARD:STRING=//p' "${BUILD_DIR}/CMakeCache.txt")
+
 echo "Running cppcheck to lint code..."
 
 # suppress syntaxError since cppcheck 2.13 (on ubuntu-latest github runner) considers variadic macros with __VA_OPT__ an error
 # suppress unknownMacro since cppcheck struggles to parse variadic macros with __VA_OPT__
-cppcheck -v --project="${COMPILE_COMMANDS_FILE}" "${PLATFORM_DEFINES[@]}" --std=c++23 --inline-suppr --enable=all \
+cppcheck -v --project="${COMPILE_COMMANDS_FILE}" "${PLATFORM_DEFINES[@]}" "--std=c++${CXX_STANDARD:-23}" --inline-suppr --enable=all \
 	--suppress=unusedFunction \
 	--suppress=syntaxError \
 	--suppress=unknownMacro \

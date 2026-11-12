@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "astl_cxx_compat.hpp"
 #include "output/output_manager.hpp"
 
 namespace astl {
@@ -15,7 +16,7 @@ namespace astl {
  * @param configuration The configuration containing parameters for output creation.
  * @return An initialized IOutputManager associating each target with its corresponding outputs, or an error code.
  */
-auto BuildOutputManager() -> std::expected<std::unique_ptr<IOutputManager>, astl_status_code> {
+auto BuildOutputManager() -> astl::compat::expected<std::unique_ptr<IOutputManager>, astl_status_code> {
   return std::make_unique<OutputManager>();
 }
 

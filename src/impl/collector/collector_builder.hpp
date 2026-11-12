@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_backend.hpp"
 #include "collector/i_collector_manager.hpp"
 #include "config/astl_configuration.hpp"
@@ -26,7 +27,7 @@ namespace astl {
 [[nodiscard]] auto BuildCollectorManager(const std::vector<std::unique_ptr<ITarget>>& targets,
                                          const AstlConfiguration&                     configuration,
                                          CollectorBackends backends = BuiltinCollectorBackends())
-    -> std::expected<std::unique_ptr<ICollectorManager>, astl_status_code>;
+    -> astl::compat::expected<std::unique_ptr<ICollectorManager>, astl_status_code>;
 
 }  // namespace astl
 

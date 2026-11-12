@@ -5,6 +5,7 @@
 #include <limits>
 #include <sstream>
 
+#include "astl_cxx_compat.hpp"
 #include "procfs/procfs_system_utils.hpp"
 #include "procfs/procfs_utils_readers_primitives.hpp"
 
@@ -18,7 +19,7 @@ constexpr uint64_t kBytesPerDiskSector       = 512;
 constexpr size_t   kNetworkFieldCount        = 16;
 constexpr size_t   kNetworkTxBytesIndex      = 8;
 auto ParseDiskField(const std::vector<std::string>& tokens, const SystemField& field, std::string* source_identity)
-    -> std::expected<AstlValue, astl_status_code> {
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   size_t index = 0;
   if (field.kind == "read_operations") {
     index = kDiskReadOperationsIndex;
@@ -34,12 +35,12 @@ auto ParseDiskField(const std::vector<std::string>& tokens, const SystemField& f
   }
   if (index == 0 || tokens.size() < kDiskStatsMinTokenCount || !ParseUint64Token(tokens[0]) ||
       !ParseUint64Token(tokens[1])) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   auto           value = ParseUint64Token(tokens[index]);
   const uint64_t scale = field.kind.ends_with("bytes") ? kBytesPerDiskSector : 1;
   if (!value || *value > std::numeric_limits<uint64_t>::max() / scale) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   if (source_identity) {
     *source_identity = tokens[0] + ':' + tokens[1];
@@ -49,7 +50,7 @@ auto ParseDiskField(const std::vector<std::string>& tokens, const SystemField& f
 }  // namespace
 
 auto ReadDiskField(std::string_view contents, const SystemField& field, std::string* source_identity,
-                   bool* missing_label) -> std::expected<AstlValue, astl_status_code> {
+                   bool* missing_label) -> astl::compat::expected<AstlValue, astl_status_code> {
   std::istringstream stream{std::string{contents}};
   std::string        line;
   while (std::getline(stream, line)) {
@@ -61,11 +62,11 @@ auto ReadDiskField(std::string_view contents, const SystemField& field, std::str
   if (missing_label) {
     *missing_label = true;
   }
-  return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
 }
 
 auto ReadNetworkField(std::string_view contents, const SystemField& field, bool* missing_label)
-    -> std::expected<AstlValue, astl_status_code> {
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   std::istringstream stream{std::string{contents}};
   std::string        line;
   while (std::getline(stream, line)) {
@@ -76,13 +77,13 @@ auto ReadNetworkField(std::string_view contents, const SystemField& field, bool*
     }
     const auto tokens = SplitWhitespace(std::string_view{line}.substr(colon + 1));
     if (tokens.size() != kNetworkFieldCount || (field.kind != "rx_bytes" && field.kind != "tx_bytes")) {
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     return ParseAstlValue(tokens[field.kind == "rx_bytes" ? 0 : kNetworkTxBytesIndex], ASTL_VALUE_UINT64);
   }
   if (missing_label) {
     *missing_label = true;
   }
-  return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
 }
 }  // namespace astl::procfs::detail

@@ -9,10 +9,8 @@
 #ifndef METRIC_CONFIG_HPP_
 #define METRIC_CONFIG_HPP_
 
-#include <expected>
 #include <map>
 #include <memory>
-#include <optional>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -20,6 +18,7 @@
 #include <vector>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_value.hpp"
 #include "common/capabilities.hpp"
 #include "metric/formula_builder.hpp"
@@ -267,9 +266,9 @@ class ResidencyMetricConfig final : public MetricConfig {
   explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
                                  astl_value_type_t value_type, astl_metric_type_t metric_type,
                                  astl_metric_identifier_t identifier, CollectorType collector_type,
-                                 StateToInfoMap                   state_info,
-                                 std::optional<InferredStateInfo> inferred_state = std::nullopt,
-                                 AnyFormula                       formula        = IdentityFormula{},
+                                 StateToInfoMap                            state_info,
+                                 astl::compat::optional<InferredStateInfo> inferred_state = astl::compat::nullopt,
+                                 AnyFormula                                formula        = IdentityFormula{},
                                  astl_value_type_t input_value_type = ASTL_VALUE_UNKNOWN, std::string metric_id = {})
       : MetricConfig(name, description, units, value_type, identifier, metric_type, collector_type,
                      NullOperationBuilder{}, std::move(formula), input_value_type, {}, std::move(metric_id)),
@@ -294,11 +293,11 @@ class ResidencyMetricConfig final : public MetricConfig {
    *
    * @return Optional inferred state info (name and description)
    */
-  const std::optional<InferredStateInfo> &InferredState() const { return _inferred_state; }
+  const astl::compat::optional<InferredStateInfo> &InferredState() const { return _inferred_state; }
 
  private:
-  StateToInfoMap                   _state_info;  // Mapping of target -> (state name -> {data_event_id, tick_frequency})
-  std::optional<InferredStateInfo> _inferred_state;  // Optional inferred state name and description
+  StateToInfoMap _state_info;  // Mapping of target -> (state name -> {data_event_id, tick_frequency})
+  astl::compat::optional<InferredStateInfo> _inferred_state;  // Optional inferred state name and description
 };
 
 /**
@@ -387,13 +386,14 @@ class FiniteSetMetricConfig final : public MetricConfig {
    * @brief Get the state info for a specific value, if it exists.
    *
    * @param value The AstlValue to get the state info for.
-   * @return std::expected containing a pointer to StateInfo if found, or
-   * std::unexpected(ASTL_STATUS_BAD_CONFIGURATION) if the value is not present.
+   * @return astl::compat::expected containing a pointer to StateInfo if found, or
+   * astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION) if the value is not present.
    */
-  [[nodiscard]] std::expected<const StateInfo *, astl_status_code> GetStateInfoForValue(const AstlValue &value) const {
+  [[nodiscard]] astl::compat::expected<const StateInfo *, astl_status_code> GetStateInfoForValue(
+      const AstlValue &value) const {
     auto iter = _state_info.find(value);
     if (iter == _state_info.end()) {
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     return &iter->second;
   }

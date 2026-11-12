@@ -6,10 +6,10 @@
 
 #include <miniz/miniz.h>
 
-#include <expected>
 #include <filesystem>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 
 namespace astl::mz {
@@ -105,18 +105,18 @@ auto UnzipDirectory(const fs::path& zip_path, const fs::path& dst_dir) -> astl_s
   return ASTL_STATUS_SUCCESS;
 }
 
-auto ListEntries(const fs::path& zip_path) -> std::expected<std::vector<std::string>, astl_status_code> {
+auto ListEntries(const fs::path& zip_path) -> astl::compat::expected<std::vector<std::string>, astl_status_code> {
   std::vector<std::string> out_entries{};
 
   if (!fs::exists(zip_path)) {
     ASTL_LOG_ERROR("list_entries: zip file does not exist: {}", zip_path.string());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   mz_zip_archive zip{};
   if (mz_zip_reader_init_file(std::addressof(zip), zip_path.string().c_str(), 0) == MZ_FALSE) {
     ASTL_LOG_ERROR("list_entries: mz_zip_reader_init_file failed: {}", zip_path.string());
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
   auto num_files = mz_zip_reader_get_num_files(std::addressof(zip));

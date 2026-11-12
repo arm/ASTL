@@ -4,16 +4,15 @@
 
 #include "scmi/scmi_metric_builder.hpp"
 
-#include <expected>
 #include <format>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "config/json_file_utils.hpp"
 #include "config/metric_json_declaration.hpp"
@@ -39,7 +38,7 @@ static auto CreateScmiConfigurationsForMetrics(const AstlConfiguration&         
                                                const scmi::spec::ScmiSpecification&     scmi_specification,
                                                const metrics::spec::MetricsDeclaration& metric_declarations,
                                                const std::vector<const ITarget*>&       applicable_targets)
-    -> std::expected<MetricConfigOnTargets, astl_status_code> {
+    -> astl::compat::expected<MetricConfigOnTargets, astl_status_code> {
   MetricConfigOnTargets configurations;
 
   for (const auto& [metric_name, metric_declaration] : metric_declarations.metrics) {
@@ -117,7 +116,7 @@ static auto CreateScmiConfigurationsForCounters(const AstlConfiguration&        
                                                 const scmi::spec::ScmiSpecification&     scmi_specification,
                                                 const metrics::spec::MetricsDeclaration& metric_declarations,
                                                 const std::vector<const ITarget*>&       applicable_targets)
-    -> std::expected<MetricConfigOnTargets, astl_status_code> {
+    -> astl::compat::expected<MetricConfigOnTargets, astl_status_code> {
   MetricConfigOnTargets           configurations_on_targets;
   std::set<std::string>           processed_counter_id_target_pairs;
   ScmiCounterConfigurationContext context{
@@ -156,12 +155,12 @@ static auto AppendScmiConfigurationsForSpecification(const AstlConfiguration&   
     status = scmi_specification_result.error();
   }
 
-  std::optional<scmi::spec::ScmiSpecification> scmi_specification;
+  astl::compat::optional<scmi::spec::ScmiSpecification> scmi_specification;
   if (status == ASTL_STATUS_SUCCESS) {
     scmi_specification = std::move(scmi_specification_result.value());
   }
 
-  std::optional<metrics::spec::MetricsDeclaration> metric_declarations;
+  astl::compat::optional<metrics::spec::MetricsDeclaration> metric_declarations;
   if (status == ASTL_STATUS_SUCCESS) {
     auto metric_declaration_result = config::TryParseJsonFile<metrics::spec::MetricsDeclaration>(
         spec_info.metric_declaration_file, configuration.resources.get());
@@ -199,10 +198,10 @@ static auto AppendScmiConfigurationsForSpecification(const AstlConfiguration&   
 
 static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfiguration&           configuration,
                                                            const std::vector<const ITarget*>& scmi_targets)
-    -> std::expected<MetricAndCounterConfigurations, astl_status_code> {
+    -> astl::compat::expected<MetricAndCounterConfigurations, astl_status_code> {
   const auto platform_specifications = LookUpScmiSpecificationFiles(configuration, scmi_targets);
   if (!platform_specifications.has_value()) {
-    return std::unexpected(platform_specifications.error());
+    return astl::compat::unexpected(platform_specifications.error());
   }
 
   MetricAndCounterConfigurations metric_and_counter_configurations;
@@ -210,7 +209,7 @@ static auto ParseMetricConfigurationsFromScmiSpecification(const AstlConfigurati
     const auto append_status =
         AppendScmiConfigurationsForSpecification(configuration, spec_info, metric_and_counter_configurations);
     if (append_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(append_status);
+      return astl::compat::unexpected(append_status);
     }
   }
   return metric_and_counter_configurations;

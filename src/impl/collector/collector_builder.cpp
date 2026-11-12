@@ -6,25 +6,26 @@
 
 #include <algorithm>
 
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_manager.hpp"
 #include "collector/i_collector.hpp"
 
 namespace astl {
 auto BuildCollectorManager(const BackendTargets& targets, const AstlConfiguration& configuration,
                            CollectorBackends backends)
-    -> std::expected<std::unique_ptr<ICollectorManager>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<ICollectorManager>, astl_status_code> {
   if (auto status = ValidateCollectorBackends(backends); status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   std::unordered_map<const ITarget*, std::vector<std::unique_ptr<ICollector>>> collectors;
   for (const auto& target : targets) {
     const auto backend = std::ranges::find(backends, target->GetCollectorType(), &CollectorBackend::type);
     if (backend == backends.end() || backend->create == nullptr) {
-      return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+      return astl::compat::unexpected(ASTL_STATUS_NOT_SUPPORTED);
     }
     auto collector = backend->create(*target, configuration);
     if (!collector) {
-      return std::unexpected(collector.error());
+      return astl::compat::unexpected(collector.error());
     }
     if (*collector) {
       collectors[target.get()].push_back(std::move(*collector));

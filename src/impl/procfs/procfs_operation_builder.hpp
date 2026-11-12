@@ -5,6 +5,7 @@
 #ifndef PROCFS_OPERATION_BUILDER_HPP_
 #define PROCFS_OPERATION_BUILDER_HPP_
 
+#include "astl_cxx_compat.hpp"
 #include "operation/operation.hpp"
 #include "procfs/procfs_utils.hpp"
 #include "target.hpp"
@@ -15,7 +16,8 @@ class ProcfsOperationBuilder {
  public:
   explicit ProcfsOperationBuilder(procfs::FieldDescriptor field_descriptor);
 
-  [[nodiscard]] auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code>;
+  [[nodiscard]] auto BuildOperations(const ITarget* target) const
+      -> astl::compat::expected<OperationSequence, astl_status_code>;
 
  private:
   procfs::FieldDescriptor _field_descriptor;

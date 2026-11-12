@@ -4,6 +4,7 @@
 
 #include <cmath>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "common/monotonic_raw_clock.hpp"
 #include "windows_pdh/windows_pdh_system_collector.hpp"
@@ -22,8 +23,8 @@ auto WindowsNativeNow() -> uint64_t {
 }
 
 struct BatchSnapshot {
-  std::unordered_map<std::string, std::optional<double>> cpu;
-  WindowsPdhMemorySnapshot                               memory{};
+  std::unordered_map<std::string, astl::compat::optional<double>> cpu;
+  WindowsPdhMemorySnapshot                                        memory{};
 };
 
 struct BatchRequirements {
@@ -31,12 +32,13 @@ struct BatchRequirements {
   bool memory{false};
 };
 
-auto GetBatchRequirements(const OperationSequence& operations) -> std::expected<BatchRequirements, astl_status_code> {
+auto GetBatchRequirements(const OperationSequence& operations)
+    -> astl::compat::expected<BatchRequirements, astl_status_code> {
   BatchRequirements required;
   for (const auto& operation : operations) {
     const auto* read = dynamic_cast<const WindowsPdhReadOperation*>(operation.get());
     if (!read) {
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
     }
     required.cpu |= read->field == WindowsPdhSystemField::CPU_UTILIZATION;
     required.memory |= read->field != WindowsPdhSystemField::CPU_UTILIZATION;
@@ -45,38 +47,39 @@ auto GetBatchRequirements(const OperationSequence& operations) -> std::expected<
 }
 
 auto ReadBatch(IWindowsPdhSystemApi& api, const BatchRequirements& required)
-    -> std::expected<BatchSnapshot, astl_status_code> {
+    -> astl::compat::expected<BatchSnapshot, astl_status_code> {
   BatchSnapshot snapshot;
   if (required.cpu) {
     auto cpu = api.ReadCpu();
     if (!cpu) {
-      return std::unexpected(cpu.error());
+      return astl::compat::unexpected(cpu.error());
     }
     snapshot.cpu = std::move(*cpu);
   }
   if (required.memory) {
     const auto memory = api.ReadMemory();
     if (!memory) {
-      return std::unexpected(memory.error());
+      return astl::compat::unexpected(memory.error());
     }
     if (memory->total == 0 || memory->available > memory->total) {
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     snapshot.memory = *memory;
   }
   return snapshot;
 }
 
-auto CpuValue(const BatchSnapshot& snapshot, const std::string& instance) -> std::optional<AstlValue> {
+auto CpuValue(const BatchSnapshot& snapshot, const std::string& instance) -> astl::compat::optional<AstlValue> {
   const auto found = snapshot.cpu.find(instance);
   if (found == snapshot.cpu.end() || !found->second || !std::isfinite(*found->second) || *found->second < 0 ||
       *found->second > kPercentageScale) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return AstlValue{*found->second};
 }
 
-auto OperationValue(const WindowsPdhReadOperation& read, const BatchSnapshot& snapshot) -> std::optional<AstlValue> {
+auto OperationValue(const WindowsPdhReadOperation& read, const BatchSnapshot& snapshot)
+    -> astl::compat::optional<AstlValue> {
   const auto& memory = snapshot.memory;
   switch (read.field) {
     case WindowsPdhSystemField::CPU_UTILIZATION:
@@ -89,11 +92,12 @@ auto OperationValue(const WindowsPdhReadOperation& read, const BatchSnapshot& sn
       return AstlValue{kPercentageScale * static_cast<double>(memory.total - memory.available) /
                        static_cast<double>(memory.total)};
   }
-  return std::nullopt;
+  return astl::compat::nullopt;
 }
 }  // namespace
 
-auto WindowsPdhSystemCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> {
+auto WindowsPdhSystemCollector::GetNativeClockSnapshot()
+    -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   std::scoped_lock lock{_collection_mutex};
   if (!_configuration.has_value()) {
     ASTL_LOG_WARNING(

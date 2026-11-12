@@ -6,16 +6,15 @@
 #define SCMI_METRIC_JSON_DECLARATION_HPP_
 
 #include <algorithm>
-#include <expected>
 #include <filesystem>
-#include <nlohmann/json.hpp>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "common/metric_config.hpp"
 #include "config/metric_json_declaration.hpp"
 #include "scmi/uuid.hpp"
@@ -28,11 +27,11 @@ struct ScmiSpecification;
 namespace astl::metrics::spec {
 
 struct MetricsDeclarationFileElement {
-  std::string                last_updated;
-  std::string                description;
-  std::string                metrics_file;
-  std::filesystem::path      resolved_metrics_file;
-  std::optional<std::string> name;
+  std::string                         last_updated;
+  std::string                         description;
+  std::string                         metrics_file;
+  std::filesystem::path               resolved_metrics_file;
+  astl::compat::optional<std::string> name;
 };
 
 inline void from_json(const nlohmann::json& json_data, MetricsDeclarationFileElement& metrics_declaration_file) {
@@ -70,24 +69,24 @@ inline void from_json(const nlohmann::json& json_data, PlatformLookup& platform_
 }
 
 inline auto FindMetricsFileElementByUuid(const PlatformLookup& platform_lookup, const scmi::spec::Uuid& uuid)
-    -> std::optional<MetricsDeclarationFileElement> {
+    -> astl::compat::optional<MetricsDeclarationFileElement> {
   auto is_matching_uuid = [&uuid](const PlatformLookupEntry& entry) -> bool { return entry.uuid == uuid; };
   auto iter             = std::find_if(std::begin(platform_lookup.metric_files_by_platform_uuid),
                                        std::end(platform_lookup.metric_files_by_platform_uuid), is_matching_uuid);
   if (iter != std::end(platform_lookup.metric_files_by_platform_uuid)) {
     return iter->metrics_declaration_file;
   }
-  return std::nullopt;
+  return astl::compat::nullopt;
 }
 
 struct ScmiMetricJsonCollectionSettings {
-  std::string                register_name;
-  std::optional<std::string> scmi_component_filter;
-  std::optional<std::string> scmi_instance_filter;
+  std::string                         register_name;
+  astl::compat::optional<std::string> scmi_component_filter;
+  astl::compat::optional<std::string> scmi_instance_filter;
 };
 
 [[nodiscard]] auto ParseScmiMetricJsonCollectionSettings(const MetricJsonCollectionSettings& collection_setting)
-    -> std::expected<ScmiMetricJsonCollectionSettings, astl_status_code>;
+    -> astl::compat::expected<ScmiMetricJsonCollectionSettings, astl_status_code>;
 
 auto BuildScalingFormulaFromBase10Modifier(int32_t base10_unit_modifier) -> AnyFormula;
 
@@ -95,7 +94,7 @@ auto BuildScalingFormulaFromBase10Modifier(int32_t base10_unit_modifier) -> AnyF
                                            MetricJsonDeclaration const&               metric_declaration,
                                            astl::scmi::spec::ScmiSpecification const& scmi_spec,
                                            std::vector<const ITarget*> const&         applicable_targets)
-    -> std::expected<MetricConfigOnTargets, astl_status_code>;
+    -> astl::compat::expected<MetricConfigOnTargets, astl_status_code>;
 
 }  // namespace astl::metrics::spec
 

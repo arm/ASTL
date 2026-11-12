@@ -6,8 +6,9 @@
 #define METRIC_GROUP_JSON_DECLARATION_HPP_
 
 #include <map>
-#include <nlohmann/json.hpp>
 #include <string>
+
+#include "astl_json.hpp"
 
 namespace astl::metrics::groups::spec {
 

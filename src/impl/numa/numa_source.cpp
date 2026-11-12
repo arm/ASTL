@@ -8,8 +8,10 @@
 #include <charconv>
 #include <limits>
 #include <sstream>
+
+#include "astl_cxx_compat.hpp"
 namespace astl::numa {
-auto Parse(std::string_view text) -> std::expected<Counts, astl_status_code> {
+auto Parse(std::string_view text) -> astl::compat::expected<Counts, astl_status_code> {
   Counts                           values{};
   std::array<bool, kFields.size()> seen{};
   std::istringstream               input{std::string{text}};
@@ -30,34 +32,34 @@ auto Parse(std::string_view text) -> std::expected<Counts, astl_status_code> {
     }
     const auto index = static_cast<size_t>(field - kFields.begin());
     if (seen.at(index) || !(tokens >> value) || (tokens >> extra)) {
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     // from_chars accepts a pointer range; both endpoints are inside the string.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     const auto* limit       = value.data() + value.size();
     const auto [end, error] = std::from_chars(value.data(), limit, values.at(index));
     if (error != std::errc{} || end != limit) {
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     seen.at(index) = true;
   }
   if (!std::ranges::all_of(seen, [](bool present) { return present; })) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return values;
 }
-auto Discover(const FileInterface& files) -> std::expected<std::vector<std::string>, astl_status_code> {
+auto Discover(const FileInterface& files) -> astl::compat::expected<std::vector<std::string>, astl_status_code> {
   std::vector<std::string> nodes;
   auto                     exists = files.IsValid(files.GetBasePath());
   if (!exists) {
-    return std::unexpected(exists.error());
+    return astl::compat::unexpected(exists.error());
   }
   if (!*exists) {
     return nodes;
   }
   auto dirs = files.GetSubdirectories();
   if (!dirs) {
-    return std::unexpected(dirs.error());
+    return astl::compat::unexpected(dirs.error());
   }
   for (const auto& dir : *dirs) {
     const auto name = dir.path().filename().string();
@@ -69,31 +71,32 @@ auto Discover(const FileInterface& files) -> std::expected<std::vector<std::stri
   // Validate every identified node so aggregate metrics never omit a failed node.
   auto snapshot = Read(files, nodes);
   if (!snapshot) {
-    return std::unexpected(snapshot.error());
+    return astl::compat::unexpected(snapshot.error());
   }
   std::sort(nodes.begin(), nodes.end());
   return nodes;
 }
 auto Read(const FileInterface& files, const std::vector<std::string>& nodes)
-    -> std::expected<Snapshot, astl_status_code> {
+    -> astl::compat::expected<Snapshot, astl_status_code> {
   Snapshot result;
   for (const auto& node : nodes) {
     std::string text;
     const auto  status = files.Read(std::filesystem::path{node} / "numastat", text);
     if (status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(status);
+      return astl::compat::unexpected(status);
     }
     auto counts = Parse(text);
     if (!counts) {
-      return std::unexpected(counts.error());
+      return astl::compat::unexpected(counts.error());
     }
     result.emplace(node, *counts);
   }
   return result;
 }
-auto Delta(const Snapshot& previous, const Snapshot& current, const std::string& node) -> std::optional<Counts> {
+auto Delta(const Snapshot& previous, const Snapshot& current, const std::string& node)
+    -> astl::compat::optional<Counts> {
   if (previous.empty() || previous.size() != current.size()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   Counts delta{};
   bool   found = false;
@@ -103,20 +106,20 @@ auto Delta(const Snapshot& previous, const Snapshot& current, const std::string&
     }
     const auto old = previous.find(name);
     if (old == previous.end()) {
-      return std::nullopt;
+      return astl::compat::nullopt;
     }
     found = true;
     for (size_t i = 0; i < delta.size(); ++i) {
       if (counts.at(i) < old->second.at(i)) {
-        return std::nullopt;
+        return astl::compat::nullopt;
       }
       const auto increment = counts.at(i) - old->second.at(i);
       if (increment > std::numeric_limits<uint64_t>::max() - delta.at(i)) {
-        return std::nullopt;
+        return astl::compat::nullopt;
       }
       delta.at(i) += increment;
     }
   }
-  return found ? std::optional{delta} : std::nullopt;
+  return found ? astl::compat::optional{delta} : astl::compat::nullopt;
 }
 }  // namespace astl::numa

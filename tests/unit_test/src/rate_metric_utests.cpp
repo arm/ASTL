@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <chrono>
-#include <expected>
 #include <vector>
 
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
+#include "astl_cxx_compat.hpp"
 #include "metric/rate_metric.hpp"
 
 static const astl::MetricConfig* GetRateConfig() {
@@ -32,8 +32,8 @@ class RateMetricTestFixture : public astl::RateMetric {
   RateMetricTestFixture() : astl::RateMetric(GetRateConfig(), nullptr, nullptr) {}
 
   // Expose protected methods for testing
-  static std::expected<astl::AstlValue, astl_status_code> TestCalculateRate(const astl::AstlValue&    delta_value,
-                                                                            std::chrono::microseconds time_interval) {
+  static astl::compat::expected<astl::AstlValue, astl_status_code> TestCalculateRate(
+      const astl::AstlValue& delta_value, std::chrono::microseconds time_interval) {
     return CalculateRate(delta_value, time_interval);
   }
 };

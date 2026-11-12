@@ -8,10 +8,9 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
-#include <optional>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "common/clock_correlation.hpp"
 #include "scmi/scmi_constants.hpp"
 #include "scmi/scmi_ioctl_uapi.hpp"
@@ -23,7 +22,7 @@ inline constexpr size_t kClockCorrelationReadAttempts = 20;
 
 /** Half the active firmware interval, rounded up to whole nanoseconds. */
 auto ClockCorrelationReadSpacing(scmi_tlm_update_interval interval)
-    -> std::expected<std::chrono::nanoseconds, astl_status_code>;
+    -> astl::compat::expected<std::chrono::nanoseconds, astl_status_code>;
 
 /** Configuration-local minimum signed raw-minus-native offset. */
 class ClockCorrelationMinimum {
@@ -32,14 +31,14 @@ class ClockCorrelationMinimum {
 
   // All valid pairs compete, including duplicates. Equal offsets retain the first pair.
   auto ConsiderSample(HwClockTicks native, ProcessedSampleTimestamp raw) -> astl_status_code;
-  auto Correlation() const -> std::expected<OperationClockCorrelation, astl_status_code>;
+  auto Correlation() const -> astl::compat::expected<OperationClockCorrelation, astl_status_code>;
   auto Count() const -> size_t { return _count; }
 
  private:
-  kilohertz                                _rate;
-  std::optional<OperationClockCorrelation> _best;
-  HwClockTicks                             _last_native{};
-  size_t                                   _count{};
+  kilohertz                                         _rate;
+  astl::compat::optional<OperationClockCorrelation> _best;
+  HwClockTicks                                      _last_native{};
+  size_t                                            _count{};
 };
 
 }  // namespace astl::scmi_detail

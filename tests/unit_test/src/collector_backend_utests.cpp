@@ -5,6 +5,7 @@
 #include <array>
 
 #include "../../test_includes.hpp"
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_builder.hpp"
 #include "collector/i_collector.hpp"
 #include "metric/metric_builder.hpp"
@@ -14,7 +15,7 @@ namespace {
 constexpr auto kTestType = static_cast<astl::CollectorType>(99);
 struct TestBuilder {
   static auto BuildOperations(const astl::ITarget* /*target*/)
-      -> std::expected<astl::OperationSequence, astl_status_code> {
+      -> astl::compat::expected<astl::OperationSequence, astl_status_code> {
     astl::OperationSequence operations;
     operations.push_back(std::make_unique<astl::Operation>());
     return operations;
@@ -39,22 +40,22 @@ class TestCollector : public astl::ICollector {
   auto ResumeCollection() -> astl_status_code override { return ASTL_STATUS_SUCCESS; }
   auto StopCollection() -> astl_status_code override { return ASTL_STATUS_SUCCESS; }
   auto ReadImmediate() -> astl_status_code override { return StartCollection(); }
-  auto GetNativeClockSnapshot() -> std::expected<astl::ClockCorrelationMap, astl_status_code> override {
+  auto GetNativeClockSnapshot() -> astl::compat::expected<astl::ClockCorrelationMap, astl_status_code> override {
     return astl::ClockCorrelationMap{};
   }
 
  private:
-  std::optional<astl::CollectionConfiguration> configured;
+  astl::compat::optional<astl::CollectionConfiguration> configured;
 };
 auto Discover(const astl::AstlConfiguration& /*configuration*/)
-    -> std::expected<astl::BackendTargets, astl_status_code> {
+    -> astl::compat::expected<astl::BackendTargets, astl_status_code> {
   astl::BackendTargets targets;
   targets.push_back(std::make_unique<astl::Target>("test-backend", "Test", kTestType));
   targets.push_back(std::make_unique<astl::Target>("test-backend", "Duplicate", kTestType));
   return targets;
 }
 auto Create(const astl::ITarget& /*target*/, const astl::AstlConfiguration& /*configuration*/)
-    -> std::expected<std::unique_ptr<astl::ICollector>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<astl::ICollector>, astl_status_code> {
   return std::make_unique<TestCollector>();
 }
 auto Register(const astl::AstlConfiguration& /*configuration*/, const astl::BackendTargetMap& targets,
@@ -77,13 +78,13 @@ auto                         Configuration() -> astl::AstlConfiguration {
 TEST_CASE("An independently registered backend works through common builders", "[CollectorBackend]") {
   const std::array backends{kTestBackend};
   const auto       config   = Configuration();
-  auto             topology = astl::BuildTopologyManager(config, std::nullopt, backends);
+  auto             topology = astl::BuildTopologyManager(config, astl::compat::nullopt, backends);
   REQUIRE(topology);
   const auto& targets = (*topology)->GetTargets();
   REQUIRE(targets.size() == 1);  // Shared duplicate-name policy also applies to injected backends.
   auto collectors = astl::BuildCollectorManager(targets, config, backends);
   REQUIRE(collectors);
-  auto metrics = astl::BuildMetricManager(targets, config, std::nullopt, backends);
+  auto metrics = astl::BuildMetricManager(targets, config, astl::compat::nullopt, backends);
   REQUIRE(metrics);
   auto handles = (*metrics)->GetAvailableMetrics(targets.front().get());
   REQUIRE(handles);
@@ -116,21 +117,22 @@ TEST_CASE("Backend registry rejects invalid registration and target ownership", 
     CHECK(astl::ValidateCollectorBackends(std::array{backend}) == ASTL_STATUS_BAD_CONFIGURATION);
   }
   SECTION("discovery failure") {
-    backend.discover =
-        [](const astl::AstlConfiguration& /*configuration*/) -> std::expected<astl::BackendTargets, astl_status_code> {
-      return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    backend.discover = [](const astl::AstlConfiguration& /*configuration*/)
+        -> astl::compat::expected<astl::BackendTargets, astl_status_code> {
+      return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
     };
-    CHECK(astl::BuildTopologyManager(config, std::nullopt, std::array{backend}).error() == ASTL_STATUS_INTERNAL_ERROR);
+    CHECK(astl::BuildTopologyManager(config, astl::compat::nullopt, std::array{backend}).error() ==
+          ASTL_STATUS_INTERNAL_ERROR);
   }
   SECTION("wrong owner") {
     backend.type              = astl::CollectorType::SCMI;
     config.collectors.enabled = std::vector{astl::CollectorType::SCMI};
-    CHECK(astl::BuildTopologyManager(config, std::nullopt, std::array{backend}).error() ==
+    CHECK(astl::BuildTopologyManager(config, astl::compat::nullopt, std::array{backend}).error() ==
           ASTL_STATUS_BAD_CONFIGURATION);
   }
   SECTION("disabled backend") {
     config.collectors.enabled = std::vector<astl::CollectorType>{};
-    auto topology             = astl::BuildTopologyManager(config, std::nullopt, std::array{backend});
+    auto topology             = astl::BuildTopologyManager(config, astl::compat::nullopt, std::array{backend});
     REQUIRE(topology);
     CHECK((*topology)->GetTargets().empty());
   }
@@ -141,7 +143,7 @@ TEST_CASE("Backend registry rejects invalid registration and target ownership", 
   }
   SECTION("compiled-out backend skips discovery") {
     backend.discover = nullptr;
-    auto topology    = astl::BuildTopologyManager(config, std::nullopt, std::array{backend});
+    auto topology    = astl::BuildTopologyManager(config, astl::compat::nullopt, std::array{backend});
     REQUIRE(topology);
     CHECK((*topology)->GetTargets().empty());
   }

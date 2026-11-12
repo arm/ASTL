@@ -7,18 +7,18 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <expected>
 #include <filesystem>
 #include <fstream>
 #include <limits>
 #include <mutex>
-#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+
+#include "astl_cxx_compat.hpp"
 
 #if defined(__GLIBC__)
 #  include <gnu/libc-version.h>
@@ -30,11 +30,11 @@
 #  include <unistd.h>
 #endif
 
+#include "astl_json.hpp"
 #include "astl_logger.hpp"
 #include "common/key_value_text_utils.hpp"
 #include "common/text_file_utils.hpp"
 #include "common/text_parse_utils.hpp"
-#include "nlohmann/json.hpp"
 #include "procfs/procfs_utils.hpp"
 
 namespace astl {
@@ -47,9 +47,9 @@ struct HugePagesInfo {
   int64_t size_kb{-1};
 };
 
-auto ToInt64(uint64_t value) -> std::optional<int64_t> {
+auto ToInt64(uint64_t value) -> astl::compat::optional<int64_t> {
   if (value > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return static_cast<int64_t>(value);
 }
@@ -356,15 +356,15 @@ auto ParseOsReleaseValue(std::string_view raw_value) -> std::string {
   return std::string{value};
 }
 
-auto ReadOsReleaseValue(const std::string& key) -> std::optional<std::string> {
+auto ReadOsReleaseValue(const std::string& key) -> astl::compat::optional<std::string> {
   auto value = text::ReadFirstMatchingKeyValueFromFile("/etc/os-release", {key}, '=');
   if (!value.has_value()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   auto parsed = ParseOsReleaseValue(*value);
   if (parsed.empty()) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   return parsed;
@@ -439,7 +439,7 @@ auto CapturePlatformInfoFromSystem() -> PlatformInfoData {
   return info;
 }
 
-auto BuildPlatformInfoJson(const PlatformInfoData& info) -> std::expected<nlohmann::json, astl_status_code> {
+auto BuildPlatformInfoJson(const PlatformInfoData& info) -> astl::compat::expected<nlohmann::json, astl_status_code> {
   try {
     nlohmann::json payload;
     payload["soc_name"]               = info.soc_name;
@@ -476,11 +476,12 @@ auto BuildPlatformInfoJson(const PlatformInfoData& info) -> std::expected<nlohma
     return payload;
   } catch (const nlohmann::json::exception& e) {
     ASTL_LOG_ERROR("BuildPlatformInfoJson: failed serializing platform info: {}", e.what());
-    return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+    return astl::compat::unexpected{ASTL_STATUS_INTERNAL_ERROR};
   }
 }
 
-auto ParsePlatformInfoJson(const nlohmann::json& payload) -> std::expected<PlatformInfoData, astl_status_code> {
+auto ParsePlatformInfoJson(const nlohmann::json& payload)
+    -> astl::compat::expected<PlatformInfoData, astl_status_code> {
   try {
     PlatformInfoData info{};
     if (payload.contains("wall_clock_correlation")) {
@@ -490,14 +491,14 @@ auto ParsePlatformInfoJson(const nlohmann::json& payload) -> std::expected<Platf
         if (!value.is_number_integer() ||
             (value.is_number_unsigned() && value.get<uint64_t>() > uint64_t{std::numeric_limits<int64_t>::max()})) {
           ASTL_LOG_ERROR("ParsePlatformInfoJson: invalid clock correlation field '{}'", field);
-          return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+          return astl::compat::unexpected{ASTL_STATUS_INTERNAL_ERROR};
         }
       }
       info.wall_clock_correlation =
           WallClockCorrelation{reference.at("raw_ns").get<int64_t>(), reference.at("realtime_ns").get<int64_t>(),
                                reference.at("uncertainty_ns").get<int64_t>()};
       if (info.wall_clock_correlation->uncertainty_ns < 0) {
-        return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+        return astl::compat::unexpected{ASTL_STATUS_INTERNAL_ERROR};
       }
     }
     info.soc_name              = payload.value("soc_name", "");
@@ -534,7 +535,7 @@ auto ParsePlatformInfoJson(const nlohmann::json& payload) -> std::expected<Platf
     return info;
   } catch (const nlohmann::json::exception& e) {
     ASTL_LOG_ERROR("ParsePlatformInfoJson: failed parsing platform info json: {}", e.what());
-    return std::unexpected{ASTL_STATUS_INTERNAL_ERROR};
+    return astl::compat::unexpected{ASTL_STATUS_INTERNAL_ERROR};
   }
 }
 
@@ -548,8 +549,8 @@ auto LoadedSessionStorage() -> bool& {
   return loaded;
 }
 
-auto SessionClockStorage() -> std::optional<WallClockCorrelation>& {
-  static std::optional<WallClockCorrelation> reference;
+auto SessionClockStorage() -> astl::compat::optional<WallClockCorrelation>& {
+  static astl::compat::optional<WallClockCorrelation> reference;
   return reference;
 }
 
@@ -565,7 +566,7 @@ auto ClearSessionWallClockCorrelation() -> void {
   SessionClockStorage().reset();
 }
 
-auto GetHostWallClockCorrelation() -> std::optional<WallClockCorrelation> {
+auto GetHostWallClockCorrelation() -> astl::compat::optional<WallClockCorrelation> {
   std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
   return SessionClockStorage();
 }
@@ -576,7 +577,7 @@ auto CaptureSessionWallClockCorrelation() -> void {
   SessionClockStorage() = reference;
 }
 
-auto GetActiveWallClockCorrelation() -> std::optional<WallClockCorrelation> {
+auto GetActiveWallClockCorrelation() -> astl::compat::optional<WallClockCorrelation> {
   std::lock_guard<std::mutex> lock{PlatformInfoMutex()};
   if (!LoadedSessionStorage()) {
     return SessionClockStorage();
@@ -585,7 +586,7 @@ auto GetActiveWallClockCorrelation() -> std::optional<WallClockCorrelation> {
   if (loaded) {
     return loaded->wall_clock_correlation;
   }
-  return std::nullopt;
+  return astl::compat::nullopt;
 }
 
 auto GetHostPlatformInfo() -> const PlatformInfoData& {

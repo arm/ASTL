@@ -6,11 +6,9 @@
 #define SCMI_SYSFS_COLLECTOR_HPP_
 
 #include <charconv>
-#include <expected>
 #include <filesystem>
 #include <iterator>
 #include <mutex>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -18,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_file_interface.hpp"
 #include "astl_logger.hpp"
 #include "collector/collection_configuration.hpp"
@@ -106,7 +105,7 @@ class ScmiSysfsCollector : public ICollector {
    *        so each OperationId receives an independent correlation entry. If any hardware clock is unavailable
    *        or invalid, all operations use software-clock correlations to keep one consistent clock domain.
    */
-  std::expected<ClockCorrelationMap, astl_status_code> GetNativeClockSnapshot() override;
+  astl::compat::expected<ClockCorrelationMap, astl_status_code> GetNativeClockSnapshot() override;
 
  private:
   // internal classes + enums
@@ -119,8 +118,9 @@ class ScmiSysfsCollector : public ICollector {
   CollectorCapability _collector_capability{CollectorType::SCMI};  //!< The capabilities of this collector
   IRawSampleSink*     _raw_sample_sink = nullptr;  //!< The (optional) destination for where sampled data should be sent
   CollectionState     _collection_state = CollectionState::UNCONFIGURED;
-  std::optional<CollectionConfiguration> _configuration;  //!< The current active configuration for this collector
-  FileInterfaceT                         _scmi_file_interface;
+  astl::compat::optional<CollectionConfiguration>
+                 _configuration;  //!< The current active configuration for this collector
+  FileInterfaceT _scmi_file_interface;
   //!< Data events touched by the current collection (TODO - consider making _collection_state a variant to bundle the
   //!< CollectionState in with _data_events and _configuration)
   std::vector<ScmiDataEvent> _data_events;
@@ -148,27 +148,28 @@ class ScmiSysfsCollector : public ICollector {
 
   /** @brief Validate and correlate one SCMI operation's hardware clock. */
   auto MakeHardwareClockCorrelation(ScmiReadOperation const& operation)
-      -> std::expected<OperationClockCorrelation, std::string_view>;
+      -> astl::compat::expected<OperationClockCorrelation, std::string_view>;
 
   /*
    * @brief Enable a given data event, and return whether it was originally enabled before we enabled it.
    */
-  auto EnableDataEvent(std::filesystem::path const& data_event_dir_path) -> std::expected<bool, astl_status_code>;
+  auto EnableDataEvent(std::filesystem::path const& data_event_dir_path)
+      -> astl::compat::expected<bool, astl_status_code>;
 
   /* @brief Enable a timestamp for this data event */
   auto EnableTimestamp(std::filesystem::path const& data_event_to_configure)
-      -> std::expected<std::optional<bool>, astl_status_code>;
+      -> astl::compat::expected<astl::compat::optional<bool>, astl_status_code>;
 
   /* @brief Read the timestamp rate for this data event, if available.
    * This is the rate at which the timestamp increments
    */
   auto ReadTimestampRate(std::filesystem::path const& data_event_to_configure)
-      -> std::expected<std::optional<kilohertz>, astl_status_code>;
+      -> astl::compat::expected<astl::compat::optional<kilohertz>, astl_status_code>;
 
   /*
    * @brief Enable the given data event ids, returning the set of DataEvents and their initial enable state
    */
-  std::expected<std::vector<ScmiDataEvent>, astl_status_code> EnableDataEvents(
+  astl::compat::expected<std::vector<ScmiDataEvent>, astl_status_code> EnableDataEvents(
       std::unordered_set<ScmiDataEventId> const& data_events_to_enable);
 
   /*
@@ -261,20 +262,20 @@ inline auto GetProcessLockTempDirectory(std::error_code& error_code) -> std::fil
 #endif
 }
 
-std::expected<std::filesystem::path, astl_status_code> GetDataEventDirPath(ScmiDataEventId data_event_id);
+astl::compat::expected<std::filesystem::path, astl_status_code> GetDataEventDirPath(ScmiDataEventId data_event_id);
 
 /* Parse the given text for a raw hardware tick timestamp and return alongside remaining text to parse.
  * The returned HwClockTicks contains the raw hardware tick count; MetricManager applies the
  * NativeToMonotonicRawRatio from OperationClockCorrelation to convert to nanoseconds. */
 auto ParseScmiTimeStamp(std::string_view text)
-    -> std::expected<std::pair<HwClockTicks, std::string_view>, astl_status_code>;
+    -> astl::compat::expected<std::pair<HwClockTicks, std::string_view>, astl_status_code>;
 
 // Expected format: "<timestamp> <value>"
 auto ParseDataEventValueWithTimestamp(std::string_view data_read)
-    -> std::expected<std::pair<HwClockTicks, ScmiDataEventValue>, astl_status_code>;
+    -> astl::compat::expected<std::pair<HwClockTicks, ScmiDataEventValue>, astl_status_code>;
 
 // Accept either "<timestamp> <value>" or "<value>".
-auto ParseDataEventValue(std::string_view data_read) -> std::expected<ScmiDataEventValue, astl_status_code>;
+auto ParseDataEventValue(std::string_view data_read) -> astl::compat::expected<ScmiDataEventValue, astl_status_code>;
 
 auto MakeSoftwareClockCorrelation() -> OperationClockCorrelation;
 
@@ -345,21 +346,21 @@ auto ScmiSysfsCollector<FileInterfaceT>::MakeSoftwareClockCorrelations() const -
 
 template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::MakeHardwareClockCorrelation(ScmiReadOperation const& operation)
-    -> std::expected<OperationClockCorrelation, std::string_view> {
+    -> astl::compat::expected<OperationClockCorrelation, std::string_view> {
   const auto data_event_it = std::find_if(
       _data_events.begin(), _data_events.end(),
       [&operation](const ScmiDataEvent& data_event) { return data_event.id == operation.scmi_data_event_id; });
   if (data_event_it == _data_events.end()) {
-    return std::unexpected{"timestamp metadata is not associated with this DE_ID"};
+    return astl::compat::unexpected{"timestamp metadata is not associated with this DE_ID"};
   }
   if (!data_event_it->timestamp_rate.has_value() || data_event_it->timestamp_rate.value() == 0 ||
       operation.tstamp_rate == 0) {
-    return std::unexpected{"timestamp rate is missing or zero"};
+    return astl::compat::unexpected{"timestamp rate is missing or zero"};
   }
 
   const auto data_event_dir_path = scmi_detail::GetDataEventDirPath(operation.scmi_data_event_id);
   if (!data_event_dir_path) {
-    return std::unexpected{"could not resolve data event sysfs path"};
+    return astl::compat::unexpected{"could not resolve data event sysfs path"};
   }
 
   std::string data_read;
@@ -367,12 +368,12 @@ auto ScmiSysfsCollector<FileInterfaceT>::MakeHardwareClockCorrelation(ScmiReadOp
   // Take CLOCK_MONOTONIC_RAW immediately after the sysfs read to minimise inter-clock drift.
   const auto raw_now = ClockMonotonicRaw::now();
   if (read_result != ASTL_STATUS_SUCCESS) {
-    return std::unexpected{"hardware timestamp value could not be read"};
+    return astl::compat::unexpected{"hardware timestamp value could not be read"};
   }
 
   const auto parsed_timestamp = scmi_detail::ParseScmiTimeStamp(data_read);
   if (!parsed_timestamp) {
-    return std::unexpected{"hardware timestamp value is missing or invalid"};
+    return astl::compat::unexpected{"hardware timestamp value is missing or invalid"};
   }
   const auto raw_ratio = NativeToMonotonicRawRatio{1'000'000LL, static_cast<intmax_t>(operation.tstamp_rate)};
   return OperationClockCorrelation{raw_now, parsed_timestamp->first, raw_ratio};
@@ -592,7 +593,7 @@ astl_status_code ScmiSysfsCollector<FileInterfaceT>::ReadImmediate() {
  */
 template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::GetNativeClockSnapshot()
-    -> std::expected<ClockCorrelationMap, astl_status_code> {
+    -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   std::scoped_lock lock{_collection_mutex};
   if (!_configuration.has_value()) {
     ASTL_LOG_WARNING("ScmiSysfsCollector::GetNativeClockSnapshot called without configuration; returning empty map");
@@ -621,7 +622,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::GetNativeClockSnapshot()
 /* Enable a data event, return true if it was originally enabled */
 template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::EnableDataEvent(std::filesystem::path const& data_event_dir_path)
-    -> std::expected<bool, astl_status_code> {
+    -> astl::compat::expected<bool, astl_status_code> {
   const auto enable_file_path = data_event_dir_path / kScmiDataEventEnableFileName;
   // check to see if the data event is already enabled (if so, we don't disable it at the end of collection)
   std::string enabled_text;
@@ -629,7 +630,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::EnableDataEvent(std::filesystem::path c
   if (result != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Failed to read enable file for data event: {} with error: {}",
                    data_event_dir_path.filename().string(), result);
-    return std::unexpected{result};
+    return astl::compat::unexpected{result};
   }
   const bool originally_enabled = (enabled_text == kScmiDataEventEnableValue);
   // enable the data event if it's not already enabled.
@@ -637,7 +638,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::EnableDataEvent(std::filesystem::path c
     result = ScmiWrite(enable_file_path, kScmiDataEventEnableValue);
     if (result != ASTL_STATUS_SUCCESS) {
       ASTL_LOG_ERROR("Failed to enable data event: {} with error: {}", data_event_dir_path.filename().string(), result);
-      return std::unexpected{result};
+      return astl::compat::unexpected{result};
     }
   }
   return originally_enabled;
@@ -645,10 +646,10 @@ auto ScmiSysfsCollector<FileInterfaceT>::EnableDataEvent(std::filesystem::path c
 
 template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::EnableTimestamp(std::filesystem::path const& data_event_to_configure)
-    -> std::expected<std::optional<bool>, astl_status_code> {
+    -> astl::compat::expected<astl::compat::optional<bool>, astl_status_code> {
   // check to see if timestamps are already enabled for this data event
-  std::optional<bool> timestamp_enabled;  // if 'none', there is no timestamp enable file for this event
-  const auto          tstamp_enable_file_path = data_event_to_configure / kScmiDataEventTstampEnableFileName;
+  astl::compat::optional<bool> timestamp_enabled;  // if 'none', there is no timestamp enable file for this event
+  const auto                   tstamp_enable_file_path = data_event_to_configure / kScmiDataEventTstampEnableFileName;
   if (!_scmi_file_interface.IsValid(tstamp_enable_file_path).value_or(false)) {
     ASTL_LOG_DEBUG("No timestamp enable file for data event: {}, timestamps will be disabled for this event",
                    data_event_to_configure.filename().string());
@@ -661,7 +662,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::EnableTimestamp(std::filesystem::path c
   if (result != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Failed to read timestamp enable file for data event: {} with error: {}",
                    data_event_to_configure.filename().string(), result);
-    return std::unexpected{result};
+    return astl::compat::unexpected{result};
   }
   timestamp_enabled = (tstamp_enabled_text == kScmiDataEventTstampEnableValue);
   // enable the timestamp if it's not already enabled, but the enable file exists
@@ -670,7 +671,7 @@ auto ScmiSysfsCollector<FileInterfaceT>::EnableTimestamp(std::filesystem::path c
     if (result != ASTL_STATUS_SUCCESS) {
       ASTL_LOG_ERROR("Failed to enable timestamp for data event: {} with error: {}",
                      data_event_to_configure.filename().string(), result);
-      return std::unexpected{result};
+      return astl::compat::unexpected{result};
     }
   }
   return timestamp_enabled;
@@ -678,20 +679,20 @@ auto ScmiSysfsCollector<FileInterfaceT>::EnableTimestamp(std::filesystem::path c
 
 template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::ReadTimestampRate(std::filesystem::path const& data_event_to_configure)
-    -> std::expected<std::optional<kilohertz>, astl_status_code> {
+    -> astl::compat::expected<astl::compat::optional<kilohertz>, astl_status_code> {
   // read the 'tstamp_rate' file to determine the rate in KHz that the data event's timestamp increments
   const auto tstamp_rate_file_path = data_event_to_configure / kScmiDataEventTstampRateFileName;
   if (!_scmi_file_interface.IsValid(tstamp_rate_file_path).value_or(false)) {
     ASTL_LOG_DEBUG("No timestamp rate file for data event: {}. Using default rate",
                    data_event_to_configure.filename().string());
-    return std::nullopt;  // not an error, but no timestamp rate file exists
+    return astl::compat::nullopt;  // not an error, but no timestamp rate file exists
   }
   std::string tstamp_rate_text;
   auto        result = _scmi_file_interface.Read(tstamp_rate_file_path, tstamp_rate_text);
   if (result != ASTL_STATUS_SUCCESS) {
     ASTL_LOG_ERROR("Failed to read timestamp rate file for data event: {} with error: {}",
                    data_event_to_configure.filename().string(), result);
-    return std::unexpected{result};
+    return astl::compat::unexpected{result};
   }
   uint32_t tstamp_rate_khz{};
   auto     parse_result = std::from_chars(
@@ -701,12 +702,12 @@ auto ScmiSysfsCollector<FileInterfaceT>::ReadTimestampRate(std::filesystem::path
     ASTL_LOG_ERROR("Failed to parse timestamp rate for data event: {} with error: {}, text was: {}",
                    data_event_to_configure.filename().string(), std::make_error_code(parse_result.ec).message(),
                    tstamp_rate_text);
-    return std::unexpected{ASTL_STATUS_FILE_ERROR};
+    return astl::compat::unexpected{ASTL_STATUS_FILE_ERROR};
   }
   if (tstamp_rate_khz == 0) {
     ASTL_LOG_ERROR("Timestamp rate for data event: {} cannot be 0, text was: {}",
                    data_event_to_configure.filename().string(), tstamp_rate_text);
-    return std::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
   }
   return kilohertz{tstamp_rate_khz};
 }
@@ -715,8 +716,8 @@ auto ScmiSysfsCollector<FileInterfaceT>::ReadTimestampRate(std::filesystem::path
  * @brief Enable the given data event ids, returning the set of DataEvents and their initial enable state
  */
 template <typename FileInterfaceT>
-std::expected<std::vector<ScmiDataEvent>, astl_status_code> ScmiSysfsCollector<FileInterfaceT>::EnableDataEvents(
-    std::unordered_set<ScmiDataEventId> const& data_events_to_enable) {
+astl::compat::expected<std::vector<ScmiDataEvent>, astl_status_code>
+ScmiSysfsCollector<FileInterfaceT>::EnableDataEvents(std::unordered_set<ScmiDataEventId> const& data_events_to_enable) {
   std::vector<ScmiDataEvent> enabled_data_events;
   for (const auto& data_event_id : data_events_to_enable) {
     const auto expected_data_event_dir_path = scmi_detail::GetDataEventDirPath(data_event_id);
@@ -729,17 +730,17 @@ std::expected<std::vector<ScmiDataEvent>, astl_status_code> ScmiSysfsCollector<F
     const auto expected_originally_enabled = EnableDataEvent(data_event_dir_path);
     if (!expected_originally_enabled) {
       static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
-      return std::unexpected{expected_originally_enabled.error()};
+      return astl::compat::unexpected{expected_originally_enabled.error()};
     }
     const auto originally_enabled = expected_originally_enabled.value();
-    enabled_data_events.emplace_back(data_event_id, originally_enabled, std::nullopt, std::nullopt);
+    enabled_data_events.emplace_back(data_event_id, originally_enabled, astl::compat::nullopt, astl::compat::nullopt);
     auto& configured_data_event = enabled_data_events.back();
     if (!_use_software_clock_timestamps) {
       // enable the timestamp collection and determine the clock rate
       const auto expected_timestamp_enabled = EnableTimestamp(data_event_dir_path);
       if (!expected_timestamp_enabled) {
         static_cast<void>(RestoreDataEventEnabledState(enabled_data_events));
-        return std::unexpected{expected_timestamp_enabled.error()};
+        return astl::compat::unexpected{expected_timestamp_enabled.error()};
       }
       const auto timestamp_enabled            = expected_timestamp_enabled.value();
       configured_data_event.timestamp_enabled = timestamp_enabled;
@@ -837,8 +838,9 @@ auto ScmiSysfsCollector<FileInterfaceT>::ExecuteScmiReadOperation(ScmiReadOperat
   }
   // TODO(https://github.com/Arm-Debug/ASTL/issues/92) - potentially disable timestamps depending on chosen
   // optimization flags
-  std::expected<ScmiDataEventValue, astl_status_code> parsed_raw_value = std::unexpected(ASTL_STATUS_FILE_ERROR);
-  HwClockTicks                                        timestamp{};
+  astl::compat::expected<ScmiDataEventValue, astl_status_code> parsed_raw_value =
+      astl::compat::unexpected(ASTL_STATUS_FILE_ERROR);
+  HwClockTicks timestamp{};
   if (_use_software_clock_timestamps) {
     parsed_raw_value = scmi_detail::ParseDataEventValue(data_read);
     timestamp        = static_cast<HwClockTicks>(ClockMonotonicRaw::now().time_since_epoch().count());

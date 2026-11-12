@@ -5,10 +5,11 @@
 #ifndef LIBSENSORS_TOPOLOGY_PLUGIN_HPP_
 #define LIBSENSORS_TOPOLOGY_PLUGIN_HPP_
 
-#include <expected>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "astl_cxx_compat.hpp"
 
 #ifdef ASTL_INCLUDE_LIBSENSORS
 #  include "libsensors/libsensors_api.hpp"
@@ -38,7 +39,7 @@ inline auto BuildTargetName(std::string_view target_suffix) -> std::string {
  */
 inline auto ScanForTargetsWithLibsensors(const AstlConfiguration&    configuration,
                                          std::shared_ptr<SensorsApi> sensors_api = nullptr)
-    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
   (void)configuration;
   std::vector<std::unique_ptr<ITarget> > targets;
   // dynamically load and initialize the libsensors library with default system configuration
@@ -56,7 +57,7 @@ inline auto ScanForTargetsWithLibsensors(const AstlConfiguration&    configurati
   if (!sensors_api->Ok()) {
     // If we loaded the sensors library but some of the functions didn't load properly, treat that as an error
     ASTL_LOG_ERROR("LibsensorsTopologyPlugin::ScanForTargets: Failed to load all requisite functions from libsensors");
-    return std::unexpected(ASTL_STATUS_NO_TARGET_FOUND);
+    return astl::compat::unexpected(ASTL_STATUS_NO_TARGET_FOUND);
   }
 
   const sensors_chip_name* chip       = nullptr;
@@ -112,7 +113,7 @@ inline auto ScanForTargetsWithLibsensors(const AstlConfiguration&    configurati
  * @brief Returns a list of targets accessible via Libsensors on this platform
  */
 inline auto ScanForTargets(const AstlConfiguration& configuration)
-    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
   (void)configuration;  // currently unused
 #ifndef ASTL_INCLUDE_LIBSENSORS
   ASTL_LOG_WARNING("LibsensorsTopologyPlugin::ScanForTargets: ASTL was not compiled with libsensors support");

@@ -5,18 +5,18 @@
 #ifndef METRIC_MANAGER_CACHE_LOADER_HPP_
 #define METRIC_MANAGER_CACHE_LOADER_HPP_
 
-#include <expected>
 #include <filesystem>
 #include <memory>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "metric/i_metric_manager.hpp"
 
 namespace astl {
 
 [[nodiscard]] auto LoadMetricManagerFromCache(const std::vector<std::unique_ptr<ITarget>>& targets,
                                               const std::filesystem::path&                 cache_dir_path)
-    -> std::expected<std::unique_ptr<IMetricManager>, astl_status_code>;
+    -> astl::compat::expected<std::unique_ptr<IMetricManager>, astl_status_code>;
 
 }  // namespace astl
 

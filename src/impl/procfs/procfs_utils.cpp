@@ -8,6 +8,7 @@
 #include <cctype>
 #include <string_view>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "procfs/procfs_utils_readers.hpp"
 
@@ -46,7 +47,7 @@ auto Trim(std::string_view text) -> std::string_view {
 }
 
 auto ReadField(const FileInterface& file_interface, const FieldDescriptor& field_descriptor)
-    -> std::expected<AstlValue, astl_status_code> {
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   if (const auto* field = std::get_if<SystemField>(&field_descriptor)) {
     return ReadSystemField(file_interface, *field);
   }
@@ -54,11 +55,11 @@ auto ReadField(const FileInterface& file_interface, const FieldDescriptor& field
   std::string contents;
   const auto  status = file_interface.Read(relative_path, contents);
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
 
   return std::visit(
-      [&contents](const auto& field) -> std::expected<AstlValue, astl_status_code> {
+      [&contents](const auto& field) -> astl::compat::expected<AstlValue, astl_status_code> {
         using FieldT = std::decay_t<decltype(field)>;
         if constexpr (std::is_same_v<FieldT, KeyValueField>) {
           return detail::ReadKeyValueField(contents, field);
@@ -74,28 +75,28 @@ auto ReadField(const FileInterface& file_interface, const FieldDescriptor& field
           return detail::ReadMemUsedPercentField(contents, field);
         } else {
           ASTL_LOG_ERROR("procfs ReadField: CpuUtilizationField requires collector-managed previous sample state");
-          return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+          return astl::compat::unexpected(ASTL_STATUS_NOT_SUPPORTED);
         }
       },
       field_descriptor);
 }
 
 auto ReadCpuSnapshot(const FileInterface& file_interface, const CpuUtilizationField& field_descriptor)
-    -> std::expected<CpuSnapshot, astl_status_code> {
+    -> astl::compat::expected<CpuSnapshot, astl_status_code> {
   std::string contents;
   const auto  status = file_interface.Read(field_descriptor.relative_path, contents);
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   return detail::ParseCpuSnapshotFromContents(contents, field_descriptor.line_prefix);
 }
 
 auto ReadCpuSnapshots(const FileInterface& file_interface, const std::filesystem::path& relative_path)
-    -> std::expected<CpuSnapshotMap, astl_status_code> {
+    -> astl::compat::expected<CpuSnapshotMap, astl_status_code> {
   std::string contents;
   const auto  status = file_interface.Read(relative_path, contents);
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   return detail::ParseCpuSnapshotsFromContents(contents);
 }

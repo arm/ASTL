@@ -11,6 +11,7 @@
 #include "../../resource_lifecycle_stress_utils.hpp"
 #include "../../test_includes.hpp"
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "operation/operation.hpp"
 #include "orchestrator/orchestrator.hpp"
 
@@ -243,7 +244,7 @@ TEST_CASE("Orchestrator tolerates repeated counter collection lifecycle churn",
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
-      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+      .RETURN(astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
   ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _)).LR_RETURN(MakeSingleSampleOperation());
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, SummarizeMetrics()).RETURN(ASTL_STATUS_SUCCESS);

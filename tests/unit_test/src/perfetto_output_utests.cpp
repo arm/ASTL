@@ -6,14 +6,15 @@
 #include <cstdlib>  // setenv, unsetenv
 #include <filesystem>
 #include <fstream>
-#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
 #include "../../mock_classes.hpp"  // mocks for orchestrator dependencies
 #include "../../orchestrator_lifecycle_test_utils.hpp"
-#include "../../test_includes.hpp"    // include before catch2
-#include "../../test_utilities.hpp"   // TempFileGuard
+#include "../../test_includes.hpp"   // include before catch2
+#include "../../test_utilities.hpp"  // TempFileGuard
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "output/output_manager.hpp"  // concrete OutputManager
 
 // Bring trompeloeil wildcard into scope for ALLOW_CALL expectations used in deferred emission test.
@@ -426,7 +427,7 @@ TEST_CASE("PerfettoOutput category inference - power & temperature (unit-based)"
       (void)caps;
       return true;
     }
-    std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
+    astl::compat::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
       return astl::OperationSequence{};
     }
     astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& sample) override {
@@ -487,7 +488,7 @@ TEST_CASE("PerfettoOutput category inference - frequency (unit-based)", "[perfet
       (void)capabilities;
       return true;
     }
-    std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
+    astl::compat::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
       return astl::OperationSequence{};
     }
     astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& raw_sample) override {
@@ -542,7 +543,7 @@ TEST_CASE("PerfettoOutput category inference - voltage (unit-based)", "[perfetto
       (void)capabilities;
       return true;
     }
-    std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
+    astl::compat::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
       return astl::OperationSequence{};
     }
     astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& raw_sample) override {
@@ -597,7 +598,7 @@ TEST_CASE("PerfettoOutput category inference - state (unit-based)", "[perfetto_o
       (void)capabilities;
       return true;
     }
-    std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
+    astl::compat::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
       return astl::OperationSequence{};
     }
     astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& raw_sample) override {
@@ -654,7 +655,7 @@ TEST_CASE("PerfettoOutput category inference fallback (unit-based)", "[perfetto_
       (void)caps;
       return true;
     }
-    std::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
+    astl::compat::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
       return astl::OperationSequence{};
     }
     astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& sample) override {

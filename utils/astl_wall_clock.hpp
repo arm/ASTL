@@ -9,23 +9,24 @@
 #include <iomanip>
 #include <limits>
 #include <locale>
-#include <optional>
 #include <sstream>
 #include <string>
+
+#include "astl_cxx_compat.hpp"
 
 namespace astl {
 
 /** Convert without overflowing even for invalid or extreme timestamps supplied by an archive. */
 inline auto CorrelateWallClockNanoseconds(int64_t raw, int64_t reference_raw, int64_t reference_realtime)
-    -> std::optional<int64_t> {
+    -> astl::compat::optional<int64_t> {
   constexpr auto min = std::numeric_limits<int64_t>::min();
   constexpr auto max = std::numeric_limits<int64_t>::max();
   if ((reference_raw > 0 && raw < min + reference_raw) || (reference_raw < 0 && raw > max + reference_raw)) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   const auto delta = raw - reference_raw;
   if ((delta > 0 && reference_realtime > max - delta) || (delta < 0 && reference_realtime < min - delta)) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return reference_realtime + delta;
 }

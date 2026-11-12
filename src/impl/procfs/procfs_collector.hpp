@@ -7,11 +7,11 @@
 
 #include <functional>
 #include <mutex>
-#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_file_interface.hpp"
 #include "collector/collection_configuration.hpp"
 #include "collector/i_collector.hpp"
@@ -46,7 +46,7 @@ class ProcfsCollector : public ICollector {
   auto PauseCollection() -> astl_status_code override;
   auto ResumeCollection() -> astl_status_code override;
   auto StopCollection() -> astl_status_code override;
-  auto GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> override;
+  auto GetNativeClockSnapshot() -> astl::compat::expected<ClockCorrelationMap, astl_status_code> override;
   auto ReadImmediate() -> astl_status_code override;
 
  private:
@@ -72,19 +72,20 @@ class ProcfsCollector : public ICollector {
   auto PrepareInterruptSnapshot(const std::filesystem::path& path, PreparedOperations& prepared) -> astl_status_code;
   auto ReadSystemSample(const procfs::SystemField& field, const PreparedOperations& prepared,
                         std::string& source_identity, bool& missing_label)
-      -> std::expected<AstlValue, astl_status_code>;
+      -> astl::compat::expected<AstlValue, astl_status_code>;
   auto ReadRateSample(OperationId operation_id, const procfs::SystemField& field, const AstlValue& value,
                       const PreparedOperations& prepared, std::string_view source_identity)
-      -> std::expected<std::optional<AstlValue>, astl_status_code>;
-  auto PrepareOperations(const OperationSequence& operations) -> std::expected<PreparedOperations, astl_status_code>;
+      -> astl::compat::expected<astl::compat::optional<AstlValue>, astl_status_code>;
+  auto PrepareOperations(const OperationSequence& operations)
+      -> astl::compat::expected<PreparedOperations, astl_status_code>;
   static auto FindCpuSnapshot(const procfs::CpuUtilizationField& cpu_field, const CpuSnapshotCache& cpu_snapshot_cache)
-      -> std::expected<const procfs::CpuSnapshot*, astl_status_code>;
+      -> astl::compat::expected<const procfs::CpuSnapshot*, astl_status_code>;
   auto ReadCpuUtilizationSample(const ProcfsReadOperation& operation, const procfs::CpuUtilizationField& cpu_field,
-                                const procfs::CpuSnapshot& cpu_snapshot) -> std::optional<AstlValue>;
+                                const procfs::CpuSnapshot& cpu_snapshot) -> astl::compat::optional<AstlValue>;
   auto ReadOperationSample(const ProcfsReadOperation& operation, const PreparedOperations& prepared)
-      -> std::expected<std::optional<AstlValue>, astl_status_code>;
+      -> astl::compat::expected<astl::compat::optional<AstlValue>, astl_status_code>;
   auto ReadFieldSample(const ProcfsReadOperation& operation, const PreparedOperations& prepared)
-      -> std::expected<std::optional<AstlValue>, astl_status_code>;
+      -> astl::compat::expected<astl::compat::optional<AstlValue>, astl_status_code>;
   auto ExecuteCollectionOperations(OperationSequence const& operations) -> astl_status_code;
   auto ExecuteStartModeOperations() -> astl_status_code;
   auto ExecuteStopModeOperations() -> astl_status_code;
@@ -96,7 +97,7 @@ class ProcfsCollector : public ICollector {
   SampleClock                                                  _sample_clock;
   IRawSampleSink*                                              _sample_sink{nullptr};
   CollectionState                                              _collection_state{CollectionState::UNCONFIGURED};
-  std::optional<CollectionConfiguration>                       _configuration;
+  astl::compat::optional<CollectionConfiguration>              _configuration;
   mutable std::mutex                                           _collection_mutex;
   std::unique_ptr<PeriodicSampler>                             _periodic_sampler;
   std::unordered_map<std::filesystem::path, InterruptSnapshot> _previous_interrupt_snapshots;

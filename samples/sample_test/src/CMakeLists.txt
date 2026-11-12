@@ -13,12 +13,14 @@ endif()
 set(TARGET "sample_test")
 
 add_executable(${TARGET} sample_test.cpp)
-target_include_directories(${TARGET} PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(${TARGET} PRIVATE ${PROJECT_SOURCE_DIR}/include "${CMAKE_CURRENT_SOURCE_DIR}/../../../utils")
+find_package(tl-expected CONFIG REQUIRED)
+find_package(tl-optional CONFIG REQUIRED)
 set_project_warnings(${TARGET})
 
 message("cmake_current_source_dir: ${CMAKE_CURRENT_SOURCE_DIR}")
 
-target_link_libraries(${TARGET} PRIVATE Astl::astl)
+target_link_libraries(${TARGET} PRIVATE Astl::astl tl::expected tl::optional)
 
 if(SHARED_KERNEL)
   target_compile_definitions(${TARGET} PUBLIC USED_SHARED)

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <format>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_value.hpp"
 
@@ -86,7 +87,7 @@ auto ResidencyMetric::InitializeResidencyState() -> void {
 // global id assignment), the contiguity or relative ordering of OperationIds could be broken, leading to
 // non‑deterministic sink ordering. Keep this single‑threaded or introduce stronger ordering guarantees in the
 // OperationId allocator before removing this constraint.
-auto ResidencyMetric::GetOperations() -> std::expected<OperationSequence, astl_status_code> {
+auto ResidencyMetric::GetOperations() -> astl::compat::expected<OperationSequence, astl_status_code> {
   OperationSequence operations_seq;
 
   // Create an operation for each configured state
@@ -95,7 +96,7 @@ auto ResidencyMetric::GetOperations() -> std::expected<OperationSequence, astl_s
     if (!operations.has_value()) {
       ASTL_LOG_ERROR("ResidencyMetric: Failed to build operations for state '{}' in metric '{}': {}",
                      state_config.state_name, _configuration->Name(), astlStatusString(operations.error()));
-      return std::unexpected(operations.error());
+      return astl::compat::unexpected(operations.error());
     }
     for (auto& operation : operations.value()) {
       OperationId op_id = operation->GetId();
@@ -145,7 +146,7 @@ auto ResidencyMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) 
   const std::string& state_name = state_config->state_name;
 
   // If this is the first sample for this state, store it and return
-  if (_previous_samples[state_name] == std::nullopt) {
+  if (_previous_samples[state_name] == astl::compat::nullopt) {
     _previous_samples[state_name] = raw_sample;
     return ASTL_STATUS_NO_NEW_SAMPLE;
   }
@@ -163,14 +164,14 @@ auto ResidencyMetric::ReceiveRawSample(const NormalizedSampledData& raw_sample) 
 
 auto ResidencyMetric::ProcessStateInterval(const NormalizedSampledData&            raw_sample,
                                            const ResidencyMetricConfig::StateInfo& state_config)
-    -> std::expected<std::chrono::microseconds, astl_status_code> {
+    -> astl::compat::expected<std::chrono::microseconds, astl_status_code> {
   const auto& state_name = state_config.state_name;
   // Calculate delta between current and previous sample for this state
   auto delta_result = CalculateDelta(raw_sample.value, _previous_samples[state_name]->value);
   if (!delta_result.has_value()) {
     ASTL_LOG_ERROR("ResidencyMetric: failed to calculate delta for state {} in metric {}: {}", state_name,
                    _configuration->Name(), astlStatusString(delta_result.error()));
-    return std::unexpected(delta_result.error());
+    return astl::compat::unexpected(delta_result.error());
   }
 
   // Convert delta ticks to time in microseconds
@@ -178,7 +179,7 @@ auto ResidencyMetric::ProcessStateInterval(const NormalizedSampledData&         
   if (!time_result.has_value()) {
     ASTL_LOG_ERROR("ResidencyMetric: failed to convert ticks to microseconds for state {} in metric {}: {}", state_name,
                    _configuration->Name(), astlStatusString(time_result.error()));
-    return std::unexpected(time_result.error());
+    return astl::compat::unexpected(time_result.error());
   }
   // Collect processed sample (do not sink yet; enforce ordering across states later)
   // Use insert_or_assign to avoid default-constructing ProcessedSampledData (no default ctor)
@@ -195,13 +196,13 @@ auto ResidencyMetric::ProcessStateInterval(const NormalizedSampledData&         
   if (!percentage_result.has_value()) {
     ASTL_LOG_ERROR("ResidencyMetric: failed to calculate percentage for state {} in metric {}: {}", state_name,
                    _configuration->Name(), astlStatusString(percentage_result.error()));
-    return std::unexpected(percentage_result.error());
+    return astl::compat::unexpected(percentage_result.error());
   }
 
   // Update state residency statistics
   auto status = UpdateStateResidencyStatistics(state_name, time_result.value(), percentage_result.value());
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
 
   return time_interval;
@@ -273,9 +274,9 @@ auto ResidencyMetric::Summarize() -> astl_status_code {
 auto ResidencyMetric::GetResidencySummaryData() const -> const ResidencySummaryData& { return _summary_data; }
 
 auto ResidencyMetric::ConvertTicksToMicroseconds(const AstlValue& ticks, const ResidencyMetricConfig::StateInfo& config)
-    -> std::expected<std::chrono::microseconds, astl_status_code> {
+    -> astl::compat::expected<std::chrono::microseconds, astl_status_code> {
   if (config.tick_frequency <= 0.0) {
-    return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+    return astl::compat::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
 
   // Convert ticks to microseconds: time = (ticks / frequency) * 1,000,000
@@ -302,13 +303,13 @@ auto ResidencyMetric::ConvertTicksToMicroseconds(const AstlValue& ticks, const R
 
 auto ResidencyMetric::CalculatePercentage(std::chrono::microseconds time_in_state,
                                           std::chrono::microseconds total_interval)
-    -> std::expected<double, astl_status_code> {
+    -> astl::compat::expected<double, astl_status_code> {
   if (total_interval.count() <= 0) {
-    return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+    return astl::compat::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
 
   if (time_in_state.count() < 0) {
-    return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+    return astl::compat::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
 
   // Calculate percentage: (time_in_state / total_interval) * 100

@@ -20,6 +20,7 @@
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
+#include "astl_cxx_compat.hpp"
 #include "collector/collection_operations.hpp"
 #include "common/capabilities.hpp"
 #include "common/i_processed_sample_sink.hpp"
@@ -71,7 +72,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @brief Helper to look up a ICounter handle representing a counter for a specific target from a metric API handle
    */
   [[nodiscard]] auto GetCounterOnTarget(astl_counter_handle_t counter_handle, const ITarget* target) const
-      -> std::expected<IMetric*, astl_status_code> override;
+      -> astl::compat::expected<IMetric*, astl_status_code> override;
 
   /**
    * @brief Register the counter.
@@ -99,7 +100,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @return A span<astl_counter_handle_t> containing all registered counters, or an error.
    */
   [[nodiscard]] auto GetAvailableCounters(const ITarget* target) const
-      -> std::expected<std::span<const astl_counter_handle_t>, astl_status_code> override;
+      -> astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code> override;
 
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
@@ -125,14 +126,14 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    */
   [[nodiscard]] auto GetCounterRequiredOperations(std::span<const astl_counter_handle_t> counters,
                                                   const ITarget*                         target)
-      -> std::expected<CollectionOperations, astl_status_code> override;
+      -> astl::compat::expected<CollectionOperations, astl_status_code> override;
 
   // IMetricManager implementation
   /**
    * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
    */
   auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target) const
-      -> std::expected<IMetric*, astl_status_code> override;
+      -> astl::compat::expected<IMetric*, astl_status_code> override;
 
   auto GetLifecycleEventMetricOnTarget(const ITarget* target) const -> const IMetric* override;
 
@@ -188,7 +189,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    *         or an error code if retrieval fails.
    */
   auto GetAvailableMetrics(const ITarget* target) const
-      -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> override;
+      -> astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code> override;
 
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
@@ -203,7 +204,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    *         or an error code (e.g., BAD_ARGUMENT, UNSUPPORTED_COLLECTOR_TYPE).
    */
   auto GetRequiredOperations(std::span<const astl_metric_handle_t> metrics, const ITarget* target)
-      -> std::expected<CollectionOperations, astl_status_code> override;
+      -> astl::compat::expected<CollectionOperations, astl_status_code> override;
 
   /**
    * @brief Distribute collected sample data to registered metrics.
@@ -258,7 +259,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @return A span<astl_metric_group_handle_t> containing all registered metric groups, or an error.
    */
   [[nodiscard]] auto GetMetricGroups(const ITarget* target) const
-      -> std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> override;
+      -> astl::compat::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> override;
 
   /**
    * @brief Assign values such as name, description, etc to the given metric groups properties pointer.
@@ -272,7 +273,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @brief Retrieve the metric handles associated with a given metric group instance
    */
   auto GetMetricsInGroup(astl_metric_group_handle_t group) const
-      -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> override;
+      -> astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code> override;
 
   /**
    * @brief Removes all previously registered metrics, due to a reconfiguration event.
@@ -300,7 +301,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
    * @param metric Metric instance pointer.
    * @return expected containing target on success or ASTL_STATUS_BAD_ARGUMENT / NOT_FOUND.
    */
-  auto GetTargetForMetric(const IMetric* metric) const -> std::expected<const ITarget*, astl_status_code>;
+  auto GetTargetForMetric(const IMetric* metric) const -> astl::compat::expected<const ITarget*, astl_status_code>;
 
   // IProcessSampleSink implementation
   /**
@@ -332,7 +333,7 @@ class MetricManager : public IMetricManager, public IProcessedSampleSink {
 
   friend auto ProtobufSerDes::Deserialize<std::unique_ptr<MetricManager>>(std::istream&,
                                                                           const std::vector<std::unique_ptr<ITarget>>&)
-      -> std::expected<std::unique_ptr<MetricManager>, astl_status_code>;
+      -> astl::compat::expected<std::unique_ptr<MetricManager>, astl_status_code>;
 
  private:
   auto DispatchProcessingQueue(std::vector<std::pair<IMetric*, NormalizedSampledData>>& processing_queue)

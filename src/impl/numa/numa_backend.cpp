@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_backend.hpp"
 #include "collector/i_collector.hpp"
 #include "config/astl_configuration.hpp"
@@ -19,10 +20,10 @@ class NumaTarget : public Target {
         root(std::move(path)),
         nodes(std::move(instances)) {}
 };
-auto DiscoverNumaTargets(const AstlConfiguration& config) -> std::expected<BackendTargets, astl_status_code> {
+auto DiscoverNumaTargets(const AstlConfiguration& config) -> astl::compat::expected<BackendTargets, astl_status_code> {
   auto nodes = numa::Discover(FileInterface{config.numa_root_path});
   if (!nodes) {
-    return std::unexpected(nodes.error());
+    return astl::compat::unexpected(nodes.error());
   }
   BackendTargets targets;
   if (!nodes->empty()) {
@@ -88,19 +89,19 @@ auto RegisterNumaMetrics(const AstlConfiguration& /*configuration*/, const Backe
 }
 #endif
 auto BuildNumaCollector(const ITarget& target, const AstlConfiguration& config)
-    -> std::expected<std::unique_ptr<ICollector>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<ICollector>, astl_status_code> {
   if (config.load_file_path) {
     return nullptr;
   }
 #if defined(ASTL_INCLUDE_NUMA)
   const auto* numa = dynamic_cast<const NumaTarget*>(&target);
   if (!numa) {
-    return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
   }
   return std::make_unique<NumaCollector>(FileInterface{numa->root}, numa->nodes);
 #else
   (void)target;
-  return std::unexpected(ASTL_STATUS_NOT_SUPPORTED);
+  return astl::compat::unexpected(ASTL_STATUS_NOT_SUPPORTED);
 #endif
 }
 }  // namespace

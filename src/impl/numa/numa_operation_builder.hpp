@@ -4,6 +4,7 @@
 
 #ifndef NUMA_OPERATION_BUILDER_HPP_
 #define NUMA_OPERATION_BUILDER_HPP_
+#include "astl_cxx_compat.hpp"
 #include "operation/operation.hpp"
 #include "target.hpp"
 namespace astl {
@@ -16,9 +17,9 @@ struct NumaReadOperation : Operation {
 class NumaOperationBuilder {
  public:
   explicit NumaOperationBuilder(NumaField field, std::string node = {}) : _field(field), _node(std::move(node)) {}
-  auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code> {
+  auto BuildOperations(const ITarget* target) const -> astl::compat::expected<OperationSequence, astl_status_code> {
     if (!target || target->GetCollectorType() != CollectorType::NUMA) {
-      return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
     }
     OperationSequence result;
     result.push_back(std::make_unique<NumaReadOperation>(_field, _node));

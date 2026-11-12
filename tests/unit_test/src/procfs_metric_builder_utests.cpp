@@ -12,6 +12,7 @@
 
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "astl_utils.hpp"
 #include "common/capabilities.hpp"
 #include "config/astl_configuration.hpp"
@@ -85,7 +86,7 @@ TEST_CASE("Shipped procfs metrics work without platform-specific configuration",
   REQUIRE(configuration.has_value());
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.push_back(std::make_unique<astl::ProcfsTarget>("procfs", "generic Android or Linux", procfs_root));
-  auto manager = astl::BuildMetricManager(targets, *configuration, std::nullopt);
+  auto manager = astl::BuildMetricManager(targets, *configuration, astl::compat::nullopt);
   REQUIRE(manager.has_value());
   CHECK(CollectMetricNames(**manager, targets.front().get()) ==
         std::vector<std::string>{"cpu.0.iowait", "cpu.0.utilization", "cpu.total.iowait", "cpu.total.utilization",
@@ -434,7 +435,8 @@ TEST_CASE("Optional scheduler and VM metrics require their individual source fie
     auto settings =
         astl::metrics::spec::ParseProcfsMetricJsonCollectionSettings(declarations->metrics.at(name).collection);
     REQUIRE(settings);
-    auto descriptor = astl::procfs_metric_builder_helpers::detail::ParseProcfsFieldDescriptor(*settings, std::nullopt);
+    auto descriptor =
+        astl::procfs_metric_builder_helpers::detail::ParseProcfsFieldDescriptor(*settings, astl::compat::nullopt);
     REQUIRE(descriptor);
     auto value = astl::procfs::ReadField(files, *descriptor);
     REQUIRE(value);

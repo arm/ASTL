@@ -6,12 +6,12 @@
 
 #include <algorithm>
 #include <cctype>
-#include <optional>
 #include <string>
 #include <string_view>
 
 #include "astl/astl_errors.h"
 #include "astl/astl_telemetry.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
 #include "collector/collector_backend.hpp"
@@ -53,7 +53,7 @@ auto TrimCollectorName(std::string_view value) -> std::string {
   return result;
 }
 
-auto ParseCollectorSelection() -> std::expected<CollectorSelection, astl_status_code> {
+auto ParseCollectorSelection() -> astl::compat::expected<CollectorSelection, astl_status_code> {
   const std::string value = GetEnvVar(EnvVar::ASTL_COLLECTORS);
   if (TrimCollectorName(value).empty()) {
     return CollectorSelection{};
@@ -66,14 +66,14 @@ auto ParseCollectorSelection() -> std::expected<CollectorSelection, astl_status_
     const auto name = TrimCollectorName(std::string_view{value}.substr(start, end - start));
     if (name.empty()) {
       ASTL_LOG_ERROR("ASTL_COLLECTORS contains an empty collector name: '{}'", value);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
 
     const auto backends = BuiltinCollectorBackends();
     const auto backend  = std::ranges::find(backends, name, &CollectorBackend::name);
     if (backend == backends.end()) {
       ASTL_LOG_ERROR("Unknown collector '{}' in ASTL_COLLECTORS", name);
-      return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
     }
     if (backend->discover != nullptr) {
       selection.enabled->push_back(backend->type);
@@ -88,7 +88,7 @@ auto ParseCollectorSelection() -> std::expected<CollectorSelection, astl_status_
   }
   if (selection.enabled->empty()) {
     ASTL_LOG_ERROR("None of the requested ASTL_COLLECTORS are available in this build");
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return selection;
 }
@@ -129,11 +129,11 @@ static auto GetProcfsRootPath() -> std::filesystem::path {
   return procfs::kDefaultProcfsRootPath;
 }
 
-AstlConfiguration::AstlConfiguration(std::filesystem::path const&                scmi_sysfs_path,
-                                     std::filesystem::path const&                scmi_ioctl_device_root,
-                                     std::filesystem::path const&                procfs_root_path,
-                                     std::filesystem::path const&                config_dir_path,
-                                     std::optional<std::filesystem::path> const& load_file_path)
+AstlConfiguration::AstlConfiguration(std::filesystem::path const&                         scmi_sysfs_path,
+                                     std::filesystem::path const&                         scmi_ioctl_device_root,
+                                     std::filesystem::path const&                         procfs_root_path,
+                                     std::filesystem::path const&                         config_dir_path,
+                                     astl::compat::optional<std::filesystem::path> const& load_file_path)
     : scmi_sysfs_telemetry_root_path{scmi_sysfs_path},
       scmi_ioctl_device_root_path{scmi_ioctl_device_root},
       procfs_root_path{procfs_root_path},
@@ -146,20 +146,21 @@ AstlConfiguration::AstlConfiguration(std::filesystem::path const&               
       load_file_path{load_file_path} {}
 
 /* Create a AstlConfiguration instance, depending on env variables, and file system paths found. */
-[[nodiscard]] auto AstlConfiguration::CreateConfiguration() -> std::expected<AstlConfiguration, astl_status_code> {
+[[nodiscard]] auto AstlConfiguration::CreateConfiguration()
+    -> astl::compat::expected<AstlConfiguration, astl_status_code> {
   auto scmi_sysfs_path        = GetScmiSysFsTelemetryRootPath();
   auto scmi_ioctl_device_root = GetScmiIoctlDeviceRootPath();
   auto procfs_root_path       = GetProcfsRootPath();
   auto resources              = config::ConfigSource::Create();
   auto collectors             = ParseCollectorSelection();
   if (!resources) {
-    return std::unexpected<astl_status_code>(resources.error());
+    return astl::compat::unexpected<astl_status_code>(resources.error());
   }
   if (!collectors) {
-    return std::unexpected<astl_status_code>(collectors.error());
+    return astl::compat::unexpected<astl_status_code>(collectors.error());
   }
   auto configuration       = AstlConfiguration(scmi_sysfs_path, scmi_ioctl_device_root, procfs_root_path,
-                                               std::filesystem::path{}, std::nullopt);
+                                               std::filesystem::path{}, astl::compat::nullopt);
   configuration.collectors = *collectors;
   configuration.resources  = *resources;
   return configuration;

@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "scmi/scmi_clock_correlation.hpp"
 #include "scmi/scmi_ioctl_collector.hpp"
@@ -31,15 +32,15 @@ struct CorrelationRead {
 };
 
 auto ReadSpacing(IScmiIoctlInterface& interface, const ScmiReadOperation& operation, IntervalCache& intervals)
-    -> std::expected<std::chrono::nanoseconds, astl_status_code> {
+    -> astl::compat::expected<std::chrono::nanoseconds, astl_status_code> {
   scmi_tlm_de_info info{};
   const auto       info_status = interface.GetDataEventInfo(operation.scmi_data_event_id, info);
   if (info_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected{info_status};
+    return astl::compat::unexpected{info_status};
   }
   const auto rate = info.ts_rate != 0 ? info.ts_rate : kDefaultScmiTimestampRate;
   if (operation.tstamp_rate == 0 || rate != operation.tstamp_rate) {
-    return std::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
+    return astl::compat::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
   }
   const bool        grouped = SCMI_TLM_DEINFO_HAS_GROUP(info.flags) != 0;
   const IntervalKey key{grouped, grouped ? info.grp_id : 0};
@@ -51,7 +52,7 @@ auto ReadSpacing(IScmiIoctlInterface& interface, const ScmiReadOperation& operat
   config.grp_id            = key.second;
   const auto config_status = interface.GetConfig(config);
   if (config_status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected{config_status};
+    return astl::compat::unexpected{config_status};
   }
   const auto spacing = scmi_detail::ClockCorrelationReadSpacing(config.active);
   if (spacing) {
@@ -61,7 +62,7 @@ auto ReadSpacing(IScmiIoctlInterface& interface, const ScmiReadOperation& operat
 }
 
 auto PrepareCorrelationReads(IScmiIoctlInterface& interface, const OperationSequence& operations)
-    -> std::expected<std::vector<CorrelationRead>, astl_status_code> {
+    -> astl::compat::expected<std::vector<CorrelationRead>, astl_status_code> {
   std::vector<CorrelationRead>                reads;
   std::unordered_map<ScmiDataEventId, size_t> by_data_event;
   IntervalCache                               intervals;
@@ -73,7 +74,7 @@ auto PrepareCorrelationReads(IScmiIoctlInterface& interface, const OperationSequ
     if (const auto found = by_data_event.find(operation->scmi_data_event_id); found != by_data_event.end()) {
       auto& read = reads[found->second];
       if (read.operation->tstamp_rate != operation->tstamp_rate) {
-        return std::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
+        return astl::compat::unexpected{ASTL_STATUS_BAD_CONFIGURATION};
       }
       read.operations.push_back(operation->GetId());
       continue;
@@ -82,7 +83,7 @@ auto PrepareCorrelationReads(IScmiIoctlInterface& interface, const OperationSequ
     if (!spacing) {
       ASTL_LOG_ERROR("SCMI clock correlation: unable to read a valid active interval for DE_ID {:08X}: {}",
                      operation->scmi_data_event_id, astlStatusString(spacing.error()));
-      return std::unexpected{spacing.error()};
+      return astl::compat::unexpected{spacing.error()};
     }
     by_data_event.emplace(operation->scmi_data_event_id, reads.size());
     reads.push_back(CorrelationRead{
@@ -116,7 +117,7 @@ auto CaptureCorrelationRead(IScmiIoctlInterface& interface, CorrelationRead& rea
 }
 
 auto MakeMinimumCorrelations(const std::vector<CorrelationRead>& reads)
-    -> std::expected<ClockCorrelationMap, astl_status_code> {
+    -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   ClockCorrelationMap result;
   for (const auto& read : reads) {
     ASTL_LOG_DEBUG("SCMI clock correlation DE_ID {:08X}: attempts={} distinct={} failures={} spacing_ns={}",
@@ -127,11 +128,11 @@ auto MakeMinimumCorrelations(const std::vector<CorrelationRead>& reads)
                        read.operation->scmi_data_event_id, read.failures, read.minimum.Count());
     }
     if (read.minimum.Count() == 0) {
-      return std::unexpected{read.last_error};
+      return astl::compat::unexpected{read.last_error};
     }
     const auto correlation = read.minimum.Correlation();
     if (!correlation) {
-      return std::unexpected{correlation.error()};
+      return astl::compat::unexpected{correlation.error()};
     }
     for (const auto operation_id : read.operations) {
       result.emplace(operation_id, *correlation);
@@ -142,7 +143,7 @@ auto MakeMinimumCorrelations(const std::vector<CorrelationRead>& reads)
 
 }  // namespace
 
-auto ScmiIoctlCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelationMap, astl_status_code> {
+auto ScmiIoctlCollector::GetNativeClockSnapshot() -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   std::scoped_lock lock{_collection_mutex};
   if (!_configuration) {
     ASTL_LOG_WARNING("ScmiIoctlCollector::GetNativeClockSnapshot called without configuration; returning empty map");
@@ -164,13 +165,13 @@ auto ScmiIoctlCollector::GetNativeClockSnapshot() -> std::expected<ClockCorrelat
   }
   auto reads = PrepareCorrelationReads(*_scmi_ioctl_interface, operations);
   if (!reads) {
-    return std::unexpected{reads.error()};
+    return astl::compat::unexpected{reads.error()};
   }
   for (size_t attempt = 0; attempt < scmi_detail::kClockCorrelationReadAttempts; ++attempt) {
     for (auto& read : *reads) {
       const auto status = CaptureCorrelationRead(*_scmi_ioctl_interface, read, attempt != 0);
       if (status != ASTL_STATUS_SUCCESS) {
-        return std::unexpected{status};
+        return astl::compat::unexpected{status};
       }
     }
   }

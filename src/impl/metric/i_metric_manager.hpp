@@ -11,6 +11,7 @@
 
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "collector/collection_operations.hpp"
 #include "common/astl_defines.hpp"
 #include "common/clock_correlation.hpp"
@@ -56,7 +57,7 @@ struct IMetricManager {
    * @return the ICounter instance representing the given counter_handle on the given target. (or an error)
    */
   [[nodiscard]] virtual auto GetCounterOnTarget(astl_counter_handle_t counter_handle, const ITarget* target) const
-      -> std::expected<IMetric*, astl_status_code> = 0;
+      -> astl::compat::expected<IMetric*, astl_status_code> = 0;
 
   /**
    * @brief Register the counter.
@@ -88,7 +89,7 @@ struct IMetricManager {
    * @return A span<astl_counter_handle_t> containing all registered counters, or an error.
    */
   [[nodiscard]] virtual auto GetAvailableCounters(const ITarget* target) const
-      -> std::expected<std::span<const astl_counter_handle_t>, astl_status_code> = 0;
+      -> astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code> = 0;
 
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
@@ -115,13 +116,13 @@ struct IMetricManager {
    */
   [[nodiscard]] virtual auto GetCounterRequiredOperations(std::span<const astl_counter_handle_t> counters,
                                                           const ITarget*                         target)
-      -> std::expected<CollectionOperations, astl_status_code> = 0;
+      -> astl::compat::expected<CollectionOperations, astl_status_code> = 0;
 
   /**
    * @brief Helper to look up a IMetric handle for a specific target from a metric API handle
    */
   [[nodiscard]] virtual auto GetMetricOnTarget(astl_metric_handle_t metric_handle, const ITarget* target) const
-      -> std::expected<IMetric*, astl_status_code> = 0;
+      -> astl::compat::expected<IMetric*, astl_status_code> = 0;
 
   /**
    * @brief Return the lifecycle-event EventMetric instance for the given target, or nullptr if none is registered.
@@ -198,7 +199,7 @@ struct IMetricManager {
    * @return A span<astl_metric_handle_t> containing all registered metrics, or an error.
    */
   [[nodiscard]] virtual auto GetAvailableMetrics(const ITarget* target) const
-      -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
+      -> astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
 
   /**
    * @brief Assign values such as name, units, etc to the given properties pointer.
@@ -223,7 +224,7 @@ struct IMetricManager {
    *         OR a status code indicating the nature of an error
    */
   [[nodiscard]] virtual auto GetRequiredOperations(std::span<const astl_metric_handle_t> metrics, const ITarget* target)
-      -> std::expected<CollectionOperations, astl_status_code> = 0;
+      -> astl::compat::expected<CollectionOperations, astl_status_code> = 0;
 
   /**
    * @brief Process the data and route the messages to metrics.
@@ -333,7 +334,7 @@ struct IMetricManager {
    * @return A span<astl_metric_group_handle_t> containing all registered metric groups, or an error.
    */
   [[nodiscard]] virtual auto GetMetricGroups(const ITarget* target) const
-      -> std::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> = 0;
+      -> astl::compat::expected<std::span<const astl_metric_group_handle_t>, astl_status_code> = 0;
 
   /**
    * @brief Assign values such as name, description, etc to the given metric groups properties pointer.
@@ -345,7 +346,7 @@ struct IMetricManager {
    * @brief Retrieve the metric handles associated with a given metric group instance
    */
   auto virtual GetMetricsInGroup(astl_metric_group_handle_t group) const
-      -> std::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
+      -> astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code> = 0;
 
   /**
    * @brief Removes all previously registered metrics, due to a reconfiguration event.

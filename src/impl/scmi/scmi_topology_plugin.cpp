@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_file_interface.hpp"
 #include "astl_logger.hpp"
 #include "config/astl_configuration.hpp"
@@ -32,10 +33,10 @@ auto BuildTargetName(const std::string& telemetry_subdirectory) -> std::string {
 
 auto BuildSysfsTargetFromImplementationVersion(const std::string& implementation_version,
                                                const std::string& telemetry_subdirectory)
-    -> std::expected<std::unique_ptr<ITarget>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<ITarget>, astl_status_code> {
   const auto uuid_result = scmi::spec::GetNormalizedUuid(implementation_version);
   if (!uuid_result) {
-    return std::unexpected(uuid_result.error());
+    return astl::compat::unexpected(uuid_result.error());
   }
 
   const auto uuid = uuid_result.value();
@@ -74,7 +75,7 @@ auto CompareTelemetryDirectoryNames(const std::string& lhs, const std::string& r
 }
 
 auto DetectIoctlTarget(const std::filesystem::path& device_path)
-    -> std::expected<std::unique_ptr<ITarget>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<ITarget>, astl_status_code> {
   ScmiIoctlInterface ioctl_interface{device_path};
   auto               status = ioctl_interface.Probe();
   if (status != ASTL_STATUS_SUCCESS) {
@@ -85,11 +86,11 @@ auto DetectIoctlTarget(const std::filesystem::path& device_path)
 
   const auto raw_uuid = ioctl_interface.DeImplementationVersion();
   if (!raw_uuid) {
-    return std::unexpected(raw_uuid.error());
+    return astl::compat::unexpected(raw_uuid.error());
   }
   const auto uuid_result = scmi::spec::GetNormalizedUuid(*raw_uuid);
   if (!uuid_result) {
-    return std::unexpected(uuid_result.error());
+    return astl::compat::unexpected(uuid_result.error());
   }
 
   const auto telemetry_subdirectory =
@@ -103,7 +104,7 @@ auto DetectIoctlTarget(const std::filesystem::path& device_path)
 }
 
 auto ListSortedIoctlDevices(const std::filesystem::path& device_root)
-    -> std::expected<std::vector<std::filesystem::directory_entry>, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::filesystem::directory_entry>, astl_status_code> {
   std::error_code ec;
   if (!std::filesystem::exists(device_root, ec)) {
     ASTL_LOG_WARNING(
@@ -113,7 +114,7 @@ auto ListSortedIoctlDevices(const std::filesystem::path& device_root)
   }
   if (ec) {
     ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to check SCMI ioctl device root path: {}", ec.message());
-    return std::unexpected(ASTL_STATUS_FILE_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_FILE_ERROR);
   }
 
   std::vector<std::filesystem::directory_entry> entries;
@@ -137,7 +138,7 @@ auto ListSortedIoctlDevices(const std::filesystem::path& device_root)
 }
 
 auto BuildTargetsFromIoctlDevices(const std::vector<std::filesystem::directory_entry>& ioctl_devices)
-    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
   std::vector<std::unique_ptr<ITarget> > targets;
   for (const auto& entry : ioctl_devices) {
     auto target = DetectIoctlTarget(entry.path());
@@ -146,7 +147,7 @@ auto BuildTargetsFromIoctlDevices(const std::vector<std::filesystem::directory_e
         continue;
       }
       ASTL_LOG_ERROR("ScmiTopologyPlugin::ScanForTargets: Failed to detect ioctl target {}", entry.path().string());
-      return std::unexpected(target.error());
+      return astl::compat::unexpected(target.error());
     }
     if (target.value()) {
       targets.push_back(std::move(target.value()));
@@ -156,10 +157,10 @@ auto BuildTargetsFromIoctlDevices(const std::vector<std::filesystem::directory_e
 }
 
 auto ScanForIoctlTargets(const AstlConfiguration& configuration)
-    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
   auto sorted_devices = ListSortedIoctlDevices(configuration.scmi_ioctl_device_root_path);
   if (!sorted_devices) {
-    return std::unexpected(sorted_devices.error());
+    return astl::compat::unexpected(sorted_devices.error());
   }
   return BuildTargetsFromIoctlDevices(*sorted_devices);
 }
@@ -167,7 +168,7 @@ auto ScanForIoctlTargets(const AstlConfiguration& configuration)
 }  // namespace detail
 
 auto ScanForTargets(const AstlConfiguration& configuration)
-    -> std::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::unique_ptr<ITarget> >, astl_status_code> {
   const auto backend_preference = GetScmiBackendPreference();
   if (ScmiPreferenceAllowsIoctl(backend_preference)) {
     auto ioctl_targets = detail::ScanForIoctlTargets(configuration);

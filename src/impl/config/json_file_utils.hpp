@@ -5,19 +5,19 @@
 #ifndef JSON_FILE_UTILS_HPP_
 #define JSON_FILE_UTILS_HPP_
 
-#include <expected>
 #include <filesystem>
 #include <fstream>
-#include <nlohmann/json.hpp>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "astl_logger.hpp"
 #include "config/config_source.hpp"
 
 namespace astl::config {
 
 inline auto LoadJsonFile(const std::filesystem::path& json_file_path, const ConfigSource* source = nullptr)
-    -> std::expected<nlohmann::json, astl_status_code> {
+    -> astl::compat::expected<nlohmann::json, astl_status_code> {
   if (source) {
     return source->Load(json_file_path);
   }
@@ -27,26 +27,26 @@ inline auto LoadJsonFile(const std::filesystem::path& json_file_path, const Conf
     return nlohmann::json::parse(json_file);
   } catch (const std::ifstream::failure& e) {
     ASTL_LOG_ERROR("Unable to open json file {}: {}", json_file_path.string(), e.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   } catch (const std::exception& e) {
     ASTL_LOG_ERROR("Unable to parse json file {}: {}", json_file_path.string(), e.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 }
 
 template <typename SpecType>
 inline auto TryParseJsonFile(const std::filesystem::path& json_file_path, const ConfigSource* source = nullptr)
-    -> std::expected<SpecType, astl_status_code> {
+    -> astl::compat::expected<SpecType, astl_status_code> {
   auto json_or_error = LoadJsonFile(json_file_path, source);
   if (!json_or_error.has_value()) {
-    return std::unexpected(json_or_error.error());
+    return astl::compat::unexpected(json_or_error.error());
   }
 
   try {
     return json_or_error->template get<SpecType>();
   } catch (const std::exception& e) {
     ASTL_LOG_ERROR("Unable to parse json file {}: {}", json_file_path.string(), e.what());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 }
 

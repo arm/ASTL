@@ -8,6 +8,7 @@
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
 #include "common/capabilities.hpp"
 #include "common/metric_config.hpp"
@@ -84,9 +85,9 @@ astl::ScmiDataEventId GetDataEventId(const astl::ResidencyMetricConfig::StateInf
 }
 
 void SetScmiCollection(astl::metrics::spec::MetricJsonDeclaration& metric_declaration,
-                       std::optional<std::string>                  register_name    = std::nullopt,
-                       std::optional<std::string>                  component_filter = std::nullopt,
-                       std::optional<std::string>                  instance_filter  = std::nullopt) {
+                       astl::compat::optional<std::string>         register_name    = astl::compat::nullopt,
+                       astl::compat::optional<std::string>         component_filter = astl::compat::nullopt,
+                       astl::compat::optional<std::string>         instance_filter  = astl::compat::nullopt) {
   metric_declaration.collection.protocol = "scmi";
   metric_declaration.collection.register_name.clear();
   metric_declaration.collection.scmi_component_filter.reset();
@@ -710,7 +711,7 @@ TEST_CASE("ConfigurationManager::GetConfiguration returns configuration", "[Conf
 }
 
 TEST_CASE("ConfigurationManager load-file override round-trips and clears", "[ConfigManager][Paths]") {
-  astl::ConfigurationManager::SetLoadFilePathOverride(std::nullopt);
+  astl::ConfigurationManager::SetLoadFilePathOverride(astl::compat::nullopt);
   REQUIRE_FALSE(astl::ConfigurationManager::GetLoadFilePathOverride().has_value());
 
   const auto override_path = std::filesystem::path{"/tmp/test-session.astl"};
@@ -720,7 +721,7 @@ TEST_CASE("ConfigurationManager load-file override round-trips and clears", "[Co
   REQUIRE(current_override.has_value());
   REQUIRE(current_override.value() == override_path);
 
-  astl::ConfigurationManager::SetLoadFilePathOverride(std::nullopt);
+  astl::ConfigurationManager::SetLoadFilePathOverride(astl::compat::nullopt);
   REQUIRE_FALSE(astl::ConfigurationManager::GetLoadFilePathOverride().has_value());
 }
 
@@ -898,10 +899,10 @@ TEST_CASE("CreateScmiMetricConfigs scopes SCMI metric ids per target", "[ConfigM
                           .rel_offset           = 0x00}}}}
   };
 
-  astl::Target target_tlm0("scmi-mockscmi-tlm-0", "test target 0", astl::CollectorType::SCMI, nullptr, std::nullopt,
-                           std::string{"tlm-0"});
-  astl::Target target_tlm1("scmi-mockscmi-tlm-1", "test target 1", astl::CollectorType::SCMI, nullptr, std::nullopt,
-                           std::string{"tlm-1"});
+  astl::Target target_tlm0("scmi-mockscmi-tlm-0", "test target 0", astl::CollectorType::SCMI, nullptr,
+                           astl::compat::nullopt, std::string{"tlm-0"});
+  astl::Target target_tlm1("scmi-mockscmi-tlm-1", "test target 1", astl::CollectorType::SCMI, nullptr,
+                           astl::compat::nullopt, std::string{"tlm-1"});
   std::vector<const astl::ITarget*> targets{&target_tlm0, &target_tlm1};
 
   auto metric_configs_result =
@@ -1062,9 +1063,9 @@ TEST_CASE("Operation strategies accept independent large builders and preserve v
   struct LargeBuilder {
     std::array<char, 1024> payload{};
     auto                   BuildOperations(const astl::ITarget* /*target*/) const
-        -> std::expected<astl::OperationSequence, astl_status_code> {
+        -> astl::compat::expected<astl::OperationSequence, astl_status_code> {
       if (payload[0] == 1) {
-        return std::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+        return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
       }
       return astl::OperationSequence{};
     }
@@ -1085,7 +1086,7 @@ TEST_CASE("Operation strategies accept independent large builders and preserve v
 TEST_CASE("Operation strategies preserve null and exhausted-ID errors", "[OperationBuilder]") {
   struct ExhaustedBuilder {
     static auto BuildOperations(const astl::ITarget* /*target*/)
-        -> std::expected<astl::OperationSequence, astl_status_code> {
+        -> astl::compat::expected<astl::OperationSequence, astl_status_code> {
       throw astl::OperationIdExhausted{};
     }
   };

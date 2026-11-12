@@ -4,6 +4,8 @@
 
 #include "sampled_value_metric.hpp"
 
+#include "astl_cxx_compat.hpp"
+
 namespace astl {
 
 namespace {
@@ -90,7 +92,7 @@ auto SampledValueMetric::InitializeSamples() -> void {
   // Initialize summary data based on the value type
   auto zero_val = AstlValue::FromZero(_configuration->ValueType());
   if (zero_val.has_value()) {
-    _summary_data = {.min = std::nullopt, .max = std::nullopt, .avg = zero_val.value()};
+    _summary_data = {.min = astl::compat::nullopt, .max = astl::compat::nullopt, .avg = zero_val.value()};
   } else {
     ASTL_LOG_INFO("SampledValueMetric: unsupported type {} for statistics for metric: {}", _configuration->ValueType(),
                   _configuration->Name());
@@ -111,7 +113,7 @@ auto SampledValueMetric::Summarize() -> astl_status_code {
   } else {
     ASTL_LOG_ERROR("Error computing average sample value: {}", astlStatusString(average.error()));
   }
-  auto to_string_or_none = [](const std::optional<AstlValue>& val) {
+  auto to_string_or_none = [](const astl::compat::optional<AstlValue>& val) {
     return val.has_value() ? to_string(val.value()) : std::string{"<none>"};
   };
   const auto max_value = to_string_or_none(_summary_data.max);

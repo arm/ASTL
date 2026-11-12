@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_backend.hpp"
 #include "collector/i_collector.hpp"
 #include "libsensors/libsensors_target.hpp"
@@ -13,7 +14,7 @@
 namespace astl {
 namespace {
 auto BuildLibsensorsCollector(const ITarget& target, const AstlConfiguration& /*configuration*/)
-    -> std::expected<std::unique_ptr<ICollector>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<ICollector>, astl_status_code> {
 #if defined(ASTL_INCLUDE_LIBSENSORS)
   if (const auto* sensors = dynamic_cast<const LibsensorsTarget*>(&target)) {
     return std::make_unique<LibsensorsCollector>(sensors->ShareApi());

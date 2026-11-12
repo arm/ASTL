@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
-#include <optional>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -19,6 +18,7 @@
 #include "../../test_utilities.hpp"
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "collector/collector_manager.hpp"
 #include "common/metric_config.hpp"
 #include "metric/metric_manager.hpp"
@@ -105,8 +105,9 @@ TEST_CASE("C interface supports mixed concurrent calls", "[wrapper][thread_safet
 
 TEST_CASE("C interface supports valid-handle configure/start/stop interleavings",
           "[wrapper][thread_safety][valgrind_isolated]") {
-  auto  target_uptr = std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt);
-  auto* target_raw  = target_uptr.get();
+  auto target_uptr =
+      std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, astl::compat::nullopt);
+  auto* target_raw = target_uptr.get();
 
   auto mock_collector = std::make_unique<MockCollector>();
   ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
@@ -200,8 +201,9 @@ TEST_CASE("C interface supports valid-handle configure/start/stop interleavings"
 
 TEST_CASE("C interface supports valid-handle pause/resume interleavings",
           "[wrapper][thread_safety][valgrind_isolated]") {
-  auto  target_uptr = std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt);
-  auto* target_raw  = target_uptr.get();
+  auto target_uptr =
+      std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, astl::compat::nullopt);
+  auto* target_raw = target_uptr.get();
 
   auto mock_collector = std::make_unique<MockCollector>();
   ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));
@@ -309,8 +311,9 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings",
 
 TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors",
           "[wrapper][thread_safety][valgrind_isolated]") {
-  auto  target_uptr = std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, std::nullopt);
-  auto* target_raw  = target_uptr.get();
+  auto target_uptr =
+      std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, astl::compat::nullopt);
+  auto* target_raw = target_uptr.get();
 
   auto mock_collector = std::make_unique<MockCollector>();
   ALLOW_CALL(*mock_collector, SetRawSampleSink(trompeloeil::_));

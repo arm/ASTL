@@ -5,14 +5,13 @@
 #include "procfs/procfs_metric_builder_helpers.hpp"
 
 #include <algorithm>
-#include <expected>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "astl_utils.hpp"
 #include "config/json_file_utils.hpp"
@@ -46,7 +45,7 @@ struct ProcfsRenderedMetricMetadata {
 };
 
 auto BuildProcfsFormula(const metrics::spec::MetricJsonDeclaration& metric_declaration)
-    -> std::expected<AnyFormula, astl_status_code> {
+    -> astl::compat::expected<AnyFormula, astl_status_code> {
   return BuildFormula(metric_declaration.formula);
 }
 
@@ -56,24 +55,24 @@ auto IsProcfsMetricDeclaration(const metrics::spec::MetricJsonDeclaration& metri
 
 auto ParseProcfsMetricBuildSettings(const std::string&                          metric_name_template,
                                     const metrics::spec::MetricJsonDeclaration& metric_declaration)
-    -> std::expected<ProcfsMetricBuildSettings, astl_status_code> {
+    -> astl::compat::expected<ProcfsMetricBuildSettings, astl_status_code> {
   ProcfsMetricBuildSettings settings;
   settings.metric_type = ParseMetricType(metric_declaration.metric_type);
   if (settings.metric_type == ASTL_METRIC_UNKNOWN) {
     ASTL_LOG_ERROR("Unsupported PROCFS metric type '{}' for metric {}", metric_declaration.metric_type,
                    metric_name_template);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   auto collection_settings = metrics::spec::ParseProcfsMetricJsonCollectionSettings(metric_declaration.collection);
   if (!collection_settings.has_value()) {
-    return std::unexpected(collection_settings.error());
+    return astl::compat::unexpected(collection_settings.error());
   }
   settings.collection_settings = std::move(*collection_settings);
 
   auto input_value_type = detail::ParseProcfsInputValueType(settings.collection_settings);
   if (!input_value_type.has_value()) {
-    return std::unexpected(input_value_type.error());
+    return astl::compat::unexpected(input_value_type.error());
   }
   settings.input_value_type = *input_value_type;
 
@@ -84,7 +83,7 @@ auto ParseProcfsMetricBuildSettings(const std::string&                          
   auto value_type =
       detail::ParseProcfsOutputValueType(settings.input_value_type, metric_declaration, settings.is_composite);
   if (!value_type.has_value()) {
-    return std::unexpected(value_type.error());
+    return astl::compat::unexpected(value_type.error());
   }
   settings.value_type = *value_type;
   return settings;
@@ -117,7 +116,7 @@ auto RenderProcfsMetricMetadata(const std::string&                          metr
 
 auto BuildCompositeInputBindings(const metrics::spec::ProcfsMetricJsonCollectionSettings& collection_settings,
                                  const std::string&                                       label)
-    -> std::expected<std::vector<ProcfsCompositeMetricConfig::InputBinding>, astl_status_code> {
+    -> astl::compat::expected<std::vector<ProcfsCompositeMetricConfig::InputBinding>, astl_status_code> {
   std::vector<ProcfsCompositeMetricConfig::InputBinding> inputs;
   inputs.reserve(collection_settings.inputs.size());
   for (const auto& input : collection_settings.inputs) {
@@ -135,7 +134,7 @@ auto BuildCompositeInputBindings(const metrics::spec::ProcfsMetricJsonCollection
         .raw_value_type    = input.raw_value_type,
     });
     if (!field_descriptor.has_value()) {
-      return std::unexpected(field_descriptor.error());
+      return astl::compat::unexpected(field_descriptor.error());
     }
     inputs.push_back(ProcfsCompositeMetricConfig::InputBinding{input.name, std::move(*field_descriptor)});
   }
@@ -145,32 +144,32 @@ auto BuildCompositeInputBindings(const metrics::spec::ProcfsMetricJsonCollection
 auto BuildCompositeMetricConfig(const ProcfsRenderedMetricMetadata&         metadata,
                                 const metrics::spec::MetricJsonDeclaration& metric_declaration,
                                 const ProcfsMetricBuildSettings& build_settings, const std::string& label)
-    -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<MetricConfig>, astl_status_code> {
   if (build_settings.metric_type == ASTL_METRIC_EVENT) {
     ASTL_LOG_ERROR("PROCFS composite event metric {} is not supported", metadata.metric_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   if (metric_declaration.event_values.has_value()) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   auto inputs = BuildCompositeInputBindings(build_settings.collection_settings, label);
   if (!inputs.has_value()) {
-    return std::unexpected(inputs.error());
+    return astl::compat::unexpected(inputs.error());
   }
 
   if (!metric_declaration.formula.has_value()) {
     ASTL_LOG_ERROR("PROCFS composite metric {} is missing formula", metadata.metric_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   if (!metric_declaration.formula->is_string()) {
     ASTL_LOG_ERROR("PROCFS composite metric {} formula must be a string tinyexpr expression", metadata.metric_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   auto formula_text = metric_declaration.formula->get<std::string>();
   if (formula_text.empty()) {
     ASTL_LOG_ERROR("PROCFS composite metric {} formula cannot be empty", metadata.metric_name);
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   return std::make_unique<ProcfsCompositeMetricConfig>(ProcfsCompositeMetricConfig::CreateParams{
@@ -191,23 +190,24 @@ auto BuildCompositeMetricConfig(const ProcfsRenderedMetricMetadata&         meta
 auto BuildStandardProcfsMetricConfig(const ProcfsRenderedMetricMetadata&         metadata,
                                      const metrics::spec::MetricJsonDeclaration& metric_declaration,
                                      const ProcfsMetricBuildSettings& build_settings, const std::string& label)
-    -> std::expected<std::unique_ptr<MetricConfig>, astl_status_code> {
-  const auto line_prefix_override = label.empty() ? std::optional<std::string>{} : std::optional<std::string>{label};
+    -> astl::compat::expected<std::unique_ptr<MetricConfig>, astl_status_code> {
+  const auto line_prefix_override =
+      label.empty() ? astl::compat::optional<std::string>{} : astl::compat::optional<std::string>{label};
   auto field_descriptor = detail::ParseProcfsFieldDescriptor(build_settings.collection_settings, line_prefix_override);
   if (!field_descriptor.has_value()) {
-    return std::unexpected(field_descriptor.error());
+    return astl::compat::unexpected(field_descriptor.error());
   }
 
   auto formula_result = BuildProcfsFormula(metric_declaration);
   if (!formula_result.has_value()) {
-    return std::unexpected(formula_result.error());
+    return astl::compat::unexpected(formula_result.error());
   }
 
   if (build_settings.metric_type == ASTL_METRIC_EVENT) {
     auto mappings =
         metrics::spec::ParseEventValueInfo(metadata.metric_name, metric_declaration, build_settings.value_type);
     if (!mappings) {
-      return std::unexpected(mappings.error());
+      return astl::compat::unexpected(mappings.error());
     }
     return std::make_unique<EventMetricConfig>(
         metadata.metric_name, metadata.description, build_settings.units, build_settings.value_type,
@@ -216,7 +216,7 @@ auto BuildStandardProcfsMetricConfig(const ProcfsRenderedMetricMetadata&        
         metadata.metric_groups, metadata.metric_id);
   }
   if (metric_declaration.event_values.has_value()) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return std::make_unique<MetricConfig>(
       metadata.metric_name, metadata.description, build_settings.units, build_settings.value_type,
@@ -228,7 +228,8 @@ auto BuildStandardProcfsMetricConfig(const ProcfsRenderedMetricMetadata&        
 }  // namespace
 
 auto LoadProcfsMetricDeclarations(const AstlConfiguration& configuration)
-    -> std::expected<std::vector<std::pair<std::string, metrics::spec::MetricJsonDeclaration>>, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::pair<std::string, metrics::spec::MetricJsonDeclaration>>,
+                              astl_status_code> {
   const auto procfs_metrics_dir = configuration.metrics_dir_path / "procfs";
   const auto declaration_files  = configuration.resources->Files(procfs_metrics_dir, false);
   std::vector<std::pair<std::string, metrics::spec::MetricJsonDeclaration>> metric_declarations;
@@ -236,7 +237,7 @@ auto LoadProcfsMetricDeclarations(const AstlConfiguration& configuration)
     auto declaration =
         config::TryParseJsonFile<metrics::spec::MetricsDeclaration>(declaration_file, configuration.resources.get());
     if (!declaration.has_value()) {
-      return std::unexpected(declaration.error());
+      return astl::compat::unexpected(declaration.error());
     }
     for (const auto& [metric_name, metric_declaration] : declaration->metrics) {
       if (!IsProcfsMetricDeclaration(metric_declaration)) {
@@ -258,10 +259,10 @@ auto LoadProcfsMetricDeclarations(const AstlConfiguration& configuration)
 auto CreateProcfsMetricConfigs(const std::string&                          metric_name_template,
                                const metrics::spec::MetricJsonDeclaration& metric_declaration, const ITarget* target,
                                const FileInterface& file_interface)
-    -> std::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
+    -> astl::compat::expected<std::vector<std::unique_ptr<MetricConfig>>, astl_status_code> {
   auto build_settings = ParseProcfsMetricBuildSettings(metric_name_template, metric_declaration);
   if (!build_settings.has_value()) {
-    return std::unexpected(build_settings.error());
+    return astl::compat::unexpected(build_settings.error());
   }
 
   const auto labels = ResolveProcfsMetricLabels(file_interface, build_settings->collection_settings);
@@ -281,11 +282,11 @@ auto CreateProcfsMetricConfigs(const std::string&                          metri
                                    ? BuildCompositeMetricConfig(metadata, metric_declaration, *build_settings, label)
                                    : BuildStandardProcfsMetricConfig(metadata, metric_declaration, *build_settings, label);
     if (!metric_config.has_value()) {
-      return std::unexpected(metric_config.error());
+      return astl::compat::unexpected(metric_config.error());
     }
     auto supported = availability->SupportsMetric(**metric_config, build_settings->is_composite, label);
     if (!supported) {
-      return std::unexpected(supported.error());
+      return astl::compat::unexpected(supported.error());
     }
     if (!*supported) {
       continue;

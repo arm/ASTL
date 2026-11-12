@@ -9,13 +9,13 @@
 #include <functional>  // for std::reference_wrapper in expected return types
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <span>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_file_interface.hpp"
 #include "collector/i_collector_manager.hpp"
 #include "common/collection_lifecycle.hpp"
@@ -123,7 +123,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    * @return a reference to an owning pointer to Orchestrator. Will return nullptr before InitializeInstance is called
    */
   static auto GetInstance() noexcept
-      -> std::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code>;
+      -> astl::compat::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code>;
   /**
    * @brief Returns true if the global Orchestrator instance has been explicitly initialized.
    *
@@ -343,7 +343,8 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    *
    * Thread-safety: acquires lifecycle mutex; returns copy of enum value.
    */
-  auto GetTargetCollectionState(const ITarget *target) const -> std::expected<TargetCollectionState, astl_status_code>;
+  auto GetTargetCollectionState(const ITarget *target) const
+      -> astl::compat::expected<TargetCollectionState, astl_status_code>;
 
   /**
    * @brief Snapshot all target lifecycle states.
@@ -359,12 +360,12 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
    * @param target The target on which collection was configured and performed
    * @param counter The specific data source that was sampled
    *
-   * @return a std::expected pair with either:
+   * @return a astl::compat::expected pair with either:
    *   - a value: the count of samples taken for the given ICounter on the target
    *   - OR an error status code such as an invalid handle or bad argument
    */
   auto GetCounterSampleCount(const ITarget *target, const ICounter *counter) const
-      -> std::expected<uint32_t, astl_status_code>;
+      -> astl::compat::expected<uint32_t, astl_status_code>;
   // TODO(ASTL-58): when OutputManager is implemented, revisit to see if GetMetricManager is even needed
   /**
    * @brief Return a reference to a pointer to the MetricManager, used to enumerate metrics
@@ -383,9 +384,9 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
       -> void override;
   auto SinkRawSamples(const ITarget *target, std::span<RawSampledData> raw_samples) -> astl_status_code override;
 
-  // std::expected cannot hold reference types directly (C++23 lib enforces this),
+  // astl::compat::expected cannot hold reference types directly (C++23 lib enforces this),
   // so expose a reference via std::reference_wrapper
-  auto GetProcessedSamples() -> std::expected<std::reference_wrapper<ProcessedSamplesMap>, astl_status_code> {
+  auto GetProcessedSamples() -> astl::compat::expected<std::reference_wrapper<ProcessedSamplesMap>, astl_status_code> {
     return std::reference_wrapper<ProcessedSamplesMap>(_processed_samples);
   }
 
@@ -443,7 +444,7 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
                                             const ProcessedSampleBatchConsumer &first_consumer,
                                             const ProcessedSampleBatchConsumer &second_consumer,
                                             astl::EmptyResultReason            &empty_reason) const
-      -> std::optional<astl_status_code>;
+      -> astl::compat::optional<astl_status_code>;
 
   auto CompleteCollectionConfiguration(const ITarget *target, const astl_collection_params_t &params,
                                        std::span<const OperationId> active_operation_ids) -> astl_status_code;
@@ -465,11 +466,11 @@ class Orchestrator : public IRawSampleSink, public IProcessedSampleSink {
       -> astl_status_code;
   auto VisitRecentProcessedMetricSamples(const IMetric *metric, const ITarget *target,
                                          const ProcessedSampleBatchConsumer &consumer) const
-      -> std::optional<astl_status_code>;
+      -> astl::compat::optional<astl_status_code>;
   auto VisitRecentProcessedMetricSamplesTwice(const IMetric *metric, const ITarget *target,
                                               const ProcessedSampleBatchConsumer &first_consumer,
                                               const ProcessedSampleBatchConsumer &second_consumer) const
-      -> std::optional<astl_status_code>;
+      -> astl::compat::optional<astl_status_code>;
   auto RememberRecentProcessedMetricSamples(const IMetric *metric, const ITarget *target,
                                             std::vector<ProcessedSampledData> samples) const -> void;
   auto InvalidateRecentProcessedMetricSamples() const -> void;

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "astl/astl.h"
+#include "astl_cxx_compat.hpp"
 #include "common/capabilities.hpp"
 #include "common/metric_config.hpp"
 #include "metric/i_counter.hpp"
@@ -47,7 +48,7 @@ class Counter : public RawMetric, public virtual ICounter {
    *
    * @return OperationSequence
    */
-  auto GetOperations() -> std::expected<OperationSequence, astl_status_code> override;
+  auto GetOperations() -> astl::compat::expected<OperationSequence, astl_status_code> override;
 
   /**
    * @brief Receive a single raw sample for this counter.

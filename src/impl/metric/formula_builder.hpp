@@ -5,14 +5,13 @@
 #ifndef FORMULA_BUILDER_HPP_
 #define FORMULA_BUILDER_HPP_
 
-#include <expected>
-#include <nlohmann/json.hpp>
-#include <optional>
 #include <string_view>
 #include <variant>
 #include <vector>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
+#include "astl_json.hpp"
 #include "common/astl_value.hpp"
 #include "metric/expression_formula.hpp"
 #include "metric/formula.hpp"
@@ -28,7 +27,9 @@ namespace astl {
 class IdentityFormula {
  public:
   // NOLINTNEXTLINE(readability-convert-member-functions-to-static) - Must be non-static to satisfy Formula concept
-  [[nodiscard]] auto Apply(const AstlValue& value) const -> std::expected<AstlValue, astl_status_code> { return value; }
+  [[nodiscard]] auto Apply(const AstlValue& value) const -> astl::compat::expected<AstlValue, astl_status_code> {
+    return value;
+  }
 
   // NOLINTNEXTLINE(readability-convert-member-functions-to-static) - Must be non-static to satisfy Formula concept
   [[nodiscard]] auto Description() const -> std::string_view { return "NONE"; }
@@ -46,12 +47,12 @@ class FormulaPipeline {
 
   explicit FormulaPipeline(std::vector<PipelineStep> steps) : _steps(std::move(steps)) {}
 
-  [[nodiscard]] auto Apply(const AstlValue& value) const -> std::expected<AstlValue, astl_status_code> {
+  [[nodiscard]] auto Apply(const AstlValue& value) const -> astl::compat::expected<AstlValue, astl_status_code> {
     AstlValue current = value;
     for (const auto& step : _steps) {
       auto result = std::visit([&current](const auto& impl) { return impl.Apply(current); }, step);
       if (!result) {
-        return std::unexpected(result.error());
+        return astl::compat::unexpected(result.error());
       }
       current = *result;
     }
@@ -82,10 +83,10 @@ using AnyFormula = std::variant<IdentityFormula, ScalingFormula, ExpressionFormu
  *
  * @param formula The formula to apply (IdentityFormula or ExpressionFormula)
  * @param value The value to transform
- * @return std::expected<AstlValue, astl_status_code> The transformed value or an error
+ * @return astl::compat::expected<AstlValue, astl_status_code> The transformed value or an error
  */
 inline auto ApplyFormula(const AnyFormula& formula, const AstlValue& value)
-    -> std::expected<AstlValue, astl_status_code> {
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   return std::visit([&value](const auto& formula_impl) { return formula_impl.Apply(value); }, formula);
 }
 
@@ -131,10 +132,10 @@ inline auto GetFormulaDescription(const AnyFormula& formula) -> std::string_view
  * 1e-3) to avoid TE_UINT64 truncation surprises for API consumers.
  *
  * @param formula_json The JSON value containing the formula configuration (optional)
- * @return std::expected<AnyFormula, astl_status_code> The formula or an error code
+ * @return astl::compat::expected<AnyFormula, astl_status_code> The formula or an error code
  */
-auto BuildFormula(const std::optional<nlohmann::json>& formula_json) noexcept
-    -> std::expected<AnyFormula, astl_status_code>;
+auto BuildFormula(const astl::compat::optional<nlohmann::json>& formula_json) noexcept
+    -> astl::compat::expected<AnyFormula, astl_status_code>;
 
 /**
  * @brief Compose two formulas into a single executable formula.

@@ -6,12 +6,12 @@
 #define EXPRESSION_FORMULA_HPP_
 
 #include <cmath>
-#include <expected>
 #include <memory>
 #include <string>
 #include <type_traits>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "common/astl_value.hpp"
 #include "metric/formula.hpp"
 #include "tinyexpr.h"
@@ -59,9 +59,9 @@ class ExpressionFormula {
    * @brief Construct an ExpressionFormula from a string expression.
    *
    * @param expression The mathematical expression to evaluate (must use 'value' as variable)
-   * @return std::expected<ExpressionFormula, astl_status_code> The formula or error status
+   * @return astl::compat::expected<ExpressionFormula, astl_status_code> The formula or error status
    */
-  static auto Create(std::string expression) -> std::expected<ExpressionFormula, astl_status_code>;
+  static auto Create(std::string expression) -> astl::compat::expected<ExpressionFormula, astl_status_code>;
 
   // Movable but not copyable (due to te_parser ownership)
   ExpressionFormula(ExpressionFormula&& other) noexcept;
@@ -72,7 +72,7 @@ class ExpressionFormula {
 
   ~ExpressionFormula();
 
-  [[nodiscard]] auto Apply(const AstlValue& value) const -> std::expected<AstlValue, astl_status_code>;
+  [[nodiscard]] auto Apply(const AstlValue& value) const -> astl::compat::expected<AstlValue, astl_status_code>;
 
   [[nodiscard]] auto Description() const -> std::string_view { return _expression; }
 

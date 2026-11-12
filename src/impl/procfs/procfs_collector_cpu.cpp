@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "procfs/procfs_collector.hpp"
 #include "procfs/procfs_utils.hpp"
@@ -10,30 +11,31 @@ namespace astl {
 
 auto ProcfsCollector::FindCpuSnapshot(const procfs::CpuUtilizationField& cpu_field,
                                       const CpuSnapshotCache&            cpu_snapshot_cache)
-    -> std::expected<const procfs::CpuSnapshot*, astl_status_code> {
+    -> astl::compat::expected<const procfs::CpuSnapshot*, astl_status_code> {
   const auto path_it = cpu_snapshot_cache.find(cpu_field.relative_path);
   if (path_it == cpu_snapshot_cache.end()) {
     ASTL_LOG_ERROR("ProcfsCollector: missing cached CPU snapshot file '{}'", cpu_field.relative_path.string());
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
   const auto snapshot_it = path_it->second.find(cpu_field.line_prefix);
   if (snapshot_it == path_it->second.end()) {
     ASTL_LOG_ERROR("ProcfsCollector: CPU '{}' is missing from '{}'", cpu_field.line_prefix,
                    cpu_field.relative_path.string());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return &snapshot_it->second;
 }
 
 auto ProcfsCollector::ReadCpuUtilizationSample(const ProcfsReadOperation&         operation,
                                                const procfs::CpuUtilizationField& cpu_field,
-                                               const procfs::CpuSnapshot& cpu_snapshot) -> std::optional<AstlValue> {
+                                               const procfs::CpuSnapshot&         cpu_snapshot)
+    -> astl::compat::optional<AstlValue> {
   const auto operation_id = operation.GetId();
   const auto previous_it  = _previous_cpu_snapshots.find(operation_id);
   if (previous_it == _previous_cpu_snapshots.end()) {
     _previous_cpu_snapshots.emplace(operation_id, cpu_snapshot);
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 
   const auto& previous_snapshot = previous_it->second;
@@ -60,7 +62,7 @@ auto ProcfsCollector::ReadCpuUtilizationSample(const ProcfsReadOperation&       
   if (cpu_field.iowait) {
     if (!cpu_snapshot.has_iowait || !old.has_iowait || cpu_snapshot.total <= old.total ||
         cpu_snapshot.iowait < old.iowait || cpu_snapshot.iowait - old.iowait > cpu_snapshot.total - old.total) {
-      return std::nullopt;
+      return astl::compat::nullopt;
     }
     return AstlValue{100.0 * static_cast<double>(cpu_snapshot.iowait - old.iowait) /
                      static_cast<double>(cpu_snapshot.total - old.total)};
@@ -70,11 +72,11 @@ auto ProcfsCollector::ReadCpuUtilizationSample(const ProcfsReadOperation&       
 }
 
 auto ProcfsCollector::ReadOperationSample(const ProcfsReadOperation& operation, const PreparedOperations& prepared)
-    -> std::expected<std::optional<AstlValue>, astl_status_code> {
+    -> astl::compat::expected<astl::compat::optional<AstlValue>, astl_status_code> {
   if (const auto* cpu_field = std::get_if<procfs::CpuUtilizationField>(&operation.field_descriptor)) {
     auto snapshot_or_error = FindCpuSnapshot(*cpu_field, prepared.cpu_snapshots);
     if (!snapshot_or_error.has_value()) {
-      return std::unexpected(snapshot_or_error.error());
+      return astl::compat::unexpected(snapshot_or_error.error());
     }
     return ReadCpuUtilizationSample(operation, *cpu_field, **snapshot_or_error);
   }
@@ -83,7 +85,7 @@ auto ProcfsCollector::ReadOperationSample(const ProcfsReadOperation& operation, 
 }
 
 auto ProcfsCollector::ReadFieldSample(const ProcfsReadOperation& operation, const PreparedOperations& prepared)
-    -> std::expected<std::optional<AstlValue>, astl_status_code> {
+    -> astl::compat::expected<astl::compat::optional<AstlValue>, astl_status_code> {
   std::string source_identity;
   bool        missing_label  = false;
   const auto* field          = std::get_if<procfs::SystemField>(&operation.field_descriptor);
@@ -93,43 +95,43 @@ auto ProcfsCollector::ReadFieldSample(const ProcfsReadOperation& operation, cons
     if (missing_label) {
       // A known device/interface vanished. Never bridge the gap on reappearance.
       _counter_rates.erase(operation.GetId());
-      return std::optional<AstlValue>{};
+      return astl::compat::optional<AstlValue>{};
     }
     if (field && (field->kind == "threads" || field->kind == "processes") &&
         (value_or_error.error() == ASTL_STATUS_FILE_ERROR || value_or_error.error() == ASTL_STATUS_FILE_OPEN_FAILED ||
          value_or_error.error() == ASTL_STATUS_BAD_CONFIGURATION)) {
       // Task scans are optional, non-atomic gauges. Preserve other samples and rate baselines.
       ASTL_LOG_DEBUG("ProcfsCollector: omitting unavailable current {} sample", field->kind);
-      return std::optional<AstlValue>{};
+      return astl::compat::optional<AstlValue>{};
     }
-    return std::unexpected(value_or_error.error());
+    return astl::compat::unexpected(value_or_error.error());
   }
   if (field && field->rate) {
     return ReadRateSample(operation.GetId(), *field, *value_or_error, prepared, source_identity);
   }
-  return std::optional<AstlValue>{std::move(*value_or_error)};
+  return astl::compat::optional<AstlValue>{std::move(*value_or_error)};
 }
 
 auto ProcfsCollector::ReadSystemSample(const procfs::SystemField& field, const PreparedOperations& prepared,
                                        std::string& source_identity, bool& missing_label)
-    -> std::expected<AstlValue, astl_status_code> {
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   if (field.kind != "interrupts") {
     return procfs::ReadSystemField(_procfs_file_interface, field, &source_identity, &missing_label);
   }
   const auto& counters = prepared.interrupt_snapshots.at(field.relative_path);
   const auto  it       = counters.find(field.label);
   if (it == counters.end()) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   return AstlValue{it->second};
 }
 
 auto ProcfsCollector::ReadRateSample(OperationId operation_id, const procfs::SystemField& field, const AstlValue& value,
                                      const PreparedOperations& prepared, std::string_view source_identity)
-    -> std::expected<std::optional<AstlValue>, astl_status_code> {
+    -> astl::compat::expected<astl::compat::optional<AstlValue>, astl_status_code> {
   const auto* counter = std::get_if<uint64_t>(&value.value);
   if (counter == nullptr) {
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
   // Cached columns share the time of the table read, independent of later
   // operations (including potentially expensive process/thread scans).
@@ -143,9 +145,9 @@ auto ProcfsCollector::ReadRateSample(OperationId operation_id, const procfs::Sys
   }
   auto rate = _counter_rates[operation_id].Sample(*counter, sample_time, identity);
   if (!rate) {
-    return std::optional<AstlValue>{};
+    return astl::compat::optional<AstlValue>{};
   }
-  return std::optional<AstlValue>{AstlValue{*rate}};
+  return astl::compat::optional<AstlValue>{AstlValue{*rate}};
 }
 
 }  // namespace astl

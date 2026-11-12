@@ -7,7 +7,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <expected>
 #include <limits>
 #include <numeric>
 #include <sstream>
@@ -15,6 +14,7 @@
 #include <type_traits>
 
 #include "astl/astl_errors.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
 #include "common/astl_value.hpp"
 #include "metric/formula.hpp"
@@ -58,21 +58,21 @@ class ScalingFormula {
     RefreshDescription();
   }
 
-  [[nodiscard]] auto Apply(const AstlValue& value) const -> std::expected<AstlValue, astl_status_code> {
+  [[nodiscard]] auto Apply(const AstlValue& value) const -> astl::compat::expected<AstlValue, astl_status_code> {
     return std::visit(
-        [this](auto&& val) -> std::expected<AstlValue, astl_status_code> {
+        [this](auto&& val) -> astl::compat::expected<AstlValue, astl_status_code> {
           using T = std::decay_t<decltype(val)>;
 
           // Only support arithmetic types (not bool)
           if constexpr (std::is_arithmetic_v<T> && !std::is_same_v<T, bool>) {
             if (_denominator == 0) {
-              return std::unexpected(astl::kInternalDivideByZero);
+              return astl::compat::unexpected(astl::kInternalDivideByZero);
             }
             if constexpr (std::is_integral_v<T>) {
               const auto raw_value = static_cast<uint64_t>(val);
               // Make overflow behavior explicit instead of silently wrapping the multiplication.
               if (_numerator != 0 && raw_value > std::numeric_limits<uint64_t>::max() / _numerator) {
-                return std::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
+                return astl::compat::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
               }
               const uint64_t product = raw_value * _numerator;
               const double   scaled  = static_cast<double>(product) / static_cast<double>(_denominator);
@@ -81,12 +81,12 @@ class ScalingFormula {
               const double scaled =
                   (static_cast<double>(val) * static_cast<double>(_numerator)) / static_cast<double>(_denominator);
               if (!std::isfinite(scaled)) {
-                return std::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
+                return astl::compat::unexpected(ASTL_STATUS_METRIC_OVERFLOW_DETECTED);
               }
               return AstlValue{scaled};
             }
           } else {
-            return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+            return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
           }
         },
         value.value);

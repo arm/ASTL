@@ -13,6 +13,7 @@
 #include "../../test_includes.hpp"  // include before catch2
 #include "astl/astl.h"
 #include "astl/astl_telemetry.h"
+#include "astl_cxx_compat.hpp"
 #include "common/capabilities.hpp"
 #include "common/clock_correlation.hpp"
 #include "common/metric_config.hpp"
@@ -69,7 +70,7 @@ struct TestMetric : public IMetric {
   // --- Implement remaining pure-virtuals so TestMetric is concrete ---
   bool CheckCapabilities(const Capabilities& /*caps*/) const override { return true; }
 
-  std::expected<OperationSequence, astl_status_code> GetOperations() override {
+  astl::compat::expected<OperationSequence, astl_status_code> GetOperations() override {
     // Return an empty sequence by default
     return OperationSequence{};
   }

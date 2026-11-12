@@ -15,6 +15,7 @@
 #include "../../mock_classes.hpp"
 #include "../../test_includes.hpp"
 #include "../../test_utilities.hpp"
+#include "astl_cxx_compat.hpp"
 #include "scmi/scmi_clock_correlation.hpp"
 #include "scmi/scmi_ioctl_collector.hpp"
 #include "scmi/scmi_read_operation.hpp"
@@ -58,23 +59,23 @@ struct ScriptedScmiIoctlInterface : public astl::IScmiIoctlInterface {
 
   auto Probe() -> astl_status_code override { return probe_status; }
 
-  auto DeImplementationVersion() -> std::expected<std::string, astl_status_code> override {
+  auto DeImplementationVersion() -> astl::compat::expected<std::string, astl_status_code> override {
     if (probe_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(probe_status);
+      return astl::compat::unexpected(probe_status);
     }
     return de_implementation_version;
   }
 
-  auto DataEventCount() -> std::expected<uint32_t, astl_status_code> override {
+  auto DataEventCount() -> astl::compat::expected<uint32_t, astl_status_code> override {
     if (probe_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(probe_status);
+      return astl::compat::unexpected(probe_status);
     }
     return data_event_count;
   }
 
-  auto SupportsSingleRead() -> std::expected<bool, astl_status_code> override {
+  auto SupportsSingleRead() -> astl::compat::expected<bool, astl_status_code> override {
     if (probe_status != ASTL_STATUS_SUCCESS) {
-      return std::unexpected(probe_status);
+      return astl::compat::unexpected(probe_status);
     }
     return supports_single_read;
   }

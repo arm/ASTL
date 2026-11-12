@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "astl_cxx_compat.hpp"
 #include "scmi/scmi_target.hpp"
 #include "serdes/protobuf_serdes.hpp"
 #include "serdes/targets.pb.h"  // AUTO-GENERATED FILE. Re-render using cmake proto_gen target.
@@ -71,11 +72,11 @@ auto Serialize(const ITopologyManager& topology_manager, std::ostream& output_st
 
 template <>
 auto Deserialize<std::unique_ptr<ITopologyManager>>(std::istream& input_stream)
-    -> std::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
+    -> astl::compat::expected<std::unique_ptr<ITopologyManager>, astl_status_code> {
   astl::protobuf::TargetList proto_list;
   if (!proto_list.ParseFromIstream(&input_stream)) {
     ASTL_LOG_ERROR("Failed to parse TargetList from input stream");
-    return std::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
 
   std::vector<std::unique_ptr<ITarget>> targets;
@@ -85,14 +86,14 @@ auto Deserialize<std::unique_ptr<ITopologyManager>>(std::istream& input_stream)
     const std::string& name = proto_target.name();
     if (name.empty()) {
       ASTL_LOG_ERROR("Target with empty name found in protobuf TargetList");
-      return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+      return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
     }
     const std::string& description = proto_target.description();
     const auto         collector   = proto_target.collector_type() == astl::protobuf::COLLECTOR_TYPE_UNKNOWN
                                          ? CollectorType::UNKNOWN
                                          : static_cast<CollectorType>(proto_target.collector_type());
 
-    std::optional<std::string> id{std::nullopt};
+    astl::compat::optional<std::string> id{astl::compat::nullopt};
     if (!proto_target.id().empty()) {
       id = proto_target.id();
     }
@@ -102,7 +103,7 @@ auto Deserialize<std::unique_ptr<ITopologyManager>>(std::istream& input_stream)
       if (!proto_target.has_scmi_sysfs_subdirectory() || proto_target.scmi_sysfs_subdirectory().empty()) {
         ASTL_LOG_ERROR("Deserialize<ITopologyManager>: SCMI target '{}' is missing scmi_sysfs_subdirectory metadata",
                        name);
-        return std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+        return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
       }
       target = std::make_unique<ScmiTarget>(name, description, proto_target.scmi_sysfs_subdirectory(), nullptr, id);
     } else {

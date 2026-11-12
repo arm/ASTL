@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cerrno>
 
+#include "astl_cxx_compat.hpp"
+
 #ifdef __linux__
 #  include <sys/resource.h>
 #endif
@@ -123,15 +125,15 @@ auto ReadFileHandleCache::ComputeLinuxReadCacheCapacity() -> std::size_t {
                   descriptor_limit.value() - open_handle_count.value() - num_reserved_file_handles);
 }
 
-auto ReadFileHandleCache::GetSoftFileHandleLimit() -> std::optional<std::size_t> {
+auto ReadFileHandleCache::GetSoftFileHandleLimit() -> astl::compat::optional<std::size_t> {
   struct rlimit limits{};
   if (getrlimit(RLIMIT_NOFILE, &limits) != 0) {
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
   return static_cast<std::size_t>(limits.rlim_cur);
 }
 
-auto ReadFileHandleCache::GetOpenFileHandleCount() -> std::optional<std::size_t> {
+auto ReadFileHandleCache::GetOpenFileHandleCount() -> astl::compat::optional<std::size_t> {
   try {
     std::size_t count = 0;
     for (const auto &entry : std::filesystem::directory_iterator("/proc/self/fd")) {
@@ -141,7 +143,7 @@ auto ReadFileHandleCache::GetOpenFileHandleCount() -> std::optional<std::size_t>
     return count;
   } catch (const std::exception &e) {
     ASTL_LOG_DEBUG("GetOpenFileHandleCount: {}", e.what());
-    return std::nullopt;
+    return astl::compat::nullopt;
   }
 }
 #endif
@@ -179,7 +181,7 @@ void ReadFileHandleCache::EvictLeastRecentlyUsed() const {
 }
 
 auto ReadFileHandleCache::Open(const std::filesystem::path &path) const
-    -> std::expected<StreamAccess, astl_status_code> {
+    -> astl::compat::expected<StreamAccess, astl_status_code> {
   _usage.push_front(path);
   auto [stream_it, inserted] = _streams.try_emplace(path, CachedStream{std::ifstream{}, _usage.begin()});
   if (!inserted) {
@@ -192,14 +194,14 @@ auto ReadFileHandleCache::Open(const std::filesystem::path &path) const
   if (!stream_it->second.stream.is_open()) {
     _usage.erase(stream_it->second.usage_it);
     _streams.erase(stream_it);
-    return std::unexpected(ASTL_STATUS_FILE_OPEN_FAILED);
+    return astl::compat::unexpected(ASTL_STATUS_FILE_OPEN_FAILED);
   }
 
   return StreamAccess{stream_it, true};
 }
 
 auto ReadFileHandleCache::GetOrOpen(const std::filesystem::path &path, std::size_t capacity) const
-    -> std::expected<StreamAccess, astl_status_code> {
+    -> astl::compat::expected<StreamAccess, astl_status_code> {
   const auto existing_stream = _streams.find(path);
   if (existing_stream != _streams.end()) {
     Touch(existing_stream);

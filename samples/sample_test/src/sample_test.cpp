@@ -7,7 +7,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <expected>
 #include <format>
 #include <iomanip>
 #include <iostream>
@@ -19,6 +18,7 @@
 
 #include "astl/astl.h"
 #include "astl/astl_telemetry.h"
+#include "astl_cxx_compat.hpp"
 
 namespace {
 auto ValueToString(const astl_value_t& value, astl_value_type_t type) -> std::string {
@@ -162,13 +162,13 @@ auto PrintSystemInfo() -> void {
 }
 
 auto GetIntervalArgument(const std::unordered_map<std::string, std::string>& args)
-    -> std::expected<std::chrono::milliseconds, int> {
+    -> astl::compat::expected<std::chrono::milliseconds, int> {
   if (args.contains("interval")) {
     try {
       int tmp_interval = std::stoi(args.at("interval"));
       if (tmp_interval <= 0) {
         std::cerr << "Interval must be a positive integer.\n";
-        return std::unexpected<int>(1);
+        return astl::compat::unexpected<int>(1);
       }
       auto sampling_interval_ms = std::chrono::milliseconds(tmp_interval);
       std::cout << "Interval set to: " << sampling_interval_ms.count() << " milliseconds\n";
@@ -176,26 +176,26 @@ auto GetIntervalArgument(const std::unordered_map<std::string, std::string>& arg
     } catch (const std::exception& e) {
       // Include exception details to aid debugging and ensure variable is referenced (avoids unused warning)
       std::cerr << "Invalid value for --interval (" << e.what() << ")\n";
-      return std::unexpected<int>(1);
+      return astl::compat::unexpected<int>(1);
     }
   }
   return std::chrono::milliseconds{};
 }
 auto GetDurationArgument(const std::unordered_map<std::string, std::string>& args)
-    -> std::expected<std::chrono::seconds, int> {
+    -> astl::compat::expected<std::chrono::seconds, int> {
   if (args.contains("duration")) {
     try {
       int tmp_duration = std::stoi(args.at("duration"));
       if (tmp_duration <= 0) {
         std::cerr << "Duration must be a positive integer.\n";
-        return std::unexpected<int>(1);
+        return astl::compat::unexpected<int>(1);
       }
       auto duration_seconds = std::chrono::seconds(tmp_duration);
       std::cout << "Duration set to: " << duration_seconds.count() << " seconds\n";
       return duration_seconds;
     } catch (const std::exception&) {
       std::cerr << "Invalid value for --duration\n";
-      return std::unexpected<int>(1);
+      return astl::compat::unexpected<int>(1);
     }
   }
   return std::chrono::seconds{};
@@ -318,7 +318,7 @@ auto GetTargets(std::vector<astl_target_props_t>& target_properties_buffer, astl
 }
 
 auto GetCountersOnTarget(const astl_target_props_t& target_properties)
-    -> std::expected<std::vector<astl_counter_props_t>, astl_status_code> {
+    -> astl::compat::expected<std::vector<astl_counter_props_t>, astl_status_code> {
   uint32_t counter_count{};
   ASTL_INIT_STRUCT(astl_get_counter_count_params_t, get_counter_count_params, .flags = 0,
                    .target_handle = target_properties.handle, .counter_count = &counter_count);
@@ -327,7 +327,7 @@ auto GetCountersOnTarget(const astl_target_props_t& target_properties)
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetCounterCountOnTarget Status: " << astlStatusString(status) << '\n';
     std::cout << "target_handle: " << target_properties.handle << " \n";
-    return std::unexpected{status};
+    return astl::compat::unexpected{status};
   }
   if (counter_count == 0) {
     std::cout << "No counters found for target.\n";
@@ -344,9 +344,9 @@ auto GetCountersOnTarget(const astl_target_props_t& target_properties)
   status = astlGetCountersOnTarget(&get_counters_params);
   std::cout << "astlGetCountersOnTarget Status: " << astlStatusString(status) << '\n';
   if (status != ASTL_STATUS_SUCCESS) {
-    return std::unexpected{status};
+    return astl::compat::unexpected{status};
   }
-  return std::expected<std::vector<astl_counter_props_t>, astl_status_code>(std::move(counter_buffer));
+  return astl::compat::expected<std::vector<astl_counter_props_t>, astl_status_code>(std::move(counter_buffer));
 }
 
 void PrintCounters(std::vector<astl_counter_props_t> const& counter_buffer) {
@@ -387,14 +387,14 @@ auto GetMetricsOnTarget(const astl_target_props_t& target_properties, std::vecto
 }
 
 auto GetMetricsInGroup(const astl_target_props_t& target_properties, const std::string& group_name)
-    -> std::expected<std::vector<astl_metric_props_t>, astl_status_code> {
+    -> astl::compat::expected<std::vector<astl_metric_props_t>, astl_status_code> {
   uint32_t metric_group_count{0};
   ASTL_INIT_STRUCT(astl_get_metric_group_count_on_target_params_t, get_metric_group_count_params, .flags = 0,
                    .target_handle = target_properties.handle, .metric_group_count = &metric_group_count);
   auto status = astlGetMetricGroupCountOnTarget(&get_metric_group_count_params);
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetMetricGroupCountOnTarget Status: " << astlStatusString(status) << '\n';
-    return std::unexpected<astl_status_code>(status);
+    return astl::compat::unexpected<astl_status_code>(status);
   }
   std::cout << "astlGetMetricGroupCountOnTarget: " << metric_group_count << '\n';
   if (metric_group_count == 0) {
@@ -410,7 +410,7 @@ auto GetMetricsInGroup(const astl_target_props_t& target_properties, const std::
   status = astlGetMetricGroupsOnTarget(&get_metric_groups_params);
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetMetricGroupsOnTarget Status: " << astlStatusString(status) << '\n';
-    return std::unexpected<astl_status_code>(status);
+    return astl::compat::unexpected<astl_status_code>(status);
   }
 
   // find the requested metric group
@@ -430,7 +430,7 @@ auto GetMetricsInGroup(const astl_target_props_t& target_properties, const std::
   status = astlGetMetricGroupMetricCountOnTarget(&get_metric_group_metric_count_params);
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetMetricGroupMetricCountOnTarget Status: " << astlStatusString(status) << '\n';
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   if (metric_count == 0) {
     return std::vector<astl_metric_props_t>{};
@@ -445,7 +445,7 @@ auto GetMetricsInGroup(const astl_target_props_t& target_properties, const std::
   status = astlGetMetricGroupMetricsOnTarget(&get_metric_group_metrics_params);
   if (status != ASTL_STATUS_SUCCESS) {
     std::cout << "astlGetMetricGroupMetricsOnTarget Status: " << astlStatusString(status) << '\n';
-    return std::unexpected(status);
+    return astl::compat::unexpected(status);
   }
   metrics_properties.resize(metric_count);
   return metrics_properties;

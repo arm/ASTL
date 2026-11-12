@@ -9,6 +9,7 @@
 #include <functional>
 #include <utility>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
 #include "operation/operation.hpp"  // defines OperationSequence and OperationBuilder concept
 #include "target.hpp"
@@ -25,9 +26,9 @@ class NullOperationBuilder {
   NullOperationBuilder() = default;
 
   [[nodiscard]] static auto BuildOperations(const ITarget* target)
-      -> std::expected<OperationSequence, astl_status_code> {
+      -> astl::compat::expected<OperationSequence, astl_status_code> {
     (void)target;
-    return std::unexpected(astl::kInternalNotImplemented);
+    return astl::compat::unexpected(astl::kInternalNotImplemented);
   }
 };
 
@@ -57,12 +58,12 @@ class AnyOperationBuilder {
     return adapter ? &adapter->builder : nullptr;
   }
 
-  auto BuildOperations(const ITarget* target) const -> std::expected<OperationSequence, astl_status_code> {
+  auto BuildOperations(const ITarget* target) const -> astl::compat::expected<OperationSequence, astl_status_code> {
     return _build ? _build(target) : NullOperationBuilder::BuildOperations(target);
   }
 
  private:
-  std::function<std::expected<OperationSequence, astl_status_code>(const ITarget*)> _build;
+  std::function<astl::compat::expected<OperationSequence, astl_status_code>(const ITarget*)> _build;
 };
 
 template <typename OperationBuilderType>
@@ -79,12 +80,12 @@ concept AnyOperationBuilderCompatible = std::constructible_from<AnyOperationBuil
  * @return either a sequence of Operations or an error code
  */
 inline auto BuildOperations(const AnyOperationBuilder& builder, const ITarget* target)
-    -> std::expected<OperationSequence, astl_status_code> {
+    -> astl::compat::expected<OperationSequence, astl_status_code> {
   try {
     return builder.BuildOperations(target);
   } catch (const OperationIdExhausted& ex) {
     ASTL_LOG_ERROR("BuildOperations: {}", ex.what());
-    return std::unexpected{OperationIdExhausted::Status()};
+    return astl::compat::unexpected{OperationIdExhausted::Status()};
   }
 }
 

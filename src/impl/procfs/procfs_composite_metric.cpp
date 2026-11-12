@@ -9,6 +9,7 @@
 #include <string_view>
 #include <utility>
 
+#include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
 #include "procfs/procfs_composite_metricconfig.hpp"
 #include "tinyexpr.h"
@@ -26,15 +27,16 @@ namespace {
 auto StartsWith(std::string_view value, std::string_view prefix) -> bool { return value.rfind(prefix, 0) == 0; }
 
 auto MissingInputError(std::string_view variable_name, std::string_view input_kind, const MetricConfig& configuration)
-    -> std::expected<double, astl_status_code> {
+    -> astl::compat::expected<double, astl_status_code> {
   ASTL_LOG_ERROR("ProcfsCompositeMetric: missing {} input '{}' for metric {}", input_kind, variable_name,
                  configuration.Name());
-  return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+  return astl::compat::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
 }
 
 auto ResolvePreviousVariableValue(std::string_view                                  variable_name,
                                   const std::unordered_map<std::string, AstlValue>& previous_inputs,
-                                  const MetricConfig& configuration) -> std::expected<double, astl_status_code> {
+                                  const MetricConfig&                               configuration)
+    -> astl::compat::expected<double, astl_status_code> {
   const auto previous_it = previous_inputs.find(std::string{variable_name.substr(5)});
   if (previous_it == previous_inputs.end()) {
     return MissingInputError(variable_name, "previous", configuration);
@@ -45,7 +47,7 @@ auto ResolvePreviousVariableValue(std::string_view                              
 auto ResolveDeltaVariableValue(std::string_view                                  variable_name,
                                const std::unordered_map<std::string, AstlValue>& current_inputs,
                                const std::unordered_map<std::string, AstlValue>& previous_inputs,
-                               const MetricConfig& configuration) -> std::expected<double, astl_status_code> {
+                               const MetricConfig& configuration) -> astl::compat::expected<double, astl_status_code> {
   const std::string base_name{variable_name.substr(6)};
   const auto        current_it  = current_inputs.find(base_name);
   const auto        previous_it = previous_inputs.find(base_name);
@@ -55,18 +57,19 @@ auto ResolveDeltaVariableValue(std::string_view                                 
 
   auto current_value = current_it->second.ToDouble();
   if (!current_value.has_value()) {
-    return std::unexpected(current_value.error());
+    return astl::compat::unexpected(current_value.error());
   }
   auto previous_value = previous_it->second.ToDouble();
   if (!previous_value.has_value()) {
-    return std::unexpected(previous_value.error());
+    return astl::compat::unexpected(previous_value.error());
   }
   return std::max(*current_value - *previous_value, 0.0);
 }
 
 auto ResolveCurrentVariableValue(std::string_view                                  variable_name,
                                  const std::unordered_map<std::string, AstlValue>& current_inputs,
-                                 const MetricConfig& configuration) -> std::expected<double, astl_status_code> {
+                                 const MetricConfig&                               configuration)
+    -> astl::compat::expected<double, astl_status_code> {
   const auto current_it = current_inputs.find(std::string{variable_name});
   if (current_it == current_inputs.end()) {
     return MissingInputError(variable_name, "current", configuration);
@@ -76,11 +79,11 @@ auto ResolveCurrentVariableValue(std::string_view                               
 
 template <typename UnsignedT>
 auto ConvertUnsignedOutputValue(double value, const MetricConfig& configuration, std::string_view type_name)
-    -> std::expected<AstlValue, astl_status_code> {
+    -> astl::compat::expected<AstlValue, astl_status_code> {
   if (!std::isfinite(value) || value < 0.0 || value > static_cast<double>(std::numeric_limits<UnsignedT>::max())) {
     ASTL_LOG_ERROR("ProcfsCompositeMetric: invalid {} output value {} for metric {}", type_name, value,
                    configuration.Name());
-    return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+    return astl::compat::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
   return AstlValue{static_cast<UnsignedT>(std::llround(value))};
 }
@@ -99,7 +102,7 @@ ProcfsCompositeMetric::ProcfsCompositeMetric(const ProcfsCompositeMetricConfig* 
 
 ProcfsCompositeMetric::~ProcfsCompositeMetric() = default;
 
-auto ProcfsCompositeMetric::GetOperations() -> std::expected<OperationSequence, astl_status_code> {
+auto ProcfsCompositeMetric::GetOperations() -> astl::compat::expected<OperationSequence, astl_status_code> {
   _operation_id_to_input_name.clear();
 
   OperationSequence operations;
@@ -113,7 +116,7 @@ auto ProcfsCompositeMetric::GetOperations() -> std::expected<OperationSequence, 
   } catch (const OperationIdExhausted& ex) {
     ASTL_LOG_ERROR("ProcfsCompositeMetric::GetOperations: {}", ex.what());
     _operation_id_to_input_name.clear();
-    return std::unexpected{OperationIdExhausted::Status()};
+    return astl::compat::unexpected{OperationIdExhausted::Status()};
   }
   return operations;
 }
@@ -264,17 +267,17 @@ auto ProcfsCompositeMetric::InitializeExpressionFormulaParser(const std::string&
 
 auto ProcfsCompositeMetric::EvaluateExpressionFormula(const std::unordered_map<std::string, AstlValue>& current_inputs,
                                                       const std::unordered_map<std::string, AstlValue>& previous_inputs)
-    const -> std::expected<double, astl_status_code> {
+    const -> astl::compat::expected<double, astl_status_code> {
   if (!_expression_formula_context || !_expression_formula_context->parser) {
     ASTL_LOG_ERROR("ProcfsCompositeMetric: expression formula parser is not initialized for metric {}",
                    _configuration->Name());
-    return std::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
   }
 
   for (auto& [name, value] : _expression_formula_context->variables) {
     auto resolved = ResolveVariable(name, current_inputs, previous_inputs);
     if (!resolved.has_value()) {
-      return std::unexpected(resolved.error());
+      return astl::compat::unexpected(resolved.error());
     }
     value = static_cast<te_type>(*resolved);
   }
@@ -283,7 +286,7 @@ auto ProcfsCompositeMetric::EvaluateExpressionFormula(const std::unordered_map<s
   if (result == te_parser::te_nan) {
     ASTL_LOG_ERROR("ProcfsCompositeMetric: expression formula '{}' evaluated to NaN for metric {}",
                    _expression_formula_context->expression, _configuration->Name());
-    return std::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
+    return astl::compat::unexpected(ASTL_STATUS_METRIC_RECEIVED_INVALID_SAMPLE);
   }
   return static_cast<double>(result);
 }
@@ -291,7 +294,7 @@ auto ProcfsCompositeMetric::EvaluateExpressionFormula(const std::unordered_map<s
 auto ProcfsCompositeMetric::ResolveVariable(std::string_view                                  variable_name,
                                             const std::unordered_map<std::string, AstlValue>& current_inputs,
                                             const std::unordered_map<std::string, AstlValue>& previous_inputs) const
-    -> std::expected<double, astl_status_code> {
+    -> astl::compat::expected<double, astl_status_code> {
   if (StartsWith(variable_name, "prev_")) {
     return ResolvePreviousVariableValue(variable_name, previous_inputs, *_configuration);
   }
@@ -301,8 +304,10 @@ auto ProcfsCompositeMetric::ResolveVariable(std::string_view                    
   return ResolveCurrentVariableValue(variable_name, current_inputs, *_configuration);
 }
 
-auto ProcfsCompositeMetric::ConvertOutputValue(double value) const -> std::expected<AstlValue, astl_status_code> {
-  std::expected<AstlValue, astl_status_code> converted_value = std::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+auto ProcfsCompositeMetric::ConvertOutputValue(double value) const
+    -> astl::compat::expected<AstlValue, astl_status_code> {
+  astl::compat::expected<AstlValue, astl_status_code> converted_value =
+      astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   switch (_configuration->ValueType()) {
     case ASTL_VALUE_FLOAT64:
       converted_value = AstlValue{value};

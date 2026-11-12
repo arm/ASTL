@@ -18,6 +18,7 @@
 #include "astl/astl.h"
 #include "astl/astl_errors.h"
 #include "astl/astl_test_hooks.h"
+#include "astl_cxx_compat.hpp"
 #include "astl_internal_status.hpp"
 #include "common/capabilities.hpp"
 #include "common/clock_correlation.hpp"
@@ -425,9 +426,9 @@ TEST_CASE("Orchestrator::ConsumeProcessedMetricSamplesIfUncached only consumes n
   ALLOW_CALL(*metric_manager, UnregisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -898,7 +899,7 @@ TEST_CASE("Orchestrator-SinkRawSamples uses configured batch size and the stable
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.push_back(std::make_unique<astl::Target>("scmi-display-target", "", astl::CollectorType::SCMI, nullptr,
-                                                   std::nullopt, "tlm-0"));
+                                                   astl::compat::nullopt, "tlm-0"));
   REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
   auto* target = orchestrator.GetTargets()[0].get();
 
@@ -935,7 +936,7 @@ TEST_CASE("Orchestrator-ReadImmediate can process samples without caching raw sa
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
 
@@ -949,9 +950,9 @@ TEST_CASE("Orchestrator-ReadImmediate can process samples without caching raw sa
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
-      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+      .RETURN(astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
   ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -963,8 +964,8 @@ TEST_CASE("Orchestrator-ReadImmediate can process samples without caching raw sa
   auto* orchestrator_ptr     = &orchestrator;
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(
-      std::make_unique<astl::Target>("no-cache-target", "", astl::CollectorType::SCMI, nullptr, std::nullopt, "tlm-0"));
+  targets.push_back(std::make_unique<astl::Target>("no-cache-target", "", astl::CollectorType::SCMI, nullptr,
+                                                   astl::compat::nullopt, "tlm-0"));
   REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
   auto* target = orchestrator.GetTargets()[0].get();
 
@@ -1006,7 +1007,7 @@ TEST_CASE("Orchestrator-ReadImmediate keeps default cached samples unavailable u
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
 
@@ -1019,9 +1020,9 @@ TEST_CASE("Orchestrator-ReadImmediate keeps default cached samples unavailable u
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
-      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+      .RETURN(astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
   ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1033,8 +1034,8 @@ TEST_CASE("Orchestrator-ReadImmediate keeps default cached samples unavailable u
   auto* orchestrator_ptr     = &orchestrator;
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(
-      std::make_unique<astl::Target>("cached-target", "", astl::CollectorType::SCMI, nullptr, std::nullopt, "tlm-0"));
+  targets.push_back(std::make_unique<astl::Target>("cached-target", "", astl::CollectorType::SCMI, nullptr,
+                                                   astl::compat::nullopt, "tlm-0"));
   REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
   auto* target = orchestrator.GetTargets()[0].get();
 
@@ -1335,7 +1336,7 @@ TEST_CASE("Orchestrator-FullLifecyclePositive", "[Orchestrator][lifecycle]") {
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*collector_manager, StartOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, PauseOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ResumeOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -1353,9 +1354,9 @@ TEST_CASE("Orchestrator-FullLifecyclePositive", "[Orchestrator][lifecycle]") {
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1445,7 +1446,7 @@ TEST_CASE("Orchestrator-ConfigureCounterCollection transitions target to configu
   ALLOW_CALL(*collector_manager, StartOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
 
   auto                               metric_manager        = std::make_unique<MockMetricManager>();
@@ -1461,9 +1462,9 @@ TEST_CASE("Orchestrator-ConfigureCounterCollection transitions target to configu
   ALLOW_CALL(*metric_manager, GetLifecycleEventMetricOnTarget(_)).RETURN(nullptr);
   ALLOW_CALL(*metric_manager, RegisterMetric(_, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
-      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+      .RETURN(astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
   ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1526,9 +1527,9 @@ TEST_CASE("Orchestrator-ConfigureMetricCollection resets global cached artifacts
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1543,9 +1544,10 @@ TEST_CASE("Orchestrator-ConfigureMetricCollection resets global cached artifacts
 
   static const std::string target_name       = "scmi-display-target";
   static const std::string other_target_name = "scmi-core-target";
-  auto* target_raw = new astl::Target(target_name, "", astl::CollectorType::SCMI, nullptr, std::nullopt, "tlm-0");
+  auto*                    target_raw =
+      new astl::Target(target_name, "", astl::CollectorType::SCMI, nullptr, astl::compat::nullopt, "tlm-0");
   auto* other_target_raw =
-      new astl::Target(other_target_name, "", astl::CollectorType::SCMI, nullptr, std::nullopt, "tlm-1");
+      new astl::Target(other_target_name, "", astl::CollectorType::SCMI, nullptr, astl::compat::nullopt, "tlm-1");
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.emplace_back(target_raw);
   targets.emplace_back(other_target_raw);
@@ -1601,7 +1603,7 @@ TEST_CASE("Orchestrator-StartCollectionPaused transitions directly to paused", "
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*collector_manager, StartOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, PauseOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ResumeOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -1617,9 +1619,9 @@ TEST_CASE("Orchestrator-StartCollectionPaused transitions directly to paused", "
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1662,7 +1664,7 @@ TEST_CASE("Orchestrator-StartCollectionPaused rolls back when pause is unsupport
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*collector_manager, StartOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, PauseOnTarget(_)).RETURN(astl::kInternalNotImplemented);
   ALLOW_CALL(*collector_manager, StopOnTarget(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -1678,9 +1680,9 @@ TEST_CASE("Orchestrator-StartCollectionPaused rolls back when pause is unsupport
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1721,7 +1723,7 @@ TEST_CASE("Orchestrator-StartFailureDoesNotStickStartedState", "[Orchestrator][l
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*collector_manager, StartOnTarget(_)).RETURN(ASTL_STATUS_INTERNAL_ERROR);
 
   auto                              metric_manager       = std::make_unique<MockMetricManager>();
@@ -1735,9 +1737,9 @@ TEST_CASE("Orchestrator-StartFailureDoesNotStickStartedState", "[Orchestrator][l
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1782,7 +1784,7 @@ TEST_CASE("Orchestrator-StartSetsStartingStateDuringCollectorStart", "[Orchestra
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
 
   auto                              metric_manager       = std::make_unique<MockMetricManager>();
   static int                        dummy_metric_storage = 0;
@@ -1795,9 +1797,9 @@ TEST_CASE("Orchestrator-StartSetsStartingStateDuringCollectorStart", "[Orchestra
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1856,7 +1858,7 @@ TEST_CASE("Orchestrator-StopDuringStartingReturnsInvalidStateTransition", "[Orch
   ALLOW_CALL(*collector_manager, UnregisterRawSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, ConfigureCollectionOnTarget(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*collector_manager, GetNativeClockSnapshot(_))
-      .RETURN(std::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
+      .RETURN(astl::compat::expected<astl::ClockCorrelationMap, astl_status_code>{astl::ClockCorrelationMap{}});
   ALLOW_CALL(*collector_manager, IsAnyTargetBeingCollected()).RETURN(false);
 
   auto                              metric_manager       = std::make_unique<MockMetricManager>();
@@ -1869,9 +1871,9 @@ TEST_CASE("Orchestrator-StopDuringStartingReturnsInvalidStateTransition", "[Orch
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, SetClockCorrelations(_));
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -1939,7 +1941,7 @@ TEST_CASE("Orchestrator::ConfigureMetricCollection preserves state on operation-
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
 
   auto               output_manager = std::make_unique<MockOutputManager>();
   astl::Orchestrator orchestrator(std::move(topology_manager), std::move(collector_manager), std::move(metric_manager),
@@ -1962,7 +1964,8 @@ TEST_CASE("Orchestrator::ConfigureMetricCollection preserves state on operation-
   std::array<astl_metric_handle_t, 1> metrics{metric_handle};
 
   SECTION("GetRequiredOperations failure maps to INTERNAL_ERROR") {
-    REQUIRE_CALL(*metric_manager_raw, GetRequiredOperations(_, _)).RETURN(std::unexpected(ASTL_STATUS_BAD_ARGUMENT));
+    REQUIRE_CALL(*metric_manager_raw, GetRequiredOperations(_, _))
+        .RETURN(astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT));
 
     REQUIRE(orchestrator.ConfigureMetricCollection(target, &params, metrics) == ASTL_STATUS_INTERNAL_ERROR);
     REQUIRE(orchestrator.GetTargetCollectionState(target).value() == State::UNCONFIGURED);
@@ -1970,7 +1973,7 @@ TEST_CASE("Orchestrator::ConfigureMetricCollection preserves state on operation-
 
   SECTION("collector configuration failure is propagated") {
     REQUIRE_CALL(*metric_manager_raw, GetRequiredOperations(_, _))
-        .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+        .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
             astl::CollectionOperations{
                                        {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
     });
@@ -1998,9 +2001,9 @@ TEST_CASE("Orchestrator::ConfigureCounterCollection propagates collector errors"
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, GetAvailableCounters(_))
-      .RETURN(std::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
+      .RETURN(astl::compat::expected<std::span<const astl_counter_handle_t>, astl_status_code>{available_counters});
   ALLOW_CALL(*metric_manager, GetCounterRequiredOperations(_, _))
-      .RETURN(std::expected<astl::CollectionOperations, astl_status_code>{
+      .RETURN(astl::compat::expected<astl::CollectionOperations, astl_status_code>{
           astl::CollectionOperations{
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}}
   });
@@ -2063,7 +2066,7 @@ TEST_CASE("Orchestrator::ConfigureMetricCollection resets OperationIds only at a
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}};
     operations.operationsOnSample.push_back(std::make_unique<astl::Operation>());
     configured_operation_ids.push_back(operations.operationsOnSample.back()->GetId());
-    return std::expected<astl::CollectionOperations, astl_status_code>{std::move(operations)};
+    return astl::compat::expected<astl::CollectionOperations, astl_status_code>{std::move(operations)};
   };
 
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -2071,7 +2074,7 @@ TEST_CASE("Orchestrator::ConfigureMetricCollection resets OperationIds only at a
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _)).LR_RETURN(make_operations());
 
   auto               output_manager       = std::make_unique<MockOutputManager>();
@@ -2147,7 +2150,7 @@ TEST_CASE("Orchestrator::ConfigureMetricCollection does not reset again while co
                                      {}, {}, {}, {}, astl::SamplingInterval{0}, astl::CollectorCapability{astl::CollectorType::UNKNOWN}};
     operations.operationsOnSample.push_back(std::make_unique<astl::Operation>());
     configured_operation_ids.push_back(operations.operationsOnSample.back()->GetId());
-    return std::expected<astl::CollectionOperations, astl_status_code>{std::move(operations)};
+    return astl::compat::expected<astl::CollectionOperations, astl_status_code>{std::move(operations)};
   };
 
   ALLOW_CALL(*metric_manager, RegisterProcessedSampleSink(_)).RETURN(ASTL_STATUS_SUCCESS);
@@ -2155,7 +2158,7 @@ TEST_CASE("Orchestrator::ConfigureMetricCollection does not reset again while co
   ALLOW_CALL(*metric_manager, RemoveAllMetrics());
   ALLOW_CALL(*metric_manager, InjectLifecycleEvent(_, _, _)).RETURN(ASTL_STATUS_SUCCESS);
   ALLOW_CALL(*metric_manager, GetAvailableMetrics(_))
-      .RETURN(std::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
+      .RETURN(astl::compat::expected<std::span<const astl_metric_handle_t>, astl_status_code>{available_metrics});
   ALLOW_CALL(*metric_manager, GetRequiredOperations(_, _)).LR_RETURN(make_operations());
 
   auto               output_manager = std::make_unique<MockOutputManager>();
