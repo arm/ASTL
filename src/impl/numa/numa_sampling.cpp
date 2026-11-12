@@ -32,7 +32,8 @@ auto NumaValue(const NumaReadOperation& read, const numa::Counts& delta) -> astl
   const auto part = read.field == NumaField::LOCAL_PERCENT ? delta[3] : delta[4];
   return AstlValue{total == 0
                        ? uint64_t{0}
-                       : static_cast<uint64_t>(static_cast<long double>(numa::kBasisPointsPerWhole) * part / total)};
+                       : static_cast<uint64_t>(static_cast<long double>(numa::kBasisPointsPerWhole) *
+                                               static_cast<long double>(part) / static_cast<long double>(total))};
 }
 }  // namespace
 auto NumaCollector::GetNativeClockSnapshot() -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
