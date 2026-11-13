@@ -19,6 +19,13 @@ namespace fs = std::filesystem;
 
 namespace {
 
+#if defined(__linux__)
+class MockScmiIoctlTransport : public astl::ScmiIoctlInterface {
+ public:
+  MAKE_MOCK2(Ioctl, astl_status_code(std::uint64_t, void*), override);
+};
+#endif
+
 void WriteTextFile(const fs::path& path, std::string_view contents) {
   std::error_code ec;
   fs::create_directories(path.parent_path(), ec);
@@ -31,6 +38,68 @@ void WriteTextFile(const fs::path& path, std::string_view contents) {
 }
 
 }  // namespace
+
+#if defined(__linux__)
+TEST_CASE("ScmiIoctlInterface distinguishes group state from per-group interval configuration",
+          "[scmi_ioctl_interface]") {
+  using trompeloeil::_;
+  MockScmiIoctlTransport interface;
+  scmi_tlm_abi_info      info{};
+  info.size         = sizeof(info);
+  info.abi_version  = SCMI_TLM_CURRENT_ABI_VERSION;
+  info.abi_features = SCMI_TLM_ABI_FEAT_BATCHED_CFG;
+  REQUIRE_CALL(interface, Ioctl(SCMI_TLM_GET_ABI_INFO, _))
+      .LR_SIDE_EFFECT(*static_cast<scmi_tlm_abi_info*>(_2) = info)
+      .RETURN(ASTL_STATUS_SUCCESS);
+
+  scmi_tlm_config config{};
+  config.flags  = SCMI_TLM_CONFIG_GROUP;
+  config.grp_id = 0;
+
+  SECTION("group state can be read without per-group interval support") {
+    REQUIRE_CALL(interface, Ioctl(SCMI_TLM_GET_CFG, &config)).RETURN(ASTL_STATUS_SUCCESS);
+    REQUIRE(interface.GetConfig(config) == ASTL_STATUS_SUCCESS);
+  }
+
+  SECTION("group enable and timestamp state can be changed without per-group interval support") {
+    config.enable   = 1;
+    config.t_enable = 1;
+    REQUIRE_CALL(interface, Ioctl(SCMI_TLM_SET_CFG, &config)).RETURN(ASTL_STATUS_SUCCESS);
+    REQUIRE(interface.SetConfig(config) == ASTL_STATUS_SUCCESS);
+  }
+
+  SECTION("unsupported group interval changes are rejected before issuing the ioctl") {
+    config.active = {.secs = 5, .exp = -3};
+    FORBID_CALL(interface, Ioctl(SCMI_TLM_SET_CFG, _));
+    REQUIRE(interface.SetConfig(config) == ASTL_STATUS_NOT_SUPPORTED);
+  }
+
+  SECTION("an interval exponent alone is still an interval configuration request") {
+    config.active.exp = -3;
+    FORBID_CALL(interface, Ioctl(SCMI_TLM_SET_CFG, _));
+    REQUIRE(interface.SetConfig(config) == ASTL_STATUS_NOT_SUPPORTED);
+  }
+
+  SECTION("advertised per-group intervals can be configured") {
+    info.features = SCMI_TLM_SCMI_SUPPORT_GROUP_CONFIG;
+    config.active = {.secs = 5, .exp = -3};
+    REQUIRE_CALL(interface, Ioctl(SCMI_TLM_SET_CFG, &config)).RETURN(ASTL_STATUS_SUCCESS);
+    REQUIRE(interface.SetConfig(config) == ASTL_STATUS_SUCCESS);
+  }
+
+  SECTION("instance intervals do not require per-group support") {
+    config.flags  = 0;
+    config.active = {.secs = 5, .exp = -3};
+    REQUIRE_CALL(interface, Ioctl(SCMI_TLM_SET_CFG, &config)).RETURN(ASTL_STATUS_SUCCESS);
+    REQUIRE(interface.SetConfig(config) == ASTL_STATUS_SUCCESS);
+  }
+
+  SECTION("group read failures are propagated") {
+    REQUIRE_CALL(interface, Ioctl(SCMI_TLM_GET_CFG, &config)).RETURN(ASTL_STATUS_BAD_ARGUMENT);
+    REQUIRE(interface.GetConfig(config) == ASTL_STATUS_BAD_ARGUMENT);
+  }
+}
+#endif
 
 TEST_CASE("GetScmiBackendPreference reads ASTL_SCMI_INTERFACE", "[scmi_ioctl_interface]") {
   EnvVarGuard guard(astl::EnvVar::ASTL_SCMI_INTERFACE, "");

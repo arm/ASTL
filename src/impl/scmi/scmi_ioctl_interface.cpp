@@ -306,14 +306,23 @@ auto ScmiIoctlInterface::SupportsSingleRead() -> astl::compat::expected<bool, as
  * @return ASTL_STATUS_SUCCESS on success, or an ABI, capability, or ioctl failure status.
  */
 auto ScmiIoctlInterface::ConfigIoctl(std::uint64_t request, scmi_tlm_config& config) -> astl_status_code {
+#if defined(__linux__)
   auto status = Probe();
   if (status != ASTL_STATUS_SUCCESS) {
     return status;
   }
-  if (SCMI_TLM_CONFIG_IS_GROUP(config.flags) != 0 && !HasScmiFeature(*_abi_info, SCMI_TLM_SCMI_SUPPORT_GROUP_CONFIG)) {
+  // Group state reads and enable/timestamp changes do not require per-group interval configuration support.
+  const bool sets_interval = request == SCMI_TLM_SET_CFG && (config.active.secs != 0 || config.active.exp != 0);
+  if (sets_interval && SCMI_TLM_CONFIG_IS_GROUP(config.flags) != 0 &&
+      !HasScmiFeature(*_abi_info, SCMI_TLM_SCMI_SUPPORT_GROUP_CONFIG)) {
     return ASTL_STATUS_NOT_SUPPORTED;
   }
   return Ioctl(request, &config);
+#else
+  (void)request;
+  (void)config;
+  return ASTL_STATUS_NOT_SUPPORTED;
+#endif
 }
 
 /**

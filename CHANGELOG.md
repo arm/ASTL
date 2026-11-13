@@ -12,6 +12,9 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ### Fixed
 
+- Allow SCMI ioctl group-state reads and enable/timestamp changes on platforms
+  without per-group update intervals, including the reads used for clock correlation.
+
 - Keep published configuration references consistent when confidential files are
   excluded, preventing startup failures with the generated public config.
 

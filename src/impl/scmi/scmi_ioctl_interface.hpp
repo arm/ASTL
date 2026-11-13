@@ -215,7 +215,7 @@ class ScmiIoctlInterface : public IScmiIoctlInterface {
    */
   static auto IsLikelyTelemetryDeviceName(std::string_view device_name) -> bool;
 
- private:
+ protected:
   /**
    * @brief Opens the device if needed and executes one raw ioctl call.
    *
@@ -223,8 +223,9 @@ class ScmiIoctlInterface : public IScmiIoctlInterface {
    * @param arg Pointer to the UAPI structure expected by the request.
    * @return ASTL_STATUS_SUCCESS on success, or an ASTL status mapped from errno.
    */
-  auto Ioctl(std::uint64_t request, void* arg) -> astl_status_code;
+  virtual auto Ioctl(std::uint64_t request, void* arg) -> astl_status_code;
 
+ private:
   /**
    * @brief Validates and issues a target or group configuration ioctl.
    *
