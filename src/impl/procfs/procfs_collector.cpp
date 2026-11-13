@@ -8,6 +8,7 @@
 
 #include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
+#include "collector/clock_snapshot.hpp"
 #include "common/monotonic_raw_clock.hpp"
 #include "procfs/procfs_read_operation.hpp"
 #include "procfs/procfs_utils.hpp"
@@ -148,20 +149,7 @@ auto ProcfsCollector::ReadImmediate() -> astl_status_code {
 
 auto ProcfsCollector::GetNativeClockSnapshot() -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   std::scoped_lock lock{_collection_mutex};
-  if (!_configuration.has_value()) {
-    ASTL_LOG_WARNING("ProcfsCollector::GetNativeClockSnapshot called without configuration; returning empty map");
-    return {};
-  }
-
-  const uint64_t native_now = ProcfsNativeNow();
-  const auto     raw_now    = ClockMonotonicRaw::now();
-
-  ClockCorrelationMap result;
-  for (const auto& operation_ptr : _configuration->Operations().operationsOnSample) {
-    result[operation_ptr->GetId()] =
-        OperationClockCorrelation{raw_now, native_now, MakeTickRatio<SampleMicroseconds>()};
-  }
-  return result;
+  return CaptureOperationClockSnapshot(_configuration, &ProcfsNativeNow, "ProcfsCollector");
 }
 
 auto ProcfsCollector::ExecuteCollectionOperations(OperationSequence const& operations) -> astl_status_code {

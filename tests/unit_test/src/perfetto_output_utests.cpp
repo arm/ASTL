@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "../../mock_classes.hpp"  // mocks for orchestrator dependencies
@@ -30,6 +32,22 @@ namespace {
 // Deterministic timestamp base (epoch)
 astl::ProcessedSampledData MakeSample(uint64_t value, astl::ProcessedSampleTimestamp timestamp) {
   return astl::ProcessedSampledData{astl::AstlValue{value}, timestamp};
+}
+
+void CheckUnitBasedCategory(std::string file_name, std::string metric_name, astl_units_t units, uint64_t value,
+                            std::string_view category) {
+  TempFileGuard        tmp_guard{std::move(file_name)};
+  astl::PerfettoOutput writer(tmp_guard.path);
+  REQUIRE(writer.Ready());
+  TestTargetBase            target{"CatT2"};
+  TestMetricBase            metric{std::move(metric_name), units};
+  astl::ProcessedSamplesMap processed;
+  processed[&target][&metric] = {MakeSample(value, astl::ProcessedSampleTimestamp{})};
+  REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
+  std::ifstream input_stream(tmp_guard.path);
+  REQUIRE(input_stream.is_open());
+  std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
+  REQUIRE(content.find(std::string{"\"cat\":\""} + std::string{category} + "\"") != std::string::npos);
 }
 
 }  // namespace
@@ -477,113 +495,11 @@ TEST_CASE("PerfettoOutput category inference - power & temperature (unit-based)"
 }
 
 TEST_CASE("PerfettoOutput category inference - frequency (unit-based)", "[perfetto_output]") {  // NOLINT
-  TempFileGuard        tmp_guard{"astl_perfetto_category_frequency.json"};
-  astl::PerfettoOutput writer(tmp_guard.path);
-  REQUIRE(writer.Ready());
-  TestTargetBase target{"CatT2"};
-  class FreqMetric : public astl::IMetric {
-   public:
-    FreqMetric() : name_("Core Frequency"), units_(ASTL_UNITS_MHZ) {}
-    bool CheckCapabilities(const astl::Capabilities& capabilities) const override {
-      (void)capabilities;
-      return true;
-    }
-    astl::compat::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
-      return astl::OperationSequence{};
-    }
-    astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& raw_sample) override {
-      (void)raw_sample;
-      return ASTL_STATUS_SUCCESS;
-    }
-    void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
-    void             Reset() override {}
-    astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-    astl_status_code GetProperties(astl_metric_props_t* props) const override {
-      if (!props) {
-        return ASTL_STATUS_BAD_ARGUMENT;
-      }
-      props->handle = this;
-      props->name   = name_.c_str();
-      props->units  = units_;
-      return ASTL_STATUS_SUCCESS;
-    }
-    auto             Name() const -> std::string const& override { return name_; }
-    astl_status_code SinkProcessedSample(const astl::ProcessedSampledData& processed_sample) override {
-      (void)processed_sample;
-      return ASTL_STATUS_SUCCESS;
-    }
-    astl_status_code ProcessPauseSample(astl::ProcessedSampleTimestamp pause_timestamp) override {
-      (void)pause_timestamp;
-      return ASTL_STATUS_SUCCESS;
-    }
-
-   private:
-    std::string  name_;
-    astl_units_t units_{};  // default member init
-  } metric;
-  const astl::ProcessedSampleTimestamp base_timestamp{};
-  astl::ProcessedSamplesMap            processed;
-  processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(1000), base_timestamp)};
-  REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream input_stream(tmp_guard.path);
-  REQUIRE(input_stream.is_open());
-  std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
-  REQUIRE(content.find("\"cat\":\"Frequency\"") != std::string::npos);
+  CheckUnitBasedCategory("astl_perfetto_category_frequency.json", "Core Frequency", ASTL_UNITS_MHZ, 1000, "Frequency");
 }
 
 TEST_CASE("PerfettoOutput category inference - voltage (unit-based)", "[perfetto_output]") {  // NOLINT
-  TempFileGuard        tmp_guard{"astl_perfetto_category_voltage.json"};
-  astl::PerfettoOutput writer(tmp_guard.path);
-  REQUIRE(writer.Ready());
-  TestTargetBase target{"CatT2"};
-  class VoltMetric : public astl::IMetric {
-   public:
-    VoltMetric() : name_("VDD Voltage"), units_(ASTL_UNITS_VOLTS) {}
-    bool CheckCapabilities(const astl::Capabilities& capabilities) const override {
-      (void)capabilities;
-      return true;
-    }
-    astl::compat::expected<astl::OperationSequence, astl_status_code> GetOperations() override {
-      return astl::OperationSequence{};
-    }
-    astl_status_code ReceiveRawSample(const astl::NormalizedSampledData& raw_sample) override {
-      (void)raw_sample;
-      return ASTL_STATUS_SUCCESS;
-    }
-    void             SetProcessedSampleSink(astl::IProcessedSampleSink* sink) override { (void)sink; }
-    void             Reset() override {}
-    astl_status_code Summarize() override { return ASTL_STATUS_SUCCESS; }
-    astl_status_code GetProperties(astl_metric_props_t* props) const override {
-      if (!props) {
-        return ASTL_STATUS_BAD_ARGUMENT;
-      }
-      props->handle = this;
-      props->name   = name_.c_str();
-      props->units  = units_;
-      return ASTL_STATUS_SUCCESS;
-    }
-    auto             Name() const -> std::string const& override { return name_; }
-    astl_status_code SinkProcessedSample(const astl::ProcessedSampledData& processed_sample) override {
-      (void)processed_sample;
-      return ASTL_STATUS_SUCCESS;
-    }
-    astl_status_code ProcessPauseSample(astl::ProcessedSampleTimestamp pause_timestamp) override {
-      (void)pause_timestamp;
-      return ASTL_STATUS_SUCCESS;
-    }
-
-   private:
-    std::string  name_;
-    astl_units_t units_{};  // default member init
-  } metric;
-  const astl::ProcessedSampleTimestamp base_timestamp{};
-  astl::ProcessedSamplesMap            processed;
-  processed[&target][&metric] = {MakeSample(static_cast<uint64_t>(1200), base_timestamp)};
-  REQUIRE(writer.WriteProcessedSamples(processed) == ASTL_STATUS_SUCCESS);
-  std::ifstream input_stream(tmp_guard.path);
-  REQUIRE(input_stream.is_open());
-  std::string content((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
-  REQUIRE(content.find("\"cat\":\"Voltage\"") != std::string::npos);
+  CheckUnitBasedCategory("astl_perfetto_category_voltage.json", "VDD Voltage", ASTL_UNITS_VOLTS, 1200, "Voltage");
 }
 
 TEST_CASE("PerfettoOutput category inference - state (unit-based)", "[perfetto_output]") {  // NOLINT

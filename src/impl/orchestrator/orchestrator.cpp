@@ -248,6 +248,26 @@ auto Orchestrator::InitializeInstance(std::unique_ptr<ITopologyManager>  topolog
   }
 }
 
+static auto BuildConfiguredOrchestrator() -> astl_status_code {
+  auto configuration = astl::ConfigurationManager::GetConfiguration();
+  if (!configuration) {
+    return configuration.error();
+  }
+
+  // One-shot in-process override used by explicit load/import APIs.
+  auto load_override = astl::ConfigurationManager::GetLoadFilePathOverride();
+  if (load_override) {
+    configuration->load_file_path = *load_override;
+    astl::ConfigurationManager::SetLoadFilePathOverride(astl::compat::nullopt);
+  }
+  try {
+    return BuildOrchestrator(configuration.value());
+  } catch (const astl::compat::bad_expected_access<astl_status_code> &ex) {
+    ASTL_LOG_ERROR("Exception during Orchestrator initialization: {}", ex.what());
+    return ASTL_STATUS_INTERNAL_ERROR;
+  }
+}
+
 auto Orchestrator::GetInstance() noexcept
     -> astl::compat::expected<std::reference_wrapper<std::unique_ptr<Orchestrator>>, astl_status_code> {
   // Fast path under lock: instance already initialized.
@@ -258,25 +278,8 @@ auto Orchestrator::GetInstance() noexcept
     }
   }
 
-  auto configuration = astl::ConfigurationManager::GetConfiguration();
-  if (!configuration) {
-    return astl::compat::unexpected(configuration.error());
-  }
-
-  // One-shot in-process override used by explicit load/import APIs.
-  auto load_override = astl::ConfigurationManager::GetLoadFilePathOverride();
-  if (load_override) {
-    configuration->load_file_path = *load_override;
-    astl::ConfigurationManager::SetLoadFilePathOverride(astl::compat::nullopt);
-  }
-  try {
-    astl_status_code status = BuildOrchestrator(configuration.value());
-    if (status != ASTL_STATUS_SUCCESS) {
-      return astl::compat::unexpected(status);
-    }
-  } catch (const astl::compat::bad_expected_access<astl_status_code> &ex) {
-    ASTL_LOG_ERROR("Exception during Orchestrator initialization: {}", ex.what());
-    return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
+  if (const auto status = BuildConfiguredOrchestrator(); status != ASTL_STATUS_SUCCESS) {
+    return astl::compat::unexpected(status);
   }
   // Re-check under lock after construction attempt.
   {

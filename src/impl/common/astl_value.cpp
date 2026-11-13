@@ -93,35 +93,38 @@ auto AstlValue::operator<=>(const AstlValue& other) const -> std::partial_orderi
  */
 auto AstlValue::FromUnion(const astl_value_t& val, astl_value_type_t type)
     -> astl::compat::expected<AstlValue, astl_status_code> {
+  astl::compat::expected<AstlValue, astl_status_code> result = astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   // clang-format off
   switch (type) {
-    case ASTL_VALUE_UINT8:       return AstlValue{val.ui8};
-    case ASTL_VALUE_UINT16:      return AstlValue{val.ui16};
-    case ASTL_VALUE_UINT32:      return AstlValue{val.ui32};
-    case ASTL_VALUE_UINT64:      return AstlValue{val.ui64};
-    case ASTL_VALUE_FLOAT32:     return AstlValue{val.fp32};
-    case ASTL_VALUE_FLOAT64:     return AstlValue{val.fp64};
-    case ASTL_VALUE_BOOL8:       return AstlValue{val.b8};
-    case ASTL_VALUE_UNKNOWN:     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    default:                     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    case ASTL_VALUE_UINT8:       result = AstlValue{val.ui8}; break;
+    case ASTL_VALUE_UINT16:      result = AstlValue{val.ui16}; break;
+    case ASTL_VALUE_UINT32:      result = AstlValue{val.ui32}; break;
+    case ASTL_VALUE_UINT64:      result = AstlValue{val.ui64}; break;
+    case ASTL_VALUE_FLOAT32:     result = AstlValue{val.fp32}; break;
+    case ASTL_VALUE_FLOAT64:     result = AstlValue{val.fp64}; break;
+    case ASTL_VALUE_BOOL8:       result = AstlValue{val.b8}; break;
+    case ASTL_VALUE_UNKNOWN:     break;
+    default:                     break;
   }
   // clang-format on
+  return result;
 }
 
 auto AstlValue::FromUnionPromoting(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code> {
-  // clang-format off
   switch (type) {
-    case ASTL_VALUE_UINT8:     return AstlValue{uint64_t{0}};
-    case ASTL_VALUE_UINT16:    return AstlValue{uint64_t{0}};
-    case ASTL_VALUE_UINT32:    return AstlValue{uint64_t{0}};
-    case ASTL_VALUE_UINT64:    return AstlValue{uint64_t{0}};
-    case ASTL_VALUE_FLOAT32:   return AstlValue{0.0};
-    case ASTL_VALUE_FLOAT64:   return AstlValue{0.0};
-    case ASTL_VALUE_BOOL8:     return AstlValue{uint64_t{0}};
-    case ASTL_VALUE_UNKNOWN:   return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    default:                   return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    case ASTL_VALUE_UINT8:
+    case ASTL_VALUE_UINT16:
+    case ASTL_VALUE_UINT32:
+    case ASTL_VALUE_UINT64:
+    case ASTL_VALUE_BOOL8:
+      return AstlValue{uint64_t{0}};
+    case ASTL_VALUE_FLOAT32:
+    case ASTL_VALUE_FLOAT64:
+      return AstlValue{0.0};
+    case ASTL_VALUE_UNKNOWN:
+    default:
+      return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
-  // clang-format on
 }
 
 /**
@@ -130,19 +133,9 @@ auto AstlValue::FromUnionPromoting(astl_value_type_t type) -> astl::compat::expe
  * @return an AstlValue instance with the minimum possible value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
  */
 auto AstlValue::FromMinimum(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code> {
-  // clang-format off
-  switch (type) {
-    case ASTL_VALUE_UINT8:       return AstlValue{std::numeric_limits<uint8_t>::min()};
-    case ASTL_VALUE_UINT16:      return AstlValue{std::numeric_limits<uint16_t>::min()};
-    case ASTL_VALUE_UINT32:      return AstlValue{std::numeric_limits<uint32_t>::min()};
-    case ASTL_VALUE_UINT64:      return AstlValue{std::numeric_limits<uint64_t>::min()};
-    case ASTL_VALUE_FLOAT32:     return AstlValue{std::numeric_limits<float>::lowest()};
-    case ASTL_VALUE_FLOAT64:     return AstlValue{std::numeric_limits<double>::lowest()};
-    case ASTL_VALUE_BOOL8:       return AstlValue{std::numeric_limits<bool>::min()};
-    case ASTL_VALUE_UNKNOWN:     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    default:                     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-  }
-  // clang-format on
+  return FromZero(type).transform([](const AstlValue& zero) {
+    return std::visit([](auto value) { return AstlValue{std::numeric_limits<decltype(value)>::lowest()}; }, zero.value);
+  });
 }
 
 /**
@@ -151,19 +144,21 @@ auto AstlValue::FromMinimum(astl_value_type_t type) -> astl::compat::expected<As
  * @return an AstlValue instance of 0 value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
  */
 auto AstlValue::FromZero(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code> {
+  astl::compat::expected<AstlValue, astl_status_code> result = astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   // clang-format off
   switch (type) {
-    case ASTL_VALUE_UINT8:       return AstlValue{uint8_t{0}};
-    case ASTL_VALUE_UINT16:      return AstlValue{uint16_t{0}};
-    case ASTL_VALUE_UINT32:      return AstlValue{uint32_t{0}};
-    case ASTL_VALUE_UINT64:      return AstlValue{uint64_t{0}};
-    case ASTL_VALUE_FLOAT32:     return AstlValue{0.0F};
-    case ASTL_VALUE_FLOAT64:     return AstlValue{0.0};
-    case ASTL_VALUE_BOOL8:       return AstlValue{false};
-    case ASTL_VALUE_UNKNOWN:     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    default:                     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+    case ASTL_VALUE_UINT8:       result = AstlValue{uint8_t{0}}; break;
+    case ASTL_VALUE_UINT16:      result = AstlValue{uint16_t{0}}; break;
+    case ASTL_VALUE_UINT32:      result = AstlValue{uint32_t{0}}; break;
+    case ASTL_VALUE_UINT64:      result = AstlValue{uint64_t{0}}; break;
+    case ASTL_VALUE_FLOAT32:     result = AstlValue{0.0F}; break;
+    case ASTL_VALUE_FLOAT64:     result = AstlValue{0.0}; break;
+    case ASTL_VALUE_BOOL8:       result = AstlValue{false}; break;
+    case ASTL_VALUE_UNKNOWN:     break;
+    default:                     break;
   }
   // clang-format on
+  return result;
 }
 
 /**
@@ -172,19 +167,9 @@ auto AstlValue::FromZero(astl_value_type_t type) -> astl::compat::expected<AstlV
  * @return an AstlValue instance with the max representable value of `type`, or a ASTL_STATUS_INVALID_VALUE_TYPE
  */
 auto AstlValue::FromMaximum(astl_value_type_t type) -> astl::compat::expected<AstlValue, astl_status_code> {
-  // clang-format off
-  switch (type) {
-    case ASTL_VALUE_UINT8:       return AstlValue{std::numeric_limits<uint8_t>::max()};
-    case ASTL_VALUE_UINT16:      return AstlValue{std::numeric_limits<uint16_t>::max()};
-    case ASTL_VALUE_UINT32:      return AstlValue{std::numeric_limits<uint32_t>::max()};
-    case ASTL_VALUE_UINT64:      return AstlValue{std::numeric_limits<uint64_t>::max()};
-    case ASTL_VALUE_FLOAT32:     return AstlValue{std::numeric_limits<float>::max()};
-    case ASTL_VALUE_FLOAT64:     return AstlValue{std::numeric_limits<double>::max()};
-    case ASTL_VALUE_BOOL8:       return AstlValue{std::numeric_limits<bool>::max()};
-    case ASTL_VALUE_UNKNOWN:     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    default:                     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-  }
-  // clang-format on
+  return FromZero(type).transform([](const AstlValue& zero) {
+    return std::visit([](auto value) { return AstlValue{std::numeric_limits<decltype(value)>::max()}; }, zero.value);
+  });
 }
 
 /**

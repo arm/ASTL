@@ -45,26 +45,41 @@ static auto LoadMetricGroupDescriptions(const AstlConfiguration& configuration)
   return descriptions;
 }
 
-auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration,
-                        astl::compat::optional<std::filesystem::path> cache_dir_path, CollectorBackends backends)
-    -> astl::compat::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
-  if (configuration.load_file_path.has_value()) {
-    if (!cache_dir_path) {
-      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-    }
-    return LoadMetricManagerFromCache(targets, *cache_dir_path);
-  }
-
+static auto PrepareCollectorTargets(const CollectorBackends& backends, const AstlConfiguration& configuration,
+                                    const std::vector<std::unique_ptr<ITarget>>& targets) -> astl_status_code {
   if (auto status = ValidateCollectorBackends(backends); status != ASTL_STATUS_SUCCESS) {
-    return astl::compat::unexpected(status);
+    return status;
   }
   for (const auto& backend : backends) {
     if (backend.prepare_targets != nullptr) {
       const auto status = backend.prepare_targets(configuration, targets);
       if (status != ASTL_STATUS_SUCCESS) {
-        return astl::compat::unexpected(status);
+        return status;
       }
     }
+  }
+
+  return ASTL_STATUS_SUCCESS;
+}
+
+static auto LoadCachedMetricManager(const std::vector<std::unique_ptr<ITarget>>&         targets,
+                                    const astl::compat::optional<std::filesystem::path>& cache_dir_path)
+    -> astl::compat::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
+  if (!cache_dir_path) {
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+  return LoadMetricManagerFromCache(targets, *cache_dir_path);
+}
+
+auto BuildMetricManager(const std::vector<std::unique_ptr<ITarget>>& targets, const AstlConfiguration& configuration,
+                        astl::compat::optional<std::filesystem::path> cache_dir_path, CollectorBackends backends)
+    -> astl::compat::expected<std::unique_ptr<IMetricManager>, astl_status_code> {
+  if (configuration.load_file_path.has_value()) {
+    return LoadCachedMetricManager(targets, cache_dir_path);
+  }
+
+  if (const auto status = PrepareCollectorTargets(backends, configuration, targets); status != ASTL_STATUS_SUCCESS) {
+    return astl::compat::unexpected(status);
   }
 
   BackendTargetMap                 collector_type_to_targets_map;

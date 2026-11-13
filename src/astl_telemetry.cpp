@@ -1047,39 +1047,43 @@ auto PopulateSystemInfo(astl_platform_props_t* system_info, const astl::Platform
 }
 
 template <typename ParamsT>
-auto UnpackParamsForGetMetricGroups(const ParamsT* params) -> astl::compat::expected<
-    std::tuple<const astl::ITarget*, astl::IMetricManager*, astl_metric_group_handle_t, uint32_t*>, astl_status_code> {
+auto ValidateMetricGroupParams(const ParamsT* params) -> astl_status_code {
   const auto params_status = ValidateApiParams(params);
   if (params_status != ASTL_STATUS_SUCCESS) {
-    return astl::compat::unexpected(params_status);
+    return params_status;
+  }
+  if (!params->target_handle) {
+    ASTL_LOG_ERROR("UnpackParamsForGetMetricGroups: target_handle cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!params->metric_group_handle) {
+    ASTL_LOG_ERROR("UnpackParamsForGetMetricGroups: metric_group_handle cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  if (!params->metric_count) {
+    ASTL_LOG_ERROR("UnpackParamsForGetMetricGroups: metric_count ptr cannot be null");
+    return ASTL_STATUS_BAD_ARGUMENT;
+  }
+  return ASTL_STATUS_SUCCESS;
+}
+
+template <typename ParamsT>
+auto UnpackParamsForGetMetricGroups(const ParamsT* params) -> astl::compat::expected<
+    std::tuple<const astl::ITarget*, astl::IMetricManager*, astl_metric_group_handle_t, uint32_t*>, astl_status_code> {
+  if (const auto status = ValidateMetricGroupParams(params); status != ASTL_STATUS_SUCCESS) {
+    return astl::compat::unexpected(status);
   }
   const auto target_handle       = params->target_handle;
   const auto metric_group_handle = params->metric_group_handle;
   auto*      metric_count        = params->metric_count;
-  if (!target_handle) {
-    ASTL_LOG_ERROR("UnpackParamsForGetMetricGroups: target_handle cannot be null");
-    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
-  }
-  if (!metric_group_handle) {
-    ASTL_LOG_ERROR("UnpackParamsForGetMetricGroups: metric_group_handle cannot be null");
-    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
-  }
-  if (!metric_count) {
-    ASTL_LOG_ERROR("UnpackParamsForGetMetricGroups: metric_count ptr cannot be null");
-    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
-  }
-  auto get_target_result = GetTargetFromHandle(target_handle);
+  auto       get_target_result   = GetTargetFromHandle(target_handle);
   if (!get_target_result) {
     return astl::compat::unexpected(get_target_result.error());
   }
   const auto* target = *get_target_result;
 
-  auto get_metric_manager_result = GetMetricManager();
-  if (!get_metric_manager_result) {
-    return astl::compat::unexpected(get_metric_manager_result.error());
-  }
-  auto* metric_manager = *get_metric_manager_result;
-  return std::make_tuple(target, metric_manager, metric_group_handle, metric_count);
+  return GetMetricManager().transform(
+      [&](auto* metric_manager) { return std::make_tuple(target, metric_manager, metric_group_handle, metric_count); });
 }
 
 auto GetMetricHandlesInGroupForTarget(astl::IMetricManager* metric_manager, astl_metric_group_handle_t group,

@@ -900,9 +900,9 @@ TEST_CASE("CreateScmiMetricConfigs scopes SCMI metric ids per target", "[ConfigM
   };
 
   astl::Target target_tlm0("scmi-mockscmi-tlm-0", "test target 0", astl::CollectorType::SCMI, nullptr,
-                           astl::compat::nullopt, std::string{"tlm-0"});
+                           astl::TargetMetadata{.uuid = astl::compat::nullopt, .collector_target_path = "tlm-0"});
   astl::Target target_tlm1("scmi-mockscmi-tlm-1", "test target 1", astl::CollectorType::SCMI, nullptr,
-                           astl::compat::nullopt, std::string{"tlm-1"});
+                           astl::TargetMetadata{.uuid = astl::compat::nullopt, .collector_target_path = "tlm-1"});
   std::vector<const astl::ITarget*> targets{&target_tlm0, &target_tlm1};
 
   auto metric_configs_result =

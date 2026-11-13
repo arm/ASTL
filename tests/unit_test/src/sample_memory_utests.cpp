@@ -93,9 +93,14 @@ auto CheckCollectionMemory(bool residency) -> void {
         {"Active", {"Active", "Synthetic active ticks", 1'000'000.0, astl::ScmiOperationBuilder{1}}}
     };
     config = std::make_unique<astl::ResidencyMetricConfig>(
-        "memory-residency", "Synthetic residency", ASTL_UNITS_TICKS, ASTL_VALUE_UINT64, ASTL_METRIC_RESIDENCY,
-        ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::SCMI, states,
-        astl::ResidencyMetricConfig::InferredStateInfo{"Idle", "Inferred idle time"});
+        astl::ResidencyMetricConfig::Settings{.name           = "memory-residency",
+                                              .description    = "Synthetic residency",
+                                              .units          = ASTL_UNITS_TICKS,
+                                              .value_type     = ASTL_VALUE_UINT64,
+                                              .identifier     = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                              .collector_type = astl::CollectorType::SCMI,
+                                              .metric_id      = {}},
+        states, astl::ResidencyMetricConfig::InferredStateInfo{"Idle", "Inferred idle time"});
   } else {
     config = std::make_unique<astl::MetricConfig>("memory-value", "Synthetic temperature", ASTL_UNITS_CELSIUS,
                                                   ASTL_VALUE_UINT64, ASTL_METRIC_IDENTIFIER_UNKNOWN, ASTL_METRIC_VALUE,

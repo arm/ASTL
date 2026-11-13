@@ -589,54 +589,62 @@ static auto DeserializeMetricWithBasicConfig(const astl::protobuf::RawMetric&   
   return MetricConfigAndResults{std::move(metric_config), std::move(metrics.value())};
 }
 
+static auto DeserializeEventMetric(const astl::protobuf::RawMetric&             raw,
+                                   const std::vector<std::unique_ptr<ITarget>>& targets)
+    -> astl::compat::expected<MetricConfigAndResults, astl_status_code> {
+  auto config = DeserializeEventMetricConfig(raw.config(), raw.metric_id());
+  if (!config) {
+    return astl::compat::unexpected(config.error());
+  }
+  auto& event_config = *config;
+  auto  metrics      = DeserializeBasicMetric<EventMetric, EventMetricConfig>(raw, event_config.get(), targets);
+  if (!metrics) {
+    return astl::compat::unexpected(metrics.error());
+  }
+  return MetricConfigAndResults{std::move(event_config), std::move(*metrics)};
+}
+
+static auto DeserializeFiniteSetMetric(const astl::protobuf::RawMetric&             raw,
+                                       const std::vector<std::unique_ptr<ITarget>>& targets)
+    -> astl::compat::expected<MetricConfigAndResults, astl_status_code> {
+  auto cfg_or_err = DeserializeFiniteSetMetricConfig(raw.config(), raw.metric_id());
+  if (!cfg_or_err) {
+    ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
+    return astl::compat::unexpected(cfg_or_err.error());
+  }
+
+  auto& finite_cfg     = cfg_or_err.value();
+  auto  metrics_or_err = DeserializeBasicMetric<FiniteSetMetric, FiniteSetMetricConfig>(raw, finite_cfg.get(), targets);
+  if (!metrics_or_err) {
+    ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", finite_cfg->Name());
+    return astl::compat::unexpected(metrics_or_err.error());
+  }
+
+  return MetricConfigAndResults{std::move(finite_cfg), std::move(metrics_or_err.value())};
+}
+
 static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl::protobuf::RawMetric& raw,
                                      const std::vector<std::unique_ptr<ITarget>>& targets)
     -> astl::compat::expected<MetricConfigAndResults, astl_status_code> {
+  using Deserializer       = decltype(&DeserializeProcfsCompositeMetric);
+  Deserializer deserialize = nullptr;
   switch (metric_type) {
-    case ASTL_METRIC_VALUE: {
-      if (raw.config().has_procfs_composite()) {
-        return DeserializeProcfsCompositeMetric(raw, targets);
-      }
-      return DeserializeMetricWithBasicConfig<SampledValueMetric>(raw, targets);
-    }
-
-    case ASTL_METRIC_EVENT: {
-      auto config = DeserializeEventMetricConfig(raw.config(), raw.metric_id());
-      if (!config) {
-        return astl::compat::unexpected(config.error());
-      }
-      auto& event_config = *config;
-      auto  metrics      = DeserializeBasicMetric<EventMetric, EventMetricConfig>(raw, event_config.get(), targets);
-      if (!metrics) {
-        return astl::compat::unexpected(metrics.error());
-      }
-      return MetricConfigAndResults{std::move(event_config), std::move(*metrics)};
-    }
-
+    case ASTL_METRIC_VALUE:
+      deserialize = raw.config().has_procfs_composite() ? &DeserializeProcfsCompositeMetric
+                                                        : &DeserializeMetricWithBasicConfig<SampledValueMetric>;
+      break;
+    case ASTL_METRIC_EVENT:
+      deserialize = &DeserializeEventMetric;
+      break;
     case ASTL_METRIC_DELTA:
-      return DeserializeMetricWithBasicConfig<DeltaMetric>(raw, targets);
-
+      deserialize = &DeserializeMetricWithBasicConfig<DeltaMetric>;
+      break;
     case ASTL_METRIC_RATE:
-      return DeserializeMetricWithBasicConfig<RateMetric>(raw, targets);
-
-    case ASTL_METRIC_FINITE_SET_VALUE: {
-      auto cfg_or_err = DeserializeFiniteSetMetricConfig(raw.config(), raw.metric_id());
-      if (!cfg_or_err) {
-        ASTL_LOG_ERROR("DeserializeMetricHandle: failed to deserialize MetricConfig for metric {}", raw.metric_id());
-        return astl::compat::unexpected(cfg_or_err.error());
-      }
-
-      auto& finite_cfg = cfg_or_err.value();
-      auto  metrics_or_err =
-          DeserializeBasicMetric<FiniteSetMetric, FiniteSetMetricConfig>(raw, finite_cfg.get(), targets);
-      if (!metrics_or_err) {
-        ASTL_LOG_ERROR("DeserializeMetricForType: DeserializeBasicMetric failed for metric {}", finite_cfg->Name());
-        return astl::compat::unexpected(metrics_or_err.error());
-      }
-
-      return MetricConfigAndResults{std::move(finite_cfg), std::move(metrics_or_err.value())};
-    }
-
+      deserialize = &DeserializeMetricWithBasicConfig<RateMetric>;
+      break;
+    case ASTL_METRIC_FINITE_SET_VALUE:
+      deserialize = &DeserializeFiniteSetMetric;
+      break;
     case ASTL_METRIC_RESIDENCY:
     case ASTL_METRIC_UNKNOWN:
     default:
@@ -644,6 +652,7 @@ static auto DeserializeMetricForType(astl_metric_type_t metric_type, const astl:
                      static_cast<int>(metric_type));
       return astl::compat::unexpected(ASTL_STATUS_INTERNAL_ERROR);
   }
+  return deserialize(raw, targets);
 }
 
 static auto SerializeHandleToRawMetric(const MetricHandle& handle)
@@ -954,60 +963,44 @@ static auto RebuildMetricHandles(const astl::protobuf::MetricManager&         pr
   return rebuilt_metric_handles;
 }
 
+template <typename TargetMap>
+static auto FindOperationMetricOnTarget(const TargetMap& target_map, const std::string& metric_id,
+                                        const std::string& target_id, std::string_view kind)
+    -> astl::compat::expected<std::pair<const ITarget*, IMetric*>, astl_status_code> {
+  const auto target_it = std::find_if(target_map.begin(), target_map.end(), [&](const auto& pair) {
+    const ITarget* target = pair.first;
+    return target && target->Name() == target_id;
+  });
+  if (target_it == target_map.end() || !target_it->second) {
+    ASTL_LOG_ERROR(
+        "Deserialize<MetricManager>: operation map refers to unknown {} target (metric_id='{}', target_id='{}')", kind,
+        metric_id, target_id);
+    return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
+  }
+  return std::pair<const ITarget*, IMetric*>{target_it->first, target_it->second.get()};
+}
+
+template <typename Handle>
+static auto FindOperationHandle(const std::vector<std::unique_ptr<Handle>>& handles, const std::string& metric_id) {
+  return std::find_if(handles.begin(), handles.end(), [&](const auto& handle) {
+    return handle && handle->config && handle->config->Id() == metric_id;
+  });
+}
+
 static auto FindMetricForOperationMapEntry(const std::vector<std::unique_ptr<MetricHandle>>&  metric_handles,
                                            const std::vector<std::unique_ptr<CounterHandle>>& counter_handles,
                                            const std::string& metric_id, const std::string& target_id)
     -> astl::compat::expected<std::pair<const ITarget*, IMetric*>, astl_status_code> {
-  const auto metric_handle_it =
-      std::find_if(metric_handles.begin(), metric_handles.end(), [&](const std::unique_ptr<MetricHandle>& handle) {
-        return handle && handle->config && handle->config->Id() == metric_id;
-      });
-
-  if (metric_handle_it != metric_handles.end()) {
-    MetricHandle* handle = metric_handle_it->get();
-    const auto    target_it =
-        std::find_if(handle->target_to_metric_map.begin(), handle->target_to_metric_map.end(), [&](const auto& pair) {
-          const ITarget* target = pair.first;
-          return target && target->Name() == target_id;
-        });
-
-    if (target_it == handle->target_to_metric_map.end() || !target_it->second) {
-      ASTL_LOG_ERROR(
-          "Deserialize<MetricManager>: operation map refers to unknown metric target (metric_id='{}', "
-          "target_id='{}')",
-          metric_id, target_id);
-      return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-    }
-
-    return std::pair<const ITarget*, IMetric*>{target_it->first, target_it->second.get()};
+  const auto metric_handle = FindOperationHandle(metric_handles, metric_id);
+  if (metric_handle != metric_handles.end()) {
+    return FindOperationMetricOnTarget((*metric_handle)->target_to_metric_map, metric_id, target_id, "metric");
   }
-
-  const auto counter_handle_it =
-      std::find_if(counter_handles.begin(), counter_handles.end(), [&](const std::unique_ptr<CounterHandle>& handle) {
-        return handle && handle->config && handle->config->Id() == metric_id;
-      });
-
-  if (counter_handle_it == counter_handles.end()) {
+  const auto counter_handle = FindOperationHandle(counter_handles, metric_id);
+  if (counter_handle == counter_handles.end()) {
     ASTL_LOG_ERROR("Deserialize<MetricManager>: operation map refers to unknown metric_id '{}'", metric_id);
     return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
   }
-
-  CounterHandle* handle = counter_handle_it->get();
-  const auto     target_it =
-      std::find_if(handle->target_to_counter_map.begin(), handle->target_to_counter_map.end(), [&](const auto& pair) {
-        const ITarget* target = pair.first;
-        return target && target->Name() == target_id;
-      });
-
-  if (target_it == handle->target_to_counter_map.end() || !target_it->second) {
-    ASTL_LOG_ERROR(
-        "Deserialize<MetricManager>: operation map refers to unknown counter target (metric_id='{}', "
-        "target_id='{}')",
-        metric_id, target_id);
-    return astl::compat::unexpected(ASTL_STATUS_INVALID_VALUE_TYPE);
-  }
-
-  return std::pair<const ITarget*, IMetric*>{target_it->first, target_it->second.get()};
+  return FindOperationMetricOnTarget((*counter_handle)->target_to_counter_map, metric_id, target_id, "counter");
 }
 
 static auto RebuildOperationMap(const astl::protobuf::MetricManager&               proto_manager,

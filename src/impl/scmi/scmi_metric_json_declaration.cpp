@@ -294,6 +294,33 @@ auto GetResidencyMetricStateToInfoMapForInstance(
   return state_to_info_map;
 }
 
+namespace {
+auto BuildResidencyInstanceName(std::string_view metric_key_name, const std::string& instance, bool multiple_instances)
+    -> std::string {
+  return multiple_instances ? std::format("{}.{}", metric_key_name, instance) : std::string{metric_key_name};
+}
+
+struct ResidencyInstanceSettings {
+  ResidencyMetricConfig::StateToInfoMap states;
+  AnyFormula                            formula;
+};
+
+auto PrepareResidencyInstance(std::string_view                                     metric_key_name,
+                              const scmi::spec::ResidencyStateRegisterDefinitions& registers,
+                              scmi::spec::InstanceId instance, const MetricJsonDeclaration& declaration)
+    -> astl::compat::expected<ResidencyInstanceSettings, astl_status_code> {
+  auto states = GetResidencyMetricStateToInfoMapForInstance(metric_key_name, registers, instance, declaration);
+  if (!states) {
+    return astl::compat::unexpected(states.error());
+  }
+  auto formula = BuildFormula(declaration.formula);
+  if (!formula) {
+    return astl::compat::unexpected(formula.error());
+  }
+  return ResidencyInstanceSettings{std::move(*states), std::move(*formula)};
+}
+}  // namespace
+
 auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDeclaration const& metric_declaration,
                                   scmi::spec::ScmiSpecification const& scmi_spec,
                                   std::vector<const ITarget*> const&   applicable_targets)
@@ -321,7 +348,8 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
   // Per-target loop so each tlm-N target gets DE ids referring to its own sysfs entries (local
   // instance index 0..count-1) while the published metric name uses the globally-unique label
   // (`target_index * count + local_instance`).
-  const auto local_count = matching_scmi_register_definitions->count;
+  const auto local_count        = matching_scmi_register_definitions->count;
+  const bool multiple_instances = local_count > 1 || applicable_targets.size() > 1;
   for (std::size_t target_index = 0; target_index < applicable_targets.size(); ++target_index) {
     const auto* target = applicable_targets[target_index];
     for (scmi::spec::InstanceId local_instance = 0; local_instance < local_count; ++local_instance) {
@@ -333,24 +361,24 @@ auto CreateResidencyMetricConfigs(std::string_view metric_key_name, MetricJsonDe
       }
       // For multi-target configurations the metric name always includes the instance suffix so
       // PSS.0..(N*count-1) remain unique across all targets.
-      std::string name                     = (local_count > 1 || applicable_targets.size() > 1)
-                                                 ? std::format("{}.{}", metric_key_name, global_instance_string)
-                                                 : std::string{metric_key_name};
-      auto        state_to_info_map_result = GetResidencyMetricStateToInfoMapForInstance(
-          metric_key_name, *matching_scmi_register_definitions, local_instance, metric_declaration);
-      if (!state_to_info_map_result.has_value()) {
-        return astl::compat::unexpected(state_to_info_map_result.error());
-      }
-
-      auto formula_result = BuildFormula(metric_declaration.formula);
-      if (!formula_result.has_value()) {
-        return astl::compat::unexpected(formula_result.error());
+      std::string name = BuildResidencyInstanceName(metric_key_name, global_instance_string, multiple_instances);
+      auto        instance_settings = PrepareResidencyInstance(metric_key_name, *matching_scmi_register_definitions,
+                                                               local_instance, metric_declaration);
+      if (!instance_settings) {
+        return astl::compat::unexpected(instance_settings.error());
       }
 
       auto new_config = std::make_unique<ResidencyMetricConfig>(
-          name, metric_declaration.description, ParseUnits(metric_declaration.unit.value_or("")), value_type,
-          ASTL_METRIC_RESIDENCY, identifier, collector_type.value(), std::move(state_to_info_map_result.value()),
-          metric_declaration.inferred_state, std::move(formula_result.value()), input_value_type, name);
+          ResidencyMetricConfig::Settings{.name             = name,
+                                          .description      = metric_declaration.description,
+                                          .units            = ParseUnits(metric_declaration.unit.value_or("")),
+                                          .value_type       = value_type,
+                                          .identifier       = identifier,
+                                          .collector_type   = collector_type.value(),
+                                          .formula          = std::move(instance_settings->formula),
+                                          .input_value_type = input_value_type,
+                                          .metric_id        = name},
+          std::move(instance_settings->states), metric_declaration.inferred_state);
 
       metric_configs_on_targets.emplace(std::move(new_config), std::vector<const ITarget*>{target});
     }

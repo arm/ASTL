@@ -227,9 +227,15 @@ TEST_CASE("astlGetMetricStatesOnTarget - Residency Metric", "[wrapper][MetricSta
       astl::ResidencyMetricConfig::StateInfo{"C6", "CPU deep power-down", 1000000, astl::NullOperationBuilder{}};
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
-      "CPUResidency", "CPU C-State residency", ASTL_UNITS_SECONDS, ASTL_VALUE_UINT64, ASTL_METRIC_RESIDENCY,
-      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::UNKNOWN, std::move(state_info), astl::compat::nullopt,
-      astl::IdentityFormula{});
+      astl::ResidencyMetricConfig::Settings{.name           = "CPUResidency",
+                                            .description    = "CPU C-State residency",
+                                            .units          = ASTL_UNITS_SECONDS,
+                                            .value_type     = ASTL_VALUE_UINT64,
+                                            .identifier     = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                            .collector_type = astl::CollectorType::UNKNOWN,
+                                            .formula        = astl::IdentityFormula{},
+                                            .metric_id      = {}},
+      std::move(state_info), astl::compat::nullopt);
 
   std::vector<astl::ResidencyMetricConfig::StateInfo> state_configs;
   state_configs.push_back({"C0", "CPU fully active", 1000000, astl::NullOperationBuilder{}});
@@ -320,9 +326,15 @@ TEST_CASE("astlGetMetricStatesOnTarget - Residency Metric with Inferred State",
       astl::ResidencyMetricConfig::StateInfo{"C6", "CPU deep power-down", 1000000, astl::NullOperationBuilder{}};
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
-      "CPUResidency", "CPU C-State residency", ASTL_UNITS_SECONDS, ASTL_VALUE_UINT64, ASTL_METRIC_RESIDENCY,
-      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::UNKNOWN, std::move(state_info),
-      astl::ResidencyMetricConfig::InferredStateInfo{"C0", "CPU fully active (inferred)"}, astl::IdentityFormula{});
+      astl::ResidencyMetricConfig::Settings{.name           = "CPUResidency",
+                                            .description    = "CPU C-State residency",
+                                            .units          = ASTL_UNITS_SECONDS,
+                                            .value_type     = ASTL_VALUE_UINT64,
+                                            .identifier     = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                            .collector_type = astl::CollectorType::UNKNOWN,
+                                            .formula        = astl::IdentityFormula{},
+                                            .metric_id      = {}},
+      std::move(state_info), astl::ResidencyMetricConfig::InferredStateInfo{"C0", "CPU fully active (inferred)"});
 
   std::vector<astl::ResidencyMetricConfig::StateInfo> state_configs;
   state_configs.push_back({"C1", "CPU clock-gated idle state", 1000000, astl::NullOperationBuilder{}});

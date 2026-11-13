@@ -219,6 +219,24 @@ auto ParseCollectionInputs(ProcfsMetricJsonCollectionSettings& settings, const n
   return {};
 }
 
+auto ParseCollectionFields(ProcfsMetricJsonCollectionSettings& settings, const nlohmann::json& json)
+    -> astl::compat::expected<void, astl_status_code> {
+  auto relative_path = ParseCollectionRelativePath(settings, json);
+  if (!relative_path) {
+    return astl::compat::unexpected(relative_path.error());
+  }
+  auto field_type = ParseCollectionFieldType(settings, json);
+  if (!field_type) {
+    return astl::compat::unexpected(field_type.error());
+  }
+  auto legacy_fields = RejectUnsupportedLegacyCollectionFields(json);
+  if (!legacy_fields) {
+    return astl::compat::unexpected(legacy_fields.error());
+  }
+  ParseOptionalCollectionFields(settings, json);
+  return ParseCollectionExpansion(settings, json);
+}
+
 }  // namespace
 
 auto ParseProcfsMetricJsonCollectionSettings(const MetricJsonCollectionSettings& collection_setting)
@@ -233,30 +251,12 @@ auto ParseProcfsMetricJsonCollectionSettings(const MetricJsonCollectionSettings&
   }
 
   ProcfsMetricJsonCollectionSettings settings;
-  auto                               relative_path = ParseCollectionRelativePath(settings, collection_setting.raw_json);
-  if (!relative_path.has_value()) {
-    return astl::compat::unexpected(relative_path.error());
+  auto                               fields = ParseCollectionFields(settings, collection_setting.raw_json);
+  if (!fields) {
+    return astl::compat::unexpected(fields.error());
   }
-
-  auto field_type = ParseCollectionFieldType(settings, collection_setting.raw_json);
-  if (!field_type.has_value()) {
-    return astl::compat::unexpected(field_type.error());
-  }
-
-  auto unsupported_fields = RejectUnsupportedLegacyCollectionFields(collection_setting.raw_json);
-  if (!unsupported_fields.has_value()) {
-    return astl::compat::unexpected(unsupported_fields.error());
-  }
-
-  ParseOptionalCollectionFields(settings, collection_setting.raw_json);
-
-  auto expansion = ParseCollectionExpansion(settings, collection_setting.raw_json);
-  if (!expansion.has_value()) {
-    return astl::compat::unexpected(expansion.error());
-  }
-
   auto inputs = ParseCollectionInputs(settings, collection_setting.raw_json);
-  if (!inputs.has_value()) {
+  if (!inputs) {
     return astl::compat::unexpected(inputs.error());
   }
 

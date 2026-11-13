@@ -107,7 +107,9 @@ auto Deserialize<std::unique_ptr<ITopologyManager>>(std::istream& input_stream)
       }
       target = std::make_unique<ScmiTarget>(name, description, proto_target.scmi_sysfs_subdirectory(), nullptr, id);
     } else {
-      target = std::make_unique<Target>(name, description, collector, nullptr, id);
+      target =
+          std::make_unique<Target>(name, description, collector, nullptr,
+                                   astl::TargetMetadata{.uuid = id, .collector_target_path = astl::compat::nullopt});
     }
 
     targets.push_back(std::move(target));

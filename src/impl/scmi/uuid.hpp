@@ -41,6 +41,28 @@ inline auto operator==(const Uuid& uuid_a, const Uuid& uuid_b) {
 
 inline auto operator!=(const Uuid& uuid_a, const Uuid& uuid_b) { return !(uuid_a == uuid_b); }
 
+inline auto ParseUuidSignificantBytes(std::string& normalized_uuid, const std::string& input_uuid)
+    -> astl::compat::expected<size_t, astl_status_code> {
+  size_t num_significant_bytes = normalized_uuid.size() / 2;  // default - 1 byte per 2 hex chars
+  size_t slash_pos             = normalized_uuid.find('/');
+  if (slash_pos != std::string::npos) {
+    std::string sig_bytes_str = normalized_uuid.substr(slash_pos + 1);
+    try {
+      num_significant_bytes = static_cast<size_t>(std::stoul(sig_bytes_str, nullptr, 0));
+    } catch (const std::invalid_argument&) {
+      ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} has invalid significant bytes specifier '{}'", input_uuid,
+                       sig_bytes_str);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    } catch (const std::out_of_range&) {
+      ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} has out of range significant bytes specifier '{}'", input_uuid,
+                       sig_bytes_str);
+      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
+    }
+    normalized_uuid = normalized_uuid.substr(0, slash_pos);
+  }
+  return num_significant_bytes;
+}
+
 /**
  * @brief normalize a UUID string to lowercase, without hyphens, without leading 0x and leading trailing spaces.
  * return as a pair of Uuid (normalized), and the number of significant bytes if specified by / postfix (else 16)
@@ -57,10 +79,6 @@ inline auto GetNormalizedUuid(std::string const& input_uuid)
   }
   normalizing_input.erase(0, first_non_space);
   const auto last_non_space = normalizing_input.find_last_not_of(whitespace);
-  if (last_non_space == std::string::npos) {
-    ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} is empty or all whitespace", input_uuid);
-    return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
-  }
   normalizing_input.erase(last_non_space + 1);
 
   // remove leading 0x if present
@@ -72,24 +90,11 @@ inline auto GetNormalizedUuid(std::string const& input_uuid)
                           normalizing_input.end());
   // convert to lowercase
   std::transform(normalizing_input.begin(), normalizing_input.end(), normalizing_input.begin(), ::tolower);
-  // split by '/' to get significant bytes if specified
-  size_t num_significant_bytes = normalizing_input.size() / 2;  // default - 1 byte per 2 hex chars
-  size_t slash_pos             = normalizing_input.find('/');
-  if (slash_pos != std::string::npos) {
-    std::string sig_bytes_str = normalizing_input.substr(slash_pos + 1);
-    try {
-      num_significant_bytes = static_cast<size_t>(std::stoul(sig_bytes_str, nullptr, 0));
-    } catch (const std::invalid_argument&) {
-      ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} has invalid significant bytes specifier '{}'", input_uuid,
-                       sig_bytes_str);
-      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
-    } catch (const std::out_of_range&) {
-      ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} has out of range significant bytes specifier '{}'", input_uuid,
-                       sig_bytes_str);
-      return astl::compat::unexpected(ASTL_STATUS_BAD_ARGUMENT);
-    }
-    normalizing_input = normalizing_input.substr(0, slash_pos);
+  auto significant_bytes = ParseUuidSignificantBytes(normalizing_input, input_uuid);
+  if (!significant_bytes) {
+    return astl::compat::unexpected(significant_bytes.error());
   }
+  const auto num_significant_bytes = *significant_bytes;
   if (normalizing_input.size() < num_significant_bytes * 2) {
     ASTL_LOG_WARNING("GetNormalizedUuid: UUID {} is {} characters long, less than the {} significant bytes required",
                      normalizing_input, normalizing_input.size(), num_significant_bytes * 2);

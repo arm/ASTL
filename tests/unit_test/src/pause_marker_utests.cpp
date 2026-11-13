@@ -318,9 +318,14 @@ static const astl::ResidencyMetricConfig::StateToInfoMap& GetResidencyStateMap()
 static std::vector<astl::OperationId> SetupResidencyMetric(astl::MetricManager& mgr, const astl::ITarget* target,
                                                            CapturingSink& sink) {
   auto cfg = std::make_unique<astl::ResidencyMetricConfig>(
-      "cpu_cstate_residency", "CPU C-state residency", ASTL_UNITS_TICKS, ASTL_VALUE_UINT64, ASTL_METRIC_RESIDENCY,
-      ASTL_METRIC_IDENTIFIER_UNKNOWN, astl::CollectorType::SCMI, GetResidencyStateMap(),
-      astl::ResidencyMetricConfig::InferredStateInfo{"Active", "CPU active state"});
+      astl::ResidencyMetricConfig::Settings{.name           = "cpu_cstate_residency",
+                                            .description    = "CPU C-state residency",
+                                            .units          = ASTL_UNITS_TICKS,
+                                            .value_type     = ASTL_VALUE_UINT64,
+                                            .identifier     = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                            .collector_type = astl::CollectorType::SCMI,
+                                            .metric_id      = {}},
+      GetResidencyStateMap(), astl::ResidencyMetricConfig::InferredStateInfo{"Active", "CPU active state"});
 
   REQUIRE(mgr.RegisterMetric(std::move(cfg), {target}) == ASTL_STATUS_SUCCESS);
   REQUIRE(mgr.RegisterProcessedSampleSink(&sink) == ASTL_STATUS_SUCCESS);

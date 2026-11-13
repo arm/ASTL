@@ -6,6 +6,7 @@
 
 #include "astl_cxx_compat.hpp"
 #include "astl_logger.hpp"
+#include "collector/clock_snapshot.hpp"
 #include "common/monotonic_raw_clock.hpp"
 #include "windows_pdh/windows_pdh_system_collector.hpp"
 
@@ -99,21 +100,7 @@ auto OperationValue(const WindowsPdhReadOperation& read, const BatchSnapshot& sn
 auto WindowsPdhSystemCollector::GetNativeClockSnapshot()
     -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
   std::scoped_lock lock{_collection_mutex};
-  if (!_configuration.has_value()) {
-    ASTL_LOG_WARNING(
-        "WindowsPdhSystemCollector::GetNativeClockSnapshot called without configuration; returning empty map");
-    return {};
-  }
-
-  const uint64_t native_now = WindowsNativeNow();
-  const auto     raw_now    = ClockMonotonicRaw::now();
-
-  ClockCorrelationMap result;
-  for (const auto& operation_ptr : _configuration->Operations().operationsOnSample) {
-    result[operation_ptr->GetId()] =
-        OperationClockCorrelation{raw_now, native_now, MakeTickRatio<SampleMicroseconds>()};
-  }
-  return result;
+  return CaptureOperationClockSnapshot(_configuration, &WindowsNativeNow, "WindowsPdhSystemCollector");
 }
 
 auto WindowsPdhSystemCollector::ExecuteCollectionOperations(const OperationSequence& operations) -> astl_status_code {

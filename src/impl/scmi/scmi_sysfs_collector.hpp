@@ -279,6 +279,22 @@ auto ParseDataEventValue(std::string_view data_read) -> astl::compat::expected<S
 
 auto MakeSoftwareClockCorrelation() -> OperationClockCorrelation;
 
+inline auto ValidateHardwareTimestampMetadata(const std::vector<ScmiDataEvent>& data_events,
+                                              const ScmiReadOperation&          operation)
+    -> astl::compat::expected<void, std::string_view> {
+  const auto data_event_it = std::find_if(
+      data_events.begin(), data_events.end(),
+      [&operation](const ScmiDataEvent& data_event) { return data_event.id == operation.scmi_data_event_id; });
+  if (data_event_it == data_events.end()) {
+    return astl::compat::unexpected{"timestamp metadata is not associated with this DE_ID"};
+  }
+  if (data_event_it->timestamp_rate.value_or(0) == 0 || operation.tstamp_rate == 0) {
+    return astl::compat::unexpected{"timestamp rate is missing or zero"};
+  }
+
+  return {};
+}
+
 }  // namespace scmi_detail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -347,15 +363,8 @@ auto ScmiSysfsCollector<FileInterfaceT>::MakeSoftwareClockCorrelations() const -
 template <typename FileInterfaceT>
 auto ScmiSysfsCollector<FileInterfaceT>::MakeHardwareClockCorrelation(ScmiReadOperation const& operation)
     -> astl::compat::expected<OperationClockCorrelation, std::string_view> {
-  const auto data_event_it = std::find_if(
-      _data_events.begin(), _data_events.end(),
-      [&operation](const ScmiDataEvent& data_event) { return data_event.id == operation.scmi_data_event_id; });
-  if (data_event_it == _data_events.end()) {
-    return astl::compat::unexpected{"timestamp metadata is not associated with this DE_ID"};
-  }
-  if (!data_event_it->timestamp_rate.has_value() || data_event_it->timestamp_rate.value() == 0 ||
-      operation.tstamp_rate == 0) {
-    return astl::compat::unexpected{"timestamp rate is missing or zero"};
+  if (auto metadata = scmi_detail::ValidateHardwareTimestampMetadata(_data_events, operation); !metadata) {
+    return astl::compat::unexpected(metadata.error());
   }
 
   const auto data_event_dir_path = scmi_detail::GetDataEventDirPath(operation.scmi_data_event_id);

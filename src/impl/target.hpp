@@ -78,15 +78,18 @@ inline auto GetStableTargetKey(const ITarget& target) -> std::string {
   return stable_key;
 }
 
-/**
- * @brief A partial implementation of the ITarget interface that holds data to fill a astl_target_props_t struct
- */
+/** Optional stable identity and collector-specific path for a target. */
+struct TargetMetadata {
+  astl::compat::optional<std::string> uuid;
+  astl::compat::optional<std::string> collector_target_path;
+};
+
+/** A partial implementation of ITarget that holds the properties of an astl_target_handle_t. */
 class Target : public astl::ITarget {
  public:
   Target() = default;
   Target(std::string name, std::string description, CollectorType collector_type, Target* parent = nullptr,
-         astl::compat::optional<std::string> uuid                  = astl::compat::nullopt,
-         astl::compat::optional<std::string> collector_target_path = astl::compat::nullopt);
+         TargetMetadata metadata = {});
   ~Target() override               = default;
   Target(const Target&)            = default;
   Target& operator=(const Target&) = default;

@@ -49,36 +49,35 @@ static auto ContainsNonIntegerNumericLiteral(std::string_view expression) -> boo
          std::regex_search(expression_text, scientific_literal_pattern);
 }
 
+static auto BuildExpressionFormula(std::string expression) -> astl::compat::expected<AnyFormula, astl_status_code> {
+  if (expression.empty()) {
+    ASTL_LOG_WARNING("Empty formula string, treating as no formula");
+    return AnyFormula{IdentityFormula{}};
+  }
+  if (ContainsNonIntegerNumericLiteral(expression)) {
+    ASTL_LOG_ERROR("Only integer numeric literals are allowed in formulas: '{}'.", expression);
+    return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
+  }
+
+  ASTL_LOG_DEBUG("Parsing formula expression: '{}'", expression);
+  auto result = ExpressionFormula::Create(std::move(expression));
+  if (!result.has_value()) {
+    ASTL_LOG_ERROR("Failed to create ExpressionFormula: {}", astlStatusString(result.error()));
+    return astl::compat::unexpected(result.error());
+  }
+  AnyFormula formula{std::move(result.value())};
+  ASTL_LOG_DEBUG("Successfully parsed formula: {}", GetFormulaDescription(formula));
+  return formula;
+}
+
 static auto BuildFormulaHelper(const astl::compat::optional<nlohmann::json>& formula_json)
     -> astl::compat::expected<AnyFormula, astl_status_code> {
-  // No formula specified - use identity (pass-through)
   if (!formula_json.has_value() || formula_json->is_null()) {
     return AnyFormula{IdentityFormula{}};
   }
-
-  // Support string expressions like "bitand(value >> 8, 0xFF)" or "value / 1000"
   if (formula_json->is_string()) {
-    std::string expression = formula_json->get<std::string>();
-    if (expression.empty()) {
-      ASTL_LOG_WARNING("Empty formula string, treating as no formula");
-      return AnyFormula{IdentityFormula{}};
-    }
-    if (ContainsNonIntegerNumericLiteral(expression)) {
-      ASTL_LOG_ERROR("Only integer numeric literals are allowed in formulas: '{}'.", expression);
-      return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
-    }
-
-    ASTL_LOG_DEBUG("Parsing formula expression: '{}'", expression);
-    auto result = ExpressionFormula::Create(std::move(expression));
-    if (!result.has_value()) {
-      ASTL_LOG_ERROR("Failed to create ExpressionFormula: {}", astlStatusString(result.error()));
-      return astl::compat::unexpected(result.error());
-    }
-    AnyFormula formula{std::move(result.value())};
-    ASTL_LOG_DEBUG("Successfully parsed formula: {}", GetFormulaDescription(formula));
-    return formula;
+    return BuildExpressionFormula(formula_json->get<std::string>());
   }
-
   ASTL_LOG_ERROR("Formula must be a string expression (e.g., \"value / 1000\" or \"bitand(value >> 8, 0xFF)\")");
   return astl::compat::unexpected(ASTL_STATUS_BAD_CONFIGURATION);
 }

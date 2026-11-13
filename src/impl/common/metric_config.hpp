@@ -247,31 +247,28 @@ class ResidencyMetricConfig final : public MetricConfig {
     std::string description;  // Description of the inferred state
   };
 
+  struct Settings {
+    std::string              name;
+    std::string              description;
+    astl_units_t             units;
+    astl_value_type_t        value_type;
+    astl_metric_identifier_t identifier;
+    CollectorType            collector_type;
+    AnyFormula               formula{IdentityFormula{}};
+    astl_value_type_t        input_value_type{ASTL_VALUE_UNKNOWN};
+    std::string              metric_id;
+  };
+
   /**
-   * @brief Construct a ResidencyMetricConfig with state-specific data event IDs and tick frequencies.
+   * @brief Construct a residency metric from common settings and its state definitions.
    *
-   * Note: The base-class _data_event_ids_ map is not used for residency (multiple per target),
-   * so we intentionally pass an empty map to the MetricConfig constructor.
-   *
-   * @param name            Metric name.
-   * @param description     Human-readable description.
-   * @param units           Measurement units (e.g., time, percentage).
-   * @param value_type      Value representation.
-   * @param metric_type     Expected to be the ASTL "residency" metric type.
-   * @param collector_type  Collector type responsible for gathering residency counters.
-   * @param state_info      Mapping from state name -> {operation_builder, tick_frequency}.
-   * @param inferred_state  Optional inferred state info (name and description).
-   * @param formula         Formula for processing raw samples (ExpressionFormula or IdentityFormula).
+   * Residency uses per-state operation builders, so the base config uses a null operation builder.
    */
-  explicit ResidencyMetricConfig(const std::string &name, const std::string &description, astl_units_t units,
-                                 astl_value_type_t value_type, astl_metric_type_t metric_type,
-                                 astl_metric_identifier_t identifier, CollectorType collector_type,
-                                 StateToInfoMap                            state_info,
-                                 astl::compat::optional<InferredStateInfo> inferred_state = astl::compat::nullopt,
-                                 AnyFormula                                formula        = IdentityFormula{},
-                                 astl_value_type_t input_value_type = ASTL_VALUE_UNKNOWN, std::string metric_id = {})
-      : MetricConfig(name, description, units, value_type, identifier, metric_type, collector_type,
-                     NullOperationBuilder{}, std::move(formula), input_value_type, {}, std::move(metric_id)),
+  explicit ResidencyMetricConfig(Settings settings, StateToInfoMap state_info,
+                                 astl::compat::optional<InferredStateInfo> inferred_state = astl::compat::nullopt)
+      : MetricConfig(settings.name, settings.description, settings.units, settings.value_type, settings.identifier,
+                     ASTL_METRIC_RESIDENCY, settings.collector_type, NullOperationBuilder{},
+                     std::move(settings.formula), settings.input_value_type, {}, std::move(settings.metric_id)),
         _state_info(std::move(state_info)),
         _inferred_state(std::move(inferred_state)) {}
 

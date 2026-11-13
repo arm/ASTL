@@ -13,13 +13,13 @@
 namespace astl {
 
 Target::Target(std::string name, std::string description, CollectorType collector_type, Target* parent,
-               astl::compat::optional<std::string> uuid, astl::compat::optional<std::string> collector_target_path)
+               TargetMetadata metadata)
     : _name{std::move(name)},
       _description{std::move(description)},
       _collector_type{collector_type},
       _parent{parent},
-      _uuid{std::move(uuid)},
-      _collector_target_path{std::move(collector_target_path)} {}
+      _uuid{std::move(metadata.uuid)},
+      _collector_target_path{std::move(metadata.collector_target_path)} {}
 
 auto Target::GetProperties(astl_target_props_t* target) const -> astl_status_code {
   if (!target) {

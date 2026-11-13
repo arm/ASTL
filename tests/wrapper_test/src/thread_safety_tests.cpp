@@ -105,8 +105,9 @@ TEST_CASE("C interface supports mixed concurrent calls", "[wrapper][thread_safet
 
 TEST_CASE("C interface supports valid-handle configure/start/stop interleavings",
           "[wrapper][thread_safety][valgrind_isolated]") {
-  auto target_uptr =
-      std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, astl::compat::nullopt);
+  auto target_uptr = std::make_unique<astl::Target>(
+      "tlm-0", "", astl::CollectorType::SCMI, nullptr,
+      astl::TargetMetadata{.uuid = astl::compat::nullopt, .collector_target_path = astl::compat::nullopt});
   auto* target_raw = target_uptr.get();
 
   auto mock_collector = std::make_unique<MockCollector>();
@@ -201,8 +202,9 @@ TEST_CASE("C interface supports valid-handle configure/start/stop interleavings"
 
 TEST_CASE("C interface supports valid-handle pause/resume interleavings",
           "[wrapper][thread_safety][valgrind_isolated]") {
-  auto target_uptr =
-      std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, astl::compat::nullopt);
+  auto target_uptr = std::make_unique<astl::Target>(
+      "tlm-0", "", astl::CollectorType::SCMI, nullptr,
+      astl::TargetMetadata{.uuid = astl::compat::nullopt, .collector_target_path = astl::compat::nullopt});
   auto* target_raw = target_uptr.get();
 
   auto mock_collector = std::make_unique<MockCollector>();
@@ -311,8 +313,9 @@ TEST_CASE("C interface supports valid-handle pause/resume interleavings",
 
 TEST_CASE("C interface interleaves all lifecycle and sample retrieval flavors",
           "[wrapper][thread_safety][valgrind_isolated]") {
-  auto target_uptr =
-      std::make_unique<astl::Target>("tlm-0", "", astl::CollectorType::SCMI, nullptr, astl::compat::nullopt);
+  auto target_uptr = std::make_unique<astl::Target>(
+      "tlm-0", "", astl::CollectorType::SCMI, nullptr,
+      astl::TargetMetadata{.uuid = astl::compat::nullopt, .collector_target_path = astl::compat::nullopt});
   auto* target_raw = target_uptr.get();
 
   auto mock_collector = std::make_unique<MockCollector>();

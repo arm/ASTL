@@ -631,8 +631,7 @@ auto MetricManager::GetMetricOnTarget(astl_metric_handle_t metric_handle, const 
   }
 
   const auto* metric_details = static_cast<const MetricHandle*>(metric_handle);
-  if (auto iter = std::ranges::find_if(_metric_handles,
-                                       [metric_details](const auto& handle) { return handle.get() == metric_details; });
+  if (auto iter = std::ranges::find(_metric_handles, metric_details, &std::unique_ptr<MetricHandle>::get);
       iter == _metric_handles.end()) {
     ASTL_LOG_ERROR("GetMetricOnTarget: Metric handle {} is not registered", metric_handle);
     return astl::compat::unexpected{ASTL_STATUS_INVALID_METRIC_HANDLE};

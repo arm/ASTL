@@ -1047,8 +1047,13 @@ TEST_CASE("MetricManager::RegisterMetric succeeds with ResidencyMetricConfig", "
                       astl::ScmiOperationBuilder{0x1002}};  // C6 state with 50kHz tick frequency
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
-      "CPU_RESIDENCY", "CPU residency metric", astl_units_t::ASTL_UNITS_SECONDS, astl_value_type_t::ASTL_VALUE_FLOAT64,
-      astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_METRIC_IDENTIFIER_UNKNOWN, CollectorType::SCMI,
+      astl::ResidencyMetricConfig::Settings{.name           = "CPU_RESIDENCY",
+                                            .description    = "CPU residency metric",
+                                            .units          = astl_units_t::ASTL_UNITS_SECONDS,
+                                            .value_type     = astl_value_type_t::ASTL_VALUE_FLOAT64,
+                                            .identifier     = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                            .collector_type = CollectorType::SCMI,
+                                            .metric_id      = {}},
       std::move(state_info), astl::ResidencyMetricConfig::InferredStateInfo{"ACTIVE", "CPU active state"});
 
   astl_status_code status = mgr.RegisterMetric(std::move(residency_config), {target.get()});
@@ -1077,8 +1082,13 @@ TEST_CASE("MetricManager::GetRequiredOperations with ResidencyMetricConfig creat
   state_info["C7"] = {"C7", "CPU ultra-low power state", 25000.0, astl::ScmiOperationBuilder{0x2003}};
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
-      "CPU_RESIDENCY", "CPU residency metric", astl_units_t::ASTL_UNITS_SECONDS, astl_value_type_t::ASTL_VALUE_FLOAT64,
-      astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_METRIC_IDENTIFIER_UNKNOWN, CollectorType::SCMI,
+      astl::ResidencyMetricConfig::Settings{.name           = "CPU_RESIDENCY",
+                                            .description    = "CPU residency metric",
+                                            .units          = astl_units_t::ASTL_UNITS_SECONDS,
+                                            .value_type     = astl_value_type_t::ASTL_VALUE_FLOAT64,
+                                            .identifier     = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                            .collector_type = CollectorType::SCMI,
+                                            .metric_id      = {}},
       std::move(state_info), astl::ResidencyMetricConfig::InferredStateInfo{"ACTIVE", "CPU active state"});
 
   REQUIRE(mgr.RegisterMetric(std::move(residency_config), {target.get()}) == ASTL_STATUS_SUCCESS);
@@ -1120,10 +1130,14 @@ TEST_CASE("MetricManager::RegisterMetric fails with empty state info for Residen
   astl::ResidencyMetricConfig::StateToInfoMap empty_state_info;
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
-      "EMPTY_RESIDENCY", "Residency metric with no states", astl_units_t::ASTL_UNITS_SECONDS,
-      astl_value_type_t::ASTL_VALUE_FLOAT64, astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_METRIC_IDENTIFIER_UNKNOWN,
-      CollectorType::SCMI, std::move(empty_state_info),
-      astl::ResidencyMetricConfig::InferredStateInfo{"ACTIVE", "CPU active state"});
+      astl::ResidencyMetricConfig::Settings{.name           = "EMPTY_RESIDENCY",
+                                            .description    = "Residency metric with no states",
+                                            .units          = astl_units_t::ASTL_UNITS_SECONDS,
+                                            .value_type     = astl_value_type_t::ASTL_VALUE_FLOAT64,
+                                            .identifier     = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                            .collector_type = CollectorType::SCMI,
+                                            .metric_id      = {}},
+      std::move(empty_state_info), astl::ResidencyMetricConfig::InferredStateInfo{"ACTIVE", "CPU active state"});
 
   astl_status_code status = mgr.RegisterMetric(std::move(residency_config), {target.get()});
   REQUIRE(status == ASTL_STATUS_BAD_CONFIGURATION);
@@ -1140,10 +1154,28 @@ TEST_CASE("MetricManager::ResidencyMetricConfig GetStateInfo accessor works corr
   state_info["SLEEP"] = {"SLEEP", "CPU low-power sleep", 25000.0, astl::ScmiOperationBuilder{0x5002}};
 
   auto residency_config = std::make_unique<astl::ResidencyMetricConfig>(
-      "ACCESSOR_TEST_RESIDENCY", "Test state info accessor", astl_units_t::ASTL_UNITS_SECONDS,
-      astl_value_type_t::ASTL_VALUE_FLOAT64, astl_metric_type_t::ASTL_METRIC_RESIDENCY, ASTL_METRIC_IDENTIFIER_UNKNOWN,
-      CollectorType::SCMI, std::move(state_info),
-      astl::ResidencyMetricConfig::InferredStateInfo{"RUNNING", "CPU running state"});
+      astl::ResidencyMetricConfig::Settings{
+          .name             = "ACCESSOR_TEST_RESIDENCY",
+          .description      = "Test state info accessor",
+          .units            = astl_units_t::ASTL_UNITS_SECONDS,
+          .value_type       = astl_value_type_t::ASTL_VALUE_FLOAT64,
+          .identifier       = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+          .collector_type   = CollectorType::SCMI,
+          .formula          = astl::ScalingFormula{3, 2},
+          .input_value_type = ASTL_VALUE_UINT64,
+          .metric_id        = "residency-stable-id"
+  },
+      std::move(state_info), astl::ResidencyMetricConfig::InferredStateInfo{"RUNNING", "CPU running state"});
+
+  // Grouped settings must preserve the input/output distinction and metric identity.
+  REQUIRE(residency_config->Id() == "residency-stable-id");
+  REQUIRE(residency_config->Name() == "ACCESSOR_TEST_RESIDENCY");
+  REQUIRE(residency_config->ValueType() == ASTL_VALUE_FLOAT64);
+  REQUIRE(residency_config->InputValueType() == ASTL_VALUE_UINT64);
+  REQUIRE(residency_config->MetricType() == ASTL_METRIC_RESIDENCY);
+  const auto& formula = std::get<astl::ScalingFormula>(residency_config->GetFormula());
+  REQUIRE(formula.GetNumerator() == 3);
+  REQUIRE(formula.GetDenominator() == 2);
 
   // Test GetStateInfo() accessor
   const auto& metric_state_info = residency_config->GetStateInfo();

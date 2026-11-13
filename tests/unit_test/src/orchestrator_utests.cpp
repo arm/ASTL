@@ -898,8 +898,9 @@ TEST_CASE("Orchestrator-SinkRawSamples uses configured batch size and the stable
                                            std::move(metric_manager), std::move(output_manager), cache_dir);
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("scmi-display-target", "", astl::CollectorType::SCMI, nullptr,
-                                                   astl::compat::nullopt, "tlm-0"));
+  targets.push_back(std::make_unique<astl::Target>(
+      "scmi-display-target", "", astl::CollectorType::SCMI, nullptr,
+      astl::TargetMetadata{.uuid = astl::compat::nullopt, .collector_target_path = "tlm-0"}));
   REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
   auto* target = orchestrator.GetTargets()[0].get();
 
@@ -964,8 +965,9 @@ TEST_CASE("Orchestrator-ReadImmediate can process samples without caching raw sa
   auto* orchestrator_ptr     = &orchestrator;
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("no-cache-target", "", astl::CollectorType::SCMI, nullptr,
-                                                   astl::compat::nullopt, "tlm-0"));
+  targets.push_back(std::make_unique<astl::Target>(
+      "no-cache-target", "", astl::CollectorType::SCMI, nullptr,
+      astl::TargetMetadata{.uuid = astl::compat::nullopt, .collector_target_path = "tlm-0"}));
   REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
   auto* target = orchestrator.GetTargets()[0].get();
 
@@ -1034,8 +1036,9 @@ TEST_CASE("Orchestrator-ReadImmediate keeps default cached samples unavailable u
   auto* orchestrator_ptr     = &orchestrator;
 
   std::vector<std::unique_ptr<astl::ITarget>> targets;
-  targets.push_back(std::make_unique<astl::Target>("cached-target", "", astl::CollectorType::SCMI, nullptr,
-                                                   astl::compat::nullopt, "tlm-0"));
+  targets.push_back(std::make_unique<astl::Target>(
+      "cached-target", "", astl::CollectorType::SCMI, nullptr,
+      astl::TargetMetadata{.uuid = astl::compat::nullopt, .collector_target_path = "tlm-0"}));
   REQUIRE(orchestrator.SetTargets(std::move(targets)) == ASTL_STATUS_SUCCESS);
   auto* target = orchestrator.GetTargets()[0].get();
 
@@ -1545,9 +1548,11 @@ TEST_CASE("Orchestrator-ConfigureMetricCollection resets global cached artifacts
   static const std::string target_name       = "scmi-display-target";
   static const std::string other_target_name = "scmi-core-target";
   auto*                    target_raw =
-      new astl::Target(target_name, "", astl::CollectorType::SCMI, nullptr, astl::compat::nullopt, "tlm-0");
+      new astl::Target(target_name, "", astl::CollectorType::SCMI, nullptr,
+                       astl::TargetMetadata{.uuid = astl::compat::nullopt, .collector_target_path = "tlm-0"});
   auto* other_target_raw =
-      new astl::Target(other_target_name, "", astl::CollectorType::SCMI, nullptr, astl::compat::nullopt, "tlm-1");
+      new astl::Target(other_target_name, "", astl::CollectorType::SCMI, nullptr,
+                       astl::TargetMetadata{.uuid = astl::compat::nullopt, .collector_target_path = "tlm-1"});
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   targets.emplace_back(target_raw);
   targets.emplace_back(other_target_raw);

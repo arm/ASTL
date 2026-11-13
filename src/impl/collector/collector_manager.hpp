@@ -107,6 +107,9 @@ class CollectorManager : public ICollectorManager, public IRawSampleSink {
    */
   mutable std::mutex _mutex;
 
+  // Select the default collector while holding the manager lock only for the lookup.
+  auto FindFirstCollector(const ITarget* target) -> ICollector*;
+
   /**
    * @brief Given a target and required capabilities, choose a suitable collector.
    *

@@ -36,15 +36,14 @@ static auto GetStatetoInfoMap() -> const astl::ResidencyMetricConfig::StateToInf
 
 static const astl::ResidencyMetricConfig* GetResidencyConfig() {
   static astl::ResidencyMetricConfig config{
-      "test_cpu_cstate_residency",
-      "Unit test CPU C-state residency metric",
-      ASTL_UNITS_TICKS,
-      ASTL_VALUE_UINT64,
-      ASTL_METRIC_RESIDENCY,
-      ASTL_METRIC_IDENTIFIER_UNKNOWN,
-      astl::CollectorType::SCMI,
-      GetStatetoInfoMap(),
-      astl::ResidencyMetricConfig::InferredStateInfo{"Active", "CPU active state"}
+      astl::ResidencyMetricConfig::Settings{.name           = "test_cpu_cstate_residency",
+                                            .description    = "Unit test CPU C-state residency metric",
+                                            .units          = ASTL_UNITS_TICKS,
+                                            .value_type     = ASTL_VALUE_UINT64,
+                                            .identifier     = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                            .collector_type = astl::CollectorType::SCMI,
+                                            .metric_id      = {}},
+      GetStatetoInfoMap(), astl::ResidencyMetricConfig::InferredStateInfo{"Active", "CPU active state"}
   };
   return &config;
 }
@@ -209,15 +208,17 @@ TEST_CASE("ResidencyMetric: construction", "[ResidencyMetric]") {
 
 TEST_CASE("ResidencyMetric: construction without inferred state", "[ResidencyMetric]") {
   // Create metric without inferred state
-  astl::ResidencyMetricConfig config{"test_cpu_cstate_residency",
-                                     "Unit test CPU C-state residency metric",
-                                     ASTL_UNITS_TICKS,
-                                     ASTL_VALUE_UINT64,
-                                     ASTL_METRIC_RESIDENCY,
-                                     ASTL_METRIC_IDENTIFIER_UNKNOWN,
-                                     astl::CollectorType::SCMI,
-                                     GetStatetoInfoMap()};
-  astl::ResidencyMetric       metric{&config, CreateTestStateInfos(), nullptr, nullptr};
+  astl::ResidencyMetricConfig config{
+      astl::ResidencyMetricConfig::Settings{.name           = "test_cpu_cstate_residency",
+                                            .description    = "Unit test CPU C-state residency metric",
+                                            .units          = ASTL_UNITS_TICKS,
+                                            .value_type     = ASTL_VALUE_UINT64,
+                                            .identifier     = ASTL_METRIC_IDENTIFIER_UNKNOWN,
+                                            .collector_type = astl::CollectorType::SCMI,
+                                            .metric_id      = {}},
+      GetStatetoInfoMap()
+  };
+  astl::ResidencyMetric metric{&config, CreateTestStateInfos(), nullptr, nullptr};
 
   // Verify initial state - no inferred state should be calculated
   auto summary = metric.GetResidencySummaryData();

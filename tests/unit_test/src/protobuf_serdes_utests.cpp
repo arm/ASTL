@@ -74,8 +74,9 @@ auto MakeTarget(std::string name, std::string description, astl::CollectorType c
                 astl::compat::optional<std::string> uuid                = astl::compat::nullopt,
                 astl::compat::optional<std::string> collector_path_name = astl::compat::nullopt)
     -> std::unique_ptr<astl::Target> {
-  return std::make_unique<astl::Target>(std::move(name), std::move(description), collector_type, nullptr,
-                                        std::move(uuid), std::move(collector_path_name));
+  return std::make_unique<astl::Target>(
+      std::move(name), std::move(description), collector_type, nullptr,
+      astl::TargetMetadata{.uuid = std::move(uuid), .collector_target_path = std::move(collector_path_name)});
 }
 
 // Helper to install a single SCMI target named "tlm-0" into the Orchestrator

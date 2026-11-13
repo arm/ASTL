@@ -903,25 +903,6 @@ static auto BuildMetricId(const DiscoveredSensorMetric& sensor) -> std::string {
          "::" + std::to_string(sensor.subfeature->number);
 }
 
-static auto MakeDiscoveredSensorMetric(const sensors_chip_name* chip, const sensors_feature* feature,
-                                       const sensors_subfeature* subfeature, std::string chip_name, std::string label,
-                                       std::string register_name, astl_units_t units,
-                                       astl_metric_identifier_t            identifier,
-                                       astl::compat::optional<std::string> description = astl::compat::nullopt)
-    -> DiscoveredSensorMetric {
-  return DiscoveredSensorMetric{
-      .chip          = chip,
-      .feature       = feature,
-      .subfeature    = subfeature,
-      .chip_name     = std::move(chip_name),
-      .label         = std::move(label),
-      .register_name = std::move(register_name),
-      .units         = units,
-      .identifier    = identifier,
-      .description   = std::move(description),
-  };
-}
-
 static auto AppendDiscoveredSensorMetric(std::vector<DiscoveredSensorMetric>& discovered_sensors,
                                          DiscoveredSensorMetric sensor, SensorsApi const* sensors_api) -> void {
   if (HasUsableInitialValue(sensor, sensors_api)) {
@@ -957,9 +938,17 @@ static auto AddDerivedSubfeatureMetrics(std::vector<DiscoveredSensorMetric>& dis
         ResolveIdentifierFromPolicy(feature_descriptor->identifier, derived_metric.identifier_policy);
     AppendDiscoveredSensorMetric(
         discovered_sensors,
-        MakeDiscoveredSensorMetric(chip, feature, subfeature, chip_name, label_register_name,
-                                   feature_register_name.empty() ? label_register_name : feature_register_name, units,
-                                   identifier, std::string{derived_metric.description_prefix} + label),
+        DiscoveredSensorMetric{
+            .chip          = chip,
+            .feature       = feature,
+            .subfeature    = subfeature,
+            .chip_name     = chip_name,
+            .label         = label_register_name,
+            .register_name = feature_register_name.empty() ? label_register_name : feature_register_name,
+            .units         = units,
+            .identifier    = identifier,
+            .description   = std::string{derived_metric.description_prefix} + label,
+        },
         sensors_api);
   }
 }

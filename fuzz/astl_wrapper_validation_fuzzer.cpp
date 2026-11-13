@@ -181,8 +181,9 @@ auto CallTargetApi(ByteCursor& input, astl_target_handle_t stable_target, Functi
 auto MakeOrchestrator(bool include_target) -> std::unique_ptr<astl::Orchestrator> {
   std::vector<std::unique_ptr<astl::ITarget>> targets;
   if (include_target) {
-    targets.push_back(std::make_unique<astl::Target>("fuzz-target", "deterministic wrapper-validation target",
-                                                     astl::CollectorType::ASTL_NATIVE, nullptr, "fuzz-target-0"));
+    targets.push_back(std::make_unique<astl::Target>(
+        "fuzz-target", "deterministic wrapper-validation target", astl::CollectorType::ASTL_NATIVE, nullptr,
+        astl::TargetMetadata{.uuid = "fuzz-target-0", .collector_target_path = {}}));
   }
 
   auto topology_manager  = std::make_unique<astl::TopologyManager>(std::move(targets));

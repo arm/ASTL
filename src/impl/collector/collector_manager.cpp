@@ -9,46 +9,8 @@
 #include "astl/astl.h"
 #include "astl_cxx_compat.hpp"
 #include "collection_configuration.hpp"
+#include "immediate_read_outcome.hpp"
 namespace astl {
-namespace {
-// Collector callbacks are synchronous. Thread-local scope excludes periodic reads on other threads.
-struct ImmediateReadOutcome {
-  static thread_local ImmediateReadOutcome* current_;
-  const CollectorManager*                   manager;
-  const ITarget*                            target;
-  bool                                      has_samples = false;
-  EmptyResultReason                         reason      = EmptyResultReason::UNKNOWN;
-  ImmediateReadOutcome*                     previous    = current_;
-
-  ImmediateReadOutcome(const CollectorManager* owner, const ITarget* read_target)
-      : manager(owner), target(read_target) {
-    current_ = this;
-  }
-  ImmediateReadOutcome(const ImmediateReadOutcome&)                    = delete;
-  auto operator=(const ImmediateReadOutcome&) -> ImmediateReadOutcome& = delete;
-  ImmediateReadOutcome(ImmediateReadOutcome&&)                         = delete;
-  auto operator=(ImmediateReadOutcome&&) -> ImmediateReadOutcome&      = delete;
-  ~ImmediateReadOutcome() { current_ = previous; }
-
-  static auto For(const CollectorManager* owner, const ITarget* read_target) -> ImmediateReadOutcome* {
-    return current_ && current_->manager == owner && current_->target == read_target ? current_ : nullptr;
-  }
-  auto Status() const -> astl_status_code {
-    if (has_samples) {
-      return ASTL_STATUS_SUCCESS;
-    }
-    switch (reason) {
-      case EmptyResultReason::SAMPLE_DROPPED:
-        return ASTL_STATUS_SAMPLE_DROPPED;
-      case EmptyResultReason::NO_NEW_SAMPLE:
-        return ASTL_STATUS_NO_NEW_SAMPLE;
-      default:
-        return ASTL_STATUS_NO_DATA_COLLECTED;
-    }
-  }
-};
-thread_local ImmediateReadOutcome* ImmediateReadOutcome::current_ = nullptr;
-}  // namespace
 
 CollectorManager::CollectorManager(
     std::unordered_map<const ITarget*, std::vector<std::unique_ptr<ICollector>>>&& collectors)
@@ -153,14 +115,9 @@ auto CollectorManager::ClearConfiguredCollectionOnTarget(const ITarget* target) 
 }
 
 auto CollectorManager::StartOnTarget(const ITarget* target) -> astl_status_code {
-  ICollector* selected_collector = nullptr;
-  {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-      selected_collector = collector->second.front().get();
-    } else {
-      return ASTL_STATUS_INVALID_TARGET_HANDLE;
-    }
+  ICollector* selected_collector = FindFirstCollector(target);
+  if (!selected_collector) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
   const auto status = selected_collector->StartCollection();
   if (status == ASTL_STATUS_SUCCESS) {
@@ -172,13 +129,7 @@ auto CollectorManager::StartOnTarget(const ITarget* target) -> astl_status_code 
 
 auto CollectorManager::GetNativeClockSnapshot(const ITarget* target)
     -> astl::compat::expected<ClockCorrelationMap, astl_status_code> {
-  ICollector* selected_collector = nullptr;
-  {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-      selected_collector = collector->second.front().get();
-    }
-  }
+  ICollector* selected_collector = FindFirstCollector(target);
   if (!selected_collector) {
     ASTL_LOG_WARNING("CollectorManager::GetNativeClockSnapshot: no collector found for target");
     return astl::compat::unexpected{ASTL_STATUS_INVALID_TARGET_HANDLE};
@@ -187,56 +138,35 @@ auto CollectorManager::GetNativeClockSnapshot(const ITarget* target)
 }
 
 auto CollectorManager::PauseOnTarget(const ITarget* target) -> astl_status_code {
-  ICollector* selected_collector = nullptr;
-  {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-      selected_collector = collector->second.front().get();
-    } else {
-      return ASTL_STATUS_INVALID_TARGET_HANDLE;
-    }
+  ICollector* selected_collector = FindFirstCollector(target);
+  if (!selected_collector) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
   return selected_collector->PauseCollection();
 }
 
 auto CollectorManager::ResumeOnTarget(const ITarget* target) -> astl_status_code {
-  ICollector* selected_collector = nullptr;
-  {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-      selected_collector = collector->second.front().get();
-    } else {
-      return ASTL_STATUS_INVALID_TARGET_HANDLE;
-    }
+  ICollector* selected_collector = FindFirstCollector(target);
+  if (!selected_collector) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
   return selected_collector->ResumeCollection();
 }
 
 auto CollectorManager::ReadImmediateOnTarget(const ITarget* target) -> astl_status_code {
-  ICollector* selected_collector = nullptr;
-  {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-      // if we have a collector for this target, sample from it
-      selected_collector = collector->second.front().get();
-    } else {
-      return ASTL_STATUS_INVALID_TARGET_HANDLE;
-    }
+  ICollector* selected_collector = FindFirstCollector(target);
+  if (!selected_collector) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
-  ImmediateReadOutcome outcome{this, target};
-  const auto           status = selected_collector->ReadImmediate();
+  detail::ImmediateReadOutcome outcome{this, target};
+  const auto                   status = selected_collector->ReadImmediate();
   return status == ASTL_STATUS_SUCCESS ? outcome.Status() : status;
 }
 
 auto CollectorManager::StopOnTarget(const ITarget* target) -> astl_status_code {
-  ICollector* selected_collector = nullptr;
-  {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (auto collector = _collectors.find(target); collector != _collectors.end() && !collector->second.empty()) {
-      selected_collector = collector->second.front().get();
-    } else {
-      return ASTL_STATUS_INVALID_TARGET_HANDLE;
-    }
+  ICollector* selected_collector = FindFirstCollector(target);
+  if (!selected_collector) {
+    return ASTL_STATUS_INVALID_TARGET_HANDLE;
   }
   const auto status = selected_collector->StopCollection();
   if (status == ASTL_STATUS_SUCCESS) {
@@ -257,7 +187,7 @@ auto CollectorManager::IsAnyTargetBeingCollected() const -> bool {
 auto CollectorManager::SinkRawSampleOutcome(const ITarget* target, OperationId operation_id,
                                             astl::EmptyResultReason reason) -> void {
   std::lock_guard<std::mutex> lock(_mutex);
-  if (auto* outcome = ImmediateReadOutcome::For(this, target)) {
+  if (auto* outcome = detail::ImmediateReadOutcome::For(this, target)) {
     if (reason == EmptyResultReason::SAMPLE_DROPPED ||
         (reason == EmptyResultReason::NO_NEW_SAMPLE && outcome->reason == EmptyResultReason::UNKNOWN)) {
       outcome->reason = reason;
@@ -275,7 +205,7 @@ auto CollectorManager::SinkRawSamples(const ITarget* target, std::span<RawSample
   // RegisterRawSampleSink()/UnregisterRawSampleSink() must NOT be called from
   // within SinkRawSamples callbacks, directly or indirectly, or this can deadlock.
   std::lock_guard<std::mutex> lock(_mutex);
-  if (auto* outcome = ImmediateReadOutcome::For(this, target)) {
+  if (auto* outcome = detail::ImmediateReadOutcome::For(this, target)) {
     outcome->has_samples |=
         std::ranges::any_of(raw_samples, [](const auto& sample) { return !sample.IsPauseResumeMarker(); });
   }
@@ -293,6 +223,12 @@ auto CollectorManager::SinkRawSamples(const ITarget* target, std::span<RawSample
 ////////////////////////////////////////////////////////////////////////////////
 // private helpers
 ////////////////////////////////////////////////////////////////////////////////
+
+auto CollectorManager::FindFirstCollector(const ITarget* target) -> ICollector* {
+  std::lock_guard<std::mutex> lock(_mutex);
+  const auto                  collector = _collectors.find(target);
+  return collector != _collectors.end() && !collector->second.empty() ? collector->second.front().get() : nullptr;
+}
 
 /**
  * @brief Given a target and required capabilities, choose a suitable collector.
