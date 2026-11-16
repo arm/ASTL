@@ -348,7 +348,7 @@ copy_pdfs() {
 			mkdir -p "${destination_dir}"
 			install -m 0644 "${pdf}" "${destination_dir}/"
 			copied=$((copied + 1))
-		done < <(find "${source_dir}" -maxdepth 1 -type f -name '*.pdf' -print)
+		done < <(find -L "${source_dir}" -maxdepth 1 -type f -name '*.pdf' -print)
 	done
 	[[ ${copied} -gt 0 ]] || die "no PDF documentation found"
 }

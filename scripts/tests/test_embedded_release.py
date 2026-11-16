@@ -18,6 +18,77 @@ spec.loader.exec_module(embed)
 
 @unittest.skipUnless(all(shutil.which(tool) for tool in ('bash', 'cmake', 'jq', 'zip', 'sha256sum')), 'release tools unavailable')
 class EmbeddedReleaseTests(unittest.TestCase):
+    def test_packages_follow_documentation_links_and_require_atx_pdfs(self):
+        for layout in ('regular', 'file-links', 'directory-link', 'missing', 'broken-link'):
+            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for name in ('scripts/release/stage_release.sh', 'scripts/release/install.sh',
+                             'scripts/release/uninstall.sh', 'scripts/publish_configs.sh',
+                             'scripts/prune_config_references.py', 'scripts/embed_config.py',
+                             'scripts/filter_config.py', 'scripts/generate_release_manifest.py'):
+                    target = root / name
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / name, target)
+                for name in ('config/groups', 'config/metrics', 'config/scmi/public', 'doc',
+                             'include/astl', 'mock-bin', 'tools/ATX', 'overlay/doc'):
+                    (root / name).mkdir(parents=True, exist_ok=True)
+                (root / 'config/metrics/metrics.json').write_text('{"metrics":{"stock":{}}}')
+                (root / 'doc/api.pdf').write_bytes(b'Core PDF fixture')
+                (root / 'include/astl/astl.h').write_text('/* fixture */')
+                atx_docs = root / 'tools/ATX/doc'
+                if layout == 'directory-link':
+                    atx_docs.symlink_to(root / 'overlay/doc', target_is_directory=True)
+                else:
+                    atx_docs.mkdir()
+                guides = {'user guide.pdf': b'User PDF fixture', 'expert.pdf': b'Expert PDF fixture'}
+                for name, content in guides.items():
+                    if layout == 'file-links':
+                        (root / 'overlay/doc' / name).write_bytes(content)
+                        (atx_docs / name).symlink_to(root / 'overlay/doc' / name)
+                    elif layout == 'broken-link':
+                        (atx_docs / name).symlink_to(root / 'overlay/doc' / name)
+                    elif layout != 'missing':
+                        (atx_docs / name).write_bytes(content)
+                (atx_docs / 'nested').mkdir()
+                (atx_docs / 'nested/ignored.pdf').write_bytes(b'Nested PDF fixture')
+                for name, data in [('scripts/host_arch.sh', '#!/bin/sh\necho arm64\n'),
+                                   ('mock-bin/uname', '#!/bin/sh\necho Linux\n')]:
+                    (root / name).write_text(data)
+                    (root / name).chmod(0o755)
+                build = root / 'build/release-profiles/public/release'
+                for name in ('arm64/lib', 'arm64/bin', 'include/astl'):
+                    (build / name).mkdir(parents=True)
+                (build / 'arm64/lib/libastl-0.so').write_bytes(b'Library fixture')
+                (build / 'arm64/lib/libastl_static-0.a').write_bytes(b'Static library fixture')
+                (build / 'arm64/bin/atx').write_bytes(b'ATX fixture')
+                (build / 'include/astl/version.h').write_text('/* version */')
+                embed.generate(root / 'config', build / 'generated/embedded_config.cpp', 'public')
+                hashes = subprocess.check_output(
+                    ['sha256sum', 'lib/libastl-0.so', 'lib/libastl_static-0.a'], cwd=build / 'arm64')
+                (build / 'embedded-binaries.sha256').write_bytes(hashes)
+                env = {**os.environ, 'PATH': str(root / 'mock-bin') + os.pathsep + os.environ['PATH']}
+                result = subprocess.run([
+                    'bash', str(root / 'scripts/release/stage_release.sh'), '--version', '1.2.3',
+                    '--variant', 'library-only', '--variant', 'everything', '--variant', 'atx',
+                    '--skip-build', '--skip-tests', '--output-dir', str(root / 'out')],
+                    env=env, capture_output=True, text=True)
+                if layout in ('missing', 'broken-link'):
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('no PDF documentation found', result.stderr)
+                    self.assertFalse((root / 'out/atx_version_1.2.3_linux_aarch64.zip').exists())
+                    continue
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                for artifact, doc_path in (
+                    ('astl_version_1.2.3_linux_aarch64_library', 'doc/ATX'),
+                    ('astl_version_1.2.3_linux_aarch64_everything', 'doc/ATX'),
+                    ('atx_version_1.2.3_linux_aarch64', 'doc'),
+                ):
+                    with zipfile.ZipFile(root / 'out' / f'{artifact}.zip') as package:
+                        for name, content in guides.items():
+                            self.assertEqual(package.read(f'{artifact}/{doc_path}/{name}'), content)
+                            self.assertFalse((root / 'out' / artifact / doc_path / name).is_symlink())
+                        self.assertFalse(any(name.endswith('/ignored.pdf') for name in package.namelist()))
+
     def test_replacement_restores_a_filtered_base_before_pruning(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
