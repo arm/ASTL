@@ -245,10 +245,11 @@ if [[ ${skip_build} == false ]]; then
 	configure_args=(-S "${REPO_ROOT}" --preset release -B "${build_dir}" ${embedding_args[@]+"${embedding_args[@]}"} "-DASTL_VERSION_OVERRIDE=${version}"
 		"-DATX_STATIC_LINK=false" "-DASTL_LIBSENSORS=AUTO")
 	cmake ${configure_args[@]+"${configure_args[@]}"}
-	cmake --build "${build_dir}" --parallel
+	# Let CMake honor CMAKE_BUILD_PARALLEL_LEVEL when the caller sets a limit.
+	cmake --build "${build_dir}"
 	if [[ ${needs_static} == true ]]; then
 		cmake -S "${REPO_ROOT}" --preset release-static -B "${static_build_dir}" ${embedding_args[@]+"${embedding_args[@]}"} "-DASTL_VERSION_OVERRIDE=${version}"
-		cmake --build "${static_build_dir}" --parallel
+		cmake --build "${static_build_dir}"
 	fi
 fi
 
