@@ -475,6 +475,12 @@ if contains_variant atx || contains_variant atx-static; then
 		mkdir -p "${static_stage}"
 		cp -a "${atx_stage}/." "${static_stage}/"
 		install -m 0755 "${static_build_output_dir}/bin/atx-static" "${static_stage}/bin/atx"
+		# An adjacent bin/config overrides the static binary's embedded ASTL resources.
+		if [[ -d ${static_stage}/bin/config/atx ]]; then
+			[[ ! -e ${static_stage}/bin/atx-config ]] || die "ATX config destination already exists: ${static_stage}/bin/atx-config"
+			mv -- "${static_stage}/bin/config/atx" "${static_stage}/bin/atx-config"
+			rmdir -- "${static_stage}/bin/config"
+		fi
 		find "${static_stage}/lib" -maxdepth 1 -type f -name 'libastl-*.so' -delete
 		"${REPO_ROOT}/scripts/verify_static_executable.sh" "${static_stage}/bin/atx"
 		"${static_stage}/bin/atx" --version
