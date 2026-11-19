@@ -10,6 +10,14 @@ All notable user-facing changes to the ASTL public API are recorded here.
 
 ## Unreleased
 
+### Added
+
+### Changed
+
+### Breaking
+
+## 0.2.0 - 2026-11-19
+
 ### Fixed
 
 - Allow SCMI ioctl group-state reads and enable/timestamp changes on platforms
