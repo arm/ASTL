@@ -276,12 +276,9 @@ if [[ ${needs_static} == true ]]; then
 fi
 
 if [[ ${skip_tests} == false ]]; then
-	# CTest discovers CMakePresets.json from its working directory, not --test-dir.
-	# The confidential release wrapper may invoke this script from outside ASTL.
-	(
-		cd -- "${REPO_ROOT}"
-		ctest --preset release --test-dir "${build_dir}"
-	)
+	# Before CMake 3.30, a test preset overrides --test-dir with its binaryDir.
+	# Preserve the release test settings while testing the actual profile build.
+	ctest --test-dir "${build_dir}" --build-config Release --output-on-failure --no-tests=error
 	# Embedded-mode smoke verification uses the profile's actual binary and no external config.
 	if [[ -x ${build_output_dir}/bin/atx ]]; then
 		env -u ASTL_CONFIG_DIR "${build_output_dir}/bin/atx" --version
