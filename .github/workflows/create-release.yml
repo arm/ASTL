@@ -88,6 +88,7 @@ jobs:
       ASTL_REPOSITORY: Arm-Debug/ASTL
       RELEASE_TYPE: ${{ inputs.release_type || 'ROLLING' }}
       SOURCE_REF: ${{ inputs.source_ref || github.sha }}
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
 
     steps:
       - name: 🔑 Create source checkout token
@@ -259,7 +260,7 @@ jobs:
           compiler: gcc
           source_dir: ${{ github.workspace }}/ASTL
 
-      - name: 🏗️ Build ASTL
+      - name: ⚙️ Prepare release build dependencies
         if: steps.existing-release.outputs.reuse != 'true'
         uses: ./ASTL/.github/actions/build
         with:
@@ -270,6 +271,8 @@ jobs:
           source_dir: ${{ github.workspace }}/ASTL
           version_override: ${{ env.VERSION_STRING }}
           vcpkg_cache_path: ${{ steps.vcpkg-cache.outputs.path }}
+          # Staging builds the release profile once, honoring the job limit above.
+          configure_only: "true"
 
       - name: ⤴️ Save vcpkg binaries
         if: steps.existing-release.outputs.reuse != 'true' && steps.vcpkg-cache.outputs.cache-hit != 'true'

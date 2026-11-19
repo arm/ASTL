@@ -33,6 +33,8 @@ jobs:
   test-candidate:
     needs: resolve
     runs-on: self-hosted-ubuntu-24.04-arm64
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
     steps:
       - name: 🔑 Create source checkout token
         id: source-token
@@ -65,7 +67,7 @@ jobs:
           cohort: selfhosted-linux
           compiler: gcc
 
-      - name: 🏗️ Build candidate
+      - name: ⚙️ Prepare candidate build dependencies
         uses: ./.github/actions/build
         with:
           os: self-hosted-ubuntu-24.04-arm64
@@ -75,6 +77,8 @@ jobs:
           source_dir: ${{ github.workspace }}
           version_override: ${{ needs.resolve.outputs.version }}
           vcpkg_cache_path: ${{ steps.vcpkg-cache.outputs.path }}
+          # Staging builds the release profile once, honoring the job limit above.
+          configure_only: "true"
 
       - name: ⤴️ Save vcpkg binaries
         if: steps.vcpkg-cache.outputs.cache-hit != 'true'

@@ -170,6 +170,76 @@ class EmbeddedReleaseTests(unittest.TestCase):
                 self.assertIn('rebuild required', stale.stderr)
             self.assertNotEqual(manifests[0]['resources'], manifests[1]['resources'])
 
+    @unittest.skipUnless(all(shutil.which(tool) for tool in ('cmake', 'ctest')), 'CMake/CTest unavailable')
+    def test_staging_tests_the_profile_and_rejects_failed_or_empty_suites(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ('scripts/release/stage_release.sh', 'scripts/release/install.sh',
+                         'scripts/release/uninstall.sh', 'scripts/publish_configs.sh',
+                         'scripts/prune_config_references.py', 'scripts/embed_config.py',
+                         'scripts/filter_config.py', 'scripts/generate_release_manifest.py'):
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / name, target)
+            for name in ('config/groups', 'config/metrics', 'config/scmi/public', 'doc', 'include/astl', 'mock-bin'):
+                (root / name).mkdir(parents=True, exist_ok=True)
+            (root / 'config/metrics/metrics.json').write_text('{"metrics":{"stock":{}}}')
+            (root / 'doc/api.pdf').write_bytes(b'PDF fixture')
+            (root / 'include/astl/astl.h').write_text('/* fixture */')
+            for name, data in [('scripts/host_arch.sh', '#!/bin/sh\necho arm64\n'),
+                               ('mock-bin/uname', '#!/bin/sh\necho Linux\n')]:
+                (root / name).write_text(data)
+                (root / name).chmod(0o755)
+            build = root / 'build/release-profiles/public/release'
+            for name in ('arm64/lib', 'include/astl'):
+                (build / name).mkdir(parents=True)
+            (build / 'arm64/lib/libastl-0.so').write_bytes(b'Library fixture')
+            (build / 'arm64/lib/libastl_static-0.a').write_bytes(b'Static library fixture')
+            (build / 'include/astl/version.h').write_text('/* version */')
+            embed.generate(root / 'config', build / 'generated/embedded_config.cpp', 'public')
+            hashes = subprocess.check_output(
+                ['sha256sum', 'lib/libastl-0.so', 'lib/libastl_static-0.a'], cwd=build / 'arm64')
+            (build / 'embedded-binaries.sha256').write_bytes(hashes)
+            cmake = json.dumps(shutil.which('cmake'))
+            ordinary_build = root / 'build/release'
+            ordinary_build.mkdir()
+            (ordinary_build / 'CTestTestfile.cmake').write_text(f'add_test(wrong_tree {cmake} -E false)\n')
+            # The release preset selects the unrelated normal build tree.
+            presets = root / 'CMakePresets.json'
+            shutil.copy2(ROOT / 'CMakePresets.json', presets)
+            marker = build / 'profile-test-ran'
+            test_file = build / 'CTestTestfile.cmake'
+            env = {**os.environ, 'PATH': str(root / 'mock-bin') + os.pathsep + os.environ['PATH']}
+            cases = {
+                'pass': f'add_test(profile_test {cmake} -E touch {json.dumps(str(marker))})\n',
+                'fail': f'add_test(profile_test {cmake} -E false)\n',
+                'empty': '',
+                'without-presets': f'add_test(profile_test {cmake} -E touch {json.dumps(str(marker))})\n',
+            }
+            for outcome, tests in cases.items():
+                with self.subTest(outcome=outcome):
+                    marker.unlink(missing_ok=True)
+                    # A configured build also works without source presets and
+                    # from an external caller directory (confidential staging).
+                    if outcome == 'without-presets':
+                        presets.unlink()
+                    test_file.write_text(tests)
+                    output = root / 'out' / outcome
+                    result = subprocess.run([
+                        'bash', str(root / 'scripts/release/stage_release.sh'), '--version', '1.2.3',
+                        '--skip-build', '--output-dir', str(output)], cwd=root.parent,
+                        env=env, capture_output=True, text=True)
+                    archive = output / 'astl_version_1.2.3_linux_aarch64_library.zip'
+                    if outcome in ('pass', 'without-presets'):
+                        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                        self.assertTrue(marker.exists(), result.stdout)
+                        self.assertTrue(archive.exists())
+                    else:
+                        self.assertNotEqual(result.returncode, 0, result.stdout)
+                        self.assertFalse(archive.exists())
+                        diagnostic = 'profile_test' if outcome == 'fail' else 'No tests were found'
+                        self.assertIn(diagnostic, result.stderr + result.stdout)
+
     def test_replacement_without_allowlist_does_not_write_through_overlay_links(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
